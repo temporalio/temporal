@@ -32,6 +32,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 
 	"go.temporal.io/server/common/log"
@@ -67,7 +68,7 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 	}, nil).Once()
 
 	env.OnActivity(a.IsAdvancedVisibilityActivity, mock.Anything).Return(true, nil).Once()
-	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(nil).Once()
+	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).Return(nil).Once()
 
 	env.OnActivity(a.DeleteNamespaceActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(nil).Once()
 
@@ -113,7 +114,9 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 	}, nil).Once()
 
 	env.OnActivity(a.IsAdvancedVisibilityActivity, mock.Anything).Return(true, nil).Once()
-	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(stderrors.New("random error")).Once()
+	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
+		Return(stderrors.New("specific_error_from_activity")).
+		Times(10) // GoSDK defaultMaximumAttemptsForUnitTest value.
 
 	env.ExecuteWorkflow(ReclaimResourcesWorkflow, ReclaimResourcesParams{
 		DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
@@ -126,7 +129,10 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
-	require.Error(t, env.GetWorkflowError())
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unable to execute activity: EnsureNoExecutionsActivity")
+	require.Contains(t, err.Error(), "specific_error_from_activity")
 }
 
 func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExist(t *testing.T) {
@@ -153,15 +159,9 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 	}, nil).Once()
 
 	env.OnActivity(a.IsAdvancedVisibilityActivity, mock.Anything).Return(true, nil).Once()
-	errorCount := 0
-	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).
-		Return(func(_ context.Context, namespaceID namespace.ID, namespaceName namespace.Name) error {
-			errorCount++
-			if errorCount < 20 {
-				return errors.ErrExecutionsStillExist
-			}
-			return stderrors.New("random error")
-		}).Once()
+	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
+		Return(errors.NewExecutionsStillExistError(1)).
+		Times(10) // GoSDK defaultMaximumAttemptsForUnitTest value.
 
 	env.ExecuteWorkflow(ReclaimResourcesWorkflow, ReclaimResourcesParams{
 		DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
@@ -174,7 +174,10 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
-	require.Error(t, env.GetWorkflowError())
+	err := env.GetWorkflowError()
+	var appErr *temporal.ApplicationError
+	require.True(t, stderrors.As(err, &appErr))
+	require.Equal(t, errors.ExecutionsStillExistErrType, appErr.Type())
 }
 
 func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
@@ -190,17 +193,17 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
 	}).DoAndReturn(func(_ context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
-		if countWorkflowExecutionsCallTimes == 9 {
+		if countWorkflowExecutionsCallTimes == 8 {
 			return &manager.CountWorkflowExecutionsResponse{
 				Count: 0,
 			}, nil
 		}
 		countWorkflowExecutionsCallTimes++
-		// Return same 1 eight times to emulate ErrNoProgress.
+		// Return same "1" 8 times to emulate ErrNoProgress.
 		return &manager.CountWorkflowExecutionsResponse{
 			Count: 1,
 		}, nil
-	}).Times(9)
+	}).Times(8)
 
 	metadataManager := persistence.NewMockMetadataManager(ctrl)
 	metadataManager.EXPECT().DeleteNamespaceByName(gomock.Any(), &persistence.DeleteNamespaceByNameRequest{
@@ -233,6 +236,66 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 	}).Return(deleteexecutions.DeleteExecutionsResult{
 		SuccessCount: 10,
 		ErrorCount:   0,
+	}, nil)
+
+	env.ExecuteWorkflow(ReclaimResourcesWorkflow, ReclaimResourcesParams{
+		DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
+			Namespace:            "namespace",
+			NamespaceID:          "namespace-id",
+			Config:               deleteexecutions.DeleteExecutionsConfig{},
+			PreviousSuccessCount: 0,
+			PreviousErrorCount:   0,
+		},
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	var result ReclaimResourcesResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.Equal(t, 0, result.ErrorCount)
+	require.Equal(t, 10, result.SuccessCount)
+}
+
+func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	ctrl := gomock.NewController(t)
+	visibilityManager := manager.NewMockVisibilityManager(ctrl)
+	visibilityManager.EXPECT().GetName().Return("elasticsearch")
+
+	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+	}).Return(&manager.CountWorkflowExecutionsResponse{
+		Count: 1,
+	}, nil).
+		Times(8)
+
+	a := &Activities{
+		visibilityManager: visibilityManager,
+		metricsClient:     metrics.NoopClient,
+		logger:            log.NewNoopLogger(),
+	}
+
+	env.RegisterActivity(a.IsAdvancedVisibilityActivity)
+	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
+
+	env.RegisterWorkflow(deleteexecutions.DeleteExecutionsWorkflow)
+	env.OnWorkflow(deleteexecutions.DeleteExecutionsWorkflow, mock.Anything, deleteexecutions.DeleteExecutionsParams{
+		Namespace:   "namespace",
+		NamespaceID: "namespace-id",
+		Config: deleteexecutions.DeleteExecutionsConfig{
+			DeleteActivityRPS:                    100,
+			PageSize:                             1000,
+			PagesPerExecutionCount:               256,
+			ConcurrentDeleteExecutionsActivities: 4,
+		},
+		PreviousSuccessCount: 0,
+		PreviousErrorCount:   0,
+	}).Return(deleteexecutions.DeleteExecutionsResult{
+		SuccessCount: 10,
+		ErrorCount:   0,
 	}, nil).Twice()
 
 	env.ExecuteWorkflow(ReclaimResourcesWorkflow, ReclaimResourcesParams{
@@ -245,11 +308,10 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 		},
 	})
 
-	ctrl.Finish()
 	require.True(t, env.IsWorkflowCompleted())
-	require.NoError(t, env.GetWorkflowError())
-	var result ReclaimResourcesResult
-	require.NoError(t, env.GetWorkflowResult(&result))
-	require.Equal(t, 0, result.ErrorCount)
-	require.Equal(t, 20, result.SuccessCount) // DeleteExecutionsWorkflow is called twice (10+10).
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	var appErr *temporal.ApplicationError
+	require.True(t, stderrors.As(err, &appErr))
+	require.Equal(t, errors.NoProgressErrType, appErr.Type())
 }

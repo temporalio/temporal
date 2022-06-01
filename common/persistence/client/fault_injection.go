@@ -1036,6 +1036,16 @@ func (s *FaultInjectionShardStore) UpdateShard(
 	return s.baseShardStore.UpdateShard(ctx, request)
 }
 
+func (s *FaultInjectionShardStore) AssertShardOwnership(
+	ctx context.Context,
+	request *persistence.AssertShardOwnershipRequest,
+) error {
+	if err := s.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return s.baseShardStore.AssertShardOwnership(ctx, request)
+}
+
 func (s *FaultInjectionShardStore) UpdateRate(rate float64) {
 	s.ErrorGenerator.UpdateRate(rate)
 }

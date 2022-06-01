@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination timerQueueProcessor_mock.go
-
 package history
 
 import (
@@ -35,15 +33,16 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -61,17 +60,19 @@ type (
 	updateTimerAckLevel     func(tasks.Key) error
 	timerQueueShutdown      func() error
 	timerQueueProcessorImpl struct {
-		isGlobalNamespaceEnabled   bool
+		singleProcessor            bool
 		currentClusterName         string
 		shard                      shard.Context
-		historyEngine              shard.Engine
 		taskAllocator              taskAllocator
 		config                     *configs.Config
 		metricsClient              metrics.Client
 		workflowCache              workflow.Cache
+		scheduler                  queues.Scheduler
 		workflowDeleteManager      workflow.DeleteManager
 		ackLevel                   tasks.Key
+		hostRateLimiter            quotas.RateLimiter
 		logger                     log.Logger
+		clientBean                 client.Bean
 		matchingClient             matchingservice.MatchingServiceClient
 		status                     int32
 		shutdownChan               chan struct{}
@@ -84,11 +85,16 @@ type (
 
 func newTimerQueueProcessor(
 	shard shard.Context,
-	historyEngine shard.Engine,
 	workflowCache workflow.Cache,
+	scheduler queues.Scheduler,
+	clientBean client.Bean,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
+	hostRateLimiter quotas.RateLimiter,
 ) queues.Processor {
+
+	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
+		shard.GetConfig().TimerProcessorEnableSingleCursor()
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
@@ -103,30 +109,40 @@ func newTimerQueueProcessor(
 	)
 
 	return &timerQueueProcessorImpl{
-		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
-		currentClusterName:       currentClusterName,
-		shard:                    shard,
-		historyEngine:            historyEngine,
-		taskAllocator:            taskAllocator,
-		config:                   config,
-		metricsClient:            shard.GetMetricsClient(),
-		workflowCache:            workflowCache,
-		workflowDeleteManager:    workflowDeleteManager,
-		ackLevel:                 shard.GetQueueAckLevel(tasks.CategoryTimer),
-		logger:                   logger,
-		matchingClient:           matchingClient,
-		status:                   common.DaemonStatusInitialized,
-		shutdownChan:             make(chan struct{}),
+		singleProcessor:       singleProcessor,
+		currentClusterName:    currentClusterName,
+		shard:                 shard,
+		taskAllocator:         taskAllocator,
+		config:                config,
+		metricsClient:         shard.GetMetricsClient(),
+		workflowCache:         workflowCache,
+		scheduler:             scheduler,
+		workflowDeleteManager: workflowDeleteManager,
+		ackLevel:              shard.GetQueueAckLevel(tasks.CategoryTimer),
+		hostRateLimiter:       hostRateLimiter,
+		logger:                logger,
+		clientBean:            clientBean,
+		matchingClient:        matchingClient,
+		status:                common.DaemonStatusInitialized,
+		shutdownChan:          make(chan struct{}),
 		activeTimerProcessor: newTimerQueueActiveProcessor(
 			shard,
 			workflowCache,
+			scheduler,
 			workflowDeleteManager,
 			matchingClient,
 			taskAllocator,
+			clientBean,
+			newQueueProcessorRateLimiter(
+				hostRateLimiter,
+				config.TimerProcessorMaxPollRPS,
+			),
 			logger,
+			singleProcessor,
 		),
 		standbyTimerProcessors: make(map[string]*timerQueueStandbyProcessorImpl),
 	}
+
 }
 
 func (t *timerQueueProcessorImpl) Start() {
@@ -134,7 +150,7 @@ func (t *timerQueueProcessorImpl) Start() {
 		return
 	}
 	t.activeTimerProcessor.Start()
-	if t.isGlobalNamespaceEnabled {
+	if !t.singleProcessor {
 		t.listenToClusterMetadataChange()
 	}
 
@@ -147,7 +163,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 		return
 	}
 	t.activeTimerProcessor.Stop()
-	if t.isGlobalNamespaceEnabled {
+	if !t.singleProcessor {
 		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(t)
 		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
@@ -166,7 +182,7 @@ func (t *timerQueueProcessorImpl) NotifyNewTasks(
 	timerTasks []tasks.Task,
 ) {
 
-	if clusterName == t.currentClusterName {
+	if clusterName == t.currentClusterName || t.singleProcessor {
 		t.activeTimerProcessor.notifyNewTimers(timerTasks)
 		return
 	}
@@ -179,12 +195,17 @@ func (t *timerQueueProcessorImpl) NotifyNewTasks(
 	}
 	standbyTimerProcessor.setCurrentTime(t.shard.GetCurrentTime(clusterName))
 	standbyTimerProcessor.notifyNewTimers(timerTasks)
-	standbyTimerProcessor.retryTasks()
 }
 
 func (t *timerQueueProcessorImpl) FailoverNamespace(
 	namespaceIDs map[string]struct{},
 ) {
+	if t.singleProcessor {
+		// TODO: we may want to reschedule all tasks for new active namespaces in buffer
+		// so that they don't have to keeping waiting on the backoff timer
+		return
+	}
+
 	// Failover queue is used to scan all inflight tasks, if queue processor is not
 	// started, there's no inflight task and we don't need to create a failover processor.
 	// Also the HandleAction will be blocked if queue processor processing loop is not running.
@@ -215,6 +236,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(
 		t.shard,
 		t.workflowCache,
+		t.scheduler,
 		t.workflowDeleteManager,
 		namespaceIDs,
 		standbyClusterName,
@@ -222,18 +244,16 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 		maxLevel,
 		t.matchingClient,
 		t.taskAllocator,
+		newQueueProcessorRateLimiter(
+			t.hostRateLimiter,
+			t.config.TimerProcessorFailoverMaxPollRPS,
+		),
 		t.logger,
 	)
 
-	t.standbyTimerProcessorsLock.RLock()
-	for _, standbyTimerProcessor := range t.standbyTimerProcessors {
-		standbyTimerProcessor.retryTasks()
-	}
-	t.standbyTimerProcessorsLock.RUnlock()
-
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerNamespaceFailoverCallback function
-	err := updateShardAckLevel(tasks.Key{FireTime: minLevel})
+	err := updateShardAckLevel(tasks.NewKey(minLevel, 0))
 	if err != nil {
 		t.logger.Error("Error when update shard ack level", tag.Error(err))
 	}
@@ -241,10 +261,18 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 }
 
 func (t *timerQueueProcessorImpl) LockTaskProcessing() {
+	if t.singleProcessor {
+		return
+	}
+
 	t.taskAllocator.lock()
 }
 
 func (t *timerQueueProcessorImpl) UnlockTaskProcessing() {
+	if t.singleProcessor {
+		return
+	}
+
 	t.taskAllocator.unlock()
 }
 
@@ -289,7 +317,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 	lowerAckLevel := t.ackLevel
 	upperAckLevel := t.activeTimerProcessor.getAckLevel()
 
-	if t.isGlobalNamespaceEnabled {
+	if !t.singleProcessor {
 		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			ackLevel := standbyTimerProcessor.getAckLevel()
@@ -315,14 +343,10 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 
 	if lowerAckLevel.FireTime.Before(upperAckLevel.FireTime) {
 		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:      t.shard.GetShardID(),
-			TaskCategory: tasks.CategoryTimer,
-			InclusiveMinTaskKey: tasks.Key{
-				FireTime: lowerAckLevel.FireTime,
-			},
-			ExclusiveMaxTaskKey: tasks.Key{
-				FireTime: upperAckLevel.FireTime,
-			},
+			ShardID:             t.shard.GetShardID(),
+			TaskCategory:        tasks.CategoryTimer,
+			InclusiveMinTaskKey: tasks.NewKey(lowerAckLevel.FireTime, 0),
+			ExclusiveMaxTaskKey: tasks.NewKey(upperAckLevel.FireTime, 0),
 		})
 		if err != nil {
 			return err
@@ -361,28 +385,39 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 		}
 		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
 			// Case 2 and Case 3
-			nDCHistoryResender := xdc.NewNDCHistoryResender(
-				t.shard.GetNamespaceRegistry(),
-				t.shard.GetRemoteAdminClient(clusterName),
-				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-					return t.historyEngine.ReplicateEventsV2(ctx, request)
-				},
-				t.shard.GetPayloadSerializer(),
-				t.config.StandbyTaskReReplicationContextTimeout,
-				t.logger,
-			)
 			processor := newTimerQueueStandbyProcessor(
 				t.shard,
 				t.workflowCache,
+				t.scheduler,
 				t.workflowDeleteManager,
 				t.matchingClient,
 				clusterName,
 				t.taskAllocator,
-				nDCHistoryResender,
+				t.clientBean,
+				newQueueProcessorRateLimiter(
+					t.hostRateLimiter,
+					t.config.TimerProcessorMaxPollRPS,
+				),
 				t.logger,
 			)
 			processor.Start()
 			t.standbyTimerProcessors[clusterName] = processor
 		}
 	}
+}
+
+func newQueueProcessorRateLimiter(
+	hostRateLimiter quotas.RateLimiter,
+	shardMaxPollRPS dynamicconfig.IntPropertyFn,
+) quotas.RateLimiter {
+	return quotas.NewMultiRateLimiter(
+		[]quotas.RateLimiter{
+			quotas.NewDefaultOutgoingRateLimiter(
+				func() float64 {
+					return float64(shardMaxPollRPS())
+				},
+			),
+			hostRateLimiter,
+		},
+	)
 }

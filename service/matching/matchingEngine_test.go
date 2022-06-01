@@ -345,13 +345,30 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 	}
 
 	_, err := s.matchingEngine.AddWorkflowTask(s.handlerContext, &addRequest)
-	s.NoError(err)
-
+	// fail due to no sticky worker
+	s.Error(err)
+	s.ErrorContains(err, "sticky worker unavailable")
+	// poll the sticky queue, should get no result
 	resp, err := s.matchingEngine.PollWorkflowTaskQueue(s.handlerContext, &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: stickyTaskQueue,
-			Identity:  identity},
+			Identity:  identity,
+		},
+	})
+	s.NoError(err)
+	s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
+
+	// add task to sticky queue again, this time it should pass
+	_, err = s.matchingEngine.AddWorkflowTask(s.handlerContext, &addRequest)
+	s.NoError(err)
+
+	resp, err = s.matchingEngine.PollWorkflowTaskQueue(s.handlerContext, &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: stickyTaskQueue,
+			Identity:  identity,
+		},
 	})
 	s.NoError(err)
 
@@ -417,7 +434,8 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 				NamespaceId: namespaceID.String(),
 				PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 					TaskQueue: taskQueue,
-					Identity:  identity},
+					Identity:  identity,
+				},
 			})
 			s.NoError(err)
 			s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
@@ -641,7 +659,8 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			NamespaceId: namespaceID.String(),
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: taskQueue,
-				Identity:  identity},
+				Identity:  identity,
+			},
 		})
 
 		s.NoError(err)
@@ -703,7 +722,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	// So we can get snapshots
 	scope := tally.NewTestScope("test", nil)
 	var err error
-	s.matchingEngine.metricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.Matching)
+	s.matchingEngine.metricsClient, err = metrics.NewTallyClient(&metrics.ClientConfig{}, scope, metrics.Matching)
 	s.NoError(err)
 
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
@@ -897,9 +916,6 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDisp
 	}
 	const workerCount = 20
 	const taskCount = 100
-	var err error
-	s.matchingEngine.metricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tally.NewTestScope("test", nil), metrics.Matching)
-	s.NoError(err)
 	throttleCt := s.concurrentPublishConsumeActivities(workerCount, taskCount, dispatchLimitFn)
 	s.logger.Info("Number of tasks throttled", tag.Number(throttleCt))
 	// atleast once from 0 dispatch poll, and until TTL is hit at which time throttle limit is reset
@@ -914,7 +930,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 ) int64 {
 	scope := tally.NewTestScope("test", nil)
 	var err error
-	s.matchingEngine.metricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.Matching)
+	s.matchingEngine.metricsClient, err = metrics.NewTallyClient(&metrics.ClientConfig{}, scope, metrics.Matching)
 	s.NoError(err)
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
@@ -1148,7 +1164,8 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 					NamespaceId: namespaceID.String(),
 					PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 						TaskQueue: taskQueue,
-						Identity:  identity},
+						Identity:  identity,
+					},
 				})
 				if err != nil {
 					panic(err)
@@ -1213,7 +1230,8 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 		NamespaceId: namespaceID.String(),
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 			TaskQueue: taskQueue,
-			Identity:  identity},
+			Identity:  identity,
+		},
 	})
 
 	s.Equal(ctx.Err(), err)
@@ -1226,7 +1244,8 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 		NamespaceId: namespaceID.String(),
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 			TaskQueue: taskQueue,
-			Identity:  identity},
+			Identity:  identity,
+		},
 	})
 	s.Nil(err)
 	s.Equal(emptyPollActivityTaskQueueResponse, resp)
@@ -1335,7 +1354,8 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 					NamespaceId: namespaceID.String(),
 					PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 						TaskQueue: taskQueue,
-						Identity:  identity},
+						Identity:  identity,
+					},
 				})
 				if err != nil {
 					panic(err)
@@ -1385,7 +1405,6 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.True(expectedRange <= s.taskManager.getTaskQueueManager(tlID).rangeID)
-
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
@@ -1476,7 +1495,8 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 					NamespaceId: namespaceID.String(),
 					PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 						TaskQueue: taskQueue,
-						Identity:  identity},
+						Identity:  identity,
+					},
 				})
 				if err != nil {
 					panic(err)
@@ -1525,7 +1545,6 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.True(expectedRange <= s.taskManager.getTaskQueueManager(tlID).rangeID)
-
 }
 
 func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
@@ -1651,7 +1670,8 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 			NamespaceId: namespaceID.String(),
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: taskQueue,
-				Identity:  identity},
+				Identity:  identity,
+			},
 		})
 
 		s.NoError(err)
@@ -1851,8 +1871,8 @@ func (s *matchingEngineSuite) awaitCondition(cond func() bool, timeout time.Dura
 }
 
 func newActivityTaskScheduledEvent(eventID int64, workflowTaskCompletedEventID int64,
-	scheduleAttributes *commandpb.ScheduleActivityTaskCommandAttributes) *historypb.HistoryEvent {
-
+	scheduleAttributes *commandpb.ScheduleActivityTaskCommandAttributes,
+) *historypb.HistoryEvent {
 	historyEvent := newHistoryEvent(eventID, enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED)
 	historyEvent.Attributes = &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
 		ActivityId:                   scheduleAttributes.ActivityId,

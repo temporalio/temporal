@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -50,6 +49,7 @@ type (
 		) error
 		GenerateWorkflowCloseTasks(
 			now time.Time,
+			deleteAfterClose bool,
 		) error
 		GenerateDeleteExecutionTask(
 			now time.Time,
@@ -112,7 +112,7 @@ type (
 			branchToken []byte,
 			events []*historypb.HistoryEvent,
 		) error
-		GenerateLastHistoryReplicationTasks(
+		GenerateMigrationTasks(
 			now time.Time,
 		) (tasks.Task, error)
 	}
@@ -161,6 +161,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	now time.Time,
+	deleteAfterClose bool,
 ) error {
 
 	currentVersion := r.mutableState.GetCurrentVersion()
@@ -171,7 +172,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	switch err.(type) {
 	case nil:
 		retention = namespaceEntry.Retention()
-	case *serviceerror.NotFound:
+	case *serviceerror.NamespaceNotFound:
 		// namespace is not accessible, use default value above
 	default:
 		return err
@@ -180,28 +181,38 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	if err != nil {
 		return err
 	}
-	r.mutableState.AddTasks(
+	closeTasks := []tasks.Task{
 		&tasks.CloseExecutionTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
 			VisibilityTimestamp: now,
 			Version:             currentVersion,
+			DeleteAfterClose:    deleteAfterClose,
 		},
-		&tasks.CloseExecutionVisibilityTask{
-			// TaskID is set by shard
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: now,
-			Version:             currentVersion,
-		},
-		&tasks.DeleteHistoryEventTask{
-			// TaskID is set by shard
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: now.Add(retention),
-			Version:             currentVersion,
-			BranchToken:         branchToken,
-		},
-	)
+	}
 
+	// To avoid race condition between visibility close and delete tasks, visibility close task is not created here.
+	// Also, there is no reason to schedule history retention task if workflow executions in about to be deleted.
+	// This will also save one call to visibility storage and one timer task creation.
+	if !deleteAfterClose {
+		closeTasks = append(closeTasks,
+			&tasks.CloseExecutionVisibilityTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: now,
+				Version:             currentVersion,
+			},
+			&tasks.DeleteHistoryEventTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: now.Add(retention),
+				Version:             currentVersion,
+				BranchToken:         branchToken,
+			},
+		)
+	}
+
+	r.mutableState.AddTasks(closeTasks...)
 	return nil
 }
 
@@ -384,14 +395,13 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 
 	attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 	childWorkflowScheduleID := event.GetEventId()
-	childWorkflowTargetNamespace := namespace.Name(attr.GetNamespace())
 
 	childWorkflowInfo, ok := r.mutableState.GetChildExecutionInfo(childWorkflowScheduleID)
 	if !ok {
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending child workflow: %v", childWorkflowScheduleID))
 	}
 
-	targetNamespaceID, err := r.getTargetNamespaceID(childWorkflowTargetNamespace)
+	targetNamespaceID, err := r.getTargetNamespaceID(namespace.Name(attr.GetNamespace()), namespace.ID(attr.GetNamespaceId()))
 	if err != nil {
 		return err
 	}
@@ -417,7 +427,6 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 	attr := event.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 	scheduleID := event.GetEventId()
 	version := event.GetVersion()
-	targetNamespace := namespace.Name(attr.GetNamespace())
 	targetWorkflowID := attr.GetWorkflowExecution().GetWorkflowId()
 	targetRunID := attr.GetWorkflowExecution().GetRunId()
 	targetChildOnly := attr.GetChildWorkflowOnly()
@@ -427,7 +436,7 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending request cancel external workflow: %v", scheduleID))
 	}
 
-	targetNamespaceID, err := r.getTargetNamespaceID(targetNamespace)
+	targetNamespaceID, err := r.getTargetNamespaceID(namespace.Name(attr.GetNamespace()), namespace.ID(attr.GetNamespaceId()))
 	if err != nil {
 		return err
 	}
@@ -455,7 +464,6 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 	attr := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 	scheduleID := event.GetEventId()
 	version := event.GetVersion()
-	targetNamespace := namespace.Name(attr.GetNamespace())
 	targetWorkflowID := attr.GetWorkflowExecution().GetWorkflowId()
 	targetRunID := attr.GetWorkflowExecution().GetRunId()
 	targetChildOnly := attr.GetChildWorkflowOnly()
@@ -465,7 +473,7 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending signal external workflow: %v", scheduleID))
 	}
 
-	targetNamespaceID, err := r.getTargetNamespaceID(targetNamespace)
+	targetNamespaceID, err := r.getTargetNamespaceID(namespace.Name(attr.GetNamespace()), namespace.ID(attr.GetNamespaceId()))
 	if err != nil {
 		return err
 	}
@@ -520,7 +528,7 @@ func (r *TaskGeneratorImpl) GenerateActivityTimerTasks(
 	now time.Time,
 ) error {
 
-	_, err := r.getTimerSequence(now).CreateNextActivityTimer()
+	_, err := r.getTimerSequence().CreateNextActivityTimer()
 	return err
 }
 
@@ -528,7 +536,7 @@ func (r *TaskGeneratorImpl) GenerateUserTimerTasks(
 	now time.Time,
 ) error {
 
-	_, err := r.getTimerSequence(now).CreateNextUserTimer()
+	_, err := r.getTimerSequence().CreateNextUserTimer()
 	return err
 }
 
@@ -557,7 +565,7 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateLastHistoryReplicationTasks(
+func (r *TaskGeneratorImpl) GenerateMigrationTasks(
 	now time.Time,
 ) (tasks.Task, error) {
 	executionInfo := r.mutableState.GetExecutionInfo()
@@ -570,36 +578,46 @@ func (r *TaskGeneratorImpl) GenerateLastHistoryReplicationTasks(
 		return nil, err
 	}
 
-	return &tasks.HistoryReplicationTask{
-		// TaskID is set by shard
-		VisibilityTimestamp: now,
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		FirstEventID:        executionInfo.LastFirstEventId,
-		NextEventID:         lastItem.GetEventId() + 1,
-		Version:             lastItem.GetVersion(),
-		BranchToken:         versionHistory.BranchToken,
-		NewRunBranchToken:   nil,
-	}, nil
+	if r.mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return &tasks.SyncWorkflowStateTask{
+			VisibilityTimestamp: now,
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			Version:             lastItem.GetVersion(),
+		}, nil
+	} else {
+		return &tasks.HistoryReplicationTask{
+			// TaskID is set by shard
+			VisibilityTimestamp: now,
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			FirstEventID:        executionInfo.LastFirstEventId,
+			NextEventID:         lastItem.GetEventId() + 1,
+			Version:             lastItem.GetVersion(),
+			BranchToken:         versionHistory.BranchToken,
+			NewRunBranchToken:   nil,
+		}, nil
+	}
 }
 
-func (r *TaskGeneratorImpl) getTimerSequence(now time.Time) TimerSequence {
-	timeSource := clock.NewEventTimeSource()
-	timeSource.Update(now)
-	return NewTimerSequence(timeSource, r.mutableState)
+func (r *TaskGeneratorImpl) getTimerSequence() TimerSequence {
+	return NewTimerSequence(r.mutableState)
 }
 
 func (r *TaskGeneratorImpl) getTargetNamespaceID(
 	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
 ) (namespace.ID, error) {
+	if !targetNamespaceID.IsEmpty() {
+		return targetNamespaceID, nil
+	}
 
-	targetNamespaceID := namespace.ID(r.mutableState.GetExecutionInfo().NamespaceId)
-	if targetNamespace != "" {
+	// TODO (alex): Remove targetNamespace after NamespaceId is back filled. Backward compatibility: old events doesn't have targetNamespaceID.
+	if !targetNamespace.IsEmpty() {
 		targetNamespaceEntry, err := r.namespaceRegistry.GetNamespace(targetNamespace)
 		if err != nil {
 			return "", err
 		}
-		targetNamespaceID = targetNamespaceEntry.ID()
+		return targetNamespaceEntry.ID(), nil
 	}
 
-	return targetNamespaceID, nil
+	return namespace.ID(r.mutableState.GetExecutionInfo().NamespaceId), nil
 }

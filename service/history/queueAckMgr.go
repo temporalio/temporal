@@ -33,6 +33,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -53,10 +55,12 @@ type (
 		finishedChan  chan struct{}
 
 		sync.RWMutex
-		outstandingTasks map[int64]bool
-		readLevel        int64
-		ackLevel         int64
-		isReadFinished   bool
+		outstandingExecutables map[int64]queues.Executable
+		readLevel              int64
+		ackLevel               int64
+		isReadFinished         bool
+
+		executableInitializer taskExecutableInitializer
 	}
 )
 
@@ -64,39 +68,57 @@ const (
 	warnPendingTasks = 2000
 )
 
-func newQueueAckMgr(shard shard.Context, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {
+var _ queueAckMgr = (*queueAckMgrImpl)(nil)
+
+func newQueueAckMgr(
+	shard shard.Context,
+	options *QueueProcessorOptions,
+	processor processor,
+	ackLevel int64,
+	logger log.Logger,
+	executableInitializer taskExecutableInitializer,
+) *queueAckMgrImpl {
 
 	return &queueAckMgrImpl{
-		isFailover:       false,
-		shard:            shard,
-		options:          options,
-		processor:        processor,
-		outstandingTasks: make(map[int64]bool),
-		readLevel:        ackLevel,
-		ackLevel:         ackLevel,
-		logger:           logger,
-		metricsClient:    shard.GetMetricsClient(),
-		finishedChan:     nil,
+		isFailover:             false,
+		shard:                  shard,
+		options:                options,
+		processor:              processor,
+		outstandingExecutables: make(map[int64]queues.Executable),
+		readLevel:              ackLevel,
+		ackLevel:               ackLevel,
+		logger:                 logger,
+		metricsClient:          shard.GetMetricsClient(),
+		finishedChan:           nil,
+		executableInitializer:  executableInitializer,
 	}
 }
 
-func newQueueFailoverAckMgr(shard shard.Context, options *QueueProcessorOptions, processor processor, ackLevel int64, logger log.Logger) *queueAckMgrImpl {
+func newQueueFailoverAckMgr(
+	shard shard.Context,
+	options *QueueProcessorOptions,
+	processor processor,
+	ackLevel int64,
+	logger log.Logger,
+	executableInitializer taskExecutableInitializer,
+) *queueAckMgrImpl {
 
 	return &queueAckMgrImpl{
-		isFailover:       true,
-		shard:            shard,
-		options:          options,
-		processor:        processor,
-		outstandingTasks: make(map[int64]bool),
-		readLevel:        ackLevel,
-		ackLevel:         ackLevel,
-		logger:           logger,
-		metricsClient:    shard.GetMetricsClient(),
-		finishedChan:     make(chan struct{}, 1),
+		isFailover:             true,
+		shard:                  shard,
+		options:                options,
+		processor:              processor,
+		outstandingExecutables: make(map[int64]queues.Executable),
+		readLevel:              ackLevel,
+		ackLevel:               ackLevel,
+		logger:                 logger,
+		metricsClient:          shard.GetMetricsClient(),
+		finishedChan:           make(chan struct{}, 1),
+		executableInitializer:  executableInitializer,
 	}
 }
 
-func (a *queueAckMgrImpl) readQueueTasks() ([]tasks.Task, bool, error) {
+func (a *queueAckMgrImpl) readQueueTasks() ([]queues.Executable, bool, error) {
 	a.RLock()
 	readLevel := a.readLevel
 	a.RUnlock()
@@ -120,9 +142,11 @@ func (a *queueAckMgrImpl) readQueueTasks() ([]tasks.Task, bool, error) {
 		a.isReadFinished = true
 	}
 
+	filteredExecutables := make([]queues.Executable, 0, len(tasks))
+
 TaskFilterLoop:
 	for _, task := range tasks {
-		_, isLoaded := a.outstandingTasks[task.GetTaskID()]
+		_, isLoaded := a.outstandingExecutables[task.GetTaskID()]
 		if isLoaded {
 			// task already loaded
 			a.logger.Debug("Skipping transfer task", tag.Task(task))
@@ -136,18 +160,13 @@ TaskFilterLoop:
 		}
 		a.logger.Debug("Moving read level", tag.TaskID(task.GetTaskID()))
 		a.readLevel = task.GetTaskID()
-		a.outstandingTasks[task.GetTaskID()] = false
+
+		taskExecutable := a.executableInitializer(task)
+		a.outstandingExecutables[task.GetTaskID()] = taskExecutable
+		filteredExecutables = append(filteredExecutables, taskExecutable)
 	}
 
-	return tasks, morePage, nil
-}
-
-func (a *queueAckMgrImpl) completeQueueTask(taskID int64) {
-	a.Lock()
-	if _, ok := a.outstandingTasks[taskID]; ok {
-		a.outstandingTasks[taskID] = true
-	}
-	a.Unlock()
+	return filteredExecutables, morePage, nil
 }
 
 func (a *queueAckMgrImpl) getQueueAckLevel() int64 {
@@ -175,7 +194,7 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() error {
 	// task ID is not sequential, meaning there are a ton of missing chunks,
 	// so to optimize the performance, a sort is required
 	var taskIDs []int64
-	for k := range a.outstandingTasks {
+	for k := range a.outstandingExecutables {
 		taskIDs = append(taskIDs, k)
 	}
 	sort.Slice(taskIDs, func(i, j int) bool { return taskIDs[i] < taskIDs[j] })
@@ -199,10 +218,10 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() error {
 
 MoveAckLevelLoop:
 	for _, current := range taskIDs {
-		acked := a.outstandingTasks[current]
+		acked := a.outstandingExecutables[current].State() == ctasks.TaskStateAcked
 		if acked {
 			ackLevel = current
-			delete(a.outstandingTasks, current)
+			delete(a.outstandingExecutables, current)
 			a.logger.Debug("Moving timer ack level to", tag.AckLevel(ackLevel))
 		} else {
 			break MoveAckLevelLoop
@@ -210,7 +229,7 @@ MoveAckLevelLoop:
 	}
 	a.ackLevel = ackLevel
 
-	if a.isFailover && a.isReadFinished && len(a.outstandingTasks) == 0 {
+	if a.isFailover && a.isReadFinished && len(a.outstandingExecutables) == 0 {
 		a.Unlock()
 		// this means in failover mode, all possible failover transfer tasks
 		// are processed and we are free to shundown

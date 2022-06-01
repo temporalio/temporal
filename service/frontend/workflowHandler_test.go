@@ -204,7 +204,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}
 	_, err := wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(errListNotAllowed, err)
 
 	// test list open by workflow type
 	listRequest.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{
@@ -212,7 +212,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}}
 	_, err = wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(errListNotAllowed, err)
 
 	// test list close by wid
 	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
@@ -227,7 +227,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(errListNotAllowed, err)
 
 	// test list close by workflow type
 	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{
@@ -235,14 +235,14 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(errListNotAllowed, err)
 
 	// test list close by workflow status
 	failedStatus := enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &filterpb.StatusFilter{Status: failedStatus}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(errListNotAllowed, err)
 }
 
 func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
@@ -312,7 +312,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.EmptyName).Return(namespace.EmptyID, serviceerror.NewNotFound("not found")).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.EmptyName).Return(namespace.EmptyID, serviceerror.NewNamespaceNotFound("missing-namespace")).AnyTimes()
 
 	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
 		// Namespace: "forget to specify",
@@ -336,7 +336,7 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	var notFound *serviceerror.NotFound
+	var notFound *serviceerror.NamespaceNotFound
 	s.ErrorAs(err, &notFound)
 }
 
@@ -567,7 +567,7 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Failure_InvalidArchivalURI(
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
-	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	s.mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(nil)
 	s.mockVisibilityArchiver.EXPECT().ValidateURI(gomock.Any()).Return(errors.New("invalid URI"))
 	s.mockArchiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.mockHistoryArchiver, nil)
@@ -591,7 +591,7 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Success_EnabledWithNoArchiv
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", testHistoryArchivalURI))
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", testVisibilityArchivalURI))
-	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.CreateNamespaceResponse{
 		ID: testNamespaceID,
 	}, nil)
@@ -613,7 +613,7 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Success_EnabledWithArchival
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "invalidURI"))
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "invalidURI"))
-	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.CreateNamespaceResponse{
 		ID: testNamespaceID,
 	}, nil)
@@ -640,7 +640,7 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Success_ClusterNotConfigure
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewDisabledArchvialConfig())
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig())
-	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.CreateNamespaceResponse{
 		ID: testNamespaceID,
 	}, nil)
@@ -663,7 +663,7 @@ func (s *workflowHandlerSuite) TestRegisterNamespace_Success_NotEnabled() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI"))
-	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.CreateNamespaceResponse{
 		ID: testNamespaceID,
 	}, nil)
@@ -681,7 +681,7 @@ func (s *workflowHandlerSuite) TestDeprecateNamespace_Success() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI")).Times(2)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI")).Times(2)
-	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found"))
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.CreateNamespaceResponse{
 		ID: testNamespaceID,
 	}, nil)
@@ -729,7 +729,7 @@ func (s *workflowHandlerSuite) TestDeprecateNamespace_Error() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI")).Times(2)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI")).Times(2)
-	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found"))
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.CreateNamespaceResponse{
 		ID: testNamespaceID,
 	}, nil)
@@ -777,7 +777,7 @@ func (s *workflowHandlerSuite) TestDeleteNamespace_Success() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI")).Times(2)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI")).Times(2)
-	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found"))
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.CreateNamespaceResponse{
 		ID: testNamespaceID,
 	}, nil)
@@ -825,7 +825,7 @@ func (s *workflowHandlerSuite) TestDeleteNamespace_Error() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockArchivalMetadata.EXPECT().GetHistoryConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI")).Times(2)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "some random URI")).Times(2)
-	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found"))
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(&persistence.CreateNamespaceResponse{
 		ID: testNamespaceID,
 	}, nil)
@@ -1766,6 +1766,7 @@ func (s *workflowHandlerSuite) TestGetSystemInfo() {
 	s.True(resp.Capabilities.SignalAndQueryHeader)
 	s.True(resp.Capabilities.InternalErrorDifferentiation)
 	s.True(resp.Capabilities.ActivityFailureIncludeHeartbeat)
+	s.True(resp.Capabilities.SupportsSchedules)
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {

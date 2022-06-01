@@ -412,6 +412,20 @@ func (mr *MockEngineMockRecorder) ReplicateEventsV2(ctx, request interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateEventsV2", reflect.TypeOf((*MockEngine)(nil).ReplicateEventsV2), ctx, request)
 }
 
+// ReplicateWorkflowState mocks base method.
+func (m *MockEngine) ReplicateWorkflowState(ctx context.Context, request *historyservice.ReplicateWorkflowStateRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplicateWorkflowState", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReplicateWorkflowState indicates an expected call of ReplicateWorkflowState.
+func (mr *MockEngineMockRecorder) ReplicateWorkflowState(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateWorkflowState", reflect.TypeOf((*MockEngine)(nil).ReplicateWorkflowState), ctx, request)
+}
+
 // RequestCancelWorkflowExecution mocks base method.
 func (m *MockEngine) RequestCancelWorkflowExecution(ctx context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest) error {
 	m.ctrl.T.Helper()
@@ -649,4 +663,32 @@ func (m *MockEngine) TerminateWorkflowExecution(ctx context.Context, request *hi
 func (mr *MockEngineMockRecorder) TerminateWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).TerminateWorkflowExecution), ctx, request)
+}
+
+// VerifyChildExecutionCompletionRecorded mocks base method.
+func (m *MockEngine) VerifyChildExecutionCompletionRecorded(ctx context.Context, request *historyservice.VerifyChildExecutionCompletionRecordedRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyChildExecutionCompletionRecorded", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// VerifyChildExecutionCompletionRecorded indicates an expected call of VerifyChildExecutionCompletionRecorded.
+func (mr *MockEngineMockRecorder) VerifyChildExecutionCompletionRecorded(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyChildExecutionCompletionRecorded", reflect.TypeOf((*MockEngine)(nil).VerifyChildExecutionCompletionRecorded), ctx, request)
+}
+
+// VerifyFirstWorkflowTaskScheduled mocks base method.
+func (m *MockEngine) VerifyFirstWorkflowTaskScheduled(ctx context.Context, request *historyservice.VerifyFirstWorkflowTaskScheduledRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyFirstWorkflowTaskScheduled", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// VerifyFirstWorkflowTaskScheduled indicates an expected call of VerifyFirstWorkflowTaskScheduled.
+func (mr *MockEngineMockRecorder) VerifyFirstWorkflowTaskScheduled(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyFirstWorkflowTaskScheduled", reflect.TypeOf((*MockEngine)(nil).VerifyFirstWorkflowTaskScheduled), ctx, request)
 }

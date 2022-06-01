@@ -39,16 +39,15 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
-		StartTime           *time.Time
-		CloseTime           *time.Time
+		// These two fields are needed for cassandra standard visibility.
+		// TODO (alex): Remove them when cassandra standard visibility is removed.
+		StartTime *time.Time
+		CloseTime *time.Time
 	}
 )
 
 func (t *DeleteExecutionVisibilityTask) GetKey() Key {
-	return Key{
-		FireTime: time.Unix(0, 0),
-		TaskID:   t.TaskID,
-	}
+	return NewImmediateKey(t.TaskID)
 }
 
 func (t *DeleteExecutionVisibilityTask) GetVersion() int64 {

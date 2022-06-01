@@ -66,8 +66,14 @@ type (
 
 const (
 	QueueTypeUnknown QueueType = iota
+	// QueueTypeTransfer is used by single cursor transfer queue, which
+	// processes both active and standby task
+	QueueTypeTransfer
 	QueueTypeActiveTransfer
 	QueueTypeStandbyTransfer
+	// QueueTypeTimer is used by single cursor timer queue, which
+	// processes both active and standby task
+	QueueTypeTimer
 	QueueTypeActiveTimer
 	QueueTypeStandbyTimer
 	QueueTypeVisibility

@@ -137,6 +137,7 @@ func TerminateWorkflow(
 	terminateReason string,
 	terminateDetails *commonpb.Payloads,
 	terminateIdentity string,
+	deleteAfterTerminate bool,
 ) error {
 
 	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
@@ -154,6 +155,7 @@ func TerminateWorkflow(
 		terminateReason,
 		terminateDetails,
 		terminateIdentity,
+		deleteAfterTerminate,
 	)
 	return err
 }

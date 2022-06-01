@@ -49,7 +49,7 @@ type TallyClient struct {
 // Client implementation
 // reporter holds the common tags for the service
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
-func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx ServiceIdx) (Client, error) {
+func NewTallyClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx ServiceIdx) (Client, error) {
 	tagsFilterConfig := NewTagFilteringScopeConfig(clientConfig.ExcludeTags)
 
 	perUnitBuckets := make(map[MetricUnit]tally.Buckets)
@@ -66,7 +66,7 @@ func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx Service
 		return nil, fmt.Errorf("failed to initialize metrics client: %w", err)
 	}
 
-	rootScope := scope.Tagged(map[string]string{serviceName: serviceTypeTagValue})
+	rootScope := scope.Tagged(map[string]string{serviceName: serviceTypeTagValue, namespace: namespaceAllValue})
 
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
 	metricsClient := &TallyClient{
@@ -76,13 +76,12 @@ func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx Service
 		serviceIdx:      serviceIdx,
 		scopeWrapper:    scopeWrapper,
 		perUnitBuckets:  perUnitBuckets,
-		userScope:       newTallyUserScope(clientConfig, scope),
+		userScope:       newTallyUserScope(clientConfig, rootScope),
 	}
 
 	for idx, def := range ScopeDefs[Common] {
 		scopeTags := map[string]string{
 			OperationTagName: def.operation,
-			namespace:        namespaceAllValue,
 		}
 		mergeMapToRight(def.tags, scopeTags)
 		metricsClient.childScopes[idx] = rootScope.Tagged(scopeTags)
@@ -91,7 +90,6 @@ func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx Service
 	for idx, def := range ScopeDefs[serviceIdx] {
 		scopeTags := map[string]string{
 			OperationTagName: def.operation,
-			namespace:        namespaceAllValue,
 		}
 		mergeMapToRight(def.tags, scopeTags)
 		metricsClient.childScopes[idx] = rootScope.Tagged(scopeTags)

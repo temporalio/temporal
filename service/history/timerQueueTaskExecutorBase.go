@@ -30,12 +30,17 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -43,12 +48,15 @@ import (
 
 type (
 	timerQueueTaskExecutorBase struct {
-		shard         shard.Context
-		deleteManager workflow.DeleteManager
-		cache         workflow.Cache
-		logger        log.Logger
-		metricsClient metrics.Client
-		config        *configs.Config
+		currentClusterName string
+		shard              shard.Context
+		registry           namespace.Registry
+		deleteManager      workflow.DeleteManager
+		cache              workflow.Cache
+		logger             log.Logger
+		matchingClient     matchingservice.MatchingServiceClient
+		metricsClient      metrics.Client
+		config             *configs.Config
 	}
 )
 
@@ -56,16 +64,20 @@ func newTimerQueueTaskExecutorBase(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	deleteManager workflow.DeleteManager,
+	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
-		shard:         shard,
-		cache:         workflowCache,
-		deleteManager: deleteManager,
-		logger:        logger,
-		metricsClient: shard.GetMetricsClient(),
-		config:        config,
+		currentClusterName: shard.GetClusterMetadata().GetCurrentClusterName(),
+		shard:              shard,
+		registry:           shard.GetNamespaceRegistry(),
+		cache:              workflowCache,
+		deleteManager:      deleteManager,
+		logger:             logger,
+		matchingClient:     matchingClient,
+		metricsClient:      shard.GetMetricsClient(),
+		config:             config,
 	}
 }
 
@@ -107,6 +119,13 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return err
 	}
 
+	if mutableState.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		// If workflow is running then just ignore DeleteHistoryEventTask timer task.
+		// This should almost never happen because DeleteHistoryEventTask is created only for closed workflows.
+		// But cross DC replication can resurrect workflow and therefore DeleteHistoryEventTask should be ignored.
+		return nil
+	}
+
 	lastWriteVersion, err := mutableState.GetLastWriteVersion()
 	if err != nil {
 		return err
@@ -135,7 +154,42 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	)
 }
 
-func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
+func getWorkflowExecutionContextForTask(
+	ctx context.Context,
+	workflowCache workflow.Cache,
+	task tasks.Task,
+) (workflow.Context, workflow.ReleaseCacheFunc, error) {
+	namespaceID, execution := getTaskNamespaceIDAndWorkflowExecution(task)
+	return getWorkflowExecutionContext(
+		ctx,
+		workflowCache,
+		namespaceID,
+		execution,
+	)
+}
+
+func getWorkflowExecutionContext(
+	ctx context.Context,
+	workflowCache workflow.Cache,
+	namespaceID namespace.ID,
+	execution commonpb.WorkflowExecution,
+) (workflow.Context, workflow.ReleaseCacheFunc, error) {
+	ctx, cancel := context.WithTimeout(ctx, taskGetExecutionTimeout)
+	defer cancel()
+
+	weContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		workflow.CallerTypeTask,
+	)
+	if common.IsContextDeadlineExceededErr(err) {
+		err = consts.ErrWorkflowBusy
+	}
+	return weContext, release, err
+}
+
+func getTaskNamespaceIDAndWorkflowExecution(
 	task tasks.Task,
 ) (namespace.ID, commonpb.WorkflowExecution) {
 

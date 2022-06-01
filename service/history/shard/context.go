@@ -31,7 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
-	clockpb "go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -67,8 +67,9 @@ type (
 		GetEngine() (Engine, error)
 		GetEngineWithContext(ctx context.Context) (Engine, error)
 
-		NewVectorClock() (*clockpb.ShardClock, error)
-		CurrentVectorClock() *clockpb.ShardClock
+		AssertOwnership(ctx context.Context) error
+		NewVectorClock() (*clockspb.VectorClock, error)
+		CurrentVectorClock() *clockspb.VectorClock
 
 		GenerateTaskID() (int64, error)
 		GenerateTaskIDs(number int) ([]int64, error)
@@ -113,7 +114,7 @@ type (
 		// If branchToken != nil, then delete history also, otherwise leave history.
 		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, version int64, startTime *time.Time, closeTime *time.Time) error
 
-		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
+		GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error)
 		GetHistoryClient() historyservice.HistoryServiceClient
 		GetPayloadSerializer() serialization.Serializer
 

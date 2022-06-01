@@ -27,7 +27,6 @@ package serialization
 import (
 	"fmt"
 	"reflect"
-	"time"
 
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
@@ -291,22 +290,6 @@ func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob, clusterName 
 
 	if err != nil {
 		return nil, err
-	}
-
-	if len(shardInfo.GetClusterTransferAckLevel()) == 0 {
-		shardInfo.ClusterTransferAckLevel = map[string]int64{
-			clusterName: shardInfo.GetTransferAckLevel(),
-		}
-	}
-
-	if len(shardInfo.GetClusterTimerAckLevel()) == 0 {
-		shardInfo.ClusterTimerAckLevel = map[string]*time.Time{
-			clusterName: shardInfo.GetTimerAckLevelTime(),
-		}
-	}
-
-	if shardInfo.GetClusterReplicationLevel() == nil {
-		shardInfo.ClusterReplicationLevel = make(map[string]int64)
 	}
 
 	if shardInfo.GetReplicationDlqAckLevel() == nil {

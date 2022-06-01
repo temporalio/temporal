@@ -37,6 +37,7 @@ import (
 	v1 "go.temporal.io/server/api/enums/v1"
 	backoff "go.temporal.io/server/common/backoff"
 	log "go.temporal.io/server/common/log"
+	metrics "go.temporal.io/server/common/metrics"
 	tasks "go.temporal.io/server/common/tasks"
 	tasks0 "go.temporal.io/server/service/history/tasks"
 )
@@ -147,10 +148,10 @@ func (mr *MockExecutableMockRecorder) GetNamespaceID() *gomock.Call {
 }
 
 // GetPriority mocks base method.
-func (m *MockExecutable) GetPriority() int {
+func (m *MockExecutable) GetPriority() tasks.Priority {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPriority")
-	ret0, _ := ret[0].(int)
+	ret0, _ := ret[0].(tasks.Priority)
 	return ret0
 }
 
@@ -172,6 +173,20 @@ func (m *MockExecutable) GetRunID() string {
 func (mr *MockExecutableMockRecorder) GetRunID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRunID", reflect.TypeOf((*MockExecutable)(nil).GetRunID))
+}
+
+// GetTask mocks base method.
+func (m *MockExecutable) GetTask() tasks0.Task {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTask")
+	ret0, _ := ret[0].(tasks0.Task)
+	return ret0
+}
+
+// GetTask indicates an expected call of GetTask.
+func (mr *MockExecutableMockRecorder) GetTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTask", reflect.TypeOf((*MockExecutable)(nil).GetTask))
 }
 
 // GetTaskID mocks base method.
@@ -339,7 +354,7 @@ func (mr *MockExecutableMockRecorder) RetryPolicy() *gomock.Call {
 }
 
 // SetPriority mocks base method.
-func (m *MockExecutable) SetPriority(arg0 int) {
+func (m *MockExecutable) SetPriority(arg0 tasks.Priority) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetPriority", arg0)
 }
@@ -424,11 +439,12 @@ func (m *MockExecutor) EXPECT() *MockExecutorMockRecorder {
 }
 
 // Execute mocks base method.
-func (m *MockExecutor) Execute(arg0 context.Context, arg1 Executable) error {
+func (m *MockExecutor) Execute(arg0 context.Context, arg1 Executable) (metrics.Scope, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(metrics.Scope)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Execute indicates an expected call of Execute.

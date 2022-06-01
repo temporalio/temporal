@@ -48,10 +48,7 @@ type (
 )
 
 func (d *WorkflowTaskTimeoutTask) GetKey() Key {
-	return Key{
-		FireTime: d.VisibilityTimestamp,
-		TaskID:   d.TaskID,
-	}
+	return NewKey(d.VisibilityTimestamp, d.TaskID)
 }
 
 func (d *WorkflowTaskTimeoutTask) GetVersion() int64 {

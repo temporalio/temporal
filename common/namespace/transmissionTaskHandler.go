@@ -27,6 +27,7 @@ package namespace
 import (
 	"context"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 
@@ -48,6 +49,7 @@ type (
 			info *persistencespb.NamespaceInfo,
 			config *persistencespb.NamespaceConfig,
 			replicationConfig *persistencespb.NamespaceReplicationConfig,
+			replicationClusterListUpdated bool,
 			configVersion int64,
 			failoverVersion int64,
 			isGlobalNamespace bool,
@@ -78,6 +80,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
+	replicationClusterListUpdated bool,
 	configVersion int64,
 	failoverVersion int64,
 	isGlobalNamespace bool,
@@ -86,7 +89,11 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 	if !isGlobalNamespace {
 		return nil
 	}
-	if len(replicationConfig.Clusters) <= 1 {
+	if len(replicationConfig.Clusters) <= 1 && !replicationClusterListUpdated {
+		return nil
+	}
+	if info.State == enumspb.NAMESPACE_STATE_DELETED {
+		// Don't replicate deleted namespace changes.
 		return nil
 	}
 

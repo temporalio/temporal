@@ -215,7 +215,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 	resp0, err0 := m.GetNamespace("", "does-not-exist")
 	m.Nil(resp0)
 	m.Error(err0)
-	m.IsType(&serviceerror.NotFound{}, err0)
+	m.IsType(&serviceerror.NamespaceNotFound{}, err0)
 	testBinaries := &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			"abc": {
@@ -935,12 +935,12 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 		time.Sleep(time.Second * time.Duration(i))
 	}
 	m.Error(err4)
-	m.IsType(&serviceerror.NotFound{}, err4)
+	m.IsType(&serviceerror.NamespaceNotFound{}, err4)
 	m.Nil(resp4)
 
 	resp5, err5 := m.GetNamespace(id, "")
 	m.Error(err5)
-	m.IsType(&serviceerror.NotFound{}, err5)
+	m.IsType(&serviceerror.NamespaceNotFound{}, err5)
 	m.Nil(resp5)
 
 	id = uuid.New()
@@ -976,12 +976,12 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 
 	resp8, err8 := m.GetNamespace("", name)
 	m.Error(err8)
-	m.IsType(&serviceerror.NotFound{}, err8)
+	m.IsType(&serviceerror.NamespaceNotFound{}, err8)
 	m.Nil(resp8)
 
 	resp9, err9 := m.GetNamespace(id, "")
 	m.Error(err9)
-	m.IsType(&serviceerror.NotFound{}, err9)
+	m.IsType(&serviceerror.NamespaceNotFound{}, err9)
 	m.Nil(resp9)
 }
 

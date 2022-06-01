@@ -70,6 +70,8 @@ var (
 	errDLQTypeIsNotSupported                              = serviceerror.NewInvalidArgument("The DLQ type is not supported.")
 	errFailureMustHaveApplicationFailureInfo              = serviceerror.NewInvalidArgument("Failure must have ApplicationFailureInfo.")
 	errStatusFilterMustBeNotRunning                       = serviceerror.NewInvalidArgument("StatusFilter must be specified and must be not Running.")
+	errCronNotAllowed                                     = serviceerror.NewInvalidArgument("Scheduled workflow must not contain CronSchedule")
+	errIDReusePolicyNotAllowed                            = serviceerror.NewInvalidArgument("Scheduled workflow must not contain WorkflowIDReusePolicy")
 	errShuttingDown                                       = serviceerror.NewUnavailable("Shutting down")
 
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
@@ -84,5 +86,6 @@ var (
 	errUnableToStartWorkflowMessage                   = "Unable to start %s workflow: %v."
 	errWorkflowReturnedErrorMessage                   = "Workflow %s returned an error: %v."
 
-	errNoPermission = serviceerror.NewPermissionDenied("No permission to do this operation.", "")
+	errListNotAllowed      = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
+	errSchedulesNotAllowed = serviceerror.NewPermissionDenied("Schedules are disabled on this namespace.", "")
 )

@@ -89,7 +89,7 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), time.Second*30)
 
-	s.ShardID = 1 + rand.Int31n(16)
+	s.ShardID = 1 + rand.Int31n(maxShards)
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID: s.ShardID,
 		InitialShardInfo: &persistencespb.ShardInfo{
@@ -120,16 +120,16 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 		err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 			ShardID:             s.ShardID,
 			TaskCategory:        category,
-			InclusiveMinTaskKey: tasks.Key{TaskID: 0},
-			ExclusiveMaxTaskKey: tasks.Key{TaskID: math.MaxInt64},
+			InclusiveMinTaskKey: tasks.NewImmediateKey(0),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(math.MaxInt64),
 		})
 		s.NoError(err)
 	}
 	err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 		ShardID:             s.ShardID,
 		TaskCategory:        tasks.CategoryTimer,
-		InclusiveMinTaskKey: tasks.Key{FireTime: time.Unix(0, 0)},
-		ExclusiveMaxTaskKey: tasks.Key{FireTime: time.Unix(0, math.MaxInt64)},
+		InclusiveMinTaskKey: tasks.NewKey(time.Unix(0, 0), 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(time.Unix(0, math.MaxInt64), 0),
 	})
 	s.NoError(err)
 
@@ -298,10 +298,10 @@ func (s *ExecutionMutableStateTaskSuite) RandomPaginateRange(
 	inclusiveMinTaskKey := createdTasks[firstTaskIdx].GetKey()
 	var exclusiveMaxTaskKey tasks.Key
 	if nextTaskIdx == numTasks {
-		exclusiveMaxTaskKey = tasks.Key{
-			FireTime: createdTasks[numTasks-1].GetVisibilityTime().Add(time.Second),
-			TaskID:   createdTasks[numTasks-1].GetTaskID() + 10,
-		}
+		exclusiveMaxTaskKey = tasks.NewKey(
+			createdTasks[numTasks-1].GetVisibilityTime().Add(time.Second),
+			createdTasks[numTasks-1].GetTaskID()+10,
+		)
 	} else {
 		exclusiveMaxTaskKey = createdTasks[nextTaskIdx].GetKey()
 	}
@@ -309,8 +309,8 @@ func (s *ExecutionMutableStateTaskSuite) RandomPaginateRange(
 	taskCategory := createdTasks[0].GetCategory()
 	switch taskCategory.Type() {
 	case tasks.CategoryTypeImmediate:
-		inclusiveMinTaskKey.FireTime = time.Time{}
-		exclusiveMaxTaskKey.FireTime = time.Time{}
+		inclusiveMinTaskKey.FireTime = tasks.DefaultFireTime
+		exclusiveMaxTaskKey.FireTime = tasks.DefaultFireTime
 	case tasks.CategoryTypeScheduled:
 		inclusiveMinTaskKey.TaskID = 0
 		exclusiveMaxTaskKey.TaskID = 0

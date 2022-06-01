@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -71,6 +72,7 @@ type (
 		mockVisibilityMgr *manager.MockVisibilityManager
 		mockExecutionMgr  *persistence.MockExecutionManager
 
+		workflowCache               workflow.Cache
 		logger                      log.Logger
 		namespaceID                 namespace.ID
 		namespace                   namespace.Name
@@ -110,9 +112,8 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:          1,
-				RangeId:          1,
-				TransferAckLevel: 0,
+				ShardId: 1,
+				RangeId: 1,
 			}},
 		config,
 	)
@@ -134,12 +135,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	mockNamespaceCache := s.mockShard.Resource.NamespaceCache
 	mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespace(tests.Namespace).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
-	mockNamespaceCache.EXPECT().GetNamespaceByID(tests.TargetNamespaceID).Return(tests.GlobalTargetNamespaceEntry, nil).AnyTimes()
-	mockNamespaceCache.EXPECT().GetNamespace(tests.TargetNamespace).Return(tests.GlobalTargetNamespaceEntry, nil).AnyTimes()
-	mockNamespaceCache.EXPECT().GetNamespaceByID(tests.ParentNamespaceID).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
-	mockNamespaceCache.EXPECT().GetNamespace(tests.ParentNamespace).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
-	mockNamespaceCache.EXPECT().GetNamespaceByID(tests.ChildNamespaceID).Return(tests.GlobalChildNamespaceEntry, nil).AnyTimes()
-	mockNamespaceCache.EXPECT().GetNamespace(tests.ChildNamespace).Return(tests.GlobalChildNamespaceEntry, nil).AnyTimes()
+	mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil).AnyTimes()
 
 	mockClusterMetadata := s.mockShard.Resource.ClusterMetadata
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -147,15 +143,14 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, s.version).Return(mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
 
+	s.workflowCache = workflow.NewCache(s.mockShard)
 	s.logger = s.mockShard.GetLogger()
 
-	historyCache := workflow.NewCache(s.mockShard)
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
 		clusterMetadata:    mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
-		historyCache:       historyCache,
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		metricsClient:      s.mockShard.GetMetricsClient(),
@@ -165,7 +160,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 
 	s.visibilityQueueTaskExecutor = newVisibilityQueueTaskExecutor(
 		s.mockShard,
-		h.historyCache,
+		s.workflowCache,
 		s.mockVisibilityMgr,
 		s.logger,
 	)
@@ -187,6 +182,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 
 	parentNamespaceID := "some random parent namespace ID"
 	parentInitiatedID := int64(3222)
+	parentInitiatedVersion := int64(1234)
 	parentNamespace := "some random parent namespace Name"
 	parentExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random parent workflow ID",
@@ -206,10 +202,11 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 			ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
-				NamespaceId: parentNamespaceID,
-				Namespace:   parentNamespace,
-				Execution:   parentExecution,
-				InitiatedId: parentInitiatedID,
+				NamespaceId:      parentNamespaceID,
+				Namespace:        parentNamespace,
+				Execution:        parentExecution,
+				InitiatedId:      parentInitiatedID,
+				InitiatedVersion: parentInitiatedVersion,
 			},
 		},
 	)
@@ -238,7 +235,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).Return(nil)
 
-	err = s.visibilityQueueTaskExecutor.execute(context.Background(), visibilityTask, true)
+	_, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
 	s.Nil(err)
 }
 
@@ -293,7 +290,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 		s.createRecordWorkflowExecutionStartedRequest(s.namespace, event, visibilityTask, mutableState, backoff, taskQueueName),
 	).Return(nil)
 
-	err = s.visibilityQueueTaskExecutor.execute(context.Background(), visibilityTask, true)
+	_, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
 	s.Nil(err)
 }
 
@@ -343,7 +340,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 		s.createUpsertWorkflowSearchAttributesRequest(s.namespace, visibilityTask, mutableState, taskQueueName),
 	).Return(nil)
 
-	err = s.visibilityQueueTaskExecutor.execute(context.Background(), visibilityTask, true)
+	_, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
 	s.NoError(err)
 }
 
@@ -421,4 +418,10 @@ func (s *visibilityQueueTaskExecutorSuite) createPersistenceMutableState(
 	))
 	s.NoError(err)
 	return workflow.TestCloneToProto(ms)
+}
+
+func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
+	task tasks.Task,
+) queues.Executable {
+	return queues.NewExecutable(task, nil, s.visibilityQueueTaskExecutor, nil, nil, s.mockShard.GetTimeSource(), nil, nil, queues.QueueTypeVisibility, nil)
 }

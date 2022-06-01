@@ -43,7 +43,7 @@ import (
 // Fixed namespace values for now
 const (
 	namespacePartition       = 0
-	cassandraPersistenceName = "cassandra"
+	CassandraPersistenceName = "cassandra"
 )
 
 const (
@@ -148,7 +148,7 @@ func NewVisibilityStore(
 }
 
 func (v *visibilityStore) GetName() string {
-	return cassandraPersistenceName
+	return CassandraPersistenceName
 }
 
 // Close releases the resources held by this object
@@ -471,7 +471,7 @@ func (v *visibilityStore) DeleteWorkflowExecution(
 			request.RunID,
 		).WithContext(ctx)
 	} else {
-		panic("both StartTime and CloseTime are nil")
+		panic("Cassandra visibility store: DeleteWorkflowExecution: both StartTime and CloseTime are nil")
 	}
 
 	if err := query.Consistency(v.lowConslevel).Exec(); err != nil {

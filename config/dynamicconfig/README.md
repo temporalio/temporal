@@ -1,4 +1,4 @@
-Use development.yaml file to override the default dynamic config value (they are specified
+Use `development-*.yaml` file to override the default dynamic config value (they are specified
 when creating the service config).
 
 Each key can have zero or more values and each value can have zero or more

@@ -26,9 +26,10 @@ package history
 
 import (
 	"context"
-	"time"
 
 	"go.temporal.io/api/serviceerror"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -37,10 +38,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
-)
-
-const (
-	refreshTaskTimeout = 30 * time.Second
 )
 
 // VerifyTaskVersion, will return true if failover version check is successful
@@ -87,12 +84,29 @@ func loadMutableStateForTransferTask(
 		metricsClient.Scope(metrics.TransferQueueProcessorScope),
 		logger,
 	)
-	if _, ok := err.(*serviceerror.NotFound); ok {
-		// NotFound error will be ignored by task error handling logic, so log it here
-		// for transfer tasks, mutable state should always be available
-		logger.Error("Transfer Task Processor: workflow mutable state not found, skip.")
-	}
+	if err != nil {
+		// When standby task executor executes task in active cluster (and vice versa),
+		// mutable state might be already deleted by active task executor and NotFound is a valid case which shouldn't be logged.
+		// Unfortunately, this will also skip logging of actual errors that might happen due to serious bugs,
+		// but these errors, most likely, will happen for other task types too, and will be logged.
+		// TODO: remove this logic multi-cursor is implemented and only one task processor is running in each cluster.
+		skipNotFoundLog :=
+			transferTask.GetType() == enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION ||
+				transferTask.GetType() == enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION
 
+		if !skipNotFoundLog {
+			switch err.(type) {
+			case *serviceerror.NotFound:
+				// NotFound error will be ignored by task error handling logic, so log it here
+				// for transfer tasks, mutable state should always be available
+				logger.Warn("Transfer Task Processor: workflow mutable state not found, skip.")
+			case *serviceerror.NamespaceNotFound:
+				// NamespaceNotFound error will be ignored by task error handling logic, so log it here
+				// for transfer tasks, namespace should always be available.
+				logger.Warn("Transfer Task Processor: namespace not found, skip.")
+			}
+		}
+	}
 	return mutableState, err
 }
 
@@ -182,4 +196,16 @@ func getTimerTaskEventIDAndRetryable(
 	}
 
 	return eventID, retryable
+}
+
+func getNamespaceTagByID(
+	registry namespace.Registry,
+	namespaceID string,
+) metrics.Tag {
+	namespaceName, err := registry.GetNamespaceName(namespace.ID(namespaceID))
+	if err != nil {
+		return metrics.NamespaceUnknownTag()
+	}
+
+	return metrics.NamespaceTag(namespaceName.String())
 }

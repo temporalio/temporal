@@ -29,12 +29,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -69,8 +71,8 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
@@ -158,8 +160,8 @@ var (
 func NewAdminHandler(
 	args NewAdminHandlerArgs,
 ) *AdminHandler {
-
 	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
+		args.ClusterMetadata.GetCurrentClusterName(),
 		args.PersistenceMetadataManager,
 		args.Logger,
 	)
@@ -177,6 +179,7 @@ func NewAdminHandler(
 			namespace.NewNamespaceReplicator(args.ReplicatorNamespaceReplicationQueue, args.Logger),
 			args.ArchivalMetadata,
 			args.ArchiverProvider,
+			args.Config.EnableSchedules,
 		),
 		namespaceDLQHandler: namespace.NewDLQMessageHandler(
 			namespaceReplicationTaskExecutor,
@@ -385,7 +388,7 @@ func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName stri
 	var wfInfo *workflowpb.WorkflowExecutionInfo
 	if err != nil {
 		// NotFound can happen when no search attributes were added and the workflow has never been executed.
-		if _, notFound := err.(*serviceerror.NotFound); !notFound {
+		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
 			lastErr = serviceerror.NewUnavailable(fmt.Sprintf("unable to get %s workflow state: %v", addsearchattributes.WorkflowName, err))
 			adh.logger.Error("getSearchAttributes error", tag.Error(lastErr))
 		}
@@ -565,12 +568,26 @@ func (adh *AdminHandler) ListHistoryTasks(
 
 	var minTaskKey, maxTaskKey tasks.Key
 	if taskRange.InclusiveMinTaskKey != nil {
-		minTaskKey.FireTime = timestamp.TimeValue(taskRange.InclusiveMinTaskKey.FireTime)
-		minTaskKey.TaskID = taskRange.InclusiveMinTaskKey.TaskId
+		minTaskKey = tasks.NewKey(
+			timestamp.TimeValue(taskRange.InclusiveMinTaskKey.FireTime),
+			taskRange.InclusiveMinTaskKey.TaskId,
+		)
+		if err := tasks.ValidateKey(minTaskKey); err != nil {
+			return nil, adh.error(&serviceerror.InvalidArgument{
+				Message: fmt.Sprintf("invalid minTaskKey: %v", err.Error()),
+			}, scope)
+		}
 	}
 	if taskRange.ExclusiveMaxTaskKey != nil {
-		maxTaskKey.FireTime = timestamp.TimeValue(taskRange.ExclusiveMaxTaskKey.FireTime)
-		maxTaskKey.TaskID = taskRange.ExclusiveMaxTaskKey.TaskId
+		maxTaskKey = tasks.NewKey(
+			timestamp.TimeValue(taskRange.ExclusiveMaxTaskKey.FireTime),
+			taskRange.ExclusiveMaxTaskKey.TaskId,
+		)
+		if err := tasks.ValidateKey(maxTaskKey); err != nil {
+			return nil, adh.error(&serviceerror.InvalidArgument{
+				Message: fmt.Sprintf("invalid maxTaskKey: %v", err.Error()),
+			}, scope)
+		}
 	}
 	resp, err := adh.persistenceExecutionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             request.ShardId,
@@ -676,18 +693,19 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	); err != nil {
 		return nil, adh.error(err, scope)
 	}
-	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+
+	ns, err := adh.getNamespaceFromRequest(request)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
-	scope = scope.Tagged(metrics.NamespaceTag(request.GetNamespace()))
+	scope = scope.Tagged(metrics.NamespaceTag(ns.Name().String()))
 
 	execution := request.Execution
 	var pageToken *tokenspb.RawHistoryContinuation
 	var targetVersionHistory *historyspb.VersionHistory
 	if request.NextPageToken == nil {
 		response, err := adh.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-			NamespaceId: namespaceID.String(),
+			NamespaceId: ns.ID().String(),
 			Execution:   execution,
 		})
 		if err != nil {
@@ -738,7 +756,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	}
 	pageSize := int(request.GetMaximumPageSize())
 	shardID := common.WorkflowIDToHistoryShard(
-		namespaceID.String(),
+		ns.ID().String(),
 		execution.GetWorkflowId(),
 		adh.numberOfHistoryShards,
 	)
@@ -753,7 +771,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		ShardID:       shardID,
 	})
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
+		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
 			return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
@@ -770,14 +788,14 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
 	// namespaces along with the individual namespaces stats
 	adh.metricsClient.
-		Scope(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
+		Scope(metrics.AdminGetWorkflowExecutionRawHistoryScope).
 		RecordDistribution(metrics.HistorySize, size)
-	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
-		RecordDistribution(metrics.HistorySize, size)
+	scope.RecordDistribution(metrics.HistorySize, size)
 
 	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
 		VersionHistory: targetVersionHistory,
+		HistoryNodeIds: rawHistoryResponse.NodeIDs,
 	}
 	if len(pageToken.PersistenceToken) == 0 {
 		result.NextPageToken = nil
@@ -1153,9 +1171,6 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-	if request.GetNamespace() == "" {
-		return nil, adh.error(interceptor.ErrNamespaceNotSet, scope)
-	}
 	if request.WorkflowExecution == nil {
 		return nil, adh.error(errExecutionNotSet, scope)
 	}
@@ -1165,7 +1180,7 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	if request.GetEvents() == nil {
 		return nil, adh.error(errWorkflowIDNotSet, scope)
 	}
-	namespaceEntry, err := adh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	namespaceEntry, err := adh.getNamespaceFromRequest(request)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
@@ -1389,7 +1404,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	if err := validateExecution(request.Execution); err != nil {
 		return nil, adh.error(err, scope)
 	}
-	namespaceEntry, err := adh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	namespaceEntry, err := adh.getNamespaceFromRequest(request)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
@@ -1416,10 +1431,9 @@ func (adh *AdminHandler) ResendReplicationTasks(
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-
 	resender := xdc.NewNDCHistoryResender(
 		adh.namespaceRegistry,
-		adh.clientBean.GetRemoteAdminClient(request.GetRemoteCluster()),
+		adh.clientBean,
 		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 			_, err1 := adh.historyClient.ReplicateEventsV2(ctx, request)
 			return err1
@@ -1429,6 +1443,7 @@ func (adh *AdminHandler) ResendReplicationTasks(
 		adh.logger,
 	)
 	if err := resender.SendSingleWorkflowHistory(
+		request.GetRemoteCluster(),
 		namespace.ID(request.GetNamespaceId()),
 		request.GetWorkflowId(),
 		request.GetRunId(),
@@ -1476,6 +1491,148 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 	return &adminservice.GetTaskQueueTasksResponse{
 		Tasks:         resp.Tasks,
 		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
+func (adh *AdminHandler) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *adminservice.DeleteWorkflowExecutionRequest,
+) (_ *adminservice.DeleteWorkflowExecutionResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminDeleteWorkflowExecutionScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	if err := validateExecution(request.Execution); err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+	execution := request.Execution
+
+	shardID := common.WorkflowIDToHistoryShard(
+		namespaceID.String(),
+		execution.GetWorkflowId(),
+		adh.numberOfHistoryShards,
+	)
+	logger := log.With(adh.logger,
+		tag.WorkflowNamespace(request.Namespace),
+		tag.WorkflowID(execution.WorkflowId),
+		tag.WorkflowRunID(execution.RunId),
+	)
+
+	if execution.RunId == "" {
+		resp, err := adh.persistenceExecutionManager.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
+			ShardID:     shardID,
+			NamespaceID: namespaceID.String(),
+			WorkflowID:  execution.WorkflowId,
+		})
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+		execution.RunId = resp.RunID
+	}
+
+	var warnings []string
+	var branchTokens [][]byte
+	var startTime, closeTime *time.Time
+	cassVisBackend := strings.Contains(adh.visibilityMgr.GetName(), cassandra.CassandraPersistenceName)
+
+	resp, err := adh.persistenceExecutionManager.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
+		ShardID:     shardID,
+		NamespaceID: namespaceID.String(),
+		WorkflowID:  execution.WorkflowId,
+		RunID:       execution.RunId,
+	})
+	if err != nil {
+		if common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err) {
+			return nil, adh.error(err, scope)
+		}
+		// continue to deletion
+		warnMsg := "Unable to load mutable state when deleting workflow execution, " +
+			"will skip deleting workflow history and cassandra visibility record"
+		logger.Warn(warnMsg, tag.Error(err))
+		warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
+	} else {
+		// load necessary information from mutable state
+		executionInfo := resp.State.GetExecutionInfo()
+		histories := executionInfo.GetVersionHistories().GetHistories()
+		branchTokens = make([][]byte, 0, len(histories))
+		for _, historyItem := range histories {
+			branchTokens = append(branchTokens, historyItem.GetBranchToken())
+		}
+
+		if cassVisBackend {
+			if resp.State.ExecutionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+				startTime = executionInfo.GetStartTime()
+			} else if executionInfo.GetCloseTime() != nil {
+				closeTime = executionInfo.GetCloseTime()
+			} else {
+				completionEvent, err := adh.getWorkflowCompletionEvent(ctx, shardID, resp.State)
+				if err != nil {
+					warnMsg := "Unable to load workflow completion event, will skip deleting visibility record"
+					adh.logger.Warn(warnMsg, tag.Error(err))
+					warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
+				} else {
+					closeTime = completionEvent.GetEventTime()
+				}
+			}
+		}
+	}
+
+	if !cassVisBackend || (startTime != nil || closeTime != nil) {
+		// if using cass visibility, then either start or close time should be non-nil
+		// NOTE: the deletion is best effort, for sql and cassandra visibility implementation,
+		// we can't guarantee there's no update or record close request for this workflow since
+		// visibility queue processing is async. Operator can call this api again to delete visibility
+		// record again if this happens.
+		if _, err := adh.historyClient.DeleteWorkflowVisibilityRecord(ctx, &historyservice.DeleteWorkflowVisibilityRecordRequest{
+			NamespaceId:       namespaceID.String(),
+			Execution:         execution,
+			WorkflowStartTime: startTime,
+			WorkflowCloseTime: closeTime,
+		}); err != nil {
+			return nil, adh.error(err, scope)
+		}
+	}
+
+	if err := adh.persistenceExecutionManager.DeleteCurrentWorkflowExecution(ctx, &persistence.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     shardID,
+		NamespaceID: namespaceID.String(),
+		WorkflowID:  execution.WorkflowId,
+		RunID:       execution.RunId,
+	}); err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	if err := adh.persistenceExecutionManager.DeleteWorkflowExecution(ctx, &persistence.DeleteWorkflowExecutionRequest{
+		ShardID:     shardID,
+		NamespaceID: namespaceID.String(),
+		WorkflowID:  execution.WorkflowId,
+		RunID:       execution.RunId,
+	}); err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	for _, branchToken := range branchTokens {
+		if err := adh.persistenceExecutionManager.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
+			ShardID:     shardID,
+			BranchToken: branchToken,
+		}); err != nil {
+			warnMsg := "Failed to delete history branch, skip"
+			adh.logger.Warn(warnMsg, tag.WorkflowBranchID(string(branchToken)), tag.Error(err))
+			warnings = append(warnings, fmt.Sprintf("%s. BranchToken: %v, Error: %v", warnMsg, branchToken, err.Error()))
+		}
+	}
+
+	return &adminservice.DeleteWorkflowExecutionResponse{
+		Warnings: warnings,
 	}, nil
 }
 
@@ -1641,7 +1798,7 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	case *serviceerror.ResourceExhausted:
 		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)
 		return err
-	case *serviceerror.NotFound:
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		return err
 	}
 
@@ -1649,4 +1806,63 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	scope.IncCounter(metrics.ServiceFailures)
 
 	return err
+}
+
+// TODO (alex): remove this func in 1.18+ together with `namespace` field in corresponding protos and namespace_validator.go.
+func (adh *AdminHandler) getNamespaceFromRequest(request interface {
+	GetNamespace() string
+	GetNamespaceId() string
+}) (*namespace.Namespace, error) {
+
+	if request.GetNamespaceId() != "" {
+		ns, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+		if err != nil {
+			return nil, err
+		}
+		return ns, nil
+	}
+
+	ns, err := adh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	return ns, nil
+}
+
+func (adh *AdminHandler) getWorkflowCompletionEvent(
+	ctx context.Context,
+	shardID int32,
+	mutableState *persistencespb.WorkflowMutableState,
+) (*historypb.HistoryEvent, error) {
+	executionInfo := mutableState.GetExecutionInfo()
+	completionEventID := mutableState.GetNextEventId() - 1
+
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
+	if err != nil {
+		return nil, err
+	}
+	version, err := versionhistory.GetVersionHistoryEventVersion(currentVersionHistory, completionEventID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := adh.persistenceExecutionManager.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
+		ShardID:     shardID,
+		BranchToken: currentVersionHistory.GetBranchToken(),
+		MinEventID:  executionInfo.CompletionEventBatchId,
+		MaxEventID:  completionEventID + 1,
+		PageSize:    1,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// find history event from batch and return back single event to caller
+	for _, e := range resp.HistoryEvents {
+		if e.EventId == completionEventID && e.Version == version {
+			return e, nil
+		}
+	}
+
+	return nil, serviceerror.NewInternal("Unable to find closed event for workflow")
 }

@@ -649,3 +649,108 @@ func (c *retryableClient) ListTaskQueuePartitions(
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
+
+func (c *retryableClient) CreateSchedule(
+	ctx context.Context,
+	request *workflowservice.CreateScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CreateScheduleResponse, error) {
+	var resp *workflowservice.CreateScheduleResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.CreateSchedule(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) DescribeSchedule(
+	ctx context.Context,
+	request *workflowservice.DescribeScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeScheduleResponse, error) {
+	var resp *workflowservice.DescribeScheduleResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.DescribeSchedule(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateSchedule(
+	ctx context.Context,
+	request *workflowservice.UpdateScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateScheduleResponse, error) {
+	var resp *workflowservice.UpdateScheduleResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.UpdateSchedule(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) PatchSchedule(
+	ctx context.Context,
+	request *workflowservice.PatchScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PatchScheduleResponse, error) {
+	var resp *workflowservice.PatchScheduleResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.PatchSchedule(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ListScheduleMatchingTimes(
+	ctx context.Context,
+	request *workflowservice.ListScheduleMatchingTimesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListScheduleMatchingTimesResponse, error) {
+	var resp *workflowservice.ListScheduleMatchingTimesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.ListScheduleMatchingTimes(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) DeleteSchedule(
+	ctx context.Context,
+	request *workflowservice.DeleteScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteScheduleResponse, error) {
+	var resp *workflowservice.DeleteScheduleResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.DeleteSchedule(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ListSchedules(
+	ctx context.Context,
+	request *workflowservice.ListSchedulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListSchedulesResponse, error) {
+	var resp *workflowservice.ListSchedulesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.ListSchedules(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}

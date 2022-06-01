@@ -43,10 +43,7 @@ type (
 )
 
 func (t *StartExecutionVisibilityTask) GetKey() Key {
-	return Key{
-		FireTime: time.Unix(0, 0),
-		TaskID:   t.TaskID,
-	}
+	return NewImmediateKey(t.TaskID)
 }
 
 func (t *StartExecutionVisibilityTask) GetVersion() int64 {

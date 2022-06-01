@@ -135,7 +135,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 		var err error
 		switch execution.Policy {
 		case enumspb.PARENT_CLOSE_POLICY_ABANDON:
-			//no-op
+			// no-op
 			continue
 		case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
 			_, err = client.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
@@ -171,7 +171,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 		switch typedErr := err.(type) {
 		case nil:
 			processor.metricsClient.IncCounter(metrics.ParentClosePolicyProcessorScope, metrics.ParentClosePolicyProcessorSuccess)
-		case *serviceerror.NotFound:
+		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 			// no-op
 		case *serviceerror.NamespaceNotActive:
 			remoteExecutions[typedErr.ActiveCluster] = append(remoteExecutions[typedErr.ActiveCluster], execution)
@@ -206,8 +206,10 @@ func signalRemoteCluster(
 	numWorkflows int,
 ) error {
 	for cluster, executions := range remoteExecutions {
-		remoteClient := clientBean.GetRemoteFrontendClient(cluster)
-
+		remoteClient, err := clientBean.GetRemoteFrontendClient(cluster)
+		if err != nil {
+			return err
+		}
 		signalValue := Request{
 			ParentExecution: parentExecution,
 			Executions:      executions,

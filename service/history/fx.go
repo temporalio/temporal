@@ -33,7 +33,6 @@ import (
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -43,9 +42,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -58,6 +55,7 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	warchiver "go.temporal.io/server/service/worker/archiver"
@@ -78,7 +76,7 @@ var Module = fx.Options(
 	fx.Provide(PersistenceMaxQpsProvider),
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
-	fx.Provide(ReplicationTaskFetchersProvider),
+	fx.Provide(ReplicationTaskFetcherFactoryProvider),
 	fx.Provide(ArchivalClientProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
@@ -114,47 +112,34 @@ func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.S
 	return membershipMonitor.GetResolver(common.HistoryServiceName)
 }
 
-func HandlerProvider(
-	config *configs.Config,
-	logger resource.SnTaggedLogger,
-	throttledLogger resource.ThrottledLogger,
-	persistenceExecutionManager persistence.ExecutionManager,
-	persistenceShardManager persistence.ShardManager,
-	historyServiceResolver membership.ServiceResolver,
-	metricsClient metrics.Client,
-	payloadSerializer serialization.Serializer,
-	timeSource clock.TimeSource,
-	namespaceRegistry namespace.Registry,
-	saProvider searchattribute.Provider,
-	saMapper searchattribute.Mapper,
-	clusterMetadata cluster.Metadata,
-	archivalMetadata archiver.ArchivalMetadata,
-	hostInfoProvider membership.HostInfoProvider,
-	shardController *shard.ControllerImpl,
-	eventNotifier events.Notifier,
-	replicationTaskFetchers ReplicationTaskFetchers,
-) *Handler {
-	args := NewHandlerArgs{
-		config,
-		logger,
-		throttledLogger,
-		persistenceExecutionManager,
-		persistenceShardManager,
-		historyServiceResolver,
-		metricsClient,
-		payloadSerializer,
-		timeSource,
-		namespaceRegistry,
-		saProvider,
-		saMapper,
-		clusterMetadata,
-		archivalMetadata,
-		hostInfoProvider,
-		shardController,
-		eventNotifier,
-		replicationTaskFetchers,
+func HandlerProvider(args NewHandlerArgs) *Handler {
+	handler := &Handler{
+		status:                        common.DaemonStatusInitialized,
+		config:                        args.Config,
+		tokenSerializer:               common.NewProtoTaskTokenSerializer(),
+		logger:                        args.Logger,
+		throttledLogger:               args.ThrottledLogger,
+		persistenceExecutionManager:   args.PersistenceExecutionManager,
+		persistenceShardManager:       args.PersistenceShardManager,
+		persistenceVisibilityManager:  args.PersistenceVisibilityManager,
+		historyServiceResolver:        args.HistoryServiceResolver,
+		metricsClient:                 args.MetricsClient,
+		payloadSerializer:             args.PayloadSerializer,
+		timeSource:                    args.TimeSource,
+		namespaceRegistry:             args.NamespaceRegistry,
+		saProvider:                    args.SaProvider,
+		saMapper:                      args.SaMapper,
+		clusterMetadata:               args.ClusterMetadata,
+		archivalMetadata:              args.ArchivalMetadata,
+		hostInfoProvider:              args.HostInfoProvider,
+		controller:                    args.ShardController,
+		eventNotifier:                 args.EventNotifier,
+		replicationTaskFetcherFactory: args.ReplicationTaskFetcherFactory,
 	}
-	return NewHandler(args)
+
+	// prevent us from trying to serve requests before shard controller is started and ready
+	handler.startWG.Add(1)
+	return handler
 }
 
 func HistoryEngineFactoryProvider(
@@ -267,13 +252,13 @@ func EventNotifierProvider(
 	)
 }
 
-func ReplicationTaskFetchersProvider(
+func ReplicationTaskFetcherFactoryProvider(
 	logger log.Logger,
 	config *configs.Config,
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
-) ReplicationTaskFetchers {
-	return NewReplicationTaskFetchers(
+) replication.TaskFetcherFactory {
+	return replication.NewTaskFetcherFactory(
 		logger,
 		config,
 		clusterMetadata,

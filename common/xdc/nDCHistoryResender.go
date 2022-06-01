@@ -30,18 +30,18 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/server/common/persistence/serialization"
-
 	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -58,6 +58,7 @@ type (
 	NDCHistoryResender interface {
 		// SendSingleWorkflowHistory sends multiple run IDs's history events to remote
 		SendSingleWorkflowHistory(
+			remoteClusterName string,
 			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
@@ -71,7 +72,7 @@ type (
 	// NDCHistoryResenderImpl is the implementation of NDCHistoryResender
 	NDCHistoryResenderImpl struct {
 		namespaceRegistry    namespace.Registry
-		adminClient          adminservice.AdminServiceClient
+		clientBean           client.Bean
 		historyReplicationFn nDCHistoryReplicationFn
 		serializer           serialization.Serializer
 		rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
@@ -91,7 +92,7 @@ const (
 // NewNDCHistoryResender create a new NDCHistoryResenderImpl
 func NewNDCHistoryResender(
 	namespaceRegistry namespace.Registry,
-	adminClient adminservice.AdminServiceClient,
+	clientBean client.Bean,
 	historyReplicationFn nDCHistoryReplicationFn,
 	serializer serialization.Serializer,
 	rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter,
@@ -100,7 +101,7 @@ func NewNDCHistoryResender(
 
 	return &NDCHistoryResenderImpl{
 		namespaceRegistry:    namespaceRegistry,
-		adminClient:          adminClient,
+		clientBean:           clientBean,
 		historyReplicationFn: historyReplicationFn,
 		serializer:           serializer,
 		rereplicationTimeout: rereplicationTimeout,
@@ -110,6 +111,7 @@ func NewNDCHistoryResender(
 
 // SendSingleWorkflowHistory sends one run IDs's history events to remote
 func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
+	remoteClusterName string,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -131,13 +133,15 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 
 	historyIterator := collection.NewPagingIterator(n.getPaginationFn(
 		ctx,
+		remoteClusterName,
 		namespaceID,
 		workflowID,
 		runID,
 		startEventID,
 		startEventVersion,
 		endEventID,
-		endEventVersion))
+		endEventVersion,
+	))
 
 	for historyIterator.HasNext() {
 		batch, err := historyIterator.Next()
@@ -172,6 +176,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 
 func (n *NDCHistoryResenderImpl) getPaginationFn(
 	ctx context.Context,
+	remoteClusterName string,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -185,6 +190,7 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 
 		response, err := n.getHistory(
 			ctx,
+			remoteClusterName,
 			namespaceID,
 			workflowID,
 			runID,
@@ -244,6 +250,7 @@ func (n *NDCHistoryResenderImpl) sendReplicationRawRequest(
 
 func (n *NDCHistoryResenderImpl) getHistory(
 	ctx context.Context,
+	remoteClusterName string,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -257,17 +264,22 @@ func (n *NDCHistoryResenderImpl) getHistory(
 
 	logger := log.With(n.logger, tag.WorkflowRunID(runID))
 
-	namespaceEntry, err := n.namespaceRegistry.GetNamespaceByID(namespaceID)
+	ns, err := n.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
-		logger.Error("error getting namespace", tag.Error(err))
 		return nil, err
 	}
-	namespace := namespaceEntry.Name()
 
 	ctx, cancel := rpc.NewContextFromParentWithTimeoutAndHeaders(ctx, resendContextTimeout)
 	defer cancel()
-	response, err := n.adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Namespace: namespace.String(),
+
+	adminClient, err := n.clientBean.GetRemoteAdminClient(remoteClusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		Namespace:   ns.Name().String(),
+		NamespaceId: namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

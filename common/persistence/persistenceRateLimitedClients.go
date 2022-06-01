@@ -167,6 +167,18 @@ func (p *shardRateLimitedPersistenceClient) UpdateShard(
 	return err
 }
 
+func (p *shardRateLimitedPersistenceClient) AssertShardOwnership(
+	ctx context.Context,
+	request *AssertShardOwnershipRequest,
+) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.AssertShardOwnership(ctx, request)
+	return err
+}
+
 func (p *shardRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
@@ -607,6 +619,17 @@ func (p *executionRateLimitedPersistenceClient) AppendHistoryNodes(
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.AppendHistoryNodes(ctx, request)
+}
+
+// AppendRawHistoryNodes add a node to history node table
+func (p *executionRateLimitedPersistenceClient) AppendRawHistoryNodes(
+	ctx context.Context,
+	request *AppendRawHistoryNodesRequest,
+) (*AppendHistoryNodesResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.AppendRawHistoryNodes(ctx, request)
 }
 
 // ReadHistoryBranch returns history node data for a branch

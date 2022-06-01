@@ -110,9 +110,8 @@ func (s *stateBuilderSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:          0,
-				RangeId:          1,
-				TransferAckLevel: 0,
+				ShardId: 0,
+				RangeId: 1,
 			}},
 		tests.NewDynamicConfig(),
 	)
@@ -183,7 +182,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 	now := time.Now().UTC()
 	evenType := enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
 	startWorkflowAttribute := &historypb.WorkflowExecutionStartedEventAttributes{
-		ParentWorkflowNamespace: tests.ParentNamespace.String(),
+		ParentWorkflowNamespace:   tests.ParentNamespace.String(),
+		ParentWorkflowNamespaceId: tests.ParentNamespaceID.String(),
 	}
 
 	event := &historypb.HistoryEvent{
@@ -195,8 +195,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: startWorkflowAttribute},
 	}
 
-	s.mockNamespaceCache.EXPECT().GetNamespace(tests.ParentNamespace).Return(tests.GlobalParentNamespaceEntry, nil)
-	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(tests.ParentNamespaceID, nil, execution, requestID, event).Return(nil)
+	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(nil, execution, requestID, event).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateRecordWorkflowStartedTasks(
 		timestamp.TimeValue(event.GetEventTime()),
@@ -229,9 +228,10 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 	now := time.Now().UTC()
 	eventType := enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
 	startWorkflowAttribute := &historypb.WorkflowExecutionStartedEventAttributes{
-		ParentWorkflowNamespace:  tests.ParentNamespace.String(),
-		Initiator:                enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
-		FirstWorkflowTaskBackoff: timestamp.DurationPtr(backoff.GetBackoffForNextSchedule(cronSchedule, now, now)),
+		ParentWorkflowNamespace:   tests.ParentNamespace.String(),
+		ParentWorkflowNamespaceId: tests.ParentNamespaceID.String(),
+		Initiator:                 enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
+		FirstWorkflowTaskBackoff:  timestamp.DurationPtr(backoff.GetBackoffForNextSchedule(cronSchedule, now, now)),
 	}
 
 	event := &historypb.HistoryEvent{
@@ -243,8 +243,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: startWorkflowAttribute},
 	}
 
-	s.mockNamespaceCache.EXPECT().GetNamespace(tests.ParentNamespace).Return(tests.GlobalParentNamespaceEntry, nil)
-	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(tests.ParentNamespaceID, nil, execution, requestID, event).Return(nil)
+	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(nil, execution, requestID, event).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateRecordWorkflowStartedTasks(
 		timestamp.TimeValue(event.GetEventTime()),
@@ -289,6 +288,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut()
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -320,6 +320,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 	_, err := s.stateRebuilder.ApplyEvents(tests.NamespaceID, requestID, execution, s.toHistory(event), nil)
@@ -350,6 +351,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed() {
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -381,6 +383,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted(
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -412,6 +415,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCanceled()
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -456,7 +460,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		EventTime: &now,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			ParentWorkflowNamespace: tests.ParentNamespace.String(),
+			ParentWorkflowNamespace:   tests.ParentNamespace.String(),
+			ParentWorkflowNamespaceId: tests.ParentNamespaceID.String(),
 			ParentWorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: parentWorkflowID,
 				RunId:      parentRunID,
@@ -508,6 +513,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -571,6 +577,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -1307,8 +1314,9 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 		EventTime: &now,
 		EventType: evenType,
 		Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{StartChildWorkflowExecutionInitiatedEventAttributes: &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
-			Namespace:  tests.TargetNamespace.String(),
-			WorkflowId: targetWorkflowID,
+			Namespace:   tests.TargetNamespace.String(),
+			NamespaceId: tests.TargetNamespaceID.String(),
+			WorkflowId:  targetWorkflowID,
 		}},
 	}
 
@@ -1319,6 +1327,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 		StartedId:             common.EmptyEventID,
 		CreateRequestId:       createRequestID,
 		Namespace:             tests.TargetNamespace.String(),
+		NamespaceId:           tests.TargetNamespaceID.String(),
 	}
 
 	// the create request ID is generated inside, cannot assert equal
@@ -1531,7 +1540,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 		EventTime: &now,
 		EventType: evenType,
 		Attributes: &historypb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
-			Namespace: tests.TargetNamespace.String(),
+			Namespace:   tests.TargetNamespace.String(),
+			NamespaceId: tests.TargetNamespaceID.String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: targetWorkflowID,
 				RunId:      targetRunID,
@@ -1675,7 +1685,8 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 		EventTime: &now,
 		EventType: evenType,
 		Attributes: &historypb.HistoryEvent_SignalExternalWorkflowExecutionInitiatedEventAttributes{SignalExternalWorkflowExecutionInitiatedEventAttributes: &historypb.SignalExternalWorkflowExecutionInitiatedEventAttributes{
-			Namespace: tests.TargetNamespace.String(),
+			Namespace:   tests.TargetNamespace.String(),
+			NamespaceId: tests.TargetNamespaceID.String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: targetWorkflowID,
 				RunId:      targetRunID,

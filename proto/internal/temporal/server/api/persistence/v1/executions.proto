@@ -31,7 +31,6 @@ import "dependencies/gogoproto/gogo.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
-import "temporal/api/history/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
@@ -45,19 +44,26 @@ message ShardInfo {
     int32 shard_id = 1;
     int64 range_id = 2;
     string owner = 3;
-    int64 replication_ack_level = 4 [deprecated = true];
-    int64 transfer_ack_level = 5 [deprecated = true];
+    // int64 replication_ack_level = 4 [deprecated = true];
+    // int64 transfer_ack_level = 5 [deprecated = true];
+    reserved 4;
+    reserved 5;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "since" is needed here. --)
     int32 stolen_since_renew = 6;
     google.protobuf.Timestamp update_time = 7 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp timer_ack_level_time = 8 [(gogoproto.stdtime) = true, deprecated = true]; 
+    // google.protobuf.Timestamp timer_ack_level_time = 8 [(gogoproto.stdtime) = true, deprecated = true]; 
+    reserved 8;
     int64 namespace_notification_version = 9;
-    map<string, int64> cluster_transfer_ack_level = 10 [deprecated = true]; 
-    map<string, google.protobuf.Timestamp> cluster_timer_ack_level = 11 [(gogoproto.stdtime) = true, deprecated = true]; 
-    map<string, int64> cluster_replication_level = 12 [deprecated = true];
+    // map<string, int64> cluster_transfer_ack_level = 10 [deprecated = true]; 
+    // map<string, google.protobuf.Timestamp> cluster_timer_ack_level = 11 [(gogoproto.stdtime) = true, deprecated = true]; 
+    // map<string, int64> cluster_replication_level = 12 [deprecated = true];
+    reserved 10;
+    reserved 11;
+    reserved 12;
     map<string, int64> replication_dlq_ack_level = 13;
-    int64 visibility_ack_level = 14 [deprecated = true]; 
+    // int64 visibility_ack_level = 14 [deprecated = true]; 
+    reserved 14;
     reserved 15;
     // Map from task category to ack levels of the corresponding queue processor
     map<int32, QueueAckLevel> queue_ack_levels = 16;  
@@ -70,7 +76,7 @@ message WorkflowExecutionInfo {
     string parent_namespace_id = 3;
     string parent_workflow_id = 4;
     string parent_run_id = 5;
-    int64 initiated_id = 6;
+    int64 parent_initiated_id = 6;
     int64 completion_event_batch_id = 7;
     reserved 8;
     string task_queue = 9;
@@ -130,7 +136,14 @@ message WorkflowExecutionInfo {
     google.protobuf.Timestamp execution_time = 60 [(gogoproto.stdtime) = true];
     // If continued-as-new, or retried, or cron, holds the new run id.
     string new_execution_run_id = 61;
-    temporal.server.api.clock.v1.ShardClock parent_clock = 62;
+    temporal.server.api.clock.v1.VectorClock parent_clock = 62;
+    // version of child execution initiated event in parent workflow
+    int64 parent_initiated_version = 63;
+    // Used to check if transfer close task is processed before deleting the workflow execution.
+    int64 close_transfer_task_id = 64;
+    // Used to check if visibility close task is processed before deleting the workflow execution.
+    int64 close_visibility_task_id = 65;
+    google.protobuf.Timestamp close_time = 66 [(gogoproto.stdtime) = true];
 }
 
 message ExecutionStats {
@@ -161,6 +174,9 @@ message TransferTaskInfo {
     int64 task_id = 12;
     google.protobuf.Timestamp visibility_time = 13 [(gogoproto.stdtime) = true];
     reserved 14;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "after" is used to indicate sequence of actions. --)
+    bool delete_after_close = 15;
 }
 
 // replication column
@@ -279,7 +295,8 @@ message ChildExecutionInfo {
     string workflow_type_name = 10;
     temporal.api.enums.v1.ParentClosePolicy parent_close_policy = 11;
     int64 initiated_id = 12;
-    temporal.server.api.clock.v1.ShardClock clock = 13;
+    temporal.server.api.clock.v1.VectorClock clock = 13;
+    string namespace_id = 14;
 }
 
 // request_cancel_map column

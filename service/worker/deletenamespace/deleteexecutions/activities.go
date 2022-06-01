@@ -27,9 +27,7 @@ package deleteexecutions
 import (
 	"context"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -125,27 +123,6 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 			a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.RateLimiterFailuresCount)
 			a.logger.Error("Workflow executions delete rate limiter error.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
 			return result, err
-		}
-		if execution.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-			_, err := a.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
-				NamespaceId: params.NamespaceID.String(),
-				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
-					Namespace:         params.Namespace.String(),
-					WorkflowExecution: execution.Execution,
-					Reason:            "Delete namespace",
-				},
-			})
-			switch err.(type) {
-			case nil:
-			case *serviceerror.NotFound: // Workflow execution has already completed or doesn't exist.
-				a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.TerminateExecutionNotFoundCount)
-				a.logger.Info("Workflow execution is not found or not running.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
-			default:
-				a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.TerminateExecutionFailuresCount)
-				a.logger.Error("Unable to terminate workflow execution.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
-				result.ErrorCount++
-				continue
-			}
 		}
 		_, err = a.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
 			NamespaceId:       params.NamespaceID.String(),

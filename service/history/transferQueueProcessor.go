@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination transferQueueProcessor_mock.go
-
 package history
 
 import (
@@ -37,13 +35,14 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -60,23 +59,25 @@ type (
 	taskFilter func(task tasks.Task) bool
 
 	transferQueueProcessorImpl struct {
-		isGlobalNamespaceEnabled  bool
+		singleProcessor           bool
 		currentClusterName        string
 		shard                     shard.Context
-		historyEngine             shard.Engine
 		workflowCache             workflow.Cache
 		archivalClient            archiver.Client
 		sdkClientFactory          sdk.ClientFactory
 		taskAllocator             taskAllocator
 		config                    *configs.Config
 		metricsClient             metrics.Client
+		clientBean                client.Bean
 		matchingClient            matchingservice.MatchingServiceClient
 		historyClient             historyservice.HistoryServiceClient
 		ackLevel                  int64
+		hostRateLimiter           quotas.RateLimiter
 		logger                    log.Logger
 		isStarted                 int32
 		isStopped                 int32
 		shutdownChan              chan struct{}
+		scheduler                 queues.Scheduler
 		activeTaskProcessor       *transferQueueActiveProcessorImpl
 		standbyTaskProcessorsLock sync.RWMutex
 		standbyTaskProcessors     map[string]*transferQueueStandbyProcessorImpl
@@ -85,13 +86,18 @@ type (
 
 func newTransferQueueProcessor(
 	shard shard.Context,
-	historyEngine shard.Engine,
 	workflowCache workflow.Cache,
+	scheduler queues.Scheduler,
+	clientBean client.Bean,
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
+	hostRateLimiter quotas.RateLimiter,
 ) queues.Processor {
+
+	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
+		shard.GetConfig().TransferProcessorEnableSingleCursor()
 
 	logger := log.With(shard.GetLogger(), tag.ComponentTransferQueue)
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
@@ -99,30 +105,39 @@ func newTransferQueueProcessor(
 	taskAllocator := newTaskAllocator(shard)
 
 	return &transferQueueProcessorImpl{
-		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
-		currentClusterName:       currentClusterName,
-		shard:                    shard,
-		historyEngine:            historyEngine,
-		workflowCache:            workflowCache,
-		archivalClient:           archivalClient,
-		sdkClientFactory:         sdkClientFactory,
-		taskAllocator:            taskAllocator,
-		config:                   config,
-		metricsClient:            shard.GetMetricsClient(),
-		matchingClient:           matchingClient,
-		historyClient:            historyClient,
-		ackLevel:                 shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
-		logger:                   logger,
-		shutdownChan:             make(chan struct{}),
+		singleProcessor:    singleProcessor,
+		currentClusterName: currentClusterName,
+		shard:              shard,
+		workflowCache:      workflowCache,
+		archivalClient:     archivalClient,
+		sdkClientFactory:   sdkClientFactory,
+		taskAllocator:      taskAllocator,
+		config:             config,
+		metricsClient:      shard.GetMetricsClient(),
+		clientBean:         clientBean,
+		matchingClient:     matchingClient,
+		historyClient:      historyClient,
+		ackLevel:           shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
+		hostRateLimiter:    hostRateLimiter,
+		logger:             logger,
+		shutdownChan:       make(chan struct{}),
+		scheduler:          scheduler,
 		activeTaskProcessor: newTransferQueueActiveProcessor(
 			shard,
 			workflowCache,
+			scheduler,
 			archivalClient,
 			sdkClientFactory,
 			matchingClient,
 			historyClient,
 			taskAllocator,
+			clientBean,
+			newQueueProcessorRateLimiter(
+				hostRateLimiter,
+				config.TransferProcessorMaxPollRPS,
+			),
 			logger,
+			singleProcessor,
 		),
 		standbyTaskProcessors: make(map[string]*transferQueueStandbyProcessorImpl),
 	}
@@ -133,7 +148,7 @@ func (t *transferQueueProcessorImpl) Start() {
 		return
 	}
 	t.activeTaskProcessor.Start()
-	if t.isGlobalNamespaceEnabled {
+	if !t.singleProcessor {
 		t.listenToClusterMetadataChange()
 	}
 
@@ -145,7 +160,7 @@ func (t *transferQueueProcessorImpl) Stop() {
 		return
 	}
 	t.activeTaskProcessor.Stop()
-	if t.isGlobalNamespaceEnabled {
+	if !t.singleProcessor {
 		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(t)
 		t.standbyTaskProcessorsLock.RLock()
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
@@ -163,7 +178,7 @@ func (t *transferQueueProcessorImpl) NotifyNewTasks(
 	transferTasks []tasks.Task,
 ) {
 
-	if clusterName == t.currentClusterName {
+	if clusterName == t.currentClusterName || t.singleProcessor {
 		// we will ignore the current time passed in, since the active processor process task immediately
 		if len(transferTasks) != 0 {
 			t.activeTaskProcessor.notifyNewTask()
@@ -171,19 +186,25 @@ func (t *transferQueueProcessorImpl) NotifyNewTasks(
 		return
 	}
 
+	t.standbyTaskProcessorsLock.RLock()
 	standbyTaskProcessor, ok := t.standbyTaskProcessors[clusterName]
+	t.standbyTaskProcessorsLock.RUnlock()
 	if !ok {
 		panic(fmt.Sprintf("Cannot find transfer processor for %s.", clusterName))
 	}
 	if len(transferTasks) != 0 {
 		standbyTaskProcessor.notifyNewTask()
 	}
-	standbyTaskProcessor.retryTasks()
 }
 
 func (t *transferQueueProcessorImpl) FailoverNamespace(
 	namespaceIDs map[string]struct{},
 ) {
+	if t.singleProcessor {
+		// TODO: we may want to reschedule all tasks for new active namespaces in buffer
+		// so that they don't have to keeping waiting on the backoff timer
+		return
+	}
 
 	minLevel := t.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, t.currentClusterName).TaskID
 	standbyClusterName := t.currentClusterName
@@ -207,6 +228,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 	updateShardAckLevel, failoverTaskProcessor := newTransferQueueFailoverProcessor(
 		t.shard,
 		t.workflowCache,
+		t.scheduler,
 		t.archivalClient,
 		t.sdkClientFactory,
 		t.matchingClient,
@@ -216,14 +238,12 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 		minLevel,
 		maxLevel,
 		t.taskAllocator,
+		newQueueProcessorRateLimiter(
+			t.hostRateLimiter,
+			t.config.TransferProcessorFailoverMaxPollRPS,
+		),
 		t.logger,
 	)
-
-	t.standbyTaskProcessorsLock.RLock()
-	for _, standbyTaskProcessor := range t.standbyTaskProcessors {
-		standbyTaskProcessor.retryTasks()
-	}
-	t.standbyTaskProcessorsLock.RUnlock()
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerNamespaceFailoverCallback function
@@ -235,10 +255,18 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 }
 
 func (t *transferQueueProcessorImpl) LockTaskProcessing() {
+	if t.singleProcessor {
+		return
+	}
+
 	t.taskAllocator.lock()
 }
 
 func (t *transferQueueProcessorImpl) UnlockTaskProcessing() {
+	if t.singleProcessor {
+		return
+	}
+
 	t.taskAllocator.unlock()
 }
 
@@ -285,7 +313,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 	lowerAckLevel := t.ackLevel
 	upperAckLevel := t.activeTaskProcessor.queueAckMgr.getQueueAckLevel()
 
-	if t.isGlobalNamespaceEnabled {
+	if !t.singleProcessor {
 		t.standbyTaskProcessorsLock.RLock()
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
 			ackLevel := standbyTaskProcessor.queueAckMgr.getQueueAckLevel()
@@ -311,14 +339,10 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 
 	if lowerAckLevel < upperAckLevel {
 		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:      t.shard.GetShardID(),
-			TaskCategory: tasks.CategoryTransfer,
-			InclusiveMinTaskKey: tasks.Key{
-				TaskID: lowerAckLevel + 1,
-			},
-			ExclusiveMaxTaskKey: tasks.Key{
-				TaskID: upperAckLevel + 1,
-			},
+			ShardID:             t.shard.GetShardID(),
+			TaskCategory:        tasks.CategoryTransfer,
+			InclusiveMinTaskKey: tasks.NewImmediateKey(lowerAckLevel + 1),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(upperAckLevel + 1),
 		})
 		if err != nil {
 			return err
@@ -327,7 +351,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 
 	t.ackLevel = upperAckLevel
 
-	return t.shard.UpdateQueueAckLevel(tasks.CategoryTransfer, tasks.Key{TaskID: upperAckLevel})
+	return t.shard.UpdateQueueAckLevel(tasks.CategoryTransfer, tasks.NewImmediateKey(upperAckLevel))
 }
 
 func (t *transferQueueProcessorImpl) listenToClusterMetadataChange() {
@@ -357,23 +381,18 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 		}
 		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
 			// Case 2 and Case 3
-			nDCHistoryResender := xdc.NewNDCHistoryResender(
-				t.shard.GetNamespaceRegistry(),
-				t.shard.GetRemoteAdminClient(clusterName),
-				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-					return t.historyEngine.ReplicateEventsV2(ctx, request)
-				},
-				t.shard.GetPayloadSerializer(),
-				t.config.StandbyTaskReReplicationContextTimeout,
-				t.logger,
-			)
 			processor := newTransferQueueStandbyProcessor(
 				clusterName,
 				t.shard,
+				t.scheduler,
 				t.workflowCache,
 				t.archivalClient,
 				t.taskAllocator,
-				nDCHistoryResender,
+				t.clientBean,
+				newQueueProcessorRateLimiter(
+					t.hostRateLimiter,
+					t.config.TransferProcessorMaxPollRPS,
+				),
 				t.logger,
 				t.matchingClient,
 			)

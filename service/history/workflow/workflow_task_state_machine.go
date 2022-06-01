@@ -40,6 +40,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -49,6 +50,11 @@ type (
 	workflowTaskStateMachine struct {
 		ms *MutableStateImpl
 	}
+)
+
+const (
+	workflowTaskRetryBackoffMinAttempts = 3
+	workflowTaskRetryInitialInterval    = 5 * time.Second
 )
 
 func newWorkflowTaskStateMachine(
@@ -113,6 +119,10 @@ func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*W
 	// 2. if no failover happen during the life time of this transient workflow task
 	// then ReplicateWorkflowTaskScheduledEvent will overwrite everything
 	// including the workflow task schedule ID
+	//
+	// regarding workflow task timeout calculation:
+	// 1. the attempt will be set to 1, so we still use default worflow task timeout
+	// 2. ReplicateWorkflowTaskScheduledEvent will overwrite everything including workflowTaskTimeout
 	workflowTask := &WorkflowTaskInfo{
 		Version:             m.ms.GetCurrentVersion(),
 		ScheduleID:          m.ms.GetNextEventID(),
@@ -274,11 +284,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	scheduleID := m.ms.GetNextEventID() // we will generate the schedule event later for repeatedly failing workflow tasks
 	// Avoid creating new history events when workflow tasks are continuously failing
 	scheduleTime := m.ms.timeSource.Now().UTC()
-	if m.ms.executionInfo.WorkflowTaskAttempt == 1 {
+	attempt := m.ms.executionInfo.WorkflowTaskAttempt
+	startToCloseTimeoutSeconds := int32(m.getStartToCloseTimeout(taskTimeout, attempt).Seconds())
+	if attempt == 1 {
 		newWorkflowTaskEvent = m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			taskQueue,
-			int32(taskTimeout.Seconds()),
-			m.ms.executionInfo.WorkflowTaskAttempt,
+			startToCloseTimeoutSeconds,
+			attempt,
 			m.ms.timeSource.Now(),
 		)
 		scheduleID = newWorkflowTaskEvent.GetEventId()
@@ -289,8 +301,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		m.ms.GetCurrentVersion(),
 		scheduleID,
 		taskQueue,
-		int32(taskTimeout.Seconds()),
-		m.ms.executionInfo.WorkflowTaskAttempt,
+		startToCloseTimeoutSeconds,
+		attempt,
 		&scheduleTime,
 		originalScheduledTimestamp,
 	)
@@ -768,4 +780,25 @@ func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
 			tag.Attempt(attempt),
 		)
 	}
+}
+
+func (m *workflowTaskStateMachine) getStartToCloseTimeout(
+	defaultTimeout time.Duration,
+	attempt int32,
+) time.Duration {
+	// This util function is only for calculating active workflow task timeout.
+	// Transient workflow task in passive cluster won't call this function and
+	// always use default timeout as it will either be completely overwritten by
+	// a replicated workflow schedule event from active cluster, or if used, it's
+	// attempt will be reset to 1.
+	// Check ReplicateTransientWorkflowTaskScheduled for details.
+
+	if attempt <= workflowTaskRetryBackoffMinAttempts {
+		return defaultTimeout
+	}
+
+	policy := backoff.NewExponentialRetryPolicy(workflowTaskRetryInitialInterval)
+	policy.SetMaximumInterval(m.ms.shard.GetConfig().WorkflowTaskRetryMaxInterval())
+	policy.SetExpirationInterval(backoff.NoInterval)
+	return defaultTimeout + policy.ComputeNextDelay(0, int(attempt)-workflowTaskRetryBackoffMinAttempts)
 }

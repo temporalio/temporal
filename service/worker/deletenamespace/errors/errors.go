@@ -26,18 +26,34 @@ package errors
 
 import (
 	"errors"
+	"fmt"
 
 	"go.temporal.io/sdk/temporal"
 )
 
 const (
-	ExecutionsStillExistErrType = "ExecutionsStillExist"
-	NoProgressErrType           = "NoProgress"
+	ExecutionsStillExistErrType           = "ExecutionsStillExist"
+	NoProgressErrType                     = "NoProgress"
+	NotDeletedExecutionsStillExistErrType = "NotDeletedExecutionsStillExist"
 )
 
 var (
 	ErrUnableToExecuteActivity      = errors.New("unable to execute activity")
 	ErrUnableToExecuteChildWorkflow = errors.New("unable to execute child workflow")
-	ErrExecutionsStillExist         = temporal.NewApplicationError("executions are still exist", ExecutionsStillExistErrType)
-	ErrNoProgress                   = temporal.NewNonRetryableApplicationError("no progress were made", NoProgressErrType, nil)
 )
+
+func NewExecutionsStillExistError(count int) error {
+	return temporal.NewApplicationError(fmt.Sprintf("%d executions are still exist", count), ExecutionsStillExistErrType, count)
+}
+
+func NewSomeExecutionsStillExistError() error {
+	return temporal.NewApplicationError("some executions are still exist", ExecutionsStillExistErrType)
+}
+
+func NewNoProgressError(count int) error {
+	return temporal.NewNonRetryableApplicationError(fmt.Sprintf("no progress were made: %d executions are still exist", count), NoProgressErrType, nil, count)
+}
+
+func NewNotDeletedExecutionsStillExistError(count int) error {
+	return temporal.NewNonRetryableApplicationError(fmt.Sprintf("%d not deleted executions are still exist", count), NotDeletedExecutionsStillExistErrType, nil, count)
+}

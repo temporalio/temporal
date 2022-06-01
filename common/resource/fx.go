@@ -116,6 +116,7 @@ var Module = fx.Options(
 	membership.HostInfoProviderModule,
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
+	fx.Provide(metrics.NewEventMetricProvider),
 )
 
 var DefaultOptions = fx.Options(
@@ -182,10 +183,12 @@ func NamespaceRegistryProvider(
 	metricsClient metrics.Client,
 	clusterMetadata cluster.Metadata,
 	metadataManager persistence.MetadataManager,
+	dynamicCollection *dynamicconfig.Collection,
 ) namespace.Registry {
 	return namespace.NewRegistry(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
+		dynamicCollection.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
 		metricsClient,
 		logger,
 	)
@@ -248,13 +251,11 @@ func MembershipMonitorProvider(
 		tlsConfigProvider,
 		dc,
 	)
-
 	if err != nil {
 		return nil, err
 	}
 
 	monitor, err := factory.GetMembershipMonitor()
-
 	if err != nil {
 		return nil, err
 	}

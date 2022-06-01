@@ -265,6 +265,8 @@ func (s *TaskSerializer) serializeReplicationTask(
 		replicationTask = s.replicationActivityTaskToProto(task)
 	case *tasks.HistoryReplicationTask:
 		replicationTask = s.replicationHistoryTaskToProto(task)
+	case *tasks.SyncWorkflowStateTask:
+		replicationTask = s.replicationSyncWorkflowStateTaskToProto(task)
 	default:
 		return commonpb.DataBlob{}, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task))
 	}
@@ -289,6 +291,8 @@ func (s *TaskSerializer) deserializeReplicationTasks(
 		replication = s.replicationActivityTaskFromProto(replicationTask)
 	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
 		replication = s.replicationHistoryTaskFromProto(replicationTask)
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
+		replication = s.replicationSyncWorkflowStateTaskFromProto(replicationTask)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", replicationTask.TaskType))
 	}
@@ -505,6 +509,7 @@ func (s *TaskSerializer) transferCloseTaskToProto(
 		Version:                 closeTask.Version,
 		TaskId:                  closeTask.TaskID,
 		VisibilityTime:          timestamp.TimePtr(closeTask.VisibilityTimestamp),
+		DeleteAfterClose:        closeTask.DeleteAfterClose,
 	}
 }
 
@@ -520,6 +525,7 @@ func (s *TaskSerializer) transferCloseTaskFromProto(
 		VisibilityTimestamp: *closeTask.VisibilityTime,
 		TaskID:              closeTask.TaskId,
 		Version:             closeTask.Version,
+		DeleteAfterClose:    closeTask.DeleteAfterClose,
 	}
 }
 
@@ -1028,5 +1034,38 @@ func (s *TaskSerializer) replicationHistoryTaskFromProto(
 		Version:             historyTask.Version,
 		BranchToken:         historyTask.BranchToken,
 		NewRunBranchToken:   historyTask.NewRunBranchToken,
+	}
+}
+
+func (s *TaskSerializer) replicationSyncWorkflowStateTaskToProto(
+	syncWorkflowStateTask *tasks.SyncWorkflowStateTask,
+) *persistencespb.ReplicationTaskInfo {
+	return &persistencespb.ReplicationTaskInfo{
+		NamespaceId:    syncWorkflowStateTask.WorkflowKey.NamespaceID,
+		WorkflowId:     syncWorkflowStateTask.WorkflowKey.WorkflowID,
+		RunId:          syncWorkflowStateTask.WorkflowKey.RunID,
+		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+		TaskId:         syncWorkflowStateTask.TaskID,
+		Version:        syncWorkflowStateTask.Version,
+		VisibilityTime: &syncWorkflowStateTask.VisibilityTimestamp,
+	}
+}
+
+func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
+	syncWorkflowStateTask *persistencespb.ReplicationTaskInfo,
+) *tasks.SyncWorkflowStateTask {
+	visibilityTimestamp := time.Unix(0, 0)
+	if syncWorkflowStateTask.VisibilityTime != nil {
+		visibilityTimestamp = *syncWorkflowStateTask.VisibilityTime
+	}
+	return &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			syncWorkflowStateTask.NamespaceId,
+			syncWorkflowStateTask.WorkflowId,
+			syncWorkflowStateTask.RunId,
+		),
+		VisibilityTimestamp: visibilityTimestamp,
+		Version:             syncWorkflowStateTask.Version,
+		TaskID:              syncWorkflowStateTask.TaskId,
 	}
 }

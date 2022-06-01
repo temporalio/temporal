@@ -27,13 +27,13 @@ package interceptor
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -54,11 +54,10 @@ type (
 )
 
 var (
-	ErrNamespaceNotSet              = serviceerror.NewInvalidArgument("Namespace not set on request.")
-	errNamespaceHandover            = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
-	errTaskTokenNotSet              = serviceerror.NewInvalidArgument("Task token not set on request.")
-	errTaskTokenNamespaceMismatch   = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
-	errInvalidNamespaceStateMessage = "Namespace has invalid state: %s. Must be %s."
+	ErrNamespaceNotSet            = serviceerror.NewInvalidArgument("Namespace not set on request.")
+	errNamespaceHandover          = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
+	errTaskTokenNotSet            = serviceerror.NewInvalidArgument("Task token not set on request.")
+	errTaskTokenNamespaceMismatch = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
 
 	allowedNamespaceStates = map[string][]enumspb.NamespaceState{
 		"StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
@@ -162,6 +161,31 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 			return nil, ErrNamespaceNotSet
 		}
 		return nil, nil
+	// TODO (alex): remove 3 below cases in 1.18+ together with `namespace` field in corresponding protos.
+	case *adminservice.GetWorkflowExecutionRawHistoryV2Request:
+		if request.GetNamespaceId() != "" {
+			return ni.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+		}
+		if namespaceName.IsEmpty() {
+			return nil, ErrNamespaceNotSet
+		}
+		return ni.namespaceRegistry.GetNamespace(namespaceName)
+	case *adminservice.ReapplyEventsRequest:
+		if request.GetNamespaceId() != "" {
+			return ni.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+		}
+		if namespaceName.IsEmpty() {
+			return nil, ErrNamespaceNotSet
+		}
+		return ni.namespaceRegistry.GetNamespace(namespaceName)
+	case *adminservice.RefreshWorkflowTasksRequest:
+		if request.GetNamespaceId() != "" {
+			return ni.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+		}
+		if namespaceName.IsEmpty() {
+			return nil, ErrNamespaceNotSet
+		}
+		return ni.namespaceRegistry.GetNamespace(namespaceName)
 	default:
 		// All other APIs.
 		if namespaceName.IsEmpty() {
@@ -231,7 +255,7 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 		}
 	}
 
-	return ni.stateNotAllowedError(namespaceEntry.State(), allowedStates)
+	return serviceerror.NewNamespaceInvalidState(namespaceEntry.Name().String(), namespaceEntry.State(), allowedStates)
 }
 
 func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *namespace.Namespace, fullMethod string) error {
@@ -249,12 +273,4 @@ func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *n
 	}
 
 	return errNamespaceHandover
-}
-
-func (ni *NamespaceValidatorInterceptor) stateNotAllowedError(currentState enumspb.NamespaceState, allowedStates []enumspb.NamespaceState) error {
-	var allowedStatesStr []string
-	for _, allowedState := range allowedStates {
-		allowedStatesStr = append(allowedStatesStr, allowedState.String())
-	}
-	return serviceerror.NewInvalidArgument(fmt.Sprintf(errInvalidNamespaceStateMessage, currentState, strings.Join(allowedStatesStr, " or ")))
 }

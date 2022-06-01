@@ -25,267 +25,117 @@
 package tests
 
 import (
-	"fmt"
-	"net"
-	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
-	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/sql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/shuffle"
-	"go.temporal.io/server/environment"
 )
 
-// TODO merge the initialization with existing persistence setup
-const (
-	testMySQLClusterName = "temporal_mysql_cluster"
+func TestMySQLShardStoreSuite(t *testing.T) {
+	testData, tearDown := setUpMySQLTest(t)
+	defer tearDown()
 
-	testMySQLUser               = "temporal"
-	testMySQLPassword           = "temporal"
-	testMySQLConnectionProtocol = "tcp"
-	testMySQLDatabaseNamePrefix = "test_"
-	testMySQLDatabaseNameSuffix = "temporal_persistence"
+	shardStore, err := testData.Factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
 
-	// TODO hard code this dir for now
-	//  need to merge persistence test config / initialization in one place
-	testMySQLExecutionSchema  = "../../../schema/mysql/v57/temporal/schema.sql"
-	testMySQLVisibilitySchema = "../../../schema/mysql/v57/visibility/schema.sql"
-)
+	s := NewShardSuite(
+		t,
+		shardStore,
+		serialization.NewSerializer(),
+		testData.Logger,
+	)
+	suite.Run(t, s)
+}
 
 func TestMySQLExecutionMutableStateStoreSuite(t *testing.T) {
-	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := sql.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testMySQLClusterName,
-		logger,
-	)
-	shardStore, err := factory.NewShardStore()
+	testData, tearDown := setUpMySQLTest(t)
+	defer tearDown()
+
+	shardStore, err := testData.Factory.NewShardStore()
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
-	executionStore, err := factory.NewExecutionStore()
+	executionStore, err := testData.Factory.NewExecutionStore()
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
-	defer func() {
-		factory.Close()
-		TearDownMySQLDatabase(cfg)
-	}()
 
 	s := NewExecutionMutableStateSuite(
 		t,
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		logger,
+		testData.Logger,
 	)
 	suite.Run(t, s)
 }
 
 func TestMySQLExecutionMutableStateTaskStoreSuite(t *testing.T) {
-	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := sql.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testMySQLClusterName,
-		logger,
-	)
-	shardStore, err := factory.NewShardStore()
+	testData, tearDown := setUpMySQLTest(t)
+	defer tearDown()
+
+	shardStore, err := testData.Factory.NewShardStore()
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
-	executionStore, err := factory.NewExecutionStore()
+	executionStore, err := testData.Factory.NewExecutionStore()
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
-	defer func() {
-		factory.Close()
-		TearDownMySQLDatabase(cfg)
-	}()
 
 	s := NewExecutionMutableStateTaskSuite(
 		t,
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		logger,
+		testData.Logger,
 	)
 	suite.Run(t, s)
 }
 
 func TestMySQLHistoryStoreSuite(t *testing.T) {
-	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := sql.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testMySQLClusterName,
-		logger,
-	)
-	store, err := factory.NewExecutionStore()
+	testData, tearDown := setUpMySQLTest(t)
+	defer tearDown()
+
+	store, err := testData.Factory.NewExecutionStore()
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
-	defer func() {
-		factory.Close()
-		TearDownMySQLDatabase(cfg)
-	}()
 
-	s := NewHistoryEventsSuite(t, store, logger)
+	s := NewHistoryEventsSuite(t, store, testData.Logger)
 	suite.Run(t, s)
 }
 
 func TestMySQLTaskQueueSuite(t *testing.T) {
-	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := sql.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testMySQLClusterName,
-		logger,
-	)
-	taskQueueStore, err := factory.NewTaskStore()
+	testData, tearDown := setUpMySQLTest(t)
+	defer tearDown()
+
+	taskQueueStore, err := testData.Factory.NewTaskStore()
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
 	defer func() {
-		factory.Close()
-		TearDownMySQLDatabase(cfg)
+		testData.Factory.Close()
+		TearDownMySQLDatabase(testData.Cfg)
 	}()
 
-	s := NewTaskQueueSuite(t, taskQueueStore, logger)
+	s := NewTaskQueueSuite(t, taskQueueStore, testData.Logger)
 	suite.Run(t, s)
 }
 
 func TestMySQLTaskQueueTaskSuite(t *testing.T) {
-	cfg := NewMySQLConfig()
-	SetupMySQLDatabase(cfg)
-	SetupMySQLSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := sql.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testMySQLClusterName,
-		logger,
-	)
-	taskQueueStore, err := factory.NewTaskStore()
+	testData, tearDown := setUpMySQLTest(t)
+	defer tearDown()
+
+	taskQueueStore, err := testData.Factory.NewTaskStore()
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
-	defer func() {
-		factory.Close()
-		TearDownMySQLDatabase(cfg)
-	}()
 
-	s := NewTaskQueueTaskSuite(t, taskQueueStore, logger)
+	s := NewTaskQueueTaskSuite(t, taskQueueStore, testData.Logger)
 	suite.Run(t, s)
-}
-
-// NewMySQLConfig returns a new MySQL config for test
-func NewMySQLConfig() *config.SQL {
-	return &config.SQL{
-		User:     testMySQLUser,
-		Password: testMySQLPassword,
-		ConnectAddr: net.JoinHostPort(
-			environment.GetMySQLAddress(),
-			strconv.Itoa(environment.GetMySQLPort()),
-		),
-		ConnectProtocol: testMySQLConnectionProtocol,
-		PluginName:      "mysql",
-		DatabaseName:    testMySQLDatabaseNamePrefix + shuffle.String(testMySQLDatabaseNameSuffix),
-	}
-}
-
-func SetupMySQLDatabase(cfg *config.SQL) {
-	adminCfg := *cfg
-	// NOTE need to connect with empty name to create new database
-	adminCfg.DatabaseName = ""
-
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver())
-	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL admin DB: %v", err))
-	}
-	defer func() { _ = db.Close() }()
-
-	err = db.CreateDatabase(cfg.DatabaseName)
-	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL database: %v", err))
-	}
-}
-
-func SetupMySQLSchema(cfg *config.SQL) {
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
-	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL admin DB: %v", err))
-	}
-	defer func() { _ = db.Close() }()
-
-	schemaPath, err := filepath.Abs(testMySQLExecutionSchema)
-	if err != nil {
-		panic(err)
-	}
-
-	statements, err := p.LoadAndSplitQuery([]string{schemaPath})
-	if err != nil {
-		panic(err)
-	}
-
-	for _, stmt := range statements {
-		if err = db.Exec(stmt); err != nil {
-			panic(err)
-		}
-	}
-
-	schemaPath, err = filepath.Abs(testMySQLVisibilitySchema)
-	if err != nil {
-		panic(err)
-	}
-
-	statements, err = p.LoadAndSplitQuery([]string{schemaPath})
-	if err != nil {
-		panic(err)
-	}
-
-	for _, stmt := range statements {
-		if err = db.Exec(stmt); err != nil {
-			panic(err)
-		}
-	}
-}
-
-func TearDownMySQLDatabase(cfg *config.SQL) {
-	adminCfg := *cfg
-	// NOTE need to connect with empty name to create new database
-	adminCfg.DatabaseName = ""
-
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver())
-	if err != nil {
-		panic(fmt.Sprintf("unable to create MySQL admin DB: %v", err))
-	}
-	defer func() { _ = db.Close() }()
-
-	err = db.DropDatabase(cfg.DatabaseName)
-	if err != nil {
-		panic(fmt.Sprintf("unable to drop MySQL database: %v", err))
-	}
 }

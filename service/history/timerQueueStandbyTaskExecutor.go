@@ -34,10 +34,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -45,6 +43,7 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
@@ -56,8 +55,6 @@ type (
 		*timerQueueTaskExecutorBase
 
 		clusterName        string
-		adminClient        adminservice.AdminServiceClient
-		matchingClient     matchingservice.MatchingServiceClient
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )
@@ -71,60 +68,49 @@ func newTimerQueueStandbyTaskExecutor(
 	logger log.Logger,
 	clusterName string,
 	config *configs.Config,
-) queueTaskExecutor {
+) queues.Executor {
 	return &timerQueueStandbyTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
 			shard,
 			workflowCache,
 			workflowDeleteManager,
+			matchingClient,
 			logger,
 			config,
 		),
 		clusterName:        clusterName,
-		adminClient:        shard.GetRemoteAdminClient(clusterName),
 		nDCHistoryResender: nDCHistoryResender,
-		matchingClient:     matchingClient,
 	}
 }
 
-func (t *timerQueueStandbyTaskExecutor) execute(
+func (t *timerQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
-	taskInfo tasks.Task,
-	shouldProcessTask bool,
-) error {
+	executable queues.Executable,
+) (metrics.Scope, error) {
 
-	switch task := taskInfo.(type) {
+	task := executable.GetTask()
+	scope := t.metricsClient.Scope(
+		tasks.GetStandbyTimerTaskMetricScope(task),
+		getNamespaceTagByID(t.registry, task.GetNamespaceID()),
+	)
+
+	switch task := task.(type) {
 	case *tasks.UserTimerTask:
-		if !shouldProcessTask {
-			return nil
-		}
-		return t.executeUserTimerTimeoutTask(ctx, task)
+		return scope, t.executeUserTimerTimeoutTask(ctx, task)
 	case *tasks.ActivityTimeoutTask:
-		if !shouldProcessTask {
-			return nil
-		}
-		return t.executeActivityTimeoutTask(ctx, task)
+		return scope, t.executeActivityTimeoutTask(ctx, task)
 	case *tasks.WorkflowTaskTimeoutTask:
-		if !shouldProcessTask {
-			return nil
-		}
-		return t.executeWorkflowTaskTimeoutTask(ctx, task)
+		return scope, t.executeWorkflowTaskTimeoutTask(ctx, task)
 	case *tasks.WorkflowBackoffTimerTask:
-		if !shouldProcessTask {
-			return nil
-		}
-		return t.executeWorkflowBackoffTimerTask(ctx, task)
+		return scope, t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.ActivityRetryTimerTask:
-		if !shouldProcessTask {
-			return nil
-		}
-		return t.executeActivityRetryTimerTask(ctx, task)
+		return scope, t.executeActivityRetryTimerTask(ctx, task)
 	case *tasks.WorkflowTimeoutTask:
-		return t.executeWorkflowTimeoutTask(ctx, task)
+		return scope, t.executeWorkflowTimeoutTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
-		return t.executeDeleteHistoryEventTask(ctx, task)
+		return scope, t.executeDeleteHistoryEventTask(ctx, task)
 	default:
-		return errUnknownTimerTask
+		return scope, errUnknownTimerTask
 	}
 }
 
@@ -133,7 +119,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 	timerTask *tasks.UserTimerTask,
 ) error {
 
-	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		timerSequence := t.getTimerSequence(mutableState)
 
@@ -192,7 +178,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	// the overall solution is to attempt to generate a new activity timer task whenever the
 	// task passed in is safe to be throw away.
 
-	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		timerSequence := t.getTimerSequence(mutableState)
 		updateMutableState := false
@@ -261,7 +247,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			return nil, err
 		}
 
-		err = context.UpdateWorkflowExecutionAsPassive(ctx, now)
+		err = wfContext.UpdateWorkflowExecutionAsPassive(ctx, now)
 		return nil, err
 	}
 
@@ -285,7 +271,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 	task *tasks.ActivityRetryTimerTask,
 ) (retError error) {
 
-	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		activityInfo, ok := mutableState.GetActivityInfo(task.EventID) // activity schedule ID
 		if !ok {
@@ -305,7 +291,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
-		return newActivityRetryTimerToMatchingInfo(activityInfo.TaskQueue, *activityInfo.ScheduleToStartTimeout), nil
+		return newActivityRetryTimePostActionInfo(mutableState, activityInfo.TaskQueue, *activityInfo.ScheduleToStartTimeout)
 	}
 
 	return t.processTimer(
@@ -317,7 +303,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
-			t.pushActivity,
+			t.fetchHistoryFromRemote,
 			t.pushActivity,
 		),
 	)
@@ -335,7 +321,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 		return nil
 	}
 
-	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		workflowTask, isPending := mutableState.GetWorkflowTaskInfo(timerTask.EventID)
 		if !isPending {
@@ -370,7 +356,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 	timerTask *tasks.WorkflowBackoffTimerTask,
 ) error {
 
-	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		if mutableState.HasProcessedOrPendingWorkflowTask() {
 			// if there is one workflow task already been processed
@@ -411,7 +397,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 	timerTask *tasks.WorkflowTimeoutTask,
 ) error {
 
-	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		// we do not need to notify new timer to base, since if there is no new event being replicated
 		// checking again if the timer can be completed is meaningless
@@ -446,17 +432,19 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 func (t *timerQueueStandbyTaskExecutor) getStandbyClusterTime() time.Time {
 	// time of remote cluster in the shard is delayed by "StandbyClusterDelay"
 	// so to get the current accurate remote cluster time, need to add it back
-	return t.shard.GetCurrentTime(t.clusterName).Add(t.shard.GetConfig().StandbyClusterDelay())
+	currentTime := t.shard.GetCurrentTime(t.clusterName)
+	if t.clusterName != t.shard.GetClusterMetadata().GetCurrentClusterName() {
+		currentTime.Add(t.shard.GetConfig().StandbyClusterDelay())
+	}
+
+	return currentTime
 }
 
 func (t *timerQueueStandbyTaskExecutor) getTimerSequence(
 	mutableState workflow.MutableState,
 ) workflow.TimerSequence {
 
-	timeSource := clock.NewEventTimeSource()
-	now := t.getStandbyClusterTime()
-	timeSource.Update(now)
-	return workflow.NewTimerSequence(timeSource, mutableState)
+	return workflow.NewTimerSequence(mutableState)
 }
 
 func (t *timerQueueStandbyTaskExecutor) processTimer(
@@ -465,17 +453,10 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 	actionFn standbyActionFn,
 	postActionFn standbyPostActionFn,
 ) (retError error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
-
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(timerTask)
-	executionContext, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+
+	executionContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, timerTask)
 	if err != nil {
 		return err
 	}
@@ -500,50 +481,86 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		return nil
 	}
 
-	historyResendInfo, err := actionFn(executionContext, mutableState)
+	historyResendInfo, err := actionFn(ctx, executionContext, mutableState)
 	if err != nil {
 		return err
 	}
 
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil)
-	return postActionFn(timerTask, historyResendInfo, t.logger)
+	return postActionFn(ctx, timerTask, historyResendInfo, t.logger)
 }
 
 func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
+	ctx context.Context,
 	taskInfo tasks.Task,
 	postActionInfo interface{},
-	_ log.Logger,
+	logger log.Logger,
 ) error {
 
-	if postActionInfo == nil {
+	var resendInfo *historyResendInfo
+	switch postActionInfo := postActionInfo.(type) {
+	case nil:
 		return nil
+	case *historyResendInfo:
+		resendInfo = postActionInfo
+	case *activityTaskPostActionInfo:
+		resendInfo = postActionInfo.historyResendInfo
+	default:
+		logger.Fatal("unknown post action info for fetching remote history", tag.Value(postActionInfo))
 	}
 
-	resendInfo := postActionInfo.(*historyResendInfo)
+	remoteClusterName, err := getRemoteClusterName(
+		t.currentClusterName,
+		t.registry,
+		taskInfo.GetNamespaceID(),
+	)
+	if err != nil {
+		return err
+	}
 
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientRequests)
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
-	var err error
-	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
+	adminClient, err := t.shard.GetRemoteAdminClient(remoteClusterName)
+	if err != nil {
+		return err
+	}
+	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
+		err = serviceerror.NewInternal("timerQueueStandbyProcessor encountered empty historyResendInfo")
+	} else {
+		ns, err := t.registry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
+		if err != nil {
+			return err
+		}
+
 		if err := refreshTasks(
-			t.adminClient,
-			t.shard.GetNamespaceRegistry(),
+			ctx,
+			adminClient,
+			ns.Name(),
 			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),
 		); err != nil {
+			if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
+				// Don't log NamespaceNotFound error because it is valid case, and return error to stop retry.
+				return err
+			}
+
 			t.logger.Error("Error refresh tasks from remote.",
 				tag.ShardID(t.shard.GetShardID()),
 				tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 				tag.WorkflowID(taskInfo.GetWorkflowID()),
 				tag.WorkflowRunID(taskInfo.GetRunID()),
-				tag.ClusterName(t.clusterName))
+				tag.ClusterName(remoteClusterName),
+				tag.Error(err))
 		}
 
+		// NOTE: history resend may take long time and its timeout is currently
+		// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+			remoteClusterName,
 			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),
@@ -552,17 +569,20 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			common.EmptyEventID,
 			common.EmptyVersion,
 		)
-	} else {
-		err = serviceerror.NewInternal("timerQueueStandbyProcessor encountered empty historyResendInfo")
 	}
 
 	if err != nil {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
+			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retry.
+			return err
+		}
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
 			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 			tag.WorkflowID(taskInfo.GetWorkflowID()),
 			tag.WorkflowRunID(taskInfo.GetRunID()),
-			tag.ClusterName(t.clusterName))
+			tag.ClusterName(remoteClusterName),
+			tag.Error(err))
 	}
 
 	// return error so task processing logic will retry
@@ -570,6 +590,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 }
 
 func (t *timerQueueStandbyTaskExecutor) pushActivity(
+	ctx context.Context,
 	task tasks.Task,
 	postActionInfo interface{},
 	logger log.Logger,
@@ -579,11 +600,9 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		return nil
 	}
 
-	pushActivityInfo := postActionInfo.(*pushActivityTaskToMatchingInfo)
+	pushActivityInfo := postActionInfo.(*activityTaskPostActionInfo)
 	activityScheduleToStartTimeout := &pushActivityInfo.activityTaskScheduleToStartTimeout
 	activityTask := task.(*tasks.ActivityRetryTimerTask)
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
 
 	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId:       activityTask.NamespaceID,
@@ -598,7 +617,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		},
 		ScheduleId:             activityTask.EventID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
-		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), activityTask.TaskID),
+		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), activityTask.TaskID),
 	})
 	return err
 }

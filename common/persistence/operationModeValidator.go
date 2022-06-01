@@ -50,7 +50,7 @@ func ValidateCreateWorkflowModeState(
 
 	switch mode {
 	case CreateWorkflowModeBrandNew,
-		CreateWorkflowModeWorkflowIDReuse:
+		CreateWorkflowModeUpdateCurrent:
 		if workflowState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 			return newInvalidCreateWorkflowMode(
 				mode,
@@ -59,10 +59,9 @@ func ValidateCreateWorkflowModeState(
 		}
 		return nil
 
-	case CreateWorkflowModeZombie:
+	case CreateWorkflowModeBypassCurrent:
 		if workflowState == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
-			workflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING ||
-			workflowState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+			workflowState == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING {
 			return newInvalidCreateWorkflowMode(
 				mode,
 				workflowState,

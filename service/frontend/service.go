@@ -138,6 +138,9 @@ type Config struct {
 	// Number of concurrent delete executions activities.
 	// Must be not greater than 256 and number of worker cores in the cluster.
 	DeleteNamespaceConcurrentDeleteExecutionsActivities dynamicconfig.IntPropertyFn
+
+	// Enable schedule-related RPCs
+	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -194,6 +197,8 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 
 		DeleteNamespaceDeleteActivityRPS:                    dc.GetIntProperty(dynamicconfig.DeleteNamespaceDeleteActivityRPS, 100),
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dc.GetIntProperty(dynamicconfig.DeleteNamespaceConcurrentDeleteExecutionsActivities, 4),
+
+		EnableSchedules: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableSchedules, false),
 	}
 }
 

@@ -44,10 +44,7 @@ type (
 )
 
 func (u *UserTimerTask) GetKey() Key {
-	return Key{
-		FireTime: u.VisibilityTimestamp,
-		TaskID:   u.TaskID,
-	}
+	return NewKey(u.VisibilityTimestamp, u.TaskID)
 }
 
 func (u *UserTimerTask) GetVersion() int64 {

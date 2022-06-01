@@ -101,7 +101,7 @@ type (
 	// PrometheusConfig is a new format for config for prometheus metrics.
 	PrometheusConfig struct {
 		// Metric framework: Tally/OpenTelemetry
-		Framework string `yaml:framework`
+		Framework string `yaml:"framework"`
 		// Address for prometheus to serve metrics from.
 		ListenAddress string `yaml:"listenAddress"`
 		// DefaultHistogramBoundaries defines the default histogram bucket
@@ -200,6 +200,12 @@ var (
 			200,
 			500,
 			1000,
+			2000,
+			5000,
+			10000,
+			20000,
+			50000,
+			100000,
 		},
 		Milliseconds: {
 			1 * ms,
@@ -254,6 +260,7 @@ var (
 // extension := MyExtensions(reporter.UserScope())
 // serverOptions.WithReporter(reporter)
 func InitMetricsReporter(logger log.Logger, c *Config) (Reporter, error) {
+	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
 	if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
 		return InitReporterFromPrometheusConfig(logger, c.Prometheus, &c.ClientConfig)
 	}
@@ -292,9 +299,6 @@ func InitReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfi
 // Current priority order is:
 // m3 > statsd > prometheus
 func NewScope(logger log.Logger, c *Config) tally.Scope {
-	if c.M3 != nil {
-		return newM3Scope(logger, c)
-	}
 	if c.Statsd != nil {
 		return newStatsdScope(logger, c)
 	}
@@ -311,7 +315,6 @@ func NewTallyReporterFromPrometheusConfig(
 ) Reporter {
 	tallyConfig := convertPrometheusConfigToTally(config)
 	tallyScope := newPrometheusScope(logger, tallyConfig, clientConfig)
-	setDefaultPerUnitHistogramBoundaries(clientConfig)
 	return NewTallyReporter(tallyScope, clientConfig)
 }
 
@@ -351,26 +354,14 @@ func convertPrometheusConfigToTally(
 }
 
 func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
-	if clientConfig.PerUnitHistogramBoundaries != nil && len(clientConfig.PerUnitHistogramBoundaries) > 0 {
-		return
+	if clientConfig.PerUnitHistogramBoundaries == nil {
+		clientConfig.PerUnitHistogramBoundaries = make(map[string][]float64)
 	}
-	clientConfig.PerUnitHistogramBoundaries = defaultPerUnitHistogramBoundaries
-}
-
-// newM3Scope returns a new m3 scope with
-// a default reporting interval of a second
-func newM3Scope(logger log.Logger, c *Config) tally.Scope {
-	reporter, err := c.M3.NewReporter()
-	if err != nil {
-		logger.Fatal("error creating m3 reporter", tag.Error(err))
+	for unit, bucket := range defaultPerUnitHistogramBoundaries {
+		if _, ok := clientConfig.PerUnitHistogramBoundaries[unit]; !ok {
+			clientConfig.PerUnitHistogramBoundaries[unit] = bucket
+		}
 	}
-	scopeOpts := tally.ScopeOptions{
-		Tags:           c.Tags,
-		CachedReporter: reporter,
-		Prefix:         c.Prefix,
-	}
-	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
-	return scope
 }
 
 // newStatsdScope returns a new statsd scope with
@@ -384,8 +375,7 @@ func newStatsdScope(logger log.Logger, c *Config) tally.Scope {
 	if err != nil {
 		logger.Fatal("error creating statsd client", tag.Error(err))
 	}
-
-	//NOTE: according to ( https://github.com/uber-go/tally )Tally's statsd implementation doesn't support tagging.
+	// NOTE: according to (https://github.com/uber-go/tally) Tally's statsd implementation doesn't support tagging.
 	// Therefore, we implement Tally interface to have a statsd reporter that can support tagging
 	opts := statsdreporter.Options{
 		TagSeparator: c.Statsd.Reporter.TagSeparator,
@@ -440,8 +430,4 @@ func histogramBoundariesToHistogramObjectives(boundaries []float64) []prometheus
 		)
 	}
 	return result
-}
-
-func histogramBoundariesToValueBuckets(buckets []float64) tally.ValueBuckets {
-	return tally.ValueBuckets(buckets)
 }

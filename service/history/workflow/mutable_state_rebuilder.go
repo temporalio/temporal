@@ -130,19 +130,16 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 			attributes := event.GetWorkflowExecutionStartedEventAttributes()
-			var parentNamespaceID namespace.ID
-			if attributes.GetParentWorkflowNamespace() != "" {
-				parentNamespaceEntry, err := b.namespaceRegistry.GetNamespace(
-					namespace.Name(attributes.GetParentWorkflowNamespace()),
-				)
+			// TODO (alex): ParentWorkflowNamespaceId is back filled. Backward compatibility: old event doesn't have ParentNamespaceId set.
+			if attributes.GetParentWorkflowNamespaceId() == "" && attributes.GetParentWorkflowNamespace() != "" {
+				parentNamespaceEntry, err := b.namespaceRegistry.GetNamespace(namespace.Name(attributes.GetParentWorkflowNamespace()))
 				if err != nil {
 					return nil, err
 				}
-				parentNamespaceID = parentNamespaceEntry.ID()
+				attributes.ParentWorkflowNamespaceId = parentNamespaceEntry.ID().String()
 			}
 
 			if err := b.mutableState.ReplicateWorkflowExecutionStartedEvent(
-				parentNamespaceID,
 				nil, // shard clock is local to cluster
 				execution,
 				requestID,
@@ -527,6 +524,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				timestamp.TimeValue(event.GetEventTime()),
+				false,
 			); err != nil {
 				return nil, err
 			}
@@ -541,6 +539,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				timestamp.TimeValue(event.GetEventTime()),
+				false,
 			); err != nil {
 				return nil, err
 			}
@@ -555,6 +554,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				timestamp.TimeValue(event.GetEventTime()),
+				false,
 			); err != nil {
 				return nil, err
 			}
@@ -569,6 +569,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				timestamp.TimeValue(event.GetEventTime()),
+				false,
 			); err != nil {
 				return nil, err
 			}
@@ -583,6 +584,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				timestamp.TimeValue(event.GetEventTime()),
+				false,
 			); err != nil {
 				return nil, err
 			}
@@ -628,6 +630,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				timestamp.TimeValue(event.GetEventTime()),
+				false,
 			); err != nil {
 				return nil, err
 			}

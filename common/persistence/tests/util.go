@@ -44,6 +44,17 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+func RandomShardInfo(
+	shardID int32,
+	rangeID int64,
+) *persistencespb.ShardInfo {
+	var shardInfo persistencespb.ShardInfo
+	_ = gofakeit.Struct(&shardInfo)
+	shardInfo.ShardId = shardID
+	shardInfo.RangeId = rangeID
+	return &shardInfo
+}
+
 func RandomSnapshot(
 	namespaceID string,
 	workflowID string,

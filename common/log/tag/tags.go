@@ -326,6 +326,11 @@ func WorkflowEventCount(eventCount int) ZapTag {
 	return NewInt("wf-event-count", eventCount)
 }
 
+// ScheduleID returns tag for ScheduleID
+func ScheduleID(scheduleID string) ZapTag {
+	return NewStringTag("schedule-id", scheduleID)
+}
+
 // ==========  System tags defined here:  ==========
 // Tags with pre-define values
 
@@ -481,6 +486,10 @@ func CertThumbprint(thumbprint string) ZapTag {
 	return NewStringTag("cert-thumbprint", thumbprint)
 }
 
+func WorkerComponent(v interface{}) ZapTag {
+	return NewStringTag("worker-component", fmt.Sprintf("%T", v))
+}
+
 // history engine shard
 
 // ShardID returns tag for ShardID
@@ -491,11 +500,6 @@ func ShardID(shardID int32) ZapTag {
 // ShardTime returns tag for ShardTime
 func ShardTime(shardTime interface{}) ZapTag {
 	return NewAnyTag("shard-time", shardTime)
-}
-
-// ShardReplicationAck returns tag for ShardReplicationAck
-func ShardReplicationAck(shardReplicationAck int64) ZapTag {
-	return NewInt64("shard-replication-ack", shardReplicationAck)
 }
 
 // PreviousShardRangeID returns tag for PreviousShardRangeID
@@ -533,14 +537,9 @@ func MaxLevel(lv int64) ZapTag {
 	return NewInt64("max-level", lv)
 }
 
-// ShardTransferAcks returns tag for ShardTransferAcks
-func ShardTransferAcks(shardTransferAcks interface{}) ZapTag {
-	return NewAnyTag("shard-transfer-acks", shardTransferAcks)
-}
-
-// ShardTimerAcks returns tag for ShardTimerAcks
-func ShardTimerAcks(shardTimerAcks interface{}) ZapTag {
-	return NewAnyTag("shard-timer-acks", shardTimerAcks)
+// ShardQueueAcks returns tag for shard queue ack levels
+func ShardQueueAcks(categoryName string, ackLevel interface{}) ZapTag {
+	return NewAnyTag("shard-"+categoryName+"-queue-acks", ackLevel)
 }
 
 // task queue processor

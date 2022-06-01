@@ -35,6 +35,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/quotas"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -59,7 +61,6 @@ type (
 		visibilityTaskFilter     taskFilter
 		logger                   log.Logger
 		metricsClient            metrics.Client
-		taskExecutor             queueTaskExecutor
 
 		// from transferQueueProcessorImpl
 		config   *configs.Config
@@ -74,7 +75,9 @@ type (
 func newVisibilityQueueProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
+	scheduler queues.Scheduler,
 	visibilityMgr manager.VisibilityManager,
+	hostRateLimiter quotas.RateLimiter,
 ) queues.Processor {
 
 	config := shard.GetConfig()
@@ -83,17 +86,14 @@ func newVisibilityQueueProcessor(
 
 	options := &QueueProcessorOptions{
 		BatchSize:                           config.VisibilityTaskBatchSize,
-		WorkerCount:                         config.VisibilityTaskWorkerCount,
-		MaxPollRPS:                          config.VisibilityProcessorMaxPollRPS,
 		MaxPollInterval:                     config.VisibilityProcessorMaxPollInterval,
 		MaxPollIntervalJitterCoefficient:    config.VisibilityProcessorMaxPollIntervalJitterCoefficient,
 		UpdateAckInterval:                   config.VisibilityProcessorUpdateAckInterval,
 		UpdateAckIntervalJitterCoefficient:  config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
-		MaxRetryCount:                       config.VisibilityTaskMaxRetryCount,
-		RedispatchInterval:                  config.VisibilityProcessorRedispatchInterval,
-		RedispatchIntervalJitterCoefficient: config.VisibilityProcessorRedispatchIntervalJitterCoefficient,
-		MaxRedispatchQueueSize:              config.VisibilityProcessorMaxRedispatchQueueSize,
-		EnablePriorityTaskProcessor:         config.VisibilityProcessorEnablePriorityTaskProcessor,
+		RescheduleInterval:                  config.VisibilityProcessorRescheduleInterval,
+		RescheduleIntervalJitterCoefficient: config.VisibilityProcessorRescheduleIntervalJitterCoefficient,
+		MaxReschdulerSize:                   config.VisibilityProcessorMaxReschedulerSize,
+		PollBackoffInterval:                 config.VisibilityProcessorPollBackoffInterval,
 		MetricScope:                         metrics.VisibilityQueueProcessorScope,
 	}
 	visibilityTaskFilter := func(taskInfo tasks.Task) bool {
@@ -106,7 +106,7 @@ func newVisibilityQueueProcessor(
 		).TaskID
 	}
 	updateVisibilityAckLevel := func(ackLevel int64) error {
-		return shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.Key{TaskID: ackLevel})
+		return shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.NewImmediateKey(ackLevel))
 	}
 
 	visibilityQueueShutdown := func() error {
@@ -123,12 +123,6 @@ func newVisibilityQueueProcessor(
 		visibilityTaskFilter:     visibilityTaskFilter,
 		logger:                   logger,
 		metricsClient:            metricsClient,
-		taskExecutor: newVisibilityQueueTaskExecutor(
-			shard,
-			workflowCache,
-			visibilityMgr,
-			logger,
-		),
 
 		config:       config,
 		ackLevel:     ackLevel,
@@ -139,12 +133,43 @@ func newVisibilityQueueProcessor(
 		executionManager:   shard.GetExecutionManager(),
 	}
 
+	taskExecutor := newVisibilityQueueTaskExecutor(
+		shard,
+		workflowCache,
+		visibilityMgr,
+		logger,
+	)
+
+	if scheduler == nil {
+		scheduler = newVisibilityTaskScheduler(shard, logger)
+	}
+
+	rescheduler := queues.NewRescheduler(
+		scheduler,
+		shard.GetTimeSource(),
+		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),
+	)
+
 	queueAckMgr := newQueueAckMgr(
 		shard,
 		options,
 		retProcessor,
 		ackLevel,
 		logger,
+		func(t tasks.Task) queues.Executable {
+			return queues.NewExecutable(
+				t,
+				visibilityTaskFilter,
+				taskExecutor,
+				scheduler,
+				rescheduler,
+				shard.GetTimeSource(),
+				logger,
+				shard.GetConfig().VisibilityTaskMaxRetryCount,
+				queues.QueueTypeVisibility,
+				shard.GetConfig().NamespaceCacheRefreshInterval,
+			)
+		},
 	)
 
 	queueProcessorBase := newQueueProcessorBase(
@@ -154,6 +179,12 @@ func newVisibilityQueueProcessor(
 		retProcessor,
 		queueAckMgr,
 		workflowCache,
+		scheduler,
+		rescheduler,
+		newQueueProcessorRateLimiter(
+			hostRateLimiter,
+			config.VisibilityProcessorMaxPollRPS,
+		),
 		logger,
 		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),
 	)
@@ -256,14 +287,10 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 
 	if lowerAckLevel < upperAckLevel {
 		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:      t.shard.GetShardID(),
-			TaskCategory: tasks.CategoryVisibility,
-			InclusiveMinTaskKey: tasks.Key{
-				TaskID: lowerAckLevel + 1,
-			},
-			ExclusiveMaxTaskKey: tasks.Key{
-				TaskID: upperAckLevel + 1,
-			},
+			ShardID:             t.shard.GetShardID(),
+			TaskCategory:        tasks.CategoryVisibility,
+			InclusiveMinTaskKey: tasks.NewImmediateKey(lowerAckLevel + 1),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(upperAckLevel + 1),
 		})
 		if err != nil {
 			return err
@@ -272,33 +299,12 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 
 	t.ackLevel = upperAckLevel
 
-	return t.shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.Key{TaskID: upperAckLevel})
+	return t.shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.NewImmediateKey(upperAckLevel))
 }
 
 // queueProcessor interface
 func (t *visibilityQueueProcessorImpl) notifyNewTask() {
 	t.queueProcessorBase.notifyNewTask()
-}
-
-// taskExecutor interfaces
-func (t *visibilityQueueProcessorImpl) getTaskFilter() taskFilter {
-	return t.visibilityTaskFilter
-}
-
-func (t *visibilityQueueProcessorImpl) complete(
-	taskInfo *taskInfo,
-) {
-
-	t.queueProcessorBase.complete(taskInfo.Task)
-}
-
-func (t *visibilityQueueProcessorImpl) process(
-	ctx context.Context,
-	taskInfo *taskInfo,
-) (int, error) {
-	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := tasks.GetVisibilityTaskMetricsScope(taskInfo.Task)
-	return metricScope, t.taskExecutor.execute(ctx, taskInfo.Task, taskInfo.shouldProcessTask)
 }
 
 // processor interfaces
@@ -307,15 +313,11 @@ func (t *visibilityQueueProcessorImpl) readTasks(
 ) ([]tasks.Task, bool, error) {
 
 	response, err := t.executionManager.GetHistoryTasks(context.TODO(), &persistence.GetHistoryTasksRequest{
-		ShardID:      t.shard.GetShardID(),
-		TaskCategory: tasks.CategoryVisibility,
-		InclusiveMinTaskKey: tasks.Key{
-			TaskID: readLevel + 1,
-		},
-		ExclusiveMaxTaskKey: tasks.Key{
-			TaskID: t.maxReadAckLevel() + 1,
-		},
-		BatchSize: t.options.BatchSize(),
+		ShardID:             t.shard.GetShardID(),
+		TaskCategory:        tasks.CategoryVisibility,
+		InclusiveMinTaskKey: tasks.NewImmediateKey(readLevel + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(t.maxReadAckLevel() + 1),
+		BatchSize:           t.options.BatchSize(),
 	})
 
 	if err != nil {
@@ -334,4 +336,25 @@ func (t *visibilityQueueProcessorImpl) updateAckLevel(
 
 func (t *visibilityQueueProcessorImpl) queueShutdown() error {
 	return t.visibilityQueueShutdown()
+}
+
+func newVisibilityTaskScheduler(
+	shard shard.Context,
+	logger log.Logger,
+) queues.Scheduler {
+	config := shard.GetConfig()
+	return queues.NewScheduler(
+		queues.NewNoopPriorityAssigner(),
+		queues.SchedulerOptions{
+			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
+				WorkerCount: config.VisibilityTaskWorkerCount,
+				QueueSize:   config.VisibilityTaskBatchSize(),
+			},
+			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
+				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.VisibilityProcessorSchedulerRoundRobinWeights(), logger),
+			},
+		},
+		shard.GetMetricsClient(),
+		logger,
+	)
 }

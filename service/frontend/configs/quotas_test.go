@@ -160,6 +160,14 @@ func (s *quotasSuite) TestOtherAPIs() {
 		"DescribeNamespace":  {},
 		"ListNamespaces":     {},
 		"DeprecateNamespace": {},
+
+		"CreateSchedule":            {},
+		"DescribeSchedule":          {},
+		"UpdateSchedule":            {},
+		"PatchSchedule":             {},
+		"ListScheduleMatchingTimes": {},
+		"DeleteSchedule":            {},
+		"ListSchedules":             {},
 	}
 
 	var service workflowservice.WorkflowServiceServer

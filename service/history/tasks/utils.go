@@ -26,16 +26,18 @@ package tasks
 
 import (
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
 
-func InitializeLogger(
+func Tags(
 	task Task,
-	logger log.Logger,
-) log.Logger {
+) []tag.Tag {
+	// TODO: convert this to a method GetEventID on task interface
+	// or remove this tag as the value is visible in the Task tag value.
 	taskEventID := int64(0)
 	taskCategory := task.GetCategory()
 	switch taskCategory.ID() {
@@ -43,15 +45,11 @@ func InitializeLogger(
 		taskEventID = GetTransferTaskEventID(task)
 	case CategoryIDTimer:
 		taskEventID = GetTimerTaskEventID(task)
-	case CategoryIDVisibility:
-		// no-op, visibility tasks don't have task eventID
 	default:
-		// replication task won't reach here
-		panic(serviceerror.NewInternal("unknown task category"))
+		// no-op, other task categories don't have task eventID
 	}
 
-	taskLogger := log.With(
-		logger,
+	return []tag.Tag{
 		tag.WorkflowNamespaceID(task.GetNamespaceID()),
 		tag.WorkflowID(task.GetWorkflowID()),
 		tag.WorkflowRunID(task.GetRunID()),
@@ -60,8 +58,18 @@ func InitializeLogger(
 		tag.TaskType(task.GetType()),
 		tag.Task(task),
 		tag.WorkflowEventID(taskEventID),
+	}
+}
+
+// TODO: deprecate this method, use logger from executable.Logger() instead
+func InitializeLogger(
+	task Task,
+	logger log.Logger,
+) log.Logger {
+	return log.With(
+		logger,
+		Tags(task)...,
 	)
-	return taskLogger
 }
 
 func GetTransferTaskEventID(

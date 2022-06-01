@@ -61,12 +61,12 @@ func (mc *inMemoryClient) GetValue(key Key, defaultValue interface{}) (interface
 }
 
 func (mc *inMemoryClient) GetValueWithFilters(
-	name Key, filters map[Filter]interface{}, defaultValue interface{},
+	name Key, filters []map[Filter]interface{}, defaultValue interface{},
 ) (interface{}, error) {
 	return mc.GetValue(name, defaultValue)
 }
 
-func (mc *inMemoryClient) GetIntValue(name Key, filters map[Filter]interface{}, defaultValue int) (int, error) {
+func (mc *inMemoryClient) GetIntValue(name Key, filters []map[Filter]interface{}, defaultValue int) (int, error) {
 	v := mc.globalValues.Load().(map[Key]interface{})
 	if val, ok := v[name]; ok {
 		return val.(int), nil
@@ -74,7 +74,7 @@ func (mc *inMemoryClient) GetIntValue(name Key, filters map[Filter]interface{}, 
 	return defaultValue, errors.New("unable to find key")
 }
 
-func (mc *inMemoryClient) GetFloatValue(name Key, filters map[Filter]interface{}, defaultValue float64) (float64, error) {
+func (mc *inMemoryClient) GetFloatValue(name Key, filters []map[Filter]interface{}, defaultValue float64) (float64, error) {
 	v := mc.globalValues.Load().(map[Key]interface{})
 	if val, ok := v[name]; ok {
 		return val.(float64), nil
@@ -82,7 +82,7 @@ func (mc *inMemoryClient) GetFloatValue(name Key, filters map[Filter]interface{}
 	return defaultValue, errors.New("unable to find key")
 }
 
-func (mc *inMemoryClient) GetBoolValue(name Key, filters map[Filter]interface{}, defaultValue bool) (bool, error) {
+func (mc *inMemoryClient) GetBoolValue(name Key, filters []map[Filter]interface{}, defaultValue bool) (bool, error) {
 	v := mc.globalValues.Load().(map[Key]interface{})
 	if val, ok := v[name]; ok {
 		return val.(bool), nil
@@ -90,7 +90,7 @@ func (mc *inMemoryClient) GetBoolValue(name Key, filters map[Filter]interface{},
 	return defaultValue, errors.New("unable to find key")
 }
 
-func (mc *inMemoryClient) GetStringValue(name Key, filters map[Filter]interface{}, defaultValue string) (string, error) {
+func (mc *inMemoryClient) GetStringValue(name Key, filters []map[Filter]interface{}, defaultValue string) (string, error) {
 	v := mc.globalValues.Load().(map[Key]interface{})
 	if val, ok := v[name]; ok {
 		return val.(string), nil
@@ -99,7 +99,7 @@ func (mc *inMemoryClient) GetStringValue(name Key, filters map[Filter]interface{
 }
 
 func (mc *inMemoryClient) GetMapValue(
-	name Key, filters map[Filter]interface{}, defaultValue map[string]interface{},
+	name Key, filters []map[Filter]interface{}, defaultValue map[string]interface{},
 ) (map[string]interface{}, error) {
 	v := mc.globalValues.Load().(map[Key]interface{})
 	if val, ok := v[name]; ok {
@@ -109,7 +109,7 @@ func (mc *inMemoryClient) GetMapValue(
 }
 
 func (mc *inMemoryClient) GetDurationValue(
-	name Key, filters map[Filter]interface{}, defaultValue time.Duration,
+	name Key, filters []map[Filter]interface{}, defaultValue time.Duration,
 ) (time.Duration, error) {
 	v := mc.globalValues.Load().(map[Key]interface{})
 	if val, ok := v[name]; ok {

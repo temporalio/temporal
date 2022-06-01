@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
@@ -443,6 +444,140 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 	s.Equal(2, d.NumOfCallFromPayloads)
 }
 
+func (s *clientIntegrationSuite) Test_StickyWorkerRestartWorkflowTask() {
+	testCases := []struct {
+		name       string
+		waitTime   time.Duration
+		doQuery    bool
+		doSignal   bool
+		delayCheck func(duration time.Duration) bool
+	}{
+		{
+			name:     "new workflow task after 10s, no delay",
+			waitTime: 10 * time.Second,
+			doSignal: true,
+			delayCheck: func(duration time.Duration) bool {
+				return duration < 5*time.Second
+			},
+		},
+		{
+			name:     "new workflow task immediately, expect 5s delay",
+			waitTime: 0,
+			doSignal: true,
+			delayCheck: func(duration time.Duration) bool {
+				return duration > 5*time.Second
+			},
+		},
+		{
+			name:     "new query after 10s, no delay",
+			waitTime: 10 * time.Second,
+			doQuery:  true,
+			delayCheck: func(duration time.Duration) bool {
+				return duration < 5*time.Second
+			},
+		},
+		{
+			name:     "new query immediately, expect 5s delay",
+			waitTime: 0,
+			doQuery:  true,
+			delayCheck: func(duration time.Duration) bool {
+				return duration > 5*time.Second
+			},
+		},
+	}
+	for _, tt := range testCases {
+		s.Run(tt.name, func() {
+			workflowFn := func(ctx workflow.Context) (string, error) {
+				workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+					return "query works", nil
+				})
+
+				signalCh := workflow.GetSignalChannel(ctx, "test")
+				var msg string
+				signalCh.Receive(ctx, &msg)
+				return msg, nil
+			}
+
+			taskQueue := "task-queue-" + tt.name
+
+			oldWorker := worker.New(s.sdkClient, taskQueue, worker.Options{})
+			oldWorker.RegisterWorkflow(workflowFn)
+			if err := oldWorker.Start(); err != nil {
+				s.Logger.Fatal("Error when start worker", tag.Error(err))
+			}
+
+			id := "test-sticky-delay" + tt.name
+			workflowOptions := sdkclient.StartWorkflowOptions{
+				ID:                 id,
+				TaskQueue:          taskQueue,
+				WorkflowRunTimeout: 20 * time.Second,
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+			if err != nil {
+				s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+			}
+
+			s.NotNil(workflowRun)
+			s.True(workflowRun.GetRunID() != "")
+
+			findFirstWorkflowTaskCompleted := false
+		WaitForFirstWorkflowTaskComplete:
+			for i := 0; i < 10; i++ {
+				// wait until first workflow task completed (so we know sticky is set on workflow)
+				iter := s.sdkClient.GetWorkflowHistory(ctx, id, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+				for iter.HasNext() {
+					evt, err := iter.Next()
+					s.NoError(err)
+					if evt.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+						findFirstWorkflowTaskCompleted = true
+						break WaitForFirstWorkflowTaskComplete
+					}
+				}
+				time.Sleep(time.Second)
+			}
+			s.True(findFirstWorkflowTaskCompleted)
+
+			// stop old worker
+			oldWorker.Stop()
+
+			// maybe wait for 10s, which will make matching aware the old sticky worker is unavailable
+			time.Sleep(tt.waitTime)
+
+			// start a new worker
+			newWorker := worker.New(s.sdkClient, taskQueue, worker.Options{})
+			newWorker.RegisterWorkflow(workflowFn)
+			if err := newWorker.Start(); err != nil {
+				s.Logger.Fatal("Error when start worker", tag.Error(err))
+			}
+			defer newWorker.Stop()
+
+			startTime := time.Now()
+			// send a signal, and workflow should complete immediately, there should not be 5s delay
+			if tt.doSignal {
+				err = s.sdkClient.SignalWorkflow(ctx, id, "", "test", "test")
+				s.NoError(err)
+
+				err = workflowRun.Get(ctx, nil)
+				s.NoError(err)
+			} else if tt.doQuery {
+				// send a signal, and workflow should complete immediately, there should not be 5s delay
+				queryResult, err := s.sdkClient.QueryWorkflow(ctx, id, "", "test", "test")
+				s.NoError(err)
+
+				var queryResultStr string
+				err = queryResult.Get(&queryResultStr)
+				s.NoError(err)
+				s.Equal("query works", queryResultStr)
+			}
+			endTime := time.Now()
+			duration := endTime.Sub(startTime)
+			s.True(tt.delayCheck(duration), "delay check failed: %s", duration)
+		})
+	}
+}
+
 func (s *clientIntegrationSuite) Test_ActivityTimeouts() {
 	activityFn := func(ctx context.Context) error {
 		info := activity.GetInfo(ctx)
@@ -576,7 +711,7 @@ func (s *clientIntegrationSuite) Test_ActivityTimeouts() {
 	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
 	s.Equal(2, v)
 
-	//s.printHistory(id, workflowRun.GetRunID())
+	// s.printHistory(id, workflowRun.GetRunID())
 }
 
 // This test simulates workflow try to complete itself while there is buffered event.
