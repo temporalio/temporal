@@ -3,7 +3,7 @@
 install: update-tools bins
 
 # Rebuild binaries (used by Dockerfile).
-bins: temporal-server temporal-cassandra-tool temporal-sql-tool
+bins: temporal-server temporal-cassandra-tool temporal-sql-tool temporal-tdbg-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
 all: update-tools clean proto bins check test
@@ -185,11 +185,16 @@ clean-bins:
 	@printf $(COLOR) "Delete old binaries..."
 	@rm -f temporal-server
 	@rm -f temporal-cassandra-tool
+	@rm -f tdbg
 	@rm -f temporal-sql-tool
 
 temporal-server: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-server with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-server ./cmd/server
+
+temporal-tdbg-tool: $(ALL_SRC)
+	@printf $(COLOR) "Build tdbg with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
+	CGO_ENABLED=$(CGO_ENABLED) go build -o tdbg ./cmd/tools/tdbg
 
 temporal-cassandra-tool: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-cassandra-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
