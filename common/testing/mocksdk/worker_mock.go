@@ -32,8 +32,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	workflow "go.temporal.io/sdk/workflow"
 	activity "go.temporal.io/sdk/activity"
+	workflow "go.temporal.io/sdk/workflow"
 )
 
 // MockWorker is a mock of Worker interface.

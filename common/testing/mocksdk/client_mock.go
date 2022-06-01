@@ -35,8 +35,8 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	enums "go.temporal.io/api/enums/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
+	client "go.temporal.io/sdk/client"
 	converter "go.temporal.io/sdk/converter"
-	"go.temporal.io/sdk/client"
 )
 
 // MockClient is a mock of Client interface.
