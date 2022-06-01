@@ -259,8 +259,6 @@ func (s *perNsWorkerManagerSuite) TestTwoNamespacesTwoComponents() {
 }
 
 func (s *perNsWorkerManagerSuite) TestDeleteNs() {
-	s.T().Skip("TODO: this is broken now, enable after fixing")
-
 	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
 
 	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
