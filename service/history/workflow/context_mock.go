@@ -258,17 +258,17 @@ func (mr *MockContextMockRecorder) SetHistorySize(size interface{}) *gomock.Call
 }
 
 // SetWorkflowExecution mocks base method.
-func (m *MockContext) SetWorkflowExecution(ctx context.Context, now time.Time, mutableState MutableState) error {
+func (m *MockContext) SetWorkflowExecution(ctx context.Context, now time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetWorkflowExecution", ctx, now, mutableState)
+	ret := m.ctrl.Call(m, "SetWorkflowExecution", ctx, now)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetWorkflowExecution indicates an expected call of SetWorkflowExecution.
-func (mr *MockContextMockRecorder) SetWorkflowExecution(ctx, now, mutableState interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) SetWorkflowExecution(ctx, now interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).SetWorkflowExecution), ctx, now, mutableState)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).SetWorkflowExecution), ctx, now)
 }
 
 // Unlock mocks base method.
