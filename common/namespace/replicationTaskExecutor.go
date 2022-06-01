@@ -100,10 +100,8 @@ func (h *namespaceReplicationTaskExecutorImpl) Execute(
 	if err := h.validateNamespaceReplicationTask(task); err != nil {
 		return err
 	}
-
-	if !checkClusterIncludedInReplicationConfig(h.currentCluster, task.ReplicationConfig.Clusters) {
-		// namespace does not live in current cluster, ignore it
-		return nil
+	if shouldProcess, err := h.shouldProcessTask(ctx, task); !shouldProcess || err != nil {
+		return err
 	}
 
 	switch task.GetNamespaceOperation() {
@@ -123,6 +121,25 @@ func checkClusterIncludedInReplicationConfig(clusterName string, repCfg []*repli
 		}
 	}
 	return false
+}
+
+func (h *namespaceReplicationTaskExecutorImpl) shouldProcessTask(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) (bool, error) {
+	resp, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
+		Name: task.Info.GetName(),
+	})
+	switch err.(type) {
+	case nil:
+		if resp.Namespace.Info.Id != task.GetId() {
+			return false, ErrNameUUIDCollision
+		}
+
+		return true, nil
+	case *serviceerror.NamespaceNotFound:
+		return checkClusterIncludedInReplicationConfig(h.currentCluster, task.ReplicationConfig.Clusters), nil
+	default:
+		// return the original err
+		return false, err
+	}
 }
 
 // handleNamespaceCreationReplicationTask handles the namespace creation replication task

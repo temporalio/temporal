@@ -394,6 +394,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace() {
 		WorkflowExecutionRetentionPeriod: retention,
 		IsGlobalNamespace:                true,
 	}
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil)
 	_, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
 	s.NoError(err)
 
