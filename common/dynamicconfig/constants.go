@@ -340,6 +340,8 @@ const (
 	TimerProcessorFailoverMaxPollRPS = "history.timerProcessorFailoverMaxPollRPS"
 	// TimerProcessorMaxPollRPS is max poll rate per second for timer processor
 	TimerProcessorMaxPollRPS = "history.timerProcessorMaxPollRPS"
+	// TimerProcessorMaxPollHostRPS is max poll rate per second for all timer processor on a host
+	TimerProcessorMaxPollHostRPS = "history.timerProcessorMaxPollHostRPS"
 	// TimerProcessorMaxPollInterval is max poll interval for timer processor
 	TimerProcessorMaxPollInterval = "history.timerProcessorMaxPollInterval"
 	// TimerProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
@@ -366,6 +368,8 @@ const (
 	TransferProcessorFailoverMaxPollRPS = "history.transferProcessorFailoverMaxPollRPS"
 	// TransferProcessorMaxPollRPS is max poll rate per second for transferQueueProcessor
 	TransferProcessorMaxPollRPS = "history.transferProcessorMaxPollRPS"
+	// TransferProcessorMaxPollHostRPS is max poll rate per second for all transferQueueProcessor on a host
+	TransferProcessorMaxPollHostRPS = "history.transferProcessorMaxPollHostRPS"
 	// TransferTaskWorkerCount is number of worker for transferQueueProcessor
 	TransferTaskWorkerCount = "history.transferTaskWorkerCount"
 	// TransferTaskMaxRetryCount is max times of retry for transferQueueProcessor
@@ -414,6 +418,8 @@ const (
 	VisibilityProcessorFailoverMaxPollRPS = "history.visibilityProcessorFailoverMaxPollRPS"
 	// VisibilityProcessorMaxPollRPS is max poll rate per second for visibilityQueueProcessor
 	VisibilityProcessorMaxPollRPS = "history.visibilityProcessorMaxPollRPS"
+	// VisibilityProcessorMaxPollHostRPS is max poll rate per second for all visibilityQueueProcessor on a host
+	VisibilityProcessorMaxPollHostRPS = "history.visibilityProcessorMaxPollHostRPS"
 	// VisibilityTaskWorkerCount is number of worker for visibilityQueueProcessor
 	VisibilityTaskWorkerCount = "history.visibilityTaskWorkerCount"
 	// VisibilityTaskMaxRetryCount is max times of retry for visibilityQueueProcessor

@@ -49,6 +49,7 @@ type (
 			info *persistencespb.NamespaceInfo,
 			config *persistencespb.NamespaceConfig,
 			replicationConfig *persistencespb.NamespaceReplicationConfig,
+			replicationClusterListUpdated bool,
 			configVersion int64,
 			failoverVersion int64,
 			isGlobalNamespace bool,
@@ -79,6 +80,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
+	replicationClusterListUpdated bool,
 	configVersion int64,
 	failoverVersion int64,
 	isGlobalNamespace bool,
@@ -87,7 +89,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 	if !isGlobalNamespace {
 		return nil
 	}
-	if len(replicationConfig.Clusters) <= 1 {
+	if len(replicationConfig.Clusters) <= 1 && !replicationClusterListUpdated {
 		return nil
 	}
 	if info.State == enumspb.NAMESPACE_STATE_DELETED {

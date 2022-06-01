@@ -89,7 +89,7 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), time.Second*30)
 
-	s.ShardID = 1 + rand.Int31n(16)
+	s.ShardID = 1 + rand.Int31n(maxShards)
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID: s.ShardID,
 		InitialShardInfo: &persistencespb.ShardInfo{

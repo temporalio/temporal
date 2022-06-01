@@ -154,6 +154,7 @@ func NewWorkflowHandler(
 			namespace.NewNamespaceReplicator(namespaceReplicationQueue, logger),
 			archivalMetadata,
 			archiverProvider,
+			config.EnableSchedules,
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMrg:                   visibilityMrg,
@@ -2982,6 +2983,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			SignalAndQueryHeader:            true,
 			InternalErrorDifferentiation:    true,
 			ActivityFailureIncludeHeartbeat: true,
+			SupportsSchedules:               true,
 		},
 	}, nil
 }

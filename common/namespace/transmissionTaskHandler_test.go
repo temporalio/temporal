@@ -152,7 +152,17 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		},
 	}).Return(nil)
 
-	err := s.namespaceReplicator.HandleTransmissionTask(context.Background(), namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		namespaceOperation,
+		info,
+		config,
+		replicationConfig,
+		true,
+		configVersion,
+		failoverVersion,
+		isGlobalNamespace,
+	)
 	s.Nil(err)
 }
 
@@ -196,7 +206,17 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	}
 	isGlobalNamespace := false
 
-	err := s.namespaceReplicator.HandleTransmissionTask(context.Background(), namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		namespaceOperation,
+		info,
+		config,
+		replicationConfig,
+		true,
+		configVersion,
+		failoverVersion,
+		isGlobalNamespace,
+	)
 	s.Nil(err)
 }
 
@@ -272,7 +292,17 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		},
 	}).Return(nil)
 
-	err := s.namespaceReplicator.HandleTransmissionTask(context.Background(), namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		namespaceOperation,
+		info,
+		config,
+		replicationConfig,
+		true,
+		configVersion,
+		failoverVersion,
+		isGlobalNamespace,
+	)
 	s.Nil(err)
 }
 
@@ -315,6 +345,115 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 	}
 	isGlobalNamespace := false
 
-	err := s.namespaceReplicator.HandleTransmissionTask(context.Background(), namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		namespaceOperation,
+		info,
+		config,
+		replicationConfig,
+		true,
+		configVersion,
+		failoverVersion,
+		isGlobalNamespace,
+	)
+	s.Nil(err)
+}
+
+func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_ReplicationClusterListUpdated() {
+	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
+	id := primitives.NewUUID().String()
+	name := "some random namespace test name"
+	state := enumspb.NAMESPACE_STATE_DEPRECATED
+	description := "some random test description"
+	ownerEmail := "some random test owner"
+	data := map[string]string{"k": "v"}
+	retention := 10 * time.Hour * 24
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "some random history archival uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "some random visibility archival uri"
+	clusterActive := "some random active cluster name"
+	configVersion := int64(0)
+	failoverVersion := int64(59)
+	singleClusterList := []string{clusterActive}
+
+	namespaceOperation := enumsspb.NAMESPACE_OPERATION_UPDATE
+	info := &persistencespb.NamespaceInfo{
+		Id:          id,
+		Name:        name,
+		State:       enumspb.NAMESPACE_STATE_DEPRECATED,
+		Description: description,
+		Owner:       ownerEmail,
+		Data:        data,
+	}
+	config := &persistencespb.NamespaceConfig{
+		Retention:               &retention,
+		HistoryArchivalState:    historyArchivalState,
+		HistoryArchivalUri:      historyArchivalURI,
+		VisibilityArchivalState: visibilityArchivalState,
+		VisibilityArchivalUri:   visibilityArchivalURI,
+		BadBinaries:             &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+	}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: clusterActive,
+		Clusters:          singleClusterList,
+	}
+
+	isGlobalNamespace := true
+
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+		TaskType: taskType,
+		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
+			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
+				NamespaceOperation: namespaceOperation,
+				Id:                 id,
+				Info: &namespacepb.NamespaceInfo{
+					Name:        name,
+					State:       state,
+					Description: description,
+					OwnerEmail:  ownerEmail,
+					Data:        data,
+				},
+				Config: &namespacepb.NamespaceConfig{
+					WorkflowExecutionRetentionTtl: &retention,
+					HistoryArchivalState:          historyArchivalState,
+					HistoryArchivalUri:            historyArchivalURI,
+					VisibilityArchivalState:       visibilityArchivalState,
+					VisibilityArchivalUri:         visibilityArchivalURI,
+					BadBinaries:                   &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
+				},
+				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+					ActiveClusterName: clusterActive,
+					Clusters:          s.namespaceReplicator.convertClusterReplicationConfigToProto(singleClusterList),
+				},
+				ConfigVersion:   configVersion,
+				FailoverVersion: failoverVersion},
+		},
+	}).Return(nil).Times(1)
+
+	err := s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		namespaceOperation,
+		info,
+		config,
+		replicationConfig,
+		true,
+		configVersion,
+		failoverVersion,
+		isGlobalNamespace,
+	)
+	s.Nil(err)
+
+	err = s.namespaceReplicator.HandleTransmissionTask(
+		context.Background(),
+		namespaceOperation,
+		info,
+		config,
+		replicationConfig,
+		false,
+		configVersion,
+		failoverVersion,
+		isGlobalNamespace,
+	)
 	s.Nil(err)
 }

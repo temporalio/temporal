@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/quotas"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
@@ -76,6 +77,7 @@ func newVisibilityQueueProcessor(
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
 	visibilityMgr manager.VisibilityManager,
+	hostRateLimiter quotas.RateLimiter,
 ) queues.Processor {
 
 	config := shard.GetConfig()
@@ -84,7 +86,6 @@ func newVisibilityQueueProcessor(
 
 	options := &QueueProcessorOptions{
 		BatchSize:                           config.VisibilityTaskBatchSize,
-		MaxPollRPS:                          config.VisibilityProcessorMaxPollRPS,
 		MaxPollInterval:                     config.VisibilityProcessorMaxPollInterval,
 		MaxPollIntervalJitterCoefficient:    config.VisibilityProcessorMaxPollIntervalJitterCoefficient,
 		UpdateAckInterval:                   config.VisibilityProcessorUpdateAckInterval,
@@ -180,6 +181,10 @@ func newVisibilityQueueProcessor(
 		workflowCache,
 		scheduler,
 		rescheduler,
+		newQueueProcessorRateLimiter(
+			hostRateLimiter,
+			config.VisibilityProcessorMaxPollRPS,
+		),
 		logger,
 		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),
 	)

@@ -36,6 +36,10 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+const (
+	maxShards = 16
+)
+
 type (
 	// ShardPersistenceSuite contains shard persistence tests
 	ShardPersistenceSuite struct {
@@ -72,7 +76,7 @@ func (s *ShardPersistenceSuite) TearDownSuite() {
 
 // TestGetOrCreateShard tests GetOrCreateShard
 func (s *ShardPersistenceSuite) TestGetOrCreateShard() {
-	shardID := int32(20)
+	shardID := int32(1)
 	owner := "test_get_shard"
 	rangeID := int64(131)
 
@@ -95,7 +99,7 @@ func (s *ShardPersistenceSuite) TestGetOrCreateShard() {
 
 // TestUpdateShard test
 func (s *ShardPersistenceSuite) TestUpdateShard() {
-	shardID := int32(30)
+	shardID := int32(2)
 	owner := "test_update_shard"
 	rangeID := int64(141)
 
