@@ -44,13 +44,6 @@ func TestSQLiteMetadataPersistenceSuiteV2(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestSQLiteShardPersistenceSuite(t *testing.T) {
-	s := new(ShardPersistenceSuite)
-	s.TestBase = NewTestBaseWithSQL(GetSQLiteMemoryTestClusterOption())
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
-}
-
 func TestSQLiteClusterMetadataPersistence(t *testing.T) {
 	s := new(ClusterMetadataManagerSuite)
 	s.TestBase = NewTestBaseWithSQL(GetSQLiteMemoryTestClusterOption())
@@ -74,13 +67,6 @@ func TestSQLiteFileHistoryV2PersistenceSuite(t *testing.T) {
 
 func TestSQLiteFileMetadataPersistenceSuiteV2(t *testing.T) {
 	s := new(MetadataPersistenceSuiteV2)
-	s.TestBase = NewTestBaseWithSQL(GetSQLiteFileTestClusterOption())
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
-}
-
-func TestSQLiteFileShardPersistenceSuite(t *testing.T) {
-	s := new(ShardPersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(GetSQLiteFileTestClusterOption())
 	s.TestBase.Setup(nil)
 	suite.Run(t, s)

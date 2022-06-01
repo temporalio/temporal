@@ -27,37 +27,28 @@ package tests
 import (
 	"testing"
 
-	"go.uber.org/zap/zaptest"
-
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/serialization"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/resolver"
 )
 
-func setUpCassandraTest(t *testing.T) (CassandraTestData, func()) {
-	var testData CassandraTestData
-	testData.Cfg = NewCassandraConfig()
-	testData.Logger = log.NewZapLogger(zaptest.NewLogger(t))
-	SetUpCassandraDatabase(testData.Cfg, testData.Logger)
-	SetUpCassandraSchema(testData.Cfg, testData.Logger)
+func TestCassandraShardStoreSuite(t *testing.T) {
+	testData, tearDown := setUpCassandraTest(t)
+	defer tearDown()
 
-	testData.Factory = cassandra.NewFactory(
-		*testData.Cfg,
-		resolver.NewNoopResolver(),
-		testCassandraClusterName,
-		testData.Logger,
-	)
-
-	tearDown := func() {
-		testData.Factory.Close()
-		TearDownCassandraKeyspace(testData.Cfg)
+	shardStore, err := testData.Factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
 	}
 
-	return testData, tearDown
+	s := NewShardSuite(
+		t,
+		shardStore,
+		serialization.NewSerializer(),
+		testData.Logger,
+	)
+	suite.Run(t, s)
 }
 
 func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
@@ -78,7 +69,8 @@ func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		testData.Logger)
+		testData.Logger,
+	)
 	suite.Run(t, s)
 }
 
