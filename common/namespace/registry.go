@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
@@ -454,8 +455,15 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	// Make a copy of the existing namespace cache (excluding deleted), so we can calculate diff and do "compare and swap".
 	newCacheNameToID := cache.New(cacheMaxSize, &cacheOpts)
 	newCacheByID := cache.New(cacheMaxSize, &cacheOpts)
+	var stateChanged []*Namespace
 	for _, namespace := range r.getAllNamespace() {
 		if _, namespaceExistsDb := namespaceIDsDb[namespace.ID()]; !namespaceExistsDb {
+			if namespace.State() != enumspb.NAMESPACE_STATE_DELETED {
+				// a namespace in state other than DELETED is being removed. we should send a state change callback.
+				nsForCallback := namespace.Clone()
+				nsForCallback.info.State = enumspb.NAMESPACE_STATE_DELETED
+				stateChanged = append(stateChanged, nsForCallback)
+			}
 			continue
 		}
 		newCacheNameToID.Put(Name(namespace.info.Name), ID(namespace.info.Id))
@@ -464,7 +472,6 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 
 	var oldEntries []*Namespace
 	var newEntries []*Namespace
-	var stateChanged []*Namespace
 UpdateLoop:
 	for _, namespace := range namespacesDb {
 		if namespace.notificationVersion >= namespaceNotificationVersion {
