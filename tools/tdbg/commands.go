@@ -25,712 +25,720 @@
 package tdbg
 
 import (
+	"context"
 	"fmt"
+	"math"
+	"net/url"
+	"os"
+	"strconv"
+	"time"
 
+	"github.com/olivere/elastic/v7"
+	"github.com/temporalio/tctl-kit/pkg/color"
 	"github.com/urfave/cli/v2"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/searchattribute"
 )
 
-var commands = []*cli.Command{
-	{
-		Name:        "workflow",
-		Aliases:     []string{"wf"},
-		Usage:       "Run admin operation on workflow",
-		Subcommands: newAdminWorkflowCommands(),
-	},
-	{
-		Name:        "shard",
-		Aliases:     []string{"shar"},
-		Usage:       "Run admin operation on specific shard",
-		Subcommands: newAdminShardManagementCommands(),
-	},
-	{
-		Name:        "history_host",
-		Aliases:     []string{"hist"},
-		Usage:       "Run admin operation on history host",
-		Subcommands: newAdminHistoryHostCommands(),
-	},
-	{
-		Name:        "taskqueue",
-		Aliases:     []string{"tq"},
-		Usage:       "Run admin operation on taskQueue",
-		Subcommands: newAdminTaskQueueCommands(),
-	},
-	{
-		Name:        "membership",
-		Usage:       "Run admin operation on membership",
-		Subcommands: newAdminMembershipCommands(),
-	},
-	{
-		Name:        "cluster",
-		Aliases:     []string{"cl"},
-		Usage:       "Run admin operation on cluster",
-		Subcommands: newAdminClusterCommands(),
-	},
-	{
-		Name:        "dlq",
-		Aliases:     []string{"dlq"},
-		Usage:       "Run admin operation on DLQ",
-		Subcommands: newAdminDLQCommands(),
-	},
-	{
-		Name:        "decode",
-		Usage:       "Decode payload",
-		Subcommands: newDecodeCommands(),
-	},
+const maxEventID = 9999
+
+// AdminShowWorkflow shows history
+func AdminShowWorkflow(c *cli.Context) error {
+	namespace, err := getRequiredGlobalOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+	wid := c.String(FlagWorkflowID)
+	rid := c.String(FlagRunID)
+	startEventId := c.Int64(FlagMinEventID)
+	endEventId := c.Int64(FlagMaxEventID)
+	startEventVerion := int64(c.Int(FlagMinEventVersion))
+	endEventVersion := int64(c.Int(FlagMaxEventVersion))
+	outputFileName := c.String(FlagOutputFilename)
+
+	client := cFactory.AdminClient(c)
+
+	serializer := serialization.NewSerializer()
+	var history []*commonpb.DataBlob
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	resp, err := client.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		Namespace: namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+		StartEventId:      startEventId,
+		EndEventId:        endEventId,
+		StartEventVersion: startEventVerion,
+		EndEventVersion:   endEventVersion,
+		MaximumPageSize:   100,
+		NextPageToken:     nil,
+	})
+	if err != nil {
+		return fmt.Errorf("ReadHistoryBranch err: %s", err)
+	}
+
+	allEvents := &historypb.History{}
+	totalSize := 0
+	for idx, b := range resp.HistoryBatches {
+		totalSize += len(b.Data)
+		fmt.Printf("======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
+		historyBatchThrift, err := serializer.DeserializeEvents(b)
+		if err != nil {
+			return fmt.Errorf("DeserializeEvents err: %s", err)
+		}
+		historyBatch := historyBatchThrift
+		allEvents.Events = append(allEvents.Events, historyBatch...)
+		encoder := codec.NewJSONPBEncoder()
+		data, err := encoder.EncodeHistoryEvents(historyBatch)
+		if err != nil {
+			return fmt.Errorf("EncodeHistoryEvents err: %s", err)
+		}
+		fmt.Println(string(data))
+	}
+	fmt.Printf("======== total batches %v, total blob len: %v ======\n", len(history), totalSize)
+
+	if outputFileName != "" {
+		encoder := codec.NewJSONPBEncoder()
+		data, err := encoder.EncodeHistoryEvents(allEvents.Events)
+		if err != nil {
+			return fmt.Errorf("Failed to serialize history data: %s", err)
+		}
+		if err := os.WriteFile(outputFileName, data, 0666); err != nil {
+			return fmt.Errorf("Failed to export history data file: %s", err)
+		}
+	}
+	return nil
 }
 
-func newAdminWorkflowCommands() []*cli.Command {
-	return []*cli.Command{
-		{
-			Name:    "show",
-			Aliases: []string{"show"},
-			Usage:   "show workflow history from database",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    FlagWorkflowID,
-					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow Id",
-				},
-				&cli.StringFlag{
-					Name:    FlagRunID,
-					Aliases: FlagRunIDAlias,
-					Usage:   "Run Id",
-				},
-				&cli.Int64Flag{
-					Name:  FlagMinEventID,
-					Usage: "Minimum event ID to be included in the history",
-				},
-				&cli.Int64Flag{
-					Name:  FlagMaxEventID,
-					Usage: "Maximum event ID to be included in the history",
-					Value: 1<<63 - 1,
-				},
-				&cli.Int64Flag{
-					Name:  FlagMinEventVersion,
-					Usage: "Start event version to be included in the history",
-				},
-				&cli.Int64Flag{
-					Name:  FlagMaxEventVersion,
-					Usage: "End event version to be included in the history",
-				},
-				&cli.StringFlag{
-					Name:  FlagOutputFilename,
-					Usage: "output file",
-				}},
-			Action: func(c *cli.Context) error {
-				return AdminShowWorkflow(c)
-			},
-		},
-		{
-			Name:    "describe",
-			Aliases: []string{"desc"},
-			Usage:   "Describe internal information of workflow execution",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    FlagWorkflowID,
-					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow Id",
-				},
-				&cli.StringFlag{
-					Name:    FlagRunID,
-					Aliases: FlagRunIDAlias,
-					Usage:   "Run Id",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminDescribeWorkflow(c)
-			},
-		},
-		{
-			Name:    "refresh_tasks",
-			Aliases: []string{"rt"},
-			Usage:   "Refreshes all the tasks of a workflow",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    FlagWorkflowID,
-					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow Id",
-				},
-				&cli.StringFlag{
-					Name:    FlagRunID,
-					Aliases: FlagRunIDAlias,
-					Usage:   "Run Id",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminRefreshWorkflowTasks(c)
-			},
-		},
-		{
-			Name:    "delete",
-			Aliases: []string{"del"},
-			Usage:   "Delete current workflow execution and the mutableState record",
-			Flags: append(
-				getDBAndESFlags(),
-				&cli.StringFlag{
-					Name:    FlagWorkflowID,
-					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow Id",
-				},
-				&cli.StringFlag{
-					Name:    FlagRunID,
-					Aliases: FlagRunIDAlias,
-					Usage:   "Run Id",
-				},
-				&cli.BoolFlag{
-					Name:  FlagSkipErrorMode,
-					Usage: "skip errors",
-				}),
-			Action: func(c *cli.Context) error {
-				return AdminDeleteWorkflow(c)
-			},
-		},
+// AdminDescribeWorkflow describe a new workflow execution for admin
+func AdminDescribeWorkflow(c *cli.Context) error {
+	resp, err := describeMutableState(c)
+	if err != nil {
+		return err
 	}
+
+	if resp != nil {
+		fmt.Println(color.Green(c, "Cache mutable state:"))
+		if resp.GetCacheMutableState() != nil {
+			prettyPrintJSONObject(resp.GetCacheMutableState())
+		}
+		fmt.Println(color.Green(c, "Database mutable state:"))
+		prettyPrintJSONObject(resp.GetDatabaseMutableState())
+
+		fmt.Println(color.Green(c, "Current branch token:"))
+		versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
+		// if VersionHistories is set, then all branch infos are stored in VersionHistories
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+		if err != nil {
+			fmt.Println(color.Red(c, "Unable to get current version history:"), err)
+		} else {
+			currentBranchToken := persistencespb.HistoryBranch{}
+			err := currentBranchToken.Unmarshal(currentVersionHistory.BranchToken)
+			if err != nil {
+				fmt.Println(color.Red(c, "Unable to unmarshal current branch token:"), err)
+			} else {
+				prettyPrintJSONObject(currentBranchToken)
+			}
+		}
+
+		fmt.Printf("History service address: %s\n", resp.GetHistoryAddr())
+		fmt.Printf("Shard Id: %s\n", resp.GetShardId())
+	}
+	return nil
 }
 
-func newAdminShardManagementCommands() []*cli.Command {
-	return []*cli.Command{
-		{
-			Name:    "describe",
-			Aliases: []string{"d"},
-			Usage:   "Describe shard by Id",
-			Flags: []cli.Flag{
-				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "The Id of the shard to describe",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminDescribeShard(c)
-			},
-		},
-		{
-			Name:  "list-tasks",
-			Usage: "List tasks for given shard Id and task type",
-			Flags: []cli.Flag{
-				&cli.BoolFlag{
-					Name:  FlagMore,
-					Usage: "List more pages, default is to list one page of default page size 10",
-				},
-				&cli.IntFlag{
-					Name:  FlagPageSize,
-					Value: 10,
-					Usage: "Result page size",
-				},
-				&cli.IntFlag{
-					Name:     FlagShardID,
-					Usage:    "The ID of the shard",
-					Required: true,
-				},
-				&cli.StringFlag{
-					Name:     FlagTaskType,
-					Usage:    "Task type: transfer, timer, replication, visibility",
-					Required: true,
-				},
-				&cli.Int64Flag{
-					Name:  FlagMinTaskID,
-					Usage: "Inclusive min taskID. Optional for transfer, replication, visibility tasks. Can't be specified for timer task",
-				},
-				&cli.Int64Flag{
-					Name:  FlagMaxTaskID,
-					Usage: "Exclusive max taskID. Required for transfer, replication, visibility tasks. Can't be specified for timer task",
-				},
-				&cli.StringFlag{
-					Name: FlagMinVisibilityTimestamp,
-					Usage: "Inclusive min task fire timestamp. Optional for timer task. Can't be specified for transfer, replication, visibility tasks." +
-						"Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
-						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
-						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
-				},
-				&cli.StringFlag{
-					Name: FlagMaxVisibilityTimestamp,
-					Usage: "Exclusive max task fire timestamp. Required for timer task. Can't be specified for transfer, replication, visibility tasks." +
-						"Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
-						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
-						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
-				},
-				&cli.BoolFlag{
-					Name:  FlagPrintJSON,
-					Usage: "Print in raw json format",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminListShardTasks(c)
-			},
-		},
-		{
-			Name:    "close_shard",
-			Aliases: []string{"clsh"},
-			Usage:   "close a shard given a shard id",
-			Flags: []cli.Flag{
-				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "ShardId for the temporal cluster to manage",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminShardManagement(c)
-			},
-		},
-		{
-			Name:    "remove_task",
-			Aliases: []string{"rmtk"},
-			Usage:   "remove a task based on shardId, task type, taskId, and task visibility timestamp",
-			Flags: []cli.Flag{
-				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "shardId",
-				},
-				&cli.Int64Flag{
-					Name:  FlagTaskID,
-					Usage: "taskId",
-				},
-				&cli.StringFlag{
-					Name:  FlagTaskType,
-					Value: "transfer",
-					Usage: "Task type: transfer (default), timer, replication",
-				},
-				&cli.Int64Flag{
-					Name:  FlagTaskVisibilityTimestamp,
-					Usage: "task visibility timestamp in nano (required for removing timer task)",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminRemoveTask(c)
-			},
-		},
+func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateResponse, error) {
+	adminClient := cFactory.AdminClient(c)
+
+	namespace, err := getRequiredGlobalOption(c, FlagNamespace)
+	if err != nil {
+		return nil, err
 	}
+	wid := c.String(FlagWorkflowID)
+	rid := c.String(FlagRunID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	resp, err := adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Get workflow mutableState failed: %s", err)
+	}
+	return resp, nil
 }
 
-func newAdminMembershipCommands() []*cli.Command {
-	return []*cli.Command{
-		{
-			Name:  "list-gossip",
-			Usage: "List ringpop membership items",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagClusterMembershipRole,
-					Value: "all",
-					Usage: "Membership role filter: all (default), frontend, history, matching, worker",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminListGossipMembers(c)
-			},
-		},
-		{
-			Name:  "list-db",
-			Usage: "List cluster membership items",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagHeartbeatedWithin,
-					Value: "15m",
-					Usage: "Filter by last heartbeat date time. Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
-						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
-						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
-				},
-				&cli.StringFlag{
-					Name:  FlagClusterMembershipRole,
-					Value: "all",
-					Usage: "Membership role filter: all (default), frontend, history, matching, worker",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminListClusterMembers(c)
-			},
-		},
+// AdminDeleteWorkflow delete a workflow execution from Cassandra and visibility document from Elasticsearch.
+func AdminDeleteWorkflow(c *cli.Context) error {
+	resp, err := describeMutableState(c)
+	if err != nil {
+		return err
 	}
+	namespaceID := resp.GetDatabaseMutableState().GetExecutionInfo().GetNamespaceId()
+	runID := resp.GetDatabaseMutableState().GetExecutionState().GetRunId()
+
+	adminDeleteVisibilityDocument(c, namespaceID)
+
+	session, err := connectToCassandra(c)
+	if err != nil {
+		return err
+	}
+
+	shardID := resp.GetShardId()
+	shardIDInt, err := strconv.Atoi(shardID)
+	if err != nil {
+		return fmt.Errorf("Unable to strconv.Atoi(shardID): %s", err)
+	}
+	var branchTokens [][]byte
+	versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
+	// if VersionHistories is set, then all branch infos are stored in VersionHistories
+	for _, historyItem := range versionHistories.GetHistories() {
+		branchTokens = append(branchTokens, historyItem.GetBranchToken())
+	}
+
+	for _, branchToken := range branchTokens {
+		branchInfo, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+		if err != nil {
+			return fmt.Errorf("Unable to HistoryBranchFromBlob: %s", err)
+		}
+		fmt.Println("Deleting history events for:")
+		prettyPrintJSONObject(branchInfo)
+		execStore := cassandra.NewExecutionStore(session, log.NewNoopLogger())
+		execMgr := persistence.NewExecutionManager(
+			execStore,
+			serialization.NewSerializer(),
+			log.NewNoopLogger(),
+			dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
+		)
+		ctx, cancel := newContext(c)
+		defer cancel()
+
+		err = execMgr.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
+			BranchToken: branchToken,
+			ShardID:     int32(shardIDInt),
+		})
+		if err != nil {
+			if c.Bool(FlagSkipErrorMode) {
+				fmt.Println("Unable to DeleteHistoryBranch:", err)
+			} else {
+				return fmt.Errorf("Unable to DeleteHistoryBranch: %s", err)
+			}
+		}
+	}
+
+	exeStore := cassandra.NewExecutionStore(session, log.NewNoopLogger())
+	req := &persistence.DeleteWorkflowExecutionRequest{
+		ShardID:     int32(shardIDInt),
+		NamespaceID: namespaceID,
+		WorkflowID:  c.String(FlagWorkflowID),
+		RunID:       runID,
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	err = exeStore.DeleteWorkflowExecution(ctx, req)
+	if err != nil {
+		if c.Bool(FlagSkipErrorMode) {
+			fmt.Printf("Unable to DeleteWorkflowExecution for RunID=%s: %v\n", runID, err)
+		} else {
+			return fmt.Errorf("Unable to DeleteWorkflowExecution for RunID=%s: %s", runID, err)
+		}
+	} else {
+		fmt.Printf("DeleteWorkflowExecution for RunID=%s executed successfully.\n", runID)
+	}
+
+	deleteCurrentReq := &persistence.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     int32(shardIDInt),
+		NamespaceID: namespaceID,
+		WorkflowID:  c.String(FlagWorkflowID),
+		RunID:       runID,
+	}
+
+	ctx, cancel = newContext(c)
+	defer cancel()
+	err = exeStore.DeleteCurrentWorkflowExecution(ctx, deleteCurrentReq)
+	if err != nil {
+		if c.Bool(FlagSkipErrorMode) {
+			fmt.Printf("Unable to DeleteCurrentWorkflowExecution for RunID=%s: %v\n", runID, err)
+		} else {
+			return fmt.Errorf("Unable to DeleteCurrentWorkflowExecution for RunID=%s: %s", runID, err)
+		}
+	} else {
+		fmt.Printf("DeleteCurrentWorkflowExecution for RunID=%s executed successfully.\n", runID)
+	}
+	return nil
 }
 
-func newAdminHistoryHostCommands() []*cli.Command {
-	return []*cli.Command{
-		{
-			Name:    "describe",
-			Aliases: []string{"desc"},
-			Usage:   "Describe internal information of history host",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    FlagWorkflowID,
-					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow Id",
-				},
-				&cli.StringFlag{
-					Name:  FlagHistoryAddress,
-					Usage: "History Host address(IP:PORT)",
-				},
-				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "ShardId",
-				},
-				&cli.BoolFlag{
-					Name:  FlagPrintFullyDetail,
-					Usage: "Print fully detail",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminDescribeHistoryHost(c)
-			},
-		},
-		{
-			Name:    "get-shardid",
-			Aliases: []string{"gsh"},
-			Usage:   "Get shardId for a namespaceId and workflowId combination",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagNamespaceID,
-					Usage: "NamespaceId",
-				},
-				&cli.StringFlag{
-					Name:    FlagWorkflowID,
-					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow Id",
-				},
-				&cli.IntFlag{
-					Name:  FlagNumberOfShards,
-					Usage: "NumberOfShards for the temporal cluster(see config for numHistoryShards)",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminGetShardID(c)
-			},
-		},
+func adminDeleteVisibilityDocument(c *cli.Context, namespaceID string) error {
+	if !c.IsSet(FlagElasticsearchIndex) {
+		prompt("Elasticsearch index name is not specified. Continue without visibility document deletion?", c.Bool(FlagAutoConfirm))
 	}
+
+	indexName := c.String(FlagElasticsearchIndex)
+	esClient, err := newESClient(c)
+	if err != nil {
+		return err
+	}
+
+	query := elastic.NewBoolQuery().
+		Filter(
+			elastic.NewTermQuery(searchattribute.NamespaceID, namespaceID),
+			elastic.NewTermQuery(searchattribute.WorkflowID, c.String(FlagWorkflowID)))
+	if c.IsSet(FlagRunID) {
+		query = query.Filter(elastic.NewTermQuery(searchattribute.RunID, c.String(FlagRunID)))
+	}
+
+	searchParams := &esclient.SearchParameters{
+		Index:    indexName,
+		Query:    query,
+		PageSize: 10000,
+	}
+	searchResult, err := esClient.Search(context.Background(), searchParams)
+	if err != nil {
+		if c.Bool(FlagSkipErrorMode) {
+			fmt.Println("Unable to search for visibility documents from Elasticsearch:", err)
+		} else {
+			return fmt.Errorf("Unable to search for visibility documents from Elasticsearch: %s", err)
+		}
+	}
+	fmt.Println("Found", len(searchResult.Hits.Hits), "visibility documents.")
+	for _, searchHit := range searchResult.Hits.Hits {
+		err := esClient.Delete(context.Background(), indexName, searchHit.Id, math.MaxInt64)
+		if err != nil {
+			if c.Bool(FlagSkipErrorMode) {
+				fmt.Println("Unable to delete visibility document from Elasticsearch:", err)
+			} else {
+				return fmt.Errorf("Unable to delete visibility document from Elasticsearch: %s", err)
+			}
+		} else {
+			fmt.Println("Visibility document", searchHit.Id, "deleted successfully.")
+		}
+	}
+	return nil
 }
 
-func newAdminTaskQueueCommands() []*cli.Command {
-	return []*cli.Command{
-		{
-			Name:    "describe",
-			Aliases: []string{"desc"},
-			Usage:   "Describe pollers and status information of task queue",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagTaskQueue,
-					Usage: "TaskQueue description",
-				},
-				&cli.StringFlag{
-					Name:  FlagTaskQueueType,
-					Value: "workflow",
-					Usage: "Optional TaskQueue type [workflow|activity]",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminDescribeTaskQueue(c)
-			},
-		},
-		{
-			Name:  "list-tasks",
-			Usage: "List tasks of a task queue",
-			Flags: []cli.Flag{
-				&cli.BoolFlag{
-					Name:  FlagMore,
-					Usage: "List more pages, default is to list one page of default page size 10",
-				},
-				&cli.IntFlag{
-					Name:  FlagPageSize,
-					Value: 10,
-					Usage: "Result page size",
-				},
-				&cli.StringFlag{
-					Name:  FlagTaskQueueType,
-					Value: "activity",
-					Usage: "Task Queue type: activity, workflow",
-				},
-				&cli.StringFlag{
-					Name:  FlagTaskQueue,
-					Usage: "Task Queue name",
-				},
-				&cli.Int64Flag{
-					Name:  FlagMinTaskID,
-					Usage: "Minimum task Id",
-					Value: -12346, // include default task id
-				},
-				&cli.Int64Flag{
-					Name:  FlagMaxTaskID,
-					Usage: "Maximum task Id",
-				},
-				&cli.BoolFlag{
-					Name:  FlagPrintJSON,
-					Usage: "Print in raw json format",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminListTaskQueueTasks(c)
-			},
-		},
-	}
+func readOneRow(query gocql.Query) (map[string]interface{}, error) {
+	result := make(map[string]interface{})
+	err := query.MapScan(result)
+	return result, err
 }
 
-func newAdminClusterCommands() []*cli.Command {
-	return []*cli.Command{
-		{
-			Name:    "add-search-attributes",
-			Aliases: []string{"asa"},
-			Usage:   "Add custom search attributes",
-			Flags: []cli.Flag{
-				&cli.BoolFlag{
-					Name:     FlagSkipSchemaUpdate,
-					Usage:    "Skip Elasticsearch index schema update (only register in metadata)",
-					Required: false,
-				},
-				&cli.StringFlag{
-					Name:   FlagElasticsearchIndex,
-					Usage:  "Elasticsearch index name (optional)",
-					Hidden: true, // don't show it for now
-				},
-				&cli.StringSliceFlag{
-					Name:  FlagName,
-					Usage: "Search attribute name (multiply values are supported)",
-				},
-				&cli.StringSliceFlag{
-					Name:  FlagType,
-					Usage: fmt.Sprintf("Search attribute type: %v (multiply values are supported)", allowedEnumValues(enumspb.IndexedValueType_name)),
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminAddSearchAttributes(c)
-			},
-		},
-		{
-			Name:    "remove-search-attributes",
-			Aliases: []string{"rsa"},
-			Usage:   "Remove custom search attributes metadata only (Elasticsearch index schema is not modified)",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:   FlagElasticsearchIndex,
-					Usage:  "Elasticsearch index name (optional)",
-					Hidden: true, // don't show it for now
-				},
-				&cli.StringSliceFlag{
-					Name:  FlagName,
-					Usage: "Search attribute name",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminRemoveSearchAttributes(c)
-			},
-		},
-		{
-			Name:    "get-search-attributes",
-			Aliases: []string{"gsa"},
-			Usage:   "Show existing search attributes",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagPrintJSON,
-					Usage: "Output in JSON format",
-				},
-				&cli.StringFlag{
-					Name:   FlagElasticsearchIndex,
-					Usage:  "Elasticsearch index name (optional)",
-					Hidden: true, // don't show it for now
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminGetSearchAttributes(c)
-			},
-		},
-		{
-			Name:    "describe",
-			Aliases: []string{"d"},
-			Usage:   "Describe cluster information",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagCluster,
-					Value: "",
-					Usage: "Remote cluster name (optional, default to return current cluster information)",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminDescribeCluster(c)
-			},
-		},
-		{
-			Name:    "list",
-			Aliases: []string{"ls"},
-			Usage:   "List clusters information",
-			Flags: []cli.Flag{
-				&cli.IntFlag{
-					Name:  FlagPageSize,
-					Value: 100,
-					Usage: "Page size",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminListClusters(c)
-			},
-		},
-		{
-			Name:    "upsert-remote-cluster",
-			Aliases: []string{"urc"},
-			Usage:   "Add or update remote cluster information in the current cluster",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:     FlagAddress,
-					Usage:    "Remote cluster frontend address",
-					Required: true,
-				},
-				&cli.BoolFlag{
-					Name:  FlagConnectionEnable,
-					Usage: "Optional: default ture. Enable remote cluster connection",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminAddOrUpdateRemoteCluster(c)
-			},
-		},
-		{
-			Name:    "remove-remote-cluster",
-			Aliases: []string{"rrc"},
-			Usage:   "Remove remote cluster information from the current cluster",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:     FlagCluster,
-					Usage:    "Remote cluster name",
-					Required: true,
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminRemoveRemoteCluster(c)
-			},
-		},
+func connectToCassandra(c *cli.Context) (gocql.Session, error) {
+	host := c.String(FlagDBAddress)
+	port := c.Int(FlagDBPort)
+
+	cassandraConfig := config.Cassandra{
+		Hosts:    host,
+		Port:     port,
+		User:     c.String(FlagUsername),
+		Password: c.String(FlagPassword),
+		Keyspace: c.String(FlagKeyspace),
 	}
+	if c.Bool(FlagEnableTLS) {
+		cassandraConfig.TLS = &auth.TLS{
+			Enabled:                true,
+			CertFile:               c.String(FlagTLSCertPath),
+			KeyFile:                c.String(FlagTLSKeyPath),
+			CaFile:                 c.String(FlagTLSCaPath),
+			ServerName:             c.String(FlagTLSServerName),
+			EnableHostVerification: !c.Bool(FlagTLSDisableHostVerification),
+		}
+	}
+
+	session, err := gocql.NewSession(cassandraConfig, resolver.NewNoopResolver(), log.NewNoopLogger())
+	if err != nil {
+		return nil, fmt.Errorf("connect to Cassandra failed: %s", err)
+	}
+	return session, nil
 }
 
-func newAdminDLQCommands() []*cli.Command {
-	return []*cli.Command{
-		{
-			Name:    "read",
-			Aliases: []string{"r"},
-			Usage:   "Read DLQ Messages",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagDLQType,
-					Usage: "Type of DLQ to manage. (Options: namespace, history)",
-				},
-				&cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "Source cluster",
-				},
-				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "ShardId",
-				},
-				&cli.IntFlag{
-					Name:  FlagMaxMessageCount,
-					Usage: "Max message size to fetch",
-				},
-				&cli.IntFlag{
-					Name:  FlagLastMessageID,
-					Usage: "The upper boundary of the read message",
-				},
-				&cli.StringFlag{
-					Name:  FlagOutputFilename,
-					Usage: "Output file to write to, if not provided output is written to stdout",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminGetDLQMessages(c)
-			},
-		},
-		{
-			Name:    "purge",
-			Aliases: []string{"p"},
-			Usage:   "Delete DLQ messages with equal or smaller ids than the provided task id",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagDLQType,
-					Usage: "Type of DLQ to manage. (Options: namespace, history)",
-				},
-				&cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "Source cluster",
-				},
-				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "ShardId",
-				},
-				&cli.IntFlag{
-					Name:  FlagLastMessageID,
-					Usage: "The upper boundary of the read message",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminPurgeDLQMessages(c)
-			},
-		},
-		{
-			Name:    "merge",
-			Aliases: []string{"m"},
-			Usage:   "Merge DLQ messages with equal or smaller ids than the provided task id",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagDLQType,
-					Usage: "Type of DLQ to manage. (Options: namespace, history)",
-				},
-				&cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "Source cluster",
-				},
-				&cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "ShardId",
-				},
-				&cli.IntFlag{
-					Name:  FlagLastMessageID,
-					Usage: "The upper boundary of the read message",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminMergeDLQMessages(c)
-			},
-		},
+func newESClient(c *cli.Context) (esclient.CLIClient, error) {
+	esUrl := c.String(FlagElasticsearchURL)
+	parsedESUrl, err := url.Parse(esUrl)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to parse URL: %s", err)
 	}
+
+	esConfig := &esclient.Config{
+		URL:      *parsedESUrl,
+		Username: c.String(FlagElasticsearchUsername),
+		Password: c.String(FlagElasticsearchPassword),
+	}
+
+	if c.IsSet(FlagVersion) {
+		esConfig.Version = c.String(FlagVersion)
+	}
+
+	client, err := esclient.NewCLIClient(esConfig, log.NewCLILogger())
+	if err != nil {
+		return nil, fmt.Errorf("Unable to create Elasticsearch client: %s", err)
+	}
+
+	return client, nil
 }
 
-func newDecodeCommands() []*cli.Command {
-	return []*cli.Command{
-		{
-			Name:  "proto",
-			Usage: "Decode proto payload",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagProtoType,
-					Usage: "full name of proto type to decode to (i.e. temporal.server.api.persistence.v1.WorkflowExecutionInfo).",
-				},
-				&cli.StringFlag{
-					Name:  FlagHexData,
-					Usage: "data in hex format (i.e. 0x0a243462613036633466...).",
-				},
-				&cli.StringFlag{
-					Name:  FlagHexFile,
-					Usage: "file with data in hex format (i.e. 0x0a243462613036633466...).",
-				},
-				&cli.StringFlag{
-					Name:  FlagBinaryFile,
-					Usage: "file with data in binary format.",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminDecodeProto(c)
-			},
-		},
-		{
-			Name:  "base64",
-			Usage: "Decode base64 payload",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagBase64Data,
-					Usage: "data in base64 format (i.e. anNvbi9wbGFpbg==).",
-				},
-				&cli.StringFlag{
-					Name:  FlagBase64File,
-					Usage: "file with data in base64 format (i.e. anNvbi9wbGFpbg==).",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminDecodeBase64(c)
-			},
-		},
+// AdminGetNamespaceIDOrName map namespace
+func AdminGetNamespaceIDOrName(c *cli.Context) error {
+	namespaceID := c.String(FlagNamespaceID)
+	namespace := c.String(FlagNamespace)
+	if len(namespaceID) == 0 && len(namespace) == 0 {
+		return fmt.Errorf("Need either namespace or namespaceId")
 	}
+
+	session, err := connectToCassandra(c)
+	if err != nil {
+		return err
+	}
+
+	if len(namespaceID) > 0 {
+		tmpl := "select namespace from namespaces where id = ? "
+		query := session.Query(tmpl, namespaceID)
+		res, err := readOneRow(query)
+		if err != nil {
+			return fmt.Errorf("readOneRow: %s", err)
+		}
+		namespaceName := res["name"].(string)
+		fmt.Printf("namespace for namespaceId %v is %v \n", namespaceID, namespaceName)
+	} else {
+		tmpl := "select namespace from namespaces_by_name where name = ?"
+		tmplV2 := "select namespace from namespaces where namespaces_partition=0 and name = ?"
+
+		query := session.Query(tmpl, namespace)
+		res, err := readOneRow(query)
+		if err != nil {
+			fmt.Printf("v1 return error: %v , trying v2...\n", err)
+
+			query := session.Query(tmplV2, namespace)
+			res, err := readOneRow(query)
+			if err != nil {
+				return fmt.Errorf("readOneRow for v2: %s", err)
+			}
+			namespace := res["namespace"].(map[string]interface{})
+			namespaceID := gocql.UUIDToString(namespace["id"])
+			fmt.Printf("namespaceId for namespace %v is %v \n", namespace, namespaceID)
+		} else {
+			namespace := res["namespace"].(map[string]interface{})
+			namespaceID := gocql.UUIDToString(namespace["id"])
+			fmt.Printf("namespaceId for namespace %v is %v \n", namespace, namespaceID)
+		}
+	}
+	return nil
+}
+
+// AdminGetShardID get shardID
+func AdminGetShardID(c *cli.Context) error {
+	namespaceID := c.String(FlagNamespaceID)
+	wid := c.String(FlagWorkflowID)
+	numberOfShards := int32(c.Int(FlagNumberOfShards))
+
+	if numberOfShards <= 0 {
+		return fmt.Errorf("numberOfShards is required")
+	}
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, wid, numberOfShards)
+	fmt.Printf("ShardId for namespace, workflowId: %v, %v is %v \n", namespaceID, wid, shardID)
+	return nil
+}
+
+// AdminListShardTasks outputs a list of a tasks for given Shard and Task Category
+func AdminListShardTasks(c *cli.Context) error {
+	sid := int32(c.Int(FlagShardID))
+	categoryStr := c.String(FlagTaskType)
+	categoryValue, err := stringToEnum(categoryStr, enumsspb.TaskCategory_value)
+	if err != nil {
+		categoryInt, err := strconv.Atoi(categoryStr)
+		if err != nil {
+			return fmt.Errorf("Failed to parse task type: %s", err)
+		}
+		categoryValue = int32(categoryInt)
+	}
+	category := enumsspb.TaskCategory(categoryValue)
+	if category == enumsspb.TASK_CATEGORY_UNSPECIFIED {
+		return fmt.Errorf("Task type is unspecified: %s", err)
+	}
+
+	client := cFactory.AdminClient(c)
+	pageSize := defaultPageSize
+	if c.IsSet(FlagPageSize) {
+		pageSize = c.Int(FlagPageSize)
+	}
+
+	minFireTime, err := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	maxFireTime, err := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	req := &adminservice.ListHistoryTasksRequest{
+		ShardId:  sid,
+		Category: category,
+		TaskRange: &history.TaskRange{
+			InclusiveMinTaskKey: &history.TaskKey{
+				FireTime: timestamp.TimePtr(minFireTime),
+				TaskId:   c.Int64(FlagMinTaskID),
+			},
+			ExclusiveMaxTaskKey: &history.TaskKey{
+				FireTime: timestamp.TimePtr(maxFireTime),
+				TaskId:   c.Int64(FlagMaxTaskID),
+			},
+		},
+		BatchSize: int32(pageSize),
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+		req.NextPageToken = paginationToken
+		response, err := client.ListHistoryTasks(ctx, req)
+		if err != nil {
+			return nil, nil, err
+		}
+		token := response.NextPageToken
+
+		var items []interface{}
+		for _, task := range response.Tasks {
+			items = append(items, task)
+		}
+		return items, token, nil
+	}
+	if err := paginate(c, paginationFunc, pageSize); err != nil {
+		return fmt.Errorf("Failed to list history tasks: %s", err)
+	}
+	return nil
+}
+
+// AdminRemoveTask describes history host
+func AdminRemoveTask(c *cli.Context) error {
+	adminClient := cFactory.AdminClient(c)
+	shardID := c.Int(FlagShardID)
+	taskID := c.Int64(FlagTaskID)
+	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
+	if err != nil {
+		return fmt.Errorf("Failed to parse Task Type: %s", err)
+	}
+	category := enumsspb.TaskCategory(categoryInt)
+	if category == enumsspb.TASK_CATEGORY_UNSPECIFIED {
+		return fmt.Errorf("Task type %s is currently not supported", category)
+	}
+	var visibilityTimestamp int64
+	if category == enumsspb.TASK_CATEGORY_TIMER {
+		visibilityTimestamp = c.Int64(FlagTaskVisibilityTimestamp)
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	req := &adminservice.RemoveTaskRequest{
+		ShardId:        int32(shardID),
+		Category:       category,
+		TaskId:         taskID,
+		VisibilityTime: timestamp.TimePtr(timestamp.UnixOrZeroTime(visibilityTimestamp)),
+	}
+
+	_, err = adminClient.RemoveTask(ctx, req)
+	if err != nil {
+		return fmt.Errorf("Remove task has failed: %s", err)
+	}
+	return nil
+}
+
+// AdminDescribeShard describes shard by shard id
+func AdminDescribeShard(c *cli.Context) error {
+	sid := c.Int(FlagShardID)
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := adminClient.GetShard(ctx, &adminservice.GetShardRequest{ShardId: int32(sid)})
+
+	if err != nil {
+		return fmt.Errorf("Failed to initialize shard manager: %s", err)
+	}
+
+	prettyPrintJSONObject(response.ShardInfo)
+	return nil
+}
+
+// AdminShardManagement describes history host
+func AdminShardManagement(c *cli.Context) error {
+	adminClient := cFactory.AdminClient(c)
+	sid := c.Int(FlagShardID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	req := &adminservice.CloseShardRequest{}
+	req.ShardId = int32(sid)
+
+	_, err := adminClient.CloseShard(ctx, req)
+	if err != nil {
+		return fmt.Errorf("Close shard task has failed: %s", err)
+	}
+	return nil
+}
+
+// AdminListGossipMembers outputs a list of gossip members
+func AdminListGossipMembers(c *cli.Context) error {
+	roleFlag := c.String(FlagClusterMembershipRole)
+
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	if err != nil {
+		return fmt.Errorf("Operation DescribeCluster failed: %s", err)
+	}
+
+	members := response.MembershipInfo.Rings
+	if roleFlag != primitives.AllServices {
+		all := members
+
+		members = members[:0]
+		for _, v := range all {
+			if roleFlag == v.Role {
+				members = append(members, v)
+			}
+		}
+	}
+
+	prettyPrintJSONObject(members)
+	return nil
+}
+
+// AdminListClusterMembers outputs a list of cluster members
+func AdminListClusterMembers(c *cli.Context) error {
+	role, _ := stringToEnum(c.String(FlagClusterMembershipRole), enumsspb.ClusterMemberRole_value)
+	// TODO: refactor this: parseTime shouldn't be used for duration.
+	heartbeatFlag, err := parseTime(c.String(FlagFrom), time.Time{}, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("Unable to parse heartbeat time: %s", err)
+	}
+	heartbeat := time.Duration(heartbeatFlag.UnixNano())
+
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	req := &adminservice.ListClusterMembersRequest{
+		Role:                enumsspb.ClusterMemberRole(role),
+		LastHeartbeatWithin: &heartbeat,
+	}
+
+	resp, err := adminClient.ListClusterMembers(ctx, req)
+	if err != nil {
+		return fmt.Errorf("unable to list cluster members: %s", err)
+	}
+
+	members := resp.ActiveMembers
+
+	prettyPrintJSONObject(members)
+	return nil
+}
+
+// AdminDescribeHistoryHost describes history host
+func AdminDescribeHistoryHost(c *cli.Context) error {
+	adminClient := cFactory.AdminClient(c)
+
+	namespace := c.String(FlagNamespace)
+	workflowID := c.String(FlagWorkflowID)
+	shardID := c.Int(FlagShardID)
+	historyAddr := c.String(FlagHistoryAddress)
+	printFully := c.Bool(FlagPrintFullyDetail)
+
+	flagsCount := 0
+	if c.IsSet(FlagShardID) {
+		flagsCount++
+	}
+	if c.IsSet(FlagNamespace) && c.IsSet(FlagWorkflowID) {
+		flagsCount++
+	}
+	if c.IsSet(FlagHistoryAddress) {
+		flagsCount++
+	}
+	if flagsCount != 1 {
+		return fmt.Errorf("must provide one and only one: shard id or namespace & workflow id or host address")
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	req := &adminservice.DescribeHistoryHostRequest{}
+	if c.IsSet(FlagShardID) {
+		req.ShardId = int32(shardID)
+	} else if c.IsSet(FlagNamespace) && c.IsSet(FlagWorkflowID) {
+		req.Namespace = namespace
+		req.WorkflowExecution = &commonpb.WorkflowExecution{WorkflowId: workflowID}
+	} else if c.IsSet(FlagHistoryAddress) {
+		req.HostAddress = historyAddr
+	}
+
+	resp, err := adminClient.DescribeHistoryHost(ctx, req)
+	if err != nil {
+		return fmt.Errorf("Describe history host failed: %s", err)
+	}
+
+	if !printFully {
+		resp.ShardIds = nil
+	}
+	prettyPrintJSONObject(resp)
+	return nil
+}
+
+// AdminRefreshWorkflowTasks refreshes all the tasks of a workflow
+func AdminRefreshWorkflowTasks(c *cli.Context) error {
+	adminClient := cFactory.AdminClient(c)
+
+	namespace, err := getRequiredGlobalOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+	wid := c.String(FlagWorkflowID)
+	rid := c.String(FlagRunID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err = adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
+		Namespace: namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("Refresh workflow task failed: %s", err)
+	} else {
+		fmt.Println("Refresh workflow task succeeded.")
+	}
+	return nil
 }
