@@ -101,6 +101,8 @@ func (s *perNsWorkerManagerSuite) TearDownTest() {
 }
 
 func (s *perNsWorkerManagerSuite) TestDisabled() {
+	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
+
 	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
 		Enabled: false,
 	}).AnyTimes()
@@ -108,19 +110,13 @@ func (s *perNsWorkerManagerSuite) TestDisabled() {
 		Enabled: false,
 	}).AnyTimes()
 
-	s.manager.namespaceCallback(namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{
-			Id:    "uuid1",
-			State: enumspb.NAMESPACE_STATE_REGISTERED,
-			Name:  "ns1",
-		},
-		nil,
-		"cluster",
-	))
+	s.manager.namespaceCallback(ns)
 	time.Sleep(50 * time.Millisecond)
 }
 
 func (s *perNsWorkerManagerSuite) TestEnabledButResolvedToOther() {
+	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
+
 	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
 		Enabled:    true,
 		TaskQueue:  "tq1",
@@ -133,7 +129,7 @@ func (s *perNsWorkerManagerSuite) TestEnabledButResolvedToOther() {
 	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("other1", nil), nil)
 	s.serviceResolver.EXPECT().Lookup("ns1/tq1/1").Return(membership.NewHostInfo("other2", nil), nil)
 
-	s.manager.namespaceCallback(testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED))
+	s.manager.namespaceCallback(ns)
 	// main work happens in a goroutine
 	time.Sleep(50 * time.Millisecond)
 }
