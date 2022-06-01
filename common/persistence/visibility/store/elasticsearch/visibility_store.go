@@ -251,8 +251,13 @@ func (s *visibilityStore) addBulkRequestAndWait(
 	defer subCtxCancelFn()
 
 	ack, err := future.Get(subCtx)
-	if err != nil {
+
+	if errors.Is(err, context.DeadlineExceeded) {
 		return &persistence.TimeoutError{Msg: fmt.Sprintf("visibility task %s timedout waiting for ACK after %v", visibilityTaskKey, s.processorAckTimeout())}
+	}
+
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("visibility task %s received error %v", visibilityTaskKey, err))
 	}
 
 	if !ack {
