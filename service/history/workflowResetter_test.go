@@ -540,7 +540,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		nextEventID,
 		terminateReason,
 		nil,
-		ResetterIdentity,
+		consts.IdentityResetter,
 		false,
 	).Return(&historypb.HistoryEvent{}, nil)
 
