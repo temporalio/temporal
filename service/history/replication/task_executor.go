@@ -50,7 +50,7 @@ type (
 	}
 
 	TaskExecutorParams struct {
-		RemoteCluster   string
+		RemoteCluster   string // TODO: Remove this remote cluster from executor then it can use singleton.
 		Shard           shard.Context
 		HistoryResender xdc.NDCHistoryResender
 		HistoryEngine   shard.Engine

@@ -34,7 +34,6 @@ import (
 
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/service/history/replication"
 
 	"github.com/uber-go/tally/v4"
 	"github.com/uber/tchannel-go"
@@ -67,6 +66,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
