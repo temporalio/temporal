@@ -54,7 +54,7 @@ import (
 )
 
 const (
-	ResetterIdentity = "resetter"
+	ResetterIdentity = "history-resetter"
 )
 
 type (
@@ -775,7 +775,7 @@ func (r *workflowResetterImpl) getPaginationFn(
 	}
 }
 
-func IsResetting(event *historypb.HistoryEvent) bool {
+func IsTerminatedByResetter(event *historypb.HistoryEvent) bool {
 	if attributes := event.GetWorkflowExecutionTerminatedEventAttributes(); attributes != nil && attributes.Identity == ResetterIdentity {
 		return true
 	}

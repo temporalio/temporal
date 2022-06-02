@@ -274,7 +274,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		}
 
 		// verify if parent got the completion event
-		verifyCompletionRecorded := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == "" && !IsResetting(completionEvent)
+		verifyCompletionRecorded := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == "" && !IsTerminatedByResetter(completionEvent)
 		if verifyCompletionRecorded {
 			_, err := t.historyClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: executionInfo.ParentNamespaceId,
