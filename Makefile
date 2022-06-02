@@ -3,7 +3,7 @@
 install: update-tools bins
 
 # Rebuild binaries (used by Dockerfile).
-bins: clean-bins temporal-server temporal-cassandra-tool temporal-sql-tool
+bins: temporal-server temporal-cassandra-tool temporal-sql-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
 all: update-tools clean proto bins check test
@@ -95,6 +95,8 @@ SUMMARY_COVER_PROFILE      := $(COVER_ROOT)/summary.out
 #   Packages are specified as import paths.
 INTEG_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/..."
 
+ALL_SRC := $(shell find . -name "*.go")
+
 ##### Tools #####
 update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
@@ -184,15 +186,15 @@ clean-bins:
 	@rm -f temporal-cassandra-tool
 	@rm -f temporal-sql-tool
 
-temporal-server:
+temporal-server: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-server with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-server ./cmd/server
 
-temporal-cassandra-tool:
+temporal-cassandra-tool: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-cassandra-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-cassandra-tool ./cmd/tools/cassandra
 
-temporal-sql-tool:
+temporal-sql-tool: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-sql-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-sql-tool ./cmd/tools/sql
 

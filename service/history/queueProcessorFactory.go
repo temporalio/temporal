@@ -157,7 +157,7 @@ func NewTransferQueueProcessorFactory(
 			),
 			queues.SchedulerOptions{
 				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-					WorkerCount: params.Config.TransferProcessorSchedulerWorkerCount(),
+					WorkerCount: params.Config.TransferProcessorSchedulerWorkerCount,
 					QueueSize:   params.Config.TransferProcessorSchedulerQueueSize(),
 				},
 				InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
@@ -208,7 +208,7 @@ func NewTimerQueueProcessorFactory(
 			),
 			queues.SchedulerOptions{
 				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-					WorkerCount: params.Config.TimerProcessorSchedulerWorkerCount(),
+					WorkerCount: params.Config.TimerProcessorSchedulerWorkerCount,
 					QueueSize:   params.Config.TimerProcessorSchedulerQueueSize(),
 				},
 				InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
@@ -257,7 +257,7 @@ func NewVisibilityQueueProcessorFactory(
 			),
 			queues.SchedulerOptions{
 				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-					WorkerCount: params.Config.VisibilityProcessorSchedulerWorkerCount(),
+					WorkerCount: params.Config.VisibilityProcessorSchedulerWorkerCount,
 					QueueSize:   params.Config.VisibilityProcessorSchedulerQueueSize(),
 				},
 				InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
