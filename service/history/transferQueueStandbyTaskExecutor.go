@@ -230,6 +230,10 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, nil
 		}
 
+		completionEvent, err := mutableState.GetCompletionEvent(ctx)
+		if err != nil {
+			return nil, err
+		}
 		wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
 		if err != nil {
 			return nil, err
