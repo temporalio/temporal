@@ -34,6 +34,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -66,7 +67,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) future.Future[bool] {
 			s.Equal("2208~111", visibilityTaskKey)
 
 			body := bulkRequest.Doc
@@ -92,9 +93,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
-			ackCh := make(chan bool, 1)
-			ackCh <- true
-			return ackCh
+			f := future.NewFuture[bool]()
+			f.Set(true, nil)
+			return f
 		})
 
 	err := s.visibilityStore.RecordWorkflowExecutionStarted(context.Background(), request)
@@ -110,7 +111,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) future.Future[bool] {
 			s.Equal("0~0", visibilityTaskKey)
 
 			body := bulkRequest.Doc
@@ -125,9 +126,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 			s.Equal("~", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
-			ackCh := make(chan bool, 1)
-			ackCh <- true
-			return ackCh
+			f := future.NewFuture[bool]()
+			f.Set(true, nil)
+			return f
 		})
 
 	err := s.visibilityStore.RecordWorkflowExecutionStarted(context.Background(), request)
@@ -160,7 +161,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) future.Future[bool] {
 			s.Equal("2208~111", visibilityTaskKey)
 
 			body := bulkRequest.Doc
@@ -182,9 +183,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
-			ackCh := make(chan bool, 1)
-			ackCh <- true
-			return ackCh
+			f := future.NewFuture[bool]()
+			f.Set(true, nil)
+			return f
 		})
 
 	err := s.visibilityStore.RecordWorkflowExecutionClosed(context.Background(), request)
@@ -200,7 +201,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) future.Future[bool] {
 			s.Equal("0~0", visibilityTaskKey)
 
 			body := bulkRequest.Doc
@@ -215,9 +216,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 			s.Equal("~", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
-			ackCh := make(chan bool, 1)
-			ackCh <- true
-			return ackCh
+			f := future.NewFuture[bool]()
+			f.Set(true, nil)
+			return f
 		})
 
 	err := s.visibilityStore.RecordWorkflowExecutionClosed(context.Background(), request)
@@ -234,7 +235,7 @@ func (s *ESVisibilitySuite) TestDeleteExecution() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) future.Future[bool] {
 			s.Equal("wid~rid", visibilityTaskKey)
 
 			s.Equal(client.BulkableRequestTypeDelete, bulkRequest.RequestType)
@@ -242,9 +243,9 @@ func (s *ESVisibilitySuite) TestDeleteExecution() {
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
-			ackCh := make(chan bool, 1)
-			ackCh <- true
-			return ackCh
+			f := future.NewFuture[bool]()
+			f.Set(true, nil)
+			return f
 		})
 
 	err := s.visibilityStore.DeleteWorkflowExecution(context.Background(), request)
@@ -256,16 +257,16 @@ func (s *ESVisibilitySuite) TestDeleteExecution_EmptyRequest() {
 	request := &manager.VisibilityDeleteWorkflowExecutionRequest{}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) future.Future[bool] {
 			s.Equal("~", visibilityTaskKey)
 
 			s.Equal(client.BulkableRequestTypeDelete, bulkRequest.RequestType)
 			s.Equal("~", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
-			ackCh := make(chan bool, 1)
-			ackCh <- true
-			return ackCh
+			f := future.NewFuture[bool]()
+			f.Set(true, nil)
+			return f
 		})
 
 	err := s.visibilityStore.DeleteWorkflowExecution(context.Background(), request)

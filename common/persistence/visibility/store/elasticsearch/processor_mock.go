@@ -32,6 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	"go.temporal.io/server/common/future"
 	client "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 )
 
@@ -59,10 +60,10 @@ func (m *MockProcessor) EXPECT() *MockProcessorMockRecorder {
 }
 
 // Add mocks base method.
-func (m *MockProcessor) Add(request *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+func (m *MockProcessor) Add(request *client.BulkableRequest, visibilityTaskKey string) *future.FutureImpl[bool] {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Add", request, visibilityTaskKey)
-	ret0, _ := ret[0].(<-chan bool)
+	ret0, _ := ret[0].(*future.FutureImpl[bool])
 	return ret0
 }
 
@@ -70,6 +71,18 @@ func (m *MockProcessor) Add(request *client.BulkableRequest, visibilityTaskKey s
 func (mr *MockProcessorMockRecorder) Add(request, visibilityTaskKey interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockProcessor)(nil).Add), request, visibilityTaskKey)
+}
+
+// Remove mocks base method.
+func (m *MockProcessor) Remove(visibilityTaskKey string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Remove", visibilityTaskKey)
+}
+
+// Remove indicates an expected call of Remove.
+func (mr *MockProcessorMockRecorder) Remove(visibilityTaskKey interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockProcessor)(nil).Remove), visibilityTaskKey)
 }
 
 // Start mocks base method.
