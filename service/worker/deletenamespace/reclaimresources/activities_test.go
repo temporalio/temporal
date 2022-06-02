@@ -60,8 +60,6 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NoExecutions(t *testing.T) {
 
 	err := a.EnsureNoExecutionsAdvVisibilityActivity(context.Background(), "namespace-id", "namespace", 0)
 	require.NoError(t, err)
-
-	ctrl.Finish()
 }
 
 func Test_EnsureNoExecutionsAdvVisibilityActivity_ExecutionsExist(t *testing.T) {
@@ -91,7 +89,6 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_ExecutionsExist(t *testing.T) 
 	var appErr *temporal.ApplicationError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, "ExecutionsStillExist", appErr.Type())
-	ctrl.Finish()
 }
 
 func Test_EnsureNoExecutionsAdvVisibilityActivity_NotDeletedExecutionsExist(t *testing.T) {
@@ -121,7 +118,6 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NotDeletedExecutionsExist(t *t
 	var appErr *temporal.ApplicationError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, "NotDeletedExecutionsStillExist", appErr.Type())
-	ctrl.Finish()
 }
 
 func Test_EnsureNoExecutionsStdVisibilityActivity_NoExecutions(t *testing.T) {
@@ -145,8 +141,6 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_NoExecutions(t *testing.T) {
 
 	err := a.EnsureNoExecutionsStdVisibilityActivity(context.Background(), "namespace-id", "namespace")
 	require.NoError(t, err)
-
-	ctrl.Finish()
 }
 
 func Test_EnsureNoExecutionsStdVisibilityActivity_ExecutionsExist(t *testing.T) {
@@ -174,5 +168,4 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_ExecutionsExist(t *testing.T) 
 	var appErr *temporal.ApplicationError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, "ExecutionsStillExist", appErr.Type())
-	ctrl.Finish()
 }
