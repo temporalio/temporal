@@ -31,11 +31,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.uber.org/fx"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
+	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
