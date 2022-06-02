@@ -126,6 +126,7 @@ var DefaultOptions = fx.Options(
 	fx.Provide(ArchiverProviderProvider),
 	fx.Provide(ThrottledLoggerProvider),
 	fx.Provide(SdkClientFactoryProvider),
+	fx.Provide(SdkWorkerFactoryProvider),
 	fx.Provide(DCRedirectionPolicyProvider),
 )
 
@@ -401,6 +402,10 @@ func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.T
 		tlsFrontendConfig,
 		sdk.NewMetricHandler(metricsClient.UserScope()),
 	), nil
+}
+
+func SdkWorkerFactoryProvider() sdk.WorkerFactory {
+	return sdk.NewWorkerFactory()
 }
 
 func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy {

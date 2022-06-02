@@ -56,6 +56,7 @@ type (
 		fx.In
 		Logger            log.Logger
 		SdkClientFactory  sdk.ClientFactory
+		SdkWorkerFactory  sdk.WorkerFactory
 		NamespaceRegistry namespace.Registry
 		HostName          resource.HostName
 		Components        []workercommon.PerNSWorkerComponent `group:"perNamespaceWorkerComponent"`
@@ -67,11 +68,13 @@ type (
 		// from init params or Start
 		logger            log.Logger
 		sdkClientFactory  sdk.ClientFactory
+		sdkWorkerFactory  sdk.WorkerFactory
 		namespaceRegistry namespace.Registry
 		self              *membership.HostInfo
 		hostName          resource.HostName
 		serviceResolver   membership.ServiceResolver
 		components        []workercommon.PerNSWorkerComponent
+		initialRetry      time.Duration
 
 		membershipChangedCh chan *membership.ChangedEvent
 
@@ -97,9 +100,11 @@ func NewPerNamespaceWorkerManager(params perNamespaceWorkerManagerInitParams) *p
 	return &perNamespaceWorkerManager{
 		logger:              params.Logger,
 		sdkClientFactory:    params.SdkClientFactory,
+		sdkWorkerFactory:    params.SdkWorkerFactory,
 		namespaceRegistry:   params.NamespaceRegistry,
 		hostName:            params.HostName,
 		components:          params.Components,
+		initialRetry:        1 * time.Second,
 		membershipChangedCh: make(chan *membership.ChangedEvent),
 		workerSets:          make(map[namespace.ID]*workerSet),
 	}
@@ -285,7 +290,7 @@ func (ws *workerSet) refreshComponent(
 			return nil
 		}
 	}
-	policy := backoff.NewExponentialRetryPolicy(1 * time.Second)
+	policy := backoff.NewExponentialRetryPolicy(ws.wm.initialRetry)
 	backoff.Retry(op, policy, nil)
 }
 
@@ -307,12 +312,13 @@ func (ws *workerSet) startWorker(
 	sdkoptions.MaxConcurrentWorkflowTaskPollers = 2 * multiplicity
 	sdkoptions.MaxConcurrentActivityTaskPollers = 2 * multiplicity
 
-	sdkworker := sdkworker.New(client, options.TaskQueue, sdkoptions)
+	sdkworker := ws.wm.sdkWorkerFactory.New(client, options.TaskQueue, sdkoptions)
 	wc.Register(sdkworker, ws.ns)
 	// TODO: use Run() and handle post-startup errors by recreating worker
 	// (after sdk supports returning post-startup errors from Run)
 	err = sdkworker.Start()
 	if err != nil {
+		client.Close()
 		return nil, err
 	}
 
