@@ -33,9 +33,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
 	"go.opentelemetry.io/otel/sdk/metric/metrictest"
 	"go.opentelemetry.io/otel/sdk/metric/number"
+
 	"go.temporal.io/server/common/log"
 )
 
@@ -44,7 +46,17 @@ type (
 		suite.Suite
 		*require.Assertions
 	}
+
+	testProvider struct {
+		meter metric.Meter
+	}
 )
+
+func (t *testProvider) GetMeter() metric.Meter {
+	return t.meter
+}
+
+func (t *testProvider) Stop(log.Logger) {}
 
 func TestEventsSuite(t *testing.T) {
 	s := new(eventsSuite)
@@ -55,23 +67,23 @@ func (s *eventsSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *eventsSuite) TestEventMetricProvider_WithTags() {
+func (s *eventsSuite) TestEventsMetricProvider_WithTags() {
 	tests := []struct {
 		name string
 		tags []Tag
-		want eventMetricProvider
+		want eventsMetricProvider
 	}{
 		{
 			"empty tags",
 			[]Tag{},
-			eventMetricProvider{
+			eventsMetricProvider{
 				tags: []Tag{},
 			},
 		},
 		{
 			"operation tag",
 			[]Tag{OperationTag("awesome")},
-			eventMetricProvider{
+			eventsMetricProvider{
 				tags: []Tag{
 					&tagImpl{
 						key:   "operation",
@@ -83,13 +95,13 @@ func (s *eventsSuite) TestEventMetricProvider_WithTags() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(NoopMetricHandler)
-			got := emp.WithTags(tt.tags...).(*eventMetricProvider)
+			emp := NewEventsMetricProvider(NoopMetricHandler)
+			got := emp.WithTags(tt.tags...).(*eventsMetricProvider)
 
 			if diff := cmp.Diff(tt.want, *got,
 				cmp.Comparer(valuesEqual),
-				cmpopts.IgnoreFields(eventMetricProvider{}, "context"),
-				cmp.AllowUnexported(eventMetricProvider{}),
+				cmpopts.IgnoreFields(eventsMetricProvider{}, "context"),
+				cmp.AllowUnexported(eventsMetricProvider{}),
 				cmp.AllowUnexported(tagImpl{})); diff != "" {
 				t.Errorf("mismatch (-want, got):\n%s", diff)
 			}
@@ -112,7 +124,7 @@ func (s *eventsSuite) TestCounterMetricFunc_Record() {
 			nil,
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName:         "go.temporal.io/server/common/metrics/test-counter",
+					InstrumentName:         "test-counter",
 					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
 					AggregationKind:        aggregation.SumKind,
 					Sum:                    number.NewInt64Number(2),
@@ -125,7 +137,7 @@ func (s *eventsSuite) TestCounterMetricFunc_Record() {
 			[]Tag{OperationTag("awesome")},
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName:         "go.temporal.io/server/common/metrics/test-counter2",
+					InstrumentName:         "test-counter2",
 					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
 					AggregationKind:        aggregation.SumKind,
 					Sum:                    number.NewInt64Number(4),
@@ -138,7 +150,7 @@ func (s *eventsSuite) TestCounterMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), meterProvider.Meter("test")))
+			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}))
 			emp.Counter(tt.name, &MetricOptions{
 				Description: "what you see is not a test",
 			}).Record(tt.v, tt.tags...)
@@ -167,7 +179,7 @@ func (s *eventsSuite) TestGaugeMetricFunc_Record() {
 			nil,
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName:         "go.temporal.io/server/common/metrics/test-gauge",
+					InstrumentName:         "test-gauge",
 					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
 					AggregationKind:        aggregation.SumKind,
 					Sum:                    number.NewFloat64Number(2.0),
@@ -181,7 +193,7 @@ func (s *eventsSuite) TestGaugeMetricFunc_Record() {
 			[]Tag{OperationTag("awesome")},
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName:         "go.temporal.io/server/common/metrics/test-gauge2",
+					InstrumentName:         "test-gauge2",
 					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
 					AggregationKind:        aggregation.SumKind,
 					Sum:                    number.NewFloat64Number(4.0),
@@ -195,7 +207,7 @@ func (s *eventsSuite) TestGaugeMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), meterProvider.Meter("test")))
+			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}))
 			emp.Gauge(tt.name, &MetricOptions{
 				Description: "what you see is not a test",
 			}).Record(tt.v, tt.tags...)
@@ -224,7 +236,7 @@ func (s *eventsSuite) TestTimerMetricFunc_Record() {
 			nil,
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName:         "go.temporal.io/server/common/metrics/test-timer",
+					InstrumentName:         "test-timer",
 					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
 					AggregationKind:        aggregation.HistogramKind,
 					Sum:                    number.NewInt64Number(int64(2 * time.Hour)),
@@ -241,7 +253,7 @@ func (s *eventsSuite) TestTimerMetricFunc_Record() {
 			[]Tag{OperationTag("awesome")},
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName:         "go.temporal.io/server/common/metrics/test-timer2",
+					InstrumentName:         "test-timer2",
 					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
 					AggregationKind:        aggregation.HistogramKind,
 					Sum:                    number.NewInt64Number(int64(4 * time.Hour)),
@@ -258,7 +270,7 @@ func (s *eventsSuite) TestTimerMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), meterProvider.Meter("test")))
+			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}))
 			emp.Timer(tt.name, &MetricOptions{
 				Description: "what you see is not a test",
 				Unit:        Milliseconds,
@@ -288,7 +300,7 @@ func (s *eventsSuite) TestHistogramMetricFunc_Record() {
 			nil,
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName:         "go.temporal.io/server/common/metrics/test-histogram",
+					InstrumentName:         "test-histogram",
 					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
 					AggregationKind:        aggregation.HistogramKind,
 					Sum:                    number.NewInt64Number(2),
@@ -305,7 +317,7 @@ func (s *eventsSuite) TestHistogramMetricFunc_Record() {
 			[]Tag{OperationTag("awesome")},
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName:         "go.temporal.io/server/common/metrics/test-histogram2",
+					InstrumentName:         "test-histogram2",
 					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
 					AggregationKind:        aggregation.HistogramKind,
 					Sum:                    number.NewInt64Number(4.0),
@@ -322,7 +334,7 @@ func (s *eventsSuite) TestHistogramMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), meterProvider.Meter("test")))
+			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}))
 			emp.Histogram(tt.name, &MetricOptions{
 				Description: "what you see is not a test",
 				Unit:        Bytes,
@@ -354,7 +366,7 @@ func (s *eventsSuite) TestCounterMetricWithTagsMergeFunc_Record() {
 			nil,
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName:         "go.temporal.io/server/common/metrics/test-counter",
+					InstrumentName:         "test-counter",
 					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
 					AggregationKind:        aggregation.SumKind,
 					Sum:                    number.NewInt64Number(2),
@@ -371,7 +383,7 @@ func (s *eventsSuite) TestCounterMetricWithTagsMergeFunc_Record() {
 			[]Tag{StringTag("new-tag", "new-value")},
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName:         "go.temporal.io/server/common/metrics/test-counter2",
+					InstrumentName:         "test-counter2",
 					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
 					AggregationKind:        aggregation.SumKind,
 					Sum:                    number.NewInt64Number(4),
@@ -385,7 +397,7 @@ func (s *eventsSuite) TestCounterMetricWithTagsMergeFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), meterProvider.Meter("test"))).WithTags(tt.rootTags...).(*eventMetricProvider)
+			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")})).WithTags(tt.rootTags...).(*eventsMetricProvider)
 			emp.Counter(tt.name, &MetricOptions{
 				Description: "what you see is not a test",
 			}).Record(tt.v, tt.tags...)
@@ -403,7 +415,7 @@ func (s *eventsSuite) TestCounterMetricWithTagsMergeFunc_Record() {
 }
 
 func BenchmarkParallelHistogram(b *testing.B) {
-	emp := NewEventMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-3"))
+	emp := NewEventsMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-3"))
 	b.ResetTimer()
 	b.RunParallel(
 		func(p *testing.PB) {
@@ -418,7 +430,7 @@ func BenchmarkParallelHistogram(b *testing.B) {
 }
 
 func BenchmarkParallelCounter(b *testing.B) {
-	emp := NewEventMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-1"))
+	emp := NewEventsMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-1"))
 	b.ResetTimer()
 	b.RunParallel(
 		func(p *testing.PB) {
@@ -432,7 +444,7 @@ func BenchmarkParallelCounter(b *testing.B) {
 }
 
 func BenchmarkParallelGauge(b *testing.B) {
-	emp := NewEventMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-2"))
+	emp := NewEventsMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-2"))
 	b.ResetTimer()
 	b.RunParallel(
 		func(p *testing.PB) {
@@ -446,7 +458,7 @@ func BenchmarkParallelGauge(b *testing.B) {
 }
 
 func BenchmarkParallelTimer(b *testing.B) {
-	emp := NewEventMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-4"))
+	emp := NewEventsMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-4"))
 	b.ResetTimer()
 	b.RunParallel(
 		func(p *testing.PB) {
@@ -460,7 +472,7 @@ func BenchmarkParallelTimer(b *testing.B) {
 }
 
 func BenchmarkAllTheMetrics(b *testing.B) {
-	emp := NewEventMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-3"))
+	emp := NewEventsMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-3"))
 	b.ResetTimer()
 
 	b.RunParallel(

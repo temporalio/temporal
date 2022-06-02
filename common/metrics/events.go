@@ -34,17 +34,20 @@ import (
 )
 
 type (
-	eventMetricProvider struct {
+	eventsMetricProvider struct {
 		context context.Context
 		tags    []Tag
 	}
 
 	// MetricHandler represents the extension point for collection instruments
 	// typedef of event.Handler from https://pkg.go.dev/golang.org/x/exp/event#Handler
-	MetricHandler = event.Handler
+	MetricHandler interface {
+		event.Handler
+		Stop(logger log.Logger)
+	}
 )
 
-var _ MetricProvider = (*eventMetricProvider)(nil)
+var _ MetricProvider = (*eventsMetricProvider)(nil)
 
 // MetricHandlerFromConfig is used at startup to construct
 func MetricHandlerFromConfig(logger log.Logger, c *Config) MetricHandler {
@@ -67,7 +70,7 @@ func MetricHandlerFromConfig(logger log.Logger, c *Config) MetricHandler {
 				logger.Fatal(err.Error())
 			}
 
-			return NewOtelMetricHandler(logger, otelProvider.GetMeter())
+			return NewOtelMetricHandler(logger, otelProvider)
 		}
 	}
 
@@ -78,14 +81,15 @@ func MetricHandlerFromConfig(logger log.Logger, c *Config) MetricHandler {
 	)
 }
 
-// NewEventMetricProvider provides an eventMetricProvider given event.Exporter struct
-func NewEventMetricProvider(h MetricHandler) *eventMetricProvider {
+// NewEventsMetricProvider provides an eventsMetricProvider given event.Exporter struct
+func NewEventsMetricProvider(h MetricHandler) eventsMetricProvider {
 	eo := &event.ExporterOptions{
-		DisableLogging: true,
-		DisableTracing: true,
+		DisableLogging:   true,
+		DisableTracing:   true,
+		EnableNamespaces: false,
 	}
 
-	return &eventMetricProvider{
+	return eventsMetricProvider{
 		context: event.WithExporter(context.Background(), event.NewExporter(h, eo)),
 		tags:    []Tag{},
 	}
@@ -93,52 +97,52 @@ func NewEventMetricProvider(h MetricHandler) *eventMetricProvider {
 
 // WithTags creates a new MetricProvder with provided []Tag
 // Tags are merged with registered Tags from the source MetricProvider
-func (emp *eventMetricProvider) WithTags(tags ...Tag) MetricProvider {
-	return &eventMetricProvider{
+func (emp eventsMetricProvider) WithTags(tags ...Tag) MetricProvider {
+	t := append(make([]Tag, 0, len(emp.tags)+len(tags)), emp.tags...)
+	return &eventsMetricProvider{
 		context: emp.context,
-		tags:    append(emp.tags, tags...),
+		tags:    append(t, tags...),
 	}
 }
 
 // Counter obtains a counter for the given name.
-func (emp *eventMetricProvider) Counter(n string, m *MetricOptions) CounterMetric {
+func (emp eventsMetricProvider) Counter(n string, m *MetricOptions) CounterMetric {
+	e := event.NewCounter(n, m)
 	return CounterMetricFunc(func(i int64, t ...Tag) {
-		e := event.NewCounter(n, m)
-		e.Record(emp.context, i, emp.tagsToLabels(t)...)
+		e.Record(emp.context, i, tagsToLabels(append(emp.tags, t...))...)
 	})
 }
 
 // Gauge obtains a gauge for the given name.
-func (emp *eventMetricProvider) Gauge(n string, m *MetricOptions) GaugeMetric {
+func (emp eventsMetricProvider) Gauge(n string, m *MetricOptions) GaugeMetric {
+	e := event.NewFloatGauge(n, m)
 	return GaugeMetricFunc(func(f float64, t ...Tag) {
-		e := event.NewFloatGauge(n, m)
-		e.Record(emp.context, f, emp.tagsToLabels(t)...)
+		e.Record(emp.context, f, tagsToLabels(append(emp.tags, t...))...)
 	})
 }
 
 // Timer obtains a timer for the given name.
-func (emp *eventMetricProvider) Timer(n string, m *MetricOptions) TimerMetric {
+func (emp eventsMetricProvider) Timer(n string, m *MetricOptions) TimerMetric {
+	e := event.NewDuration(n, m)
 	return TimerMetricFunc(func(d time.Duration, t ...Tag) {
-		e := event.NewDuration(n, m)
-		e.Record(emp.context, d, emp.tagsToLabels(t)...)
+		e.Record(emp.context, d, tagsToLabels(append(emp.tags, t...))...)
 	})
 }
 
 // Histogram obtains a histogram for the given name.
-func (emp *eventMetricProvider) Histogram(n string, m *MetricOptions) HistogramMetric {
+func (emp eventsMetricProvider) Histogram(n string, m *MetricOptions) HistogramMetric {
+	e := event.NewIntDistribution(n, m)
 	return HistogramMetricFunc(func(i int64, t ...Tag) {
-		e := event.NewIntDistribution(n, m)
-		e.Record(emp.context, i, emp.tagsToLabels(t)...)
+		e.Record(emp.context, i, tagsToLabels(append(emp.tags, t...))...)
 	})
 }
 
 // tagsToLabels helper to merge registred tags and additional tags converting to event.Label struct
-func (emp *eventMetricProvider) tagsToLabels(tags []Tag) []event.Label {
-	l := make([]event.Label, len(emp.tags)+len(tags))
-	t := append(emp.tags, tags...)
+func tagsToLabels(tags []Tag) []event.Label {
+	l := make([]event.Label, len(tags))
 
-	for i := range t {
-		l[i] = event.String(t[i].Key(), t[i].Value())
+	for i := range tags {
+		l[i] = event.String(tags[i].Key(), tags[i].Value())
 	}
 
 	return l

@@ -44,44 +44,42 @@ const (
 
 // RuntimeMetricsReporter A struct containing the state of the RuntimeMetricsReporter.
 type RuntimeMetricsReporter struct {
-	scope          UserScope
-	buildInfoScope UserScope
-	reportInterval time.Duration
-	started        int32
-	quit           chan struct{}
-	logger         log.Logger
-	lastNumGC      uint32
-	buildTime      time.Time
+	provider          MetricProvider
+	buildInfoProvider MetricProvider
+	reportInterval    time.Duration
+	started           int32
+	quit              chan struct{}
+	logger            log.Logger
+	lastNumGC         uint32
+	buildTime         time.Time
 }
 
 // NewRuntimeMetricsReporter Creates a new RuntimeMetricsReporter.
 func NewRuntimeMetricsReporter(
-	scope UserScope,
+	provider MetricProvider,
 	reportInterval time.Duration,
 	logger log.Logger,
 	instanceID string,
 ) *RuntimeMetricsReporter {
 	if len(instanceID) > 0 {
-		scope = scope.Tagged(map[string]string{instance: instanceID})
+		provider = provider.WithTags(StringTag(instance, instanceID))
 	}
 	var memstats runtime.MemStats
 	runtime.ReadMemStats(&memstats)
 
 	return &RuntimeMetricsReporter{
-		scope:          scope,
+		provider:       provider,
 		reportInterval: reportInterval,
 		logger:         logger,
 		lastNumGC:      memstats.NumGC,
 		quit:           make(chan struct{}),
 		buildTime:      build.InfoData.GitTime,
-		buildInfoScope: scope.Tagged(
-			map[string]string{
-				gitRevisionTag:   build.InfoData.GitRevision,
-				buildDateTag:     build.InfoData.GitTime.Format(time.RFC3339),
-				buildPlatformTag: build.InfoData.GoArch,
-				goVersionTag:     build.InfoData.GoVersion,
-				buildVersionTag:  headers.ServerVersion,
-			},
+		buildInfoProvider: provider.WithTags(
+			StringTag(gitRevisionTag, build.InfoData.GitRevision),
+			StringTag(buildDateTag, build.InfoData.GitTime.Format(time.RFC3339)),
+			StringTag(buildPlatformTag, build.InfoData.GoArch),
+			StringTag(goVersionTag, build.InfoData.GoVersion),
+			StringTag(buildVersionTag, headers.ServerVersion),
 		),
 	}
 }
@@ -91,32 +89,32 @@ func (r *RuntimeMetricsReporter) report() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
-	r.scope.UpdateGauge(NumGoRoutinesGauge, float64(runtime.NumGoroutine()))
-	r.scope.UpdateGauge(GoMaxProcsGauge, float64(runtime.GOMAXPROCS(0)))
-	r.scope.UpdateGauge(MemoryAllocatedGauge, float64(memStats.Alloc))
-	r.scope.UpdateGauge(MemoryHeapGauge, float64(memStats.HeapAlloc))
-	r.scope.UpdateGauge(MemoryHeapIdleGauge, float64(memStats.HeapIdle))
-	r.scope.UpdateGauge(MemoryHeapInuseGauge, float64(memStats.HeapInuse))
-	r.scope.UpdateGauge(MemoryStackGauge, float64(memStats.StackInuse))
+	r.provider.Gauge(NumGoRoutinesGauge, nil).Record(float64(runtime.NumGoroutine()))
+	r.provider.Gauge(GoMaxProcsGauge, nil).Record(float64(runtime.GOMAXPROCS(0)))
+	r.provider.Gauge(MemoryAllocatedGauge, nil).Record(float64(memStats.Alloc))
+	r.provider.Gauge(MemoryHeapGauge, nil).Record(float64(memStats.HeapAlloc))
+	r.provider.Gauge(MemoryHeapIdleGauge, nil).Record(float64(memStats.HeapIdle))
+	r.provider.Gauge(MemoryHeapInuseGauge, nil).Record(float64(memStats.HeapInuse))
+	r.provider.Gauge(MemoryStackGauge, nil).Record(float64(memStats.StackInuse))
 
 	// memStats.NumGC is a perpetually incrementing counter (unless it wraps at 2^32)
 	num := memStats.NumGC
 	lastNum := atomic.SwapUint32(&r.lastNumGC, num) // reset for the next iteration
 	if delta := num - lastNum; delta > 0 {
-		r.scope.AddCounter(NumGCCounter, int64(delta))
+		r.provider.Histogram(NumGCCounter, nil).Record(int64(delta))
 		if delta > 255 {
 			// too many GCs happened, the timestamps buffer got wrapped around. Report only the last 256
 			lastNum = num - 256
 		}
 		for i := lastNum; i != num; i++ {
 			pause := memStats.PauseNs[i%256]
-			r.scope.RecordTimer(GcPauseMsTimer, time.Duration(pause))
+			r.provider.Timer(GcPauseMsTimer, nil).Record(time.Duration(pause))
 		}
 	}
 
 	// report build info
-	r.buildInfoScope.UpdateGauge(buildInfoMetricName, 1.0)
-	r.buildInfoScope.UpdateGauge(buildAgeMetricName, float64(time.Since(r.buildTime)))
+	r.buildInfoProvider.Gauge(buildInfoMetricName, nil).Record(1.0)
+	r.buildInfoProvider.Gauge(buildAgeMetricName, nil).Record(float64(time.Since(r.buildTime)))
 }
 
 // Start Starts the reporter thread that periodically emits metrics.

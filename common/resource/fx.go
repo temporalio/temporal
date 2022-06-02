@@ -31,8 +31,9 @@ import (
 	"os"
 	"time"
 
-	"go.temporal.io/api/workflowservice/v1"
 	"go.uber.org/fx"
+
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -68,7 +69,6 @@ type (
 	ThrottledLogger      log.Logger
 	ThrottledLoggerRpsFn quotas.RateFn
 	NamespaceLogger      log.Logger
-	ServerReporter       metrics.Reporter
 	ServiceName          string
 	HostName             string
 	InstanceID           string
@@ -80,9 +80,9 @@ type (
 	RuntimeMetricsReporterParams struct {
 		fx.In
 
-		MetricsScope metrics.UserScope
-		Logger       SnTaggedLogger
-		InstanceID   InstanceID `optional:"true"`
+		Provider   metrics.MetricProvider
+		Logger     SnTaggedLogger
+		InstanceID InstanceID `optional:"true"`
 	}
 )
 
@@ -95,8 +95,6 @@ var Module = fx.Options(
 	fx.Provide(HostNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
-	fx.Provide(MetricsClientProvider),
-	fx.Provide(MetricsUserScopeProvider),
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
@@ -116,7 +114,9 @@ var Module = fx.Options(
 	membership.HostInfoProviderModule,
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
-	fx.Provide(metrics.NewEventMetricProvider),
+	fx.Provide(func(r metrics.Reporter) metrics.MetricProvider { return r.MetricProvider() }),
+	fx.Provide(func(r metrics.Reporter) metrics.UserScope { return r.UserScope() }),
+	fx.Provide(MetricsClientProvider),
 )
 
 var DefaultOptions = fx.Options(
@@ -287,15 +287,11 @@ func FrontendClientProvider(clientBean client.Bean) workflowservice.WorkflowServ
 	)
 }
 
-func MetricsUserScopeProvider(serverMetricsClient metrics.Client) metrics.UserScope {
-	return serverMetricsClient.UserScope()
-}
-
 func RuntimeMetricsReporterProvider(
 	params RuntimeMetricsReporterParams,
 ) *metrics.RuntimeMetricsReporter {
 	return metrics.NewRuntimeMetricsReporter(
-		params.MetricsScope,
+		params.Provider,
 		time.Minute,
 		params.Logger,
 		string(params.InstanceID),
@@ -366,9 +362,10 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient 
 	)
 }
 
-func MetricsClientProvider(logger log.Logger, serviceName ServiceName, serverReporter ServerReporter) (metrics.Client, error) {
+// TODO: rework to depend on...
+func MetricsClientProvider(logger log.Logger, serviceName ServiceName, provider metrics.MetricProvider) metrics.Client {
 	serviceIdx := metrics.GetMetricsServiceIdx(string(serviceName), logger)
-	return serverReporter.NewClient(logger, serviceIdx)
+	return metrics.NewEventsClient(provider, serviceIdx)
 }
 
 func PersistenceConfigProvider(persistenceConfig config.Persistence, dc *dynamicconfig.Collection) *config.Persistence {
@@ -391,7 +388,7 @@ func ArchiverProviderProvider(cfg *config.Config) provider.ArchiverProvider {
 	return provider.NewArchiverProvider(cfg.Archival.History.Provider, cfg.Archival.Visibility.Provider)
 }
 
-func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.TLSConfigProvider, metricsClient metrics.Client) (sdk.ClientFactory, error) {
+func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.TLSConfigProvider, provider metrics.MetricProvider) (sdk.ClientFactory, error) {
 	tlsFrontendConfig, err := tlsConfigProvider.GetFrontendClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
@@ -400,7 +397,7 @@ func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.T
 	return sdk.NewClientFactory(
 		cfg.PublicClient.HostPort,
 		tlsFrontendConfig,
-		sdk.NewMetricHandler(metricsClient.UserScope()),
+		sdk.NewMetricHandler(provider),
 	), nil
 }
 

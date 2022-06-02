@@ -46,7 +46,7 @@ type TallyMetricHandler struct {
 
 type tallyRecordFunc func(event.Label)
 
-var _ event.Handler = (*TallyMetricHandler)(nil)
+var _ MetricHandler = (*TallyMetricHandler)(nil)
 
 // NewTallyMetricHandler creates a new tally event.Handler.
 func NewTallyMetricHandler(log log.Logger, scope tally.Scope, perUnitHistogramBoundaries map[string][]float64) *TallyMetricHandler {
@@ -100,8 +100,7 @@ func (t *TallyMetricHandler) getRecordFunc(em event.Metric, tags map[string]stri
 }
 
 func (t *TallyMetricHandler) newRecordFunc(em event.Metric, tags map[string]string) tallyRecordFunc {
-	opts := em.Options()
-	name := opts.Namespace + "/" + em.Name()
+	name := em.Name()
 	unit := em.Options().Unit
 	switch em.(type) {
 	case *event.Counter:
@@ -142,4 +141,8 @@ func labelsToMap(attrs []event.Label) map[string]string {
 		tags[l.Name] = l.String()
 	}
 	return tags
+}
+
+func (t *TallyMetricHandler) Stop(logger log.Logger) {
+	// noop
 }
