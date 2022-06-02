@@ -336,17 +336,13 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
-	completionEvent, err := mutableState.GetCompletionEvent(ctx)
+	wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
 	if err != nil {
 		return err
 	}
-	wfCloseTime := timestamp.TimeValue(completionEvent.GetEventTime())
-
 	workflowTypeName := executionInfo.WorkflowTypeName
-	workflowCloseTime := wfCloseTime
 	workflowStatus := executionState.Status
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
-
 	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
 	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
 	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
@@ -366,7 +362,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		workflowTypeName,
 		workflowStartTime,
 		workflowExecutionTime,
-		workflowCloseTime,
+		timestamp.TimeValue(wfCloseTime),
 		workflowStatus,
 		stateTransitionCount,
 		workflowHistoryLength,

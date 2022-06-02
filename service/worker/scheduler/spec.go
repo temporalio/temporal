@@ -34,10 +34,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-const (
-	defaultJitter = 1 * time.Second
-)
-
 type (
 	compiledSpec struct {
 		spec     *schedpb.ScheduleSpec
@@ -166,12 +162,11 @@ func (cs *compiledSpec) excluded(nominal time.Time) bool {
 }
 
 // Adds jitter to a nominal time, deterministically (by hashing the given time). The range
-// of jitter is the min of the schedule spec's jitter (default 1s if missing) and the
-// given limit value.
+// of the jitter is zero to the min of the schedule spec's jitter and the given limit value.
 func (cs *compiledSpec) addJitter(nominal time.Time, limit time.Duration) time.Time {
 	maxJitter := timestamp.DurationValue(cs.spec.Jitter)
-	if maxJitter == 0 {
-		maxJitter = defaultJitter
+	if maxJitter < 0 {
+		maxJitter = 0
 	}
 	if maxJitter > limit {
 		maxJitter = limit

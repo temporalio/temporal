@@ -230,16 +230,13 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, nil
 		}
 
-		completionEvent, err := mutableState.GetCompletionEvent(ctx)
+		wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
 		if err != nil {
 			return nil, err
 		}
-		wfCloseTime := timestamp.TimeValue(completionEvent.GetEventTime())
-
 		executionInfo := mutableState.GetExecutionInfo()
 		executionState := mutableState.GetExecutionState()
 		workflowTypeName := executionInfo.WorkflowTypeName
-		workflowCloseTime := wfCloseTime
 		workflowStatus := executionState.Status
 		workflowHistoryLength := mutableState.GetNextEventID() - 1
 		workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
@@ -264,7 +261,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			workflowTypeName,
 			workflowStartTime,
 			workflowExecutionTime,
-			workflowCloseTime,
+			timestamp.TimeValue(wfCloseTime),
 			workflowStatus,
 			workflowHistoryLength,
 			visibilityMemo,
@@ -606,7 +603,9 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if err != nil {
 		return err
 	}
-	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
+	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
+		err = serviceerror.NewInternal("transferQueueStandbyProcessor encountered empty historyResendInfo")
+	} else {
 		ns, err := t.registry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
 		if err != nil {
 			return err
@@ -620,12 +619,17 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),
 		); err != nil {
+			if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
+				// Don't log NamespaceNotFound error because it is valid case, and return error to stop retry.
+				return err
+			}
 			t.logger.Error("Error refresh tasks from remote.",
 				tag.ShardID(t.shard.GetShardID()),
 				tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 				tag.WorkflowID(taskInfo.GetWorkflowID()),
 				tag.WorkflowRunID(taskInfo.GetRunID()),
-				tag.ClusterName(remoteClusterName))
+				tag.ClusterName(remoteClusterName),
+				tag.Error(err))
 		}
 
 		// NOTE: history resend may take long time and its timeout is currently
@@ -640,19 +644,20 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			0,
 			0,
 		)
-	} else {
-		err = serviceerror.NewInternal(
-			"transferQueueStandbyProcessor encountered empty historyResendInfo",
-		)
 	}
 
 	if err != nil {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
+			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retry.
+			return err
+		}
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
 			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 			tag.WorkflowID(taskInfo.GetWorkflowID()),
 			tag.WorkflowRunID(taskInfo.GetRunID()),
-			tag.SourceCluster(remoteClusterName))
+			tag.SourceCluster(remoteClusterName),
+			tag.Error(err))
 	}
 
 	// return error so task processing logic will retry

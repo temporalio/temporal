@@ -86,5 +86,6 @@ var (
 	errUnableToStartWorkflowMessage                   = "Unable to start %s workflow: %v."
 	errWorkflowReturnedErrorMessage                   = "Workflow %s returned an error: %v."
 
-	errListNotAllowed = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
+	errListNotAllowed      = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
+	errSchedulesNotAllowed = serviceerror.NewPermissionDenied("Schedules are disabled on this namespace.", "")
 )

@@ -25,47 +25,23 @@
 package configs
 
 import (
-	"strconv"
-	"strings"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/tasks"
 )
 
-const (
-	numBitsPerLevel = 3
-)
-
-const (
-	TaskHighPriorityClass = iota << numBitsPerLevel
-	TaskDefaultPriorityClass
-	TaskLowPriorityClass
-)
-
-const (
-	TaskHighPrioritySubclass = iota
-	TaskDefaultPrioritySubclass
-	TaskLowPrioritySubclass
-)
-
-var (
-	TaskPriorityHigh    = GetTaskPriority(TaskHighPriorityClass, TaskDefaultPrioritySubclass)
-	TaskPriorityDefault = GetTaskPriority(TaskDefaultPriorityClass, TaskDefaultPrioritySubclass)
-	TaskPriorityLow     = GetTaskPriority(TaskLowPriorityClass, TaskDefaultPrioritySubclass)
-)
-
-var DefaultTaskPriorityWeight = map[int]int{
-	TaskPriorityHigh:    900,
-	TaskPriorityDefault: 50,
-	TaskPriorityLow:     25,
+var DefaultTaskPriorityWeight = map[tasks.Priority]int{
+	tasks.PriorityHigh:   900,
+	tasks.PriorityMedium: 50,
+	tasks.PriorityLow:    25,
 }
 
 func ConvertWeightsToDynamicConfigValue(
-	weights map[int]int,
+	weights map[tasks.Priority]int,
 ) map[string]interface{} {
 	weightsForDC := make(map[string]interface{})
 	for priority, weight := range weights {
-		weightsForDC[strconv.Itoa(priority)] = weight
+		weightsForDC[priority.String()] = weight
 	}
 	return weightsForDC
 }
@@ -73,12 +49,12 @@ func ConvertWeightsToDynamicConfigValue(
 func ConvertDynamicConfigValueToWeights(
 	weightsFromDC map[string]interface{},
 	logger log.Logger,
-) map[int]int {
-	weights := make(map[int]int)
+) map[tasks.Priority]int {
+	weights := make(map[tasks.Priority]int)
 	for key, value := range weightsFromDC {
-		intKey, err := strconv.Atoi(strings.TrimSpace(key))
-		if err != nil {
-			logger.Error("Failed to parse dynamic config map value to int map, fallback to default weights", tag.Error(err))
+		priority, ok := tasks.PriorityValue[key]
+		if !ok {
+			logger.Error("Unknown key for task priority name, fallback to default weights", tag.Key(key), tag.Value(value))
 			return DefaultTaskPriorityWeight
 		}
 
@@ -93,16 +69,10 @@ func ConvertDynamicConfigValueToWeights(
 		case int64:
 			intValue = int(value)
 		default:
-			logger.Error("Failed to parse dynamic config map value to int map, fallback to default weights", tag.Error(err))
+			logger.Error("Unknown type for task priority weight, fallback to default weights", tag.Key(key), tag.Value(value))
 			return DefaultTaskPriorityWeight
 		}
-		weights[intKey] = intValue
+		weights[priority] = intValue
 	}
 	return weights
-}
-
-func GetTaskPriority(
-	class, subClass int,
-) int {
-	return class | subClass
 }

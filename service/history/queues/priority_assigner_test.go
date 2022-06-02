@@ -36,8 +36,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
 
@@ -82,7 +81,7 @@ func (s *priorityAssignerSuite) TearDownTest() {
 func (s *priorityAssignerSuite) TestAssign_CriticalAttempts() {
 	mockExecutable := NewMockExecutable(s.controller)
 	mockExecutable.EXPECT().Attempt().Return(1000).AnyTimes()
-	mockExecutable.EXPECT().SetPriority(configs.TaskPriorityLow)
+	mockExecutable.EXPECT().SetPriority(tasks.PriorityLow)
 
 	err := s.priorityAssigner.Assign(mockExecutable)
 	s.NoError(err)
@@ -95,7 +94,7 @@ func (s *priorityAssignerSuite) TestAssign_StandbyNamespaceStandbyQueue() {
 	mockExecutable.EXPECT().Attempt().Return(10).AnyTimes()
 	mockExecutable.EXPECT().GetNamespaceID().Return(tests.NamespaceID.String()).AnyTimes()
 	mockExecutable.EXPECT().QueueType().Return(QueueTypeStandbyTransfer).AnyTimes()
-	mockExecutable.EXPECT().SetPriority(configs.TaskPriorityLow)
+	mockExecutable.EXPECT().SetPriority(tasks.PriorityLow)
 
 	err := s.priorityAssigner.Assign(mockExecutable)
 	s.NoError(err)
@@ -108,7 +107,7 @@ func (s *priorityAssignerSuite) TestAssign_NoopExecuable() {
 	mockExecutable.EXPECT().Attempt().Return(10).AnyTimes()
 	mockExecutable.EXPECT().GetNamespaceID().Return(tests.NamespaceID.String()).AnyTimes()
 	mockExecutable.EXPECT().QueueType().Return(QueueTypeActiveTransfer).AnyTimes()
-	mockExecutable.EXPECT().SetPriority(configs.TaskPriorityHigh)
+	mockExecutable.EXPECT().SetPriority(tasks.PriorityHigh)
 
 	err := s.priorityAssigner.Assign(mockExecutable)
 	s.NoError(err)
@@ -123,7 +122,7 @@ func (s *priorityAssignerSuite) TestAssign_SelectedTaskTypes() {
 	mockExecutable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT).AnyTimes()
 
 	mockExecutable.EXPECT().QueueType().Return(QueueTypeActiveTransfer).AnyTimes()
-	mockExecutable.EXPECT().SetPriority(configs.TaskPriorityDefault)
+	mockExecutable.EXPECT().SetPriority(tasks.PriorityMedium)
 
 	err := s.priorityAssigner.Assign(mockExecutable)
 	s.NoError(err)
@@ -137,10 +136,9 @@ func (s *priorityAssignerSuite) TestAssign_Throttled() {
 	mockExecutable.EXPECT().Attempt().Return(10).AnyTimes()
 	mockExecutable.EXPECT().GetNamespaceID().Return(tests.NamespaceID.String()).AnyTimes()
 	mockExecutable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_UNSPECIFIED).AnyTimes()
-	mockExecutable.EXPECT().GetCategory().Return(tasks.CategoryTransfer).AnyTimes()
 	mockExecutable.EXPECT().QueueType().Return(QueueTypeActiveTransfer).AnyTimes()
 
-	mockExecutable.EXPECT().SetPriority(configs.TaskPriorityHigh).Times(1)
+	mockExecutable.EXPECT().SetPriority(tasks.PriorityHigh).Times(1)
 	err := s.priorityAssigner.Assign(mockExecutable)
 	s.NoError(err)
 
@@ -150,7 +148,7 @@ func (s *priorityAssignerSuite) TestAssign_Throttled() {
 		s.NoError(err)
 	}
 
-	mockExecutable.EXPECT().SetPriority(configs.TaskPriorityDefault).Times(1)
+	mockExecutable.EXPECT().SetPriority(tasks.PriorityMedium).Times(1)
 	err = s.priorityAssigner.Assign(mockExecutable)
 	s.NoError(err)
 }

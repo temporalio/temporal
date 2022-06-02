@@ -99,6 +99,7 @@ const (
 	FailureTagName        = "failure"
 	TaskCategoryTagName   = "task_category"
 	TaskTypeTagName       = "task_type"
+	TaskPriorityTagName   = "task_priority"
 	QueueTypeTagName      = "queue_type"
 	visibilityTypeTagName = "visibility_type"
 	ErrorTypeTagName      = "error_type"
@@ -2200,8 +2201,6 @@ const (
 
 	ElasticsearchBulkProcessorBulkSize
 
-	ElasticsearchBulkProcessorDeadlock
-
 	NumHistoryMetrics
 )
 
@@ -2680,7 +2679,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ElasticsearchBulkProcessorWaitAddLatency:   NewTimerDef("elasticsearch_bulk_processor_wait_add_latency"),
 		ElasticsearchBulkProcessorWaitStartLatency: NewTimerDef("elasticsearch_bulk_processor_wait_start_latency"),
 		ElasticsearchBulkProcessorBulkSize:         NewDimensionlessHistogramDef("elasticsearch_bulk_processor_bulk_size"),
-		ElasticsearchBulkProcessorDeadlock:         NewCounterDef("elasticsearch_bulk_processor_deadlock"),
 	},
 	Matching: {
 		PollSuccessPerTaskQueueCounter:            NewRollupCounterDef("poll_success_per_tl", "poll_success"),

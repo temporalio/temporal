@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/common/tasks"
 )
 
 type (
@@ -86,14 +86,14 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 	*/
 
 	if executable.Attempt() > a.options.CriticalRetryAttempts() {
-		executable.SetPriority(configs.TaskPriorityLow)
+		executable.SetPriority(tasks.PriorityLow)
 		return nil
 	}
 
 	namespaceEntry, err := a.namespaceRegistry.GetNamespaceByID(namespace.ID(executable.GetNamespaceID()))
 	if err != nil {
 		if _, ok := err.(*serviceerror.NamespaceNotFound); ok {
-			executable.SetPriority(configs.TaskPriorityLow)
+			executable.SetPriority(tasks.PriorityLow)
 			return nil
 		}
 
@@ -117,7 +117,7 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 
 	if !taskActive && !namespaceActive {
 		// standby tasks
-		executable.SetPriority(configs.TaskPriorityLow)
+		executable.SetPriority(tasks.PriorityLow)
 		return nil
 	}
 
@@ -125,7 +125,7 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 		// no-op tasks, set to high priority to ack them as soon as possible
 		// don't consume rps limit
 		// ignoring overrides for some no-op standby tasks for now
-		executable.SetPriority(configs.TaskPriorityHigh)
+		executable.SetPriority(tasks.PriorityHigh)
 		return nil
 	}
 
@@ -136,23 +136,22 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 		enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
 		// add more task types here if we believe it's ok to delay those tasks
 		// and assign them the same priority as throttled tasks
-		executable.SetPriority(configs.TaskPriorityDefault)
+		executable.SetPriority(tasks.PriorityMedium)
 		return nil
 	}
 
 	ratelimiter := a.getOrCreateRateLimiter(executable.GetNamespaceID())
 	if !ratelimiter.Allow() {
-		executable.SetPriority(configs.TaskPriorityDefault)
+		executable.SetPriority(tasks.PriorityMedium)
 
-		category := executable.GetCategory()
 		a.scope.Tagged(
 			metrics.NamespaceTag(namespaceName),
-			metrics.TaskCategoryTag(category.Name()),
+			metrics.TaskTypeTag(executable.GetType().String()),
 		).IncCounter(metrics.TaskThrottledCounter)
 		return nil
 	}
 
-	executable.SetPriority(configs.TaskPriorityHigh)
+	executable.SetPriority(tasks.PriorityHigh)
 	return nil
 }
 

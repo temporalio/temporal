@@ -46,7 +46,7 @@ var (
 )
 
 func BenchmarkInterleavedWeightedRoundRobinScheduler(b *testing.B) {
-	priorityToWeight := map[int]int{
+	priorityToWeight := map[Priority]int{
 		0: 5,
 		1: 3,
 		2: 2,
@@ -89,5 +89,5 @@ func (n *noopTask) Ack()                             { n.Done() }
 func (n *noopTask) Nack(err error)                   { panic("implement me") }
 func (n *noopTask) Reschedule()                      { panic("implement me") }
 func (n *noopTask) State() State                     { panic("implement me") }
-func (n *noopTask) GetPriority() int                 { return 0 }
-func (n *noopTask) SetPriority(i int)                { panic("implement me") }
+func (n *noopTask) GetPriority() Priority            { return 0 }
+func (n *noopTask) SetPriority(i Priority)           { panic("implement me") }

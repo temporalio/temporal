@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -59,6 +60,7 @@ func newTransferQueueStandbyProcessor(
 	archivalClient archiver.Client,
 	taskAllocator taskAllocator,
 	clientBean client.Bean,
+	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueStandbyProcessorImpl {
@@ -66,7 +68,6 @@ func newTransferQueueStandbyProcessor(
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		BatchSize:                           config.TransferTaskBatchSize,
-		MaxPollRPS:                          config.TransferProcessorMaxPollRPS,
 		MaxPollInterval:                     config.TransferProcessorMaxPollInterval,
 		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
 		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
@@ -176,6 +177,7 @@ func newTransferQueueStandbyProcessor(
 		workflowCache,
 		scheduler,
 		rescheduler,
+		rateLimiter,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferStandbyQueueProcessorScope),
 	)
