@@ -60,7 +60,7 @@ func (c *Collection) logError(key Key, err error) {
 	errCount := atomic.AddInt64(&c.errCount, 1)
 	if errCount%errCountLogThreshold == 0 {
 		// log only every 'x' errors to reduce mem allocs and to avoid log noise
-		c.logger.Debug("Failed to fetch key from dynamic config", tag.Key(key.String()), tag.Error(err))
+		c.logger.Debug("No such key in dynamic config, using default", tag.Key(key.String()), tag.Error(err))
 	}
 }
 
