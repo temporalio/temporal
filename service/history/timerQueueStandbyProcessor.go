@@ -123,7 +123,7 @@ func newTimerQueueStandbyProcessor(
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		metricsClient.Scope(metrics.TimerActiveQueueProcessorScope),
+		metricsClient.Scope(metrics.TimerStandbyQueueProcessorScope),
 	)
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
