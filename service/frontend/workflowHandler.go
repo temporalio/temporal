@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -63,6 +64,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -3266,11 +3268,18 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		if !needRefresh {
 			token := make([]byte, 8)
 			binary.BigEndian.PutUint64(token, uint64(response.ConflictToken))
+
+			searchAttrs := describeResponse.GetWorkflowExecutionInfo().GetSearchAttributes()
+			searchAttrs = wh.cleanScheduleSearchAttrs(searchAttrs)
+
+			memo := describeResponse.GetWorkflowExecutionInfo().GetMemo()
+			memo = wh.cleanScheduleMemo(memo)
+
 			describeScheduleResponse = &workflowservice.DescribeScheduleResponse{
 				Schedule:         response.Schedule,
 				Info:             response.Info,
-				Memo:             describeResponse.GetWorkflowExecutionInfo().Memo,
-				SearchAttributes: describeResponse.GetWorkflowExecutionInfo().SearchAttributes,
+				Memo:             memo,
+				SearchAttributes: searchAttrs,
 				ConflictToken:    token,
 			}
 			return nil
@@ -3611,10 +3620,15 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 
 	schedules := make([]*schedpb.ScheduleListEntry, len(persistenceResp.Executions))
 	for i, ex := range persistenceResp.Executions {
+		searchAttrs := ex.GetSearchAttributes()
+		info := wh.decodeScheduleListInfo(searchAttrs)
+		searchAttrs = wh.cleanScheduleSearchAttrs(searchAttrs)
+		memo := wh.cleanScheduleMemo(ex.GetMemo())
 		schedules[i] = &schedpb.ScheduleListEntry{
 			ScheduleId:       ex.GetExecution().GetWorkflowId(),
-			Memo:             ex.GetMemo(),
-			SearchAttributes: ex.GetSearchAttributes(),
+			Memo:             memo,
+			SearchAttributes: searchAttrs,
+			Info:             info,
 		}
 	}
 
@@ -4343,4 +4357,49 @@ func (wh *WorkflowHandler) trimHistoryNode(
 			tag.Error(err),
 		)
 	}
+}
+
+func (wh *WorkflowHandler) decodeScheduleListInfo(searchAttrs *commonpb.SearchAttributes) *schedpb.ScheduleListInfo {
+	var listInfoStr string
+	var listInfoPb schedpb.ScheduleListInfo
+	if listInfoPayload := searchAttrs.GetIndexedFields()[searchattribute.ScheduleInfoJSON]; listInfoPayload == nil {
+		return nil
+	} else if err := payload.Decode(listInfoPayload, &listInfoStr); err != nil {
+		wh.logger.Error("decoding schedule list info to string", tag.Error(err))
+		return nil
+	} else if err = json.Unmarshal([]byte(listInfoStr), &listInfoPb); err != nil {
+		wh.logger.Error("decoding schedule list info from json", tag.Error(err))
+		return nil
+	} else {
+		return &listInfoPb
+	}
+}
+
+// This mutates searchAttrs
+func (wh *WorkflowHandler) cleanScheduleSearchAttrs(searchAttrs *commonpb.SearchAttributes) *commonpb.SearchAttributes {
+	fields := searchAttrs.GetIndexedFields()
+	if len(fields) == 0 {
+		return nil
+	}
+
+	delete(fields, searchattribute.SchedulePaused)
+	delete(fields, searchattribute.ScheduleInfoJSON)
+	// this isn't schedule-related but isn't relevant to the user for
+	// scheduler workflows since it's the server worker
+	delete(fields, searchattribute.BinaryChecksums)
+
+	if len(fields) == 0 {
+		return nil
+	}
+	return searchAttrs
+}
+
+// This mutates memo
+func (wh *WorkflowHandler) cleanScheduleMemo(memo *commonpb.Memo) *commonpb.Memo {
+	fields := memo.GetFields()
+	if len(fields) == 0 {
+		return nil
+	}
+	// we don't define any fields here but might in the future
+	return memo
 }

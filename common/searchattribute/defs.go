@@ -49,6 +49,14 @@ const (
 	BatcherNamespace      = "BatcherNamespace"
 	BatcherUser           = "BatcherUser"
 
+	// added to workflows started by a schedule
+	ScheduledStartTime = "ScheduledStartTime"
+	ScheduledById      = "ScheduledById"
+
+	// used by scheduler workflow
+	SchedulePaused   = "SchedulePaused"
+	ScheduleInfoJSON = "ScheduleInfoJSON"
+
 	MemoEncoding      = "MemoEncoding"
 	Memo              = "Memo"
 	VisibilityTaskKey = "VisibilityTaskKey"
@@ -78,6 +86,10 @@ var (
 		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BatcherNamespace:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BatcherUser:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		ScheduledStartTime:    enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		ScheduledById:         enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		SchedulePaused:        enumspb.INDEXED_VALUE_TYPE_BOOL,
+		ScheduleInfoJSON:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.

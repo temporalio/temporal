@@ -47,6 +47,7 @@ import (
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 const (
@@ -66,14 +67,6 @@ const (
 	// Maximum number of times to list per ListMatchingTimes query. (This is used only in a
 	// query so it can be changed without breaking history.)
 	maxListMatchingTimesCount = 1000
-
-	// search attributes for started workflows
-	searchAttrStartTime    = "TemporalScheduledStartTime"
-	searchAttrScheduleById = "TemporalScheduledById"
-
-	// search attributes for scheduler workflows, for internal use
-	searchAttrPaused = "TemporalSchedulePaused"
-	searchAttrInfo   = "TemporalScheduleInfo"
 )
 
 type (
@@ -103,6 +96,8 @@ type (
 		AlwaysAppendTimestamp             bool          // Whether to append timestamp for non-overlapping workflows too
 		FutureActionCount                 int           // The number of future action times to include in Describe.
 		RecentActionCount                 int           // The number of recent actual action results to include in Describe.
+		FutureActionCountForList          int           // The number of future action times to include in List (search attr).
+		RecentActionCountForList          int           // The number of recent actual action results to include in List (search attr).
 		IterationsBeforeContinueAsNew     int
 	}
 )
@@ -130,6 +125,8 @@ var (
 		AlwaysAppendTimestamp:             true,
 		FutureActionCount:                 10,
 		RecentActionCount:                 10,
+		FutureActionCountForList:          5,
+		RecentActionCountForList:          5,
 		IterationsBeforeContinueAsNew:     500,
 	}
 
@@ -533,17 +530,21 @@ func (s *scheduler) incSeqNo() {
 }
 
 func (s *scheduler) getListInfo() *schedpb.ScheduleListInfo {
+	recent := s.Info.RecentActions
+	if len(recent) > s.tweakables.RecentActionCountForList {
+		recent = recent[len(recent)-s.tweakables.RecentActionCountForList:]
+	}
 	return &schedpb.ScheduleListInfo{
 		Notes:             s.Schedule.State.Notes,
 		Paused:            s.Schedule.State.Paused,
-		RecentActions:     s.Info.RecentActions,
-		FutureActionTimes: s.getFutureActionTimes(5), // FIXME: make tweakable
+		RecentActions:     recent,
+		FutureActionTimes: s.getFutureActionTimes(s.tweakables.FutureActionCountForList),
 	}
 }
 
 func (s *scheduler) updateSearchAttrs() {
 	var currentInfo string
-	if payload := workflow.GetInfo(s.ctx).SearchAttributes.GetIndexedFields()[searchAttrInfo]; payload != nil {
+	if payload := workflow.GetInfo(s.ctx).SearchAttributes.GetIndexedFields()[searchattribute.ScheduleInfoJSON]; payload != nil {
 		if err := converter.GetDefaultDataConverter().FromPayload(payload, &currentInfo); err != nil {
 			s.logger.Error("error decoding current info search attr", "error", err)
 			return
@@ -563,8 +564,8 @@ func (s *scheduler) updateSearchAttrs() {
 	}
 
 	err = workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
-		searchAttrPaused: s.Schedule.State.Paused,
-		searchAttrInfo:   newInfoStr,
+		searchattribute.SchedulePaused:   s.Schedule.State.Paused,
+		searchattribute.ScheduleInfoJSON: newInfoStr,
 	})
 	if err != nil {
 		s.logger.Error("error updating search attrs", "error", err)
@@ -794,10 +795,10 @@ func (s *scheduler) addSearchAttrs(
 ) *commonpb.SearchAttributes {
 	fields := maps.Clone(attrs.GetIndexedFields())
 	if p, err := payload.Encode(nominal); err == nil {
-		fields[searchAttrStartTime] = p
+		fields[searchattribute.ScheduledStartTime] = p
 	}
 	if p, err := payload.Encode(s.State.ScheduleId); err == nil {
-		fields[searchAttrScheduleById] = p
+		fields[searchattribute.ScheduledById] = p
 	}
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,
