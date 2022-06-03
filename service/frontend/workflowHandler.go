@@ -3404,6 +3404,11 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, err
 	}
 
+	if len(request.Patch.Pause) > common.ScheduleNotesSizeLimit ||
+		len(request.Patch.Unpause) > common.ScheduleNotesSizeLimit {
+		return nil, errNotesTooLong
+	}
+
 	inputPayloads, err := payloads.Encode(request.Patch)
 
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
