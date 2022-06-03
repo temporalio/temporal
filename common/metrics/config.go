@@ -25,7 +25,6 @@
 package metrics
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
@@ -240,50 +239,14 @@ var (
 			16777216,
 		},
 	}
+
+	defaultConfig = ClientConfig{
+		Tags:                       nil,
+		ExcludeTags:                map[string][]string{},
+		Prefix:                     "",
+		PerUnitHistogramBoundaries: map[string][]float64{Dimensionless: {0, 10, 100}, Bytes: {1024, 2048}},
+	}
 )
-
-// InitMetricsReporter is a method that initializes reporter to be used inside server.
-//
-// Reporter is a base for reporting metrics and is used to initialize MetricsClient or UserScope.
-// MetricsClient is utilized internally in server to report metrics.
-// UserScope is utilized by user to report metrics.
-//
-// Recommended to use for current support for reporting metrics in extensions.
-//
-// reporter := InitMetricsReporter()
-// extension := MyExtensions(reporter.UserScope())
-// serverOptions.WithReporter(reporter)
-func InitMetricsReporter(logger log.Logger, c *Config) (Reporter, error) {
-	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
-	if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
-		return InitReporterFromPrometheusConfig(logger, c.Prometheus, &c.ClientConfig)
-	}
-	return NewTallyReporterFromConfig(logger, c)
-}
-
-func NewTallyReporterFromConfig(logger log.Logger, c *Config) (*TallyReporter, error) {
-	scope := NewScope(logger, c)
-	reporter := NewTallyReporter(scope, &c.ClientConfig)
-	return reporter, nil
-}
-
-// InitReporterFromPrometheusConfig initializes reporter from PrometheusConfig
-//
-// This is a custom case of initializing temporal metrics reporter.
-func InitReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfig, clientConfig *ClientConfig) (Reporter, error) {
-	// TODO: We should switch to this being the only metrics reporter constructor once we decide to deprecate tally and
-	// custom tally configs Config.Statsd and Config.M3.
-	switch config.Framework {
-	case FrameworkTally:
-		return NewTallyReporterFromPrometheusConfig(logger, config, clientConfig), nil
-	case FrameworkOpentelemetry:
-		return NewOpenTelemetryReporterFromPrometheusConfig(logger, config, clientConfig)
-	default:
-		err := fmt.Errorf("unsupported framework type specified in config: %q", config.Framework)
-		logger.Error(err.Error())
-		return nil, err
-	}
-}
 
 // NewScope builds a new tally scope for this metrics configuration
 //
@@ -300,16 +263,6 @@ func NewScope(logger log.Logger, c *Config) tally.Scope {
 		return newPrometheusScope(logger, convertPrometheusConfigToTally(c.Prometheus), &c.ClientConfig)
 	}
 	return tally.NoopScope
-}
-
-func NewTallyReporterFromPrometheusConfig(
-	logger log.Logger,
-	config *PrometheusConfig,
-	clientConfig *ClientConfig,
-) Reporter {
-	tallyConfig := convertPrometheusConfigToTally(config)
-	tallyScope := newPrometheusScope(logger, tallyConfig, clientConfig)
-	return NewTallyReporter(tallyScope, clientConfig)
 }
 
 func buildHistogramBuckets(

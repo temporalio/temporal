@@ -39,6 +39,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -721,10 +722,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	// So we can get snapshots
 	scope := tally.NewTestScope("test", nil)
-	var err error
-	s.matchingEngine.metricsClient, err = metrics.NewTallyClient(&metrics.ClientConfig{}, scope, metrics.Matching)
-	s.NoError(err)
+	s.matchingEngine.metricsClient = metrics.NewEventsClient(metrics.NewEventsMetricProvider(metrics.NewTallyMetricHandler(log.NewTestLogger(), scope, metrics.ClientConfig{}, nil)), metrics.Matching)
 
+	var err error
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config, s.matchingEngine.clusterMeta)
 	s.NoError(err)
@@ -863,7 +863,8 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	}
 
 	time.Sleep(20 * time.Millisecond) // So any buffer tasks from 0 rps get picked up
-	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count_per_tl+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,service_name=matching,task_type=Activity,taskqueue=makeToast"]
+	snap := scope.Snapshot()
+	syncCtr := snap.Counters()["test.sync_throttle_count_per_tl+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,service_name=matching,task_type=Activity,taskqueue=makeToast"]
 	s.Equal(1, int(syncCtr.Value()))                         // Check times zero rps is set = throttle counter
 	s.EqualValues(1, s.taskManager.getCreateTaskCount(tlID)) // Check times zero rps is set = Tasks stored in persistence
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
@@ -929,9 +930,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	dispatchLimitFn func(int, int64) float64,
 ) int64 {
 	scope := tally.NewTestScope("test", nil)
-	var err error
-	s.matchingEngine.metricsClient, err = metrics.NewTallyClient(&metrics.ClientConfig{}, scope, metrics.Matching)
-	s.NoError(err)
+	s.matchingEngine.metricsClient = metrics.NewEventsClient(metrics.NewEventsMetricProvider(metrics.NewTallyMetricHandler(log.NewTestLogger(), scope, metrics.ClientConfig{}, nil)), metrics.Matching)
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -946,6 +945,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
+	var err error
 	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config, s.matchingEngine.clusterMeta)
 	s.NoError(err)
 

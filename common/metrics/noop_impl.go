@@ -28,15 +28,15 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/server/common/log"
 	"golang.org/x/exp/event"
+
+	"go.temporal.io/server/common/log"
 )
 
 var (
 	NoopReporter      Reporter      = newNoopReporter()
 	NoopClient        Client        = newNoopClient()
-	noopInternalScope internalScope = newNoopScope()
-	NoopScope         Scope         = noopInternalScope
+	NoopScope         Scope         = newNoopScope()
 	NoopUserScope     UserScope     = newNoopUserScope()
 	NoopStopwatch     Stopwatch     = newNoopStopwatch()
 	NoopMetricHandler MetricHandler = newNoopMetricHandler()
@@ -55,8 +55,8 @@ func newNoopReporter() *noopReporterImpl {
 	return &noopReporterImpl{}
 }
 
-func (*noopReporterImpl) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
-	return NoopClient, nil
+func (*noopReporterImpl) MetricProvider() MetricProvider {
+	return NewEventsMetricProvider(NoopMetricHandler)
 }
 
 func (*noopReporterImpl) Stop(logger log.Logger) {}
@@ -109,12 +109,8 @@ func (m *noopClientImpl) Scope(scope int, tags ...Tag) Scope {
 	return NoopScope
 }
 
-func (m *noopClientImpl) UserScope() UserScope {
-	return NoopUserScope
-}
-
 // NoopScope returns a noop scope of metrics
-func newNoopScope() internalScope {
+func newNoopScope() *noopScopeImpl {
 	return &noopScopeImpl{}
 }
 
@@ -129,10 +125,6 @@ func (n *noopScopeImpl) RecordTimerInternal(timer string, d time.Duration) {
 }
 
 func (n *noopScopeImpl) RecordDistributionInternal(id string, unit MetricUnit, d int) {
-}
-
-func (n *noopScopeImpl) TaggedInternal(tags ...Tag) internalScope {
-	return n
 }
 
 func (n *noopScopeImpl) IncCounter(counter int) {}
@@ -168,3 +160,5 @@ func newNoopMetricHandler() *noopMetricHandler {
 func (*noopMetricHandler) Event(ctx context.Context, _ *event.Event) context.Context {
 	return ctx
 }
+
+func (*noopMetricHandler) Stop(log.Logger) {}

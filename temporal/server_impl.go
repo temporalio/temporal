@@ -72,7 +72,7 @@ func NewServerFxImpl(
 	namespaceLogger resource.NamespaceLogger,
 	stoppedCh chan interface{},
 	dcCollection *dynamicconfig.Collection,
-	serverReporter resource.ServerReporter,
+	serverReporter metrics.Reporter,
 	servicesGroup ServicesGroupIn,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,

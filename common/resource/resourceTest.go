@@ -29,6 +29,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/uber-go/tally/v4"
+
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
 
@@ -163,11 +164,10 @@ func NewTest(
 	membershipMonitor.EXPECT().GetResolver(common.WorkerServiceName).Return(workerServiceResolver, nil).AnyTimes()
 
 	scope := tally.NewTestScope("test", nil)
-
-	metricClient, err := metrics.NewTallyClient(&metrics.ClientConfig{}, scope, serviceMetricsIndex)
-	if err != nil {
-		panic(err)
-	}
+	metricClient := metrics.NewEventsClient(
+		metrics.NewEventsMetricProvider(metrics.NewTallyMetricHandler(logger, scope, metrics.ClientConfig{}, nil)),
+		serviceMetricsIndex,
+	)
 
 	return &Test{
 		MetricsScope:             scope,

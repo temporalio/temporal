@@ -34,55 +34,60 @@ import (
 
 type (
 	MetricsHandler struct {
-		scope metrics.UserScope
+		provider metrics.MetricProvider
 	}
 
 	metricsCounter struct {
-		name  string
-		scope metrics.UserScope
+		name     string
+		provider metrics.MetricProvider
 	}
 
 	metricsGauge struct {
-		name  string
-		scope metrics.UserScope
+		name     string
+		provider metrics.MetricProvider
 	}
 
 	metricsTimer struct {
-		name  string
-		scope metrics.UserScope
+		name     string
+		provider metrics.MetricProvider
 	}
 )
 
 var _ sdkclient.MetricsHandler = &MetricsHandler{}
 
-func NewMetricHandler(scope metrics.UserScope) *MetricsHandler {
-	return &MetricsHandler{scope: scope}
+func NewMetricHandler(provider metrics.MetricProvider) *MetricsHandler {
+	return &MetricsHandler{provider: provider}
 }
 
 func (m *MetricsHandler) WithTags(tags map[string]string) sdkclient.MetricsHandler {
-	return NewMetricHandler(m.scope.Tagged(tags))
+	t := make([]metrics.Tag, 0, len(tags))
+	for k, v := range tags {
+		t = append(t, metrics.StringTag(k, v))
+	}
+
+	return NewMetricHandler(m.provider.WithTags(t...))
 }
 
 func (m *MetricsHandler) Counter(name string) sdkclient.MetricsCounter {
-	return &metricsCounter{name: name, scope: m.scope}
+	return &metricsCounter{name: name, provider: m.provider}
 }
 
 func (m *MetricsHandler) Gauge(name string) sdkclient.MetricsGauge {
-	return &metricsGauge{name: name, scope: m.scope}
+	return &metricsGauge{name: name, provider: m.provider}
 }
 
 func (m *MetricsHandler) Timer(name string) sdkclient.MetricsTimer {
-	return &metricsTimer{name: name, scope: m.scope}
+	return &metricsTimer{name: name, provider: m.provider}
 }
 
 func (m metricsCounter) Inc(i int64) {
-	m.scope.AddCounter(m.name, i)
+	m.provider.Counter(m.name, nil).Record(i)
 }
 
 func (m metricsGauge) Update(f float64) {
-	m.scope.UpdateGauge(m.name, f)
+	m.provider.Gauge(m.name, nil).Record(f)
 }
 
 func (m metricsTimer) Record(duration time.Duration) {
-	m.scope.RecordTimer(m.name, duration)
+	m.provider.Timer(m.name, nil).Record(duration)
 }
