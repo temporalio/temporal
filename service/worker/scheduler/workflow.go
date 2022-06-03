@@ -567,7 +567,7 @@ func (s *scheduler) updateSearchAttrs() {
 	dc := converter.GetDefaultDataConverter()
 
 	var currentInfo, newInfo string
-	if payload := workflow.GetInfo(s.ctx).SearchAttributes.GetIndexedFields()[searchattribute.ScheduleInfoJSON]; payload != nil {
+	if payload := workflow.GetInfo(s.ctx).SearchAttributes.GetIndexedFields()[searchattribute.TemporalScheduleInfoJSON]; payload != nil {
 		if err := dc.FromPayload(payload, &currentInfo); err != nil {
 			s.logger.Error("error decoding current info search attr", "error", err)
 			return
@@ -596,8 +596,8 @@ func (s *scheduler) updateSearchAttrs() {
 	}
 
 	err := workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
-		searchattribute.SchedulePaused:   s.Schedule.State.Paused,
-		searchattribute.ScheduleInfoJSON: newInfo,
+		searchattribute.TemporalSchedulePaused:   s.Schedule.State.Paused,
+		searchattribute.TemporalScheduleInfoJSON: newInfo,
 	})
 	if err != nil {
 		s.logger.Error("error updating search attrs", "error", err)
@@ -823,10 +823,10 @@ func (s *scheduler) addSearchAttrs(
 ) *commonpb.SearchAttributes {
 	fields := maps.Clone(attrs.GetIndexedFields())
 	if p, err := payload.Encode(nominal); err == nil {
-		fields[searchattribute.ScheduledStartTime] = p
+		fields[searchattribute.TemporalScheduledStartTime] = p
 	}
 	if p, err := payload.Encode(s.State.ScheduleId); err == nil {
-		fields[searchattribute.ScheduledById] = p
+		fields[searchattribute.TemporalScheduledById] = p
 	}
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,

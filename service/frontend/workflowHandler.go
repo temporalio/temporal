@@ -4362,7 +4362,7 @@ func (wh *WorkflowHandler) trimHistoryNode(
 func (wh *WorkflowHandler) decodeScheduleListInfo(searchAttrs *commonpb.SearchAttributes) *schedpb.ScheduleListInfo {
 	var listInfoStr string
 	var listInfoPb schedpb.ScheduleListInfo
-	if listInfoPayload := searchAttrs.GetIndexedFields()[searchattribute.ScheduleInfoJSON]; listInfoPayload == nil {
+	if listInfoPayload := searchAttrs.GetIndexedFields()[searchattribute.TemporalScheduleInfoJSON]; listInfoPayload == nil {
 		return nil
 	} else if err := payload.Decode(listInfoPayload, &listInfoStr); err != nil {
 		wh.logger.Error("decoding schedule list info from payload", tag.Error(err))
@@ -4381,8 +4381,8 @@ func (wh *WorkflowHandler) cleanScheduleSearchAttrs(searchAttrs *commonpb.Search
 		return nil
 	}
 
-	delete(fields, searchattribute.SchedulePaused)
-	delete(fields, searchattribute.ScheduleInfoJSON)
+	delete(fields, searchattribute.TemporalSchedulePaused)
+	delete(fields, searchattribute.TemporalScheduleInfoJSON)
 	// this isn't schedule-related but isn't relevant to the user for
 	// scheduler workflows since it's the server worker
 	delete(fields, searchattribute.BinaryChecksums)
