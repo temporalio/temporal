@@ -36,11 +36,11 @@ import (
 )
 
 type TallyMetricHandler struct {
-	scope       tally.Scope
-	mu          sync.Mutex
-	l           log.Logger
-	recordFuncs map[event.Metric]tallyRecordFunc
-
+	scope          tally.Scope
+	mu             sync.Mutex
+	l              log.Logger
+	recordFuncs    map[event.Metric]tallyRecordFunc
+	excludeTags    map[string]map[string]struct{}
 	perUnitBuckets map[MetricUnit]tally.Buckets
 }
 
@@ -49,7 +49,7 @@ type tallyRecordFunc func(event.Label)
 var _ MetricHandler = (*TallyMetricHandler)(nil)
 
 // NewTallyMetricHandler creates a new tally event.Handler.
-func NewTallyMetricHandler(log log.Logger, scope tally.Scope, perUnitHistogramBoundaries map[string][]float64) *TallyMetricHandler {
+func NewTallyMetricHandler(log log.Logger, scope tally.Scope, cfg ClientConfig, perUnitHistogramBoundaries map[string][]float64) *TallyMetricHandler {
 	perUnitBuckets := make(map[MetricUnit]tally.Buckets)
 	for unit, boundariesList := range perUnitHistogramBoundaries {
 		perUnitBuckets[MetricUnit(unit)] = tally.ValueBuckets(boundariesList)
@@ -60,6 +60,7 @@ func NewTallyMetricHandler(log log.Logger, scope tally.Scope, perUnitHistogramBo
 		scope:          scope,
 		perUnitBuckets: perUnitBuckets,
 		recordFuncs:    make(map[event.Metric]tallyRecordFunc),
+		excludeTags:    configExcludeTags(cfg),
 	}
 }
 
@@ -79,7 +80,7 @@ func (t *TallyMetricHandler) Event(ctx context.Context, e *event.Event) context.
 		t.l.Fatal("no metric value for metric event", tag.NewAnyTag("event", e))
 	}
 
-	rf := t.getRecordFunc(em, labelsToMap(e.Labels))
+	rf := t.getRecordFunc(em, t.labelsToMap(e.Labels))
 	if rf == nil {
 		t.l.Fatal("unable to record for metric", tag.NewAnyTag("event", e))
 	}
@@ -132,9 +133,16 @@ func (t *TallyMetricHandler) newRecordFunc(em event.Metric, tags map[string]stri
 	}
 }
 
-func labelsToMap(attrs []event.Label) map[string]string {
+func (t *TallyMetricHandler) labelsToMap(attrs []event.Label) map[string]string {
 	tags := make(map[string]string)
 	for _, l := range attrs {
+		if vals, ok := t.excludeTags[l.Name]; ok {
+			if _, ok := vals[l.String()]; ok {
+				tags[l.Name] = tagExcludedValue
+				continue
+			}
+		}
+
 		if l.Name == string(event.MetricKey) || l.Name == string(event.MetricVal) {
 			continue
 		}

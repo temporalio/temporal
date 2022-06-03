@@ -44,7 +44,7 @@ import (
 func TestMeter(t *testing.T) {
 	ctx := context.Background()
 	mp, exp := metrictest.NewTestMeterProvider()
-	mh := NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: mp.Meter("test")})
+	mh := NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: mp.Meter("test")}, defaultConfig)
 	ctx = event.WithExporter(ctx, event.NewExporter(mh, nil))
 	recordMetrics(ctx)
 

@@ -35,8 +35,8 @@ import (
 
 type (
 	eventsMetricProvider struct {
-		context context.Context
-		tags    []Tag
+		tags     []Tag
+		exporter *event.Exporter
 	}
 
 	// MetricHandler represents the extension point for collection instruments
@@ -62,6 +62,7 @@ func MetricHandlerFromConfig(logger log.Logger, c *Config) MetricHandler {
 					convertPrometheusConfigToTally(c.Prometheus),
 					&c.ClientConfig,
 				),
+				c.ClientConfig,
 				c.ClientConfig.PerUnitHistogramBoundaries,
 			)
 		case FrameworkOpentelemetry:
@@ -70,13 +71,14 @@ func MetricHandlerFromConfig(logger log.Logger, c *Config) MetricHandler {
 				logger.Fatal(err.Error())
 			}
 
-			return NewOtelMetricHandler(logger, otelProvider)
+			return NewOtelMetricHandler(logger, otelProvider, c.ClientConfig)
 		}
 	}
 
 	return NewTallyMetricHandler(
 		logger,
 		NewScope(logger, c),
+		c.ClientConfig,
 		c.ClientConfig.PerUnitHistogramBoundaries,
 	)
 }
@@ -90,18 +92,19 @@ func NewEventsMetricProvider(h MetricHandler) eventsMetricProvider {
 	}
 
 	return eventsMetricProvider{
-		context: event.WithExporter(context.Background(), event.NewExporter(h, eo)),
-		tags:    []Tag{},
+		exporter: event.NewExporter(h, eo),
+		tags:     []Tag{},
 	}
 }
 
 // WithTags creates a new MetricProvder with provided []Tag
 // Tags are merged with registered Tags from the source MetricProvider
 func (emp eventsMetricProvider) WithTags(tags ...Tag) MetricProvider {
-	t := append(make([]Tag, 0, len(emp.tags)+len(tags)), emp.tags...)
+	var t []Tag
+	t = append(t, emp.tags...)
 	return &eventsMetricProvider{
-		context: emp.context,
-		tags:    append(t, tags...),
+		exporter: emp.exporter,
+		tags:     append(t, tags...),
 	}
 }
 
@@ -109,7 +112,10 @@ func (emp eventsMetricProvider) WithTags(tags ...Tag) MetricProvider {
 func (emp eventsMetricProvider) Counter(n string, m *MetricOptions) CounterMetric {
 	e := event.NewCounter(n, m)
 	return CounterMetricFunc(func(i int64, t ...Tag) {
-		e.Record(emp.context, i, tagsToLabels(append(emp.tags, t...))...)
+		e.Record(
+			event.WithExporter(context.Background(), emp.exporter),
+			i,
+			tagsToLabels(emp.tags, t)...)
 	})
 }
 
@@ -117,7 +123,10 @@ func (emp eventsMetricProvider) Counter(n string, m *MetricOptions) CounterMetri
 func (emp eventsMetricProvider) Gauge(n string, m *MetricOptions) GaugeMetric {
 	e := event.NewFloatGauge(n, m)
 	return GaugeMetricFunc(func(f float64, t ...Tag) {
-		e.Record(emp.context, f, tagsToLabels(append(emp.tags, t...))...)
+		e.Record(
+			event.WithExporter(context.Background(), emp.exporter),
+			f,
+			tagsToLabels(emp.tags, t)...)
 	})
 }
 
@@ -125,7 +134,10 @@ func (emp eventsMetricProvider) Gauge(n string, m *MetricOptions) GaugeMetric {
 func (emp eventsMetricProvider) Timer(n string, m *MetricOptions) TimerMetric {
 	e := event.NewDuration(n, m)
 	return TimerMetricFunc(func(d time.Duration, t ...Tag) {
-		e.Record(emp.context, d, tagsToLabels(append(emp.tags, t...))...)
+		e.Record(
+			event.WithExporter(context.Background(), emp.exporter),
+			d,
+			tagsToLabels(emp.tags, t)...)
 	})
 }
 
@@ -133,16 +145,23 @@ func (emp eventsMetricProvider) Timer(n string, m *MetricOptions) TimerMetric {
 func (emp eventsMetricProvider) Histogram(n string, m *MetricOptions) HistogramMetric {
 	e := event.NewIntDistribution(n, m)
 	return HistogramMetricFunc(func(i int64, t ...Tag) {
-		e.Record(emp.context, i, tagsToLabels(append(emp.tags, t...))...)
+		e.Record(
+			event.WithExporter(context.Background(), emp.exporter),
+			i,
+			tagsToLabels(emp.tags, t)...)
 	})
 }
 
 // tagsToLabels helper to merge registred tags and additional tags converting to event.Label struct
-func tagsToLabels(tags []Tag) []event.Label {
-	l := make([]event.Label, len(tags))
+func tagsToLabels(t1 []Tag, t2 []Tag) []event.Label {
+	l := make([]event.Label, 0, len(t1)+len(t2))
 
-	for i := range tags {
-		l[i] = event.String(tags[i].Key(), tags[i].Value())
+	for i := range t1 {
+		l = append(l, event.String(t1[i].Key(), t1[i].Value()))
+	}
+
+	for i := range t2 {
+		l = append(l, event.String(t2[i].Key(), t2[i].Value()))
 	}
 
 	return l

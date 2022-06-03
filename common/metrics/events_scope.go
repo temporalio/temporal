@@ -25,6 +25,7 @@
 package metrics
 
 import (
+	"fmt"
 	"time"
 
 	"golang.org/x/exp/event"
@@ -58,7 +59,7 @@ func newEventsScope(provider MetricProvider, idx ServiceIdx, id int) eventsScope
 		provider:   provider,
 		serviceIdx: idx,
 		scopeId:    id,
-		scopeTags:  append(make([]Tag, 0), scopeDefToTags(ScopeDefs[idx][id])...),
+		scopeTags:  scopeDefToTags(ScopeDefs[idx][id]),
 		scopeDef:   ScopeDefs[idx][id],
 	}
 }
@@ -70,7 +71,7 @@ func (e eventsScope) IncCounter(counter int) {
 
 // AddCounter adds delta to the counter metric
 func (e eventsScope) AddCounter(counter int, delta int64) {
-	m := MetricDefs[e.serviceIdx][counter]
+	m := getDefinition(e.serviceIdx, counter)
 
 	e.provider.Counter(m.metricName.String(), &MetricOptions{
 		Unit: event.Unit(m.unit),
@@ -88,7 +89,7 @@ func (e eventsScope) AddCounter(counter int, delta int64) {
 func (e eventsScope) StartTimer(timer int) Stopwatch {
 	return &eventsStopwatch{
 		recordFunc: func(d time.Duration) {
-			m := MetricDefs[e.serviceIdx][timer]
+			m := getDefinition(e.serviceIdx, timer)
 
 			e.provider.Timer(m.metricName.String(), nil).Record(d, e.scopeTags...)
 
@@ -102,7 +103,7 @@ func (e eventsScope) StartTimer(timer int) Stopwatch {
 
 // RecordTimer records a timer for the given metric name
 func (e eventsScope) RecordTimer(timer int, d time.Duration) {
-	m := MetricDefs[e.serviceIdx][timer]
+	m := getDefinition(e.serviceIdx, timer)
 
 	e.provider.Timer(m.metricName.String(), &MetricOptions{
 		Unit: event.Unit(m.unit),
@@ -118,7 +119,7 @@ func (e eventsScope) RecordTimer(timer int, d time.Duration) {
 // RecordDistribution records a distribution (wrapper on top of timer) for the given
 // metric name
 func (e eventsScope) RecordDistribution(id int, d int) {
-	m := MetricDefs[e.serviceIdx][id]
+	m := getDefinition(e.serviceIdx, id)
 
 	e.provider.Histogram(m.metricName.String(), &MetricOptions{
 		Unit: event.Unit(m.unit),
@@ -133,7 +134,7 @@ func (e eventsScope) RecordDistribution(id int, d int) {
 
 // UpdateGauge reports Gauge type absolute value metric
 func (e eventsScope) UpdateGauge(gauge int, value float64) {
-	m := MetricDefs[e.serviceIdx][gauge]
+	m := getDefinition(e.serviceIdx, gauge)
 
 	e.provider.Gauge(m.metricName.String(), &MetricOptions{
 		Unit: event.Unit(m.unit),
@@ -170,4 +171,16 @@ func (e eventsStopwatch) Stop() {
 // Subtract adds value to subtract from recorded duration.
 func (e *eventsStopwatch) Subtract(d time.Duration) {
 	e.start = e.start.Add(d)
+}
+
+func getDefinition(idx ServiceIdx, id int) metricDefinition {
+	m, ok := MetricDefs[idx][id]
+	if !ok {
+		m, ok = MetricDefs[Common][id]
+		if !ok {
+			panic(fmt.Errorf("failed to lookup metric by id %v and service %v", id, idx))
+		}
+	}
+
+	return m
 }

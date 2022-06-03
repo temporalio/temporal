@@ -25,6 +25,7 @@
 package metrics
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -37,6 +38,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
 	"go.opentelemetry.io/otel/sdk/metric/metrictest"
 	"go.opentelemetry.io/otel/sdk/metric/number"
+	"golang.org/x/exp/event"
+	"golang.org/x/exp/event/eventtest"
 
 	"go.temporal.io/server/common/log"
 )
@@ -77,7 +80,7 @@ func (s *eventsSuite) TestEventsMetricProvider_WithTags() {
 			"empty tags",
 			[]Tag{},
 			eventsMetricProvider{
-				tags: []Tag{},
+				tags: nil,
 			},
 		},
 		{
@@ -100,7 +103,7 @@ func (s *eventsSuite) TestEventsMetricProvider_WithTags() {
 
 			if diff := cmp.Diff(tt.want, *got,
 				cmp.Comparer(valuesEqual),
-				cmpopts.IgnoreFields(eventsMetricProvider{}, "context"),
+				cmpopts.IgnoreFields(eventsMetricProvider{}, "exporter"),
 				cmp.AllowUnexported(eventsMetricProvider{}),
 				cmp.AllowUnexported(tagImpl{})); diff != "" {
 				t.Errorf("mismatch (-want, got):\n%s", diff)
@@ -111,7 +114,7 @@ func (s *eventsSuite) TestEventsMetricProvider_WithTags() {
 
 func (s *eventsSuite) TestCounterMetricFunc_Record() {
 	meterProvider, testexporter := metrictest.NewTestMeterProvider()
-
+	ctx := event.WithExporter(context.Background(), event.NewExporter(&eventtest.CaptureHandler{}, nil))
 	tests := []struct {
 		name string
 		v    int64
@@ -150,11 +153,11 @@ func (s *eventsSuite) TestCounterMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}))
+			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{}))
 			emp.Counter(tt.name, &MetricOptions{
 				Description: "what you see is not a test",
 			}).Record(tt.v, tt.tags...)
-			testexporter.Collect(emp.context)
+			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
 			if diff := cmp.Diff(tt.want, testexporter.Records, cmp.Comparer(valuesEqual)); diff != "" {
@@ -166,6 +169,7 @@ func (s *eventsSuite) TestCounterMetricFunc_Record() {
 
 func (s *eventsSuite) TestGaugeMetricFunc_Record() {
 	meterProvider, testexporter := metrictest.NewTestMeterProvider()
+	ctx := event.WithExporter(context.Background(), event.NewExporter(&eventtest.CaptureHandler{}, nil))
 
 	tests := []struct {
 		name string
@@ -207,11 +211,11 @@ func (s *eventsSuite) TestGaugeMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}))
+			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{}))
 			emp.Gauge(tt.name, &MetricOptions{
 				Description: "what you see is not a test",
 			}).Record(tt.v, tt.tags...)
-			testexporter.Collect(emp.context)
+			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
 			if diff := cmp.Diff(tt.want, testexporter.Records, cmp.Comparer(valuesEqual)); diff != "" {
@@ -223,6 +227,7 @@ func (s *eventsSuite) TestGaugeMetricFunc_Record() {
 
 func (s *eventsSuite) TestTimerMetricFunc_Record() {
 	meterProvider, testexporter := metrictest.NewTestMeterProvider()
+	ctx := event.WithExporter(context.Background(), event.NewExporter(&eventtest.CaptureHandler{}, nil))
 
 	tests := []struct {
 		name string
@@ -270,12 +275,12 @@ func (s *eventsSuite) TestTimerMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}))
+			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{}))
 			emp.Timer(tt.name, &MetricOptions{
 				Description: "what you see is not a test",
 				Unit:        Milliseconds,
 			}).Record(tt.v, tt.tags...)
-			testexporter.Collect(emp.context)
+			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
 			if diff := cmp.Diff(tt.want, testexporter.Records, cmp.Comparer(valuesEqual), cmpopts.IgnoreFields(aggregation.Buckets{}, "Boundaries")); diff != "" {
@@ -287,6 +292,7 @@ func (s *eventsSuite) TestTimerMetricFunc_Record() {
 
 func (s *eventsSuite) TestHistogramMetricFunc_Record() {
 	meterProvider, testexporter := metrictest.NewTestMeterProvider()
+	ctx := event.WithExporter(context.Background(), event.NewExporter(&eventtest.CaptureHandler{}, nil))
 
 	tests := []struct {
 		name string
@@ -334,12 +340,12 @@ func (s *eventsSuite) TestHistogramMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}))
+			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{}))
 			emp.Histogram(tt.name, &MetricOptions{
 				Description: "what you see is not a test",
 				Unit:        Bytes,
 			}).Record(tt.v, tt.tags...)
-			testexporter.Collect(emp.context)
+			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
 			if diff := cmp.Diff(tt.want, testexporter.Records, cmp.Comparer(valuesEqual), cmpopts.IgnoreFields(aggregation.Buckets{}, "Boundaries")); diff != "" {
@@ -351,6 +357,7 @@ func (s *eventsSuite) TestHistogramMetricFunc_Record() {
 
 func (s *eventsSuite) TestCounterMetricWithTagsMergeFunc_Record() {
 	meterProvider, testexporter := metrictest.NewTestMeterProvider()
+	ctx := event.WithExporter(context.Background(), event.NewExporter(&eventtest.CaptureHandler{}, nil))
 
 	tests := []struct {
 		name     string
@@ -397,11 +404,11 @@ func (s *eventsSuite) TestCounterMetricWithTagsMergeFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")})).WithTags(tt.rootTags...).(*eventsMetricProvider)
+			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{})).WithTags(tt.rootTags...).(*eventsMetricProvider)
 			emp.Counter(tt.name, &MetricOptions{
 				Description: "what you see is not a test",
 			}).Record(tt.v, tt.tags...)
-			testexporter.Collect(emp.context)
+			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
 

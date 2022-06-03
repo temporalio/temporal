@@ -40,7 +40,7 @@ import (
 func TestTallyScope(t *testing.T) {
 	ctx := context.Background()
 	scope := tally.NewTestScope("test", map[string]string{})
-	mh := NewTallyMetricHandler(log.NewTestLogger(), scope, defaultConfig.PerUnitHistogramBoundaries)
+	mh := NewTallyMetricHandler(log.NewTestLogger(), scope, defaultConfig, defaultConfig.PerUnitHistogramBoundaries)
 	ctx = event.WithExporter(ctx, event.NewExporter(mh, nil))
 	recordTallyMetrics(ctx)
 

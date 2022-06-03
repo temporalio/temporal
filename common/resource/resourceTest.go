@@ -165,7 +165,7 @@ func NewTest(
 
 	scope := tally.NewTestScope("test", nil)
 	metricClient := metrics.NewEventsClient(
-		metrics.NewEventsMetricProvider(metrics.NewTallyMetricHandler(logger, scope, nil)),
+		metrics.NewEventsMetricProvider(metrics.NewTallyMetricHandler(logger, scope, metrics.ClientConfig{}, nil)),
 		serviceMetricsIndex,
 	)
 
