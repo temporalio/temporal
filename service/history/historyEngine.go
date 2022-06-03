@@ -2359,17 +2359,6 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		return nil, serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow last event ID.")
 	}
 
-	switch request.GetResetReapplyType() {
-	case enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED:
-		return nil, serviceerror.NewInvalidArgument("reset type not set")
-	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
-		// noop
-	case enumspb.RESET_REAPPLY_TYPE_NONE:
-		// noop
-	default:
-		return nil, serviceerror.NewInternal("unknown reset type")
-	}
-
 	// also load the current run of the workflow, it can be different from the base runID
 	currentRunID, err := e.workflowConsistencyChecker.GetCurrentRunID(
 		ctx,
