@@ -120,7 +120,7 @@ func (r *nDCWorkflowImpl) happensAfter(
 		return false, err
 	}
 
-	return workflowHappensAfter(
+	return WorkflowHappensAfter(
 		thisLastWriteVersion,
 		thisLastEventTaskID,
 		thatLastWriteVersion,
@@ -169,7 +169,7 @@ func (r *nDCWorkflowImpl) suppressBy(
 		return workflow.TransactionPolicyActive, err
 	}
 
-	if workflowHappensAfter(
+	if WorkflowHappensAfter(
 		lastWriteVersion,
 		lastEventTaskID,
 		incomingLastWriteVersion,
@@ -283,7 +283,7 @@ func (r *nDCWorkflowImpl) zombiefyWorkflow() error {
 	)
 }
 
-func workflowHappensAfter(
+func WorkflowHappensAfter(
 	thisLastWriteVersion int64,
 	thisLastEventTaskID int64,
 	thatLastWriteVersion int64,

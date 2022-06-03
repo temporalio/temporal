@@ -96,6 +96,7 @@ type (
 		replicationAckMgr          replication.AckManager
 		nDCReplicator              nDCHistoryReplicator
 		nDCActivityReplicator      nDCActivityReplicator
+		replicationProcessorMgr    common.Daemon
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
 		metricsClient              metrics.Client
@@ -129,6 +130,8 @@ func NewEngineWithShardContext(
 	archivalClient archiver.Client,
 	eventSerializer serialization.Serializer,
 	queueProcessorFactories []queues.ProcessorFactory,
+	replicationTaskFetcherFactory replication.TaskFetcherFactory,
+	replicationTaskExecutorProvider replication.TaskExecutorProvider,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -213,8 +216,24 @@ func NewEngineWithShardContext(
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
-	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(shard, workflowDeleteManager, historyCache, clientBean)
-
+	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(
+		shard,
+		workflowDeleteManager,
+		historyCache,
+		clientBean,
+		replicationTaskExecutorProvider,
+	)
+	historyEngImpl.replicationProcessorMgr = replication.NewTaskProcessorManager(
+		config,
+		shard,
+		historyEngImpl,
+		historyCache,
+		workflowDeleteManager,
+		clientBean,
+		eventSerializer,
+		replicationTaskFetcherFactory,
+		replicationTaskExecutorProvider,
+	)
 	return historyEngImpl
 }
 
@@ -236,6 +255,7 @@ func (e *historyEngineImpl) Start() {
 	for _, queueProcessor := range e.queueProcessors {
 		queueProcessor.Start()
 	}
+	e.replicationProcessorMgr.Start()
 
 	// failover callback will try to create a failover queue processor to scan all inflight tasks
 	// if domain needs to be failovered. However, in the multicursor queue logic, the scan range
@@ -264,7 +284,7 @@ func (e *historyEngineImpl) Stop() {
 	for _, queueProcessor := range e.queueProcessors {
 		queueProcessor.Stop()
 	}
-
+	e.replicationProcessorMgr.Stop()
 	// unset the failover callback
 	e.shard.GetNamespaceRegistry().UnregisterNamespaceChangeCallback(e)
 }

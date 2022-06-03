@@ -121,6 +121,16 @@ func (s *dlqHandlerSuite) SetupTest() {
 		workflow.NewMockCache(s.controller),
 		s.mockClientBean,
 		s.taskExecutors,
+		func(params TaskExecutorParams) TaskExecutor {
+			return NewTaskExecutor(
+				params.RemoteCluster,
+				params.Shard,
+				params.HistoryResender,
+				params.HistoryEngine,
+				params.DeleteManager,
+				params.WorkflowCache,
+			)
+		},
 	)
 }
 

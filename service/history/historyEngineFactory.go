@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
@@ -43,16 +44,18 @@ type (
 	HistoryEngineFactoryParams struct {
 		fx.In
 
-		ClientBean              client.Bean
-		MatchingClient          resource.MatchingClient
-		SdkClientFactory        sdk.ClientFactory
-		EventNotifier           events.Notifier
-		Config                  *configs.Config
-		RawMatchingClient       resource.MatchingRawClient
-		NewCacheFn              workflow.NewCacheFn
-		ArchivalClient          archiver.Client
-		EventSerializer         serialization.Serializer
-		QueueProcessorFactories []queues.ProcessorFactory `group:"queueProcessorFactory"`
+		ClientBean                      client.Bean
+		MatchingClient                  resource.MatchingClient
+		SdkClientFactory                sdk.ClientFactory
+		EventNotifier                   events.Notifier
+		Config                          *configs.Config
+		RawMatchingClient               resource.MatchingRawClient
+		NewCacheFn                      workflow.NewCacheFn
+		ArchivalClient                  archiver.Client
+		EventSerializer                 serialization.Serializer
+		QueueProcessorFactories         []queues.ProcessorFactory `group:"queueProcessorFactory"`
+		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
+		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
 	}
 
 	historyEngineFactory struct {
@@ -75,5 +78,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.ArchivalClient,
 		f.EventSerializer,
 		f.QueueProcessorFactories,
+		f.ReplicationTaskFetcherFactory,
+		f.ReplicationTaskExecutorProvider,
 	)
 }
