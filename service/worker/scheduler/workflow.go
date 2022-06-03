@@ -45,6 +45,7 @@ import (
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 const (
@@ -64,9 +65,6 @@ const (
 	// Maximum number of times to list per ListMatchingTimes query. (This is used only in a
 	// query so it can be changed without breaking history.)
 	maxListMatchingTimesCount = 1000
-
-	searchAttrStartTime    = "TemporalScheduledStartTime"
-	searchAttrScheduleById = "TemporalScheduledById"
 )
 
 type (
@@ -744,10 +742,10 @@ func (s *scheduler) addSearchAttrs(
 ) *commonpb.SearchAttributes {
 	fields := maps.Clone(attrs.GetIndexedFields())
 	if p, err := payload.Encode(nominal); err == nil {
-		fields[searchAttrStartTime] = p
+		fields[searchattribute.TemporalScheduledStartTime] = p
 	}
 	if p, err := payload.Encode(s.State.ScheduleId); err == nil {
-		fields[searchAttrScheduleById] = p
+		fields[searchattribute.TemporalScheduledById] = p
 	}
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,
