@@ -25,6 +25,7 @@
 package scheduler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -38,6 +39,7 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/converter"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -65,8 +67,13 @@ const (
 	// query so it can be changed without breaking history.)
 	maxListMatchingTimesCount = 1000
 
+	// search attributes for started workflows
 	searchAttrStartTime    = "TemporalScheduledStartTime"
 	searchAttrScheduleById = "TemporalScheduledById"
+
+	// search attributes for scheduler workflows, for internal use
+	searchAttrPaused = "TemporalSchedulePaused"
+	searchAttrInfo   = "TemporalScheduleInfo"
 )
 
 type (
@@ -183,6 +190,7 @@ func (s *scheduler) run() error {
 		s.State.LastProcessedTime = timestamp.TimePtr(t2)
 		for s.processBuffer() {
 		}
+		s.updateSearchAttrs()
 		// sleep returns on any of:
 		// 1. requested time elapsed
 		// 2. we got a signal (update, request, refresh)
@@ -473,22 +481,25 @@ func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
 	s.needRefresh = true
 }
 
-func (s *scheduler) handleDescribeQuery() (*schedspb.DescribeResponse, error) {
-	// update future actions
-	if s.cspec != nil {
-		s.Info.FutureActionTimes = make([]*time.Time, 0, s.tweakables.FutureActionCount)
-		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
-		for len(s.Info.FutureActionTimes) < s.tweakables.FutureActionCount {
-			var has bool
-			_, t1, has = s.cspec.getNextTime(t1)
-			if !has {
-				break
-			}
-			s.Info.FutureActionTimes = append(s.Info.FutureActionTimes, timestamp.TimePtr(t1))
-		}
-	} else {
-		s.Info.FutureActionTimes = nil
+func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
+	if s.cspec == nil {
+		return nil
 	}
+	out := make([]*time.Time, 0, n)
+	t1 := timestamp.TimeValue(s.State.LastProcessedTime)
+	for len(out) < n {
+		var has bool
+		_, t1, has = s.cspec.getNextTime(t1)
+		if !has {
+			break
+		}
+		out = append(out, timestamp.TimePtr(t1))
+	}
+	return out
+}
+
+func (s *scheduler) handleDescribeQuery() (*schedspb.DescribeResponse, error) {
+	s.Info.FutureActionTimes = s.getFutureActionTimes(s.tweakables.FutureActionCount)
 
 	return &schedspb.DescribeResponse{
 		Schedule:      s.Schedule,
@@ -519,6 +530,45 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 
 func (s *scheduler) incSeqNo() {
 	s.State.ConflictToken++
+}
+
+func (s *scheduler) getListInfo() *schedpb.ScheduleListInfo {
+	return &schedpb.ScheduleListInfo{
+		Notes:             s.Schedule.State.Notes,
+		Paused:            s.Schedule.State.Paused,
+		RecentActions:     s.Info.RecentActions,
+		FutureActionTimes: s.getFutureActionTimes(5), // FIXME: make tweakable
+	}
+}
+
+func (s *scheduler) updateSearchAttrs() {
+	var currentInfo string
+	if payload := workflow.GetInfo(s.ctx).SearchAttributes.GetIndexedFields()[searchAttrInfo]; payload != nil {
+		if err := converter.GetDefaultDataConverter().FromPayload(payload, &currentInfo); err != nil {
+			s.logger.Error("error decoding current info search attr", "error", err)
+			return
+		}
+	}
+
+	newInfoBytes, err := json.Marshal(s.getListInfo())
+	if err != nil {
+		s.logger.Error("error encoding ScheduleListInfo", "error", err)
+		return
+	}
+	// json.Marshal should only produce valid utf-8 so we can do this
+	newInfoStr := string(newInfoBytes)
+	if newInfoStr == currentInfo {
+		// note that newInfo contains paused, so if paused changed, then newInfo will too
+		return
+	}
+
+	err = workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
+		searchAttrPaused: s.Schedule.State.Paused,
+		searchAttrInfo:   newInfoStr,
+	})
+	if err != nil {
+		s.logger.Error("error updating search attrs", "error", err)
+	}
 }
 
 func (s *scheduler) checkConflict(token int64) error {
