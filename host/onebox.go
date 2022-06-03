@@ -431,6 +431,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() authorization.Authorizer { return nil }),
 		fx.Provide(func() authorization.ClaimMapper { return nil }),
 		fx.Provide(func() authorization.JWTAudienceMapper { return nil }),
+		fx.Provide(func() authorization.PostAuthorizationAction { return nil }),
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		// Comment the line above and uncomment the line bellow to test with search attributes mapper.

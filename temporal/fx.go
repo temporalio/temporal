@@ -106,11 +106,12 @@ type (
 		ServiceResolver        resolver.ServiceResolver
 		CustomDataStoreFactory persistenceClient.AbstractDataStoreFactory
 
-		SearchAttributesMapper searchattribute.Mapper
-		CustomInterceptors     []grpc.UnaryServerInterceptor
-		Authorizer             authorization.Authorizer
-		ClaimMapper            authorization.ClaimMapper
-		AudienceGetter         authorization.JWTAudienceMapper
+		SearchAttributesMapper  searchattribute.Mapper
+		CustomInterceptors      []grpc.UnaryServerInterceptor
+		Authorizer              authorization.Authorizer
+		ClaimMapper             authorization.ClaimMapper
+		AudienceGetter          authorization.JWTAudienceMapper
+		PostAuthorizationAction authorization.PostAuthorizationAction
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                  log.Logger
@@ -325,6 +326,7 @@ type (
 		ClusterMetadata            *cluster.Config
 		ClientFactoryProvider      client.FactoryProvider
 		AudienceGetter             authorization.JWTAudienceMapper
+		PostAuthorizationAction    authorization.PostAuthorizationAction
 		PersistenceServiceResolver resolver.ServiceResolver
 		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
 		SearchAttributesMapper     searchattribute.Mapper
@@ -364,6 +366,7 @@ func HistoryServiceProvider(
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
 		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
+		fx.Provide(func() authorization.PostAuthorizationAction { return params.PostAuthorizationAction }),
 		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
 		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
@@ -422,6 +425,7 @@ func MatchingServiceProvider(
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
 		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
+		fx.Provide(func() authorization.PostAuthorizationAction { return params.PostAuthorizationAction }),
 		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
 		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
@@ -477,6 +481,7 @@ func FrontendServiceProvider(
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
 		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
+		fx.Provide(func() authorization.PostAuthorizationAction { return params.PostAuthorizationAction }),
 		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
 		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
@@ -533,6 +538,7 @@ func WorkerServiceProvider(
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
 		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
+		fx.Provide(func() authorization.PostAuthorizationAction { return params.PostAuthorizationAction }),
 		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
 		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),

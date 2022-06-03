@@ -60,6 +60,7 @@ type (
 		tlsConfigProvider          encryption.TLSConfigProvider
 		claimMapper                authorization.ClaimMapper
 		audienceGetter             authorization.JWTAudienceMapper
+		postAuthorizationAction    authorization.PostAuthorizationAction
 		metricsReporter            metrics.Reporter
 		persistenceServiceResolver resolver.ServiceResolver
 		elasticsearchHttpClient    *http.Client

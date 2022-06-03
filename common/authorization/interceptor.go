@@ -50,6 +50,17 @@ type (
 	JWTAudienceMapper interface {
 		Audience(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo) string
 	}
+
+	// PostAuthorizationAction returns the final response after running post-processing logic
+	PostAuthorizationAction interface {
+		Run(
+			ctx context.Context,
+			req interface{},
+			info *grpc.UnaryServerInfo,
+			claims *Claims,
+			resp interface{},
+		) (interface{}, error)
+	}
 )
 
 const (
@@ -149,7 +160,16 @@ func (a *interceptor) Interceptor(
 			return nil, errUnauthorized // return a generic error to the caller without disclosing details
 		}
 	}
-	return handler(ctx, req)
+
+	resp, err := handler(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if a.postAction != nil {
+		return a.postAction.Run(ctx, req, info, claims, resp)
+	}
+	return resp, nil
 }
 
 func (a *interceptor) authorize(ctx context.Context, claims *Claims, callTarget *CallTarget, scope metrics.Scope) (Result, error) {
@@ -168,6 +188,7 @@ type interceptor struct {
 	metricsClient  metrics.Client
 	logger         log.Logger
 	audienceGetter JWTAudienceMapper
+	postAction     PostAuthorizationAction
 }
 
 // NewAuthorizationInterceptor creates an authorization interceptor and return a func that points to its Interceptor method
@@ -177,6 +198,7 @@ func NewAuthorizationInterceptor(
 	metrics metrics.Client,
 	logger log.Logger,
 	audienceGetter JWTAudienceMapper,
+	postAction PostAuthorizationAction,
 ) grpc.UnaryServerInterceptor {
 	return (&interceptor{
 		claimMapper:    claimMapper,
@@ -184,6 +206,7 @@ func NewAuthorizationInterceptor(
 		metricsClient:  metrics,
 		logger:         logger,
 		audienceGetter: audienceGetter,
+		postAction:     postAction,
 	}).Interceptor
 }
 

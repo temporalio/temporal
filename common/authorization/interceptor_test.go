@@ -26,6 +26,7 @@ package authorization
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -68,7 +69,21 @@ type (
 		handler             grpc.UnaryHandler
 		mockClaimMapper     *MockClaimMapper
 	}
+
+	mockPostAction func(
+		ctx context.Context,
+		req interface{},
+		info *grpc.UnaryServerInfo,
+		claims *Claims,
+		resp interface{},
+	) (interface{}, error)
 )
+
+func (m mockPostAction) Run(
+	ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, claims *Claims, resp interface{},
+) (interface{}, error) {
+	return m(ctx, req, info, claims, resp)
+}
 
 func TestAuthorizerInterceptorSuite(t *testing.T) {
 	s := new(authorizerInterceptorSuite)
@@ -94,7 +109,9 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 		s.mockAuthorizer,
 		s.mockMetricsClient,
 		log.NewNoopLogger(),
-		nil)
+		nil,
+		nil,
+	)
 	s.handler = func(ctx context.Context, req interface{}) (interface{}, error) { return true, nil }
 }
 
@@ -138,4 +155,49 @@ func (s *authorizerInterceptorSuite) TestAuthorizationFailed() {
 	res, err := s.interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.Nil(res)
 	s.Error(err)
+}
+
+func (s *authorizerInterceptorSuite) TestPostAuthorizationAction_Success() {
+	s.interceptor = NewAuthorizationInterceptor(
+		s.mockClaimMapper,
+		s.mockAuthorizer,
+		s.mockMetricsClient,
+		log.NewNoopLogger(),
+		nil,
+		mockPostAction(func(
+			_ context.Context, _ interface{}, _ *grpc.UnaryServerInfo, _ *Claims, resp interface{},
+		) (interface{}, error) {
+			return !resp.(bool), nil
+		}),
+	)
+
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
+		Return(Result{Decision: DecisionAllow}, nil)
+
+	res, err := s.interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
+	s.False(res.(bool))
+	s.NoError(err)
+}
+
+func (s *authorizerInterceptorSuite) TestPostAuthorizationAction_Failure() {
+	postActionErr := errors.New("failed to run post action")
+	s.interceptor = NewAuthorizationInterceptor(
+		s.mockClaimMapper,
+		s.mockAuthorizer,
+		s.mockMetricsClient,
+		log.NewNoopLogger(),
+		nil,
+		mockPostAction(func(
+			_ context.Context, _ interface{}, _ *grpc.UnaryServerInfo, _ *Claims, resp interface{},
+		) (interface{}, error) {
+			return nil, postActionErr
+		}),
+	)
+
+	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
+		Return(Result{Decision: DecisionAllow}, nil)
+
+	res, err := s.interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
+	s.Nil(res)
+	s.EqualError(err, postActionErr.Error())
 }

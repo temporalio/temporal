@@ -121,6 +121,15 @@ func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.JW
 	})
 }
 
+// WithPostAuthorizationAction configures post-authorization action
+func WithPostAuthorizationAction(
+	postAuthorizationAction func(cfg *config.Config) authorization.PostAuthorizationAction,
+) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.postAuthorizationAction = postAuthorizationAction(s.config)
+	})
+}
+
 // WithCustomMetricsReporter sets custom metric reporter
 // Detailed examples can be found at https://github.com/temporalio/samples-server
 //

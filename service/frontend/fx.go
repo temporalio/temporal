@@ -138,6 +138,7 @@ func GrpcServerOptionsProvider(
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
 	audienceGetter authorization.JWTAudienceMapper,
+	postAuthorizationAction authorization.PostAuthorizationAction,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsClient metrics.Client,
 ) []grpc.ServerOption {
@@ -171,6 +172,7 @@ func GrpcServerOptionsProvider(
 			metricsClient,
 			logger,
 			audienceGetter,
+			postAuthorizationAction,
 		),
 		sdkVersionInterceptor.Intercept,
 	}
