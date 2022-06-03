@@ -14,6 +14,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	// these defaults were taken from the grpc docs as of grpc v1.46.
+	// they are not available programatically
+
+	defaultReadBufferSize    = 32 * 1024
+	defaultWriteBufferSize   = 32 * 1024
+	defaultMinConnectTimeout = 10 * time.Second
+)
+
 type (
 	metadata struct {
 		Name   string            `yaml:"name"`
@@ -100,11 +109,11 @@ func (g *grpcconn) dial(ctx context.Context) (*grpc.ClientConn, error) {
 
 func (g *grpcconn) dialOpts() []grpc.DialOption {
 	out := []grpc.DialOption{
-		grpc.WithReadBufferSize(valueOrDefault(g.ReadBufferSize, 32*1024)),
-		grpc.WithWriteBufferSize(valueOrDefault(g.WriteBufferSize, 32*1024)),
+		grpc.WithReadBufferSize(valueOrDefault(g.ReadBufferSize, defaultReadBufferSize)),
+		grpc.WithWriteBufferSize(valueOrDefault(g.WriteBufferSize, defaultWriteBufferSize)),
 		grpc.WithUserAgent(g.UserAgent),
 		grpc.WithConnectParams(grpc.ConnectParams{
-			MinConnectTimeout: valueOrDefault(g.ConnectParams.MinConnectTimeout, 10*time.Second),
+			MinConnectTimeout: valueOrDefault(g.ConnectParams.MinConnectTimeout, defaultMinConnectTimeout),
 			Backoff: backoff.Config{
 				BaseDelay:  valueOrDefault(g.ConnectParams.Backoff.BaseDelay, backoff.DefaultConfig.BaseDelay),
 				MaxDelay:   valueOrDefault(g.ConnectParams.Backoff.MaxDelay, backoff.DefaultConfig.MaxDelay),
