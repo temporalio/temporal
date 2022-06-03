@@ -27,12 +27,12 @@ package frontend
 import (
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -4367,7 +4367,7 @@ func (wh *WorkflowHandler) decodeScheduleListInfo(searchAttrs *commonpb.SearchAt
 	} else if err := payload.Decode(listInfoPayload, &listInfoStr); err != nil {
 		wh.logger.Error("decoding schedule list info to string", tag.Error(err))
 		return nil
-	} else if err = json.Unmarshal([]byte(listInfoStr), &listInfoPb); err != nil {
+	} else if err = jsonpb.UnmarshalString(listInfoStr, &listInfoPb); err != nil {
 		wh.logger.Error("decoding schedule list info from json", tag.Error(err))
 		return nil
 	} else {

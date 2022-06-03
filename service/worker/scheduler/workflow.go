@@ -25,11 +25,11 @@
 package scheduler
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/google/uuid"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -560,21 +560,19 @@ func (s *scheduler) updateSearchAttrs() {
 		}
 	}
 
-	newInfoBytes, err := json.Marshal(s.getListInfo())
+	newInfo, err := new(jsonpb.Marshaler).MarshalToString(s.getListInfo())
 	if err != nil {
 		s.logger.Error("error encoding ScheduleListInfo", "error", err)
 		return
 	}
-	// json.Marshal should only produce valid utf-8 so we can do this
-	newInfoStr := string(newInfoBytes)
-	if newInfoStr == currentInfo {
+	if newInfo == currentInfo {
 		// note that newInfo contains paused, so if paused changed, then newInfo will too
 		return
 	}
 
 	err = workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
 		searchattribute.SchedulePaused:   s.Schedule.State.Paused,
-		searchattribute.ScheduleInfoJSON: newInfoStr,
+		searchattribute.ScheduleInfoJSON: newInfo,
 	})
 	if err != nil {
 		s.logger.Error("error updating search attrs", "error", err)
