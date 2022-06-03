@@ -31,7 +31,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 
@@ -110,7 +109,7 @@ func (s *perNsWorkerManagerSuite) TestDisabled() {
 		Enabled: false,
 	}).AnyTimes()
 
-	s.manager.namespaceCallback(ns)
+	s.manager.namespaceCallback(ns, false)
 	time.Sleep(50 * time.Millisecond)
 }
 
@@ -129,7 +128,7 @@ func (s *perNsWorkerManagerSuite) TestEnabledButResolvedToOther() {
 	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("other1", nil), nil)
 	s.serviceResolver.EXPECT().Lookup("ns1/tq1/1").Return(membership.NewHostInfo("other2", nil), nil)
 
-	s.manager.namespaceCallback(ns)
+	s.manager.namespaceCallback(ns, false)
 	// main work happens in a goroutine
 	time.Sleep(50 * time.Millisecond)
 }
@@ -154,7 +153,7 @@ func (s *perNsWorkerManagerSuite) TestEnabled() {
 	s.cmp1.EXPECT().Register(wkr1, ns)
 	wkr1.EXPECT().Start()
 
-	s.manager.namespaceCallback(ns)
+	s.manager.namespaceCallback(ns, false)
 	time.Sleep(50 * time.Millisecond)
 
 	// shutdown
@@ -187,7 +186,7 @@ func (s *perNsWorkerManagerSuite) TestMultiplicity() {
 	s.cmp1.EXPECT().Register(wkr1, ns)
 	wkr1.EXPECT().Start()
 
-	s.manager.namespaceCallback(ns)
+	s.manager.namespaceCallback(ns, false)
 	time.Sleep(50 * time.Millisecond)
 
 	wkr1.EXPECT().Stop()
@@ -244,8 +243,8 @@ func (s *perNsWorkerManagerSuite) TestTwoNamespacesTwoComponents() {
 	wkr21.EXPECT().Start()
 	wkr22.EXPECT().Start()
 
-	s.manager.namespaceCallback(ns1)
-	s.manager.namespaceCallback(ns2)
+	s.manager.namespaceCallback(ns1, false)
+	s.manager.namespaceCallback(ns2, false)
 	time.Sleep(50 * time.Millisecond)
 
 	wkr11.EXPECT().Stop()
@@ -259,8 +258,6 @@ func (s *perNsWorkerManagerSuite) TestTwoNamespacesTwoComponents() {
 }
 
 func (s *perNsWorkerManagerSuite) TestDeleteNs() {
-	s.T().Skip("TODO: this is broken now, enable after fixing")
-
 	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
 
 	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
@@ -280,14 +277,33 @@ func (s *perNsWorkerManagerSuite) TestDeleteNs() {
 	s.cmp1.EXPECT().Register(wkr1, ns)
 	wkr1.EXPECT().Start()
 
-	s.manager.namespaceCallback(ns)
+	s.manager.namespaceCallback(ns, false)
 	time.Sleep(50 * time.Millisecond)
 
 	// now delete it
 	nsDeleted := testns("ns1", enumspb.NAMESPACE_STATE_DELETED)
 	wkr1.EXPECT().Stop()
 	cli1.EXPECT().Close()
-	s.manager.namespaceCallback(nsDeleted)
+	s.manager.namespaceCallback(nsDeleted, false)
+	time.Sleep(50 * time.Millisecond)
+
+	// restore it
+	nsRestored := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
+	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("self", nil), nil)
+	cli2 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient("ns1", gomock.Any()).Return(cli2, nil)
+	wkr2 := mocksdk.NewMockWorker(s.controller)
+	s.wfactory.EXPECT().New(cli1, "tq1", gomock.Any()).Return(wkr2)
+	s.cmp1.EXPECT().Register(wkr2, ns)
+	wkr2.EXPECT().Start()
+
+	s.manager.namespaceCallback(nsRestored, false)
+	time.Sleep(50 * time.Millisecond)
+
+	// now delete from db without changing state
+	wkr2.EXPECT().Stop()
+	cli2.EXPECT().Close()
+	s.manager.namespaceCallback(nsRestored, true)
 	time.Sleep(50 * time.Millisecond)
 }
 
@@ -306,7 +322,7 @@ func (s *perNsWorkerManagerSuite) TestMembershipChanged() {
 	// we don't own it at first
 	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("other", nil), nil)
 
-	s.manager.namespaceCallback(ns)
+	s.manager.namespaceCallback(ns, false)
 	time.Sleep(50 * time.Millisecond)
 
 	// now we own it
@@ -353,7 +369,7 @@ func (s *perNsWorkerManagerSuite) TestServiceResolverError() {
 	s.cmp1.EXPECT().Register(wkr1, ns)
 	wkr1.EXPECT().Start()
 
-	s.manager.namespaceCallback(ns)
+	s.manager.namespaceCallback(ns, false)
 	time.Sleep(50 * time.Millisecond)
 
 	// shutdown
@@ -385,7 +401,7 @@ func (s *perNsWorkerManagerSuite) TestNewClientError() {
 	s.cmp1.EXPECT().Register(wkr1, ns)
 	wkr1.EXPECT().Start()
 
-	s.manager.namespaceCallback(ns)
+	s.manager.namespaceCallback(ns, false)
 	time.Sleep(50 * time.Millisecond)
 
 	// shutdown
@@ -425,7 +441,7 @@ func (s *perNsWorkerManagerSuite) TestStartWorkerError() {
 	s.cmp1.EXPECT().Register(wkr2, ns)
 	wkr2.EXPECT().Start()
 
-	s.manager.namespaceCallback(ns)
+	s.manager.namespaceCallback(ns, false)
 	time.Sleep(50 * time.Millisecond)
 
 	// shutdown
