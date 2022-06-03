@@ -123,7 +123,7 @@ func newTransferQueueActiveProcessor(
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
+		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)
 
 	transferTaskFilter := func(task tasks.Task) bool {
@@ -314,7 +314,7 @@ func newTransferQueueFailoverProcessor(
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
+		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)
 
 	queueAckMgr := newQueueFailoverAckMgr(
