@@ -530,11 +530,20 @@ func (s *scheduler) incSeqNo() {
 }
 
 func (s *scheduler) getListInfo() *schedpb.ScheduleListInfo {
+	// clear some fields that are too large/not useful for the list view
+	spec := *s.Schedule.Spec
+	spec.ExcludeCalendar = nil
+	spec.Jitter = nil
+	spec.TimezoneData = nil
+
 	recent := s.Info.RecentActions
 	if len(recent) > s.tweakables.RecentActionCountForList {
 		recent = recent[len(recent)-s.tweakables.RecentActionCountForList:]
 	}
+
 	return &schedpb.ScheduleListInfo{
+		Spec:              &spec,
+		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
 		Notes:             s.Schedule.State.Notes,
 		Paused:            s.Schedule.State.Paused,
 		RecentActions:     recent,
