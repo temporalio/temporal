@@ -128,7 +128,7 @@ func (s *nDCWorkflowSuite) TestHappensAfter_LargerVersion() {
 	thatLastWriteVersion := thisLastWriteVersion - 1
 	thatLastEventTaskID := int64(123)
 
-	s.True(workflowHappensAfter(
+	s.True(WorkflowHappensAfter(
 		thisLastWriteVersion,
 		thisLastEventTaskID,
 		thatLastWriteVersion,
@@ -142,7 +142,7 @@ func (s *nDCWorkflowSuite) TestHappensAfter_SmallerVersion() {
 	thatLastWriteVersion := thisLastWriteVersion + 1
 	thatLastEventTaskID := int64(23)
 
-	s.False(workflowHappensAfter(
+	s.False(WorkflowHappensAfter(
 		thisLastWriteVersion,
 		thisLastEventTaskID,
 		thatLastWriteVersion,
@@ -156,7 +156,7 @@ func (s *nDCWorkflowSuite) TestHappensAfter_SameVersion_SmallerTaskID() {
 	thatLastWriteVersion := thisLastWriteVersion
 	thatLastEventTaskID := thisLastEventTaskID + 1
 
-	s.False(workflowHappensAfter(
+	s.False(WorkflowHappensAfter(
 		thisLastWriteVersion,
 		thisLastEventTaskID,
 		thatLastWriteVersion,
@@ -170,7 +170,7 @@ func (s *nDCWorkflowSuite) TestHappensAfter_SameVersion_LatrgerTaskID() {
 	thatLastWriteVersion := thisLastWriteVersion
 	thatLastEventTaskID := thisLastEventTaskID - 1
 
-	s.True(workflowHappensAfter(
+	s.True(WorkflowHappensAfter(
 		thisLastWriteVersion,
 		thisLastEventTaskID,
 		thatLastWriteVersion,

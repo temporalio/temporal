@@ -31,11 +31,9 @@ import (
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -55,7 +53,6 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	warchiver "go.temporal.io/server/service/worker/archiver"
@@ -76,7 +73,6 @@ var Module = fx.Options(
 	fx.Provide(PersistenceMaxQpsProvider),
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
-	fx.Provide(ReplicationTaskFetcherFactoryProvider),
 	fx.Provide(ArchivalClientProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
@@ -249,20 +245,6 @@ func EventNotifierProvider(
 		timeSource,
 		metricsClient,
 		config.GetShardID,
-	)
-}
-
-func ReplicationTaskFetcherFactoryProvider(
-	logger log.Logger,
-	config *configs.Config,
-	clusterMetadata cluster.Metadata,
-	clientBean client.Bean,
-) replication.TaskFetcherFactory {
-	return replication.NewTaskFetcherFactory(
-		logger,
-		config,
-		clusterMetadata,
-		clientBean,
 	)
 }
 

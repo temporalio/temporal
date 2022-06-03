@@ -2154,15 +2154,9 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	switch request.GetResetReapplyType() {
-	case enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED:
-		request.ResetReapplyType = enumspb.RESET_REAPPLY_TYPE_SIGNAL
-	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
-		// noop
-	case enumspb.RESET_REAPPLY_TYPE_NONE:
-		// noop
-	default:
-		return nil, serviceerror.NewInternal("unknown reset type")
+	enums.SetDefaultResetReapplyType(&request.ResetReapplyType)
+	if _, validType := enumspb.ResetReapplyType_name[int32(request.GetResetReapplyType())]; !validType {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown reset reapply type: %v", request.GetResetReapplyType()))
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))

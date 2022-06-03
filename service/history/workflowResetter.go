@@ -331,7 +331,7 @@ func (r *workflowResetterImpl) reapplyEventsToResetWorkflow(
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
 		// noop
 	default:
-		panic(fmt.Sprintf("unknown reset type: %v", resetReapplyType))
+		panic(fmt.Sprintf("unknown reset reapply type: %v", resetReapplyType))
 	}
 
 	if err := r.reapplyEvents(resetMutableState, additionalReapplyEvents); err != nil {

@@ -61,10 +61,6 @@ var QueueProcessorModule = fx.Options(
 			Group:  queues.ProcessorFactoryFxGroup,
 			Target: NewVisibilityQueueProcessorFactory,
 		},
-		fx.Annotated{
-			Group:  queues.ProcessorFactoryFxGroup,
-			Target: NewReplicationQueueProcessorFactory,
-		},
 	),
 )
 
@@ -304,32 +300,6 @@ func (f *visibilityQueueProcessorFactory) CreateProcessor(
 		f.scheduler,
 		f.VisibilityMgr,
 		f.hostRateLimiter,
-	)
-}
-
-func NewReplicationQueueProcessorFactory(
-	params replicationQueueProcessorFactoryParams,
-) queues.ProcessorFactory {
-
-	return &replicationQueueProcessorFactory{
-		replicationQueueProcessorFactoryParams: params,
-	}
-}
-
-func (f *replicationQueueProcessorFactory) CreateProcessor(
-	shard shard.Context,
-	engine shard.Engine,
-	workflowCache workflow.Cache,
-) queues.Processor {
-	return replication.NewTaskProcessorFactory(
-		f.ArchivalClient,
-		f.Config,
-		engine,
-		f.EventSerializer,
-		shard,
-		f.TaskFetcherFactory,
-		workflowCache,
-		f.ClientBean,
 	)
 }
 

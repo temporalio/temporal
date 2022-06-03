@@ -29,6 +29,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/server/service/history/replication"
+
 	"google.golang.org/grpc"
 
 	"go.uber.org/fx"
@@ -378,6 +380,7 @@ func HistoryServiceProvider(
 		resource.DefaultOptions,
 		history.QueueProcessorModule,
 		history.Module,
+		replication.Module,
 		fx.NopLogger,
 	)
 
