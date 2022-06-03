@@ -583,7 +583,7 @@ func (r *workflowResetterImpl) terminateWorkflow(
 		eventBatchFirstEventID,
 		terminateReason,
 		nil,
-		consts.IdentityHistoryService,
+		consts.IdentityResetter,
 		false,
 	)
 }
@@ -769,4 +769,11 @@ func (r *workflowResetterImpl) getPaginationFn(
 		}
 		return resp.History, resp.NextPageToken, nil
 	}
+}
+
+func IsTerminatedByResetter(event *historypb.HistoryEvent) bool {
+	if attributes := event.GetWorkflowExecutionTerminatedEventAttributes(); attributes != nil && attributes.Identity == consts.IdentityResetter {
+		return true
+	}
+	return false
 }
