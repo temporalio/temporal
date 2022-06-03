@@ -4365,14 +4365,13 @@ func (wh *WorkflowHandler) decodeScheduleListInfo(searchAttrs *commonpb.SearchAt
 	if listInfoPayload := searchAttrs.GetIndexedFields()[searchattribute.ScheduleInfoJSON]; listInfoPayload == nil {
 		return nil
 	} else if err := payload.Decode(listInfoPayload, &listInfoStr); err != nil {
-		wh.logger.Error("decoding schedule list info to string", tag.Error(err))
+		wh.logger.Error("decoding schedule list info from payload", tag.Error(err))
 		return nil
 	} else if err = jsonpb.UnmarshalString(listInfoStr, &listInfoPb); err != nil {
 		wh.logger.Error("decoding schedule list info from json", tag.Error(err))
 		return nil
-	} else {
-		return &listInfoPb
 	}
+	return &listInfoPb
 }
 
 // This mutates searchAttrs
