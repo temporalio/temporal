@@ -32,10 +32,18 @@ import (
 )
 
 type (
+	// ServerTraceInterceptor gives a named type to the
+	// grpc.UnaryServerInterceptor implementation provided by otelgrpc
 	ServerTraceInterceptor grpc.UnaryServerInterceptor
+
+	// ClientTraceInterceptor gives a named type to the
+	// grpc.UnaryClientInterceptor implementation provided by otelgrpc
 	ClientTraceInterceptor grpc.UnaryClientInterceptor
 )
 
+// NewServerTraceInterceptor creates a new gRPC server interceptor that tracks
+// each request with an encapsulating span using the provided TracerProvider and
+// TextMapPropagator.
 func NewServerTraceInterceptor(
 	tp trace.TracerProvider,
 	tmp propagation.TextMapPropagator,
@@ -48,6 +56,9 @@ func NewServerTraceInterceptor(
 	)
 }
 
+// NewClientTraceInterceptor creates a new gRPC client interceptor that tracks
+// each request with an encapsulating span using the provided TracerProvider and
+// TextMapPropagator.
 func NewClientTraceInterceptor(
 	tp trace.TracerProvider,
 	tmp propagation.TextMapPropagator,

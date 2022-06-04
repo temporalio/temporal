@@ -804,8 +804,8 @@ var TraceExportModule = fx.Options(
 			return nil, err
 		}
 		lc.Append(fx.Hook{
-			OnStart: telemetry.Starter(exporters),
-			OnStop:  telemetry.Stopper(exporters),
+			OnStart: startAll(exporters),
+			OnStop:  shutdownAll(exporters),
 		})
 		return exporters, nil
 	}),
@@ -880,3 +880,30 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(telemetry.NewServerTraceInterceptor),
 	fx.Provide(telemetry.NewClientTraceInterceptor),
 )
+
+func startAll(exporters []sdktrace.SpanExporter) func(ctx context.Context) error {
+	type starter interface{ Start(context.Context) error }
+	return func(ctx context.Context) error {
+		for _, e := range exporters {
+			if starter, ok := e.(starter); ok {
+				err := starter.Start(ctx)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+}
+
+func shutdownAll(exporters []sdktrace.SpanExporter) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		for _, e := range exporters {
+			err := e.Shutdown(ctx)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}

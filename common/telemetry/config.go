@@ -277,3 +277,11 @@ func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 	}
 	return obj.Spec.Decode(e.Spec)
 }
+
+func valueOrDefault[T comparable](v, defval T) T {
+	var zero T
+	if v == zero {
+		return defval
+	}
+	return v
+}
