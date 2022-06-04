@@ -49,63 +49,63 @@ const (
 
 type (
 	metadata struct {
-		Name   string            `yaml:"name"`
-		Labels map[string]string `yaml:"labels"`
+		Name   string
+		Labels map[string]string
 	}
 
 	connection struct {
-		Kind     string      `yaml:"kind"`
-		Metadata metadata    `yaml:"metadata"`
+		Kind     string
+		Metadata metadata
 		Spec     interface{} `yaml:"-"`
 	}
 
 	grpcconn struct {
-		Endpoint      string `yaml:"endpoint"`
-		Block         bool   `yaml:"block"`
+		Endpoint      string
+		Block         bool
 		ConnectParams struct {
 			MinConnectTimeout time.Duration `yaml:"min_connect_timeout"`
 			Backoff           struct {
 				BaseDelay  time.Duration `yaml:"base_delay"`
-				Multiplier float64       `yaml:"multiplier"`
-				Jitter     float64       `yaml:"jitter"`
+				Multiplier float64
+				Jitter     float64
 				MaxDelay   time.Duration `yaml:"max_delay"`
-			} `yaml:"backoff"`
+			}
 		} `yaml:"connect_params"`
 		UserAgent       string `yaml:"user_agent"`
 		ReadBufferSize  int    `yaml:"read_buffer_size"`
 		WriteBufferSize int    `yaml:"write_buffer_size"`
-		Authority       string `yaml:"authority"`
-		Insecure        bool   `yaml:"insecure"`
+		Authority       string
+		Insecure        bool
 
 		cc *grpc.ClientConn
 	}
 
 	exporter struct {
 		Kind struct {
-			Signal string `yaml:"signal"`
-			Model  string `yaml:"model"`
-			Proto  string `yaml:"proto"`
-		} `yaml:"kind"`
-		Metadata metadata    `yaml:"metadata"`
+			Signal string
+			Model  string
+			Proto  string
+		}
+		Metadata metadata
 		Spec     interface{} `yaml:"-"`
 	}
 
 	otlpGrpcSpanExporter struct {
-		ConnectionName string            `yaml:"connection_name"`
-		Connection     grpcconn          `yaml:"connection"`
-		Headers        map[string]string `yaml:"headers"`
-		Timeout        time.Duration     `yaml:"timeout"`
+		ConnectionName string `yaml:"connection_name"`
+		Connection     grpcconn
+		Headers        map[string]string
+		Timeout        time.Duration
 		Retry          struct {
-			Enabled         bool          `yaml:"enabled"`
+			Enabled         bool
 			InitialInterval time.Duration `yaml:"initial_interval"`
 			MaxInterval     time.Duration `yaml:"max_interval"`
 			MaxElapsedTime  time.Duration `yaml:"max_elapsed_time"`
-		} `yaml:"retry"`
+		}
 	}
 
 	exportConfig struct {
-		Connections []connection `yaml:"connections"`
-		Exporters   []exporter   `yaml:"exporters"`
+		Connections []connection
+		Exporters   []exporter
 	}
 
 	// ExportConfig represents YAML structured configuration for a set of OTEL
