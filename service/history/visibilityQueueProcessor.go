@@ -59,6 +59,7 @@ type (
 		updateVisibilityAckLevel updateVisibilityAckLevel
 		visibilityQueueShutdown  visibilityQueueShutdown
 		visibilityTaskFilter     taskFilter
+		ownedScheduler           queues.Scheduler // this is the scheduler owned by this visibility queue processor
 		logger                   log.Logger
 		metricsClient            metrics.Client
 
@@ -142,6 +143,7 @@ func newVisibilityQueueProcessor(
 
 	if scheduler == nil {
 		scheduler = newVisibilityTaskScheduler(shard, logger)
+		retProcessor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
@@ -199,6 +201,9 @@ func (t *visibilityQueueProcessorImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&t.isStarted, 0, 1) {
 		return
 	}
+	if t.ownedScheduler != nil {
+		t.ownedScheduler.Start()
+	}
 	t.queueProcessorBase.Start()
 	go t.completeTaskLoop()
 }
@@ -208,6 +213,9 @@ func (t *visibilityQueueProcessorImpl) Stop() {
 		return
 	}
 	t.queueProcessorBase.Stop()
+	if t.ownedScheduler != nil {
+		t.ownedScheduler.Stop()
+	}
 	close(t.shutdownChan)
 }
 

@@ -36,3 +36,21 @@
 #    constraints: {}
 #system.enableParentClosePolicyWorker:
 #  - value: true
+history.timerProcessorEnablePriorityTaskScheduler:
+- value: true
+  constraints: {}
+history.transferProcessorEnablePriorityTaskScheduler:
+- value: true
+  constraints: {}
+history.visibilityProcessorEnablePriorityTaskScheduler:
+- value: true
+  constraints: {}
+history.timerTaskMaxRetryCount:
+- value: 10
+  constraints: {}
+history.transferTaskMaxRetryCount:
+- value: 10
+  constraints: {}
+history.visibilityTaskMaxRetryCount:
+- value: 10
+  constraints: {}

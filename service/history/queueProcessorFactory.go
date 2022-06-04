@@ -25,6 +25,9 @@
 package history
 
 import (
+	"context"
+	"fmt"
+
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -33,7 +36,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
@@ -41,7 +43,6 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
@@ -62,6 +63,7 @@ var QueueProcessorModule = fx.Options(
 			Target: NewVisibilityQueueProcessorFactory,
 		},
 	),
+	fx.Invoke(QueueProcessorFactoryLifetimeHooks),
 )
 
 type (
@@ -105,41 +107,55 @@ type (
 		VisibilityMgr manager.VisibilityManager
 	}
 
-	replicationQueueProcessorFactoryParams struct {
-		fx.In
-
-		Config             *configs.Config
-		ClientBean         client.Bean
-		ArchivalClient     archiver.Client
-		EventSerializer    serialization.Serializer
-		TaskFetcherFactory replication.TaskFetcherFactory
+	queueProcessorFactoryBase struct {
+		scheduler       queues.Scheduler
+		hostRateLimiter quotas.RateLimiter
 	}
 
 	transferQueueProcessorFactory struct {
 		transferQueueProcessorFactoryParams
-
-		scheduler       queues.Scheduler
-		hostRateLimiter quotas.RateLimiter
+		queueProcessorFactoryBase
 	}
 
 	timerQueueProcessorFactory struct {
 		timerQueueProcessorFactoryParams
-
-		scheduler       queues.Scheduler
-		hostRateLimiter quotas.RateLimiter
+		queueProcessorFactoryBase
 	}
 
 	visibilityQueueProcessorFactory struct {
 		visibilityQueueProcessorFactoryParams
-
-		scheduler       queues.Scheduler
-		hostRateLimiter quotas.RateLimiter
+		queueProcessorFactoryBase
 	}
 
-	replicationQueueProcessorFactory struct {
-		replicationQueueProcessorFactoryParams
+	QueueProcessorFactoriesLifetimeHookParams struct {
+		fx.In
+
+		Lifecycle fx.Lifecycle
+		Factories []queues.ProcessorFactory `group:"queueProcessorFactory"`
 	}
 )
+
+func QueueProcessorFactoryLifetimeHooks(
+	params QueueProcessorFactoriesLifetimeHookParams,
+) {
+	params.Lifecycle.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+				fmt.Println("QueueProcessorFactoryLifetimeHooks for ", len(params.Factories))
+				for _, factory := range params.Factories {
+					factory.Start()
+				}
+				return nil
+			},
+			OnStop: func(context.Context) error {
+				for _, factory := range params.Factories {
+					factory.Stop()
+				}
+				return nil
+			},
+		},
+	)
+}
 
 func NewTransferQueueProcessorFactory(
 	params transferQueueProcessorFactoryParams,
@@ -171,11 +187,13 @@ func NewTransferQueueProcessorFactory(
 	}
 	return &transferQueueProcessorFactory{
 		transferQueueProcessorFactoryParams: params,
-		scheduler:                           scheduler,
-		hostRateLimiter: newQueueProcessorHostRateLimiter(
-			params.Config.TransferProcessorMaxPollHostRPS,
-			params.Config.PersistenceMaxQPS,
-		),
+		queueProcessorFactoryBase: queueProcessorFactoryBase{
+			scheduler: scheduler,
+			hostRateLimiter: newQueueProcessorHostRateLimiter(
+				params.Config.TransferProcessorMaxPollHostRPS,
+				params.Config.PersistenceMaxQPS,
+			),
+		},
 	}
 }
 
@@ -227,11 +245,13 @@ func NewTimerQueueProcessorFactory(
 	}
 	return &timerQueueProcessorFactory{
 		timerQueueProcessorFactoryParams: params,
-		scheduler:                        scheduler,
-		hostRateLimiter: newQueueProcessorHostRateLimiter(
-			params.Config.TimerProcessorMaxPollHostRPS,
-			params.Config.PersistenceMaxQPS,
-		),
+		queueProcessorFactoryBase: queueProcessorFactoryBase{
+			scheduler: scheduler,
+			hostRateLimiter: newQueueProcessorHostRateLimiter(
+				params.Config.TimerProcessorMaxPollHostRPS,
+				params.Config.PersistenceMaxQPS,
+			),
+		},
 	}
 }
 
@@ -255,7 +275,7 @@ func NewVisibilityQueueProcessorFactory(
 	params visibilityQueueProcessorFactoryParams,
 ) queues.ProcessorFactory {
 	var scheduler queues.Scheduler
-	if params.Config.TimerProcessorEnablePriorityTaskScheduler() {
+	if params.Config.VisibilityProcessorEnablePriorityTaskScheduler() {
 		scheduler = queues.NewScheduler(
 			queues.NewPriorityAssigner(
 				params.ClusterMetadata.GetCurrentClusterName(),
@@ -281,11 +301,13 @@ func NewVisibilityQueueProcessorFactory(
 	}
 	return &visibilityQueueProcessorFactory{
 		visibilityQueueProcessorFactoryParams: params,
-		scheduler:                             scheduler,
-		hostRateLimiter: newQueueProcessorHostRateLimiter(
-			params.Config.VisibilityProcessorMaxPollHostRPS,
-			params.Config.PersistenceMaxQPS,
-		),
+		queueProcessorFactoryBase: queueProcessorFactoryBase{
+			scheduler: scheduler,
+			hostRateLimiter: newQueueProcessorHostRateLimiter(
+				params.Config.VisibilityProcessorMaxPollHostRPS,
+				params.Config.PersistenceMaxQPS,
+			),
+		},
 	}
 }
 
@@ -301,6 +323,18 @@ func (f *visibilityQueueProcessorFactory) CreateProcessor(
 		f.VisibilityMgr,
 		f.hostRateLimiter,
 	)
+}
+
+func (f *queueProcessorFactoryBase) Start() {
+	if f.scheduler != nil {
+		f.scheduler.Start()
+	}
+}
+
+func (f *queueProcessorFactoryBase) Stop() {
+	if f.scheduler != nil {
+		f.scheduler.Stop()
+	}
 }
 
 func newQueueProcessorHostRateLimiter(
