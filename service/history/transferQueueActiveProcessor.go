@@ -52,6 +52,9 @@ type (
 		*transferQueueProcessorBase
 		*queueProcessorBase
 		queueAckMgr
+
+		// this is the scheduler owned by this active queue processor
+		ownedScheduler queues.Scheduler
 	}
 )
 
@@ -118,6 +121,7 @@ func newTransferQueueActiveProcessor(
 
 	if scheduler == nil {
 		scheduler = newTransferTaskScheduler(shard, logger)
+		processor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
@@ -309,6 +313,7 @@ func newTransferQueueFailoverProcessor(
 
 	if scheduler == nil {
 		scheduler = newTransferTaskScheduler(shard, logger)
+		processor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
@@ -359,4 +364,18 @@ func newTransferQueueFailoverProcessor(
 
 func (t *transferQueueActiveProcessorImpl) notifyNewTask() {
 	t.queueProcessorBase.notifyNewTask()
+}
+
+func (t *transferQueueActiveProcessorImpl) Start() {
+	if t.ownedScheduler != nil {
+		t.ownedScheduler.Start()
+	}
+	t.queueProcessorBase.Start()
+}
+
+func (t *transferQueueActiveProcessorImpl) Stop() {
+	t.queueProcessorBase.Stop()
+	if t.ownedScheduler != nil {
+		t.ownedScheduler.Stop()
+	}
 }

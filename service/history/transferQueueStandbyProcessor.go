@@ -49,6 +49,9 @@ type (
 		*transferQueueProcessorBase
 		*queueProcessorBase
 		queueAckMgr
+
+		// this is the scheduler owned by this standby queue processor
+		ownedScheduler queues.Scheduler
 	}
 )
 
@@ -138,6 +141,7 @@ func newTransferQueueStandbyProcessor(
 
 	if scheduler == nil {
 		scheduler = newTransferTaskScheduler(shard, logger)
+		processor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
@@ -190,4 +194,18 @@ func newTransferQueueStandbyProcessor(
 
 func (t *transferQueueStandbyProcessorImpl) notifyNewTask() {
 	t.queueProcessorBase.notifyNewTask()
+}
+
+func (t *transferQueueStandbyProcessorImpl) Start() {
+	if t.ownedScheduler != nil {
+		t.ownedScheduler.Start()
+	}
+	t.queueProcessorBase.Start()
+}
+
+func (t *transferQueueStandbyProcessorImpl) Stop() {
+	t.queueProcessorBase.Stop()
+	if t.ownedScheduler != nil {
+		t.ownedScheduler.Stop()
+	}
 }

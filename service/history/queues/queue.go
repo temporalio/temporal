@@ -44,6 +44,8 @@ type (
 	}
 
 	ProcessorFactory interface {
+		common.Daemon
+
 		// TODO: remove the cache parameter after workflow cache become a host level component
 		// and it can be provided as a parameter when creating a ProcessorFactory instance.
 		// Currently, workflow cache is shard level, but we can't get it from shard or engine interface,
