@@ -26,7 +26,6 @@ package history
 
 import (
 	"context"
-	"fmt"
 
 	"go.uber.org/fx"
 
@@ -141,7 +140,6 @@ func QueueProcessorFactoryLifetimeHooks(
 	params.Lifecycle.Append(
 		fx.Hook{
 			OnStart: func(context.Context) error {
-				fmt.Println("QueueProcessorFactoryLifetimeHooks for ", len(params.Factories))
 				for _, factory := range params.Factories {
 					factory.Start()
 				}
