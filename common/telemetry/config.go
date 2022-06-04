@@ -115,6 +115,7 @@ type (
 	}
 )
 
+// UnmarshalYAML loads the state of an ExportConfig from parsed YAML
 func (ec *ExportConfig) UnmarshalYAML(n *yaml.Node) error {
 	return n.Decode(&ec.inner)
 }
@@ -161,15 +162,15 @@ func (g *grpcconn) dialOpts() []grpc.DialOption {
 // SpanExporters builds the set of OTEL SpanExporter objects defined by the YAML
 // unmarshaled into this ExportConfig object. The returned SpanExporters have
 // not been started.
-func (c *ExportConfig) SpanExporters(ctx context.Context) ([]sdktrace.SpanExporter, error) {
-	out := make([]sdktrace.SpanExporter, 0, len(c.inner.Exporters))
-	for _, expcfg := range c.inner.Exporters {
+func (ec *ExportConfig) SpanExporters(ctx context.Context) ([]sdktrace.SpanExporter, error) {
+	out := make([]sdktrace.SpanExporter, 0, len(ec.inner.Exporters))
+	for _, expcfg := range ec.inner.Exporters {
 		if !strings.HasPrefix(expcfg.Kind.Signal, "trace") {
 			continue
 		}
 		switch spec := expcfg.Spec.(type) {
 		case *otlpGrpcSpanExporter:
-			spanexp, err := c.buildOtlpGrpcSpanExporter(ctx, spec)
+			spanexp, err := ec.buildOtlpGrpcSpanExporter(ctx, spec)
 			if err != nil {
 				return nil, err
 			}
@@ -181,7 +182,7 @@ func (c *ExportConfig) SpanExporters(ctx context.Context) ([]sdktrace.SpanExport
 	return out, nil
 }
 
-func (c *ExportConfig) buildOtlpGrpcSpanExporter(
+func (ec *ExportConfig) buildOtlpGrpcSpanExporter(
 	ctx context.Context,
 	cfg *otlpGrpcSpanExporter,
 ) (sdktrace.SpanExporter, error) {
@@ -208,7 +209,7 @@ func (c *ExportConfig) buildOtlpGrpcSpanExporter(
 		return otlptracegrpc.NewUnstarted(opts...), nil
 	}
 
-	conncfg, ok := c.findNamedGrpcConnCfg(cfg.ConnectionName)
+	conncfg, ok := ec.findNamedGrpcConnCfg(cfg.ConnectionName)
 	if !ok {
 		return nil, fmt.Errorf("OTEL exporter connection %q not found", cfg.ConnectionName)
 	}
@@ -220,11 +221,11 @@ func (c *ExportConfig) buildOtlpGrpcSpanExporter(
 	return otlptracegrpc.NewUnstarted(opts...), nil
 }
 
-func (c *ExportConfig) findNamedGrpcConnCfg(name string) (*grpcconn, bool) {
+func (ec *ExportConfig) findNamedGrpcConnCfg(name string) (*grpcconn, bool) {
 	if name == "" {
 		return nil, false
 	}
-	for _, conn := range c.inner.Connections {
+	for _, conn := range ec.inner.Connections {
 		if gconn, ok := conn.Spec.(*grpcconn); ok && conn.Metadata.Name == name {
 			return gconn, true
 		}
@@ -232,6 +233,7 @@ func (c *ExportConfig) findNamedGrpcConnCfg(name string) (*grpcconn, bool) {
 	return nil, false
 }
 
+// UnmarshalYAML loads the state of a generic connection from parsed YAML
 func (c *connection) UnmarshalYAML(n *yaml.Node) error {
 	type conn connection
 	type overlay struct {
@@ -252,6 +254,7 @@ func (c *connection) UnmarshalYAML(n *yaml.Node) error {
 	return obj.Spec.Decode(c.Spec)
 }
 
+// UnmarshalYAML loads the state of a generic exporter from parsed YAML
 func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 	type exp exporter
 	type overlay struct {
