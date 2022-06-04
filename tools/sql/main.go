@@ -191,8 +191,8 @@ func BuildCLIOptions() *cli.App {
 			Usage:   "creates a database",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  schema.CLIFlagDatabase,
-					Usage: "name of the database",
+					Name:  schema.CLIOptDefaultDb,
+					Usage: "optional default db to connect to, this is not the db to be created",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -205,8 +205,8 @@ func BuildCLIOptions() *cli.App {
 			Usage:   "drops a database",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  schema.CLIFlagDatabase,
-					Usage: "name of the database",
+					Name:  schema.CLIOptDefaultDb,
+					Usage: "optional default db to connect to, not the db to be deleted",
 				},
 				cli.BoolFlag{
 					Name:  schema.CLIFlagForce,
@@ -216,7 +216,7 @@ func BuildCLIOptions() *cli.App {
 			Action: func(c *cli.Context) {
 				drop := c.Bool(schema.CLIOptForce)
 				if !drop {
-					database := c.String(schema.CLIOptDatabase)
+					database := c.GlobalString(schema.CLIOptDatabase)
 					fmt.Printf("Are you sure you want to drop database %q (y/N)? ", database)
 					y := ""
 					_, _ = fmt.Scanln(&y)
