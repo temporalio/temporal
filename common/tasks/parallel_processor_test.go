@@ -103,14 +103,20 @@ func (s *parallelProcessorSuite) TestSubmitProcess_Running_FailExecution() {
 	testWaitGroup.Wait()
 }
 
-func (s *parallelProcessorSuite) TestSubmitProcess_Stopped_FailSubmission() {
+func (s *parallelProcessorSuite) TestSubmitProcess_Stopped_Submission() {
 	testWaitGroup := sync.WaitGroup{}
 	testWaitGroup.Add(1)
 
 	s.processor.Stop()
 
-	// drain immediately
 	mockTask := NewMockTask(s.controller)
+
+	// if task get picked up before worker goroutine receives the shutdown notification
+	mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).MaxTimes(1)
+	mockTask.EXPECT().Execute().Return(nil).MaxTimes(1)
+	mockTask.EXPECT().Ack().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
+
+	// if task get drained
 	mockTask.EXPECT().Reschedule().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
 
 	s.processor.Submit(mockTask)
