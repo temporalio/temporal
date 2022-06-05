@@ -28,9 +28,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	sdkmetricexp "go.opentelemetry.io/otel/sdk/metric/export"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -90,7 +93,7 @@ type (
 		Spec     interface{} `yaml:"-"`
 	}
 
-	otlpGrpcSpanExporter struct {
+	otlpGrpcExporter struct {
 		ConnectionName string `yaml:"connection_name"`
 		Connection     grpcconn
 		Headers        map[string]string
@@ -101,6 +104,13 @@ type (
 			MaxInterval     time.Duration `yaml:"max_interval"`
 			MaxElapsedTime  time.Duration `yaml:"max_elapsed_time"`
 		}
+	}
+
+	otlpGrpcSpanExporter struct {
+		otlpGrpcExporter `yaml:",inline"`
+	}
+	otlpGrpcMetricExporter struct {
+		otlpGrpcExporter `yaml:",inline"`
 	}
 
 	exportConfig struct {
@@ -120,7 +130,15 @@ func (ec *ExportConfig) UnmarshalYAML(n *yaml.Node) error {
 	return n.Decode(&ec.inner)
 }
 
-func (g *grpcconn) dial(ctx context.Context) (*grpc.ClientConn, error) {
+func (ec *ExportConfig) SpanExporters() ([]sdktrace.SpanExporter, error) {
+	return ec.inner.SpanExporters()
+}
+
+func (ec *ExportConfig) MetricExporters() ([]sdkmetricexp.Exporter, error) {
+	return ec.inner.MetricExporters()
+}
+
+func (g *grpcconn) Dial(ctx context.Context) (*grpc.ClientConn, error) {
 	if g.cc != nil {
 		return g.cc, nil
 	}
@@ -162,15 +180,15 @@ func (g *grpcconn) dialOpts() []grpc.DialOption {
 // SpanExporters builds the set of OTEL SpanExporter objects defined by the YAML
 // unmarshaled into this ExportConfig object. The returned SpanExporters have
 // not been started.
-func (ec *ExportConfig) SpanExporters(ctx context.Context) ([]sdktrace.SpanExporter, error) {
-	out := make([]sdktrace.SpanExporter, 0, len(ec.inner.Exporters))
-	for _, expcfg := range ec.inner.Exporters {
+func (ec *exportConfig) SpanExporters() ([]sdktrace.SpanExporter, error) {
+	out := make([]sdktrace.SpanExporter, 0, len(ec.Exporters))
+	for _, expcfg := range ec.Exporters {
 		if !strings.HasPrefix(expcfg.Kind.Signal, "trace") {
 			continue
 		}
 		switch spec := expcfg.Spec.(type) {
 		case *otlpGrpcSpanExporter:
-			spanexp, err := ec.buildOtlpGrpcSpanExporter(ctx, spec)
+			spanexp, err := ec.buildOtlpGrpcSpanExporter(spec)
 			if err != nil {
 				return nil, err
 			}
@@ -182,8 +200,64 @@ func (ec *ExportConfig) SpanExporters(ctx context.Context) ([]sdktrace.SpanExpor
 	return out, nil
 }
 
-func (ec *ExportConfig) buildOtlpGrpcSpanExporter(
-	ctx context.Context,
+func (ec *exportConfig) MetricExporters() ([]sdkmetricexp.Exporter, error) {
+	out := make([]sdkmetricexp.Exporter, 0, len(ec.Exporters))
+	for _, expcfg := range ec.Exporters {
+		if !strings.HasPrefix(expcfg.Kind.Signal, "metric") {
+			continue
+		}
+		switch spec := expcfg.Spec.(type) {
+		case *otlpGrpcMetricExporter:
+			metricexp, err := ec.buildOtlpGrpcMetricExporter(spec)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, metricexp)
+		default:
+			return nil, fmt.Errorf("unsupported metric exporter type: %T", spec)
+		}
+	}
+	return out, nil
+
+}
+
+func (ec *exportConfig) buildOtlpGrpcMetricExporter(
+	cfg *otlpGrpcMetricExporter,
+) (sdkmetricexp.Exporter, error) {
+	dopts := cfg.Connection.dialOpts()
+	opts := []otlpmetricgrpc.Option{
+		otlpmetricgrpc.WithEndpoint(cfg.Connection.Endpoint),
+		otlpmetricgrpc.WithHeaders(cfg.Headers),
+		otlpmetricgrpc.WithTimeout(valueOrDefault(cfg.Timeout, 10*time.Second)),
+		otlpmetricgrpc.WithDialOption(dopts...),
+		otlpmetricgrpc.WithRetry(otlpmetricgrpc.RetryConfig{
+			Enabled:         valueOrDefault(cfg.Retry.Enabled, true),
+			InitialInterval: valueOrDefault(cfg.Retry.InitialInterval, 5*time.Second),
+			MaxInterval:     valueOrDefault(cfg.Retry.MaxInterval, 30*time.Second),
+			MaxElapsedTime:  valueOrDefault(cfg.Retry.MaxElapsedTime, 1*time.Minute),
+		}),
+	}
+
+	// work around https://github.com/open-telemetry/opentelemetry-go/issues/2940
+	if cfg.Connection.Insecure {
+		opts = append(opts, otlpmetricgrpc.WithInsecure())
+	}
+
+	if cfg.ConnectionName == "" {
+		return otlpmetricgrpc.NewUnstarted(opts...), nil
+	}
+
+	conncfg, ok := ec.findNamedGrpcConnCfg(cfg.ConnectionName)
+	if !ok {
+		return nil, fmt.Errorf("OTEL exporter connection %q not found", cfg.ConnectionName)
+	}
+	return &sharedConnMetricExporter{
+		baseOpts: opts,
+		dialer:   conncfg,
+	}, nil
+}
+
+func (ec *exportConfig) buildOtlpGrpcSpanExporter(
 	cfg *otlpGrpcSpanExporter,
 ) (sdktrace.SpanExporter, error) {
 	dopts := cfg.Connection.dialOpts()
@@ -213,19 +287,70 @@ func (ec *ExportConfig) buildOtlpGrpcSpanExporter(
 	if !ok {
 		return nil, fmt.Errorf("OTEL exporter connection %q not found", cfg.ConnectionName)
 	}
-	cc, err := conncfg.dial(ctx)
-	if err != nil {
-		return nil, err
-	}
-	opts = append(opts, otlptracegrpc.WithGRPCConn(cc))
-	return otlptracegrpc.NewUnstarted(opts...), nil
+	return &sharedConnSpanExporter{
+		baseOpts: opts,
+		dialer:   conncfg,
+	}, nil
 }
 
-func (ec *ExportConfig) findNamedGrpcConnCfg(name string) (*grpcconn, bool) {
+// sharedConnSpanExporter exists to wrap a span exporter that uses a shared
+// *grpc.ClientConn so that the grpc.Dial call doesn't happen until Start() is
+// called. Without this wrapper the grpc.ClientConn (which can only be created
+// via grpc.Dial or grpc.DialContext) would need to exist at exporter
+// _construction_ time, meaning that we would need to dial at construction
+// rather then during the start phase.
+type sharedConnSpanExporter struct {
+	baseOpts []otlptracegrpc.Option
+	dialer   interface {
+		Dial(context.Context) (*grpc.ClientConn, error)
+	}
+	startOnce sync.Once
+	sdktrace.SpanExporter
+}
+
+// Start
+func (scse *sharedConnSpanExporter) Start(ctx context.Context) error {
+	var err error
+	scse.startOnce.Do(func() {
+		var cc *grpc.ClientConn
+		cc, err = scse.dialer.Dial(ctx)
+		if err != nil {
+			return
+		}
+		opts := append(scse.baseOpts, otlptracegrpc.WithGRPCConn(cc))
+		scse.SpanExporter, err = otlptracegrpc.New(ctx, opts...)
+	})
+	return err
+}
+
+type sharedConnMetricExporter struct {
+	baseOpts []otlpmetricgrpc.Option
+	dialer   interface {
+		Dial(context.Context) (*grpc.ClientConn, error)
+	}
+	startOnce sync.Once
+	sdkmetricexp.Exporter
+}
+
+func (scme *sharedConnMetricExporter) Start(ctx context.Context) error {
+	var err error
+	scme.startOnce.Do(func() {
+		var cc *grpc.ClientConn
+		cc, err = scme.dialer.Dial(ctx)
+		if err != nil {
+			return
+		}
+		opts := append(scme.baseOpts, otlpmetricgrpc.WithGRPCConn(cc))
+		scme.Exporter, err = otlpmetricgrpc.New(ctx, opts...)
+	})
+	return err
+}
+
+func (ec *exportConfig) findNamedGrpcConnCfg(name string) (*grpcconn, bool) {
 	if name == "" {
 		return nil, false
 	}
-	for _, conn := range ec.inner.Connections {
+	for _, conn := range ec.Connections {
 		if gconn, ok := conn.Spec.(*grpcconn); ok && conn.Metadata.Name == name {
 			return gconn, true
 		}
@@ -270,6 +395,8 @@ func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 	switch descriptor {
 	case "traces+otlp+grpc", "trace+otlp+grpc":
 		e.Spec = new(otlpGrpcSpanExporter)
+	case "metrics+otlp+grpc", "metric+otlp+grpc":
+		e.Spec = new(otlpGrpcMetricExporter)
 	default:
 		return fmt.Errorf(
 			"unsupported exporter kind: signal=%q; model=%q; proto=%q",

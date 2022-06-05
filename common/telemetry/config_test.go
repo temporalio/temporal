@@ -25,7 +25,6 @@
 package telemetry_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -56,11 +55,76 @@ exporters:
         endpoint: localhost:4317
 `
 
+var sharedConnOTLPConfig = `
+otel:
+  connections:
+    - kind: grpc
+      metadata:
+        name: conn1
+      spec:
+        endpoint: localhost:4317
+  exporters:
+    - kind:
+        signal: traces
+        model: otlp
+        proto: grpc
+      spec:
+        connection_name: conn1
+    - kind:
+        signal: metrics
+        model: otlp
+        proto: grpc
+      spec:
+        connection_name: conn1
+`
+
 func TestEmptyConfig(t *testing.T) {
 	cfg := telemetry.ExportConfig{}
-	exporters, err := cfg.SpanExporters(context.TODO())
+	exporters, err := cfg.SpanExporters()
 	require.NoError(t, err)
 	require.Len(t, exporters, 0)
+}
+
+func TestExportersWithSharedConn(t *testing.T) {
+	root := struct{ Otel telemetry.PrivateExportConfig }{}
+	err := yaml.Unmarshal([]byte(sharedConnOTLPConfig), &root)
+	require.NoError(t, err)
+	cfg := &root.Otel
+
+	spanExporters, err := cfg.SpanExporters()
+	require.NoError(t, err)
+	require.Len(t, spanExporters, 1)
+
+	metricExporters, err := cfg.MetricExporters()
+	require.NoError(t, err)
+	require.Len(t, metricExporters, 1)
+}
+
+func TestSharedConn(t *testing.T) {
+	root := struct{ Otel telemetry.PrivateExportConfig }{}
+	err := yaml.Unmarshal([]byte(sharedConnOTLPConfig), &root)
+	require.NoError(t, err)
+	cfg := &root.Otel
+	require.Len(t, cfg.Connections, 1)
+	require.Len(t, cfg.Exporters, 2)
+
+	exp := cfg.Exporters[0]
+	require.Equal(t, exp.Kind.Signal, "traces")
+	require.Equal(t, exp.Kind.Model, "otlp")
+	require.Equal(t, exp.Kind.Proto, "grpc")
+	require.NotNil(t, exp.Spec)
+	sspec, ok := exp.Spec.(*telemetry.OTLPGRPCSpanExporter)
+	require.True(t, ok)
+	require.Equal(t, "conn1", sspec.ConnectionName)
+
+	exp = cfg.Exporters[1]
+	require.Equal(t, exp.Kind.Signal, "metrics")
+	require.Equal(t, exp.Kind.Model, "otlp")
+	require.Equal(t, exp.Kind.Proto, "grpc")
+	require.NotNil(t, exp.Spec)
+	mspec, ok := exp.Spec.(*telemetry.OTLPGRPCMetricExporter)
+	require.True(t, ok)
+	require.Equal(t, "conn1", mspec.ConnectionName)
 }
 
 func TestOTLPTraceGRPC(t *testing.T) {

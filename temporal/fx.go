@@ -799,7 +799,7 @@ var TraceExportModule = fx.Options(
 	}),
 
 	fx.Provide(func(lc fx.Lifecycle, c *config.Config) ([]sdktrace.SpanExporter, error) {
-		exporters, err := c.ExporterConfig.SpanExporters(context.Background())
+		exporters, err := c.ExporterConfig.SpanExporters()
 		if err != nil {
 			return nil, err
 		}

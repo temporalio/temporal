@@ -25,6 +25,7 @@
 package telemetry
 
 type (
-	OTLPGRPCSpanExporter = otlpGrpcSpanExporter
-	PrivateExportConfig  = exportConfig
+	OTLPGRPCSpanExporter   = otlpGrpcSpanExporter
+	OTLPGRPCMetricExporter = otlpGrpcMetricExporter
+	PrivateExportConfig    = exportConfig
 )
