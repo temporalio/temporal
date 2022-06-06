@@ -53,7 +53,7 @@ new_mapping='
 '
 
 if [ -z "${AUTO_CONFIRM}" ]; then
-    read -p "Add new builtin search attributes above to the index ${ES_VIS_INDEX_V1}? (N/y)" -n 1 -r
+    read -p "Add new builtin search attributes to the index ${ES_VIS_INDEX_V1}? (N/y)" -n 1 -r
     echo
 else
     REPLY="y"
