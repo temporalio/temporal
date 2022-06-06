@@ -42,12 +42,20 @@ import (
 )
 
 const (
-	// these defaults were taken from the grpc docs as of grpc v1.46.
+	// the following defaults were taken from the grpc docs as of grpc v1.46.
 	// they are not available programatically
 
 	defaultReadBufferSize    = 32 * 1024
 	defaultWriteBufferSize   = 32 * 1024
 	defaultMinConnectTimeout = 10 * time.Second
+
+	// the following defaults were taken from the otel library as of v1.7.
+	// they are not available programatically
+
+	retryDefaultEnabled         = true
+	retryDefaultInitialInterval = 5 * time.Second
+	retryDefaultMaxInterval     = 30 * time.Second
+	retryDefaultMaxElapsedTime  = 1 * time.Minute
 )
 
 type (
@@ -255,10 +263,10 @@ func (ec *exportConfig) buildOtlpGrpcMetricExporter(
 		otlpmetricgrpc.WithTimeout(coalesce(cfg.Timeout, 10*time.Second)),
 		otlpmetricgrpc.WithDialOption(dopts...),
 		otlpmetricgrpc.WithRetry(otlpmetricgrpc.RetryConfig{
-			Enabled:         coalesce(cfg.Retry.Enabled, true),
-			InitialInterval: coalesce(cfg.Retry.InitialInterval, 5*time.Second),
-			MaxInterval:     coalesce(cfg.Retry.MaxInterval, 30*time.Second),
-			MaxElapsedTime:  coalesce(cfg.Retry.MaxElapsedTime, 1*time.Minute),
+			Enabled:         coalesce(cfg.Retry.Enabled, retryDefaultEnabled),
+			InitialInterval: coalesce(cfg.Retry.InitialInterval, retryDefaultInitialInterval),
+			MaxInterval:     coalesce(cfg.Retry.MaxInterval, retryDefaultMaxInterval),
+			MaxElapsedTime:  coalesce(cfg.Retry.MaxElapsedTime, retryDefaultMaxElapsedTime),
 		}),
 	}
 
@@ -290,10 +298,10 @@ func (ec *exportConfig) buildOtlpGrpcSpanExporter(
 		otlptracegrpc.WithTimeout(coalesce(cfg.Timeout, 10*time.Second)),
 		otlptracegrpc.WithDialOption(cfg.Connection.dialOpts()...),
 		otlptracegrpc.WithRetry(otlptracegrpc.RetryConfig{
-			Enabled:         coalesce(cfg.Retry.Enabled, true),
-			InitialInterval: coalesce(cfg.Retry.InitialInterval, 5*time.Second),
-			MaxInterval:     coalesce(cfg.Retry.MaxInterval, 30*time.Second),
-			MaxElapsedTime:  coalesce(cfg.Retry.MaxElapsedTime, 1*time.Minute),
+			Enabled:         coalesce(cfg.Retry.Enabled, retryDefaultEnabled),
+			InitialInterval: coalesce(cfg.Retry.InitialInterval, retryDefaultInitialInterval),
+			MaxInterval:     coalesce(cfg.Retry.MaxInterval, retryDefaultMaxInterval),
+			MaxElapsedTime:  coalesce(cfg.Retry.MaxElapsedTime, retryDefaultMaxElapsedTime),
 		}),
 	}
 
