@@ -33,7 +33,10 @@ import (
 	"go.temporal.io/server/common"
 )
 
-const IdentityHistoryService = "history-service"
+const (
+	IdentityHistoryService = "history-service"
+	IdentityResetter       = "history-resetter"
+)
 
 var (
 	// ErrTaskDiscarded is the error indicating that the standby timer / transfer task is pending for too long and discarded.

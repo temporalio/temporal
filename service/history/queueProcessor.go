@@ -59,17 +59,17 @@ type (
 	}
 
 	queueProcessorBase struct {
-		clusterName         string
-		shard               shard.Context
-		timeSource          clock.TimeSource
-		options             *QueueProcessorOptions
-		processor           processor
-		logger              log.Logger
-		metricsScope        metrics.Scope
-		rateLimiter         quotas.RateLimiter // Read rate limiter
-		ackMgr              queueAckMgr
-		executableScheduler queues.Scheduler
-		rescheduler         queues.Rescheduler
+		clusterName  string
+		shard        shard.Context
+		timeSource   clock.TimeSource
+		options      *QueueProcessorOptions
+		processor    processor
+		logger       log.Logger
+		metricsScope metrics.Scope
+		rateLimiter  quotas.RateLimiter // Read rate limiter
+		ackMgr       queueAckMgr
+		scheduler    queues.Scheduler
+		rescheduler  queues.Rescheduler
 
 		lastPollTime time.Time
 		backoffTimer *time.Timer
@@ -92,7 +92,7 @@ func newQueueProcessorBase(
 	processor processor,
 	queueAckMgr queueAckMgr,
 	historyCache workflow.Cache,
-	executableScheduler queues.Scheduler,
+	scheduler queues.Scheduler,
 	rescheduler queues.Rescheduler,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
@@ -100,21 +100,21 @@ func newQueueProcessorBase(
 ) *queueProcessorBase {
 
 	p := &queueProcessorBase{
-		clusterName:         clusterName,
-		shard:               shard,
-		timeSource:          shard.GetTimeSource(),
-		options:             options,
-		processor:           processor,
-		rateLimiter:         rateLimiter,
-		status:              common.DaemonStatusInitialized,
-		notifyCh:            make(chan struct{}, 1),
-		shutdownCh:          make(chan struct{}),
-		logger:              logger,
-		metricsScope:        metricsScope,
-		ackMgr:              queueAckMgr,
-		lastPollTime:        time.Time{},
-		executableScheduler: executableScheduler,
-		rescheduler:         rescheduler,
+		clusterName:  clusterName,
+		shard:        shard,
+		timeSource:   shard.GetTimeSource(),
+		options:      options,
+		processor:    processor,
+		rateLimiter:  rateLimiter,
+		status:       common.DaemonStatusInitialized,
+		notifyCh:     make(chan struct{}, 1),
+		shutdownCh:   make(chan struct{}),
+		logger:       logger,
+		metricsScope: metricsScope,
+		ackMgr:       queueAckMgr,
+		lastPollTime: time.Time{},
+		scheduler:    scheduler,
+		rescheduler:  rescheduler,
 	}
 
 	return p
@@ -128,7 +128,6 @@ func (p *queueProcessorBase) Start() {
 	p.logger.Info("", tag.LifeCycleStarting, tag.ComponentTransferQueue)
 	defer p.logger.Info("", tag.LifeCycleStarted, tag.ComponentTransferQueue)
 
-	p.executableScheduler.Start()
 	p.shutdownWG.Add(1)
 	p.notifyNewTask()
 	go p.processorPump()
@@ -147,8 +146,6 @@ func (p *queueProcessorBase) Stop() {
 	if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
 		p.logger.Warn("", tag.LifeCycleStopTimedout, tag.ComponentTransferQueue)
 	}
-
-	p.executableScheduler.Stop()
 }
 
 func (p *queueProcessorBase) notifyNewTask() {
@@ -289,7 +286,7 @@ func (p *queueProcessorBase) submitTask(
 	executable queues.Executable,
 ) {
 
-	submitted, err := p.executableScheduler.TrySubmit(executable)
+	submitted, err := p.scheduler.TrySubmit(executable)
 	if err != nil {
 		p.logger.Error("Failed to submit task", tag.Error(err))
 		executable.Reschedule()

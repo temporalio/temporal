@@ -32,13 +32,12 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/workflowservice/v1"
-
-	"github.com/uber-go/tally/v4"
 	"github.com/uber/tchannel-go"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
+
+	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -390,21 +389,6 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 
 	rpcFactory := newRPCFactoryImpl(serviceName, c.FrontendGRPCAddress(), c.FrontendRingpopAddress(), c.logger)
 
-	metricsClient, err := metrics.NewTallyClient(
-		&metrics.ClientConfig{},
-		tally.NewTestScope(serviceName, make(map[string]string)),
-		metrics.GetMetricsServiceIdx(serviceName, c.logger),
-	)
-	if err != nil {
-		c.logger.Fatal("metrics.NewTallyClient", tag.Error(err))
-	}
-
-	sdkClientFactory := sdk.NewClientFactory(
-		c.FrontendGRPCAddress(),
-		nil,
-		sdk.NewMetricHandler(metricsClient.UserScope()),
-	)
-
 	stoppedCh := make(chan struct{})
 	var frontendService *frontend.Service
 	var clientBean client.Bean
@@ -414,7 +398,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() resource.ServerReporter { return metrics.NoopReporter }),
+		fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
@@ -426,7 +410,13 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
-		fx.Provide(func() sdk.ClientFactory { return sdkClientFactory }),
+		fx.Provide(func() sdk.ClientFactory {
+			return sdk.NewClientFactory(
+				c.FrontendGRPCAddress(),
+				nil,
+				sdk.NewMetricHandler(metrics.NewEventsMetricProvider(metrics.NoopMetricHandler)),
+			)
+		}),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
 		fx.Provide(func() authorization.Authorizer { return nil }),
 		fx.Provide(func() authorization.ClaimMapper { return nil }),
@@ -498,21 +488,6 @@ func (c *temporalImpl) startHistory(
 
 		rpcFactory := newRPCFactoryImpl(serviceName, grpcPort, membershipPorts[i], c.logger)
 
-		metricsClient, err := metrics.NewTallyClient(
-			&metrics.ClientConfig{},
-			tally.NewTestScope(serviceName, make(map[string]string)),
-			metrics.GetMetricsServiceIdx(serviceName, c.logger),
-		)
-		if err != nil {
-			c.logger.Fatal("metrics.NewTallyClient", tag.Error(err))
-		}
-
-		sdkClientFactory := sdk.NewClientFactory(
-			c.FrontendGRPCAddress(),
-			nil,
-			sdk.NewMetricHandler(metricsClient.UserScope()),
-		)
-
 		stoppedCh := make(chan struct{})
 		var historyService *history.Service
 		var clientBean client.Bean
@@ -523,7 +498,7 @@ func (c *temporalImpl) startHistory(
 				integrationClient,
 				persistenceConfig,
 			),
-			fx.Provide(func() resource.ServerReporter { return metrics.NoopReporter }),
+			fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
 			fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() resource.ThrottledLogger { return c.logger }),
@@ -534,7 +509,13 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
-			fx.Provide(func() sdk.ClientFactory { return sdkClientFactory }),
+			fx.Provide(func() sdk.ClientFactory {
+				return sdk.NewClientFactory(
+					c.FrontendGRPCAddress(),
+					nil,
+					sdk.NewMetricHandler(metrics.NewEventsMetricProvider(metrics.NoopMetricHandler)),
+				)
+			}),
 			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
 			// Comment the line above and uncomment the line bellow to test with search attributes mapper.
@@ -605,7 +586,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() resource.ServerReporter { return metrics.NoopReporter }),
+		fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
 		fx.Provide(func() common.RPCFactory { return rpcFactory }),
@@ -664,21 +645,6 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 
 	rpcFactory := newRPCFactoryImpl(serviceName, c.WorkerGRPCServiceAddress(), c.WorkerServiceRingpopAddress(), c.logger)
 
-	metricsClient, err := metrics.NewTallyClient(
-		&metrics.ClientConfig{},
-		tally.NewTestScope(serviceName, make(map[string]string)),
-		metrics.GetMetricsServiceIdx(serviceName, c.logger),
-	)
-	if err != nil {
-		c.logger.Fatal("metrics.NewTallyClient", tag.Error(err))
-	}
-
-	sdkClientFactory := sdk.NewClientFactory(
-		c.FrontendGRPCAddress(),
-		nil,
-		sdk.NewMetricHandler(metricsClient.UserScope()),
-	)
-
 	clusterConfigCopy := cluster.Config{
 		EnableGlobalNamespace:    c.clusterMetadataConfig.EnableGlobalNamespace,
 		FailoverVersionIncrement: c.clusterMetadataConfig.FailoverVersionIncrement,
@@ -703,7 +669,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() resource.ServerReporter { return metrics.NoopReporter }),
+		fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
@@ -714,7 +680,13 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
-		fx.Provide(func() sdk.ClientFactory { return sdkClientFactory }),
+		fx.Provide(func() sdk.ClientFactory {
+			return sdk.NewClientFactory(
+				c.FrontendGRPCAddress(),
+				nil,
+				sdk.NewMetricHandler(metrics.NewEventsMetricProvider(metrics.NoopMetricHandler)),
+			)
+		}),
 		fx.Provide(func() sdk.WorkerFactory { return sdk.NewWorkerFactory() }),
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),

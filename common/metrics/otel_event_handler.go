@@ -30,7 +30,6 @@ import (
 	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/instrument"
 	otelunit "go.opentelemetry.io/otel/metric/unit"
 	"golang.org/x/exp/event"
@@ -42,25 +41,27 @@ import (
 // MetricHandler is an event.Handler for OpenTelemetry metrics.
 // Its Event method handles Metric events and ignores all others.
 type OtelMetricHandler struct {
-	meter metric.Meter
-	mu    sync.Mutex
-	l     log.Logger
+	provider OpenTelemetryProvider
+	mu       sync.Mutex
+	l        log.Logger
 	// A map from event.Metrics to, effectively, otel Meters.
 	// But since the only thing we need from the Meter is recording a value, we
 	// use a function for that that closes over the Meter itself.
 	recordFuncs map[event.Metric]recordFunc
+	excludeTags map[string]map[string]struct{}
 }
 
 type recordFunc func(context.Context, event.Label, []attribute.KeyValue)
 
-var _ event.Handler = (*OtelMetricHandler)(nil)
+var _ MetricHandler = (*OtelMetricHandler)(nil)
 
 // NewOtelMetricHandler creates a new open telemetry MetricHandler.
-func NewOtelMetricHandler(l log.Logger, m metric.Meter) *OtelMetricHandler {
+func NewOtelMetricHandler(l log.Logger, o OpenTelemetryProvider, cfg ClientConfig) *OtelMetricHandler {
 	return &OtelMetricHandler{
-		meter:       m,
+		provider:    o,
 		l:           l,
 		recordFuncs: map[event.Metric]recordFunc{},
+		excludeTags: configExcludeTags(cfg),
 	}
 }
 
@@ -85,7 +86,7 @@ func (m *OtelMetricHandler) Event(ctx context.Context, e *event.Event) context.C
 		m.l.Fatal("unable to record for metric", tag.NewAnyTag("event", e))
 	}
 
-	rf(ctx, lval, labelsToAttributes(e.Labels))
+	rf(ctx, lval, m.labelsToAttributes(e.Labels))
 	return ctx
 }
 
@@ -102,14 +103,14 @@ func (m *OtelMetricHandler) getRecordFunc(em event.Metric) recordFunc {
 
 func (m *OtelMetricHandler) newRecordFunc(em event.Metric) recordFunc {
 	opts := em.Options()
-	name := opts.Namespace + "/" + em.Name()
+	name := em.Name()
 	otelOpts := []instrument.Option{
 		instrument.WithDescription(opts.Description),
 		instrument.WithUnit(otelunit.Unit(opts.Unit)), // cast OK: same strings
 	}
 	switch em.(type) {
 	case *event.Counter:
-		c, err := m.meter.SyncInt64().Counter(name, otelOpts...)
+		c, err := m.provider.GetMeter().SyncInt64().Counter(name, otelOpts...)
 		if err != nil {
 			m.l.Fatal("unable to get new recording function", tag.NewAnyTag("MetricType", fmt.Sprintf("%T", em)), tag.Error(err))
 			return nil
@@ -120,7 +121,7 @@ func (m *OtelMetricHandler) newRecordFunc(em event.Metric) recordFunc {
 		}
 
 	case *event.FloatGauge:
-		g, err := m.meter.SyncFloat64().UpDownCounter(name, otelOpts...)
+		g, err := m.provider.GetMeter().SyncFloat64().UpDownCounter(name, otelOpts...)
 		if err != nil {
 			m.l.Fatal("unable to get new recording function", tag.NewAnyTag("MetricType", fmt.Sprintf("%T", em)), tag.Error(err))
 			return nil
@@ -131,7 +132,7 @@ func (m *OtelMetricHandler) newRecordFunc(em event.Metric) recordFunc {
 		}
 
 	case *event.DurationDistribution:
-		r, err := m.meter.SyncInt64().Histogram(name, otelOpts...)
+		r, err := m.provider.GetMeter().SyncInt64().Histogram(name, otelOpts...)
 		if err != nil {
 			m.l.Fatal("unable to get new recording function", tag.NewAnyTag("MetricType", fmt.Sprintf("%T", em)), tag.Error(err))
 		}
@@ -141,7 +142,7 @@ func (m *OtelMetricHandler) newRecordFunc(em event.Metric) recordFunc {
 		}
 
 	case *event.IntDistribution:
-		r, err := m.meter.SyncInt64().Histogram(name, otelOpts...)
+		r, err := m.provider.GetMeter().SyncInt64().Histogram(name, otelOpts...)
 		if err != nil {
 			m.l.Fatal("unable to get new recording function", tag.NewAnyTag("MetricType", fmt.Sprintf("%T", em)), tag.Error(err))
 			return nil
@@ -156,12 +157,20 @@ func (m *OtelMetricHandler) newRecordFunc(em event.Metric) recordFunc {
 	}
 }
 
-func labelsToAttributes(ls []event.Label) []attribute.KeyValue {
+func (m *OtelMetricHandler) labelsToAttributes(ls []event.Label) []attribute.KeyValue {
 	var attrs []attribute.KeyValue
 	for _, l := range ls {
+		if vals, ok := m.excludeTags[l.Name]; ok {
+			if _, ok := vals[l.String()]; ok {
+				attrs = append(attrs, attribute.String(l.Name, tagExcludedValue))
+				continue
+			}
+		}
+
 		if l.Name == string(event.MetricKey) || l.Name == string(event.MetricVal) {
 			continue
 		}
+
 		attrs = append(attrs, labelToAttribute(l))
 	}
 	return attrs
@@ -180,4 +189,20 @@ func labelToAttribute(l event.Label) attribute.KeyValue {
 	default:
 		return attribute.String(l.Name, l.String())
 	}
+}
+
+func (m *OtelMetricHandler) Stop(logger log.Logger) {
+	m.provider.Stop(logger)
+}
+
+func configExcludeTags(cfg ClientConfig) map[string]map[string]struct{} {
+	tagsToFilter := make(map[string]map[string]struct{})
+	for key, val := range cfg.ExcludeTags {
+		exclusions := make(map[string]struct{})
+		for _, val := range val {
+			exclusions[val] = struct{}{}
+		}
+		tagsToFilter[key] = exclusions
+	}
+	return tagsToFilter
 }

@@ -50,6 +50,9 @@ type (
 	timerQueueStandbyProcessorImpl struct {
 		timerGate               timer.RemoteGate
 		timerQueueProcessorBase *timerQueueProcessorBase
+
+		// this is the scheduler owned by this standby queue processor
+		ownedScheduler queues.Scheduler
 	}
 )
 
@@ -116,8 +119,13 @@ func newTimerQueueStandbyProcessor(
 		config,
 	)
 
+	processor := &timerQueueStandbyProcessorImpl{
+		timerGate: timerGate,
+	}
+
 	if scheduler == nil {
 		scheduler = newTimerTaskScheduler(shard, logger)
+		processor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
@@ -150,10 +158,6 @@ func newTimerQueueStandbyProcessor(
 		},
 	)
 
-	processor := &timerQueueStandbyProcessorImpl{
-		timerGate: timerGate,
-	}
-
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
 		metrics.TimerStandbyQueueProcessorScope,
 		shard,
@@ -172,11 +176,17 @@ func newTimerQueueStandbyProcessor(
 }
 
 func (t *timerQueueStandbyProcessorImpl) Start() {
+	if t.ownedScheduler != nil {
+		t.ownedScheduler.Start()
+	}
 	t.timerQueueProcessorBase.Start()
 }
 
 func (t *timerQueueStandbyProcessorImpl) Stop() {
 	t.timerQueueProcessorBase.Stop()
+	if t.ownedScheduler != nil {
+		t.ownedScheduler.Stop()
+	}
 }
 
 func (t *timerQueueStandbyProcessorImpl) setCurrentTime(

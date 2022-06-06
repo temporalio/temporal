@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/tests/testhelper"
 
@@ -232,7 +233,7 @@ func runRingpopTLSTest(s suite.Suite, logger log.Logger, serverA *ringpopFactory
 }
 
 func (s *RingpopSuite) setupInternodeRingpop() {
-	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, nil, s.logger, nil)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, metrics.NoopClient, s.logger, nil)
 	s.NoError(err)
 	s.insecureFactory = newTestRingpopFactory("tester", s.logger, rpcTestCfgDefault, provider, dynamicconfig.NewNoopCollection())
 	s.NotNil(s.insecureFactory)
@@ -258,14 +259,14 @@ func (s *RingpopSuite) setupInternodeRingpop() {
 	dcClient.EXPECT().GetBoolValue(dynamicconfig.Key(dynamicconfig.EnableRingpopTLS), gomock.Any(), false).Return(true, nil).AnyTimes()
 	dc := dynamicconfig.NewCollection(dcClient, s.logger)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopMutualTLS.TLS, nil, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopMutualTLS.TLS, metrics.NoopClient, s.logger, nil)
 	s.NoError(err)
 	s.ringpopMutualTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
 	s.NotNil(s.ringpopMutualTLSFactoryA)
 	s.ringpopMutualTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, rpcCfgB, provider, dc)
 	s.NotNil(s.ringpopMutualTLSFactoryB)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopServerTLS.TLS, nil, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopServerTLS.TLS, metrics.NoopClient, s.logger, nil)
 	s.NoError(err)
 	s.ringpopServerTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
 	s.NotNil(s.ringpopServerTLSFactoryA)

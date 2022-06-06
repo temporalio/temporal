@@ -199,20 +199,6 @@ func (mr *MockClientMockRecorder) UpdateGauge(scope, gauge, value interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateGauge", reflect.TypeOf((*MockClient)(nil).UpdateGauge), scope, gauge, value)
 }
 
-// UserScope mocks base method.
-func (m *MockClient) UserScope() UserScope {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UserScope")
-	ret0, _ := ret[0].(UserScope)
-	return ret0
-}
-
-// UserScope indicates an expected call of UserScope.
-func (mr *MockClientMockRecorder) UserScope() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UserScope", reflect.TypeOf((*MockClient)(nil).UserScope))
-}
-
 // MockScope is a mock of Scope interface.
 type MockScope struct {
 	ctrl     *gomock.Controller
@@ -462,19 +448,18 @@ func (m *MockReporter) EXPECT() *MockReporterMockRecorder {
 	return m.recorder
 }
 
-// NewClient mocks base method.
-func (m *MockReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
+// MetricProvider mocks base method.
+func (m *MockReporter) MetricProvider() MetricProvider {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewClient", logger, serviceIdx)
-	ret0, _ := ret[0].(Client)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "MetricProvider")
+	ret0, _ := ret[0].(MetricProvider)
+	return ret0
 }
 
-// NewClient indicates an expected call of NewClient.
-func (mr *MockReporterMockRecorder) NewClient(logger, serviceIdx interface{}) *gomock.Call {
+// MetricProvider indicates an expected call of MetricProvider.
+func (mr *MockReporterMockRecorder) MetricProvider() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewClient", reflect.TypeOf((*MockReporter)(nil).NewClient), logger, serviceIdx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MetricProvider", reflect.TypeOf((*MockReporter)(nil).MetricProvider))
 }
 
 // Stop mocks base method.

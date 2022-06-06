@@ -24,20 +24,32 @@
 
 package metrics
 
-import (
-	"testing"
-
-	"github.com/stretchr/testify/suite"
-)
+import "go.temporal.io/server/common/log"
 
 type (
-	TallyClientTestsSuite struct {
-		MetricTestSuiteBase
+	eventsReporter struct {
+		provider MetricProvider
+		handler  MetricHandler
 	}
 )
 
-func TestTallyClientTest(t *testing.T) {
-	s := new(TallyClientTestsSuite)
-	s.MetricTestUtilityProvider = func() MetricTestUtility { return NewTallyMetricTestUtility() }
-	suite.Run(t, s)
+var _ Reporter = (*eventsReporter)(nil)
+
+func NewEventsReporter(h MetricHandler) eventsReporter {
+	return eventsReporter{
+		provider: NewEventsMetricProvider(h),
+		handler:  h,
+	}
+}
+
+func (e eventsReporter) MetricProvider() MetricProvider {
+	return e.provider
+}
+
+func (e eventsReporter) Stop(logger log.Logger) {
+	e.handler.Stop(logger)
+}
+
+func (e eventsReporter) UserScope() UserScope {
+	return newEventsUserScope(e.provider)
 }

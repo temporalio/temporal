@@ -51,7 +51,7 @@ import (
 
 const (
 	taskTimeout             = time.Second * 3
-	taskGetExecutionTimeout = 500 * time.Millisecond
+	taskGetExecutionTimeout = time.Second
 	taskHistoryOpTimeout    = 20 * time.Second
 )
 

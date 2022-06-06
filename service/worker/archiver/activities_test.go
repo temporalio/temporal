@@ -31,6 +31,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
@@ -80,7 +81,6 @@ func TestActivitiesSuite(t *testing.T) {
 }
 
 func (s *activitiesSuite) SetupTest() {
-
 	s.controller = gomock.NewController(s.T())
 	s.mockExecutionMgr = persistence.NewMockExecutionManager(s.controller)
 
@@ -90,7 +90,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.archiverProvider = provider.NewMockArchiverProvider(s.controller)
 	s.historyArchiver = carchiver.NewMockHistoryArchiver(s.controller)
 	s.visibilityArchiver = carchiver.NewMockVisibilityArchiver(s.controller)
-	s.metricsScope.EXPECT().StartTimer(metrics.ServiceLatency).Return(metrics.NewTestStopwatch()).MinTimes(0)
+	s.metricsScope.EXPECT().StartTimer(metrics.ServiceLatency).Return(metrics.NoopStopwatch).MinTimes(0)
 	s.metricsScope.EXPECT().RecordTimer(gomock.Any(), gomock.Any()).MinTimes(0)
 }
 

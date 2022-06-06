@@ -56,26 +56,26 @@ var (
 
 type (
 	timerQueueProcessorBase struct {
-		scope               int
-		shard               shard.Context
-		cache               workflow.Cache
-		executionManager    persistence.ExecutionManager
-		status              int32
-		shutdownWG          sync.WaitGroup
-		shutdownCh          chan struct{}
-		config              *configs.Config
-		logger              log.Logger
-		metricsClient       metrics.Client
-		metricsScope        metrics.Scope
-		timerProcessor      timerProcessor
-		timerQueueAckMgr    timerQueueAckMgr
-		timerGate           timer.Gate
-		timeSource          clock.TimeSource
-		rateLimiter         quotas.RateLimiter
-		retryPolicy         backoff.RetryPolicy
-		lastPollTime        time.Time
-		executableScheduler queues.Scheduler
-		rescheduler         queues.Rescheduler
+		scope            int
+		shard            shard.Context
+		cache            workflow.Cache
+		executionManager persistence.ExecutionManager
+		status           int32
+		shutdownWG       sync.WaitGroup
+		shutdownCh       chan struct{}
+		config           *configs.Config
+		logger           log.Logger
+		metricsClient    metrics.Client
+		metricsScope     metrics.Scope
+		timerProcessor   timerProcessor
+		timerQueueAckMgr timerQueueAckMgr
+		timerGate        timer.Gate
+		timeSource       clock.TimeSource
+		rateLimiter      quotas.RateLimiter
+		retryPolicy      backoff.RetryPolicy
+		lastPollTime     time.Time
+		scheduler        queues.Scheduler
+		rescheduler      queues.Rescheduler
 
 		// timer notification
 		newTimerCh  chan struct{}
@@ -91,7 +91,7 @@ func newTimerQueueProcessorBase(
 	timerProcessor timerProcessor,
 	timerQueueAckMgr timerQueueAckMgr,
 	timerGate timer.Gate,
-	executableScheduler queues.Scheduler,
+	scheduler queues.Scheduler,
 	rescheduler queues.Rescheduler,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
@@ -102,26 +102,26 @@ func newTimerQueueProcessorBase(
 	config := shard.GetConfig()
 
 	base := &timerQueueProcessorBase{
-		scope:               scope,
-		shard:               shard,
-		timerProcessor:      timerProcessor,
-		cache:               workflowCache,
-		executionManager:    shard.GetExecutionManager(),
-		status:              common.DaemonStatusInitialized,
-		shutdownCh:          make(chan struct{}),
-		config:              config,
-		logger:              logger,
-		metricsClient:       shard.GetMetricsClient(),
-		metricsScope:        metricsScope,
-		timerQueueAckMgr:    timerQueueAckMgr,
-		timerGate:           timerGate,
-		timeSource:          shard.GetTimeSource(),
-		newTimerCh:          make(chan struct{}, 1),
-		lastPollTime:        time.Time{},
-		executableScheduler: executableScheduler,
-		rescheduler:         rescheduler,
-		rateLimiter:         rateLimiter,
-		retryPolicy:         common.CreatePersistenceRetryPolicy(),
+		scope:            scope,
+		shard:            shard,
+		timerProcessor:   timerProcessor,
+		cache:            workflowCache,
+		executionManager: shard.GetExecutionManager(),
+		status:           common.DaemonStatusInitialized,
+		shutdownCh:       make(chan struct{}),
+		config:           config,
+		logger:           logger,
+		metricsClient:    shard.GetMetricsClient(),
+		metricsScope:     metricsScope,
+		timerQueueAckMgr: timerQueueAckMgr,
+		timerGate:        timerGate,
+		timeSource:       shard.GetTimeSource(),
+		newTimerCh:       make(chan struct{}, 1),
+		lastPollTime:     time.Time{},
+		scheduler:        scheduler,
+		rescheduler:      rescheduler,
+		rateLimiter:      rateLimiter,
+		retryPolicy:      common.CreatePersistenceRetryPolicy(),
 	}
 
 	return base
@@ -132,7 +132,6 @@ func (t *timerQueueProcessorBase) Start() {
 		return
 	}
 
-	t.executableScheduler.Start()
 	t.shutdownWG.Add(1)
 	// notify a initial scan
 	t.notifyNewTimer(time.Time{})
@@ -153,7 +152,6 @@ func (t *timerQueueProcessorBase) Stop() {
 		t.logger.Warn("Timer queue processor timedout on shutdown.")
 	}
 
-	t.executableScheduler.Stop()
 	t.logger.Info("Timer queue processor stopped.")
 }
 
@@ -361,7 +359,7 @@ func (t *timerQueueProcessorBase) submitTask(
 	executable queues.Executable,
 ) {
 
-	submitted, err := t.executableScheduler.TrySubmit(executable)
+	submitted, err := t.scheduler.TrySubmit(executable)
 	if err != nil {
 		t.logger.Error("Failed to submit task", tag.Error(err))
 		executable.Reschedule()

@@ -67,9 +67,6 @@ type (
 		// Scope returns an internal scope that can be used to add additional
 		// information to metrics
 		Scope(scope int, tags ...Tag) Scope
-		// UserScope returns a new metrics scope that can be used to add additional
-		// information to the metrics emitted by user code
-		UserScope() UserScope
 	}
 
 	// Scope is an interface for metric.
@@ -119,7 +116,7 @@ type (
 	// Reporter is an interface for base constructor for metrics client.
 	// Deprecated
 	Reporter interface {
-		NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error)
+		MetricProvider() MetricProvider
 		Stop(logger log.Logger)
 		UserScope() UserScope
 	}
