@@ -65,6 +65,7 @@ func TestMetricNameWithTagsStability(t *testing.T) {
 
 func TestMetricNameWithSeparatedTags(t *testing.T) {
 	testCases := []string{
+		"",
 		",",
 		"__",
 		".__",
@@ -84,12 +85,16 @@ func TestMetricNameWithSeparatedTags(t *testing.T) {
 
 			newName := r.metricNameWithTags(name, tags)
 
-			ss := strings.Split(newName, sep)
-			assert.Len(t, ss, 1+len(tags))
-			assert.Equal(t, ss[0], name)
-			assert.Contains(t, ss, "tag1=123")
-			assert.Contains(t, ss, "tag2=456")
-			assert.Contains(t, ss, "tag3=789")
+			if sep == "" {
+				assert.Equal(t, newName, "test-metric-name3.tag1.123.tag2.456.tag3.789")
+			} else {
+				ss := strings.Split(newName, sep)
+				assert.Len(t, ss, 1+len(tags))
+				assert.Equal(t, ss[0], name)
+				assert.Contains(t, ss, "tag1=123")
+				assert.Contains(t, ss, "tag2=456")
+				assert.Contains(t, ss, "tag3=789")
+			}
 		})
 	}
 
