@@ -49,6 +49,14 @@ const (
 	BatcherNamespace      = "BatcherNamespace"
 	BatcherUser           = "BatcherUser"
 
+	// added to workflows started by a schedule
+	TemporalScheduledStartTime = "TemporalScheduledStartTime"
+	TemporalScheduledById      = "TemporalScheduledById"
+
+	// used by scheduler workflow
+	TemporalSchedulePaused   = "TemporalSchedulePaused"
+	TemporalScheduleInfoJSON = "TemporalScheduleInfoJSON"
+
 	MemoEncoding      = "MemoEncoding"
 	Memo              = "Memo"
 	VisibilityTaskKey = "VisibilityTaskKey"
@@ -74,10 +82,14 @@ var (
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
 	predefined = map[string]enumspb.IndexedValueType{
-		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BatcherNamespace:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BatcherUser:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherNamespace:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherUser:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalScheduledStartTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
+		TemporalScheduleInfoJSON:   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.
