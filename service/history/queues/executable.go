@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -80,7 +81,7 @@ var (
 const (
 	// resubmitMaxAttempts is the max number of attempts we may skip rescheduler when a task is Nacked.
 	// check the comment in shouldResubmitOnNack() for more details
-	resubmitMaxAttempts = 10
+	resubmitMaxAttempts = 20
 )
 
 type (
@@ -234,6 +235,10 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 func (e *executableImpl) IsRetryableError(err error) bool {
 	// this determines if the executable should be retried within one submission to scheduler
 
+	if shard.IsShardOwnershipLostError(err) {
+		return false
+	}
+
 	// don't retry immediately for resource exhausted which may incur more load
 	// context deadline exceed may also suggested downstream is overloaded, so don't retry immediately
 	if common.IsResourceExhausted(err) || common.IsContextDeadlineExceededErr(err) {
@@ -336,7 +341,11 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 	// this is an optimization for skipping rescheduler and retry the task sooner
 	// this can be useful for errors like unable to get workflow lock, which doesn't
 	// have to backoff for a long time and wait for the periodic rescheduling.
-	return (err == consts.ErrWorkflowBusy || e.IsRetryableError(err)) && e.Attempt() < resubmitMaxAttempts
+	if e.Attempt() > resubmitMaxAttempts {
+		return false
+	}
+
+	return err == consts.ErrWorkflowBusy || common.IsContextDeadlineExceededErr(err) || e.IsRetryableError(err)
 }
 
 func (e *executableImpl) rescheduleBackoff(attempt int) time.Duration {
