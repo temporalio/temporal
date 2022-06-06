@@ -25,6 +25,7 @@
 package tasks
 
 import (
+	"math"
 	"math/rand"
 	"sort"
 	"testing"
@@ -64,6 +65,45 @@ func (s *taskKeySuite) SetupTest() {
 
 func (s *taskKeySuite) TearDownTest() {
 
+}
+
+func (s *taskKeySuite) TestValidateKey_Valid() {
+	s.NoError(ValidateKey(Key{
+		FireTime: time.Unix(0, 0),
+		TaskID:   0,
+	}))
+	s.NoError(ValidateKey(Key{
+		FireTime: time.Unix(0, math.MaxInt64),
+		TaskID:   math.MaxInt64,
+	}))
+	s.NoError(ValidateKey(Key{
+		FireTime: time.Unix(0, rand.Int63()),
+		TaskID:   rand.Int63(),
+	}))
+}
+
+func (s *taskKeySuite) TestValidateKey_Invalid() {
+	s.Error(ValidateKey(Key{
+		FireTime: time.Time{},
+		TaskID:   0,
+	}))
+	s.Error(ValidateKey(Key{
+		FireTime: time.Now(),
+		TaskID:   -1,
+	}))
+}
+
+func (s *taskKeySuite) TestMinMaxKey() {
+	thisKey := NewKey(time.Unix(0, rand.Int63()), rand.Int63())
+	thatKey := NewKey(time.Unix(0, rand.Int63()), rand.Int63())
+
+	minKey := MinKey(thisKey, thatKey)
+	s.True(minKey.CompareTo(thisKey) <= 0)
+	s.True(minKey.CompareTo(thatKey) <= 0)
+
+	maxKey := MaxKey(thisKey, thatKey)
+	s.True(maxKey.CompareTo(thisKey) >= 0)
+	s.True(maxKey.CompareTo(thisKey) >= 0)
 }
 
 func (s *taskKeySuite) TestSort() {
