@@ -235,7 +235,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 func (e *executableImpl) IsRetryableError(err error) bool {
 	// this determines if the executable should be retried within one submission to scheduler
 
-	if err == shard.ErrShardClosed || shard.IsShardOwnershipLostError(err) {
+	if shard.IsShardOwnershipLostError(err) {
 		return false
 	}
 
