@@ -3269,8 +3269,8 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 			token := make([]byte, 8)
 			binary.BigEndian.PutUint64(token, uint64(response.ConflictToken))
 
-			searchAttrs := describeResponse.GetWorkflowExecutionInfo().GetSearchAttributes()
-			searchAttrs = wh.cleanScheduleSearchAttrs(searchAttrs)
+			searchAttributes := describeResponse.GetWorkflowExecutionInfo().GetSearchAttributes()
+			searchAttributes = wh.cleanScheduleSearchAttributes(searchAttributes)
 
 			memo := describeResponse.GetWorkflowExecutionInfo().GetMemo()
 			memo = wh.cleanScheduleMemo(memo)
@@ -3279,7 +3279,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 				Schedule:         response.Schedule,
 				Info:             response.Info,
 				Memo:             memo,
-				SearchAttributes: searchAttrs,
+				SearchAttributes: searchAttributes,
 				ConflictToken:    token,
 			}
 			return nil
@@ -3620,14 +3620,14 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 
 	schedules := make([]*schedpb.ScheduleListEntry, len(persistenceResp.Executions))
 	for i, ex := range persistenceResp.Executions {
-		searchAttrs := ex.GetSearchAttributes()
-		info := wh.decodeScheduleListInfo(searchAttrs)
-		searchAttrs = wh.cleanScheduleSearchAttrs(searchAttrs)
+		searchAttributes := ex.GetSearchAttributes()
+		info := wh.decodeScheduleListInfo(searchAttributes)
+		searchAttributes = wh.cleanScheduleSearchAttributes(searchAttributes)
 		memo := wh.cleanScheduleMemo(ex.GetMemo())
 		schedules[i] = &schedpb.ScheduleListEntry{
 			ScheduleId:       ex.GetExecution().GetWorkflowId(),
 			Memo:             memo,
-			SearchAttributes: searchAttrs,
+			SearchAttributes: searchAttributes,
 			Info:             info,
 		}
 	}
@@ -4359,10 +4359,10 @@ func (wh *WorkflowHandler) trimHistoryNode(
 	}
 }
 
-func (wh *WorkflowHandler) decodeScheduleListInfo(searchAttrs *commonpb.SearchAttributes) *schedpb.ScheduleListInfo {
+func (wh *WorkflowHandler) decodeScheduleListInfo(searchAttributes *commonpb.SearchAttributes) *schedpb.ScheduleListInfo {
 	var listInfoStr string
 	var listInfoPb schedpb.ScheduleListInfo
-	if listInfoPayload := searchAttrs.GetIndexedFields()[searchattribute.TemporalScheduleInfoJSON]; listInfoPayload == nil {
+	if listInfoPayload := searchAttributes.GetIndexedFields()[searchattribute.TemporalScheduleInfoJSON]; listInfoPayload == nil {
 		return nil
 	} else if err := payload.Decode(listInfoPayload, &listInfoStr); err != nil {
 		wh.logger.Error("decoding schedule list info from payload", tag.Error(err))
@@ -4374,9 +4374,9 @@ func (wh *WorkflowHandler) decodeScheduleListInfo(searchAttrs *commonpb.SearchAt
 	return &listInfoPb
 }
 
-// This mutates searchAttrs
-func (wh *WorkflowHandler) cleanScheduleSearchAttrs(searchAttrs *commonpb.SearchAttributes) *commonpb.SearchAttributes {
-	fields := searchAttrs.GetIndexedFields()
+// This mutates searchAttributes
+func (wh *WorkflowHandler) cleanScheduleSearchAttributes(searchAttributes *commonpb.SearchAttributes) *commonpb.SearchAttributes {
+	fields := searchAttributes.GetIndexedFields()
 	if len(fields) == 0 {
 		return nil
 	}
@@ -4390,7 +4390,7 @@ func (wh *WorkflowHandler) cleanScheduleSearchAttrs(searchAttrs *commonpb.Search
 	if len(fields) == 0 {
 		return nil
 	}
-	return searchAttrs
+	return searchAttributes
 }
 
 // This mutates memo

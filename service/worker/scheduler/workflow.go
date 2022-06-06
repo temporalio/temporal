@@ -189,7 +189,7 @@ func (s *scheduler) run() error {
 		s.State.LastProcessedTime = timestamp.TimePtr(t2)
 		for s.processBuffer() {
 		}
-		s.updateSearchAttrs()
+		s.updateSearchAttributes()
 		// sleep returns on any of:
 		// 1. requested time elapsed
 		// 2. we got a signal (update, request, refresh)
@@ -563,7 +563,7 @@ func (s *scheduler) getListInfo(shrink int) *schedpb.ScheduleListInfo {
 	}
 }
 
-func (s *scheduler) updateSearchAttrs() {
+func (s *scheduler) updateSearchAttributes() {
 	dc := converter.GetDefaultDataConverter()
 
 	var currentInfo, newInfo string
@@ -576,7 +576,8 @@ func (s *scheduler) updateSearchAttrs() {
 
 	for shrink := 0; shrink <= 2; shrink++ {
 		var err error
-		if newInfo, err = new(jsonpb.Marshaler).MarshalToString(s.getListInfo(shrink)); err != nil {
+		m := &jsonpb.Marshaler{}
+		if newInfo, err = m.MarshalToString(s.getListInfo(shrink)); err != nil {
 			s.logger.Error("error encoding ScheduleListInfo", "error", err)
 			return
 		}
@@ -600,7 +601,7 @@ func (s *scheduler) updateSearchAttrs() {
 		searchattribute.TemporalScheduleInfoJSON: newInfo,
 	})
 	if err != nil {
-		s.logger.Error("error updating search attrs", "error", err)
+		s.logger.Error("error updating search attributes", "error", err)
 	}
 }
 
@@ -790,7 +791,7 @@ func (s *scheduler) startWorkflow(
 			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 			RetryPolicy:              newWorkflow.RetryPolicy,
 			Memo:                     newWorkflow.Memo,
-			SearchAttributes:         s.addSearchAttrs(newWorkflow.SearchAttributes, nominalTimeSec),
+			SearchAttributes:         s.addSearchAttributes(newWorkflow.SearchAttributes, nominalTimeSec),
 			Header:                   newWorkflow.Header,
 		},
 		StartTime:            startTime,
@@ -817,11 +818,11 @@ func (s *scheduler) identity() string {
 	return fmt.Sprintf("temporal-scheduler-%s-%s", s.State.Namespace, s.State.ScheduleId)
 }
 
-func (s *scheduler) addSearchAttrs(
-	attrs *commonpb.SearchAttributes,
+func (s *scheduler) addSearchAttributes(
+	attributes *commonpb.SearchAttributes,
 	nominal time.Time,
 ) *commonpb.SearchAttributes {
-	fields := maps.Clone(attrs.GetIndexedFields())
+	fields := maps.Clone(attributes.GetIndexedFields())
 	if p, err := payload.Encode(nominal); err == nil {
 		fields[searchattribute.TemporalScheduledStartTime] = p
 	}
