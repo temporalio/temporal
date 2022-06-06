@@ -97,6 +97,13 @@ func (s *rangeSuite) TestIsEmpty() {
 	maxKey = NewKey(minKey.FireTime, minKey.TaskID+1)
 	r = NewRange(minKey, maxKey)
 	s.False(r.IsEmpty())
+
+	maxKey = NewKey(
+		time.Unix(0, minKey.FireTime.UnixNano()+1),
+		minKey.TaskID-1,
+	)
+	r = NewRange(minKey, maxKey)
+	s.False(r.IsEmpty())
 }
 
 func (s *rangeSuite) TestContainsKey_EmptyRange() {

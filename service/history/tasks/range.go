@@ -63,11 +63,8 @@ func (r *Range) ContainsKey(
 func (r *Range) ContainsRange(
 	input Range,
 ) bool {
-	containsMin := r.ContainsKey(input.InclusiveMin)
-	containsMax := r.ContainsKey(input.ExclusiveMax) || r.ExclusiveMax.CompareTo(input.ExclusiveMax) == 0
-	// Note we consider empty range = to max as contains
-	return (containsMin && containsMax) ||
-		(input.IsEmpty() && input.InclusiveMin.CompareTo(r.ExclusiveMax) == 0)
+	return r.InclusiveMin.CompareTo(input.InclusiveMin) <= 0 &&
+		r.ExclusiveMax.CompareTo(input.ExclusiveMax) >= 0
 }
 
 func (r *Range) CanSplit(

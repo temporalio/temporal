@@ -67,49 +67,30 @@ func (s *taskKeySuite) TearDownTest() {
 
 }
 
-func (s *taskKeySuite) TestValidateKey() {
-	testCases := []struct {
-		key   Key
-		valid bool
-	}{
-		{
-			key: Key{
-				FireTime: time.Unix(0, 0),
-				TaskID:   0,
-			},
-			valid: true,
-		},
-		{
-			key: Key{
-				FireTime: time.Unix(0, math.MaxInt64),
-				TaskID:   math.MaxInt64,
-			},
-			valid: true,
-		},
-		{
-			key: Key{
-				FireTime: time.Time{},
-				TaskID:   0,
-			},
-			valid: false,
-		},
-		{
-			key: Key{
-				FireTime: time.Now(),
-				TaskID:   -1,
-			},
-			valid: false,
-		},
-	}
+func (s *taskKeySuite) TestValidateKey_Valid() {
+	s.NoError(ValidateKey(Key{
+		FireTime: time.Unix(0, 0),
+		TaskID:   0,
+	}))
+	s.NoError(ValidateKey(Key{
+		FireTime: time.Unix(0, math.MaxInt64),
+		TaskID:   math.MaxInt64,
+	}))
+	s.NoError(ValidateKey(Key{
+		FireTime: time.Unix(0, rand.Int63()),
+		TaskID:   rand.Int63(),
+	}))
+}
 
-	for _, tc := range testCases {
-		err := ValidateKey(tc.key)
-		if tc.valid {
-			s.NoError(err)
-		} else {
-			s.Error(err)
-		}
-	}
+func (s *taskKeySuite) TestValidateKey_Invalid() {
+	s.Error(ValidateKey(Key{
+		FireTime: time.Time{},
+		TaskID:   0,
+	}))
+	s.Error(ValidateKey(Key{
+		FireTime: time.Now(),
+		TaskID:   -1,
+	}))
 }
 
 func (s *taskKeySuite) TestMinMaxKey() {
