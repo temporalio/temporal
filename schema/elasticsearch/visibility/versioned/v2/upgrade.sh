@@ -7,15 +7,15 @@ set -eu -o pipefail
 #   - curl
 
 # Input parameters.
-: ${ES_SCHEME:=http}
-: ${ES_SERVER:=127.0.0.1}
-: ${ES_PORT:=9200}
-: ${ES_USER:=}
-: ${ES_PWD:=}
-: ${ES_VERSION:=v7}
-: ${ES_VIS_INDEX_V1:=temporal_visibility_v1_dev}
-: ${AUTO_CONFIRM:=}
-: ${SLICES_COUNT:=auto}
+: "${ES_SCHEME:=http}"
+: "${ES_SERVER:=127.0.0.1}"
+: "${ES_PORT:=9200}"
+: "${ES_USER:=}"
+: "${ES_PWD:=}"
+: "${ES_VERSION:=v7}"
+: "${ES_VIS_INDEX_V1:=temporal_visibility_v1_dev}"
+: "${AUTO_CONFIRM:=}"
+: "${SLICES_COUNT:=auto}"
 
 es_endpoint="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}"
 
