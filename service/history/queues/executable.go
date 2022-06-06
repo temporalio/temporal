@@ -81,7 +81,7 @@ var (
 const (
 	// resubmitMaxAttempts is the max number of attempts we may skip rescheduler when a task is Nacked.
 	// check the comment in shouldResubmitOnNack() for more details
-	resubmitMaxAttempts = 10
+	resubmitMaxAttempts = 20
 )
 
 type (
