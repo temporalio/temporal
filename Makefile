@@ -69,7 +69,10 @@ PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
 PROTO_IMPORTS := -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
 PROTO_OUT := api
 
-ALL_SRC         := $(shell find . -name "*.go" | grep -v -e "^$(PROTO_OUT)")
+
+ALL_SRC         := $(shell find . -name "*.go")
+ALL_SRC         += go.mod
+# Replace below with build tags and `go test ./...` for targets
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
@@ -94,8 +97,6 @@ SUMMARY_COVER_PROFILE      := $(COVER_ROOT)/summary.out
 #   The default is for each test to analyze only the package being tested.
 #   Packages are specified as import paths.
 INTEG_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/..."
-
-ALL_SRC := $(shell find . -name "*.go")
 
 ##### Tools #####
 update-checkers:

@@ -182,3 +182,27 @@ func (mr *MockProcessorFactoryMockRecorder) CreateProcessor(shard, engine, cache
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateProcessor", reflect.TypeOf((*MockProcessorFactory)(nil).CreateProcessor), shard, engine, cache)
 }
+
+// Start mocks base method.
+func (m *MockProcessorFactory) Start() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Start")
+}
+
+// Start indicates an expected call of Start.
+func (mr *MockProcessorFactoryMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockProcessorFactory)(nil).Start))
+}
+
+// Stop mocks base method.
+func (m *MockProcessorFactory) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MockProcessorFactoryMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockProcessorFactory)(nil).Stop))
+}

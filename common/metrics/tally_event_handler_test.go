@@ -32,41 +32,42 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/uber-go/tally/v4"
-	"go.temporal.io/server/common/log"
 	"golang.org/x/exp/event"
+
+	"go.temporal.io/server/common/log"
 )
 
 func TestTallyScope(t *testing.T) {
 	ctx := context.Background()
 	scope := tally.NewTestScope("test", map[string]string{})
-	mh := NewTallyMetricHandler(log.NewTestLogger(), scope, defaultConfig.PerUnitHistogramBoundaries)
+	mh := NewTallyMetricHandler(log.NewTestLogger(), scope, defaultConfig, defaultConfig.PerUnitHistogramBoundaries)
 	ctx = event.WithExporter(ctx, event.NewExporter(mh, nil))
 	recordTallyMetrics(ctx)
 
 	snap := scope.Snapshot()
 	counters, gauges, timers, histograms := snap.Counters(), snap.Gauges(), snap.Timers(), snap.Histograms()
 
-	assert.EqualValues(t, 8, counters["test.go.temporal.io/server/common/metrics/hits+"].Value())
-	assert.EqualValues(t, map[string]string{}, counters["test.go.temporal.io/server/common/metrics/hits+"].Tags())
+	assert.EqualValues(t, 8, counters["test.hits+"].Value())
+	assert.EqualValues(t, map[string]string{}, counters["test.hits+"].Tags())
 
-	assert.EqualValues(t, float64(-100), gauges["test.go.temporal.io/server/common/metrics/temp+location=Mare Imbrium"].Value())
+	assert.EqualValues(t, float64(-100), gauges["test.temp+location=Mare Imbrium"].Value())
 	assert.EqualValues(t, map[string]string{
 		"location": "Mare Imbrium",
-	}, gauges["test.go.temporal.io/server/common/metrics/temp+location=Mare Imbrium"].Tags())
+	}, gauges["test.temp+location=Mare Imbrium"].Tags())
 
 	assert.EqualValues(t, []time.Duration{
 		1248 * time.Millisecond,
 		1255 * time.Millisecond,
-	}, timers["test.go.temporal.io/server/common/metrics/latency+"].Values())
-	assert.EqualValues(t, map[string]string{}, timers["test.go.temporal.io/server/common/metrics/latency+"].Tags())
+	}, timers["test.latency+"].Values())
+	assert.EqualValues(t, map[string]string{}, timers["test.latency+"].Tags())
 
 	assert.EqualValues(t, map[float64]int64{
 		1024:            0,
 		2048:            0,
 		math.MaxFloat64: 1,
-	}, histograms["test.go.temporal.io/server/common/metrics/transmission+"].Values())
-	assert.EqualValues(t, map[time.Duration]int64(nil), histograms["test.go.temporal.io/server/common/metrics/transmission+"].Durations())
-	assert.EqualValues(t, map[string]string{}, histograms["test.go.temporal.io/server/common/metrics/transmission+"].Tags())
+	}, histograms["test.transmission+"].Values())
+	assert.EqualValues(t, map[time.Duration]int64(nil), histograms["test.transmission+"].Durations())
+	assert.EqualValues(t, map[string]string{}, histograms["test.transmission+"].Tags())
 }
 
 func recordTallyMetrics(ctx context.Context) {

@@ -50,6 +50,9 @@ import (
 type (
 	timerQueueActiveProcessorImpl struct {
 		timerQueueProcessorBase *timerQueueProcessorBase
+
+		// this is the scheduler owned by this active queue processor
+		ownedScheduler queues.Scheduler
 	}
 )
 
@@ -89,6 +92,7 @@ func newTimerQueueActiveProcessor(
 
 	if scheduler == nil {
 		scheduler = newTimerTaskScheduler(shard, logger)
+		processor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
@@ -258,6 +262,7 @@ func newTimerQueueFailoverProcessor(
 
 	if scheduler == nil {
 		scheduler = newTimerTaskScheduler(shard, logger)
+		processor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
@@ -308,11 +313,17 @@ func newTimerQueueFailoverProcessor(
 }
 
 func (t *timerQueueActiveProcessorImpl) Start() {
+	if t.ownedScheduler != nil {
+		t.ownedScheduler.Start()
+	}
 	t.timerQueueProcessorBase.Start()
 }
 
 func (t *timerQueueActiveProcessorImpl) Stop() {
 	t.timerQueueProcessorBase.Stop()
+	if t.ownedScheduler != nil {
+		t.ownedScheduler.Stop()
+	}
 }
 
 func (t *timerQueueActiveProcessorImpl) getAckLevel() tasks.Key {

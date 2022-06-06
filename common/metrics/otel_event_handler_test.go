@@ -36,14 +36,15 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
 	"go.opentelemetry.io/otel/sdk/metric/metrictest"
 	"go.opentelemetry.io/otel/sdk/metric/number"
-	"go.temporal.io/server/common/log"
 	"golang.org/x/exp/event"
+
+	"go.temporal.io/server/common/log"
 )
 
 func TestMeter(t *testing.T) {
 	ctx := context.Background()
 	mp, exp := metrictest.NewTestMeterProvider()
-	mh := NewOtelMetricHandler(log.NewTestLogger(), mp.Meter("test"))
+	mh := NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: mp.Meter("test")}, defaultConfig)
 	ctx = event.WithExporter(ctx, event.NewExporter(mh, nil))
 	recordMetrics(ctx)
 
@@ -55,7 +56,7 @@ func TestMeter(t *testing.T) {
 
 	want := []metrictest.ExportRecord{
 		{
-			InstrumentName:         "go.temporal.io/server/common/metrics/hits",
+			InstrumentName:         "hits",
 			Sum:                    number.NewInt64Number(8),
 			Attributes:             nil,
 			InstrumentationLibrary: lib,
@@ -63,7 +64,7 @@ func TestMeter(t *testing.T) {
 			NumberKind:             number.Int64Kind,
 		},
 		{
-			InstrumentName:         "go.temporal.io/server/common/metrics/latency",
+			InstrumentName:         "latency",
 			Sum:                    number.NewInt64Number(int64(2503 * time.Millisecond)),
 			Count:                  2,
 			Attributes:             nil,
@@ -75,7 +76,7 @@ func TestMeter(t *testing.T) {
 			},
 		},
 		{
-			InstrumentName: "go.temporal.io/server/common/metrics/temp",
+			InstrumentName: "temp",
 			Sum:            number.NewFloat64Number(-100),
 			Attributes: []attribute.KeyValue{
 				{
@@ -88,7 +89,7 @@ func TestMeter(t *testing.T) {
 			NumberKind:             number.Float64Kind,
 		},
 		{
-			InstrumentName:         "go.temporal.io/server/common/metrics/transmission",
+			InstrumentName:         "transmission",
 			InstrumentationLibrary: lib,
 			Sum:                    number.NewInt64Number(1234567),
 			Count:                  1,

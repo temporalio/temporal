@@ -230,6 +230,10 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, nil
 		}
 
+		completionEvent, err := mutableState.GetCompletionEvent(ctx)
+		if err != nil {
+			return nil, err
+		}
 		wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
 		if err != nil {
 			return nil, err
@@ -271,7 +275,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		}
 
 		// verify if parent got the completion event
-		verifyCompletionRecorded := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
+		verifyCompletionRecorded := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == "" && !IsTerminatedByResetter(completionEvent)
 		if verifyCompletionRecorded {
 			_, err := t.historyClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: executionInfo.ParentNamespaceId,

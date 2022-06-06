@@ -104,9 +104,7 @@ func createDatabase(cli *cli.Context, logger log.Logger) error {
 }
 
 func DoCreateDatabase(cfg *config.SQL, name string) error {
-	if cfg.PluginName != "postgres" {
-		cfg.DatabaseName = ""
-	}
+	cfg.DatabaseName = ""
 	conn, err := NewConnection(cfg)
 	if err != nil {
 		return err
@@ -136,9 +134,7 @@ func dropDatabase(cli *cli.Context, logger log.Logger) error {
 }
 
 func DoDropDatabase(cfg *config.SQL, name string) error {
-	if cfg.PluginName != "postgres" {
-		cfg.DatabaseName = ""
-	}
+	cfg.DatabaseName = ""
 	conn, err := NewConnection(cfg)
 	if err != nil {
 		return err

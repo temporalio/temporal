@@ -40,7 +40,7 @@ require (
 	go.opentelemetry.io/otel/metric v0.30.0
 	go.opentelemetry.io/otel/sdk v1.7.0
 	go.opentelemetry.io/otel/sdk/metric v0.30.0
-	go.temporal.io/api v1.7.1-0.20220531210845-69c8b41408d0
+	go.temporal.io/api v1.8.0
 	go.temporal.io/sdk v1.14.1-0.20220525140819-54f4148173a9
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.9.0
@@ -52,12 +52,12 @@ require (
 	golang.org/x/oauth2 v0.0.0-20220524215830-622c5d57e401
 	golang.org/x/time v0.0.0-20220411224347-583f2d630306
 	google.golang.org/api v0.81.0
-	google.golang.org/grpc v1.46.2
+	google.golang.org/grpc v1.47.0
 	google.golang.org/grpc/examples v0.0.0-20220412212246-3bf6719fc8ab
 	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/validator.v2 v2.0.1
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
-	modernc.org/sqlite v1.16.0
+	gopkg.in/yaml.v3 v3.0.1
+	modernc.org/sqlite v1.17.3
 )
 
 require (
@@ -123,17 +123,17 @@ require (
 	golang.org/x/tools v0.1.10 // indirect
 	golang.org/x/xerrors v0.0.0-20220517211312-f3a8303e98df // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20220531173845-685668d2de03 // indirect
+	google.golang.org/genproto v0.0.0-20220602131408-e326c6e8e9c8 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	lukechampine.com/uint128 v1.2.0 // indirect
-	modernc.org/cc/v3 v3.35.26 // indirect
-	modernc.org/ccgo/v3 v3.16.2 // indirect
-	modernc.org/libc v1.15.0 // indirect
+	modernc.org/cc/v3 v3.36.0 // indirect
+	modernc.org/ccgo/v3 v3.16.6 // indirect
+	modernc.org/libc v1.16.8 // indirect
 	modernc.org/mathutil v1.4.1 // indirect
-	modernc.org/memory v1.0.7 // indirect
+	modernc.org/memory v1.1.1 // indirect
 	modernc.org/opt v0.1.3 // indirect
-	modernc.org/strutil v1.1.1 // indirect
+	modernc.org/strutil v1.1.2 // indirect
 	modernc.org/token v1.0.0 // indirect
 )
 

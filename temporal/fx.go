@@ -115,7 +115,7 @@ type (
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                  log.Logger
 		ClientFactoryProvider   client.FactoryProvider
-		ServerReporter          resource.ServerReporter
+		ServerReporter          metrics.Reporter
 		MetricsClient           metrics.Client
 		DynamicConfigClient     dynamicconfig.Client
 		DynamicConfigCollection *dynamicconfig.Collection
@@ -180,6 +180,8 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		clientFactoryProvider = client.NewFactoryProvider()
 	}
 
+	handler := metrics.MetricHandlerFromConfig(logger, so.config.Global.Metrics)
+
 	// ServerReporter
 	serverReporter := so.metricsReporter
 	if serverReporter == nil {
@@ -187,19 +189,12 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 			logger.Warn("no metrics config provided, using noop reporter")
 			serverReporter = metrics.NoopReporter
 		} else {
-			serverReporter, err = metrics.InitMetricsReporter(logger, so.config.Global.Metrics)
-			if err != nil {
-				return serverOptionsProvider{}, err
-			}
+			serverReporter = metrics.NewEventsReporter(handler)
 		}
 	}
 
 	// MetricsClient
-	var metricsClient metrics.Client
-	metricsClient, err = serverReporter.NewClient(logger, metrics.Server)
-	if err != nil {
-		return serverOptionsProvider{}, err
-	}
+	var metricsClient metrics.Client = metrics.NewEventsClient(serverReporter.MetricProvider(), metrics.Server)
 
 	// DynamicConfigClient
 	dcClient := so.dynamicConfigClient
@@ -220,7 +215,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// TLSConfigProvider
 	tlsConfigProvider := so.tlsConfigProvider
 	if tlsConfigProvider == nil {
-		tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricsClient.Scope(metrics.ServerTlsScope), logger, nil)
+		tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricsClient, logger, nil)
 		if err != nil {
 			return serverOptionsProvider{}, err
 		}
@@ -317,7 +312,7 @@ type (
 		Logger                     log.Logger
 		NamespaceLogger            resource.NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
-		ServerReporter             resource.ServerReporter
+		ServerReporter             metrics.Reporter
 		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
 		TlsConfigProvider          encryption.TLSConfigProvider
@@ -373,7 +368,7 @@ func HistoryServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() resource.ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
@@ -431,7 +426,7 @@ func MatchingServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() resource.ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		resource.DefaultOptions,
@@ -486,7 +481,7 @@ func FrontendServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() resource.ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
@@ -542,7 +537,7 @@ func WorkerServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() resource.ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		resource.DefaultOptions,
@@ -625,7 +620,8 @@ func ApplyClusterMetadataConfigProvider(
 					InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
 					IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
 					IsConnectionEnabled:      clusterInfo.Enabled,
-				}})
+				},
+			})
 		if err != nil {
 			logger.Warn("Failed to save cluster metadata.", tag.Error(err), tag.ClusterName(clusterName))
 		}
@@ -667,7 +663,7 @@ func ApplyClusterMetadataConfigProvider(
 		}
 
 		// Verify current cluster metadata
-		var persistedShardCount = resp.HistoryShardCount
+		persistedShardCount := resp.HistoryShardCount
 		if config.Persistence.NumHistoryShards != persistedShardCount {
 			logger.Warn(
 				mismatchLogMessage,

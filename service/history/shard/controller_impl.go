@@ -401,6 +401,10 @@ func (c *ControllerImpl) ShardIDs() []int32 {
 }
 
 func IsShardOwnershipLostError(err error) bool {
+	if err == ErrShardClosed {
+		return true
+	}
+
 	switch err.(type) {
 	case *persistence.ShardOwnershipLostError:
 		return true
