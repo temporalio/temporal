@@ -92,7 +92,7 @@ func newTimerQueueActiveProcessor(
 	processor := &timerQueueActiveProcessorImpl{}
 
 	if scheduler == nil {
-		scheduler = newTimerTaskScheduler(shard, logger)
+		scheduler = newTimerTaskScheduler(shard, logger, metricProvider)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -266,7 +266,7 @@ func newTimerQueueFailoverProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newTimerTaskScheduler(shard, logger)
+		scheduler = newTimerTaskScheduler(shard, logger, metricProvider)
 		processor.ownedScheduler = scheduler
 	}
 

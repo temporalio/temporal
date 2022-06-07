@@ -48,9 +48,9 @@ type (
 	InterleavedWeightedRoundRobinScheduler struct {
 		status int32
 
-		processor    Processor
-		metricsScope metrics.Scope
-		logger       log.Logger
+		processor       Processor
+		metricsProvider metrics.MetricProvider
+		logger          log.Logger
 
 		notifyChan   chan struct{}
 		shutdownChan chan struct{}
@@ -74,15 +74,15 @@ type (
 func NewInterleavedWeightedRoundRobinScheduler(
 	option InterleavedWeightedRoundRobinSchedulerOptions,
 	processor Processor,
-	metricsClient metrics.Client,
+	metricsProvider metrics.MetricProvider,
 	logger log.Logger,
 ) *InterleavedWeightedRoundRobinScheduler {
 	return &InterleavedWeightedRoundRobinScheduler{
 		status: common.DaemonStatusInitialized,
 
-		processor:    processor,
-		metricsScope: metricsClient.Scope(metrics.TaskSchedulerScope),
-		logger:       logger,
+		processor:       processor,
+		metricsProvider: metricsProvider.WithTags(metrics.OperationTag(OperationTaskScheduler)),
+		logger:          logger,
 
 		notifyChan:   make(chan struct{}, 1),
 		shutdownChan: make(chan struct{}),

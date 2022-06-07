@@ -28,6 +28,7 @@ import (
 	"context"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
@@ -104,6 +105,7 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 func newTransferTaskScheduler(
 	shard shard.Context,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 ) queues.Scheduler {
 	config := shard.GetConfig()
 	return queues.NewScheduler(
@@ -117,7 +119,7 @@ func newTransferTaskScheduler(
 				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TransferProcessorSchedulerRoundRobinWeights(), logger),
 			},
 		},
-		shard.GetMetricsClient(),
+		metricProvider,
 		logger,
 	)
 }

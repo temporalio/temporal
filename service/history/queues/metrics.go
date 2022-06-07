@@ -50,6 +50,7 @@ const (
 	TaskUserLatency             = "task_latency_userlatency"
 	TaskNoUserQueueLatency      = "task_latency_queue_nouserlatency"
 	TaskReschedulerPendingTasks = "task_rescheduler_pending_tasks"
+	TaskThrottledCounter        = "task_throttled_counter"
 )
 
 // Operation tag value for queue processors
@@ -59,6 +60,7 @@ const (
 	OperationTransferActiveQueueProcessor  = "TransferActiveQueueProcessor"
 	OperationTransferStandbyQueueProcessor = "TransferStandbyQueueProcessor"
 	OperationVisibilityQueueProcessor      = "VisibilityQueueProcessor"
+	OperationTaskPriorityAssigner          = "TaskPriorityAssigner"
 )
 
 // Task type tag value for active and standby tasks
