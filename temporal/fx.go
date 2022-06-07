@@ -180,8 +180,6 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		clientFactoryProvider = client.NewFactoryProvider()
 	}
 
-	handler := metrics.MetricHandlerFromConfig(logger, so.config.Global.Metrics)
-
 	// ServerReporter
 	serverReporter := so.metricsReporter
 	if serverReporter == nil {
@@ -189,6 +187,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 			logger.Warn("no metrics config provided, using noop reporter")
 			serverReporter = metrics.NoopReporter
 		} else {
+			handler := metrics.MetricHandlerFromConfig(logger, so.config.Global.Metrics)
 			serverReporter = metrics.NewEventsReporter(handler)
 		}
 	}
