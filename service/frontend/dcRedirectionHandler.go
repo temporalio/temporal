@@ -1590,7 +1590,10 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkerBuildIdOrdering(
 		case targetDC == handler.currentClusterName:
 			resp, err = handler.frontendHandler.UpdateWorkerBuildIdOrdering(ctx, request)
 		default:
-			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			if err != nil {
+				return err
+			}
 			resp, err = remoteClient.UpdateWorkerBuildIdOrdering(ctx, request)
 		}
 		return err
@@ -1619,7 +1622,10 @@ func (handler *DCRedirectionHandlerImpl) GetWorkerBuildIdOrdering(
 		case targetDC == handler.currentClusterName:
 			resp, err = handler.frontendHandler.GetWorkerBuildIdOrdering(ctx, request)
 		default:
-			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			if err != nil {
+				return err
+			}
 			resp, err = remoteClient.GetWorkerBuildIdOrdering(ctx, request)
 		}
 		return err
