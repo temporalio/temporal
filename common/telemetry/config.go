@@ -33,8 +33,8 @@ import (
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	sdkmetricexp "go.opentelemetry.io/otel/sdk/metric/export"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	otelsdkmetricexp "go.opentelemetry.io/otel/sdk/metric/export"
+	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
@@ -140,7 +140,7 @@ type (
 			Dial(context.Context) (*grpc.ClientConn, error)
 		}
 		startOnce sync.Once
-		sdktrace.SpanExporter
+		otelsdktrace.SpanExporter
 	}
 
 	sharedConnMetricExporter struct {
@@ -149,7 +149,7 @@ type (
 			Dial(context.Context) (*grpc.ClientConn, error)
 		}
 		startOnce sync.Once
-		sdkmetricexp.Exporter
+		otelsdkmetricexp.Exporter
 	}
 
 	// ExportConfig represents YAML structured configuration for a set of OTEL
@@ -164,11 +164,11 @@ func (ec *ExportConfig) UnmarshalYAML(n *yaml.Node) error {
 	return n.Decode(&ec.inner)
 }
 
-func (ec *ExportConfig) SpanExporters() ([]sdktrace.SpanExporter, error) {
+func (ec *ExportConfig) SpanExporters() ([]otelsdktrace.SpanExporter, error) {
 	return ec.inner.SpanExporters()
 }
 
-func (ec *ExportConfig) MetricExporters() ([]sdkmetricexp.Exporter, error) {
+func (ec *ExportConfig) MetricExporters() ([]otelsdkmetricexp.Exporter, error) {
 	return ec.inner.MetricExporters()
 }
 
@@ -212,8 +212,8 @@ func (g *grpcconn) dialOpts() []grpc.DialOption {
 // SpanExporters builds the set of OTEL SpanExporter objects defined by the YAML
 // unmarshaled into this ExportConfig object. The returned SpanExporters have
 // not been started.
-func (ec *exportConfig) SpanExporters() ([]sdktrace.SpanExporter, error) {
-	out := make([]sdktrace.SpanExporter, 0, len(ec.Exporters))
+func (ec *exportConfig) SpanExporters() ([]otelsdktrace.SpanExporter, error) {
+	out := make([]otelsdktrace.SpanExporter, 0, len(ec.Exporters))
 	for _, expcfg := range ec.Exporters {
 		if !strings.HasPrefix(expcfg.Kind.Signal, "trace") {
 			continue
@@ -232,8 +232,8 @@ func (ec *exportConfig) SpanExporters() ([]sdktrace.SpanExporter, error) {
 	return out, nil
 }
 
-func (ec *exportConfig) MetricExporters() ([]sdkmetricexp.Exporter, error) {
-	out := make([]sdkmetricexp.Exporter, 0, len(ec.Exporters))
+func (ec *exportConfig) MetricExporters() ([]otelsdkmetricexp.Exporter, error) {
+	out := make([]otelsdkmetricexp.Exporter, 0, len(ec.Exporters))
 	for _, expcfg := range ec.Exporters {
 		if !strings.HasPrefix(expcfg.Kind.Signal, "metric") {
 			continue
@@ -255,7 +255,7 @@ func (ec *exportConfig) MetricExporters() ([]sdkmetricexp.Exporter, error) {
 
 func (ec *exportConfig) buildOtlpGrpcMetricExporter(
 	cfg *otlpGrpcMetricExporter,
-) (sdkmetricexp.Exporter, error) {
+) (otelsdkmetricexp.Exporter, error) {
 	dopts := cfg.Connection.dialOpts()
 	opts := []otlpmetricgrpc.Option{
 		otlpmetricgrpc.WithEndpoint(cfg.Connection.Endpoint),
@@ -291,7 +291,7 @@ func (ec *exportConfig) buildOtlpGrpcMetricExporter(
 
 func (ec *exportConfig) buildOtlpGrpcSpanExporter(
 	cfg *otlpGrpcSpanExporter,
-) (sdktrace.SpanExporter, error) {
+) (otelsdktrace.SpanExporter, error) {
 	opts := []otlptracegrpc.Option{
 		otlptracegrpc.WithEndpoint(cfg.Connection.Endpoint),
 		otlptracegrpc.WithHeaders(cfg.Headers),

@@ -36,7 +36,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	otelresource "go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
@@ -339,7 +339,7 @@ type (
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
-		SpanExporters              []sdktrace.SpanExporter
+		SpanExporters              []otelsdktrace.SpanExporter
 		InstanceID                 resource.InstanceID `optional:"true"`
 	}
 )
@@ -798,7 +798,7 @@ var TraceExportModule = fx.Options(
 		)
 	}),
 
-	fx.Provide(func(lc fx.Lifecycle, c *config.Config) ([]sdktrace.SpanExporter, error) {
+	fx.Provide(func(lc fx.Lifecycle, c *config.Config) ([]otelsdktrace.SpanExporter, error) {
 		exporters, err := c.ExporterConfig.SpanExporters()
 		if err != nil {
 			return nil, err
@@ -829,13 +829,13 @@ var TraceExportModule = fx.Options(
 // - telemetry.ServerTraceInterceptor
 // - telemetry.ClientTraceInterceptor
 var ServiceTracingModule = fx.Options(
-	fx.Supply([]sdktrace.BatchSpanProcessorOption{}),
+	fx.Supply([]otelsdktrace.BatchSpanProcessorOption{}),
 	fx.Provide(
 		fx.Annotate(
-			func(exps []sdktrace.SpanExporter, opts []sdktrace.BatchSpanProcessorOption) []sdktrace.SpanProcessor {
-				sps := make([]sdktrace.SpanProcessor, 0, len(exps))
+			func(exps []otelsdktrace.SpanExporter, opts []otelsdktrace.BatchSpanProcessorOption) []otelsdktrace.SpanProcessor {
+				sps := make([]otelsdktrace.SpanProcessor, 0, len(exps))
 				for _, exp := range exps {
-					sps = append(sps, sdktrace.NewBatchSpanProcessor(exp, opts...))
+					sps = append(sps, otelsdktrace.NewBatchSpanProcessor(exp, opts...))
 				}
 				return sps
 			},
@@ -868,17 +868,17 @@ var ServiceTracingModule = fx.Options(
 		),
 	),
 	fx.Provide(
-		func(r *otelresource.Resource, sps []sdktrace.SpanProcessor) []sdktrace.TracerProviderOption {
-			opts := make([]sdktrace.TracerProviderOption, 0, len(sps)+1)
-			opts = append(opts, sdktrace.WithResource(r))
+		func(r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) []otelsdktrace.TracerProviderOption {
+			opts := make([]otelsdktrace.TracerProviderOption, 0, len(sps)+1)
+			opts = append(opts, otelsdktrace.WithResource(r))
 			for _, sp := range sps {
-				opts = append(opts, sdktrace.WithSpanProcessor(sp))
+				opts = append(opts, otelsdktrace.WithSpanProcessor(sp))
 			}
 			return opts
 		},
 	),
-	fx.Provide(func(lc fx.Lifecycle, opts []sdktrace.TracerProviderOption) trace.TracerProvider {
-		tp := sdktrace.NewTracerProvider(opts...)
+	fx.Provide(func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
+		tp := otelsdktrace.NewTracerProvider(opts...)
 		lc.Append(fx.Hook{OnStop: tp.Shutdown})
 		return tp
 	}),
@@ -888,7 +888,7 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(telemetry.NewClientTraceInterceptor),
 )
 
-func startAll(exporters []sdktrace.SpanExporter) func(ctx context.Context) error {
+func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
 	type starter interface{ Start(context.Context) error }
 	return func(ctx context.Context) error {
 		for _, e := range exporters {
@@ -903,7 +903,7 @@ func startAll(exporters []sdktrace.SpanExporter) func(ctx context.Context) error
 	}
 }
 
-func shutdownAll(exporters []sdktrace.SpanExporter) func(ctx context.Context) error {
+func shutdownAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		for _, e := range exporters {
 			err := e.Shutdown(ctx)
