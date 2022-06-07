@@ -2,6 +2,11 @@ module go.temporal.io/server
 
 go 1.18
 
+replace (
+	go.temporal.io/api => ../api-go
+	go.temporal.io/sdk => ../sdk-go
+)
+
 require (
 	cloud.google.com/go/storage v1.22.0
 	github.com/aws/aws-sdk-go v1.43.38
@@ -47,10 +52,12 @@ require (
 	go.uber.org/fx v1.17.1
 	go.uber.org/multierr v1.8.0
 	go.uber.org/zap v1.21.0
+	golang.org/x/exp v0.0.0-20220602145555-4a0574d9293f
+	golang.org/x/exp/event v0.0.0-20220602145555-4a0574d9293f
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
 	golang.org/x/time v0.0.0-20220411224347-583f2d630306
 	google.golang.org/api v0.74.0
-	google.golang.org/grpc v1.46.2
+	google.golang.org/grpc v1.47.0
 	google.golang.org/grpc/examples v0.0.0-20220412212246-3bf6719fc8ab
 	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/validator.v2 v2.0.1
@@ -88,7 +95,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/go-cmp v0.5.7 // indirect
+	github.com/google/go-cmp v0.5.7
 	github.com/googleapis/gax-go/v2 v2.3.0 // indirect
 	github.com/googleapis/go-type-adapters v1.0.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
