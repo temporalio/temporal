@@ -1,14 +1,3 @@
-otel:
-  exporters:
-    - kind:
-        signal: traces
-        model: otlp
-        proto: grpc
-      spec:
-        connection:
-          insecure: true
-          endpoint: localhost:4317
-
 log:
   stdout: true
   level: info
