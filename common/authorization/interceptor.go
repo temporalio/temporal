@@ -63,144 +63,103 @@ var (
 	AuthHeader   contextKeyAuthHeader
 )
 
-// GetClaims returns mapped claims and a new context with MappedClaims and AuthHeader values set if applicable
-func GetClaims(
-	ctx context.Context,
-	claimMapper ClaimMapper,
-	audienceGetter JWTAudienceMapper,
-	req interface{},
-	info *grpc.UnaryServerInfo,
-	logger log.Logger,
-) (context.Context, *Claims, error) {
-	var claims *Claims
-	var tlsSubject *pkix.Name
-	var authHeaders []string
-	var authExtraHeaders []string
-	var tlsConnection *credentials.TLSInfo
-
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		authHeaders = md["authorization"]
-		authExtraHeaders = md["authorization-extras"]
-	}
-	tlsConnection = TLSInfoFormContext(ctx)
-	clientCert := PeerCert(tlsConnection)
-	if clientCert != nil {
-		tlsSubject = &clientCert.Subject
-	}
-
-	// Add auth info to context only if there's some auth info
-	if tlsSubject != nil || len(authHeaders) > 0 {
-		var authHeader string
-		var authExtraHeader string
-		var audience string
-		if len(authHeaders) > 0 {
-			authHeader = authHeaders[0]
-		}
-		if len(authExtraHeaders) > 0 {
-			authExtraHeader = authExtraHeaders[0]
-		}
-		if audienceGetter != nil {
-			audience = audienceGetter.Audience(ctx, req, info)
-		}
-		authInfo := AuthInfo{
-			AuthToken:     authHeader,
-			TLSSubject:    tlsSubject,
-			TLSConnection: tlsConnection,
-			ExtraData:     authExtraHeader,
-			Audience:      audience,
-		}
-		mappedClaims, err := claimMapper.GetClaims(&authInfo)
-		if err != nil {
-			logAuthError(logger, err)
-			return nil, nil, errUnauthorized // return a generic error to the caller without disclosing details
-		}
-		claims = mappedClaims
-		ctx = context.WithValue(ctx, MappedClaims, mappedClaims)
-		if authHeader != "" {
-			ctx = context.WithValue(ctx, AuthHeader, authHeader)
-		}
-	}
-
-	return ctx, claims, nil
-}
-
-// AuthorizeRequest authorizes the request and its claims
-func AuthorizeRequest(
-	ctx context.Context,
-	authorizer Authorizer,
-	req interface{},
-	info *grpc.UnaryServerInfo,
-	claims *Claims,
-	logger log.Logger,
-	metricsClient metrics.Client,
-) error {
-	var namespace string
-	requestWithNamespace, ok := req.(hasNamespace)
-	if ok {
-		namespace = requestWithNamespace.GetNamespace()
-	}
-
-	scope := getMetricsScope(metricsClient, metrics.AuthorizationScope, namespace)
-	result, err := authorize(ctx, authorizer, claims, &CallTarget{
-		Namespace: namespace,
-		APIName:   info.FullMethod,
-		Request:   req,
-	}, scope)
-	if err != nil {
-		scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
-		logAuthError(logger, err)
-		return errUnauthorized // return a generic error to the caller without disclosing details
-	}
-	if result.Decision != DecisionAllow {
-		scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
-		// if a reason is included in the result, include it in the error message
-		if result.Reason != "" {
-			return serviceerror.NewPermissionDenied(RequestUnauthorized, result.Reason)
-		}
-		return errUnauthorized // return a generic error to the caller without disclosing details
-	}
-
-	return nil
-}
-
 func (a *interceptor) Interceptor(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
+
 	var claims *Claims
+
 	if a.claimMapper != nil && a.authorizer != nil {
-		var err error
-		ctx, claims, err = GetClaims(ctx, a.claimMapper, a.audienceGetter, req, info, a.logger)
-		if err != nil {
-			return nil, err
+		var tlsSubject *pkix.Name
+		var authHeaders []string
+		var authExtraHeaders []string
+		var tlsConnection *credentials.TLSInfo
+
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			authHeaders = md["authorization"]
+			authExtraHeaders = md["authorization-extras"]
+		}
+		tlsConnection = TLSInfoFormContext(ctx)
+		clientCert := PeerCert(tlsConnection)
+		if clientCert != nil {
+			tlsSubject = &clientCert.Subject
+		}
+
+		// Add auth info to context only if there's some auth info
+		if tlsSubject != nil || len(authHeaders) > 0 {
+			var authHeader string
+			var authExtraHeader string
+			var audience string
+			if len(authHeaders) > 0 {
+				authHeader = authHeaders[0]
+			}
+			if len(authExtraHeaders) > 0 {
+				authExtraHeader = authExtraHeaders[0]
+			}
+			if a.audienceGetter != nil {
+				audience = a.audienceGetter.Audience(ctx, req, info)
+			}
+			authInfo := AuthInfo{
+				AuthToken:     authHeader,
+				TLSSubject:    tlsSubject,
+				TLSConnection: tlsConnection,
+				ExtraData:     authExtraHeader,
+				Audience:      audience,
+			}
+			mappedClaims, err := a.claimMapper.GetClaims(&authInfo)
+			if err != nil {
+				a.logAuthError(err)
+				return nil, errUnauthorized // return a generic error to the caller without disclosing details
+			}
+			claims = mappedClaims
+			ctx = context.WithValue(ctx, MappedClaims, mappedClaims)
+			if authHeader != "" {
+				ctx = context.WithValue(ctx, AuthHeader, authHeader)
+			}
 		}
 	}
 
 	if a.authorizer != nil {
-		if err := AuthorizeRequest(ctx, a.authorizer, req, info, claims, a.logger, a.metricsClient); err != nil {
-			return nil, err
+		var namespace string
+		requestWithNamespace, ok := req.(hasNamespace)
+		if ok {
+			namespace = requestWithNamespace.GetNamespace()
+		}
+
+		scope := a.getMetricsScope(metrics.AuthorizationScope, namespace)
+		result, err := a.authorize(ctx, claims, &CallTarget{
+			Namespace: namespace,
+			APIName:   info.FullMethod,
+			Request:   req,
+		}, scope)
+		if err != nil {
+			scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
+			a.logAuthError(err)
+			return nil, errUnauthorized // return a generic error to the caller without disclosing details
+		}
+		if result.Decision != DecisionAllow {
+			scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
+			// if a reason is included in the result, include it in the error message
+			if result.Reason != "" {
+				return nil, serviceerror.NewPermissionDenied(RequestUnauthorized, result.Reason)
+			}
+			return nil, errUnauthorized // return a generic error to the caller without disclosing details
 		}
 	}
-
 	return handler(ctx, req)
 }
 
-func authorize(
-	ctx context.Context,
-	authorizer Authorizer,
-	claims *Claims,
-	callTarget *CallTarget,
-	scope metrics.Scope,
-) (Result, error) {
+func (a *interceptor) authorize(ctx context.Context, claims *Claims, callTarget *CallTarget, scope metrics.Scope) (Result, error) {
 	sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
 	defer sw.Stop()
-	return authorizer.Authorize(ctx, claims, callTarget)
+	return a.authorizer.Authorize(ctx, claims, callTarget)
 }
 
-func logAuthError(logger log.Logger, err error) {
-	logger.Error("Authorization error", tag.Error(err))
+func (a *interceptor) logAuthError(err error) {
+	a.logger.Error("Authorization error", tag.Error(err))
 }
 
 type interceptor struct {
@@ -229,16 +188,15 @@ func NewAuthorizationInterceptor(
 }
 
 // getMetricsScope return metrics scope with namespace tag
-func getMetricsScope(
-	metricsClient metrics.Client,
+func (a *interceptor) getMetricsScope(
 	scope int,
 	namespace string,
 ) metrics.Scope {
 	var metricsScope metrics.Scope
 	if namespace != "" {
-		metricsScope = metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespace))
+		metricsScope = a.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespace))
 	} else {
-		metricsScope = metricsClient.Scope(scope).Tagged(metrics.NamespaceUnknownTag())
+		metricsScope = a.metricsClient.Scope(scope).Tagged(metrics.NamespaceUnknownTag())
 	}
 	return metricsScope
 }
