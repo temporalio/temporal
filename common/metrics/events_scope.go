@@ -55,12 +55,20 @@ var (
 )
 
 func newEventsScope(provider MetricProvider, idx ServiceIdx, id int) eventsScope {
+	def, ok := ScopeDefs[idx][id]
+	if !ok {
+		def, ok = ScopeDefs[Common][id]
+		if !ok {
+			panic(fmt.Errorf("failed to lookup scope by id %v and service %v", id, idx))
+		}
+	}
+
 	return eventsScope{
 		provider:   provider,
 		serviceIdx: idx,
 		scopeId:    id,
-		scopeTags:  scopeDefToTags(ScopeDefs[idx][id]),
-		scopeDef:   ScopeDefs[idx][id],
+		scopeTags:  scopeDefToTags(def),
+		scopeDef:   def,
 	}
 }
 
