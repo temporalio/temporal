@@ -2233,7 +2233,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	s.NoError(err)
 
 	// start force-replicate wf
-	sysClient, err := sdkclient.NewClient(sdkclient.Options{
+	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: "temporal-system",
 	})
@@ -2278,7 +2278,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	s.Equal(clusterName[1], nsResp2.ReplicationConfig.ActiveClusterName)
 
 	// verify all wf in ns is now available in cluster2
-	client2, err := sdkclient.NewClient(sdkclient.Options{
+	client2, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster2.GetHost().FrontendGRPCAddress(),
 		Namespace: namespace,
 	})
@@ -2349,7 +2349,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	s.Equal(2, len(nsResp.ReplicationConfig.Clusters))
 
 	// Start force-replicate wf
-	sysClient, err := sdkclient.NewClient(sdkclient.Options{
+	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: "temporal-system",
 	})
@@ -2495,7 +2495,7 @@ func (s *integrationClustersTestSuite) registerNamespace(namespace string, isGlo
 }
 
 func (s *integrationClustersTestSuite) newClientAndWorker(hostport, namespace, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
-	sdkClient1, err := sdkclient.NewClient(sdkclient.Options{
+	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  hostport,
 		Namespace: namespace,
 	})
