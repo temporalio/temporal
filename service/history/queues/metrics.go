@@ -27,7 +27,7 @@ package queues
 import (
 	"strings"
 
-	"go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -68,7 +68,7 @@ func GetActiveTransferTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	typeString := task.GetType().String()
-	if task.GetType() == enums.TASK_TYPE_TRANSFER_ACTIVITY_TASK {
+	if task.GetType() == enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK {
 		typeString = "TransferActivity"
 	}
 
@@ -79,7 +79,7 @@ func GetStandbyTransferTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	typeString := task.GetType().String()
-	if task.GetType() == enums.TASK_TYPE_TRANSFER_ACTIVITY_TASK {
+	if task.GetType() == enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK {
 		typeString = "TransferActivity"
 	}
 
@@ -90,7 +90,7 @@ func GetActiveTimerTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	typeString := task.GetType().String()
-	if task.GetType() == enums.TASK_TYPE_WORKFLOW_RUN_TIMEOUT {
+	if task.GetType() == enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT {
 		typeString = "WorkflowTimeout"
 	}
 
@@ -101,7 +101,7 @@ func GetStandbyTimerTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	typeString := task.GetType().String()
-	if task.GetType() == enums.TASK_TYPE_WORKFLOW_RUN_TIMEOUT {
+	if task.GetType() == enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT {
 		typeString = "WorkflowTimeout"
 	}
 
