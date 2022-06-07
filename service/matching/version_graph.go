@@ -2,6 +2,7 @@ package matching
 
 import (
 	"fmt"
+	"go.temporal.io/api/serviceerror"
 	"reflect"
 
 	"go.temporal.io/api/workflow/v1"
@@ -10,25 +11,6 @@ import (
 )
 
 // TODO: Add validator of requests that can return proper error codes @ frontend
-
-// TODO: Should propagate as invalid argument/payload
-type invalidVersionUpdateError struct {
-	msg string
-}
-
-func (e *invalidVersionUpdateError) Error() string {
-	return e.msg
-}
-
-// TODO: Should propagate as 404
-type versionNotFoundError struct {
-	msg string
-	ver *workflow.VersionId
-}
-
-func (e *versionNotFoundError) Error() string {
-	return fmt.Sprintf("version %v not found: %s", e.ver, e.msg)
-}
 
 func ToBuildIdOrderingResponse(g *persistence.VersioningData) *workflowservice.GetWorkerBuildIdOrderingResponse {
 	return &workflowservice.GetWorkerBuildIdOrderingResponse{
@@ -72,9 +54,9 @@ func UpdateVersionsGraph(
 			}
 			if !isExistingDefault {
 				if req.GetPreviousCompatible() != nil {
-					return &invalidVersionUpdateError{msg: "adding a new default version which is compatible " +
+					return serviceerror.NewInvalidArgument("adding a new default version which is compatible " +
 						" with some previous version, when there is no existing default version, is not allowed." +
-						" There must be a default version before this operation makes sense"}
+						" There must be a default version before this operation makes sense")
 				}
 				newNode := &workflow.VersionIdNode{
 					Version:              req.VersionId,
@@ -98,8 +80,8 @@ func UpdateVersionsGraph(
 						existingData.CompatibleLeaves = append(existingData.CompatibleLeaves, newNode)
 					}
 				} else {
-					return &versionNotFoundError{
-						msg: "previous compatible version not found", ver: req.GetPreviousCompatible()}
+					return serviceerror.NewNotFound(
+						fmt.Sprintf("previous compatible version %v not found", req.GetPreviousCompatible()))
 				}
 			} else {
 				// Check if the version is already a default, and remove it from being one if it is.
@@ -129,13 +111,13 @@ func UpdateVersionsGraph(
 						return nil
 					}
 				}
-				return &invalidVersionUpdateError{
-					msg: "Requests to update build id ordering cannot create a new non-default version with no links"}
+				return serviceerror.NewInvalidArgument(
+					"requests to update build id ordering cannot create a new non-default version with no links")
 			}
 		}
 	} else {
-		return &invalidVersionUpdateError{
-			msg: "request to update worker build id ordering is missing a valid version identifier"}
+		return serviceerror.NewInvalidArgument(
+			"request to update worker build id ordering is missing a valid version identifier")
 	}
 	return nil
 }
