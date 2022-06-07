@@ -27,7 +27,6 @@ package metrics
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric/instrument"
@@ -41,13 +40,8 @@ import (
 // MetricHandler is an event.Handler for OpenTelemetry metrics.
 // Its Event method handles Metric events and ignores all others.
 type OtelMetricHandler struct {
-	provider OpenTelemetryProvider
-	mu       sync.Mutex
-	l        log.Logger
-	// A map from event.Metrics to, effectively, otel Meters.
-	// But since the only thing we need from the Meter is recording a value, we
-	// use a function for that that closes over the Meter itself.
-	recordFuncs map[event.Metric]recordFunc
+	provider    OpenTelemetryProvider
+	l           log.Logger
 	excludeTags map[string]map[string]struct{}
 }
 
@@ -60,12 +54,11 @@ func NewOtelMetricHandler(l log.Logger, o OpenTelemetryProvider, cfg ClientConfi
 	return &OtelMetricHandler{
 		provider:    o,
 		l:           l,
-		recordFuncs: map[event.Metric]recordFunc{},
 		excludeTags: configExcludeTags(cfg),
 	}
 }
 
-func (m *OtelMetricHandler) Event(ctx context.Context, e *event.Event) context.Context {
+func (m OtelMetricHandler) Event(ctx context.Context, e *event.Event) context.Context {
 	if e.Kind != event.MetricKind {
 		return ctx
 	}
@@ -90,18 +83,7 @@ func (m *OtelMetricHandler) Event(ctx context.Context, e *event.Event) context.C
 	return ctx
 }
 
-func (m *OtelMetricHandler) getRecordFunc(em event.Metric) recordFunc {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if f, ok := m.recordFuncs[em]; ok {
-		return f
-	}
-	f := m.newRecordFunc(em)
-	m.recordFuncs[em] = f
-	return f
-}
-
-func (m *OtelMetricHandler) newRecordFunc(em event.Metric) recordFunc {
+func (m OtelMetricHandler) getRecordFunc(em event.Metric) recordFunc {
 	opts := em.Options()
 	name := em.Name()
 	otelOpts := []instrument.Option{
@@ -157,7 +139,7 @@ func (m *OtelMetricHandler) newRecordFunc(em event.Metric) recordFunc {
 	}
 }
 
-func (m *OtelMetricHandler) labelsToAttributes(ls []event.Label) []attribute.KeyValue {
+func (m OtelMetricHandler) labelsToAttributes(ls []event.Label) []attribute.KeyValue {
 	var attrs []attribute.KeyValue
 	for _, l := range ls {
 		if vals, ok := m.excludeTags[l.Name]; ok {
@@ -191,7 +173,7 @@ func labelToAttribute(l event.Label) attribute.KeyValue {
 	}
 }
 
-func (m *OtelMetricHandler) Stop(logger log.Logger) {
+func (m OtelMetricHandler) Stop(logger log.Logger) {
 	m.provider.Stop(logger)
 }
 

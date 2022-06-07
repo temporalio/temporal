@@ -95,10 +95,10 @@ func (e eventsScope) AddCounter(counter int, delta int64) {
 // StartTimer starts a timer for the given metric name.
 // Time will be recorded when stopwatch is stopped.
 func (e eventsScope) StartTimer(timer int) Stopwatch {
+	m := getDefinition(e.serviceIdx, timer)
+
 	return &eventsStopwatch{
 		recordFunc: func(d time.Duration) {
-			m := getDefinition(e.serviceIdx, timer)
-
 			e.provider.Timer(m.metricName.String(), nil).Record(d, e.scopeTags...)
 
 			if !m.metricRollupName.Empty() {
