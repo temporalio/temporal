@@ -402,6 +402,7 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 	return c.matcher.OfferQuery(ctx, task)
 }
 
+// TODO: Use signalIfFatal
 func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error) {
 	return c.db.GetVersioningData(ctx)
 }
