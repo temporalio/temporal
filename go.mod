@@ -13,7 +13,7 @@ require (
 	github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13
 	github.com/emirpasic/gods v1.15.1
-	github.com/go-sql-driver/mysql v1.5.0
+	github.com/go-sql-driver/mysql v1.6.0
 	github.com/gocql/gocql v1.0.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
@@ -29,6 +29,7 @@ require (
 	github.com/prometheus/client_golang v1.12.2
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.7.1
+	github.com/temporalio/cds v0.2.0
 	github.com/temporalio/ringpop-go v0.0.0-20211012191444-6f91b5915e95
 	github.com/uber-go/tally/v4 v4.1.1
 	github.com/uber/tchannel-go v1.22.3
@@ -97,7 +98,7 @@ require (
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
-	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
+	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
