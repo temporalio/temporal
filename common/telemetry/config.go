@@ -93,9 +93,9 @@ type (
 
 	exporter struct {
 		Kind struct {
-			Signal string
-			Model  string
-			Proto  string
+			Signal   string
+			Model    string
+			Protocol string
 		}
 		Metadata metadata
 		Spec     interface{} `yaml:"-"`
@@ -399,7 +399,7 @@ func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 	if err != nil {
 		return err
 	}
-	descriptor := fmt.Sprintf("%v+%v+%v", e.Kind.Signal, e.Kind.Model, e.Kind.Proto)
+	descriptor := fmt.Sprintf("%v+%v+%v", e.Kind.Signal, e.Kind.Model, e.Kind.Protocol)
 	switch descriptor {
 	case "traces+otlp+grpc", "trace+otlp+grpc":
 		e.Spec = new(otlpGrpcSpanExporter)
@@ -407,10 +407,10 @@ func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 		e.Spec = new(otlpGrpcMetricExporter)
 	default:
 		return fmt.Errorf(
-			"unsupported exporter kind: signal=%q; model=%q; proto=%q",
+			"unsupported exporter kind: signal=%q; model=%q; protocol=%q",
 			e.Kind.Signal,
 			e.Kind.Model,
-			e.Kind.Proto,
+			e.Kind.Protocol,
 		)
 	}
 	return obj.Spec.Decode(e.Spec)

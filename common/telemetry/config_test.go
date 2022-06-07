@@ -38,7 +38,7 @@ exporters:
   - kind:
       signal: traces
       model: otlp
-      proto: grpc
+      protocol: grpc
     spec:
       headers:
         a: b
@@ -67,13 +67,13 @@ otel:
     - kind:
         signal: traces
         model: otlp
-        proto: grpc
+        protocol: grpc
       spec:
         connection_name: conn1
     - kind:
         signal: metrics
         model: otlp
-        proto: grpc
+        protocol: grpc
       spec:
         connection_name: conn1
 `
@@ -111,7 +111,7 @@ func TestSharedConn(t *testing.T) {
 	exp := cfg.Exporters[0]
 	require.Equal(t, exp.Kind.Signal, "traces")
 	require.Equal(t, exp.Kind.Model, "otlp")
-	require.Equal(t, exp.Kind.Proto, "grpc")
+	require.Equal(t, exp.Kind.Protocol, "grpc")
 	require.NotNil(t, exp.Spec)
 	sspec, ok := exp.Spec.(*telemetry.OTLPGRPCSpanExporter)
 	require.True(t, ok)
@@ -120,7 +120,7 @@ func TestSharedConn(t *testing.T) {
 	exp = cfg.Exporters[1]
 	require.Equal(t, exp.Kind.Signal, "metrics")
 	require.Equal(t, exp.Kind.Model, "otlp")
-	require.Equal(t, exp.Kind.Proto, "grpc")
+	require.Equal(t, exp.Kind.Protocol, "grpc")
 	require.NotNil(t, exp.Spec)
 	mspec, ok := exp.Spec.(*telemetry.OTLPGRPCMetricExporter)
 	require.True(t, ok)
@@ -137,7 +137,7 @@ func TestOTLPTraceGRPC(t *testing.T) {
 	exp := cfg.Exporters[0]
 	require.Equal(t, exp.Kind.Signal, "traces")
 	require.Equal(t, exp.Kind.Model, "otlp")
-	require.Equal(t, exp.Kind.Proto, "grpc")
+	require.Equal(t, exp.Kind.Protocol, "grpc")
 	require.NotNil(t, exp.Spec)
 
 	spec, ok := exp.Spec.(*telemetry.OTLPGRPCSpanExporter)
