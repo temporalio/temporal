@@ -25,10 +25,7 @@
 package tdbg
 
 import (
-	"fmt"
-
 	"github.com/urfave/cli/v2"
-	enumspb "go.temporal.io/api/enums/v1"
 )
 
 var commands = []*cli.Command{
@@ -464,72 +461,6 @@ func newAdminTaskQueueCommands() []*cli.Command {
 
 func newAdminClusterCommands() []*cli.Command {
 	return []*cli.Command{
-		{
-			Name:    "add-search-attributes",
-			Aliases: []string{"asa"},
-			Usage:   "Add custom search attributes",
-			Flags: []cli.Flag{
-				&cli.BoolFlag{
-					Name:     FlagSkipSchemaUpdate,
-					Usage:    "Skip Elasticsearch index schema update (only register in metadata)",
-					Required: false,
-				},
-				&cli.StringFlag{
-					Name:   FlagElasticsearchIndex,
-					Usage:  "Elasticsearch index name (optional)",
-					Hidden: true, // don't show it for now
-				},
-				&cli.StringSliceFlag{
-					Name:  FlagName,
-					Usage: "Search attribute name (multiply values are supported)",
-				},
-				&cli.StringSliceFlag{
-					Name:  FlagType,
-					Usage: fmt.Sprintf("Search attribute type: %v (multiply values are supported)", allowedEnumValues(enumspb.IndexedValueType_name)),
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminAddSearchAttributes(c)
-			},
-		},
-		{
-			Name:    "remove-search-attributes",
-			Aliases: []string{"rsa"},
-			Usage:   "Remove custom search attributes metadata only (Elasticsearch index schema is not modified)",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:   FlagElasticsearchIndex,
-					Usage:  "Elasticsearch index name (optional)",
-					Hidden: true, // don't show it for now
-				},
-				&cli.StringSliceFlag{
-					Name:  FlagName,
-					Usage: "Search attribute name",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminRemoveSearchAttributes(c)
-			},
-		},
-		{
-			Name:    "get-search-attributes",
-			Aliases: []string{"gsa"},
-			Usage:   "Show existing search attributes",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagPrintJSON,
-					Usage: "Output in JSON format",
-				},
-				&cli.StringFlag{
-					Name:   FlagElasticsearchIndex,
-					Usage:  "Elasticsearch index name (optional)",
-					Hidden: true, // don't show it for now
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminGetSearchAttributes(c)
-			},
-		},
 		{
 			Name:    "describe",
 			Aliases: []string{"d"},
