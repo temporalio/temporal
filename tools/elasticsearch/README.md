@@ -76,7 +76,7 @@ ES_VERSION=v7 temporal-elasticsearch-tool setup \
 ```
 
 ### Ping
-This is primarily useful for ES servers that do not use basic auth. It will block until a successful response is received.
+Ping the ES server to ensure connectivity and successful authentication
 
 ```
 export ES_SERVER=http://127.0.0.1:9200

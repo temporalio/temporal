@@ -200,7 +200,7 @@ temporal-sql-tool: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-sql-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-sql-tool ./cmd/tools/sql
 
-temporal-elasticsearch-tool:
+temporal-elasticsearch-tool: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-elasticsearch-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	go build -o temporal-elasticsearch-tool ./cmd/tools/elasticsearch
 
@@ -374,7 +374,7 @@ install-schema-postgresql: temporal-sql-tool
 	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v96/visibility/versioned
 
-install-schema-es:
+install-schema-es: temporal-elasticsearch-tool
 	@printf $(COLOR) "Install Elasticsearch schema..."
 	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 setup \
 		--settings-file ./schema/elasticsearch/visibility/cluster_settings_v7.json \
