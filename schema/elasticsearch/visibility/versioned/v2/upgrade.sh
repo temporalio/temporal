@@ -46,7 +46,7 @@ new_mapping='
       "type": "boolean"
     },
     "TemporalScheduleInfoJSON": {
-      "type": "keyword"
+      "type": "keyword", "index": false
     }
   }
 }
