@@ -305,7 +305,7 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(cluster string) tasks.Key 
 
 	currentTime := s.timeSource.Now()
 	if cluster != "" && cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		currentTime = s.getRemoteClusterInfoLocked(cluster).CurrentTime
+		currentTime = s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 
 	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
@@ -419,7 +419,7 @@ func (s *ContextImpl) UpdateRemoteClusterInfo(
 	s.wLock()
 	defer s.wUnlock()
 
-	remoteClusterInfo := s.getRemoteClusterInfoLocked(cluster)
+	remoteClusterInfo := s.getOrUpdateRemoteClusterInfoLocked(cluster)
 	remoteClusterInfo.AckedReplicationTaskID = ackTaskID
 	remoteClusterInfo.AckedReplicationTimestamp = ackTimestamp
 }
@@ -1306,9 +1306,9 @@ func (s *ContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {
 	s.wLock()
 	defer s.wUnlock()
 	if cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		prevTime := s.getRemoteClusterInfoLocked(cluster).CurrentTime
+		prevTime := s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime
 		if prevTime.Before(currentTime) {
-			s.getRemoteClusterInfoLocked(cluster).CurrentTime = currentTime
+			s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime = currentTime
 		}
 	} else {
 		panic("Cannot set current time for current cluster")
@@ -1316,10 +1316,10 @@ func (s *ContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {
 }
 
 func (s *ContextImpl) GetCurrentTime(cluster string) time.Time {
-	s.rLock()
-	defer s.rUnlock()
 	if cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		return s.getRemoteClusterInfoLocked(cluster).CurrentTime
+		s.wLock()
+		defer s.wUnlock()
+		return s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 	return s.timeSource.Now().UTC()
 }
@@ -1716,7 +1716,7 @@ func (s *ContextImpl) GetReplicationStatus(cluster []string) (map[string]*histor
 	return remoteClusters, handoverNamespaces, nil
 }
 
-func (s *ContextImpl) getRemoteClusterInfoLocked(clusterName string) *remoteClusterInfo {
+func (s *ContextImpl) getOrUpdateRemoteClusterInfoLocked(clusterName string) *remoteClusterInfo {
 	if info, ok := s.remoteClusterInfos[clusterName]; ok {
 		return info
 	}
