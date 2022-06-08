@@ -95,7 +95,7 @@ func (s *clientIntegrationSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 
-	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
 		Namespace: s.namespace,
 	})
@@ -243,7 +243,7 @@ func testDataConverterWorkflow(ctx workflow.Context, tl string) (string, error) 
 }
 
 func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataConverter converter.DataConverter) (sdkclient.Client, worker.Worker) {
-	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:      s.hostPort,
 		Namespace:     s.namespace,
 		DataConverter: dataConverter,

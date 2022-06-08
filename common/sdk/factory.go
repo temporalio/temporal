@@ -79,7 +79,7 @@ func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkc
 
 	// Retry for up to 1m, handles frontend service not ready
 	err := backoff.Retry(func() error {
-		sdkClient, err := sdkclient.NewClient(sdkclient.Options{
+		sdkClient, err := sdkclient.Dial(sdkclient.Options{
 			HostPort:       f.hostPort,
 			Namespace:      namespaceName,
 			MetricsHandler: f.metricsHandler,
