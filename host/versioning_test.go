@@ -117,6 +117,8 @@ func (s *integrationSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	isFirst := true
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		// TODO: This timer is long to ensure the 1-minute lease-renewal on the task queue happens, to verify that
+		//   doesn't blow up data. There must be a faster way to do that.
 		if isFirst {
 			isFirst = false
 			return []*commandpb.Command{{

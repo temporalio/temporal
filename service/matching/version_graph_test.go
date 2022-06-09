@@ -3,6 +3,7 @@ package matching
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"testing"
 
@@ -188,7 +189,7 @@ func TestAddingNewNodeCompatWithPreviousWhenNoDefaultNotAllowed(t *testing.T) {
 	}
 	err := UpdateVersionsGraph(data, req)
 	assert.Error(t, err)
-	assert.IsType(t, &invalidVersionUpdateError{}, err)
+	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
 
 func TestAddingNewNodeWithNoLinksNotAllowed(t *testing.T) {
@@ -199,7 +200,7 @@ func TestAddingNewNodeWithNoLinksNotAllowed(t *testing.T) {
 	}
 	err := UpdateVersionsGraph(data, req)
 	assert.Error(t, err)
-	assert.IsType(t, &invalidVersionUpdateError{}, err)
+	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
 
 func TestUnsetCurrentDefault(t *testing.T) {
@@ -298,7 +299,7 @@ func TestCompatibleTargetsNotFound(t *testing.T) {
 
 	err := UpdateVersionsGraph(data, req)
 	assert.Error(t, err)
-	assert.IsType(t, &versionNotFoundError{}, err)
+	assert.IsType(t, &serviceerror.NotFound{}, err)
 }
 
 func FuzzVersionGraphEnsureNoSameTypeDefaults(f *testing.F) {
