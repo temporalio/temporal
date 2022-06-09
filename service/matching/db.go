@@ -55,6 +55,7 @@ type (
 		taskType      enumspb.TaskQueueType
 		rangeID       int64
 		ackLevel      int64
+		versioningDat *persistencespb.VersioningData
 		store         persistence.TaskManager
 		logger        log.Logger
 	}
@@ -139,16 +140,8 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 
 	case *serviceerror.NotFound:
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
-			RangeID: initialRangeID,
-			TaskQueueInfo: &persistencespb.TaskQueueInfo{
-				NamespaceId:    db.namespaceID.String(),
-				Name:           db.taskQueueName,
-				TaskType:       db.taskType,
-				Kind:           db.taskQueueKind,
-				AckLevel:       db.ackLevel,
-				ExpiryTime:     db.expiryTime(),
-				LastUpdateTime: timestamp.TimeNowPtrUtc(),
-			},
+			RangeID:       initialRangeID,
+			TaskQueueInfo: db.cachedQueueInfo(),
 		}); err != nil {
 			return err
 		}
@@ -165,17 +158,9 @@ func (db *taskQueueDB) renewTaskQueueLocked(
 	rangeID int64,
 ) error {
 	if _, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
-		RangeID: rangeID,
-		TaskQueueInfo: &persistencespb.TaskQueueInfo{
-			NamespaceId:    db.namespaceID.String(),
-			Name:           db.taskQueueName,
-			TaskType:       db.taskType,
-			Kind:           db.taskQueueKind,
-			AckLevel:       db.ackLevel,
-			ExpiryTime:     db.expiryTime(),
-			LastUpdateTime: timestamp.TimeNowPtrUtc(),
-		},
-		PrevRangeID: db.rangeID,
+		RangeID:       rangeID,
+		TaskQueueInfo: db.cachedQueueInfo(),
+		PrevRangeID:   db.rangeID,
 	}); err != nil {
 		return err
 	}
@@ -191,18 +176,12 @@ func (db *taskQueueDB) UpdateState(
 ) error {
 	db.Lock()
 	defer db.Unlock()
+	queueInfo := db.cachedQueueInfo()
+	queueInfo.AckLevel = ackLevel
 	_, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
-		RangeID: db.rangeID,
-		TaskQueueInfo: &persistencespb.TaskQueueInfo{
-			NamespaceId:    db.namespaceID.String(),
-			Name:           db.taskQueueName,
-			TaskType:       db.taskType,
-			Kind:           db.taskQueueKind,
-			AckLevel:       ackLevel,
-			ExpiryTime:     db.expiryTime(),
-			LastUpdateTime: timestamp.TimeNowPtrUtc(),
-		},
-		PrevRangeID: db.rangeID,
+		RangeID:       db.rangeID,
+		TaskQueueInfo: queueInfo,
+		PrevRangeID:   db.rangeID,
 	})
 	if err == nil {
 		db.ackLevel = ackLevel
@@ -221,13 +200,7 @@ func (db *taskQueueDB) CreateTasks(
 		ctx,
 		&persistence.CreateTasksRequest{
 			TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
-				Data: &persistencespb.TaskQueueInfo{
-					NamespaceId: db.namespaceID.String(),
-					Name:        db.taskQueueName,
-					TaskType:    db.taskType,
-					AckLevel:    db.ackLevel,
-					Kind:        db.taskQueueKind,
-				},
+				Data:    db.cachedQueueInfo(),
 				RangeID: db.rangeID,
 			},
 			Tasks: tasks,
@@ -305,6 +278,13 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 func (db *taskQueueDB) GetVersioningData(
 	ctx context.Context,
 ) (*persistencespb.VersioningData, error) {
+	db.Lock()
+	defer db.Unlock()
+
+	if db.versioningDat != nil {
+		return db.versioningDat, nil
+	}
+
 	tqInfo, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
 		NamespaceID: db.namespaceID.String(),
 		TaskQueue:   db.taskQueueName,
@@ -320,14 +300,13 @@ func (db *taskQueueDB) GetVersioningData(
 // MutateVersioningData allows callers to update versioning data for this task queue. The pointer passed to the
 // mutating function is guaranteed to be non-nil.
 func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
-	db.Lock()
-	defer db.Unlock()
-
-	// TODO: caching this seems necessary. UpdateState can blow it away
 	verDat, err := db.GetVersioningData(ctx)
 	if err != nil {
 		return err
 	}
+
+	db.Lock()
+	defer db.Unlock()
 
 	if verDat == nil {
 		verDat = &persistencespb.VersioningData{}
@@ -336,20 +315,15 @@ func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*p
 		return err
 	}
 	db.logger.Info("Updating versioning data "+verDat.String(), tag.ShardRangeID(db.rangeID))
+	db.versioningDat = verDat
+
+	queueInfo := db.cachedQueueInfo()
+	queueInfo.VersioningData = verDat
 
 	_, err = db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
-		RangeID: db.rangeID,
-		TaskQueueInfo: &persistencespb.TaskQueueInfo{
-			NamespaceId:    db.namespaceID.String(),
-			Name:           db.taskQueueName,
-			TaskType:       db.taskType,
-			Kind:           db.taskQueueKind,
-			AckLevel:       db.ackLevel,
-			ExpiryTime:     db.expiryTime(),
-			LastUpdateTime: timestamp.TimeNowPtrUtc(),
-			VersioningData: verDat,
-		},
-		PrevRangeID: db.rangeID,
+		RangeID:       db.rangeID,
+		TaskQueueInfo: queueInfo,
+		PrevRangeID:   db.rangeID,
 	})
 	return err
 }
@@ -362,5 +336,18 @@ func (db *taskQueueDB) expiryTime() *time.Time {
 		return timestamp.TimePtr(time.Now().UTC().Add(stickyTaskQueueTTL))
 	default:
 		panic(fmt.Sprintf("taskQueueDB encountered unknown task kind: %v", db.taskQueueKind))
+	}
+}
+
+func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
+	return &persistencespb.TaskQueueInfo{
+		NamespaceId:    db.namespaceID.String(),
+		Name:           db.taskQueueName,
+		TaskType:       db.taskType,
+		Kind:           db.taskQueueKind,
+		AckLevel:       db.ackLevel,
+		VersioningData: db.versioningDat,
+		ExpiryTime:     db.expiryTime(),
+		LastUpdateTime: timestamp.TimeNowPtrUtc(),
 	}
 }

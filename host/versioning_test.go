@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/pborman/uuid"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflow/v1"
@@ -94,6 +97,64 @@ func (s *integrationSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound
 	s.Error(err)
 	s.Nil(res)
 	s.IsType(&serviceerror.NotFound{}, err)
+}
+
+func (s *integrationSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
+	ctx := NewContext()
+	tq := "integration-versioning-not-destroyed"
+	s.prepareQueue(ctx, tq)
+
+	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		Namespace:          s.namespace,
+		TaskQueue:          tq,
+		VersionId:          &workflow.VersionId{Version: &workflow.VersionId_WorkerBuildId{WorkerBuildId: "foo"}},
+		PreviousCompatible: nil,
+		BecomeDefault:      true,
+	})
+	s.NoError(err)
+	s.NotNil(res)
+
+	isFirst := true
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		if isFirst {
+			isFirst = false
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
+				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
+					TimerId:            "timer-id-1",
+					StartToFireTimeout: timestamp.DurationPtr(70 * time.Second),
+				}},
+			}}, nil
+		}
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}}}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
+		Identity:            "whatever",
+		WorkflowTaskHandler: wtHandler,
+		ActivityTaskHandler: nil,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+	_, errWorkflowTask := poller.PollAndProcessWorkflowTask(true, false)
+	s.NoError(errWorkflowTask)
+	_, errWorkflowTask = poller.PollAndProcessWorkflowTask(true, false)
+	s.NoError(errWorkflowTask)
+
+	res2, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+	})
+	s.NoError(err)
+	s.NotNil(res2)
+	s.Equal(len(res2.CurrentDefaults), 1)
+	s.Equal(res2.CurrentDefaults[0].GetVersion().GetWorkerBuildId(), "foo")
 }
 
 func (s *integrationSuite) prepareQueue(ctx context.Context, tq string) {
