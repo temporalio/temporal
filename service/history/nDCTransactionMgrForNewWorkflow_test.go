@@ -268,7 +268,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		now,
-		persistence.CreateWorkflowModeWorkflowIDReuse,
+		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
 		currentLastWriteVersion,
 		targetMutableState,
@@ -343,7 +343,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		now,
-		persistence.CreateWorkflowModeWorkflowIDReuse,
+		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
 		currentLastWriteVersion,
 		targetMutableState,
@@ -412,7 +412,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		now,
-		persistence.CreateWorkflowModeZombie,
+		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
 		targetMutableState,
@@ -482,7 +482,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		now,
-		persistence.CreateWorkflowModeZombie,
+		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
 		targetMutableState,
@@ -552,7 +552,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		now,
-		persistence.CreateWorkflowModeZombie,
+		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
 		targetMutableState,
@@ -622,7 +622,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		now,
-		persistence.CreateWorkflowModeZombie,
+		persistence.CreateWorkflowModeBypassCurrent,
 		"",
 		int64(0),
 		targetMutableState,

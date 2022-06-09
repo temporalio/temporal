@@ -764,3 +764,129 @@ func (c *metricClient) ListTaskQueuePartitions(
 	}
 	return resp, err
 }
+
+func (c *metricClient) CreateSchedule(
+	ctx context.Context,
+	request *workflowservice.CreateScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CreateScheduleResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientCreateScheduleScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientCreateScheduleScope, metrics.ClientLatency)
+	resp, err := c.client.CreateSchedule(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientCreateScheduleScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) DescribeSchedule(
+	ctx context.Context,
+	request *workflowservice.DescribeScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeScheduleResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientDescribeScheduleScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientDescribeScheduleScope, metrics.ClientLatency)
+	resp, err := c.client.DescribeSchedule(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientDescribeScheduleScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) UpdateSchedule(
+	ctx context.Context,
+	request *workflowservice.UpdateScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateScheduleResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientUpdateScheduleScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientUpdateScheduleScope, metrics.ClientLatency)
+	resp, err := c.client.UpdateSchedule(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientUpdateScheduleScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) PatchSchedule(
+	ctx context.Context,
+	request *workflowservice.PatchScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PatchScheduleResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientPatchScheduleScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientPatchScheduleScope, metrics.ClientLatency)
+	resp, err := c.client.PatchSchedule(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientPatchScheduleScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) ListScheduleMatchingTimes(
+	ctx context.Context,
+	request *workflowservice.ListScheduleMatchingTimesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListScheduleMatchingTimesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientListScheduleMatchingTimesScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientListScheduleMatchingTimesScope, metrics.ClientLatency)
+	resp, err := c.client.ListScheduleMatchingTimes(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientListScheduleMatchingTimesScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) DeleteSchedule(
+	ctx context.Context,
+	request *workflowservice.DeleteScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteScheduleResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientDeleteScheduleScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientDeleteScheduleScope, metrics.ClientLatency)
+	resp, err := c.client.DeleteSchedule(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientDeleteScheduleScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) ListSchedules(
+	ctx context.Context,
+	request *workflowservice.ListSchedulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListSchedulesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientListSchedulesScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientListSchedulesScope, metrics.ClientLatency)
+	resp, err := c.client.ListSchedules(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientListSchedulesScope, metrics.ClientFailures)
+	}
+	return resp, err
+}

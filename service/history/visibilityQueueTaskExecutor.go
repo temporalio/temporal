@@ -34,9 +34,11 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -69,27 +71,28 @@ func newVisibilityQueueTaskExecutor(
 	}
 }
 
-func (t *visibilityQueueTaskExecutor) execute(
+func (t *visibilityQueueTaskExecutor) Execute(
 	ctx context.Context,
-	taskInfo tasks.Task,
-	shouldProcessTask bool,
-) error {
+	executable queues.Executable,
+) (metrics.Scope, error) {
 
-	if !shouldProcessTask {
-		return nil
-	}
+	task := executable.GetTask()
+	scope := t.shard.GetMetricsClient().Scope(
+		tasks.GetVisibilityTaskMetricsScope(task),
+		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+	)
 
-	switch task := taskInfo.(type) {
+	switch task := task.(type) {
 	case *tasks.StartExecutionVisibilityTask:
-		return t.processStartExecution(ctx, task)
+		return scope, t.processStartExecution(ctx, task)
 	case *tasks.UpsertExecutionVisibilityTask:
-		return t.processUpsertExecution(ctx, task)
+		return scope, t.processUpsertExecution(ctx, task)
 	case *tasks.CloseExecutionVisibilityTask:
-		return t.processCloseExecution(ctx, task)
+		return scope, t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionVisibilityTask:
-		return t.processDeleteExecution(ctx, task)
+		return scope, t.processDeleteExecution(ctx, task)
 	default:
-		return errUnknownVisibilityTask
+		return scope, errUnknownVisibilityTask
 	}
 }
 
@@ -97,19 +100,10 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	ctx context.Context,
 	task *tasks.StartExecutionVisibilityTask,
 ) (retError error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
-
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespace.ID(task.NamespaceID),
-		commonpb.WorkflowExecution{
-			WorkflowId: task.WorkflowID,
-			RunId:      task.RunID,
-		},
-		workflow.CallerTypeTask,
-	)
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -172,19 +166,10 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	ctx context.Context,
 	task *tasks.UpsertExecutionVisibilityTask,
 ) (retError error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
-
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespace.ID(task.NamespaceID),
-		commonpb.WorkflowExecution{
-			WorkflowId: task.WorkflowID,
-			RunId:      task.RunID,
-		},
-		workflow.CallerTypeTask,
-	)
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -323,19 +308,10 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	ctx context.Context,
 	task *tasks.CloseExecutionVisibilityTask,
 ) (retError error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
-
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespace.ID(task.NamespaceID),
-		commonpb.WorkflowExecution{
-			WorkflowId: task.WorkflowID,
-			RunId:      task.RunID,
-		},
-		workflow.CallerTypeTask,
-	)
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -360,17 +336,13 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
-	completionEvent, err := mutableState.GetCompletionEvent(ctx)
+	wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
 	if err != nil {
 		return err
 	}
-	wfCloseTime := timestamp.TimeValue(completionEvent.GetEventTime())
-
 	workflowTypeName := executionInfo.WorkflowTypeName
-	workflowCloseTime := wfCloseTime
 	workflowStatus := executionState.Status
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
-
 	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
 	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
 	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
@@ -390,7 +362,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		workflowTypeName,
 		workflowStartTime,
 		workflowExecutionTime,
-		workflowCloseTime,
+		timestamp.TimeValue(wfCloseTime),
 		workflowStatus,
 		stateTransitionCount,
 		workflowHistoryLength,
@@ -451,11 +423,8 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	ctx context.Context,
 	task *tasks.DeleteExecutionVisibilityTask,
 ) (retError error) {
-	if task.CloseTime == nil {
-		// CloseTime is not set for workflow executions with TTL (old version).
-		// They will be deleted using Cassandra TTL and this task should be ignored.
-		return nil
-	}
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
 
 	request := &manager.VisibilityDeleteWorkflowExecutionRequest{
 		NamespaceID: namespace.ID(task.NamespaceID),

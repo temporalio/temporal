@@ -13,28 +13,34 @@ can be applied to local Temporal cluster.
 ### Quickstart for localhost development
 
 1. Start Temporal development server for active zone:
-    ```
-    ./temporal-server --zone active start
-    ```
-
-1. Start Temporal development server for standby(passive) zone:
-    ```
-    ./temporal-server --zone standby start
+    ```bash
+    make start-cdc-active
     ```
 
-1. Create global namespaces
+2. Start Temporal development server for standby(passive) zone:
+    ```bash
+    make start-cdc-standby
     ```
+   
+3. Connect two Temporal clusters:
+   ```bash
+   tctl --ad 127.0.0.1:7233 adm cl upsert-remote-cluster --frontend_address "localhost:8233"
+   tctl --ad 127.0.0.1:8233 adm cl upsert-remote-cluster --frontend_address "localhost:7233"
+   ```
+
+4. Create global namespaces
+    ```bash
     tctl --ns sample namespace register --gd true --ac active --cl active standby
     ```
 
-1. Failover between zones:
+5. Failover between zones:
 
     Failover to standby:
-    ```
+    ```bash
     tctl --ns sample namespace update --ac standby
     ```
     Failback to active:
-    ```
+    ```bash
     tctl --ns sample namespace update --ac active
     ```
 

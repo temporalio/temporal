@@ -180,6 +180,13 @@ func (d *ShardStore) UpdateShard(
 	return nil
 }
 
+func (d *ShardStore) AssertShardOwnership(
+	ctx context.Context,
+	request *p.AssertShardOwnershipRequest,
+) error {
+	return nil
+}
+
 func (d *ShardStore) GetName() string {
 	return cassandraPersistenceName
 }

@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -130,4 +132,13 @@ func Test_GetRetentionDays(t *testing.T) {
 			require.Equal(t, tt.want, ns.Retention())
 		})
 	}
+}
+
+func TestNamespace_GetCustomData(t *testing.T) {
+	base := base(t)
+	ns := base.Clone(namespace.WithData("foo", "bar"))
+	data := ns.GetCustomData("foo")
+	assert.Equal(t, "bar", data)
+	data2 := ns.GetCustomData("fake")
+	assert.Equal(t, "", data2)
 }

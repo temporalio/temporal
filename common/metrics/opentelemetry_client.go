@@ -54,18 +54,20 @@ func NewOpenTelemetryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, r
 		return NewTagFilteringScope(tagsFilterConfig, impl)
 	}
 
-	globalRootScope := newOpenTelemetryScope(serviceIdx, reporter.GetMeter(), nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache, false)
+	rootScope := newOpenTelemetryScope(serviceIdx, reporter.GetMeter(), nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache, false)
 
 	serviceTypeTagValue, err := MetricsServiceIdxToServiceName(serviceIdx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize metrics client: %w", err)
 	}
 
-	rootTags := make(map[string]string, len(clientConfig.Tags)+1)
+	rootTags := make(map[string]string, len(clientConfig.Tags)+2)
 	for k, v := range clientConfig.Tags {
 		rootTags[k] = v
 	}
 	rootTags[serviceName] = serviceTypeTagValue
+	rootTags[namespace] = namespaceAllValue
+	globalRootScope := rootScope.taggedString(rootTags, true)
 
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
 	metricsClient := &openTelemetryClient{
@@ -75,13 +77,12 @@ func NewOpenTelemetryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, r
 		serviceIdx:   serviceIdx,
 		scopeWrapper: scopeWrapper,
 		gaugeCache:   gaugeCache,
-		userScope:    reporter.UserScope(),
+		userScope:    reporter.UserScope().Tagged(rootTags),
 	}
 
 	for idx, def := range ScopeDefs[Common] {
 		scopeTags := map[string]string{
 			OperationTagName: def.operation,
-			namespace:        namespaceAllValue,
 		}
 		mergeMapToRight(def.tags, scopeTags)
 		metricsClient.childScopes[idx] = scopeWrapper(globalRootScope.taggedString(scopeTags, true))
@@ -90,7 +91,6 @@ func NewOpenTelemetryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, r
 	for idx, def := range ScopeDefs[serviceIdx] {
 		scopeTags := map[string]string{
 			OperationTagName: def.operation,
-			namespace:        namespaceAllValue,
 		}
 		mergeMapToRight(def.tags, scopeTags)
 		metricsClient.childScopes[idx] = scopeWrapper(globalRootScope.taggedString(scopeTags, true))

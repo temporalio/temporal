@@ -27,8 +27,6 @@ package deletenamespace
 import (
 	"context"
 	"fmt"
-	"math/rand"
-	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -123,18 +121,11 @@ func (a *activities) MarkNamespaceDeletedActivity(ctx context.Context, nsName na
 	return nil
 }
 
-func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, nsName namespace.Name) (namespace.Name, error) {
-	var letters = []rune("1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	const suffixLength = 5
-	rand.Seed(time.Now().UnixNano())
+func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (namespace.Name, error) {
+	const initialSuffixLength = 5
 
-	for { // Just in case. Generated name should always be unique after first attempt.
-		b := make([]rune, suffixLength)
-		for i := range b {
-			b[i] = letters[rand.Intn(len(letters))]
-		}
-
-		newName := fmt.Sprintf("%s-deleted-%s", nsName, string(b))
+	for suffixLength := initialSuffixLength; suffixLength < len(nsID.String()); suffixLength++ { // Just in case. 5 chars from ID should be good enough.
+		newName := fmt.Sprintf("%s-deleted-%s", nsName, nsID.String()[:suffixLength])
 
 		_, err := a.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 			Name: newName,
@@ -142,7 +133,7 @@ func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, n
 		switch err.(type) {
 		case nil:
 			a.logger.Warn("Regenerate namespace name due to collision.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespace(newName))
-		case *serviceerror.NotFound:
+		case *serviceerror.NamespaceNotFound:
 			a.logger.Info("Generated new name for deleted namespace.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespace(newName))
 			return namespace.Name(newName), nil
 		default:
@@ -151,6 +142,8 @@ func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, n
 			return namespace.EmptyName, err
 		}
 	}
+	// Should never get here because namespace ID is guaranteed to be unique.
+	panic(fmt.Sprintf("Unable to generate new name for deleted namespace %s. ID %q is not unique.", nsName, nsID))
 }
 
 func (a *activities) RenameNamespaceActivity(ctx context.Context, previousName namespace.Name, newName namespace.Name) error {

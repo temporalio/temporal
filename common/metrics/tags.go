@@ -48,6 +48,7 @@ const (
 	activityType  = "activityType"
 	commandType   = "commandType"
 	serviceName   = "service_name"
+	actionType    = "action_type"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
@@ -172,14 +173,6 @@ func ServiceRoleTag(value string) Tag {
 	return &tagImpl{key: ServiceRoleTagName, value: value}
 }
 
-// Returns a new stats type tag
-func StatsTypeTag(value string) Tag {
-	if len(value) == 0 {
-		value = unknownValue
-	}
-	return &tagImpl{key: StatsTypeTagName, value: value}
-}
-
 // Returns a new failure type tag
 func FailureTag(value string) Tag {
 	if len(value) == 0 {
@@ -200,7 +193,13 @@ func TaskTypeTag(value string) Tag {
 		value = unknownValue
 	}
 	return &tagImpl{key: TaskTypeTagName, value: value}
+}
 
+func TaskPriorityTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{key: TaskPriorityTagName, value: value}
 }
 
 func QueueTypeTag(value string) Tag {
@@ -221,8 +220,10 @@ func ServiceErrorTypeTag(err error) Tag {
 	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(fmt.Sprintf(getType, err), errorPrefix)}
 }
 
-var standardVisibilityTypeTag = VisibilityTypeTag(standardVisibilityTagValue)
-var advancedVisibilityTypeTag = VisibilityTypeTag(advancedVisibilityTagValue)
+var (
+	standardVisibilityTypeTag = VisibilityTypeTag(standardVisibilityTagValue)
+	advancedVisibilityTypeTag = VisibilityTypeTag(advancedVisibilityTagValue)
+)
 
 func StandardVisibilityTypeTag() Tag {
 	return standardVisibilityTypeTag
@@ -243,4 +244,16 @@ func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 
 func ServiceTypeTag(value string) Tag {
 	return &tagImpl{key: serviceName, value: value}
+}
+
+func ActionType(value string) Tag {
+	return &tagImpl{key: actionType, value: value}
+}
+
+func OperationTag(value string) Tag {
+	return &tagImpl{key: OperationTagName, value: value}
+}
+
+func StringTag(key string, value string) Tag {
+	return &tagImpl{key: key, value: value}
 }

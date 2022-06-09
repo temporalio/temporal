@@ -28,8 +28,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/uber-go/tally/v4"
-
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -42,32 +40,26 @@ type (
 	}
 )
 
-var _ Processor = (*noopProcessor)(nil)
-var _ PriorityTask = (*noopTask)(nil)
+var (
+	_ Processor    = (*noopProcessor)(nil)
+	_ PriorityTask = (*noopTask)(nil)
+)
 
 func BenchmarkInterleavedWeightedRoundRobinScheduler(b *testing.B) {
-	priorityToWeight := map[int]int{
+	priorityToWeight := map[Priority]int{
 		0: 5,
 		1: 3,
 		2: 2,
 		3: 1,
 	}
 	logger := log.NewTestLogger()
-	metricsClient, err := metrics.NewClient(
-		&metrics.ClientConfig{},
-		tally.NewTestScope("test", nil),
-		metrics.UnitTestService,
-	)
-	if err != nil {
-		panic(err)
-	}
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions{
 			PriorityToWeight: priorityToWeight,
 		},
 		&noopProcessor{},
-		metricsClient,
+		metrics.NoopClient,
 		logger,
 	)
 	scheduler.Start()
@@ -97,5 +89,5 @@ func (n *noopTask) Ack()                             { n.Done() }
 func (n *noopTask) Nack(err error)                   { panic("implement me") }
 func (n *noopTask) Reschedule()                      { panic("implement me") }
 func (n *noopTask) State() State                     { panic("implement me") }
-func (n *noopTask) GetPriority() int                 { return 0 }
-func (n *noopTask) SetPriority(i int)                { panic("implement me") }
+func (n *noopTask) GetPriority() Priority            { return 0 }
+func (n *noopTask) SetPriority(i Priority)           { panic("implement me") }

@@ -29,13 +29,16 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/health"
 
 	"go.temporal.io/server/api/adminservicemock/v1"
+	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -44,6 +47,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkmocks "go.temporal.io/sdk/mocks"
@@ -84,8 +88,9 @@ type (
 		mockMetadata               *cluster.MockMetadata
 		mockProducer               *persistence.MockNamespaceReplicationQueue
 
-		namespace   namespace.Name
-		namespaceID namespace.ID
+		namespace      namespace.Name
+		namespaceID    namespace.ID
+		namespaceEntry *namespace.Namespace
 
 		handler *AdminHandler
 	}
@@ -101,6 +106,16 @@ func (s *adminHandlerSuite) SetupTest() {
 
 	s.namespace = "some random namespace name"
 	s.namespaceID = "deadd0d0-c001-face-d00d-000000000000"
+	s.namespaceEntry = namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Name: s.namespace.String(),
+			Id:   s.namespaceID.String(),
+		},
+		nil,
+		false,
+		nil,
+		int64(100),
+	)
 
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
@@ -147,6 +162,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		health.NewServer(),
 		serialization.NewSerializer(),
 	}
+	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
 	s.handler = NewAdminHandler(args)
 	s.handler.Start()
 }
@@ -215,10 +231,11 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 
 func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamespaceCache() {
 	ctx := context.Background()
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(namespace.ID(""), fmt.Errorf("test"))
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(nil, fmt.Errorf("test"))
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace: s.namespace.String(),
+			Namespace:   s.namespace.String(),
+			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
@@ -235,7 +252,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamesp
 
 func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	ctx := context.Background()
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil).AnyTimes()
 	branchToken := []byte{1}
 	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
 		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
@@ -255,7 +272,8 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	}, nil)
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace: s.namespace.String(),
+			Namespace:   s.namespace.String(),
+			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
@@ -272,7 +290,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 
 func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAndEndID() {
 	ctx := context.Background()
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil).AnyTimes()
 	branchToken := []byte{1}
 	versionHistory := versionhistory.NewVersionHistory(branchToken, []*historyspb.VersionHistoryItem{
 		versionhistory.NewVersionHistoryItem(int64(10), int64(100)),
@@ -287,7 +305,8 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAnd
 
 	resp, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace: s.namespace.String(),
+			Namespace:   s.namespace.String(),
+			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
@@ -767,7 +786,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 	var clusterId = uuid.New()
 	var recordVersion int64 = 5
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
@@ -807,7 +825,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
@@ -844,17 +861,15 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_ClusterNameConflict() {
 	var rpcAddress = uuid.New()
-	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(clusterName)
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
 	)
 	s.mockAdminClient.EXPECT().DescribeCluster(gomock.Any(), &adminservice.DescribeClusterRequest{}).Return(
 		&adminservice.DescribeClusterResponse{
 			ClusterId:                clusterId,
-			ClusterName:              clusterName,
+			ClusterName:              s.mockMetadata.GetCurrentClusterName(),
 			HistoryShardCount:        0,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
@@ -870,7 +885,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Failov
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -894,7 +908,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_ShardC
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -918,7 +931,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Global
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -942,7 +954,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Initia
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
 		uuid.New(): {InitialFailoverVersion: 0},
@@ -983,7 +994,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_Err
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
@@ -1011,7 +1021,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_Er
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
@@ -1051,7 +1060,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_No
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
@@ -1088,10 +1096,8 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_No
 }
 
 func (s *adminHandlerSuite) Test_DescribeCluster_CurrentCluster_Success() {
-	var clusterName = uuid.New()
 	var clusterId = uuid.New()
-
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(clusterName)
+	clusterName := s.mockMetadata.GetCurrentClusterName()
 	s.mockResource.MembershipMonitor.EXPECT().WhoAmI().Return(&membership.HostInfo{}, nil)
 	s.mockResource.MembershipMonitor.EXPECT().GetReachableMembers().Return(nil, nil)
 	s.mockResource.HistoryServiceResolver.EXPECT().Members().Return([]*membership.HostInfo{})
@@ -1185,4 +1191,202 @@ func (s *adminHandlerSuite) Test_ListClusters_Success() {
 	s.NoError(err)
 	s.Equal(1, len(resp.Clusters))
 	s.Equal(0, len(resp.GetNextPageToken()))
+}
+
+func (s *adminHandlerSuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "workflowID",
+	}
+
+	request := &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: s.namespace.String(),
+		Execution: &execution,
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetName().Return("elasticsearch").AnyTimes()
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
+	resp, err := s.handler.DeleteWorkflowExecution(context.Background(), request)
+	s.Nil(resp)
+	s.Error(err)
+
+	mutableState := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			VersionHistories: &historyspb.VersionHistories{
+				CurrentVersionHistoryIndex: 0,
+				Histories: []*historyspb.VersionHistory{
+					{BranchToken: []byte("branch1")},
+					{BranchToken: []byte("branch2")},
+					{BranchToken: []byte("branch3")},
+				},
+			},
+		},
+	}
+
+	shardID := common.WorkflowIDToHistoryShard(
+		s.namespaceID.String(),
+		execution.GetWorkflowId(),
+		s.handler.numberOfHistoryShards,
+	)
+	runID := uuid.New()
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetCurrentExecutionResponse{
+		StartRequestID: uuid.New(),
+		RunID:          runID,
+		State:          enums.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		Status:         enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+	}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     shardID,
+		NamespaceID: s.namespaceID.String(),
+		WorkflowID:  execution.WorkflowId,
+		RunID:       runID,
+	}).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
+		NamespaceId: s.namespaceID.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: execution.WorkflowId,
+			RunId:      runID,
+		},
+	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
+	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), &persistence.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     shardID,
+		NamespaceID: s.namespaceID.String(),
+		WorkflowID:  execution.WorkflowId,
+		RunID:       runID,
+	}).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), &persistence.DeleteWorkflowExecutionRequest{
+		ShardID:     shardID,
+		NamespaceID: s.namespaceID.String(),
+		WorkflowID:  execution.WorkflowId,
+		RunID:       runID,
+	}).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
+
+	_, err = s.handler.DeleteWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+}
+
+func (s *adminHandlerSuite) TestDeleteWorkflowExecution_LoadMutableStateFailed() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "workflowID",
+		RunId:      uuid.New(),
+	}
+
+	request := &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: s.namespace.String(),
+		Execution: &execution,
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetName().Return("elasticsearch").AnyTimes()
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), gomock.Any()).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
+	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+
+	_, err := s.handler.DeleteWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+}
+
+func (s *adminHandlerSuite) TestDeleteWorkflowExecution_CassandraVisibilityBackend() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "workflowID",
+		RunId:      uuid.New(),
+	}
+
+	request := &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: s.namespace.String(),
+		Execution: &execution,
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetName().Return("elasticsearch,cassandra").AnyTimes()
+
+	// test delete open records
+	branchToken := []byte("branchToken")
+	version := int64(100)
+	mutableState := &persistencespb.WorkflowMutableState{
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			CreateRequestId: uuid.New(),
+			RunId:           execution.RunId,
+			State:           enums.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: 12,
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			CompletionEventBatchId: 10,
+			StartTime:              timestamp.TimePtr(time.Now()),
+			VersionHistories: &historyspb.VersionHistories{
+				CurrentVersionHistoryIndex: 0,
+				Histories: []*historyspb.VersionHistory{
+					{
+						BranchToken: branchToken,
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 11, Version: version},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
+		NamespaceId:       s.namespaceID.String(),
+		Execution:         &execution,
+		WorkflowStartTime: mutableState.ExecutionInfo.StartTime,
+	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
+	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
+
+	_, err := s.handler.DeleteWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+
+	// test delete close records
+	mutableState.ExecutionState.State = enums.WORKFLOW_EXECUTION_STATE_COMPLETED
+	mutableState.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+
+	shardID := common.WorkflowIDToHistoryShard(
+		s.namespaceID.String(),
+		execution.GetWorkflowId(),
+		s.handler.numberOfHistoryShards,
+	)
+	closeTime := time.Now()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		ShardID:     shardID,
+		BranchToken: branchToken,
+		MinEventID:  mutableState.ExecutionInfo.CompletionEventBatchId,
+		MaxEventID:  mutableState.NextEventId,
+		PageSize:    1,
+	}).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{
+			{
+				EventId:   10,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+				Version:   version,
+				EventTime: timestamp.TimePtr(closeTime.Add(-time.Millisecond)),
+			},
+			{
+				EventId:   11,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+				Version:   version,
+				EventTime: timestamp.TimePtr(closeTime),
+			},
+		},
+	}, nil)
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
+		NamespaceId:       s.namespaceID.String(),
+		Execution:         &execution,
+		WorkflowCloseTime: timestamp.TimePtr(closeTime),
+	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
+	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
+
+	_, err = s.handler.DeleteWorkflowExecution(context.Background(), request)
+	s.NoError(err)
 }

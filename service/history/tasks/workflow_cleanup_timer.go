@@ -44,10 +44,7 @@ type (
 )
 
 func (a *DeleteHistoryEventTask) GetKey() Key {
-	return Key{
-		FireTime: a.VisibilityTimestamp,
-		TaskID:   a.TaskID,
-	}
+	return NewKey(a.VisibilityTimestamp, a.TaskID)
 }
 
 func (a *DeleteHistoryEventTask) GetVersion() int64 {

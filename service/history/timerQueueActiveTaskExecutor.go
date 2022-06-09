@@ -30,12 +30,14 @@ import (
 
 	"github.com/pborman/uuid"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -45,7 +47,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
@@ -57,7 +61,6 @@ type (
 		*timerQueueTaskExecutorBase
 
 		queueProcessor *timerQueueActiveProcessorImpl
-		matchingClient matchingservice.MatchingServiceClient
 	}
 )
 
@@ -69,47 +72,48 @@ func newTimerQueueActiveTaskExecutor(
 	logger log.Logger,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
-) queueTaskExecutor {
+) queues.Executor {
 	return &timerQueueActiveTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
 			shard,
 			workflowCache,
 			workflowDeleteManager,
+			matchingClient,
 			logger,
 			config,
 		),
 		queueProcessor: queueProcessor,
-		matchingClient: matchingClient,
 	}
 }
 
-func (t *timerQueueActiveTaskExecutor) execute(
+func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
-	taskInfo tasks.Task,
-	shouldProcessTask bool,
-) error {
+	executable queues.Executable,
+) (metrics.Scope, error) {
 
-	if !shouldProcessTask {
-		return nil
-	}
+	task := executable.GetTask()
+	scope := t.metricsClient.Scope(
+		tasks.GetActiveTimerTaskMetricScope(task),
+		getNamespaceTagByID(t.registry, task.GetNamespaceID()),
+	)
 
-	switch task := taskInfo.(type) {
+	switch task := task.(type) {
 	case *tasks.UserTimerTask:
-		return t.executeUserTimerTimeoutTask(ctx, task)
+		return scope, t.executeUserTimerTimeoutTask(ctx, task)
 	case *tasks.ActivityTimeoutTask:
-		return t.executeActivityTimeoutTask(ctx, task)
+		return scope, t.executeActivityTimeoutTask(ctx, task)
 	case *tasks.WorkflowTaskTimeoutTask:
-		return t.executeWorkflowTaskTimeoutTask(ctx, task)
+		return scope, t.executeWorkflowTaskTimeoutTask(ctx, task)
 	case *tasks.WorkflowTimeoutTask:
-		return t.executeWorkflowTimeoutTask(ctx, task)
+		return scope, t.executeWorkflowTimeoutTask(ctx, task)
 	case *tasks.ActivityRetryTimerTask:
-		return t.executeActivityRetryTimerTask(ctx, task)
+		return scope, t.executeActivityRetryTimerTask(ctx, task)
 	case *tasks.WorkflowBackoffTimerTask:
-		return t.executeWorkflowBackoffTimerTask(ctx, task)
+		return scope, t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
-		return t.executeDeleteHistoryEventTask(ctx, task)
+		return scope, t.executeDeleteHistoryEventTask(ctx, task)
 	default:
-		return errUnknownTimerTask
+		return scope, errUnknownTimerTask
 	}
 }
 
@@ -117,17 +121,10 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	ctx context.Context,
 	task *tasks.UserTimerTask,
 ) (retError error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
-
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -177,17 +174,10 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	ctx context.Context,
 	task *tasks.ActivityTimeoutTask,
 ) (retError error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
-
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -287,17 +277,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	ctx context.Context,
 	task *tasks.WorkflowTaskTimeoutTask,
 ) (retError error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
-
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -365,17 +348,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	ctx context.Context,
 	task *tasks.WorkflowBackoffTimerTask,
 ) (retError error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
-
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -408,17 +384,10 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	ctx context.Context,
 	task *tasks.ActivityRetryTimerTask,
 ) (retError error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
-
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -462,16 +431,17 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil) // release earlier as we don't need the lock anymore
 
-	ctx, cancel = context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
 	_, retError = t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-		NamespaceId:            namespaceID.String(),
-		SourceNamespaceId:      namespaceID.String(),
-		Execution:              &execution,
+		NamespaceId:       task.GetNamespaceID(),
+		SourceNamespaceId: task.GetNamespaceID(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: task.GetWorkflowID(),
+			RunId:      task.GetRunID(),
+		},
 		TaskQueue:              taskQueue,
 		ScheduleId:             task.EventID,
 		ScheduleToStartTimeout: timestamp.DurationPtr(scheduleToStartTimeout),
-		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
+		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
 	})
 
 	return retError
@@ -481,18 +451,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	ctx context.Context,
 	task *tasks.WorkflowTimeoutTask,
 ) (retError error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
-
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -561,7 +523,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newMutableState, err := createMutableState(
+	newMutableState, err := api.CreateMutableState(
 		t.shard,
 		mutableState.GetNamespaceEntry(),
 		newRunID,
@@ -606,8 +568,7 @@ func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 	mutableState workflow.MutableState,
 ) workflow.TimerSequence {
 
-	timeSource := t.shard.GetTimeSource()
-	return workflow.NewTimerSequence(timeSource, mutableState)
+	return workflow.NewTimerSequence(mutableState)
 }
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
@@ -645,7 +606,7 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	scope int,
 	timerType enumspb.TimeoutType,
 ) {
-	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := t.registry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return
 	}

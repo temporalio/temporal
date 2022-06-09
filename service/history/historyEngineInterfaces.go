@@ -32,6 +32,7 @@ import (
 
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -57,43 +58,29 @@ type (
 
 	queueAckMgr interface {
 		getFinishedChan() <-chan struct{}
-		readQueueTasks() ([]tasks.Task, bool, error)
-		completeQueueTask(taskID int64)
+		readQueueTasks() ([]queues.Executable, bool, error)
 		getQueueAckLevel() int64
 		getQueueReadLevel() int64
 		updateQueueAckLevel() error
 	}
 
-	queueTaskExecutor interface {
-		execute(ctx context.Context, taskInfo tasks.Task, shouldProcessTask bool) error
-	}
-
-	// TODO: deprecate this interface in favor of the task interface
-	// defined in common/task package
-	taskExecutor interface {
-		process(ctx context.Context, taskInfo *taskInfo) (int, error)
-		complete(taskInfo *taskInfo)
-		getTaskFilter() taskFilter
-	}
-
 	processor interface {
-		taskExecutor
 		readTasks(readLevel int64) ([]tasks.Task, bool, error)
 		updateAckLevel(taskID int64) error
 		queueShutdown() error
 	}
 
 	timerProcessor interface {
-		taskExecutor
 		notifyNewTimers(timerTask []tasks.Task)
 	}
 
 	timerQueueAckMgr interface {
 		getFinishedChan() <-chan struct{}
-		readTimerTasks() ([]tasks.Task, *time.Time, bool, error)
-		completeTimerTask(time.Time, int64)
+		readTimerTasks() ([]queues.Executable, *time.Time, bool, error)
 		getAckLevel() tasks.Key
 		getReadLevel() tasks.Key
 		updateAckLevel() error
 	}
+
+	taskExecutableInitializer func(tasks.Task) queues.Executable
 )

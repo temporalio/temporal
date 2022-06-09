@@ -40,7 +40,6 @@ import (
 )
 
 const (
-	// WorkflowName is the workflow name.
 	WorkflowName = "temporal-sys-delete-namespace-workflow"
 )
 
@@ -60,19 +59,26 @@ type (
 )
 
 var (
-	retryPolicy = &temporal.RetryPolicy{
+	localRetryPolicy = &temporal.RetryPolicy{
 		InitialInterval: 1 * time.Second,
 		MaximumInterval: 10 * time.Second,
 	}
 
+	reclaimResourcesWorkflowRetryPolicy = &temporal.RetryPolicy{
+		InitialInterval: 60 * time.Second,
+		// ReclaimResourcesWorkflow will try to delete workflow executions (call `DeleteWorkflowExecution` and wait for all executions to be deleted) 3 times.
+		// If there are still executions left, ReclaimResourcesWorkflow fails, and needs to be restarted manually (this indicates some serious problems with transfer/visibility task processing).
+		MaximumAttempts: 3,
+	}
+
 	localActivityOptions = workflow.LocalActivityOptions{
-		RetryPolicy:            retryPolicy,
+		RetryPolicy:            localRetryPolicy,
 		StartToCloseTimeout:    30 * time.Second,
 		ScheduleToCloseTimeout: 5 * time.Minute,
 	}
 
 	reclaimResourcesWorkflowOptions = workflow.ChildWorkflowOptions{
-		RetryPolicy: retryPolicy,
+		RetryPolicy: reclaimResourcesWorkflowRetryPolicy,
 		// Important: this is required to make sure the child workflow is not terminated when delete namespace workflow is completed.
 		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_ABANDON,
 	}
@@ -125,7 +131,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 	// Step 3. Rename namespace.
 	ctx3 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx3, a.GenerateDeletedNamespaceNameActivity, params.Namespace).Get(ctx, &result.DeletedNamespace)
+	err = workflow.ExecuteLocalActivity(ctx3, a.GenerateDeletedNamespaceNameActivity, params.NamespaceID, params.Namespace).Get(ctx, &result.DeletedNamespace)
 	if err != nil {
 		return result, fmt.Errorf("%w: GenerateDeletedNamespaceNameActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}

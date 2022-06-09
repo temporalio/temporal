@@ -41,13 +41,16 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-var _ MetricTestUtility = (*OtelMetricTestUtility)(nil)
-var _ OpenTelemetryReporter = (*TestOtelReporter)(nil)
+var (
+	_ MetricTestUtility     = (*OtelMetricTestUtility)(nil)
+	_ OpenTelemetryReporter = (*TestOtelReporter)(nil)
+)
 
 type (
 	TestOtelReporter struct {
 		// TODO: https://github.com/open-telemetry/opentelemetry-go/issues/2722
 		controller *controller.Controller
+		userScope  UserScope
 	}
 
 	OtelMetricTestUtility struct {
@@ -79,7 +82,7 @@ func (t *OtelMetricTestUtility) collect() {
 		return r.ForEach(aggregation.CumulativeTemporalitySelector(), func(rec export.Record) error {
 			for idx, existingRec := range t.collection {
 				if existingRec.Descriptor().Name() == rec.Descriptor().Name() &&
-					existingRec.Labels().Equals(rec.Labels()) {
+					existingRec.Attributes().Equals(rec.Attributes()) {
 					t.collection[idx] = rec
 					return nil
 				}
@@ -103,7 +106,7 @@ func (t *OtelMetricTestUtility) ContainsCounter(name MetricName, labels map[stri
 		return fmt.Errorf("no entries were recorded")
 	}
 	for _, rec := range t.collection {
-		if !t.labelsMatch(rec.Labels().ToSlice(), labels) {
+		if !t.labelsMatch(rec.Attributes().ToSlice(), labels) {
 			continue
 		}
 		if rec.Descriptor().Name() != name.String() {
@@ -133,7 +136,7 @@ func (t *OtelMetricTestUtility) ContainsGauge(name MetricName, labels map[string
 		return fmt.Errorf("no entries were recorded")
 	}
 	for _, rec := range t.collection {
-		if !t.labelsMatch(rec.Labels().ToSlice(), labels) {
+		if !t.labelsMatch(rec.Attributes().ToSlice(), labels) {
 			continue
 		}
 		if rec.Descriptor().Name() != name.String() {
@@ -163,7 +166,7 @@ func (t *OtelMetricTestUtility) ContainsTimer(name MetricName, labels map[string
 		return fmt.Errorf("no entries were recorded")
 	}
 	for _, rec := range t.collection {
-		if !t.labelsMatch(rec.Labels().ToSlice(), labels) {
+		if !t.labelsMatch(rec.Attributes().ToSlice(), labels) {
 			continue
 		}
 		if rec.Descriptor().Name() != name.String() {
@@ -193,7 +196,7 @@ func (t *OtelMetricTestUtility) ContainsHistogram(name MetricName, labels map[st
 		return fmt.Errorf("no entries were recorded")
 	}
 	for _, rec := range t.collection {
-		if !t.labelsMatch(rec.Labels().ToSlice(), labels) {
+		if !t.labelsMatch(rec.Attributes().ToSlice(), labels) {
 			continue
 		}
 		if rec.Descriptor().Name() != name.String() {
@@ -231,14 +234,18 @@ func (t *OtelMetricTestUtility) labelsMatch(left []attribute.KeyValue, right map
 }
 
 func NewTestOtelReporter() *TestOtelReporter {
-	return &TestOtelReporter{
-		controller: controller.New(
-			processor.NewFactory(
-				selector.NewWithHistogramDistribution(),
-				aggregation.CumulativeTemporalitySelector(),
-			),
-			controller.WithCollectPeriod(0),
+	ctr := controller.New(
+		processor.NewFactory(
+			selector.NewWithHistogramDistribution(),
+			aggregation.CumulativeTemporalitySelector(),
 		),
+		controller.WithCollectPeriod(0),
+	)
+	meter := ctr.Meter("")
+	gaugeCache := NewOtelGaugeCache(meter)
+	return &TestOtelReporter{
+		controller: ctr,
+		userScope:  NewOpenTelemetryUserScope(meter, nil, gaugeCache),
 	}
 }
 
@@ -253,5 +260,5 @@ func (t TestOtelReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (C
 func (t TestOtelReporter) Stop(logger log.Logger) {}
 
 func (t TestOtelReporter) UserScope() UserScope {
-	return NoopUserScope
+	return t.userScope
 }

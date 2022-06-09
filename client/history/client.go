@@ -766,6 +766,32 @@ func (c *clientImpl) ScheduleWorkflowTask(
 
 }
 
+func (c *clientImpl) VerifyFirstWorkflowTaskScheduled(
+	ctx context.Context,
+	request *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.VerifyFirstWorkflowTaskScheduledResponse, error) {
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.WorkflowId)
+	if err != nil {
+		return nil, err
+	}
+
+	var response *historyservice.VerifyFirstWorkflowTaskScheduledResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.VerifyFirstWorkflowTaskScheduled(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+
+}
+
 func (c *clientImpl) RecordChildExecutionCompleted(
 	ctx context.Context,
 	request *historyservice.RecordChildExecutionCompletedRequest,
@@ -789,6 +815,31 @@ func (c *clientImpl) RecordChildExecutionCompleted(
 	}
 	return response, nil
 
+}
+
+func (c *clientImpl) VerifyChildExecutionCompletionRecorded(
+	ctx context.Context,
+	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.ParentExecution.WorkflowId)
+	if err != nil {
+		return nil, err
+	}
+
+	var response *historyservice.VerifyChildExecutionCompletionRecordedResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.VerifyChildExecutionCompletionRecorded(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (c *clientImpl) ReplicateEventsV2(
@@ -1052,6 +1103,10 @@ func (c *clientImpl) RefreshWorkflowTasks(
 	opts ...grpc.CallOption,
 ) (*historyservice.RefreshWorkflowTasksResponse, error) {
 	client, err := c.getClientForWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+
 	var response *historyservice.RefreshWorkflowTasksResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1073,6 +1128,10 @@ func (c *clientImpl) GenerateLastHistoryReplicationTasks(
 	opts ...grpc.CallOption,
 ) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
 	client, err := c.getClientForWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+
 	var response *historyservice.GenerateLastHistoryReplicationTasksResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1134,6 +1193,31 @@ func (c *clientImpl) GetReplicationStatus(
 	return response, nil
 }
 
+func (c *clientImpl) DeleteWorkflowVisibilityRecord(
+	ctx context.Context,
+	request *historyservice.DeleteWorkflowVisibilityRecordRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DeleteWorkflowVisibilityRecordResponse, error) {
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+
+	var response *historyservice.DeleteWorkflowVisibilityRecordResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.DeleteWorkflowVisibilityRecord(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.timeout)
 }
@@ -1159,7 +1243,6 @@ func (c *clientImpl) executeWithRedirect(ctx context.Context,
 	op func(ctx context.Context, client historyservice.HistoryServiceClient) error,
 ) error {
 
-redirectLoop:
 	for {
 		err := common.IsValidContext(ctx)
 		if err != nil {
@@ -1174,7 +1257,6 @@ redirectLoop:
 				return err
 			}
 			client = ret.(historyservice.HistoryServiceClient)
-			continue redirectLoop
 		} else {
 			return err
 		}

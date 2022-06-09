@@ -38,7 +38,6 @@ import (
 )
 
 const (
-	// WorkflowName is the workflow name.
 	WorkflowName = "temporal-sys-reclaim-namespace-resources-workflow"
 
 	namespaceCacheRefreshDelay = 11 * time.Second
@@ -50,8 +49,9 @@ type (
 	}
 
 	ReclaimResourcesResult struct {
-		SuccessCount int
-		ErrorCount   int
+		SuccessCount     int
+		ErrorCount       int
+		NamespaceDeleted bool
 	}
 )
 
@@ -135,6 +135,7 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 		return result, fmt.Errorf("%w: DeleteNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
+	result.NamespaceDeleted = true
 	logger.Info("Workflow finished successfully.", tag.WorkflowType(WorkflowName))
 	return result, nil
 }
@@ -142,7 +143,6 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParams) (ReclaimResourcesResult, error) {
 	var a *Activities
 	logger := workflow.GetLogger(ctx)
-	deleteAttempt := int32(1)
 	var result ReclaimResourcesResult
 
 	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
@@ -152,36 +152,31 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 		return result, fmt.Errorf("%w: IsAdvancedVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
-	for {
-		ctx2 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
-		ctx2 = workflow.WithWorkflowID(ctx2, fmt.Sprintf("%s/%s", deleteexecutions.WorkflowName, params.Namespace))
-		var der deleteexecutions.DeleteExecutionsResult
-		err := workflow.ExecuteChildWorkflow(ctx2, deleteexecutions.DeleteExecutionsWorkflow, params.DeleteExecutionsParams).Get(ctx, &der)
-		if err != nil {
-			logger.Error("Unable to execute child workflow.", tag.WorkflowType(deleteexecutions.WorkflowName), tag.Error(err))
-			return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, deleteexecutions.WorkflowName, err)
-		}
-		result.SuccessCount += der.SuccessCount
-		result.ErrorCount += der.ErrorCount
+	ctx2 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
+	ctx2 = workflow.WithWorkflowID(ctx2, fmt.Sprintf("%s/%s", deleteexecutions.WorkflowName, params.Namespace))
+	var der deleteexecutions.DeleteExecutionsResult
+	err = workflow.ExecuteChildWorkflow(ctx2, deleteexecutions.DeleteExecutionsWorkflow, params.DeleteExecutionsParams).Get(ctx, &der)
+	if err != nil {
+		logger.Error("Unable to execute child workflow.", tag.WorkflowType(deleteexecutions.WorkflowName), tag.Error(err))
+		return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, deleteexecutions.WorkflowName, err)
+	}
+	result.SuccessCount = der.SuccessCount
+	result.ErrorCount = der.ErrorCount
 
-		if isAdvancedVisibility {
-			ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsAdvVisibilityActivityOptions)
-			err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace, isAdvancedVisibility).Get(ctx, nil)
-		} else {
-			ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsStdVisibilityOptionsActivity)
-			err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsStdVisibilityActivity, params.NamespaceID, params.Namespace, isAdvancedVisibility).Get(ctx, nil)
-		}
-		if err == nil {
-			break
-		}
-
+	if isAdvancedVisibility {
+		ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsAdvVisibilityActivityOptions)
+		err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace, der.ErrorCount).Get(ctx, nil)
+	} else {
+		ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsStdVisibilityOptionsActivity)
+		err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsStdVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
+	}
+	if err != nil {
 		var appErr *temporal.ApplicationError
 		if stderrors.As(err, &appErr) {
 			switch appErr.Type() {
-			case errors.ExecutionsStillExistErrType, errors.NoProgressErrType:
-				logger.Info("Unable to delete workflow executions. Will try again.", tag.WorkflowNamespace(params.Namespace.String()), tag.Counter(der.ErrorCount), tag.Attempt(deleteAttempt))
-				deleteAttempt++
-				continue
+			case errors.ExecutionsStillExistErrType, errors.NoProgressErrType, errors.NotDeletedExecutionsStillExistErrType:
+				logger.Info("Unable to delete workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.Counter(der.ErrorCount))
+				return result, err
 			}
 		}
 		return result, fmt.Errorf("%w: EnsureNoExecutionsActivity: %v", errors.ErrUnableToExecuteActivity, err)

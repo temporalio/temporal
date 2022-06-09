@@ -58,7 +58,7 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NoExecutions(t *testing.T) {
 		logger:            log.NewNoopLogger(),
 	}
 
-	err := a.EnsureNoExecutionsAdvVisibilityActivity(context.Background(), "namespace-id", "namespace")
+	err := a.EnsureNoExecutionsAdvVisibilityActivity(context.Background(), "namespace-id", "namespace", 0)
 	require.NoError(t, err)
 
 	ctrl.Finish()
@@ -86,11 +86,41 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_ExecutionsExist(t *testing.T) 
 	}
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
 
-	_, err := env.ExecuteActivity(a.EnsureNoExecutionsAdvVisibilityActivity, namespace.ID("namespace-id"), namespace.Name("namespace"))
+	_, err := env.ExecuteActivity(a.EnsureNoExecutionsAdvVisibilityActivity, namespace.ID("namespace-id"), namespace.Name("namespace"), 0)
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, "ExecutionsStillExist", appErr.Type())
+	ctrl.Finish()
+}
+
+func Test_EnsureNoExecutionsAdvVisibilityActivity_NotDeletedExecutionsExist(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestActivityEnvironment()
+
+	ctrl := gomock.NewController(t)
+	visibilityManager := manager.NewMockVisibilityManager(ctrl)
+
+	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+	}).Return(&manager.CountWorkflowExecutionsResponse{
+		Count: 10,
+	}, nil)
+
+	a := &Activities{
+		visibilityManager: visibilityManager,
+		metadataManager:   nil,
+		metricsClient:     metrics.NoopClient,
+		logger:            log.NewNoopLogger(),
+	}
+	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
+
+	_, err := env.ExecuteActivity(a.EnsureNoExecutionsAdvVisibilityActivity, namespace.ID("namespace-id"), namespace.Name("namespace"), 10)
+	require.Error(t, err)
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "NotDeletedExecutionsStillExist", appErr.Type())
 	ctrl.Finish()
 }
 

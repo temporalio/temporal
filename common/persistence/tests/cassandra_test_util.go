@@ -31,8 +31,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"testing"
 
 	"github.com/blang/semver/v4"
+	"go.uber.org/zap/zaptest"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -60,10 +63,34 @@ const (
 	testCassandraDatabaseNameSuffix = "temporal_persistence"
 )
 
-type CassandraTestData struct {
-	Cfg     *config.Cassandra
-	Factory *cassandra.Factory
-	Logger  log.Logger
+type (
+	CassandraTestData struct {
+		Cfg     *config.Cassandra
+		Factory *cassandra.Factory
+		Logger  log.Logger
+	}
+)
+
+func setUpCassandraTest(t *testing.T) (CassandraTestData, func()) {
+	var testData CassandraTestData
+	testData.Cfg = NewCassandraConfig()
+	testData.Logger = log.NewZapLogger(zaptest.NewLogger(t))
+	SetUpCassandraDatabase(testData.Cfg, testData.Logger)
+	SetUpCassandraSchema(testData.Cfg, testData.Logger)
+
+	testData.Factory = cassandra.NewFactory(
+		*testData.Cfg,
+		resolver.NewNoopResolver(),
+		testCassandraClusterName,
+		testData.Logger,
+	)
+
+	tearDown := func() {
+		testData.Factory.Close()
+		TearDownCassandraKeyspace(testData.Cfg)
+	}
+
+	return testData, tearDown
 }
 
 func SetUpCassandraDatabase(cfg *config.Cassandra, logger log.Logger) {

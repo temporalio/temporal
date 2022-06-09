@@ -124,7 +124,7 @@ func (m *sqlMetadataManagerV2) GetNamespace(
 				identity = request.ID
 			}
 
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("Namespace %s does not exist.", identity))
+			return nil, serviceerror.NewNamespaceNotFound(identity)
 		default:
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetNamespace operation failed. Error %v", err))
 		}

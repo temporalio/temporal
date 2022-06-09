@@ -43,10 +43,7 @@ type (
 )
 
 func (a *ResetWorkflowTask) GetKey() Key {
-	return Key{
-		FireTime: time.Unix(0, 0),
-		TaskID:   a.TaskID,
-	}
+	return NewImmediateKey(a.TaskID)
 }
 
 func (a *ResetWorkflowTask) GetVersion() int64 {

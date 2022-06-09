@@ -1,0 +1,130 @@
+log:
+  stdout: true
+  level: info
+
+persistence:
+  defaultStore: cass-default
+  visibilityStore:
+  advancedVisibilityStore: es-visibility
+  numHistoryShards: 4
+  datastores:
+    cass-default:
+      cassandra:
+        hosts: "127.0.0.1"
+        keyspace: "temporal_standby"
+    es-visibility:
+      elasticsearch:
+        version: "v7"
+        logLevel: "error"
+        url:
+          scheme: "http"
+          host: "127.0.0.1:9200"
+        indices:
+          visibility: temporal_visibility_v1_dev_standby
+          # secondary_visibility: temporal_visibility_v2_dev
+        closeIdleConnectionsInterval: 15s
+
+global:
+  membership:
+    maxJoinDuration: 30s
+  pprof:
+    port: 8936
+  metrics:
+    prometheus:
+#      # specify framework to use new approach for initializing metrics and/or use opentelemetry
+#      framework: "opentelemetry"
+      framework: "tally"
+      timerType: "histogram"
+      listenAddress: "127.0.0.1:8000"
+
+services:
+  frontend:
+    rpc:
+      grpcPort: 8233
+      membershipPort: 8933
+      bindOnLocalHost: true
+
+  matching:
+    rpc:
+      grpcPort: 8235
+      membershipPort: 8935
+      bindOnLocalHost: true
+
+  history:
+    rpc:
+      grpcPort: 8234
+      membershipPort: 8934
+      bindOnLocalHost: true
+
+  worker:
+    rpc:
+      grpcPort: 8240
+      membershipPort: 8940
+      bindOnLocalHost: true
+
+clusterMetadata:
+  enableGlobalNamespace: true
+  failoverVersionIncrement: 10
+  masterClusterName: "active"
+  currentClusterName: "standby"
+  clusterInformation:
+    active:
+      enabled: true
+      initialFailoverVersion: 1
+      rpcName: "frontend"
+      rpcAddress: "localhost:7233"
+    standby:
+      enabled: true
+      initialFailoverVersion: 2
+      rpcName: "frontend"
+      rpcAddress: "localhost:8233"
+# Use tctl --ad 127.0.0.1:8233 adm cl upsert-remote-cluster --frontend_address "localhost:7233"
+#    active:
+#      enabled: true
+#      initialFailoverVersion: 1
+#      rpcName: "frontend"
+#      rpcAddress: "localhost:7233"
+# Use tctl --ad 127.0.0.1:8233 adm cl upsert-remote-cluster --frontend_address "localhost:9233"
+#    other:
+#      enabled: false
+#      initialFailoverVersion: 3
+#      rpcName: "frontend"
+#      rpcAddress: "localhost:9233"
+
+dcRedirectionPolicy:
+  policy: "selected-apis-forwarding"
+  toDC: ""
+
+archival:
+  history:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+      gstorage:
+        credentialsPath: "/tmp/gcloud/keyfile.json"
+  visibility:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+
+namespaceDefaults:
+  archival:
+    history:
+      state: "disabled"
+      URI: "file:///tmp/temporal_archival/development"
+    visibility:
+      state: "disabled"
+      URI: "file:///tmp/temporal_vis_archival/development"
+
+publicClient:
+  hostPort: "localhost:8233"
+
+dynamicConfigClient:
+  filepath: "config/dynamicconfig/development-cass.yaml"
+  pollInterval: "10s"

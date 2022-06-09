@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	dconf "go.temporal.io/server/common/dynamicconfig"
 )
 
@@ -103,10 +104,10 @@ func TestMulti(t *testing.T) {
 	require.Equal(t, i, 1)
 }
 
-func composeFilters(fs ...dconf.FilterOption) map[dconf.Filter]interface{} {
+func composeFilters(fs ...dconf.FilterOption) []map[dconf.Filter]interface{} {
 	out := map[dconf.Filter]interface{}{}
 	for _, f := range fs {
 		f(out)
 	}
-	return out
+	return []map[dconf.Filter]interface{}{out}
 }

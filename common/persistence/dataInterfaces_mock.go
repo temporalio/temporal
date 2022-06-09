@@ -93,6 +93,20 @@ func (m *MockShardManager) EXPECT() *MockShardManagerMockRecorder {
 	return m.recorder
 }
 
+// AssertShardOwnership mocks base method.
+func (m *MockShardManager) AssertShardOwnership(ctx context.Context, request *AssertShardOwnershipRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AssertShardOwnership", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AssertShardOwnership indicates an expected call of AssertShardOwnership.
+func (mr *MockShardManagerMockRecorder) AssertShardOwnership(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssertShardOwnership", reflect.TypeOf((*MockShardManager)(nil).AssertShardOwnership), ctx, request)
+}
+
 // Close mocks base method.
 func (m *MockShardManager) Close() {
 	m.ctrl.T.Helper()
@@ -198,6 +212,21 @@ func (m *MockExecutionManager) AppendHistoryNodes(ctx context.Context, request *
 func (mr *MockExecutionManagerMockRecorder) AppendHistoryNodes(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryNodes", reflect.TypeOf((*MockExecutionManager)(nil).AppendHistoryNodes), ctx, request)
+}
+
+// AppendRawHistoryNodes mocks base method.
+func (m *MockExecutionManager) AppendRawHistoryNodes(ctx context.Context, request *AppendRawHistoryNodesRequest) (*AppendHistoryNodesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendRawHistoryNodes", ctx, request)
+	ret0, _ := ret[0].(*AppendHistoryNodesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AppendRawHistoryNodes indicates an expected call of AppendRawHistoryNodes.
+func (mr *MockExecutionManagerMockRecorder) AppendRawHistoryNodes(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendRawHistoryNodes", reflect.TypeOf((*MockExecutionManager)(nil).AppendRawHistoryNodes), ctx, request)
 }
 
 // Close mocks base method.

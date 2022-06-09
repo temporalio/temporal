@@ -38,6 +38,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -72,6 +73,7 @@ func (s *registrySuite) SetupTest() {
 	s.registry = namespace.NewRegistry(
 		s.regPersistence,
 		true,
+		dynamicconfig.GetDurationPropertyFn(time.Second),
 		metrics.NoopClient,
 		log.NewTestLogger())
 }
@@ -519,7 +521,7 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 		case nil:
 			s.Equal(entryOld, entryNew)
 			waitGroup.Done()
-		case *serviceerror.NotFound:
+		case *serviceerror.NamespaceNotFound:
 			time.Sleep(4 * time.Second)
 			entryNew, err := s.registry.GetNamespaceByID(id)
 			s.NoError(err)
@@ -636,7 +638,7 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	ns1FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
 	s.Nil(ns1FromRegistry)
 	s.Error(err)
-	var notFound *serviceerror.NotFound
+	var notFound *serviceerror.NamespaceNotFound
 	s.ErrorAs(err, &notFound)
 }
 
@@ -658,7 +660,7 @@ func TestCacheByName(t *testing.T) {
 		Namespaces: []*persistence.GetNamespaceResponse{&nsrec},
 	}, nil)
 	reg := namespace.NewRegistry(
-		regPersist, false, metrics.NoopClient, log.NewNoopLogger())
+		regPersist, false, dynamicconfig.GetDurationPropertyFn(time.Second), metrics.NoopClient, log.NewNoopLogger())
 	reg.Start()
 	defer reg.Stop()
 	ns, err := reg.GetNamespace(namespace.Name("foo"))

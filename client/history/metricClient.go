@@ -417,6 +417,20 @@ func (c *metricClient) ScheduleWorkflowTask(
 	return c.client.ScheduleWorkflowTask(context, request, opts...)
 }
 
+func (c *metricClient) VerifyFirstWorkflowTaskScheduled(
+	context context.Context,
+	request *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.VerifyFirstWorkflowTaskScheduledResponse, retError error) {
+
+	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientVerifyFirstWorkflowTaskScheduled)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	return c.client.VerifyFirstWorkflowTaskScheduled(context, request, opts...)
+}
+
 func (c *metricClient) RecordChildExecutionCompleted(
 	context context.Context,
 	request *historyservice.RecordChildExecutionCompletedRequest,
@@ -429,6 +443,20 @@ func (c *metricClient) RecordChildExecutionCompleted(
 	}()
 
 	return c.client.RecordChildExecutionCompleted(context, request, opts...)
+}
+
+func (c *metricClient) VerifyChildExecutionCompletionRecorded(
+	context context.Context,
+	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.VerifyChildExecutionCompletionRecordedResponse, retError error) {
+
+	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientVerifyChildExecutionCompletionRecordedScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	return c.client.VerifyChildExecutionCompletionRecorded(context, request, opts...)
 }
 
 func (c *metricClient) ReplicateEventsV2(
@@ -613,6 +641,20 @@ func (c *metricClient) GetReplicationStatus(
 	return c.client.GetReplicationStatus(ctx, request, opts...)
 }
 
+func (c *metricClient) DeleteWorkflowVisibilityRecord(
+	ctx context.Context,
+	request *historyservice.DeleteWorkflowVisibilityRecordRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.DeleteWorkflowVisibilityRecordResponse, retError error) {
+
+	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientDeleteWorkflowVisibilityRecordScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	return c.client.DeleteWorkflowVisibilityRecord(ctx, request, opts...)
+}
+
 func (c *metricClient) startMetricsRecording(
 	metricScope int,
 ) (metrics.Scope, metrics.Stopwatch) {
@@ -632,6 +674,9 @@ func (c *metricClient) finishMetricsRecording(
 		case *serviceerror.Canceled,
 			*serviceerror.DeadlineExceeded,
 			*serviceerror.NotFound,
+			*serviceerror.QueryFailed,
+			*serviceerror.NamespaceNotFound,
+			*serviceerror.WorkflowNotReady,
 			*serviceerror.WorkflowExecutionAlreadyStarted:
 			// noop - not interest and too many logs
 		default:

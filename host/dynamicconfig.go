@@ -32,6 +32,8 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 )
 
+const NamespaceCacheRefreshInterval = time.Second
+
 var (
 	// Override values for dynamic configs
 	staticOverrides = map[dynamicconfig.Key]interface{}{
@@ -47,6 +49,7 @@ var (
 		dynamicconfig.ReplicationTaskFetcherErrorRetryWait:          50 * time.Millisecond,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryWait:        time.Millisecond,
 		dynamicconfig.ClusterMetadataRefreshInterval:                100 * time.Millisecond,
+		dynamicconfig.NamespaceCacheRefreshInterval:                 NamespaceCacheRefreshInterval,
 	}
 )
 
@@ -68,7 +71,7 @@ func (d *dynamicClient) GetValue(name dynamicconfig.Key, defaultValue interface{
 }
 
 func (d *dynamicClient) GetValueWithFilters(
-	name dynamicconfig.Key, filters map[dynamicconfig.Filter]interface{}, defaultValue interface{},
+	name dynamicconfig.Key, filters []map[dynamicconfig.Filter]interface{}, defaultValue interface{},
 ) (interface{}, error) {
 	d.RLock()
 	if val, ok := d.overrides[name]; ok {
@@ -79,7 +82,7 @@ func (d *dynamicClient) GetValueWithFilters(
 	return d.client.GetValueWithFilters(name, filters, defaultValue)
 }
 
-func (d *dynamicClient) GetIntValue(name dynamicconfig.Key, filters map[dynamicconfig.Filter]interface{}, defaultValue int) (int, error) {
+func (d *dynamicClient) GetIntValue(name dynamicconfig.Key, filters []map[dynamicconfig.Filter]interface{}, defaultValue int) (int, error) {
 	d.RLock()
 	if val, ok := d.overrides[name]; ok {
 		if intVal, ok := val.(int); ok {
@@ -91,7 +94,7 @@ func (d *dynamicClient) GetIntValue(name dynamicconfig.Key, filters map[dynamicc
 	return d.client.GetIntValue(name, filters, defaultValue)
 }
 
-func (d *dynamicClient) GetFloatValue(name dynamicconfig.Key, filters map[dynamicconfig.Filter]interface{}, defaultValue float64) (float64, error) {
+func (d *dynamicClient) GetFloatValue(name dynamicconfig.Key, filters []map[dynamicconfig.Filter]interface{}, defaultValue float64) (float64, error) {
 	d.RLock()
 	if val, ok := d.overrides[name]; ok {
 		if floatVal, ok := val.(float64); ok {
@@ -103,7 +106,7 @@ func (d *dynamicClient) GetFloatValue(name dynamicconfig.Key, filters map[dynami
 	return d.client.GetFloatValue(name, filters, defaultValue)
 }
 
-func (d *dynamicClient) GetBoolValue(name dynamicconfig.Key, filters map[dynamicconfig.Filter]interface{}, defaultValue bool) (bool, error) {
+func (d *dynamicClient) GetBoolValue(name dynamicconfig.Key, filters []map[dynamicconfig.Filter]interface{}, defaultValue bool) (bool, error) {
 	d.RLock()
 	if val, ok := d.overrides[name]; ok {
 		if boolVal, ok := val.(bool); ok {
@@ -115,7 +118,7 @@ func (d *dynamicClient) GetBoolValue(name dynamicconfig.Key, filters map[dynamic
 	return d.client.GetBoolValue(name, filters, defaultValue)
 }
 
-func (d *dynamicClient) GetStringValue(name dynamicconfig.Key, filters map[dynamicconfig.Filter]interface{}, defaultValue string) (string, error) {
+func (d *dynamicClient) GetStringValue(name dynamicconfig.Key, filters []map[dynamicconfig.Filter]interface{}, defaultValue string) (string, error) {
 	d.RLock()
 	if val, ok := d.overrides[name]; ok {
 		if stringVal, ok := val.(string); ok {
@@ -128,7 +131,7 @@ func (d *dynamicClient) GetStringValue(name dynamicconfig.Key, filters map[dynam
 }
 
 func (d *dynamicClient) GetMapValue(
-	name dynamicconfig.Key, filters map[dynamicconfig.Filter]interface{}, defaultValue map[string]interface{},
+	name dynamicconfig.Key, filters []map[dynamicconfig.Filter]interface{}, defaultValue map[string]interface{},
 ) (map[string]interface{}, error) {
 	d.RLock()
 	if val, ok := d.overrides[name]; ok {
@@ -142,7 +145,7 @@ func (d *dynamicClient) GetMapValue(
 }
 
 func (d *dynamicClient) GetDurationValue(
-	name dynamicconfig.Key, filters map[dynamicconfig.Filter]interface{}, defaultValue time.Duration,
+	name dynamicconfig.Key, filters []map[dynamicconfig.Filter]interface{}, defaultValue time.Duration,
 ) (time.Duration, error) {
 	d.RLock()
 	if val, ok := d.overrides[name]; ok {

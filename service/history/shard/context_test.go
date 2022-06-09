@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -41,7 +40,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -51,19 +49,15 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller   *gomock.Controller
-		shardContext Context
-
-		mockResource *resource.Test
-
-		namespaceID        namespace.ID
-		mockNamespaceCache *namespace.MockRegistry
-		namespaceEntry     *namespace.Namespace
-		timeSource         *clock.EventTimeSource
-
+		controller           *gomock.Controller
+		mockShard            Context
 		mockClusterMetadata  *cluster.MockMetadata
+		mockShardManager     *persistence.MockShardManager
 		mockExecutionManager *persistence.MockExecutionManager
+		mockNamespaceCache   *namespace.MockRegistry
 		mockHistoryEngine    *MockEngine
+
+		timeSource *clock.EventTimeSource
 	}
 )
 
@@ -82,27 +76,26 @@ func (s *contextSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:          0,
-				RangeId:          1,
-				TransferAckLevel: 0,
+				ShardId: 0,
+				RangeId: 1,
 			}},
 		tests.NewDynamicConfig(),
 		s.timeSource,
 	)
-	s.shardContext = shardContext
+	s.mockShard = shardContext
 
-	s.mockResource = shardContext.Resource
-	shardContext.MockHostInfoProvider.EXPECT().HostInfo().Return(s.mockResource.GetHostInfo()).AnyTimes()
+	shardContext.MockHostInfoProvider.EXPECT().HostInfo().Return(shardContext.Resource.GetHostInfo()).AnyTimes()
 
-	s.namespaceID = "namespace-Id"
-	s.namespaceEntry = namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Id: s.namespaceID.String()}, &persistencespb.NamespaceConfig{}, "")
-	s.mockNamespaceCache = s.mockResource.NamespaceCache
-	shardContext.namespaceRegistry = s.mockResource.NamespaceCache
+	s.mockNamespaceCache = shardContext.Resource.NamespaceCache
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
 
-	s.mockClusterMetadata = s.mockResource.ClusterMetadata
-	shardContext.clusterMetadata = s.mockClusterMetadata
+	s.mockClusterMetadata = shardContext.Resource.ClusterMetadata
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
-	s.mockExecutionManager = s.mockResource.ExecutionMgr
+	s.mockExecutionManager = shardContext.Resource.ExecutionMgr
+	s.mockShardManager = shardContext.Resource.ShardMgr
 	s.mockHistoryEngine = NewMockEngine(s.controller)
 	shardContext.engineFuture.Set(s.mockHistoryEngine, nil)
 }
@@ -112,18 +105,6 @@ func (s *contextSuite) TearDownTest() {
 }
 
 func (s *contextSuite) TestAddTasks_Success() {
-	task := &persistencespb.TimerTaskInfo{
-		NamespaceId:     s.namespaceID.String(),
-		WorkflowId:      "workflow-id",
-		RunId:           "run-id",
-		TaskType:        enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
-		Version:         1,
-		EventId:         2,
-		ScheduleAttempt: 1,
-		TaskId:          12345,
-		VisibilityTime:  timestamp.TimeNowPtrUtc(),
-	}
-
 	tasks := map[tasks.Category][]tasks.Task{
 		tasks.CategoryTransfer:    {&tasks.ActivityTask{}},           // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
 		tasks.CategoryTimer:       {&tasks.ActivityRetryTimerTask{}}, // Just for testing purpose. In the real code ActivityRetryTimerTask can't be passed to shardContext.AddTasks.
@@ -132,20 +113,18 @@ func (s *contextSuite) TestAddTasks_Success() {
 	}
 
 	addTasksRequest := &persistence.AddHistoryTasksRequest{
-		ShardID:     s.shardContext.GetShardID(),
-		NamespaceID: task.GetNamespaceId(),
-		WorkflowID:  task.GetWorkflowId(),
-		RunID:       task.GetRunId(),
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: tests.NamespaceID.String(),
+		WorkflowID:  tests.WorkflowID,
+		RunID:       tests.RunID,
 
 		Tasks: tasks,
 	}
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil)
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), addTasksRequest).Return(nil)
 	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), tasks)
 
-	err := s.shardContext.AddTasks(context.Background(), addTasksRequest)
+	err := s.mockShard.AddTasks(context.Background(), addTasksRequest)
 	s.NoError(err)
 }
 
@@ -153,54 +132,55 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 
 	now := time.Now().Truncate(time.Millisecond)
 	persistenceShardInfo := &persistencespb.ShardInfo{
-		ShardId:           0,
-		TimerAckLevelTime: timestamp.TimePtr(now.Add(-time.Minute)),
-		ClusterTimerAckLevel: map[string]*time.Time{
-			cluster.TestCurrentClusterName: timestamp.TimePtr(now),
+		ShardId: 0,
+		QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+			tasks.CategoryTimer.ID(): {
+				AckLevel: now.Add(-time.Minute).UnixNano(),
+				ClusterAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName: now.UnixNano(),
+				},
+			},
 		},
 	}
-	s.mockResource.ShardMgr.EXPECT().GetOrCreateShard(gomock.Any(), gomock.Any()).Return(
+	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), gomock.Any()).Return(
 		&persistence.GetOrCreateShardResponse{
 			ShardInfo: persistenceShardInfo,
 		},
 		nil,
 	)
-	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
-	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 
 	// clear shardInfo and load from persistence
-	shardContextImpl := s.shardContext.(*ContextTest)
+	shardContextImpl := s.mockShard.(*ContextTest)
 	shardContextImpl.shardInfo = nil
 	err := shardContextImpl.loadShardMetadata(convert.BoolPtr(false))
 	s.NoError(err)
 
-	for clusterName, info := range s.shardContext.GetClusterMetadata().GetAllClusterInfo() {
+	for clusterName, info := range s.mockShard.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
 		}
 
-		maxReadLevel := shardContextImpl.getScheduledTaskMaxReadLevel(clusterName).FireTime
-		s.False(maxReadLevel.Before(*persistenceShardInfo.TimerAckLevelTime))
+		timerQueueAckLevels := persistenceShardInfo.QueueAckLevels[tasks.CategoryTimer.ID()]
 
-		if clusterAckLevel, ok := persistenceShardInfo.ClusterTimerAckLevel[clusterName]; ok {
-			s.False(maxReadLevel.Before(*clusterAckLevel))
+		maxReadLevel := shardContextImpl.getScheduledTaskMaxReadLevel(clusterName).FireTime
+		s.False(maxReadLevel.Before(timestamp.UnixOrZeroTime(timerQueueAckLevels.AckLevel)))
+
+		if clusterAckLevel, ok := timerQueueAckLevels.ClusterAckLevel[clusterName]; ok {
+			s.False(maxReadLevel.Before(timestamp.UnixOrZeroTime(clusterAckLevel)))
 		}
 	}
 }
 
 func (s *contextSuite) TestTimerMaxReadLevelUpdate() {
-	clusterName := cluster.TestCurrentClusterName
-	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName).AnyTimes()
-
 	now := time.Now()
 	s.timeSource.Update(now)
-	maxReadLevel := s.shardContext.GetQueueMaxReadLevel(tasks.CategoryTimer, clusterName)
+	maxReadLevel := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryTimer, cluster.TestCurrentClusterName)
 
 	s.timeSource.Update(now.Add(-time.Minute))
-	newMaxReadLevel := s.shardContext.GetQueueMaxReadLevel(tasks.CategoryTimer, clusterName)
+	newMaxReadLevel := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryTimer, cluster.TestCurrentClusterName)
 	s.Equal(maxReadLevel, newMaxReadLevel)
 
 	s.timeSource.Update(now.Add(time.Minute))
-	newMaxReadLevel = s.shardContext.GetQueueMaxReadLevel(tasks.CategoryTimer, clusterName)
+	newMaxReadLevel = s.mockShard.GetQueueMaxReadLevel(tasks.CategoryTimer, cluster.TestCurrentClusterName)
 	s.True(newMaxReadLevel.FireTime.After(maxReadLevel.FireTime))
 }

@@ -87,6 +87,7 @@ type (
 		namespaceAttrValidator *AttrValidatorImpl
 		archivalMetadata       archiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
+		supportsSchedules      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -102,6 +103,7 @@ func NewHandler(
 	namespaceReplicator Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
+	supportsSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) *HandlerImpl {
 	return &HandlerImpl{
 		maxBadBinaryCount:      maxBadBinaryCount,
@@ -112,6 +114,7 @@ func NewHandler(
 		namespaceAttrValidator: newAttrValidator(clusterMetadata),
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
+		supportsSchedules:      supportsSchedules,
 	}
 }
 
@@ -146,7 +149,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	case nil:
 		// namespace already exists, cannot proceed
 		return nil, serviceerror.NewNamespaceAlreadyExists("Namespace already exists.")
-	case *serviceerror.NotFound:
+	case *serviceerror.NamespaceNotFound:
 		// namespace does not exists, proceeds
 	default:
 		// other err
@@ -226,6 +229,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: activeClusterName,
 		Clusters:          clusters,
+		State:             enumspb.REPLICATION_STATE_NORMAL,
 	}
 	isGlobalNamespace := registerRequest.GetIsGlobalNamespace()
 
@@ -273,6 +277,7 @@ func (d *HandlerImpl) RegisterNamespace(
 		namespaceRequest.Namespace.Info,
 		namespaceRequest.Namespace.Config,
 		namespaceRequest.Namespace.ReplicationConfig,
+		true,
 		namespaceRequest.Namespace.ConfigVersion,
 		namespaceRequest.Namespace.FailoverVersion,
 		namespaceRequest.IsGlobalNamespace,
@@ -428,6 +433,8 @@ func (d *HandlerImpl) UpdateNamespace(
 	activeClusterChanged := false
 	// whether anything other than active cluster is changed
 	configurationChanged := false
+	// whether replication cluster list is changed
+	clusterListChanged := false
 
 	if updateRequest.UpdateInfo != nil {
 		updatedInfo := updateRequest.UpdateInfo
@@ -497,6 +504,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		updateReplicationConfig := updateRequest.ReplicationConfig
 		if len(updateReplicationConfig.Clusters) != 0 {
 			configurationChanged = true
+			clusterListChanged = true
 			var clustersNew []string
 			for _, clusterConfig := range updateReplicationConfig.Clusters {
 				clustersNew = append(clustersNew, clusterConfig.GetClusterName())
@@ -578,6 +586,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		info,
 		config,
 		replicationConfig,
+		clusterListChanged,
 		configVersion,
 		failoverVersion,
 		isGlobalNamespace,
@@ -661,6 +670,8 @@ func (d *HandlerImpl) createResponse(
 		OwnerEmail:  info.Owner,
 		Data:        info.Data,
 		Id:          info.Id,
+
+		SupportsSchedules: d.supportsSchedules(info.Name),
 	}
 
 	configResult := &namespacepb.NamespaceConfig{

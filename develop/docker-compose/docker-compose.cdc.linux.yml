@@ -1,0 +1,12 @@
+# Overrides for CDC for Linux users.
+version: "3.5"
+
+services:
+  temporal-ui-standby:
+    environment:
+      - TEMPORAL_ADDRESS=localhost:8233
+    network_mode: host
+  temporal-ui-other:
+    environment:
+      - TEMPORAL_ADDRESS=localhost:9233
+    network_mode: host

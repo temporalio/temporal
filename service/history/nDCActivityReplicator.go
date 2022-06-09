@@ -35,13 +35,13 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -118,15 +118,14 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 
 	mutableState, err := executionContext.LoadWorkflowExecution(ctx)
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); !ok {
-			return err
+		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+			// this can happen if the workflow start event and this sync activity task are out of order
+			// or the target workflow is long gone
+			// the safe solution to this is to throw away the sync activity task
+			// or otherwise, worker attempt will exceed limit and put this message to DLQ
+			return nil
 		}
-
-		// this can happen if the workflow start event and this sync activity task are out of order
-		// or the target workflow is long gone
-		// the safe solution to this is to throw away the sync activity task
-		// or otherwise, worker attempt will exceed limit and put this message to DLQ
-		return nil
+		return err
 	}
 
 	scheduleID := request.GetScheduledId()
@@ -196,7 +195,6 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	// passive logic need to explicitly call create timer
 	now := eventTime
 	if _, err := workflow.NewTimerSequence(
-		clock.NewEventTimeSource().Update(now),
 		mutableState,
 	).CreateNextActivityTimer(); err != nil {
 		return err

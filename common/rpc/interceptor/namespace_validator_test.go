@@ -135,7 +135,7 @@ func (s *namespaceValidatorSuite) Test_Intercept_NamespaceNotFound() {
 		FullMethod: "/temporal/random",
 	}
 
-	s.mockRegistry.EXPECT().GetNamespace(namespace.Name("not-found-namespace")).Return(nil, serviceerror.NewNotFound("not-found"))
+	s.mockRegistry.EXPECT().GetNamespace(namespace.Name("not-found-namespace")).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: "not-found-namespace"}
 	handlerCalled := false
 	_, err := nvi.Intercept(context.Background(), req, serverInfo, func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -143,10 +143,10 @@ func (s *namespaceValidatorSuite) Test_Intercept_NamespaceNotFound() {
 		return &workflowservice.StartWorkflowExecutionResponse{}, nil
 	})
 
-	s.IsType(&serviceerror.NotFound{}, err)
+	s.IsType(&serviceerror.NamespaceNotFound{}, err)
 	s.False(handlerCalled)
 
-	s.mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("not-found-namespace-id")).Return(nil, serviceerror.NewNotFound("not-found"))
+	s.mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("not-found-namespace-id")).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	taskToken, _ := common.NewProtoTaskTokenSerializer().Serialize(&tokenspb.Task{
 		NamespaceId: "not-found-namespace-id",
 	})
@@ -160,7 +160,7 @@ func (s *namespaceValidatorSuite) Test_Intercept_NamespaceNotFound() {
 		return &workflowservice.RespondWorkflowTaskCompletedResponse{}, nil
 	})
 
-	s.IsType(&serviceerror.NotFound{}, err)
+	s.IsType(&serviceerror.NamespaceNotFound{}, err)
 	s.False(handlerCalled)
 }
 
@@ -181,13 +181,13 @@ func (s *namespaceValidatorSuite) Test_Intercept_StatusFromNamespace() {
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
-			expectedErr: &serviceerror.InvalidArgument{},
+			expectedErr: &serviceerror.NamespaceInvalidState{},
 			method:      "/temporal/StartWorkflowExecution",
 			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DELETED,
-			expectedErr: &serviceerror.InvalidArgument{},
+			expectedErr: &serviceerror.NamespaceInvalidState{},
 			method:      "/temporal/StartWorkflowExecution",
 			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
@@ -239,7 +239,7 @@ func (s *namespaceValidatorSuite) Test_Intercept_StatusFromNamespace() {
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DELETED,
-			expectedErr: &serviceerror.InvalidArgument{},
+			expectedErr: &serviceerror.NamespaceInvalidState{},
 			method:      "/temporal/PollWorkflowTaskQueue",
 			req:         &workflowservice.PollWorkflowTaskQueueRequest{Namespace: "test-namespace"},
 		},
@@ -265,7 +265,7 @@ func (s *namespaceValidatorSuite) Test_Intercept_StatusFromNamespace() {
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DELETED,
-			expectedErr: &serviceerror.InvalidArgument{},
+			expectedErr: &serviceerror.NamespaceInvalidState{},
 			method:      "/temporal/UpdateNamespace",
 			req:         &workflowservice.UpdateNamespaceRequest{Namespace: "test-namespace"},
 		},
@@ -337,7 +337,7 @@ func (s *namespaceValidatorSuite) Test_Intercept_StatusFromToken() {
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DELETED,
-			expectedErr: &serviceerror.InvalidArgument{},
+			expectedErr: &serviceerror.NamespaceInvalidState{},
 			method:      "/temporal/RespondWorkflowTaskCompleted",
 			req: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: taskToken,

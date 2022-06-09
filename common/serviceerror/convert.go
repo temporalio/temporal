@@ -58,6 +58,11 @@ func FromStatus(st *status.Status) error {
 		case *errordetails.RetryReplicationFailure:
 			return newRetryReplication(st, errDetails)
 		}
+	case codes.Unavailable:
+		switch errDetails.(type) {
+		case *errordetails.StickyWorkerUnavailableFailure:
+			return newStickyWorkerUnavailable(st)
+		}
 	}
 
 	return serviceerror.FromStatus(st)

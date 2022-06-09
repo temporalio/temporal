@@ -56,6 +56,8 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 )
 
+// TODO: replace with test specific Fx
+
 type (
 	// Test is the test implementation used for testing
 	Test struct {
@@ -112,16 +114,13 @@ const (
 	testHostName = "test_host"
 )
 
-var (
-	testHostInfo = membership.NewHostInfo(testHostName, nil)
-)
+var testHostInfo = membership.NewHostInfo(testHostName, nil)
 
 // NewTest returns a new test resource instance
 func NewTest(
 	controller *gomock.Controller,
 	serviceMetricsIndex metrics.ServiceIdx,
 ) *Test {
-
 	logger := log.NewTestLogger()
 
 	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
@@ -134,8 +133,8 @@ func NewTest(
 	clientBean.EXPECT().GetFrontendClient().Return(frontendClient).AnyTimes()
 	clientBean.EXPECT().GetMatchingClient(gomock.Any()).Return(matchingClient, nil).AnyTimes()
 	clientBean.EXPECT().GetHistoryClient().Return(historyClient).AnyTimes()
-	clientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(remoteAdminClient).AnyTimes()
-	clientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(remoteFrontendClient).AnyTimes()
+	clientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(remoteAdminClient, nil).AnyTimes()
+	clientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(remoteFrontendClient, nil).AnyTimes()
 	clientFactory := client.NewMockFactory(controller)
 
 	metadataMgr := persistence.NewMockMetadataManager(controller)
@@ -165,7 +164,7 @@ func NewTest(
 
 	scope := tally.NewTestScope("test", nil)
 
-	metricClient, err := metrics.NewClient(&metrics.ClientConfig{}, scope, serviceMetricsIndex)
+	metricClient, err := metrics.NewTallyClient(&metrics.ClientConfig{}, scope, serviceMetricsIndex)
 	if err != nil {
 		panic(err)
 	}
@@ -224,12 +223,10 @@ func NewTest(
 
 // Start for testing
 func (t *Test) Start() {
-
 }
 
 // Stop for testing
 func (t *Test) Stop() {
-
 }
 
 // static infos
@@ -354,7 +351,6 @@ func (t *Test) GetHistoryClient() historyservice.HistoryServiceClient {
 func (t *Test) GetRemoteAdminClient(
 	cluster string,
 ) adminservice.AdminServiceClient {
-
 	return t.RemoteAdminClient
 }
 
@@ -362,7 +358,6 @@ func (t *Test) GetRemoteAdminClient(
 func (t *Test) GetRemoteFrontendClient(
 	cluster string,
 ) workflowservice.WorkflowServiceClient {
-
 	return t.RemoteFrontendClient
 }
 

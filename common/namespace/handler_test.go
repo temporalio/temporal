@@ -26,8 +26,11 @@ package namespace
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
+
+	persistence2 "go.temporal.io/server/api/persistence/v1"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/mock/gomock"
@@ -111,6 +114,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		s.mockNamespaceReplicator,
 		s.archivalMetadata,
 		s.mockArchiverProvider,
+		func(s string) bool { return strings.HasSuffix(s, "sched") },
 	)
 }
 
@@ -279,7 +283,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	s.NoError(err)
 	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 
-	namespace2 := s.getRandomNamespace()
+	namespace2 := s.getRandomNamespace() + "sched"
 	description2 := "some random description 2"
 	email2 := "some random email 2"
 	retention2 := 2 * time.Hour * 24
@@ -354,12 +358,13 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		},
 		namespace2: &workflowservice.DescribeNamespaceResponse{
 			NamespaceInfo: &namespacepb.NamespaceInfo{
-				Name:        namespace2,
-				State:       enumspb.NAMESPACE_STATE_REGISTERED,
-				Description: description2,
-				OwnerEmail:  email2,
-				Data:        data2,
-				Id:          "",
+				Name:              namespace2,
+				State:             enumspb.NAMESPACE_STATE_REGISTERED,
+				Description:       description2,
+				OwnerEmail:        email2,
+				Data:              data2,
+				Id:                "",
+				SupportsSchedules: true,
 			},
 			Config: &namespacepb.NamespaceConfig{
 				WorkflowExecutionRetentionTtl: &retention2,
@@ -376,12 +381,60 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			FailoverVersion:   s.ClusterMetadata.GetNextFailoverVersion(activeClusterName2, 0),
 			IsGlobalNamespace: isGlobalNamespace2,
 		},
-	}, namespaces)
+	}, namespaces,
+	)
+}
+
+func (s *namespaceHandlerCommonSuite) TestRegisterNamespace() {
+	const namespace = "namespace-to-register"
+	retention := timestamp.DurationPtr(10 * 24 * time.Hour)
+	registerRequest := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		Description:                      namespace,
+		WorkflowExecutionRetentionPeriod: retention,
+		IsGlobalNamespace:                true,
+	}
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil)
+	_, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
+	s.NoError(err)
+
+	nsResp, err := s.MetadataManager.GetNamespace(
+		context.Background(),
+		&persistence.GetNamespaceRequest{Name: namespace},
+	)
+	s.NoError(err)
+
+	wantNsDetail := persistence2.NamespaceDetail{
+		Info: &persistence2.NamespaceInfo{
+			State:       enumspb.NAMESPACE_STATE_REGISTERED,
+			Name:        namespace,
+			Description: namespace,
+		},
+		Config: &persistence2.NamespaceConfig{Retention: retention},
+		ReplicationConfig: &persistence2.NamespaceReplicationConfig{
+			ActiveClusterName: s.ClusterMetadata.GetMasterClusterName(),
+			Clusters:          []string{s.ClusterMetadata.GetMasterClusterName()},
+			State:             enumspb.REPLICATION_STATE_NORMAL,
+		},
+	}
+
+	s.Equal(registerRequest.IsGlobalNamespace, nsResp.IsGlobalNamespace)
+	gotNsDetail := nsResp.Namespace
+	s.Equal(wantNsDetail.Info.Name, gotNsDetail.Info.Name)
+	s.Equal(wantNsDetail.Info.Description, gotNsDetail.Info.Description)
+	s.Equal(wantNsDetail.Info.State, gotNsDetail.Info.State)
+	s.Equal(wantNsDetail.Config.Retention, gotNsDetail.Config.Retention)
+	s.Equal(wantNsDetail.ReplicationConfig, gotNsDetail.ReplicationConfig)
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeriod() {
 	// local
-	for _, invalidDuration := range []time.Duration{0, -1 * time.Hour, 1 * time.Millisecond, 10 * 365 * 24 * time.Hour} {
+	for _, invalidDuration := range []time.Duration{
+		0,
+		-1 * time.Hour,
+		1 * time.Millisecond,
+		10 * 365 * 24 * time.Hour,
+	} {
 		registerRequest := &workflowservice.RegisterNamespaceRequest{
 			Namespace:                        "random namespace name",
 			Description:                      "random namespace name",

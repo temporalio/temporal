@@ -44,7 +44,7 @@ type (
 
 	// Client is used to send request to processor workflow
 	Client interface {
-		SendParentClosePolicyRequest(Request) error
+		SendParentClosePolicyRequest(context.Context, Request) error
 	}
 
 	clientImpl struct {
@@ -79,7 +79,7 @@ func NewClient(
 	}
 }
 
-func (c *clientImpl) SendParentClosePolicyRequest(request Request) error {
+func (c *clientImpl) SendParentClosePolicyRequest(ctx context.Context, request Request) error {
 	workflowID := getWorkflowID(c.numWorkflows)
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                    workflowID,
@@ -87,7 +87,7 @@ func (c *clientImpl) SendParentClosePolicyRequest(request Request) error {
 		WorkflowTaskTimeout:   workflowTaskTimeout,
 		WorkflowIDReusePolicy: workflowIDReusePolicy,
 	}
-	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
+	signalCtx, cancel := context.WithTimeout(ctx, signalTimeout)
 	defer cancel()
 
 	sdkClient := c.sdkClientFactory.GetSystemClient(c.logger)

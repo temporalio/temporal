@@ -242,6 +242,7 @@ func IsPersistenceTransientError(err error) bool {
 func IsServiceTransientError(err error) bool {
 	switch err.(type) {
 	case *serviceerror.NotFound,
+		*serviceerror.NamespaceNotFound,
 		*serviceerror.InvalidArgument,
 		*serviceerror.NamespaceNotActive,
 		*serviceerror.WorkflowExecutionAlreadyStarted:
@@ -286,6 +287,14 @@ func IsWhitelistServiceTransientError(err error) bool {
 	return false
 }
 
+func IsStickyWorkerUnavailable(err error) bool {
+	switch err.(type) {
+	case *serviceerrors.StickyWorkerUnavailable:
+		return true
+	}
+	return false
+}
+
 // IsResourceExhausted checks if the error is a service busy error.
 func IsResourceExhausted(err error) bool {
 	switch err.(type) {
@@ -295,12 +304,7 @@ func IsResourceExhausted(err error) bool {
 	return false
 }
 
-func IsNotFoundError(err error) bool {
-	var notFoundError *serviceerror.NotFound
-	return errors.As(err, &notFoundError)
-}
-
-// WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID
+// WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID.
 func WorkflowIDToHistoryShard(
 	namespaceID string,
 	workflowID string,

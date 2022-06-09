@@ -37,6 +37,7 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -59,28 +60,32 @@ type (
 	OperatorHandlerImpl struct {
 		status int32
 
-		healthStatus     int32
-		logger           log.Logger
-		config           *Config
-		esConfig         *esclient.Config
-		esClient         esclient.Client
-		sdkClientFactory sdk.ClientFactory
-		metricsClient    metrics.Client
-		saProvider       searchattribute.Provider
-		saManager        searchattribute.Manager
-		healthServer     *health.Server
+		healthStatus      int32
+		logger            log.Logger
+		config            *Config
+		esConfig          *esclient.Config
+		esClient          esclient.Client
+		sdkClientFactory  sdk.ClientFactory
+		metricsClient     metrics.Client
+		saProvider        searchattribute.Provider
+		saManager         searchattribute.Manager
+		healthServer      *health.Server
+		historyClient     historyservice.HistoryServiceClient
+		namespaceRegistry namespace.Registry
 	}
 
 	NewOperatorHandlerImplArgs struct {
-		config           *Config
-		EsConfig         *esclient.Config
-		EsClient         esclient.Client
-		Logger           log.Logger
-		sdkClientFactory sdk.ClientFactory
-		MetricsClient    metrics.Client
-		SaProvider       searchattribute.Provider
-		SaManager        searchattribute.Manager
-		healthServer     *health.Server
+		config            *Config
+		EsConfig          *esclient.Config
+		EsClient          esclient.Client
+		Logger            log.Logger
+		sdkClientFactory  sdk.ClientFactory
+		MetricsClient     metrics.Client
+		SaProvider        searchattribute.Provider
+		SaManager         searchattribute.Manager
+		healthServer      *health.Server
+		historyClient     historyservice.HistoryServiceClient
+		namespaceRegistry namespace.Registry
 	}
 )
 
@@ -90,16 +95,18 @@ func NewOperatorHandlerImpl(
 ) *OperatorHandlerImpl {
 
 	handler := &OperatorHandlerImpl{
-		logger:           args.Logger,
-		status:           common.DaemonStatusInitialized,
-		config:           args.config,
-		esConfig:         args.EsConfig,
-		esClient:         args.EsClient,
-		sdkClientFactory: args.sdkClientFactory,
-		metricsClient:    args.MetricsClient,
-		saProvider:       args.SaProvider,
-		saManager:        args.SaManager,
-		healthServer:     args.healthServer,
+		logger:            args.Logger,
+		status:            common.DaemonStatusInitialized,
+		config:            args.config,
+		esConfig:          args.EsConfig,
+		esClient:          args.EsClient,
+		sdkClientFactory:  args.sdkClientFactory,
+		metricsClient:     args.MetricsClient,
+		saProvider:        args.SaProvider,
+		saManager:         args.SaManager,
+		healthServer:      args.healthServer,
+		historyClient:     args.historyClient,
+		namespaceRegistry: args.namespaceRegistry,
 	}
 
 	return handler
@@ -337,6 +344,35 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 	}, nil
 }
 
+// DeleteWorkflowExecution deletes a closed workflow execution asynchronously (workflow must be completed or terminated before).
+// This method is EXPERIMENTAL and may be changed or removed in a later release.
+func (h *OperatorHandlerImpl) DeleteWorkflowExecution(ctx context.Context, request *operatorservice.DeleteWorkflowExecutionRequest) (_ *operatorservice.DeleteWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := validateExecution(request.WorkflowExecution); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId:       namespaceID.String(),
+		WorkflowExecution: request.GetWorkflowExecution(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &operatorservice.DeleteWorkflowExecutionResponse{}, nil
+}
+
 // startRequestProfile initiates recording of request metrics
 func (h *OperatorHandlerImpl) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
 	metricsScope := h.metricsClient.Scope(scope)
@@ -356,7 +392,7 @@ func (h *OperatorHandlerImpl) error(err error, scope metrics.Scope, endpointName
 		scope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.ResourceExhausted:
 		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)
-	case *serviceerror.NotFound:
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 	default:
 		h.logger.Error("Unknown error.", tag.Error(err), tag.Endpoint(endpointName))
 		scope.IncCounter(metrics.ServiceFailures)

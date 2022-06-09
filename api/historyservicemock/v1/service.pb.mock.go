@@ -100,6 +100,26 @@ func (mr *MockHistoryServiceClientMockRecorder) DeleteWorkflowExecution(ctx, in 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeleteWorkflowExecution), varargs...)
 }
 
+// DeleteWorkflowVisibilityRecord mocks base method.
+func (m *MockHistoryServiceClient) DeleteWorkflowVisibilityRecord(ctx context.Context, in *historyservice.DeleteWorkflowVisibilityRecordRequest, opts ...grpc.CallOption) (*historyservice.DeleteWorkflowVisibilityRecordResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteWorkflowVisibilityRecord", varargs...)
+	ret0, _ := ret[0].(*historyservice.DeleteWorkflowVisibilityRecordResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteWorkflowVisibilityRecord indicates an expected call of DeleteWorkflowVisibilityRecord.
+func (mr *MockHistoryServiceClientMockRecorder) DeleteWorkflowVisibilityRecord(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowVisibilityRecord", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeleteWorkflowVisibilityRecord), varargs...)
+}
+
 // DescribeHistoryHost mocks base method.
 func (m *MockHistoryServiceClient) DescribeHistoryHost(ctx context.Context, in *historyservice.DescribeHistoryHostRequest, opts ...grpc.CallOption) (*historyservice.DescribeHistoryHostResponse, error) {
 	m.ctrl.T.Helper()
@@ -880,6 +900,46 @@ func (mr *MockHistoryServiceClientMockRecorder) TerminateWorkflowExecution(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).TerminateWorkflowExecution), varargs...)
 }
 
+// VerifyChildExecutionCompletionRecorded mocks base method.
+func (m *MockHistoryServiceClient) VerifyChildExecutionCompletionRecorded(ctx context.Context, in *historyservice.VerifyChildExecutionCompletionRecordedRequest, opts ...grpc.CallOption) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "VerifyChildExecutionCompletionRecorded", varargs...)
+	ret0, _ := ret[0].(*historyservice.VerifyChildExecutionCompletionRecordedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VerifyChildExecutionCompletionRecorded indicates an expected call of VerifyChildExecutionCompletionRecorded.
+func (mr *MockHistoryServiceClientMockRecorder) VerifyChildExecutionCompletionRecorded(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyChildExecutionCompletionRecorded", reflect.TypeOf((*MockHistoryServiceClient)(nil).VerifyChildExecutionCompletionRecorded), varargs...)
+}
+
+// VerifyFirstWorkflowTaskScheduled mocks base method.
+func (m *MockHistoryServiceClient) VerifyFirstWorkflowTaskScheduled(ctx context.Context, in *historyservice.VerifyFirstWorkflowTaskScheduledRequest, opts ...grpc.CallOption) (*historyservice.VerifyFirstWorkflowTaskScheduledResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "VerifyFirstWorkflowTaskScheduled", varargs...)
+	ret0, _ := ret[0].(*historyservice.VerifyFirstWorkflowTaskScheduledResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VerifyFirstWorkflowTaskScheduled indicates an expected call of VerifyFirstWorkflowTaskScheduled.
+func (mr *MockHistoryServiceClientMockRecorder) VerifyFirstWorkflowTaskScheduled(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyFirstWorkflowTaskScheduled", reflect.TypeOf((*MockHistoryServiceClient)(nil).VerifyFirstWorkflowTaskScheduled), varargs...)
+}
+
 // MockHistoryServiceServer is a mock of HistoryServiceServer interface.
 type MockHistoryServiceServer struct {
 	ctrl     *gomock.Controller
@@ -931,6 +991,21 @@ func (m *MockHistoryServiceServer) DeleteWorkflowExecution(arg0 context.Context,
 func (mr *MockHistoryServiceServerMockRecorder) DeleteWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeleteWorkflowExecution), arg0, arg1)
+}
+
+// DeleteWorkflowVisibilityRecord mocks base method.
+func (m *MockHistoryServiceServer) DeleteWorkflowVisibilityRecord(arg0 context.Context, arg1 *historyservice.DeleteWorkflowVisibilityRecordRequest) (*historyservice.DeleteWorkflowVisibilityRecordResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteWorkflowVisibilityRecord", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.DeleteWorkflowVisibilityRecordResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteWorkflowVisibilityRecord indicates an expected call of DeleteWorkflowVisibilityRecord.
+func (mr *MockHistoryServiceServerMockRecorder) DeleteWorkflowVisibilityRecord(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowVisibilityRecord", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeleteWorkflowVisibilityRecord), arg0, arg1)
 }
 
 // DescribeHistoryHost mocks base method.
@@ -1516,4 +1591,34 @@ func (m *MockHistoryServiceServer) TerminateWorkflowExecution(arg0 context.Conte
 func (mr *MockHistoryServiceServerMockRecorder) TerminateWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).TerminateWorkflowExecution), arg0, arg1)
+}
+
+// VerifyChildExecutionCompletionRecorded mocks base method.
+func (m *MockHistoryServiceServer) VerifyChildExecutionCompletionRecorded(arg0 context.Context, arg1 *historyservice.VerifyChildExecutionCompletionRecordedRequest) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyChildExecutionCompletionRecorded", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.VerifyChildExecutionCompletionRecordedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VerifyChildExecutionCompletionRecorded indicates an expected call of VerifyChildExecutionCompletionRecorded.
+func (mr *MockHistoryServiceServerMockRecorder) VerifyChildExecutionCompletionRecorded(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyChildExecutionCompletionRecorded", reflect.TypeOf((*MockHistoryServiceServer)(nil).VerifyChildExecutionCompletionRecorded), arg0, arg1)
+}
+
+// VerifyFirstWorkflowTaskScheduled mocks base method.
+func (m *MockHistoryServiceServer) VerifyFirstWorkflowTaskScheduled(arg0 context.Context, arg1 *historyservice.VerifyFirstWorkflowTaskScheduledRequest) (*historyservice.VerifyFirstWorkflowTaskScheduledResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyFirstWorkflowTaskScheduled", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.VerifyFirstWorkflowTaskScheduledResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VerifyFirstWorkflowTaskScheduled indicates an expected call of VerifyFirstWorkflowTaskScheduled.
+func (mr *MockHistoryServiceServerMockRecorder) VerifyFirstWorkflowTaskScheduled(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyFirstWorkflowTaskScheduled", reflect.TypeOf((*MockHistoryServiceServer)(nil).VerifyFirstWorkflowTaskScheduled), arg0, arg1)
 }

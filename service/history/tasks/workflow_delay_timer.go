@@ -44,10 +44,7 @@ type (
 )
 
 func (r *WorkflowBackoffTimerTask) GetKey() Key {
-	return Key{
-		FireTime: r.VisibilityTimestamp,
-		TaskID:   r.TaskID,
-	}
+	return NewKey(r.VisibilityTimestamp, r.TaskID)
 }
 
 func (r *WorkflowBackoffTimerTask) GetVersion() int64 {

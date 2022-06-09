@@ -389,7 +389,7 @@ func (r *workflowResetterImpl) persistToDB(
 	return resetWorkflow.getContext().CreateWorkflowExecution(
 		ctx,
 		now,
-		persistence.CreateWorkflowModeWorkflowIDReuse,
+		persistence.CreateWorkflowModeUpdateCurrent,
 		currentRunID,
 		currentLastWriteVersion,
 		resetWorkflow.getMutableState(),
@@ -584,6 +584,7 @@ func (r *workflowResetterImpl) terminateWorkflow(
 		terminateReason,
 		nil,
 		consts.IdentityHistoryService,
+		false,
 	)
 }
 

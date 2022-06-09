@@ -59,7 +59,7 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // GetBoolValue mocks base method.
-func (m *MockClient) GetBoolValue(name Key, filters map[Filter]interface{}, defaultValue bool) (bool, error) {
+func (m *MockClient) GetBoolValue(name Key, filters []map[Filter]interface{}, defaultValue bool) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetBoolValue", name, filters, defaultValue)
 	ret0, _ := ret[0].(bool)
@@ -74,7 +74,7 @@ func (mr *MockClientMockRecorder) GetBoolValue(name, filters, defaultValue inter
 }
 
 // GetDurationValue mocks base method.
-func (m *MockClient) GetDurationValue(name Key, filters map[Filter]interface{}, defaultValue time.Duration) (time.Duration, error) {
+func (m *MockClient) GetDurationValue(name Key, filters []map[Filter]interface{}, defaultValue time.Duration) (time.Duration, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDurationValue", name, filters, defaultValue)
 	ret0, _ := ret[0].(time.Duration)
@@ -89,7 +89,7 @@ func (mr *MockClientMockRecorder) GetDurationValue(name, filters, defaultValue i
 }
 
 // GetFloatValue mocks base method.
-func (m *MockClient) GetFloatValue(name Key, filters map[Filter]interface{}, defaultValue float64) (float64, error) {
+func (m *MockClient) GetFloatValue(name Key, filters []map[Filter]interface{}, defaultValue float64) (float64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFloatValue", name, filters, defaultValue)
 	ret0, _ := ret[0].(float64)
@@ -104,7 +104,7 @@ func (mr *MockClientMockRecorder) GetFloatValue(name, filters, defaultValue inte
 }
 
 // GetIntValue mocks base method.
-func (m *MockClient) GetIntValue(name Key, filters map[Filter]interface{}, defaultValue int) (int, error) {
+func (m *MockClient) GetIntValue(name Key, filters []map[Filter]interface{}, defaultValue int) (int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetIntValue", name, filters, defaultValue)
 	ret0, _ := ret[0].(int)
@@ -119,7 +119,7 @@ func (mr *MockClientMockRecorder) GetIntValue(name, filters, defaultValue interf
 }
 
 // GetMapValue mocks base method.
-func (m *MockClient) GetMapValue(name Key, filters map[Filter]interface{}, defaultValue map[string]interface{}) (map[string]interface{}, error) {
+func (m *MockClient) GetMapValue(name Key, filters []map[Filter]interface{}, defaultValue map[string]interface{}) (map[string]interface{}, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMapValue", name, filters, defaultValue)
 	ret0, _ := ret[0].(map[string]interface{})
@@ -134,7 +134,7 @@ func (mr *MockClientMockRecorder) GetMapValue(name, filters, defaultValue interf
 }
 
 // GetStringValue mocks base method.
-func (m *MockClient) GetStringValue(name Key, filters map[Filter]interface{}, defaultValue string) (string, error) {
+func (m *MockClient) GetStringValue(name Key, filters []map[Filter]interface{}, defaultValue string) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStringValue", name, filters, defaultValue)
 	ret0, _ := ret[0].(string)
@@ -164,7 +164,7 @@ func (mr *MockClientMockRecorder) GetValue(name, defaultValue interface{}) *gomo
 }
 
 // GetValueWithFilters mocks base method.
-func (m *MockClient) GetValueWithFilters(name Key, filters map[Filter]interface{}, defaultValue interface{}) (interface{}, error) {
+func (m *MockClient) GetValueWithFilters(name Key, filters []map[Filter]interface{}, defaultValue interface{}) (interface{}, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetValueWithFilters", name, filters, defaultValue)
 	ret0, _ := ret[0].(interface{})
