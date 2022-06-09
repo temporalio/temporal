@@ -84,16 +84,7 @@ func (i *IteratorImpl) Next() (tasks.Task, error) {
 		return nil, err
 	}
 
-	taskKey := task.GetKey()
-	taskID := taskKey.TaskID
-	if taskKey.FireTime.UnixNano() <= 0 {
-		// only increase taskID for immediate task category
-		taskID++
-	}
-	i.remainingRange.InclusiveMin = tasks.NewKey(
-		taskKey.FireTime,
-		taskID,
-	)
+	i.remainingRange.InclusiveMin = task.GetKey().Next()
 	return task, nil
 }
 

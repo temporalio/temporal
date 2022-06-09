@@ -26,6 +26,7 @@ package tasks
 
 import (
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -84,6 +85,26 @@ func (left Key) CompareTo(right Key) int {
 		return 1
 	}
 	return 0
+}
+
+func (k Key) Prev() Key {
+	if k.TaskID == 0 {
+		if k.FireTime.UnixNano() == 0 {
+			panic("Key encountered negative underflow")
+		}
+		return NewKey(k.FireTime.Add(-time.Nanosecond), math.MaxInt64)
+	}
+	return NewKey(k.FireTime, k.TaskID-1)
+}
+
+func (k Key) Next() Key {
+	if k.TaskID == math.MaxInt64 {
+		if k.FireTime.UnixNano() == math.MaxInt64 {
+			panic("Key encountered positive overflow")
+		}
+		return NewKey(k.FireTime.Add(time.Nanosecond), 0)
+	}
+	return NewKey(k.FireTime, k.TaskID+1)
 }
 
 func MinKey(this Key, that Key) Key {

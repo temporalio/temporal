@@ -64,10 +64,8 @@ func (s *iteratorSuite) TearDownSuite() {
 	s.controller.Finish()
 }
 
-func (s *iteratorSuite) TestNext_IncreaseTaskID() {
+func (s *iteratorSuite) TestNext_IncreaseTaskKey() {
 	r := tasks.NewRandomRange()
-	r.InclusiveMin.FireTime = tasks.DefaultFireTime
-	r.ExclusiveMax.FireTime = tasks.DefaultFireTime
 
 	taskKey := tasks.NewRandomKeyInRange(r)
 	mockTask := tasks.NewMockTask(s.controller)
@@ -87,35 +85,7 @@ func (s *iteratorSuite) TestNext_IncreaseTaskID() {
 	s.NoError(err)
 	s.Equal(mockTask, task)
 
-	s.Equal(tasks.NewRange(tasks.NewImmediateKey(taskKey.TaskID+1), r.ExclusiveMax), iterator.Range())
-
-	s.False(iterator.HasNext())
-}
-
-func (s *iteratorSuite) TestNext_NotIncreaseFireTime() {
-	r := tasks.NewRandomRange()
-	r.InclusiveMin.TaskID = 0
-	r.ExclusiveMax.TaskID = 0
-
-	taskKey := tasks.NewRandomKeyInRange(r)
-	mockTask := tasks.NewMockTask(s.controller)
-	mockTask.EXPECT().GetKey().Return(taskKey).Times(1)
-	paginationFnProvider := func(paginationRange tasks.Range) collection.PaginationFn[tasks.Task] {
-		s.Equal(r, paginationRange)
-		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
-			return []tasks.Task{mockTask}, nil, nil
-		}
-	}
-
-	iterator := NewIterator(paginationFnProvider, r)
-	s.Equal(r, iterator.Range())
-
-	s.True(iterator.HasNext())
-	task, err := iterator.Next()
-	s.NoError(err)
-	s.Equal(mockTask, task)
-
-	s.Equal(tasks.NewRange(taskKey, r.ExclusiveMax), iterator.Range())
+	s.Equal(tasks.NewRange(taskKey.Next(), r.ExclusiveMax), iterator.Range())
 
 	s.False(iterator.HasNext())
 }
