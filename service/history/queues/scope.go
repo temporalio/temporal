@@ -53,16 +53,16 @@ func (s *Scope) Contains(task tasks.Task) bool {
 		s.Predicate.Test(task)
 }
 
-func (s *Scope) CanSplitRange(
+func (s *Scope) CanSplitByRange(
 	key tasks.Key,
 ) bool {
 	return s.Range.CanSplit(key)
 }
 
-func (s *Scope) SplitRange(
+func (s *Scope) SplitByRange(
 	key tasks.Key,
 ) (left Scope, right Scope) {
-	if !s.CanSplitRange(key) {
+	if !s.CanSplitByRange(key) {
 		panic(fmt.Sprintf("Unable to split scope with range %v at %v", s.Range, key))
 	}
 
@@ -70,7 +70,7 @@ func (s *Scope) SplitRange(
 	return NewScope(leftRange, s.Predicate), NewScope(rightRange, s.Predicate)
 }
 
-func (s *Scope) SplitPredicate(
+func (s *Scope) SplitByPredicate(
 	predicate tasks.Predicate,
 ) (pass Scope, fail Scope) {
 	// TODO: special check if the predicates are the same type
@@ -88,25 +88,37 @@ func (s *Scope) SplitPredicate(
 	return passScope, failScope
 }
 
-func (s *Scope) CanMergeRange(
-	input tasks.Range,
+func (s *Scope) CanMergeByRange(
+	incomingScope Scope,
 ) bool {
-	return s.Range.CanMerge(input)
+	// TODO: validate two scopes' predicates are equal
+
+	return s.Range.CanMerge(incomingScope.Range)
 }
 
-func (s *Scope) MergeRange(
-	input tasks.Range,
+func (s *Scope) MergeByRange(
+	incomingScope Scope,
 ) Scope {
-	if !s.CanMergeRange(input) {
-		panic(fmt.Sprintf("Unable to merge scope with range %v with range %v", s.Range, input))
+	if !s.CanMergeByRange(incomingScope) {
+		panic(fmt.Sprintf("Unable to merge scope with range %v with range %v by range", s.Range, incomingScope.Range))
 	}
 
-	return NewScope(s.Range.Merge(input), s.Predicate)
+	return NewScope(s.Range.Merge(incomingScope.Range), s.Predicate)
 }
 
-func (s *Scope) MergePredicate(
-	predicate tasks.Predicate,
+func (s *Scope) CanMergeByPredicate(
+	incomingScope Scope,
+) bool {
+	return s.Range.Equal(incomingScope.Range)
+}
+
+func (s *Scope) MergeByPredicate(
+	incomingScope Scope,
 ) Scope {
+	if !s.CanMergeByPredicate(incomingScope) {
+		panic(fmt.Sprintf("Unable to merge scope with range %v with range %v by predicate", s.Range, incomingScope.Range))
+	}
+
 	// TODO: special check if the predicates are the same type
-	return NewScope(s.Range, predicates.Or(s.Predicate, predicate))
+	return NewScope(s.Range, predicates.Or(s.Predicate, incomingScope.Predicate))
 }
