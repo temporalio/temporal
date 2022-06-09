@@ -41,6 +41,7 @@ type temporalTallyStatsdReporter struct {
 	tagSeparator string
 }
 
+// Options allows configuration of Temporal-specific statsd reporter options in addition to Tally's statsd reporter options.
 type Options struct {
 	TallyOptions tallystatsdreporter.Options
 
@@ -50,9 +51,8 @@ type Options struct {
 func (r *temporalTallyStatsdReporter) metricNameWithTags(originalName string, tags map[string]string) string {
 	if r.tagSeparator != "" {
 		return appendSeparatedTags(originalName, r.tagSeparator, tags)
-	} else {
-		return embedTags(originalName, tags)
 	}
+	return embedTags(originalName, tags)
 }
 
 // NewReporter is a wrapper on top of "github.com/uber-go/tally/statsd"
@@ -136,6 +136,10 @@ func embedTags(name string, tags map[string]string) string {
 // appendSeparatedTags adds the sorted list of tags using the DogStatsd/InfluxDB supported tagging protocol.
 // For example, if the stat is `hello.world` and the tags are `{universe: milkyWay, planet: earth}` and the separator is `,`,
 // the stat will be emitted as `hello.world,planet=earth,universe=milkyWay`.
+//
+// For more details on the protocol see:
+// - Datadog: https://docs.datadoghq.com/developers/dogstatsd/datagram_shell
+// - InfluxDB: https://github.com/influxdata/telegraf/blob/ce9411343076b56dabd77fc8845cc58872d4b2e6/plugins/inputs/statsd/README.md#influx-statsd
 func appendSeparatedTags(name string, separator string, tags map[string]string) string {
 	var buffer strings.Builder
 	buffer.WriteString(name)
