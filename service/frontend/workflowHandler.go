@@ -4289,9 +4289,6 @@ func (wh *WorkflowHandler) makeFakeContinuedAsNewEvent(
 func (wh *WorkflowHandler) validateNamespace(
 	namespace string,
 ) error {
-	if namespace == "" {
-		return errNamespaceNotSet
-	}
 	if err := wh.validateUTF8String(namespace); err != nil {
 		return err
 	}
