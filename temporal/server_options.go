@@ -68,6 +68,7 @@ type (
 		clientFactoryProvider      client.FactoryProvider
 		searchAttributesMapper     searchattribute.Mapper
 		customInterceptors         []grpc.UnaryServerInterceptor
+		metricHandler              metrics.MetricHandler
 	}
 )
 
@@ -127,6 +128,7 @@ func (so *serverOptions) validateConfig() error {
 	}
 	return nil
 }
+
 func isValidService(service string) bool {
 	for _, s := range Services {
 		if s == service {

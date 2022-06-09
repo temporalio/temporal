@@ -122,6 +122,7 @@ type (
 		TLSConfigProvider       encryption.TLSConfigProvider
 		EsConfig                *esclient.Config
 		EsClient                esclient.Client
+		MetricHandler           metrics.MetricHandler
 	}
 )
 
@@ -180,16 +181,20 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		clientFactoryProvider = client.NewFactoryProvider()
 	}
 
+	// MetricHandler
+	handler := so.metricHandler
+	if handler == nil {
+		if so.config.Global.Metrics != nil {
+			handler = metrics.MetricHandlerFromConfig(logger, so.config.Global.Metrics)
+		} else {
+			handler = metrics.NoopMetricHandler
+		}
+	}
+
 	// ServerReporter
 	serverReporter := so.metricsReporter
 	if serverReporter == nil {
-		if so.config.Global.Metrics == nil {
-			logger.Warn("no metrics config provided, using noop reporter")
-			serverReporter = metrics.NoopReporter
-		} else {
-			handler := metrics.MetricHandlerFromConfig(logger, so.config.Global.Metrics)
-			serverReporter = metrics.NewEventsReporter(handler)
-		}
+		serverReporter = metrics.NewEventsReporter(handler)
 	}
 
 	// MetricsClient
@@ -275,6 +280,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		TLSConfigProvider:       tlsConfigProvider,
 		EsConfig:                esConfig,
 		EsClient:                esClient,
+		MetricHandler:           handler,
 	}, nil
 }
 
