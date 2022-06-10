@@ -97,6 +97,9 @@ func NewTLSConfigProviderFromConfig(
 	if certProviderFactory == nil {
 		certProviderFactory = NewLocalStoreCertProvider
 	}
+	if client == nil {
+		client = metrics.NoopClient
+	}
 	return NewLocalStoreTlsProvider(&encryptionSettings, client.Scope(metrics.ServerTlsScope), logger, certProviderFactory)
 }
 
