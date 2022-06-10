@@ -51,6 +51,10 @@ var _ MetricProvider = (*eventsMetricProvider)(nil)
 
 // MetricHandlerFromConfig is used at startup to construct
 func MetricHandlerFromConfig(logger log.Logger, c *Config) MetricHandler {
+	if c == nil {
+		return NoopMetricHandler
+	}
+
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
 	if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
 		switch c.Prometheus.Framework {

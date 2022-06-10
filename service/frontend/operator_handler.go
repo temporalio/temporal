@@ -38,19 +38,18 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
-
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/searchattribute"
 )
 
 var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
@@ -300,10 +299,6 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 	// validate request
 	if request == nil {
 		return nil, h.error(errRequestNotSet, scope, endpointName)
-	}
-
-	if request.GetNamespace() == "" {
-		return nil, h.error(errNamespaceNotSet, scope, endpointName)
 	}
 
 	// Execute workflow.

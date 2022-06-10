@@ -49,17 +49,19 @@ const (
 	BatcherNamespace      = "BatcherNamespace"
 	BatcherUser           = "BatcherUser"
 
-	// added to workflows started by a schedule
-	TemporalScheduledStartTime = "TemporalScheduledStartTime"
-	TemporalScheduledById      = "TemporalScheduledById"
-
-	// used by scheduler workflow
-	TemporalSchedulePaused   = "TemporalSchedulePaused"
-	TemporalScheduleInfoJSON = "TemporalScheduleInfoJSON"
-
+	// These fields are not in Elasticsearch mappings definition and therefore are not indexed.
 	MemoEncoding      = "MemoEncoding"
 	Memo              = "Memo"
 	VisibilityTaskKey = "VisibilityTaskKey"
+
+	// Added to workflows started by a schedule.
+	TemporalScheduledStartTime = "TemporalScheduledStartTime"
+	TemporalScheduledById      = "TemporalScheduledById"
+
+	// Used by scheduler workflow.
+	TemporalSchedulePaused = "TemporalSchedulePaused"
+	// TemporalScheduleInfoJSON is not in Elasticsearch mappings definition and therefore is not indexed.
+	TemporalScheduleInfoJSON = "TemporalScheduleInfoJSON"
 
 	ReservedPrefix = "Temporal"
 )
