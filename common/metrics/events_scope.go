@@ -26,6 +26,7 @@ package metrics
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"golang.org/x/exp/event"
@@ -39,6 +40,8 @@ type (
 		scopeId    int
 		scopeTags  []Tag
 		scopeDef   scopeDefinition
+
+		metricDefs sync.Map
 	}
 
 	eventsStopwatch struct {
@@ -54,7 +57,7 @@ var (
 	_ Stopwatch = (*eventsStopwatch)(nil)
 )
 
-func newEventsScope(provider MetricProvider, idx ServiceIdx, id int) eventsScope {
+func newEventsScope(provider MetricProvider, idx ServiceIdx, id int) *eventsScope {
 	def, ok := ScopeDefs[idx][id]
 	if !ok {
 		def, ok = ScopeDefs[Common][id]
@@ -63,7 +66,7 @@ func newEventsScope(provider MetricProvider, idx ServiceIdx, id int) eventsScope
 		}
 	}
 
-	return eventsScope{
+	return &eventsScope{
 		provider:   provider,
 		serviceIdx: idx,
 		scopeId:    id,
@@ -73,13 +76,13 @@ func newEventsScope(provider MetricProvider, idx ServiceIdx, id int) eventsScope
 }
 
 // IncCounter increments a counter metric
-func (e eventsScope) IncCounter(counter int) {
+func (e *eventsScope) IncCounter(counter int) {
 	e.AddCounter(counter, 1)
 }
 
 // AddCounter adds delta to the counter metric
-func (e eventsScope) AddCounter(counter int, delta int64) {
-	m := getDefinition(e.serviceIdx, counter)
+func (e *eventsScope) AddCounter(counter int, delta int64) {
+	m := e.getDefinition(e.serviceIdx, counter)
 
 	e.provider.Counter(m.metricName.String(), &MetricOptions{
 		Unit: event.Unit(m.unit),
@@ -94,8 +97,8 @@ func (e eventsScope) AddCounter(counter int, delta int64) {
 
 // StartTimer starts a timer for the given metric name.
 // Time will be recorded when stopwatch is stopped.
-func (e eventsScope) StartTimer(timer int) Stopwatch {
-	m := getDefinition(e.serviceIdx, timer)
+func (e *eventsScope) StartTimer(timer int) Stopwatch {
+	m := e.getDefinition(e.serviceIdx, timer)
 
 	return &eventsStopwatch{
 		recordFunc: func(d time.Duration) {
@@ -110,8 +113,8 @@ func (e eventsScope) StartTimer(timer int) Stopwatch {
 }
 
 // RecordTimer records a timer for the given metric name
-func (e eventsScope) RecordTimer(timer int, d time.Duration) {
-	m := getDefinition(e.serviceIdx, timer)
+func (e *eventsScope) RecordTimer(timer int, d time.Duration) {
+	m := e.getDefinition(e.serviceIdx, timer)
 
 	e.provider.Timer(m.metricName.String(), &MetricOptions{
 		Unit: event.Unit(m.unit),
@@ -126,8 +129,8 @@ func (e eventsScope) RecordTimer(timer int, d time.Duration) {
 
 // RecordDistribution records a distribution (wrapper on top of timer) for the given
 // metric name
-func (e eventsScope) RecordDistribution(id int, d int) {
-	m := getDefinition(e.serviceIdx, id)
+func (e *eventsScope) RecordDistribution(id int, d int) {
+	m := e.getDefinition(e.serviceIdx, id)
 
 	e.provider.Histogram(m.metricName.String(), &MetricOptions{
 		Unit: event.Unit(m.unit),
@@ -141,8 +144,8 @@ func (e eventsScope) RecordDistribution(id int, d int) {
 }
 
 // UpdateGauge reports Gauge type absolute value metric
-func (e eventsScope) UpdateGauge(gauge int, value float64) {
-	m := getDefinition(e.serviceIdx, gauge)
+func (e *eventsScope) UpdateGauge(gauge int, value float64) {
+	m := e.getDefinition(e.serviceIdx, gauge)
 
 	e.provider.Gauge(m.metricName.String(), &MetricOptions{
 		Unit: event.Unit(m.unit),
@@ -157,7 +160,7 @@ func (e eventsScope) UpdateGauge(gauge int, value float64) {
 
 // Tagged returns an internal scope that can be used to add additional
 // information to metrics
-func (e eventsScope) Tagged(tags ...Tag) Scope {
+func (e *eventsScope) Tagged(tags ...Tag) Scope {
 	return newEventsScope(e.provider.WithTags(tags...), e.serviceIdx, e.scopeId)
 }
 
@@ -181,14 +184,17 @@ func (e *eventsStopwatch) Subtract(d time.Duration) {
 	e.start = e.start.Add(d)
 }
 
-func getDefinition(idx ServiceIdx, id int) metricDefinition {
-	m, ok := MetricDefs[idx][id]
+func (e *eventsScope) getDefinition(idx ServiceIdx, id int) metricDefinition {
+	m, ok := e.metricDefs.Load(id)
 	if !ok {
-		m, ok = MetricDefs[Common][id]
-		if !ok {
-			panic(fmt.Errorf("failed to lookup metric by id %v and service %v", id, idx))
+		if m, ok = MetricDefs[idx][id]; !ok {
+			if m, ok = MetricDefs[Common][id]; !ok {
+				panic(fmt.Errorf("failed to lookup metric by id %v and service %v", id, idx))
+			}
 		}
+
+		e.metricDefs.Store(id, m)
 	}
 
-	return m
+	return m.(metricDefinition)
 }

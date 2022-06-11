@@ -88,14 +88,14 @@ func MetricHandlerFromConfig(logger log.Logger, c *Config) MetricHandler {
 }
 
 // NewEventsMetricProvider provides an eventsMetricProvider given event.Exporter struct
-func NewEventsMetricProvider(h MetricHandler) eventsMetricProvider {
+func NewEventsMetricProvider(h MetricHandler) *eventsMetricProvider {
 	eo := &event.ExporterOptions{
 		DisableLogging:   true,
 		DisableTracing:   true,
 		EnableNamespaces: false,
 	}
 
-	return eventsMetricProvider{
+	return &eventsMetricProvider{
 		exporter: event.NewExporter(h, eo),
 		tags:     []Tag{},
 	}
@@ -103,7 +103,7 @@ func NewEventsMetricProvider(h MetricHandler) eventsMetricProvider {
 
 // WithTags creates a new MetricProvder with provided []Tag
 // Tags are merged with registered Tags from the source MetricProvider
-func (emp eventsMetricProvider) WithTags(tags ...Tag) MetricProvider {
+func (emp *eventsMetricProvider) WithTags(tags ...Tag) MetricProvider {
 	var t []Tag
 	t = append(t, emp.tags...)
 	return &eventsMetricProvider{
@@ -113,7 +113,7 @@ func (emp eventsMetricProvider) WithTags(tags ...Tag) MetricProvider {
 }
 
 // Counter obtains a counter for the given name.
-func (emp eventsMetricProvider) Counter(n string, m *MetricOptions) CounterMetric {
+func (emp *eventsMetricProvider) Counter(n string, m *MetricOptions) CounterMetric {
 	e := event.NewCounter(n, m)
 	return CounterMetricFunc(func(i int64, t ...Tag) {
 		e.Record(
@@ -124,7 +124,7 @@ func (emp eventsMetricProvider) Counter(n string, m *MetricOptions) CounterMetri
 }
 
 // Gauge obtains a gauge for the given name.
-func (emp eventsMetricProvider) Gauge(n string, m *MetricOptions) GaugeMetric {
+func (emp *eventsMetricProvider) Gauge(n string, m *MetricOptions) GaugeMetric {
 	e := event.NewFloatGauge(n, m)
 	return GaugeMetricFunc(func(f float64, t ...Tag) {
 		e.Record(
@@ -135,7 +135,7 @@ func (emp eventsMetricProvider) Gauge(n string, m *MetricOptions) GaugeMetric {
 }
 
 // Timer obtains a timer for the given name.
-func (emp eventsMetricProvider) Timer(n string, m *MetricOptions) TimerMetric {
+func (emp *eventsMetricProvider) Timer(n string, m *MetricOptions) TimerMetric {
 	e := event.NewDuration(n, m)
 	return TimerMetricFunc(func(d time.Duration, t ...Tag) {
 		e.Record(
@@ -146,7 +146,7 @@ func (emp eventsMetricProvider) Timer(n string, m *MetricOptions) TimerMetric {
 }
 
 // Histogram obtains a histogram for the given name.
-func (emp eventsMetricProvider) Histogram(n string, m *MetricOptions) HistogramMetric {
+func (emp *eventsMetricProvider) Histogram(n string, m *MetricOptions) HistogramMetric {
 	e := event.NewIntDistribution(n, m)
 	return HistogramMetricFunc(func(i int64, t ...Tag) {
 		e.Record(

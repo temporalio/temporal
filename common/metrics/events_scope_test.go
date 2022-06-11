@@ -24,32 +24,39 @@
 
 package metrics
 
-import "go.temporal.io/server/common/log"
-
-type (
-	eventsReporter struct {
-		provider MetricProvider
-		handler  MetricHandler
-	}
+import (
+	"testing"
+	"time"
 )
 
-var _ Reporter = (*eventsReporter)(nil)
+func BenchmarkAllTheMetricsScope(b *testing.B) {
+	var emp MetricProvider = NewEventsMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-3"))
+	var us Scope = newEventsScope(emp, UnitTestService, TestScope1).Tagged(ServiceRoleTag("testing"), ServiceTypeTag("test"))
 
-func NewEventsReporter(h MetricHandler) *eventsReporter {
-	return &eventsReporter{
-		provider: NewEventsMetricProvider(h),
-		handler:  h,
-	}
-}
+	b.ResetTimer()
 
-func (e *eventsReporter) MetricProvider() MetricProvider {
-	return e.provider
-}
-
-func (e *eventsReporter) Stop(logger log.Logger) {
-	e.handler.Stop(logger)
-}
-
-func (e *eventsReporter) UserScope() UserScope {
-	return newEventsUserScope(e.provider)
+	b.RunParallel(
+		func(p *testing.PB) {
+			for p.Next() {
+				us.AddCounter(TestCounterMetric1, 1)
+				us.IncCounter(TestCounterMetric2)
+				us.IncCounter(ServiceRequests)
+				us.RecordDistribution(TestBytesHistogramMetric1, 1024)
+				us.RecordTimer(TestTimerMetric1, time.Hour*100)
+				us.UpdateGauge(TestGaugeMetric1, 120.435)
+				us.AddCounter(TestCounterMetric1, 1)
+				us.IncCounter(TestCounterMetric2)
+				us.IncCounter(ServiceRequests)
+				us.RecordDistribution(TestBytesHistogramMetric1, 1024)
+				us.RecordTimer(TestTimerMetric1, time.Hour*100)
+				us.UpdateGauge(TestGaugeMetric1, 120.435)
+				us.AddCounter(TestCounterMetric1, 1)
+				us.IncCounter(TestCounterMetric2)
+				us.IncCounter(ServiceRequests)
+				us.RecordDistribution(TestBytesHistogramMetric1, 1024)
+				us.RecordTimer(TestTimerMetric1, time.Hour*100)
+				us.UpdateGauge(TestGaugeMetric1, 120.435)
+			}
+		},
+	)
 }
