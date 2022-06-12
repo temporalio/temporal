@@ -47,36 +47,36 @@ func NewNoopCollection() *Collection {
 }
 
 func (mc *noopClient) GetValue(name Key, defaultValue interface{}) (interface{}, error) {
-	return nil, errors.New("unable to find key")
+	return nil, errors.New("Noop key search")
 }
 
 func (mc *noopClient) GetValueWithFilters(name Key, filters []map[Filter]interface{}, defaultValue interface{}) (interface{}, error) {
-	return nil, errors.New("unable to find key")
+	return nil, errors.New("Noop key search")
 }
 
 func (mc *noopClient) GetIntValue(name Key, filters []map[Filter]interface{}, defaultValue int) (int, error) {
-	return defaultValue, errors.New("unable to find key")
+	return defaultValue, errors.New("Noop key search")
 }
 
 func (mc *noopClient) GetFloatValue(name Key, filters []map[Filter]interface{}, defaultValue float64) (float64, error) {
-	return defaultValue, errors.New("unable to find key")
+	return defaultValue, errors.New("Noop key search")
 }
 
 func (mc *noopClient) GetBoolValue(name Key, filters []map[Filter]interface{}, defaultValue bool) (bool, error) {
 	if len(filters) > 0 && filters[0][Namespace] == "TestRawHistoryNamespace" {
-		return true, errors.New("unable to find key")
+		return true, errors.New("Noop key search")
 	}
-	return defaultValue, errors.New("unable to find key")
+	return defaultValue, errors.New("Noop key search")
 }
 
 func (mc *noopClient) GetStringValue(name Key, filters []map[Filter]interface{}, defaultValue string) (string, error) {
-	return defaultValue, errors.New("unable to find key")
+	return defaultValue, errors.New("Noop key search")
 }
 
 func (mc *noopClient) GetMapValue(name Key, filters []map[Filter]interface{}, defaultValue map[string]interface{}) (map[string]interface{}, error) {
-	return defaultValue, errors.New("unable to find key")
+	return defaultValue, errors.New("Noop key search")
 }
 
 func (mc *noopClient) GetDurationValue(name Key, filters []map[Filter]interface{}, defaultValue time.Duration) (time.Duration, error) {
-	return defaultValue, errors.New("unable to find key")
+	return defaultValue, errors.New("Noop key search")
 }
