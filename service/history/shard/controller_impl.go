@@ -75,6 +75,7 @@ type (
 		historyClient               historyservice.HistoryServiceClient
 		historyServiceResolver      membership.ServiceResolver
 		metricsClient               metrics.Client
+		metricsReporter             metrics.Reporter
 		payloadSerializer           serialization.Serializer
 		timeSource                  clock.TimeSource
 		namespaceRegistry           namespace.Registry
@@ -242,6 +243,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 		c.clientBean,
 		c.historyClient,
 		c.metricsClient,
+		c.metricsReporter,
 		c.payloadSerializer,
 		c.timeSource,
 		c.namespaceRegistry,
@@ -290,14 +292,12 @@ func (c *ControllerImpl) removeShard(shardID int32, expected *ContextImpl) (*Con
 //   b. Periodic ticker
 //   c. ShardOwnershipLostError and subsequent ShardClosedEvents from engine
 func (c *ControllerImpl) shardManagementPump() {
-
 	defer c.shutdownWG.Done()
 
 	acquireTicker := time.NewTicker(c.config.AcquireShardInterval())
 	defer acquireTicker.Stop()
 
 	for {
-
 		select {
 		case <-c.shutdownCh:
 			c.doShutdown()

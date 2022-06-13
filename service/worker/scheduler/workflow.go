@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/google/uuid"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -38,6 +39,7 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/converter"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -94,6 +96,9 @@ type (
 		AlwaysAppendTimestamp             bool          // Whether to append timestamp for non-overlapping workflows too
 		FutureActionCount                 int           // The number of future action times to include in Describe.
 		RecentActionCount                 int           // The number of recent actual action results to include in Describe.
+		FutureActionCountForList          int           // The number of future action times to include in List (search attr).
+		RecentActionCountForList          int           // The number of recent actual action results to include in List (search attr).
+		MaxSearchAttrLen                  int           // Search attr length limit (should be <= server's limit).
 		IterationsBeforeContinueAsNew     int
 	}
 )
@@ -121,6 +126,9 @@ var (
 		AlwaysAppendTimestamp:             true,
 		FutureActionCount:                 10,
 		RecentActionCount:                 10,
+		FutureActionCountForList:          5,
+		RecentActionCountForList:          5,
+		MaxSearchAttrLen:                  2000, // server default is 2048 but leave a little room
 		IterationsBeforeContinueAsNew:     500,
 	}
 
@@ -181,6 +189,7 @@ func (s *scheduler) run() error {
 		s.State.LastProcessedTime = timestamp.TimePtr(t2)
 		for s.processBuffer() {
 		}
+		s.updateSearchAttributes()
 		// sleep returns on any of:
 		// 1. requested time elapsed
 		// 2. we got a signal (update, request, refresh)
@@ -471,22 +480,25 @@ func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
 	s.needRefresh = true
 }
 
-func (s *scheduler) handleDescribeQuery() (*schedspb.DescribeResponse, error) {
-	// update future actions
-	if s.cspec != nil {
-		s.Info.FutureActionTimes = make([]*time.Time, 0, s.tweakables.FutureActionCount)
-		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
-		for len(s.Info.FutureActionTimes) < s.tweakables.FutureActionCount {
-			var has bool
-			_, t1, has = s.cspec.getNextTime(t1)
-			if !has {
-				break
-			}
-			s.Info.FutureActionTimes = append(s.Info.FutureActionTimes, timestamp.TimePtr(t1))
-		}
-	} else {
-		s.Info.FutureActionTimes = nil
+func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
+	if s.cspec == nil {
+		return nil
 	}
+	out := make([]*time.Time, 0, n)
+	t1 := timestamp.TimeValue(s.State.LastProcessedTime)
+	for len(out) < n {
+		var has bool
+		_, t1, has = s.cspec.getNextTime(t1)
+		if !has {
+			break
+		}
+		out = append(out, timestamp.TimePtr(t1))
+	}
+	return out
+}
+
+func (s *scheduler) handleDescribeQuery() (*schedspb.DescribeResponse, error) {
+	s.Info.FutureActionTimes = s.getFutureActionTimes(s.tweakables.FutureActionCount)
 
 	return &schedspb.DescribeResponse{
 		Schedule:      s.Schedule,
@@ -517,6 +529,80 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 
 func (s *scheduler) incSeqNo() {
 	s.State.ConflictToken++
+}
+
+func (s *scheduler) getListInfo(shrink int) *schedpb.ScheduleListInfo {
+	specCopy := *s.Schedule.Spec
+	spec := &specCopy
+	// always clear some fields that are too large/not useful for the list view
+	spec.ExcludeCalendar = nil
+	spec.Jitter = nil
+	spec.TimezoneData = nil
+
+	recentActionCount := s.tweakables.RecentActionCountForList
+	futureActionCount := s.tweakables.FutureActionCountForList
+	notes := s.Schedule.State.Notes
+
+	// if we need to shrink it, clear/shrink some more
+	if shrink > 0 {
+		recentActionCount = 1
+		futureActionCount = 1
+		notes = ""
+	}
+	if shrink > 1 {
+		spec = nil
+	}
+
+	return &schedpb.ScheduleListInfo{
+		Spec:              spec,
+		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
+		Notes:             notes,
+		Paused:            s.Schedule.State.Paused,
+		RecentActions:     sliceTail(s.Info.RecentActions, recentActionCount),
+		FutureActionTimes: s.getFutureActionTimes(futureActionCount),
+	}
+}
+
+func (s *scheduler) updateSearchAttributes() {
+	dc := converter.GetDefaultDataConverter()
+
+	var currentInfo, newInfo string
+	if payload := workflow.GetInfo(s.ctx).SearchAttributes.GetIndexedFields()[searchattribute.TemporalScheduleInfoJSON]; payload != nil {
+		if err := dc.FromPayload(payload, &currentInfo); err != nil {
+			s.logger.Error("error decoding current info search attr", "error", err)
+			return
+		}
+	}
+
+	for shrink := 0; shrink <= 2; shrink++ {
+		var err error
+		m := &jsonpb.Marshaler{}
+		if newInfo, err = m.MarshalToString(s.getListInfo(shrink)); err != nil {
+			s.logger.Error("error encoding ScheduleListInfo", "error", err)
+			return
+		}
+		// encode to check size. note that the server uses len(Data) for per-attr size checks
+		if newInfoPayload, err := dc.ToPayload(newInfo); err != nil {
+			s.logger.Error("error encoding ScheduleListInfo into payload", "error", err)
+			return
+		} else if len(newInfoPayload.Data) <= s.tweakables.MaxSearchAttrLen {
+			break
+		}
+		newInfo = "{}" // fallback that can't possibly exceed the limit
+	}
+
+	// note that newInfo contains paused, so if paused changed, then newInfo will too
+	if newInfo == currentInfo {
+		return
+	}
+
+	err := workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
+		searchattribute.TemporalSchedulePaused:   s.Schedule.State.Paused,
+		searchattribute.TemporalScheduleInfoJSON: newInfo,
+	})
+	if err != nil {
+		s.logger.Error("error updating search attributes", "error", err)
+	}
 }
 
 func (s *scheduler) checkConflict(token int64) error {
@@ -647,11 +733,7 @@ func (s *scheduler) processBuffer() bool {
 
 func (s *scheduler) recordAction(result *schedpb.ScheduleActionResult) {
 	s.Info.ActionCount++
-	s.Info.RecentActions = append(s.Info.RecentActions, result)
-	extra := len(s.Info.RecentActions) - s.tweakables.RecentActionCount
-	if extra > 0 {
-		s.Info.RecentActions = s.Info.RecentActions[extra:]
-	}
+	s.Info.RecentActions = sliceTail(append(s.Info.RecentActions, result), s.tweakables.RecentActionCount)
 	if result.StartWorkflowResult != nil {
 		s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, result.StartWorkflowResult)
 	}
@@ -709,7 +791,7 @@ func (s *scheduler) startWorkflow(
 			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 			RetryPolicy:              newWorkflow.RetryPolicy,
 			Memo:                     newWorkflow.Memo,
-			SearchAttributes:         s.addSearchAttrs(newWorkflow.SearchAttributes, nominalTimeSec),
+			SearchAttributes:         s.addSearchAttributes(newWorkflow.SearchAttributes, nominalTimeSec),
 			Header:                   newWorkflow.Header,
 		},
 		StartTime:            startTime,
@@ -736,11 +818,11 @@ func (s *scheduler) identity() string {
 	return fmt.Sprintf("temporal-scheduler-%s-%s", s.State.Namespace, s.State.ScheduleId)
 }
 
-func (s *scheduler) addSearchAttrs(
-	attrs *commonpb.SearchAttributes,
+func (s *scheduler) addSearchAttributes(
+	attributes *commonpb.SearchAttributes,
 	nominal time.Time,
 ) *commonpb.SearchAttributes {
-	fields := maps.Clone(attrs.GetIndexedFields())
+	fields := maps.Clone(attributes.GetIndexedFields())
 	if p, err := payload.Encode(nominal); err == nil {
 		fields[searchattribute.TemporalScheduledStartTime] = p
 	}
@@ -837,4 +919,11 @@ func (s *scheduler) newUUIDString() string {
 		return uuid.NewString()
 	}).Get(&str)
 	return str
+}
+
+func sliceTail[S ~[]E, E any](s S, n int) S {
+	if extra := len(s) - n; extra > 0 {
+		return s[extra:]
+	}
+	return s
 }

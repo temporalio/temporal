@@ -32,6 +32,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -63,6 +64,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -3266,11 +3268,18 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		if !needRefresh {
 			token := make([]byte, 8)
 			binary.BigEndian.PutUint64(token, uint64(response.ConflictToken))
+
+			searchAttributes := describeResponse.GetWorkflowExecutionInfo().GetSearchAttributes()
+			searchAttributes = wh.cleanScheduleSearchAttributes(searchAttributes)
+
+			memo := describeResponse.GetWorkflowExecutionInfo().GetMemo()
+			memo = wh.cleanScheduleMemo(memo)
+
 			describeScheduleResponse = &workflowservice.DescribeScheduleResponse{
 				Schedule:         response.Schedule,
 				Info:             response.Info,
-				Memo:             describeResponse.GetWorkflowExecutionInfo().Memo,
-				SearchAttributes: describeResponse.GetWorkflowExecutionInfo().SearchAttributes,
+				Memo:             memo,
+				SearchAttributes: searchAttributes,
 				ConflictToken:    token,
 			}
 			return nil
@@ -3402,6 +3411,11 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
+	}
+
+	if len(request.Patch.Pause) > common.ScheduleNotesSizeLimit ||
+		len(request.Patch.Unpause) > common.ScheduleNotesSizeLimit {
+		return nil, errNotesTooLong
 	}
 
 	inputPayloads, err := payloads.Encode(request.Patch)
@@ -3606,10 +3620,15 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 
 	schedules := make([]*schedpb.ScheduleListEntry, len(persistenceResp.Executions))
 	for i, ex := range persistenceResp.Executions {
+		searchAttributes := ex.GetSearchAttributes()
+		info := wh.decodeScheduleListInfo(searchAttributes)
+		searchAttributes = wh.cleanScheduleSearchAttributes(searchAttributes)
+		memo := wh.cleanScheduleMemo(ex.GetMemo())
 		schedules[i] = &schedpb.ScheduleListEntry{
 			ScheduleId:       ex.GetExecution().GetWorkflowId(),
-			Memo:             ex.GetMemo(),
-			SearchAttributes: ex.GetSearchAttributes(),
+			Memo:             memo,
+			SearchAttributes: searchAttributes,
+			Info:             info,
 		}
 	}
 
@@ -4270,9 +4289,6 @@ func (wh *WorkflowHandler) makeFakeContinuedAsNewEvent(
 func (wh *WorkflowHandler) validateNamespace(
 	namespace string,
 ) error {
-	if namespace == "" {
-		return errNamespaceNotSet
-	}
 	if err := wh.validateUTF8String(namespace); err != nil {
 		return err
 	}
@@ -4338,4 +4354,48 @@ func (wh *WorkflowHandler) trimHistoryNode(
 			tag.Error(err),
 		)
 	}
+}
+
+func (wh *WorkflowHandler) decodeScheduleListInfo(searchAttributes *commonpb.SearchAttributes) *schedpb.ScheduleListInfo {
+	var listInfoStr string
+	var listInfoPb schedpb.ScheduleListInfo
+	if listInfoPayload := searchAttributes.GetIndexedFields()[searchattribute.TemporalScheduleInfoJSON]; listInfoPayload == nil {
+		return nil
+	} else if err := payload.Decode(listInfoPayload, &listInfoStr); err != nil {
+		wh.logger.Error("decoding schedule list info from payload", tag.Error(err))
+		return nil
+	} else if err = jsonpb.UnmarshalString(listInfoStr, &listInfoPb); err != nil {
+		wh.logger.Error("decoding schedule list info from json", tag.Error(err))
+		return nil
+	}
+	return &listInfoPb
+}
+
+// This mutates searchAttributes
+func (wh *WorkflowHandler) cleanScheduleSearchAttributes(searchAttributes *commonpb.SearchAttributes) *commonpb.SearchAttributes {
+	fields := searchAttributes.GetIndexedFields()
+	if len(fields) == 0 {
+		return nil
+	}
+
+	delete(fields, searchattribute.TemporalSchedulePaused)
+	delete(fields, searchattribute.TemporalScheduleInfoJSON)
+	// this isn't schedule-related but isn't relevant to the user for
+	// scheduler workflows since it's the server worker
+	delete(fields, searchattribute.BinaryChecksums)
+
+	if len(fields) == 0 {
+		return nil
+	}
+	return searchAttributes
+}
+
+// This mutates memo
+func (wh *WorkflowHandler) cleanScheduleMemo(memo *commonpb.Memo) *commonpb.Memo {
+	fields := memo.GetFields()
+	if len(fields) == 0 {
+		return nil
+	}
+	// we don't define any fields here but might in the future
+	return memo
 }

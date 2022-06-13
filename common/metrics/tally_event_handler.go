@@ -26,7 +26,6 @@ package metrics
 
 import (
 	"context"
-	"sync"
 
 	"github.com/uber-go/tally/v4"
 	"golang.org/x/exp/event"
@@ -37,9 +36,7 @@ import (
 
 type TallyMetricHandler struct {
 	scope          tally.Scope
-	mu             sync.Mutex
 	l              log.Logger
-	recordFuncs    map[event.Metric]tallyRecordFunc
 	excludeTags    map[string]map[string]struct{}
 	perUnitBuckets map[MetricUnit]tally.Buckets
 }
@@ -59,12 +56,11 @@ func NewTallyMetricHandler(log log.Logger, scope tally.Scope, cfg ClientConfig, 
 		l:              log,
 		scope:          scope,
 		perUnitBuckets: perUnitBuckets,
-		recordFuncs:    make(map[event.Metric]tallyRecordFunc),
 		excludeTags:    configExcludeTags(cfg),
 	}
 }
 
-func (t *TallyMetricHandler) Event(ctx context.Context, e *event.Event) context.Context {
+func (t TallyMetricHandler) Event(ctx context.Context, e *event.Event) context.Context {
 	if e.Kind != event.MetricKind {
 		return ctx
 	}
@@ -89,18 +85,7 @@ func (t *TallyMetricHandler) Event(ctx context.Context, e *event.Event) context.
 	return ctx
 }
 
-func (t *TallyMetricHandler) getRecordFunc(em event.Metric, tags map[string]string) tallyRecordFunc {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if f, ok := t.recordFuncs[em]; ok {
-		return f
-	}
-	f := t.newRecordFunc(em, tags)
-	t.recordFuncs[em] = f
-	return f
-}
-
-func (t *TallyMetricHandler) newRecordFunc(em event.Metric, tags map[string]string) tallyRecordFunc {
+func (t TallyMetricHandler) getRecordFunc(em event.Metric, tags map[string]string) tallyRecordFunc {
 	name := em.Name()
 	unit := em.Options().Unit
 	switch em.(type) {
@@ -133,7 +118,7 @@ func (t *TallyMetricHandler) newRecordFunc(em event.Metric, tags map[string]stri
 	}
 }
 
-func (t *TallyMetricHandler) labelsToMap(attrs []event.Label) map[string]string {
+func (t TallyMetricHandler) labelsToMap(attrs []event.Label) map[string]string {
 	tags := make(map[string]string)
 	for _, l := range attrs {
 		if vals, ok := t.excludeTags[l.Name]; ok {
@@ -151,6 +136,6 @@ func (t *TallyMetricHandler) labelsToMap(attrs []event.Label) map[string]string 
 	return tags
 }
 
-func (t *TallyMetricHandler) Stop(logger log.Logger) {
+func (t TallyMetricHandler) Stop(logger log.Logger) {
 	// noop
 }

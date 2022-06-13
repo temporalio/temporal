@@ -73,9 +73,6 @@
       },
       "TemporalSchedulePaused": {
         "type": "boolean"
-      },
-      "TemporalScheduleInfoJSON": {
-        "type": "keyword"
       }
     }
   },

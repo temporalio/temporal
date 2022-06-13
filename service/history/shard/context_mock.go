@@ -434,6 +434,20 @@ func (mr *MockContextMockRecorder) GetMetricsClient() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetricsClient", reflect.TypeOf((*MockContext)(nil).GetMetricsClient))
 }
 
+// GetMetricsReporter mocks base method.
+func (m *MockContext) GetMetricsReporter() metrics.Reporter {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMetricsReporter")
+	ret0, _ := ret[0].(metrics.Reporter)
+	return ret0
+}
+
+// GetMetricsReporter indicates an expected call of GetMetricsReporter.
+func (mr *MockContextMockRecorder) GetMetricsReporter() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetricsReporter", reflect.TypeOf((*MockContext)(nil).GetMetricsReporter))
+}
+
 // GetNamespaceNotificationVersion mocks base method.
 func (m *MockContext) GetNamespaceNotificationVersion() int64 {
 	m.ctrl.T.Helper()

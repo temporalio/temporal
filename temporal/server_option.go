@@ -129,6 +129,7 @@ func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.JW
 // handler, err := NewCustomHandlerImplementation(logger)
 // reporter, err2 := metrics.NewEventsReporter(handler)
 // server := temporal.NewServer(temporal.WithCustomMetricsReporter(repoter))
+// Deprecated use WithCustomMetricHandler
 func WithCustomMetricsReporter(reporter metrics.Reporter) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.metricsReporter = reporter
@@ -188,5 +189,13 @@ func WithChainedFrontendGrpcInterceptors(
 ) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.customInterceptors = interceptors
+	})
+}
+
+// WithCustomerMetricsHandler sets a custom implementation of the metrics.MetricHandler interface
+// metrics.MetricHandler is the base interface for publishing metric events
+func WithCustomMetricHandler(handler metrics.MetricHandler) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.metricHandler = handler
 	})
 }
