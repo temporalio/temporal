@@ -91,9 +91,8 @@ func (s *Scope) SplitByPredicate(
 func (s *Scope) CanMergeByRange(
 	incomingScope Scope,
 ) bool {
-	// TODO: validate two scopes' predicates are equal
-
-	return s.Range.CanMerge(incomingScope.Range)
+	return s.Range.CanMerge(incomingScope.Range) &&
+		s.Predicate.Equals(incomingScope.Predicate)
 }
 
 func (s *Scope) MergeByRange(

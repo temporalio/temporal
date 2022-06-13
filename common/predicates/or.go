@@ -24,16 +24,66 @@
 
 package predicates
 
-type (
-	Predicate[T any] interface {
-		// Test checks if the given entity statisfy the predicate or not
-		Test(T) bool
+import (
+	"fmt"
+)
 
-		// Equals recursively checks if the given Predicate has the same
-		// structure and value as the caller Predicate
-		// NOTE: the result will contain false negatives, meaning even if
-		// two predicates are mathmatically equivalent, Equals may still
-		// return false.
-		Equals(Predicate[T]) bool
+type (
+	OrImpl[T any] struct {
+		Predicates []Predicate[T]
 	}
 )
+
+func Or[T any](
+	predicates ...Predicate[T],
+) Predicate[T] {
+	if len(predicates) < 2 {
+		panic(fmt.Sprintf("Or requires at least 2 predicates, got %v", len(predicates)))
+	}
+
+	flattened := make([]Predicate[T], 0, len(predicates))
+	for _, p := range predicates {
+		switch p := p.(type) {
+		case *OrImpl[T]:
+			flattened = append(flattened, p.Predicates...)
+		case *AllImpl[T]:
+			return p
+		case *EmptyImpl[T]:
+			continue
+		default:
+			flattened = append(flattened, p)
+		}
+	}
+
+	switch len(flattened) {
+	case 0:
+		return Empty[T]()
+	case 1:
+		return flattened[0]
+	default:
+		return &OrImpl[T]{
+			Predicates: flattened,
+		}
+	}
+}
+
+func (o *OrImpl[T]) Test(t T) bool {
+	for _, p := range o.Predicates {
+		if p.Test(t) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (o *OrImpl[T]) Equals(
+	predicate Predicate[T],
+) bool {
+	orPredicate, ok := predicate.(*OrImpl[T])
+	if !ok {
+		return false
+	}
+
+	return predicatesEqual(o.Predicates, orPredicate.Predicates)
+}

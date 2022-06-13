@@ -214,31 +214,45 @@ func (s *scopeSuite) TestSplitByPredicate_DifferentPredicateType() {
 }
 
 func (s *scopeSuite) TestCanMergeByRange() {
-	// TODO: add test for validating scope predicate
-
 	r := NewRandomRange()
-	predicate := predicates.All[tasks.Task]()
+	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	predicate := tasks.NewNamespacePredicate(namespaceIDs)
 	scope := NewScope(r, predicate)
 
-	incomingScope := NewScope(r, predicate)
-	s.True(scope.CanMergeByRange(incomingScope))
+	testPredicates := []tasks.Predicate{
+		predicate,
+		tasks.NewNamespacePredicate(namespaceIDs),
+		tasks.NewNamespacePredicate([]string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}),
+		tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER}),
+	}
+	s.True(predicate.Equals(testPredicates[0]))
+	s.True(predicate.Equals(testPredicates[1]))
+	s.False(predicate.Equals(testPredicates[2]))
+	s.False(predicate.Equals(testPredicates[3]))
 
-	incomingScope = NewScope(NewRange(tasks.MinimumKey, r.InclusiveMin), predicate)
-	s.True(scope.CanMergeByRange(incomingScope))
+	for _, mergePredicate := range testPredicates {
+		canMerge := predicate.Equals(mergePredicate)
 
-	incomingScope = NewScope(NewRange(r.ExclusiveMax, tasks.MaximumKey), predicate)
-	s.True(scope.CanMergeByRange(incomingScope))
+		incomingScope := NewScope(r, mergePredicate)
+		s.Equal(canMerge, scope.CanMergeByRange(incomingScope))
 
-	incomingScope = NewScope(NewRange(tasks.MinimumKey, NewRandomKeyInRange(r)), predicate)
-	s.True(scope.CanMergeByRange(incomingScope))
+		incomingScope = NewScope(NewRange(tasks.MinimumKey, r.InclusiveMin), mergePredicate)
+		s.Equal(canMerge, scope.CanMergeByRange(incomingScope))
 
-	incomingScope = NewScope(NewRange(NewRandomKeyInRange(r), tasks.MaximumKey), predicate)
-	s.True(scope.CanMergeByRange(incomingScope))
+		incomingScope = NewScope(NewRange(r.ExclusiveMax, tasks.MaximumKey), mergePredicate)
+		s.Equal(canMerge, scope.CanMergeByRange(incomingScope))
 
-	incomingScope = NewScope(NewRange(tasks.MinimumKey, tasks.MaximumKey), predicate)
-	s.True(scope.CanMergeByRange(incomingScope))
+		incomingScope = NewScope(NewRange(tasks.MinimumKey, NewRandomKeyInRange(r)), mergePredicate)
+		s.Equal(canMerge, scope.CanMergeByRange(incomingScope))
 
-	incomingScope = NewScope(NewRange(
+		incomingScope = NewScope(NewRange(NewRandomKeyInRange(r), tasks.MaximumKey), mergePredicate)
+		s.Equal(canMerge, scope.CanMergeByRange(incomingScope))
+
+		incomingScope = NewScope(NewRange(tasks.MinimumKey, tasks.MaximumKey), mergePredicate)
+		s.Equal(canMerge, scope.CanMergeByRange(incomingScope))
+	}
+
+	incomingScope := NewScope(NewRange(
 		tasks.MinimumKey,
 		tasks.NewKey(r.InclusiveMin.FireTime, r.InclusiveMin.TaskID-1),
 	), predicate)

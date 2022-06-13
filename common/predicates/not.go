@@ -25,15 +25,38 @@
 package predicates
 
 type (
-	Predicate[T any] interface {
-		// Test checks if the given entity statisfy the predicate or not
-		Test(T) bool
-
-		// Equals recursively checks if the given Predicate has the same
-		// structure and value as the caller Predicate
-		// NOTE: the result will contain false negatives, meaning even if
-		// two predicates are mathmatically equivalent, Equals may still
-		// return false.
-		Equals(Predicate[T]) bool
+	NotImpl[T any] struct {
+		Predicate Predicate[T]
 	}
 )
+
+func Not[T any](
+	predicate Predicate[T],
+) Predicate[T] {
+	switch p := predicate.(type) {
+	case *NotImpl[T]:
+		return p.Predicate
+	case *AllImpl[T]:
+		return Empty[T]()
+	case *EmptyImpl[T]:
+		return All[T]()
+	default:
+		return &NotImpl[T]{
+			Predicate: predicate,
+		}
+	}
+}
+
+func (n *NotImpl[T]) Test(t T) bool {
+	return !n.Predicate.Test(t)
+}
+
+func (n *NotImpl[T]) Equals(
+	predicate Predicate[T],
+) bool {
+	notPredicate, ok := predicate.(*NotImpl[T])
+	if !ok {
+		return false
+	}
+	return n.Predicate.Equals(notPredicate.Predicate)
+}

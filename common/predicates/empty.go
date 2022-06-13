@@ -25,15 +25,20 @@
 package predicates
 
 type (
-	Predicate[T any] interface {
-		// Test checks if the given entity statisfy the predicate or not
-		Test(T) bool
-
-		// Equals recursively checks if the given Predicate has the same
-		// structure and value as the caller Predicate
-		// NOTE: the result will contain false negatives, meaning even if
-		// two predicates are mathmatically equivalent, Equals may still
-		// return false.
-		Equals(Predicate[T]) bool
-	}
+	EmptyImpl[T any] struct{}
 )
+
+func Empty[T any]() Predicate[T] {
+	return &EmptyImpl[T]{}
+}
+
+func (n *EmptyImpl[T]) Test(t T) bool {
+	return false
+}
+
+func (n *EmptyImpl[T]) Equals(
+	predicate Predicate[T],
+) bool {
+	_, ok := predicate.(*EmptyImpl[T])
+	return ok
+}

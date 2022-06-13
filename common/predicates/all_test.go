@@ -24,16 +24,53 @@
 
 package predicates
 
-type (
-	Predicate[T any] interface {
-		// Test checks if the given entity statisfy the predicate or not
-		Test(T) bool
+import (
+	"math/rand"
+	"testing"
 
-		// Equals recursively checks if the given Predicate has the same
-		// structure and value as the caller Predicate
-		// NOTE: the result will contain false negatives, meaning even if
-		// two predicates are mathmatically equivalent, Equals may still
-		// return false.
-		Equals(Predicate[T]) bool
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+)
+
+type (
+	allSuite struct {
+		suite.Suite
+		*require.Assertions
+
+		all Predicate[int]
 	}
 )
+
+func TestAllSuite(t *testing.T) {
+	s := new(allSuite)
+	suite.Run(t, s)
+}
+
+func (s *allSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.all = All[int]()
+}
+
+func (s *allSuite) TestAll_Test() {
+	for i := 1; i != 10; i++ {
+		s.True(s.all.Test(rand.Int()))
+	}
+}
+
+func (s *allSuite) TestAll_Equals() {
+	s.True(s.all.Equals(s.all))
+	s.True(s.all.Equals(All[int]()))
+
+	s.False(s.all.Equals(newTestPredicate(1, 2, 3)))
+	s.False(s.all.Equals(And[int](
+		newTestPredicate(1, 2, 3),
+		newTestPredicate(2, 3, 4),
+	)))
+	s.False(s.all.Equals(Or[int](
+		newTestPredicate(1, 2, 3),
+		newTestPredicate(4, 5, 6),
+	)))
+	s.False(s.all.Equals(Not[int](newTestPredicate(1, 2, 3))))
+	s.False(s.all.Equals(Empty[int]()))
+}
