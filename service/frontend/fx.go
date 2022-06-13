@@ -26,7 +26,6 @@ package frontend
 
 import (
 	"context"
-	"go.temporal.io/server/api/adminservice/v1"
 	"net"
 
 	"go.uber.org/fx"
@@ -34,6 +33,7 @@ import (
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"

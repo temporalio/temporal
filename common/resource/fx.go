@@ -27,19 +27,18 @@ package resource
 import (
 	"context"
 	"fmt"
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/client/admin"
 	"net"
 	"os"
 	"time"
 
+	"go.temporal.io/api/workflowservice/v1"
 	"go.uber.org/fx"
 
-	"go.temporal.io/api/workflowservice/v1"
-
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
