@@ -26,6 +26,7 @@ package frontend
 
 import (
 	"context"
+	"go.temporal.io/server/api/adminservice/v1"
 	"net"
 
 	"go.uber.org/fx"
@@ -429,6 +430,10 @@ func OperatorHandlerProvider(
 	healthServer *health.Server,
 	historyClient historyservice.HistoryServiceClient,
 	namespaceRegistry namespace.Registry,
+	clusterMetadataManager persistence.ClusterMetadataManager,
+	clusterMetadata cluster.Metadata,
+	clientFactory client.Factory,
+	adminClient adminservice.AdminServiceClient,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		config,
@@ -442,6 +447,10 @@ func OperatorHandlerProvider(
 		healthServer,
 		historyClient,
 		namespaceRegistry,
+		clusterMetadataManager,
+		clusterMetadata,
+		clientFactory,
+		adminClient,
 	}
 	return NewOperatorHandlerImpl(args)
 }

@@ -27,6 +27,8 @@ package resource
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/client/admin"
 	"net"
 	"os"
 	"time"
@@ -105,6 +107,7 @@ var Module = fx.Options(
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(FrontendClientProvider),
+	fx.Provide(AdminClientProvider),
 	fx.Provide(GrpcListenerProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
@@ -285,6 +288,21 @@ func FrontendClientProvider(clientBean client.Bean) workflowservice.WorkflowServ
 		common.CreateFrontendServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
+}
+
+func AdminClientProvider(
+	clientBean client.Bean,
+	clusterMetadata cluster.Metadata,
+) (adminservice.AdminServiceClient, error) {
+	adminClient, err := clientBean.GetRemoteAdminClient(clusterMetadata.GetCurrentClusterName())
+	if err != nil {
+		return nil, err
+	}
+	return admin.NewRetryableClient(
+		adminClient,
+		common.CreateAdminServiceRetryPolicy(),
+		common.IsWhitelistServiceTransientError,
+	), nil
 }
 
 func RuntimeMetricsReporterProvider(

@@ -836,6 +836,16 @@ const (
 	// OperatorListSearchAttributesScope is the metric scope for operator.ListSearchAttributes
 	OperatorListSearchAttributesScope
 	OperatorDeleteNamespaceScope
+	// OperatorAddOrUpdateRemoteClusterScope is the metric scope for operator.AddOrUpdateRemoteClusterScope
+	OperatorAddOrUpdateRemoteClusterScope
+	// OperatorRemoveRemoteClusterScope is the metric scope for operator.RemoveRemoteClusterScope
+	OperatorRemoveRemoteClusterScope
+	// OperatorDescribeClusterScope is the metric scope for operator.OperatorDescribeClusterScope
+	OperatorDescribeClusterScope
+	// OperatorListClustersScope is the metric scope for operator.OperatorListClustersScope
+	OperatorListClustersScope
+	// OperatorListClusterMembersScope is the metric scope for operator.OperatorListClusterMembersScope
+	OperatorListClusterMembersScope
 
 	NumOperatorScopes
 )
@@ -1620,6 +1630,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		OperatorRemoveSearchAttributesScope:             {operation: "OperatorRemoveSearchAttributes"},
 		OperatorListSearchAttributesScope:               {operation: "OperatorListSearchAttributes"},
 		OperatorDeleteNamespaceScope:                    {operation: "OperatorDeleteNamespace"},
+		OperatorAddOrUpdateRemoteClusterScope:           {operation: "OperatorAddOrUpdateRemoteCluster"},
+		OperatorRemoveRemoteClusterScope:                {operation: "OperatorRemoveRemoteCluster"},
+		OperatorDescribeClusterScope:                    {operation: "OperatorDescribeCluster"},
+		OperatorListClustersScope:                       {operation: "OperatorListClusters"},
+		OperatorListClusterMembersScope:                 {operation: "OperatorListClusterMembers"},
 		FrontendStartWorkflowExecutionScope:             {operation: "StartWorkflowExecution"},
 		FrontendPollWorkflowTaskQueueScope:              {operation: "PollWorkflowTaskQueue"},
 		FrontendPollActivityTaskQueueScope:              {operation: "PollActivityTaskQueue"},

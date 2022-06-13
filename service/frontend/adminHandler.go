@@ -888,6 +888,7 @@ func (adh *AdminHandler) DescribeCluster(
 }
 
 // ListClusters return information about temporal clusters
+// TODO: Remove this API after migrate tctl to use operator handler
 func (adh *AdminHandler) ListClusters(
 	ctx context.Context,
 	request *adminservice.ListClustersRequest,
@@ -922,6 +923,8 @@ func (adh *AdminHandler) ListClusters(
 	}, nil
 }
 
+// ListClusterMembers
+// TODO: Remove this API after migrate tctl to use operator handler
 func (adh *AdminHandler) ListClusterMembers(
 	ctx context.Context,
 	request *adminservice.ListClusterMembersRequest,
@@ -980,6 +983,8 @@ func (adh *AdminHandler) ListClusterMembers(
 	}, nil
 }
 
+// AddOrUpdateRemoteCluster
+// TODO: Remove this API after migrate tctl to use operator handler
 func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	ctx context.Context,
 	request *adminservice.AddOrUpdateRemoteClusterRequest,
@@ -1046,6 +1051,8 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	return &adminservice.AddOrUpdateRemoteClusterResponse{}, nil
 }
 
+// RemoveRemoteCluster
+// TODO: Remove this API after migrate tctl to use operator handler
 func (adh *AdminHandler) RemoveRemoteCluster(
 	ctx context.Context,
 	request *adminservice.RemoveRemoteClusterRequest,
