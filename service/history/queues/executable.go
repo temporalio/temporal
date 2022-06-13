@@ -29,12 +29,12 @@ package queues
 import (
 	"context"
 	"sync"
-	time "time"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
-	backoff "go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"

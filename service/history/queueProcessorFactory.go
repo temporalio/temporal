@@ -86,6 +86,7 @@ type (
 		SdkClientFactory sdk.ClientFactory
 		MatchingClient   resource.MatchingClient
 		HistoryClient    historyservice.HistoryServiceClient
+		MetricProvider   metrics.MetricProvider
 	}
 
 	timerQueueProcessorFactoryParams struct {
@@ -96,6 +97,7 @@ type (
 		ClientBean     client.Bean
 		ArchivalClient archiver.Client
 		MatchingClient resource.MatchingClient
+		MetricProvider metrics.MetricProvider
 	}
 
 	visibilityQueueProcessorFactoryParams struct {
@@ -103,7 +105,8 @@ type (
 
 		SchedulerParams
 
-		VisibilityMgr manager.VisibilityManager
+		VisibilityMgr  manager.VisibilityManager
+		MetricProvider metrics.MetricProvider
 	}
 
 	queueProcessorFactoryBase struct {

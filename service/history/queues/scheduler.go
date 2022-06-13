@@ -31,7 +31,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	tasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/tasks"
 )
 
 type (
