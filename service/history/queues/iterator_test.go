@@ -65,12 +65,12 @@ func (s *iteratorSuite) TearDownSuite() {
 }
 
 func (s *iteratorSuite) TestNext_IncreaseTaskKey() {
-	r := tasks.NewRandomRange()
+	r := NewRandomRange()
 
-	taskKey := tasks.NewRandomKeyInRange(r)
+	taskKey := NewRandomKeyInRange(r)
 	mockTask := tasks.NewMockTask(s.controller)
 	mockTask.EXPECT().GetKey().Return(taskKey).Times(1)
-	paginationFnProvider := func(paginationRange tasks.Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
 		s.Equal(r, paginationRange)
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			return []tasks.Task{mockTask}, nil, nil
@@ -85,20 +85,20 @@ func (s *iteratorSuite) TestNext_IncreaseTaskKey() {
 	s.NoError(err)
 	s.Equal(mockTask, task)
 
-	s.Equal(tasks.NewRange(taskKey.Next(), r.ExclusiveMax), iterator.Range())
+	s.Equal(NewRange(taskKey.Next(), r.ExclusiveMax), iterator.Range())
 
 	s.False(iterator.HasNext())
 }
 
 func (s *iteratorSuite) TestCanSplit() {
-	r := tasks.NewRandomRange()
+	r := NewRandomRange()
 
 	iterator := NewIterator(nil, r)
 	s.Equal(r, iterator.Range())
 
 	s.True(iterator.CanSplit(r.InclusiveMin))
 	s.True(iterator.CanSplit(r.ExclusiveMax))
-	s.True(iterator.CanSplit(tasks.NewRandomKeyInRange(r)))
+	s.True(iterator.CanSplit(NewRandomKeyInRange(r)))
 
 	s.False(iterator.CanSplit(tasks.NewKey(
 		r.InclusiveMin.FireTime,
@@ -111,8 +111,8 @@ func (s *iteratorSuite) TestCanSplit() {
 }
 
 func (s *iteratorSuite) TestSplit() {
-	r := tasks.NewRandomRange()
-	paginationFnProvider := func(paginationRange tasks.Range) collection.PaginationFn[tasks.Task] {
+	r := NewRandomRange()
+	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			return []tasks.Task{}, nil, nil
 		}
@@ -121,44 +121,44 @@ func (s *iteratorSuite) TestSplit() {
 	iterator := NewIterator(paginationFnProvider, r)
 	s.Equal(r, iterator.Range())
 
-	splitKey := tasks.NewRandomKeyInRange(r)
+	splitKey := NewRandomKeyInRange(r)
 
 	leftIterator, rightIterator := iterator.Split(splitKey)
-	s.Equal(tasks.NewRange(r.InclusiveMin, splitKey), leftIterator.Range())
-	s.Equal(tasks.NewRange(splitKey, r.ExclusiveMax), rightIterator.Range())
+	s.Equal(NewRange(r.InclusiveMin, splitKey), leftIterator.Range())
+	s.Equal(NewRange(splitKey, r.ExclusiveMax), rightIterator.Range())
 	s.False(leftIterator.HasNext())
 	s.False(leftIterator.HasNext())
 }
 
 func (s *iteratorSuite) TestCanMerge() {
-	r := tasks.NewRandomRange()
+	r := NewRandomRange()
 	iterator := NewIterator(nil, r)
 
 	incomingIterator := NewIterator(nil, r)
 	s.True(iterator.CanMerge(incomingIterator))
 
-	incomingIterator = NewIterator(nil, tasks.NewRange(tasks.MinimumKey, r.InclusiveMin))
+	incomingIterator = NewIterator(nil, NewRange(tasks.MinimumKey, r.InclusiveMin))
 	s.True(iterator.CanMerge(incomingIterator))
 
-	incomingIterator = NewIterator(nil, tasks.NewRange(r.ExclusiveMax, tasks.MaximumKey))
+	incomingIterator = NewIterator(nil, NewRange(r.ExclusiveMax, tasks.MaximumKey))
 	s.True(iterator.CanMerge(incomingIterator))
 
-	incomingIterator = NewIterator(nil, tasks.NewRange(tasks.MinimumKey, tasks.NewRandomKeyInRange(r)))
+	incomingIterator = NewIterator(nil, NewRange(tasks.MinimumKey, NewRandomKeyInRange(r)))
 	s.True(iterator.CanMerge(incomingIterator))
 
-	incomingIterator = NewIterator(nil, tasks.NewRange(tasks.NewRandomKeyInRange(r), tasks.MaximumKey))
+	incomingIterator = NewIterator(nil, NewRange(NewRandomKeyInRange(r), tasks.MaximumKey))
 	s.True(iterator.CanMerge(incomingIterator))
 
-	incomingIterator = NewIterator(nil, tasks.NewRange(tasks.MinimumKey, tasks.MaximumKey))
+	incomingIterator = NewIterator(nil, NewRange(tasks.MinimumKey, tasks.MaximumKey))
 	s.True(iterator.CanMerge(incomingIterator))
 
-	incomingIterator = NewIterator(nil, tasks.NewRange(
+	incomingIterator = NewIterator(nil, NewRange(
 		tasks.MinimumKey,
 		tasks.NewKey(r.InclusiveMin.FireTime, r.InclusiveMin.TaskID-1),
 	))
 	s.False(iterator.CanMerge(incomingIterator))
 
-	incomingIterator = NewIterator(nil, tasks.NewRange(
+	incomingIterator = NewIterator(nil, NewRange(
 		tasks.NewKey(r.ExclusiveMax.FireTime, r.ExclusiveMax.TaskID+1),
 		tasks.MaximumKey,
 	))
@@ -166,10 +166,10 @@ func (s *iteratorSuite) TestCanMerge() {
 }
 
 func (s *iteratorSuite) TestMerge() {
-	r := tasks.NewRandomRange()
+	r := NewRandomRange()
 
 	numLoad := 0
-	paginationFnProvider := func(paginationRange tasks.Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			numLoad++
 			return []tasks.Task{}, nil, nil
@@ -186,42 +186,42 @@ func (s *iteratorSuite) TestMerge() {
 
 	incomingIterator = NewIterator(
 		paginationFnProvider,
-		tasks.NewRange(tasks.MinimumKey, r.InclusiveMin),
+		NewRange(tasks.MinimumKey, r.InclusiveMin),
 	)
 	mergedIterator = iterator.Merge(incomingIterator)
-	s.Equal(tasks.NewRange(tasks.MinimumKey, r.ExclusiveMax), mergedIterator.Range())
+	s.Equal(NewRange(tasks.MinimumKey, r.ExclusiveMax), mergedIterator.Range())
 	s.False(mergedIterator.HasNext())
 
 	incomingIterator = NewIterator(
 		paginationFnProvider,
-		tasks.NewRange(r.ExclusiveMax, tasks.MaximumKey),
+		NewRange(r.ExclusiveMax, tasks.MaximumKey),
 	)
 	mergedIterator = iterator.Merge(incomingIterator)
-	s.Equal(tasks.NewRange(r.InclusiveMin, tasks.MaximumKey), mergedIterator.Range())
+	s.Equal(NewRange(r.InclusiveMin, tasks.MaximumKey), mergedIterator.Range())
 	s.False(mergedIterator.HasNext())
 
 	incomingIterator = NewIterator(
 		paginationFnProvider,
-		tasks.NewRange(tasks.MinimumKey, tasks.NewRandomKeyInRange(r)),
+		NewRange(tasks.MinimumKey, NewRandomKeyInRange(r)),
 	)
 	mergedIterator = iterator.Merge(incomingIterator)
-	s.Equal(tasks.NewRange(tasks.MinimumKey, r.ExclusiveMax), mergedIterator.Range())
+	s.Equal(NewRange(tasks.MinimumKey, r.ExclusiveMax), mergedIterator.Range())
 	s.False(mergedIterator.HasNext())
 
 	incomingIterator = NewIterator(
 		paginationFnProvider,
-		tasks.NewRange(tasks.NewRandomKeyInRange(r), tasks.MaximumKey),
+		NewRange(NewRandomKeyInRange(r), tasks.MaximumKey),
 	)
 	mergedIterator = iterator.Merge(incomingIterator)
-	s.Equal(tasks.NewRange(r.InclusiveMin, tasks.MaximumKey), mergedIterator.Range())
+	s.Equal(NewRange(r.InclusiveMin, tasks.MaximumKey), mergedIterator.Range())
 	s.False(mergedIterator.HasNext())
 
 	incomingIterator = NewIterator(
 		paginationFnProvider,
-		tasks.NewRange(tasks.MinimumKey, tasks.MaximumKey),
+		NewRange(tasks.MinimumKey, tasks.MaximumKey),
 	)
 	mergedIterator = iterator.Merge(incomingIterator)
-	s.Equal(tasks.NewRange(tasks.MinimumKey, tasks.MaximumKey), mergedIterator.Range())
+	s.Equal(NewRange(tasks.MinimumKey, tasks.MaximumKey), mergedIterator.Range())
 	s.False(mergedIterator.HasNext())
 
 	// test if Merge returns a new iterator
@@ -229,15 +229,15 @@ func (s *iteratorSuite) TestMerge() {
 }
 
 func (s *iteratorSuite) TestRemaining() {
-	r := tasks.NewRandomRange()
+	r := NewRandomRange()
 	r.InclusiveMin.FireTime = tasks.DefaultFireTime
 	r.ExclusiveMax.FireTime = tasks.DefaultFireTime
 
 	numLoad := 0
-	taskKey := tasks.NewRandomKeyInRange(r)
+	taskKey := NewRandomKeyInRange(r)
 	mockTask := tasks.NewMockTask(s.controller)
 	mockTask.EXPECT().GetKey().Return(taskKey).Times(1)
-	paginationFnProvider := func(paginationRange tasks.Range) collection.PaginationFn[tasks.Task] {
+	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
 		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
 			numLoad++
 			if paginationRange.ContainsKey(taskKey) {
