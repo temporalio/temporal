@@ -1848,7 +1848,7 @@ const (
 	ServiceRequests = iota
 	ServicePendingRequests
 	ServiceFailures
-	ServiceFailuresWithType
+	ServiceErrorWithType
 	ServiceCriticalFailures
 	ServiceLatency
 	ServiceLatencyNoUserLatency
@@ -1875,6 +1875,7 @@ const (
 
 	PersistenceRequests
 	PersistenceFailures
+	PersistenceErrorWithType
 	PersistenceLatency
 	PersistenceErrShardExistsCounter
 	PersistenceErrShardOwnershipLostCounter
@@ -2345,7 +2346,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceRequests:                                     NewCounterDef("service_requests"),
 		ServicePendingRequests:                              NewGaugeDef("service_pending_requests"),
 		ServiceFailures:                                     NewCounterDef("service_errors"),
-		ServiceFailuresWithType:                             NewCounterDef("service_errors_with_type"),
+		ServiceErrorWithType:                                NewCounterDef("service_error_with_type"),
 		ServiceCriticalFailures:                             NewCounterDef("service_errors_critical"),
 		ServiceLatency:                                      NewTimerDef("service_latency"),
 		ServiceLatencyNoUserLatency:                         NewTimerDef("service_latency_nouserlatency"),
@@ -2370,6 +2371,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ActionCounter:                                       NewCounterDef("action"),
 		PersistenceRequests:                                 NewCounterDef("persistence_requests"),
 		PersistenceFailures:                                 NewCounterDef("persistence_errors"),
+		PersistenceErrorWithType:                            NewCounterDef("persistence_error_with_type"),
 		PersistenceLatency:                                  NewTimerDef("persistence_latency"),
 		PersistenceErrShardExistsCounter:                    NewCounterDef("persistence_errors_shard_exists"),
 		PersistenceErrShardOwnershipLostCounter:             NewCounterDef("persistence_errors_shard_ownership_lost"),

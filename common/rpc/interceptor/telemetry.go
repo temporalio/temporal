@@ -233,7 +233,7 @@ func (ti *TelemetryInterceptor) handleError(
 	err error,
 ) {
 
-	scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ServiceFailuresWithType)
+	scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ServiceErrorWithType)
 
 	if common.IsContextDeadlineExceededErr(err) {
 		scope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
