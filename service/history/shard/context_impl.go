@@ -64,9 +64,7 @@ import (
 	"go.temporal.io/server/service/history/vclock"
 )
 
-var (
-	persistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
-)
+var persistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
 
 const (
 	// See transitionLocked for overview of state transitions.
@@ -90,6 +88,7 @@ type (
 		shardID             int32
 		executionManager    persistence.ExecutionManager
 		metricsClient       metrics.Client
+		metricsReporter     metrics.Reporter
 		eventsCache         events.Cache
 		closeCallback       func(*ContextImpl)
 		config              *configs.Config
@@ -306,7 +305,7 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(cluster string) tasks.Key 
 
 	currentTime := s.timeSource.Now()
 	if cluster != "" && cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		currentTime = s.getRemoteClusterInfoLocked(cluster).CurrentTime
+		currentTime = s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 
 	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
@@ -420,7 +419,7 @@ func (s *ContextImpl) UpdateRemoteClusterInfo(
 	s.wLock()
 	defer s.wUnlock()
 
-	remoteClusterInfo := s.getRemoteClusterInfoLocked(cluster)
+	remoteClusterInfo := s.getOrUpdateRemoteClusterInfoLocked(cluster)
 	remoteClusterInfo.AckedReplicationTaskID = ackTaskID
 	remoteClusterInfo.AckedReplicationTimestamp = ackTimestamp
 }
@@ -439,7 +438,6 @@ func (s *ContextImpl) UpdateReplicatorDLQAckLevel(
 	sourceCluster string,
 	ackLevel int64,
 ) error {
-
 	s.wLock()
 	defer s.wUnlock()
 
@@ -1116,7 +1114,8 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 	defer cancel()
 	err := s.persistenceShardManager.UpdateShard(ctx, &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
-		PreviousRangeID: s.shardInfo.GetRangeId()})
+		PreviousRangeID: s.shardInfo.GetRangeId(),
+	})
 	if err != nil {
 		// Failure in updating shard to grab new RangeID
 		s.contextTaggedLogger.Error("Persistent store operation failure",
@@ -1307,9 +1306,9 @@ func (s *ContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {
 	s.wLock()
 	defer s.wUnlock()
 	if cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		prevTime := s.getRemoteClusterInfoLocked(cluster).CurrentTime
+		prevTime := s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime
 		if prevTime.Before(currentTime) {
-			s.getRemoteClusterInfoLocked(cluster).CurrentTime = currentTime
+			s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime = currentTime
 		}
 	} else {
 		panic("Cannot set current time for current cluster")
@@ -1317,10 +1316,10 @@ func (s *ContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {
 }
 
 func (s *ContextImpl) GetCurrentTime(cluster string) time.Time {
-	s.rLock()
-	defer s.rUnlock()
 	if cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		return s.getRemoteClusterInfoLocked(cluster).CurrentTime
+		s.wLock()
+		defer s.wUnlock()
+		return s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 	return s.timeSource.Now().UTC()
 }
@@ -1717,7 +1716,7 @@ func (s *ContextImpl) GetReplicationStatus(cluster []string) (map[string]*histor
 	return remoteClusters, handoverNamespaces, nil
 }
 
-func (s *ContextImpl) getRemoteClusterInfoLocked(clusterName string) *remoteClusterInfo {
+func (s *ContextImpl) getOrUpdateRemoteClusterInfoLocked(clusterName string) *remoteClusterInfo {
 	if info, ok := s.remoteClusterInfos[clusterName]; ok {
 		return info
 	}
@@ -1818,6 +1817,7 @@ func newContext(
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
 	metricsClient metrics.Client,
+	metricsReporter metrics.Reporter,
 	payloadSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
@@ -1827,7 +1827,6 @@ func newContext(
 	archivalMetadata archiver.ArchivalMetadata,
 	hostInfoProvider membership.HostInfoProvider,
 ) (*ContextImpl, error) {
-
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
@@ -1837,6 +1836,7 @@ func newContext(
 		shardID:                 shardID,
 		executionManager:        persistenceExecutionManager,
 		metricsClient:           metricsClient,
+		metricsReporter:         metricsReporter,
 		closeCallback:           closeCallback,
 		config:                  config,
 		contextTaggedLogger:     log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity)),
@@ -1918,6 +1918,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 func (s *ContextImpl) GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error) {
 	return s.clientBean.GetRemoteAdminClient(cluster)
 }
+
 func (s *ContextImpl) GetPayloadSerializer() serialization.Serializer {
 	return s.payloadSerializer
 }
@@ -1928,6 +1929,10 @@ func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 
 func (s *ContextImpl) GetMetricsClient() metrics.Client {
 	return s.metricsClient
+}
+
+func (s *ContextImpl) GetMetricsReporter() metrics.Reporter {
+	return s.metricsReporter
 }
 
 func (s *ContextImpl) GetTimeSource() clock.TimeSource {
@@ -1941,9 +1946,11 @@ func (s *ContextImpl) GetNamespaceRegistry() namespace.Registry {
 func (s *ContextImpl) GetSearchAttributesProvider() searchattribute.Provider {
 	return s.saProvider
 }
+
 func (s *ContextImpl) GetSearchAttributesMapper() searchattribute.Mapper {
 	return s.saMapper
 }
+
 func (s *ContextImpl) GetClusterMetadata() cluster.Metadata {
 	return s.clusterMetadata
 }

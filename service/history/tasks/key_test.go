@@ -132,3 +132,23 @@ func (s *taskKeySuite) TestSort() {
 		}
 	}
 }
+
+func (s *taskKeySuite) TestPrev() {
+	s.Equal(NewKey(time.Unix(0, 1), 0), NewKey(time.Unix(0, 1), 1).Prev())
+	s.Equal(NewKey(time.Unix(0, 0), math.MaxInt64), NewKey(time.Unix(0, 1), 0).Prev())
+	s.Equal(NewKey(time.Unix(0, 0), math.MaxInt64-1), NewKey(time.Unix(0, 0), math.MaxInt64).Prev())
+
+	s.Equal(NewKey(time.Unix(0, math.MaxInt64), 0), NewKey(time.Unix(0, math.MaxInt64), 1).Prev())
+	s.Equal(NewKey(time.Unix(0, math.MaxInt64-1), math.MaxInt64), NewKey(time.Unix(0, math.MaxInt64), 0).Prev())
+	s.Equal(NewKey(time.Unix(0, math.MaxInt64-1), math.MaxInt64-1), NewKey(time.Unix(0, math.MaxInt64-1), math.MaxInt64).Prev())
+}
+
+func (s *taskKeySuite) TestNext() {
+	s.Equal(NewKey(time.Unix(0, 0), math.MaxInt64), NewKey(time.Unix(0, 0), math.MaxInt64-1).Next())
+	s.Equal(NewKey(time.Unix(0, 1), 0), NewKey(time.Unix(0, 0), math.MaxInt64).Next())
+	s.Equal(NewKey(time.Unix(0, 1), 1), NewKey(time.Unix(0, 1), 0).Next())
+
+	s.Equal(NewKey(time.Unix(0, math.MaxInt64-1), math.MaxInt64), NewKey(time.Unix(0, math.MaxInt64-1), math.MaxInt64-1).Next())
+	s.Equal(NewKey(time.Unix(0, math.MaxInt64), 0), NewKey(time.Unix(0, math.MaxInt64-1), math.MaxInt64).Next())
+	s.Equal(NewKey(time.Unix(0, math.MaxInt64), 1), NewKey(time.Unix(0, math.MaxInt64), 0).Next())
+}

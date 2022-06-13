@@ -55,12 +55,20 @@ var (
 )
 
 func newEventsScope(provider MetricProvider, idx ServiceIdx, id int) eventsScope {
+	def, ok := ScopeDefs[idx][id]
+	if !ok {
+		def, ok = ScopeDefs[Common][id]
+		if !ok {
+			panic(fmt.Errorf("failed to lookup scope by id %v and service %v", id, idx))
+		}
+	}
+
 	return eventsScope{
 		provider:   provider,
 		serviceIdx: idx,
 		scopeId:    id,
-		scopeTags:  scopeDefToTags(ScopeDefs[idx][id]),
-		scopeDef:   ScopeDefs[idx][id],
+		scopeTags:  scopeDefToTags(def),
+		scopeDef:   def,
 	}
 }
 
@@ -87,10 +95,10 @@ func (e eventsScope) AddCounter(counter int, delta int64) {
 // StartTimer starts a timer for the given metric name.
 // Time will be recorded when stopwatch is stopped.
 func (e eventsScope) StartTimer(timer int) Stopwatch {
+	m := getDefinition(e.serviceIdx, timer)
+
 	return &eventsStopwatch{
 		recordFunc: func(d time.Duration) {
-			m := getDefinition(e.serviceIdx, timer)
-
 			e.provider.Timer(m.metricName.String(), nil).Record(d, e.scopeTags...)
 
 			if !m.metricRollupName.Empty() {

@@ -398,11 +398,6 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 			Request:  nil,
 			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
 		},
-		{
-			Name:     "empty request",
-			Request:  &operatorservice.DeleteNamespaceRequest{},
-			Expected: &serviceerror.InvalidArgument{Message: "Namespace is not set on request."},
-		},
 	}
 	for _, testCase := range testCases1 {
 		s.T().Run(testCase.Name, func(t *testing.T) {
