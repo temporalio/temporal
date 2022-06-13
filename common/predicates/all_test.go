@@ -53,7 +53,7 @@ func (s *allSuite) SetupTest() {
 }
 
 func (s *allSuite) TestAll_Test() {
-	for i := 1; i != 10; i++ {
+	for i := 0; i != 10; i++ {
 		s.True(s.all.Test(rand.Int()))
 	}
 }

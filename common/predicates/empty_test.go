@@ -52,7 +52,7 @@ func (s *emptySuite) SetupTest() {
 }
 
 func (s *emptySuite) TestEmpty_Test() {
-	for i := 1; i != 10; i++ {
+	for i := 0; i != 10; i++ {
 		s.False(s.emtpy.Test(i))
 	}
 }
