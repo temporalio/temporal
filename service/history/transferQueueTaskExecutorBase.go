@@ -63,6 +63,7 @@ type (
 		cache                    workflow.Cache
 		archivalClient           archiver.Client
 		logger                   log.Logger
+		metricProvider           metrics.MetricProvider
 		metricsClient            metrics.Client
 		historyClient            historyservice.HistoryServiceClient
 		matchingClient           matchingservice.MatchingServiceClient
@@ -77,6 +78,7 @@ func newTransferQueueTaskExecutorBase(
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
@@ -86,6 +88,7 @@ func newTransferQueueTaskExecutorBase(
 		cache:                    workflowCache,
 		archivalClient:           archivalClient,
 		logger:                   logger,
+		metricProvider:           metricProvider,
 		metricsClient:            shard.GetMetricsClient(),
 		historyClient:            shard.GetHistoryClient(),
 		matchingClient:           matchingClient,

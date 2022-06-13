@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -198,6 +199,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.mockArchivalClient,
 		s.mockNDCHistoryResender,
 		s.logger,
+		metrics.NoopMetricProvider,
 		s.clusterName,
 		s.mockShard.Resource.GetMatchingClient(),
 	).(*transferQueueStandbyTaskExecutor)

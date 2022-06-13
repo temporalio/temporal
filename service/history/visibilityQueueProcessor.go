@@ -78,6 +78,7 @@ func newVisibilityQueueProcessor(
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
 	visibilityMgr manager.VisibilityManager,
+	metricProvider metrics.MetricProvider,
 	hostRateLimiter quotas.RateLimiter,
 ) queues.Processor {
 
@@ -139,6 +140,7 @@ func newVisibilityQueueProcessor(
 		workflowCache,
 		visibilityMgr,
 		logger,
+		metricProvider,
 	)
 
 	if scheduler == nil {
@@ -149,7 +151,7 @@ func newVisibilityQueueProcessor(
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
 	)
 
 	queueAckMgr := newQueueAckMgr(

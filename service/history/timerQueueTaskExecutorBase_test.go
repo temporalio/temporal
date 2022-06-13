@@ -39,6 +39,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -98,6 +99,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		s.mockDeleteManager,
 		nil,
 		s.testShardContext.GetLogger(),
+		metrics.NoopMetricProvider,
 		config,
 	)
 }

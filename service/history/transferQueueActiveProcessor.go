@@ -70,6 +70,7 @@ func newTransferQueueActiveProcessor(
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 	singleProcessor bool,
 ) *transferQueueActiveProcessorImpl {
 
@@ -127,7 +128,7 @@ func newTransferQueueActiveProcessor(
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationTransferActiveQueueProcessor)),
 	)
 
 	transferTaskFilter := func(task tasks.Task) bool {
@@ -139,6 +140,7 @@ func newTransferQueueActiveProcessor(
 		archivalClient,
 		sdkClientFactory,
 		logger,
+		metricProvider,
 		config,
 		matchingClient,
 	)
@@ -172,6 +174,7 @@ func newTransferQueueActiveProcessor(
 					logger,
 				),
 				logger,
+				metricProvider,
 				// note: the cluster name is for calculating time for standby tasks,
 				// here we are basically using current cluster time
 				// this field will be deprecated soon, currently exists so that
@@ -242,6 +245,7 @@ func newTransferQueueFailoverProcessor(
 	taskAllocator taskAllocator,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 
 	config := shard.GetConfig()
@@ -307,6 +311,7 @@ func newTransferQueueFailoverProcessor(
 		archivalClient,
 		sdkClientFactory,
 		logger,
+		metricProvider,
 		config,
 		matchingClient,
 	)
@@ -319,7 +324,7 @@ func newTransferQueueFailoverProcessor(
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationTransferActiveQueueProcessor)),
 	)
 
 	queueAckMgr := newQueueFailoverAckMgr(

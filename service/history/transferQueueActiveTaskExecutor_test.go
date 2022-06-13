@@ -230,6 +230,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockArchivalClient,
 		h.sdkClientFactory,
 		s.logger,
+		metrics.NoopMetricProvider,
 		config,
 		s.mockShard.Resource.MatchingClient,
 	).(*transferQueueActiveTaskExecutor)

@@ -193,9 +193,11 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 				func() float64 { return float64(config.TimerProcessorMaxPollRPS()) },
 			),
 			s.logger,
+			metrics.NoopMetricProvider,
 			false,
 		),
 		s.logger,
+		metrics.NoopMetricProvider,
 		config,
 		s.mockShard.Resource.GetMatchingClient(),
 	).(*timerQueueActiveTaskExecutor)

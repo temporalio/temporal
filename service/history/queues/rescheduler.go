@@ -63,9 +63,9 @@ type (
 	}
 
 	reschedulerImpl struct {
-		scheduler  Scheduler
-		timeSource clock.TimeSource
-		scope      metrics.Scope
+		scheduler      Scheduler
+		timeSource     clock.TimeSource
+		metricProvider metrics.MetricProvider
 
 		sync.Mutex
 		pq collection.Queue[rescheduledExecuable]
@@ -75,12 +75,12 @@ type (
 func NewRescheduler(
 	scheduler Scheduler,
 	timeSource clock.TimeSource,
-	scope metrics.Scope,
+	metricProvider metrics.MetricProvider,
 ) *reschedulerImpl {
 	return &reschedulerImpl{
-		scheduler:  scheduler,
-		timeSource: timeSource,
-		scope:      scope,
+		scheduler:      scheduler,
+		timeSource:     timeSource,
+		metricProvider: metricProvider,
 		pq: collection.NewPriorityQueue((func(this rescheduledExecuable, that rescheduledExecuable) bool {
 			return this.rescheduleTime.Before(that.rescheduleTime)
 		})),
@@ -106,7 +106,7 @@ func (r *reschedulerImpl) Reschedule(
 	r.Lock()
 	defer r.Unlock()
 
-	r.scope.RecordDistribution(metrics.TaskReschedulerPendingTasks, r.pq.Len())
+	r.metricProvider.Histogram(TaskReschedulerPendingTasks, nil).Record(int64(r.pq.Len()))
 
 	if targetRescheduleSize == 0 {
 		targetRescheduleSize = r.pq.Len()
