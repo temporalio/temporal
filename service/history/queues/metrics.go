@@ -25,9 +25,6 @@
 package queues
 
 import (
-	"strings"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -64,52 +61,147 @@ const (
 	OperationVisibilityQueueProcessor      = "VisibilityQueueProcessor"
 )
 
+// Task type tag value for active and standby tasks
+const (
+	TaskTypeTransferActiveTaskActivity             = "TransferActiveTaskActivity"
+	TaskTypeTransferActiveTaskWorkflowTask         = "TransferActiveTaskWorkflowTask"
+	TaskTypeTransferActiveTaskCloseExecution       = "TransferActiveTaskCloseExecution"
+	TaskTypeTransferActiveTaskCancelExecution      = "TransferActiveTaskCancelExecution"
+	TaskTypeTransferActiveTaskSignalExecution      = "TransferActiveTaskSignalExecution"
+	TaskTypeTransferActiveTaskStartChildExecution  = "TransferActiveTaskStartChildExecution"
+	TaskTypeTransferActiveTaskResetWorkflow        = "TransferActiveTaskResetWorkflow"
+	TaskTypeTransferStandbyTaskActivity            = "TransferStandbyTaskActivity"
+	TaskTypeTransferStandbyTaskWorkflowTask        = "TransferStandbyTaskWorkflowTask"
+	TaskTypeTransferStandbyTaskCloseExecution      = "TransferStandbyTaskCloseExecution"
+	TaskTypeTransferStandbyTaskCancelExecution     = "TransferStandbyTaskCancelExecution"
+	TaskTypeTransferStandbyTaskSignalExecution     = "TransferStandbyTaskSignalExecution"
+	TaskTypeTransferStandbyTaskStartChildExecution = "TransferStandbyTaskStartChildExecution"
+	TaskTypeTransferStandbyTaskResetWorkflow       = "TransferStandbyTaskResetWorkflow"
+	TaskTypeVisibilityTaskStartExecution           = "VisibilityTaskStartExecution"
+	TaskTypeVisibilityTaskUpsertExecution          = "VisibilityTaskUpsertExecution"
+	TaskTypeVisibilityTaskCloseExecution           = "VisibilityTaskCloseExecution"
+	TaskTypeVisibilityTaskDeleteExecution          = "VisibilityTaskDeleteExecution"
+	TaskTypeTimerActiveTaskActivityTimeout         = "TimerActiveTaskActivityTimeout"
+	TaskTypeTimerActiveTaskWorkflowTaskTimeout     = "TimerActiveTaskWorkflowTaskTimeout"
+	TaskTypeTimerActiveTaskUserTimer               = "TimerActiveTaskUserTimer"
+	TaskTypeTimerActiveTaskWorkflowTimeout         = "TimerActiveTaskWorkflowTimeout"
+	TaskTypeTimerActiveTaskActivityRetryTimer      = "TimerActiveTaskActivityRetryTimer"
+	TaskTypeTimerActiveTaskWorkflowBackoffTimer    = "TimerActiveTaskWorkflowBackoffTimer"
+	TaskTypeTimerActiveTaskDeleteHistoryEvent      = "TimerActiveTaskDeleteHistoryEvent"
+	TaskTypeTimerStandbyTaskActivityTimeout        = "TimerStandbyTaskActivityTimeout"
+	TaskTypeTimerStandbyTaskWorkflowTaskTimeout    = "TimerStandbyTaskWorkflowTaskTimeout"
+	TaskTypeTimerStandbyTaskUserTimer              = "TimerStandbyTaskUserTimer"
+	TaskTypeTimerStandbyTaskWorkflowTimeout        = "TimerStandbyTaskWorkflowTimeout"
+	TaskTypeTimerStandbyTaskActivityRetryTimer     = "TimerStandbyTaskActivityRetryTimer"
+	TaskTypeTimerStandbyTaskWorkflowBackoffTimer   = "TimerStandbyTaskWorkflowBackoffTimer"
+	TaskTypeTimerStandbyTaskDeleteHistoryEvent     = "TimerStandbyTaskDeleteHistoryEvent"
+)
+
 func GetActiveTransferTaskTypeTagValue(
 	task tasks.Task,
 ) string {
-	typeString := task.GetType().String()
-	if task.GetType() == enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK {
-		typeString = "TransferActivity"
+	switch task.(type) {
+	case *tasks.ActivityTask:
+		return TaskTypeTransferActiveTaskActivity
+	case *tasks.WorkflowTask:
+		return TaskTypeTransferActiveTaskWorkflowTask
+	case *tasks.CloseExecutionTask:
+		return TaskTypeTransferActiveTaskCloseExecution
+	case *tasks.CancelExecutionTask:
+		return TaskTypeTransferActiveTaskCancelExecution
+	case *tasks.SignalExecutionTask:
+		return TaskTypeTransferActiveTaskSignalExecution
+	case *tasks.StartChildExecutionTask:
+		return TaskTypeTransferActiveTaskStartChildExecution
+	case *tasks.ResetWorkflowTask:
+		return TaskTypeTransferActiveTaskResetWorkflow
+	default:
+		return ""
 	}
-
-	return strings.Replace(typeString, "Transfer", "TransferActiveTask", 1)
 }
 
 func GetStandbyTransferTaskTypeTagValue(
 	task tasks.Task,
 ) string {
-	typeString := task.GetType().String()
-	if task.GetType() == enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK {
-		typeString = "TransferActivity"
+	switch task.(type) {
+	case *tasks.ActivityTask:
+		return TaskTypeTransferStandbyTaskActivity
+	case *tasks.WorkflowTask:
+		return TaskTypeTransferStandbyTaskWorkflowTask
+	case *tasks.CloseExecutionTask:
+		return TaskTypeTransferStandbyTaskCloseExecution
+	case *tasks.CancelExecutionTask:
+		return TaskTypeTransferStandbyTaskCancelExecution
+	case *tasks.SignalExecutionTask:
+		return TaskTypeTransferStandbyTaskSignalExecution
+	case *tasks.StartChildExecutionTask:
+		return TaskTypeTransferStandbyTaskStartChildExecution
+	case *tasks.ResetWorkflowTask:
+		return TaskTypeTransferStandbyTaskResetWorkflow
+	default:
+		return ""
 	}
-
-	return strings.Replace(typeString, "Transfer", "TransferStandbyTask", 1)
 }
 
 func GetActiveTimerTaskTypeTagValue(
 	task tasks.Task,
 ) string {
-	typeString := task.GetType().String()
-	if task.GetType() == enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT {
-		typeString = "WorkflowTimeout"
+	switch task.(type) {
+	case *tasks.WorkflowTaskTimeoutTask:
+		return TaskTypeTimerActiveTaskWorkflowTaskTimeout
+	case *tasks.ActivityTimeoutTask:
+		return TaskTypeTimerActiveTaskActivityTimeout
+	case *tasks.UserTimerTask:
+		return TaskTypeTimerActiveTaskUserTimer
+	case *tasks.WorkflowTimeoutTask:
+		return TaskTypeTimerActiveTaskWorkflowTimeout
+	case *tasks.DeleteHistoryEventTask:
+		return TaskTypeTimerActiveTaskDeleteHistoryEvent
+	case *tasks.ActivityRetryTimerTask:
+		return TaskTypeTimerActiveTaskActivityRetryTimer
+	case *tasks.WorkflowBackoffTimerTask:
+		return TaskTypeTimerActiveTaskWorkflowBackoffTimer
+	default:
+		return ""
 	}
-
-	return "TimerActiveTask" + typeString
 }
 
 func GetStandbyTimerTaskTypeTagValue(
 	task tasks.Task,
 ) string {
-	typeString := task.GetType().String()
-	if task.GetType() == enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT {
-		typeString = "WorkflowTimeout"
+	switch task.(type) {
+	case *tasks.WorkflowTaskTimeoutTask:
+		return TaskTypeTimerStandbyTaskWorkflowTaskTimeout
+	case *tasks.ActivityTimeoutTask:
+		return TaskTypeTimerStandbyTaskActivityTimeout
+	case *tasks.UserTimerTask:
+		return TaskTypeTimerStandbyTaskUserTimer
+	case *tasks.WorkflowTimeoutTask:
+		return TaskTypeTimerStandbyTaskWorkflowTimeout
+	case *tasks.DeleteHistoryEventTask:
+		return TaskTypeTimerStandbyTaskDeleteHistoryEvent
+	case *tasks.ActivityRetryTimerTask:
+		return TaskTypeTimerStandbyTaskActivityRetryTimer
+	case *tasks.WorkflowBackoffTimerTask:
+		return TaskTypeTimerStandbyTaskWorkflowBackoffTimer
+	default:
+		return ""
 	}
-
-	return "TimerStandbyTask" + typeString
 }
 
 func GetVisibilityTaskTypeTagValue(
 	task tasks.Task,
 ) string {
-	return strings.Replace(task.GetType().String(), "Visibility", "VisibilityTask", 1)
+	switch task.(type) {
+	case *tasks.StartExecutionVisibilityTask:
+		return TaskTypeVisibilityTaskStartExecution
+	case *tasks.UpsertExecutionVisibilityTask:
+		return TaskTypeVisibilityTaskUpsertExecution
+	case *tasks.CloseExecutionVisibilityTask:
+		return TaskTypeVisibilityTaskCloseExecution
+	case *tasks.DeleteExecutionVisibilityTask:
+		return TaskTypeVisibilityTaskDeleteExecution
+	default:
+		return ""
+	}
 }
