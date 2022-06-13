@@ -22,22 +22,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package queues
 
 import (
 	"fmt"
+
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
 	Range struct {
-		InclusiveMin Key
-		ExclusiveMax Key
+		InclusiveMin tasks.Key
+		ExclusiveMax tasks.Key
 	}
 )
 
 func NewRange(
-	inclusiveMin Key,
-	exclusiveMax Key,
+	inclusiveMin tasks.Key,
+	exclusiveMax tasks.Key,
 ) Range {
 	if inclusiveMin.CompareTo(exclusiveMax) > 0 {
 		panic(fmt.Sprintf("invalid task range, min %v is larger than max %v", inclusiveMin, exclusiveMax))
@@ -54,7 +56,7 @@ func (r *Range) IsEmpty() bool {
 }
 
 func (r *Range) ContainsKey(
-	key Key,
+	key tasks.Key,
 ) bool {
 	return key.CompareTo(r.InclusiveMin) >= 0 &&
 		key.CompareTo(r.ExclusiveMax) < 0
@@ -68,13 +70,13 @@ func (r *Range) ContainsRange(
 }
 
 func (r *Range) CanSplit(
-	key Key,
+	key tasks.Key,
 ) bool {
 	return r.ContainsKey(key) || r.ExclusiveMax.CompareTo(key) == 0
 }
 
 func (r *Range) Split(
-	key Key,
+	key tasks.Key,
 ) (left Range, right Range) {
 	if !r.CanSplit(key) {
 		panic(fmt.Sprintf("Unable to split range %v at %v", r, key))
@@ -98,8 +100,8 @@ func (r *Range) Merge(
 	}
 
 	return NewRange(
-		MinKey(r.InclusiveMin, input.InclusiveMin),
-		MaxKey(r.ExclusiveMax, input.ExclusiveMax),
+		tasks.MinKey(r.InclusiveMin, input.InclusiveMin),
+		tasks.MaxKey(r.ExclusiveMax, input.ExclusiveMax),
 	)
 }
 

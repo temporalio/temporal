@@ -35,7 +35,7 @@ type (
 	Iterator interface {
 		collection.Iterator[tasks.Task]
 
-		Range() tasks.Range
+		Range() Range
 		CanSplit(tasks.Key) bool
 		Split(key tasks.Key) (left Iterator, right Iterator)
 		CanMerge(Iterator) bool
@@ -43,11 +43,11 @@ type (
 		Remaining() Iterator
 	}
 
-	paginationFnProvider func(tasks.Range) collection.PaginationFn[tasks.Task]
+	paginationFnProvider func(Range) collection.PaginationFn[tasks.Task]
 
 	IteratorImpl struct {
 		paginationFnProvider paginationFnProvider
-		remainingRange       tasks.Range
+		remainingRange       Range
 
 		pagingIterator collection.Iterator[tasks.Task]
 	}
@@ -55,7 +55,7 @@ type (
 
 func NewIterator(
 	paginationFnProvider paginationFnProvider,
-	r tasks.Range,
+	r Range,
 ) *IteratorImpl {
 	return &IteratorImpl{
 		paginationFnProvider: paginationFnProvider,
@@ -88,7 +88,7 @@ func (i *IteratorImpl) Next() (tasks.Task, error) {
 	return task, nil
 }
 
-func (i *IteratorImpl) Range() tasks.Range {
+func (i *IteratorImpl) Range() Range {
 	return i.remainingRange
 }
 

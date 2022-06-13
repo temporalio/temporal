@@ -35,6 +35,11 @@ var (
 	defaultFireTimeUnixNano = DefaultFireTime.UnixNano()
 )
 
+var (
+	MinimumKey = NewKey(DefaultFireTime, 0)
+	MaximumKey = NewKey(time.Unix(0, math.MaxInt64), math.MaxInt64)
+)
+
 type (
 	Key struct {
 		// FireTime is the scheduled time of the task

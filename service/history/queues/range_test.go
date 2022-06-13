@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package queues
 
 import (
 	"testing"
@@ -30,6 +30,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
@@ -50,13 +51,13 @@ func (s *rangeSuite) SetupTest() {
 
 func (s *rangeSuite) TestNewRange_Invalid() {
 	minKey := NewRandomKey()
-	maxKey := NewKey(
+	maxKey := tasks.NewKey(
 		time.Unix(0, minKey.FireTime.UnixNano()-1),
 		minKey.TaskID,
 	)
 	s.Panics(func() { NewRange(minKey, maxKey) })
 
-	maxKey = NewKey(minKey.FireTime, minKey.TaskID-1)
+	maxKey = tasks.NewKey(minKey.FireTime, minKey.TaskID-1)
 	s.Panics(func() { NewRange(minKey, maxKey) })
 }
 
@@ -64,16 +65,16 @@ func (s *rangeSuite) TestNewRange_Valid() {
 	minKey := NewRandomKey()
 	_ = NewRange(minKey, minKey)
 
-	maxKey := NewKey(
+	maxKey := tasks.NewKey(
 		time.Unix(0, minKey.FireTime.UnixNano()+1),
 		minKey.TaskID,
 	)
 	_ = NewRange(minKey, maxKey)
 
-	maxKey = NewKey(minKey.FireTime, minKey.TaskID+1)
+	maxKey = tasks.NewKey(minKey.FireTime, minKey.TaskID+1)
 	_ = NewRange(minKey, maxKey)
 
-	maxKey = NewKey(
+	maxKey = tasks.NewKey(
 		time.Unix(0, minKey.FireTime.UnixNano()+1),
 		minKey.TaskID-1,
 	)
@@ -85,18 +86,18 @@ func (s *rangeSuite) TestIsEmpty() {
 	r := NewRange(minKey, minKey)
 	s.True(r.IsEmpty())
 
-	maxKey := NewKey(
+	maxKey := tasks.NewKey(
 		time.Unix(0, minKey.FireTime.UnixNano()+1),
 		minKey.TaskID,
 	)
 	r = NewRange(minKey, maxKey)
 	s.False(r.IsEmpty())
 
-	maxKey = NewKey(minKey.FireTime, minKey.TaskID+1)
+	maxKey = tasks.NewKey(minKey.FireTime, minKey.TaskID+1)
 	r = NewRange(minKey, maxKey)
 	s.False(r.IsEmpty())
 
-	maxKey = NewKey(
+	maxKey = tasks.NewKey(
 		time.Unix(0, minKey.FireTime.UnixNano()+1),
 		minKey.TaskID-1,
 	)
@@ -111,16 +112,16 @@ func (s *rangeSuite) TestContainsKey_EmptyRange() {
 	testKey := key
 	s.False(r.ContainsKey(testKey))
 
-	testKey = NewKey(key.FireTime.Add(time.Nanosecond), key.TaskID)
+	testKey = tasks.NewKey(key.FireTime.Add(time.Nanosecond), key.TaskID)
 	s.False(r.ContainsKey(testKey))
 
-	testKey = NewKey(key.FireTime.Add(-time.Nanosecond), key.TaskID)
+	testKey = tasks.NewKey(key.FireTime.Add(-time.Nanosecond), key.TaskID)
 	s.False(r.ContainsKey(testKey))
 
-	testKey = NewKey(key.FireTime, key.TaskID-1)
+	testKey = tasks.NewKey(key.FireTime, key.TaskID-1)
 	s.False(r.ContainsKey(testKey))
 
-	testKey = NewKey(key.FireTime, key.TaskID+1)
+	testKey = tasks.NewKey(key.FireTime, key.TaskID+1)
 	s.False(r.ContainsKey(testKey))
 }
 
@@ -133,16 +134,16 @@ func (s *rangeSuite) TestContainsKey_NonEmptyRange() {
 	testKey = r.ExclusiveMax
 	s.False(r.ContainsKey(testKey))
 
-	testKey = NewKey(r.InclusiveMin.FireTime.Add(-time.Nanosecond), r.InclusiveMin.TaskID)
+	testKey = tasks.NewKey(r.InclusiveMin.FireTime.Add(-time.Nanosecond), r.InclusiveMin.TaskID)
 	s.False(r.ContainsKey(testKey))
 
-	testKey = NewKey(r.InclusiveMin.FireTime, r.InclusiveMin.TaskID-1)
+	testKey = tasks.NewKey(r.InclusiveMin.FireTime, r.InclusiveMin.TaskID-1)
 	s.False(r.ContainsKey(testKey))
 
-	testKey = NewKey(r.ExclusiveMax.FireTime.Add(time.Nanosecond), r.ExclusiveMax.TaskID)
+	testKey = tasks.NewKey(r.ExclusiveMax.FireTime.Add(time.Nanosecond), r.ExclusiveMax.TaskID)
 	s.False(r.ContainsKey(testKey))
 
-	testKey = NewKey(r.ExclusiveMax.FireTime, r.ExclusiveMax.TaskID+1)
+	testKey = tasks.NewKey(r.ExclusiveMax.FireTime, r.ExclusiveMax.TaskID+1)
 	s.False(r.ContainsKey(testKey))
 
 	for i := 0; i != 1000; i++ {
@@ -169,7 +170,7 @@ func (s *rangeSuite) TestContainsRange_NonEmptyRange() {
 	s.True(r.ContainsRange(testRange))
 
 	testRange = NewRange(
-		NewKey(r.InclusiveMin.FireTime, r.InclusiveMin.TaskID+1),
+		tasks.NewKey(r.InclusiveMin.FireTime, r.InclusiveMin.TaskID+1),
 		r.ExclusiveMax,
 	)
 	s.True(r.ContainsRange(testRange))
@@ -177,7 +178,7 @@ func (s *rangeSuite) TestContainsRange_NonEmptyRange() {
 
 	testRange = NewRange(
 		r.InclusiveMin,
-		NewKey(r.ExclusiveMax.FireTime, r.ExclusiveMax.TaskID+1),
+		tasks.NewKey(r.ExclusiveMax.FireTime, r.ExclusiveMax.TaskID+1),
 	)
 	s.False(r.ContainsRange(testRange))
 	s.True(testRange.ContainsRange(r))
@@ -229,7 +230,7 @@ func (s *rangeSuite) TestCanMerge() {
 	for _, r := range ranges {
 		if !r.IsEmpty() {
 			testRange := NewRange(
-				MinimumKey,
+				tasks.MinimumKey,
 				NewRandomKeyInRange(r),
 			)
 			s.True(r.CanMerge(testRange))
@@ -237,21 +238,21 @@ func (s *rangeSuite) TestCanMerge() {
 
 			testRange = NewRange(
 				NewRandomKeyInRange(r),
-				MaximumKey,
+				tasks.MaximumKey,
 			)
 			s.True(r.CanMerge(testRange))
 			s.True(testRange.CanMerge(r))
 		}
 
 		testRange := NewRange(
-			MinimumKey,
-			MaximumKey,
+			tasks.MinimumKey,
+			tasks.MaximumKey,
 		)
 		s.True(r.CanMerge(testRange))
 		s.True(testRange.CanMerge(r))
 
 		testRange = NewRange(
-			MinimumKey,
+			tasks.MinimumKey,
 			r.InclusiveMin,
 		)
 		s.True(r.CanMerge(testRange))
@@ -259,21 +260,21 @@ func (s *rangeSuite) TestCanMerge() {
 
 		testRange = NewRange(
 			r.ExclusiveMax,
-			MaximumKey,
+			tasks.MaximumKey,
 		)
 		s.True(r.CanMerge(testRange))
 		s.True(testRange.CanMerge(r))
 
 		testRange = NewRange(
-			MinimumKey,
-			NewKey(r.InclusiveMin.FireTime, r.InclusiveMin.TaskID-1),
+			tasks.MinimumKey,
+			tasks.NewKey(r.InclusiveMin.FireTime, r.InclusiveMin.TaskID-1),
 		)
 		s.False(r.CanMerge(testRange))
 		s.False(testRange.CanMerge(r))
 
 		testRange = NewRange(
-			NewKey(r.ExclusiveMax.FireTime, r.ExclusiveMax.TaskID+1),
-			MaximumKey,
+			tasks.NewKey(r.ExclusiveMax.FireTime, r.ExclusiveMax.TaskID+1),
+			tasks.MaximumKey,
 		)
 		s.False(r.CanMerge(testRange))
 		s.False(testRange.CanMerge(r))
@@ -293,33 +294,33 @@ func (s *rangeSuite) TestMerge() {
 	r := NewRandomRange()
 
 	testRange := NewRange(
-		MinimumKey,
+		tasks.MinimumKey,
 		NewRandomKeyInRange(r),
 	)
 	mergedRange := r.Merge(testRange)
 	s.True(mergedRange.Equal(testRange.Merge(r)))
-	s.True(mergedRange.Equal(NewRange(MinimumKey, r.ExclusiveMax)))
+	s.True(mergedRange.Equal(NewRange(tasks.MinimumKey, r.ExclusiveMax)))
 
 	testRange = NewRange(
 		NewRandomKeyInRange(r),
-		MaximumKey,
+		tasks.MaximumKey,
 	)
 	mergedRange = r.Merge(testRange)
 	s.True(mergedRange.Equal(testRange.Merge(r)))
-	s.True(mergedRange.Equal(NewRange(r.InclusiveMin, MaximumKey)))
+	s.True(mergedRange.Equal(NewRange(r.InclusiveMin, tasks.MaximumKey)))
 
-	testRange = NewRange(MinimumKey, MaximumKey)
+	testRange = NewRange(tasks.MinimumKey, tasks.MaximumKey)
 	mergedRange = r.Merge(testRange)
 	s.True(mergedRange.Equal(testRange.Merge(r)))
-	s.True(mergedRange.Equal(NewRange(MinimumKey, MaximumKey)))
+	s.True(mergedRange.Equal(NewRange(tasks.MinimumKey, tasks.MaximumKey)))
 
-	testRange = NewRange(MinimumKey, r.InclusiveMin)
+	testRange = NewRange(tasks.MinimumKey, r.InclusiveMin)
 	mergedRange = r.Merge(testRange)
 	s.True(mergedRange.Equal(testRange.Merge(r)))
-	s.True(mergedRange.Equal(NewRange(MinimumKey, r.ExclusiveMax)))
+	s.True(mergedRange.Equal(NewRange(tasks.MinimumKey, r.ExclusiveMax)))
 
-	testRange = NewRange(r.ExclusiveMax, MaximumKey)
+	testRange = NewRange(r.ExclusiveMax, tasks.MaximumKey)
 	mergedRange = r.Merge(testRange)
 	s.True(mergedRange.Equal(testRange.Merge(r)))
-	s.True(mergedRange.Equal(NewRange(r.InclusiveMin, MaximumKey)))
+	s.True(mergedRange.Equal(NewRange(r.InclusiveMin, tasks.MaximumKey)))
 }

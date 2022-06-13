@@ -22,26 +22,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package queues
 
 import (
 	"math"
 	"math/rand"
 	"time"
+
+	"go.temporal.io/server/service/history/tasks"
 )
 
-var (
-	MinimumKey = NewKey(DefaultFireTime, 0)
-	MaximumKey = NewKey(time.Unix(0, math.MaxInt64), math.MaxInt64)
-)
-
-func NewRandomKey() Key {
-	return NewKey(time.Unix(0, rand.Int63()), rand.Int63())
+func NewRandomKey() tasks.Key {
+	return tasks.NewKey(time.Unix(0, rand.Int63()), rand.Int63())
 }
 
 func NewRandomRange() Range {
 	maxKey := NewRandomKey()
-	minKey := NewKey(
+	minKey := tasks.NewKey(
 		time.Unix(0, rand.Int63n(maxKey.FireTime.UnixNano())),
 		rand.Int63n(maxKey.TaskID),
 	)
@@ -50,7 +47,7 @@ func NewRandomRange() Range {
 
 func NewRandomKeyInRange(
 	r Range,
-) Key {
+) tasks.Key {
 	if r.IsEmpty() {
 		panic("can not create key in range for an empty range")
 	}
@@ -61,7 +58,7 @@ func NewRandomKeyInRange(
 	maxTaskID := r.ExclusiveMax.TaskID
 
 	if minFireTimeUnixNano == maxFireTimeUnixNano {
-		return NewKey(
+		return tasks.NewKey(
 			r.InclusiveMin.FireTime,
 			rand.Int63n(1+maxTaskID-minTaskID)+minTaskID,
 		)
@@ -69,18 +66,18 @@ func NewRandomKeyInRange(
 
 	fireTime := time.Unix(0, rand.Int63n(1+maxFireTimeUnixNano-minFireTimeUnixNano)+minFireTimeUnixNano)
 	if fireTime.Equal(r.InclusiveMin.FireTime) {
-		return NewKey(
+		return tasks.NewKey(
 			fireTime,
 			rand.Int63n(math.MaxInt64-minTaskID)+minTaskID,
 		)
 	}
 
 	if fireTime.Equal(r.ExclusiveMax.FireTime) {
-		return NewKey(
+		return tasks.NewKey(
 			fireTime,
 			rand.Int63n(maxTaskID),
 		)
 	}
 
-	return NewKey(fireTime, rand.Int63())
+	return tasks.NewKey(fireTime, rand.Int63())
 }

@@ -33,13 +33,13 @@ import (
 
 type (
 	Scope struct {
-		Range     tasks.Range
+		Range     Range
 		Predicate tasks.Predicate
 	}
 )
 
 func NewScope(
-	r tasks.Range,
+	r Range,
 	predicate tasks.Predicate,
 ) Scope {
 	return Scope{
