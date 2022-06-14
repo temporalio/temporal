@@ -25,7 +25,6 @@
 package metrics
 
 import (
-	"sync"
 	"time"
 )
 
@@ -33,8 +32,6 @@ type (
 	eventsClient struct {
 		provider   MetricProvider
 		serviceIdx ServiceIdx
-
-		scopes *sync.Map
 	}
 )
 
@@ -46,54 +43,44 @@ func NewEventsClient(provider MetricProvider, idx ServiceIdx) *eventsClient {
 	return &eventsClient{
 		provider:   provider.WithTags(ServiceTypeTag(serviceTypeTagValue), NamespaceTag(namespaceAllValue)),
 		serviceIdx: idx,
-		scopes:     new(sync.Map),
 	}
 }
 
 // IncCounter increments a counter metric
-func (e eventsClient) IncCounter(scope int, counter int) {
+func (e *eventsClient) IncCounter(scope int, counter int) {
 	e.Scope(scope).IncCounter(counter)
 }
 
 // AddCounter adds delta to the counter metric
-func (e eventsClient) AddCounter(scope int, counter int, delta int64) {
+func (e *eventsClient) AddCounter(scope int, counter int, delta int64) {
 	e.Scope(scope).AddCounter(counter, delta)
 }
 
 // StartTimer starts a timer for the given
 // metric name. Time will be recorded when stopwatch is stopped.
-func (e eventsClient) StartTimer(scope int, timer int) Stopwatch {
+func (e *eventsClient) StartTimer(scope int, timer int) Stopwatch {
 	return e.Scope(scope).StartTimer(timer)
 }
 
 // RecordTimer starts a timer for the given
 // metric name
-func (e eventsClient) RecordTimer(scope int, timer int, d time.Duration) {
+func (e *eventsClient) RecordTimer(scope int, timer int, d time.Duration) {
 	e.Scope(scope).RecordTimer(timer, d)
 }
 
 // RecordDistribution records and emits a distribution (wrapper on top of timer) for the given
 // metric name
-func (e eventsClient) RecordDistribution(scope int, timer int, d int) {
+func (e *eventsClient) RecordDistribution(scope int, timer int, d int) {
 	e.Scope(scope).RecordDistribution(timer, d)
 }
 
 // UpdateGauge reports Gauge type absolute value metric
-func (e eventsClient) UpdateGauge(scope int, gauge int, value float64) {
+func (e *eventsClient) UpdateGauge(scope int, gauge int, value float64) {
 	e.Scope(scope).UpdateGauge(gauge, value)
 }
 
 // Scope returns an internal scope that can be used to add additional
 // information to metrics
-func (e eventsClient) Scope(scope int, tags ...Tag) Scope {
-	s, ok := e.scopes.Load(scope)
-
-	if !ok {
-		if s, ok = e.scopes.Load(scope); !ok {
-			s = newEventsScope(e.provider.WithTags(tags...), e.serviceIdx, scope)
-			e.scopes.Store(scope, s.(Scope))
-		}
-	}
-
-	return s.(Scope)
+func (e *eventsClient) Scope(scope int, tags ...Tag) Scope {
+	return newEventsScope(e.provider.WithTags(tags...), e.serviceIdx, scope)
 }
