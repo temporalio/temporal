@@ -813,7 +813,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 			WorkflowId:       task.event.Data.GetWorkflowId(),
 			RunId:            task.event.Data.GetRunId(),
 			ScheduledEventId: historyResponse.GetScheduledEventId(),
-			ScheduledAttempt: historyResponse.GetAttempt(),
+			Attempt:          historyResponse.GetAttempt(),
 			Clock:            historyResponse.GetClock(),
 		}
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
@@ -860,7 +860,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		WorkflowId:       task.event.Data.GetWorkflowId(),
 		RunId:            task.event.Data.GetRunId(),
 		ScheduledEventId: task.event.Data.GetScheduledEventId(),
-		ScheduledAttempt: historyResponse.GetAttempt(),
+		Attempt:          historyResponse.GetAttempt(),
 		ActivityId:       attributes.GetActivityId(),
 		ActivityType:     attributes.GetActivityType().GetName(),
 		Clock:            historyResponse.GetClock(),
@@ -881,7 +881,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		StartToCloseTimeout:         attributes.StartToCloseTimeout,
 		HeartbeatTimeout:            attributes.HeartbeatTimeout,
 		TaskToken:                   serializedToken,
-		Attempt:                     taskToken.ScheduledAttempt,
+		Attempt:                     taskToken.Attempt,
 		HeartbeatDetails:            historyResponse.HeartbeatDetails,
 		WorkflowType:                historyResponse.WorkflowType,
 		WorkflowNamespace:           historyResponse.WorkflowNamespace,

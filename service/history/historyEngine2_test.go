@@ -933,7 +933,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	}
 	tl := "testTaskQueue"
 	taskToken := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       "wId",
 		RunId:            we.GetRunId(),
@@ -990,7 +990,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 	}
 	tl := "testTaskQueue"
 	taskToken := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       "wId",
 		RunId:            we.GetRunId(),

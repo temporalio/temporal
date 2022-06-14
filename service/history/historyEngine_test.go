@@ -302,7 +302,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll() {
 	waitGroup.Add(1)
 	asycWorkflowUpdate := func(delay time.Duration) {
 		tt := &tokenspb.Task{
-			ScheduledAttempt: 1,
+			Attempt:          1,
 			NamespaceId:      namespaceID.String(),
 			WorkflowId:       execution.WorkflowId,
 			RunId:            execution.RunId,
@@ -822,7 +822,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedInvalidToken() {
 func (s *engineSuite) TestRespondWorkflowTaskCompletedIfNoExecution() {
 	namespaceID := tests.NamespaceID
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		RunId:            tests.RunID,
@@ -847,7 +847,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedIfNoExecution() {
 func (s *engineSuite) TestRespondWorkflowTaskCompletedIfGetExecutionFailed() {
 	namespaceID := tests.NamespaceID
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		RunId:            tests.RunID,
@@ -877,7 +877,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedUpdateExecutionFailed() {
 	tq := "testTaskQueue"
 
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -918,7 +918,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedIfTaskCompleted() {
 	}
 	tq := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -958,7 +958,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedIfTaskNotStarted() {
 	}
 	tq := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -1023,7 +1023,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedConflictOnUpdate() {
 	addWorkflowTaskStartedEvent(msBuilder, di2.ScheduledEventID, tq, identity)
 
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		RunId:            we.GetRunId(),
@@ -1100,7 +1100,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_StaleCache() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -1183,7 +1183,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 		activity2StartedEvent.EventId, activity2Result, identity)
 
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -1268,7 +1268,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 		activity2StartedEvent.EventId, activity2Result, identity)
 
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -1344,7 +1344,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadCommandAttributes() {
 	addWorkflowTaskStartedEvent(msBuilder, di2.ScheduledEventID, tl, identity)
 
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -1443,7 +1443,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 		}
 		tl := "testTaskQueue"
 		tt := &tokenspb.Task{
-			ScheduledAttempt: 1,
+			Attempt:          1,
 			NamespaceId:      namespaceID.String(),
 			WorkflowId:       tests.WorkflowID,
 			RunId:            we.GetRunId(),
@@ -1531,7 +1531,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		RunId:            tests.RunID,
@@ -1594,7 +1594,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		RunId:            we.GetRunId(),
@@ -1665,7 +1665,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityLocalDispatch() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		RunId:            we.GetRunId(),
@@ -1772,7 +1772,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTime
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -1816,7 +1816,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -1860,7 +1860,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -1904,7 +1904,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowSuccess() 
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -1957,7 +1957,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowSuccess() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -2010,7 +2010,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowSucc
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -2066,7 +2066,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAban
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -2130,7 +2130,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -2195,7 +2195,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-ScheduledAttempt: 1,
+Attempt: 1,
 		WorkflowId: we.GetWorkflowId(),
 		RunId:      we.GetRunId(),
 		ScheduledEventId: 2,
@@ -2244,7 +2244,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowFail
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -2314,7 +2314,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 	namespaceID := tests.NamespaceID
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		RunId:            tests.RunID,
@@ -2339,7 +2339,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoExecution() {
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
 	namespaceID := tests.NamespaceID
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		ScheduledEventId: 2,
@@ -2363,7 +2363,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoRunID() {
 func (s *engineSuite) TestRespondActivityTaskCompletedIfGetExecutionFailed() {
 	namespaceID := tests.NamespaceID
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		RunId:            tests.RunID,
@@ -2393,7 +2393,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		ScheduledEventId: common.EmptyEventID,
@@ -2424,7 +2424,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNotFound() {
 	namespaceID := tests.NamespaceID
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		ScheduledEventId: common.EmptyEventID,
@@ -2467,7 +2467,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -2515,7 +2515,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskCompleted() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -2565,7 +2565,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfTaskNotStarted() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -2611,7 +2611,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -2680,7 +2680,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -2729,7 +2729,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -2793,7 +2793,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	activityInput := payloads.EncodeString("input1")
 	activityResult := payloads.EncodeString("activity result")
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		ScheduledEventId: common.EmptyEventID,
@@ -2860,7 +2860,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
 func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 	namespaceID := tests.NamespaceID
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		RunId:            tests.RunID,
@@ -2886,7 +2886,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoExecution() {
 func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
 	namespaceID := tests.NamespaceID
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		ScheduledEventId: 2,
@@ -2911,7 +2911,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfNoRunID() {
 func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 	namespaceID := tests.NamespaceID
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		RunId:            tests.RunID,
@@ -2936,7 +2936,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfGetExecutionFailed() {
 func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 	namespaceID := tests.NamespaceID
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		ScheduledEventId: common.EmptyEventID,
@@ -2973,7 +2973,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 func (s *engineSuite) TestRespondActivityTaskFailededIfNotFound() {
 	namespaceID := tests.NamespaceID
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		ScheduledEventId: common.EmptyEventID,
@@ -3016,7 +3016,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -3062,7 +3062,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskCompleted() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -3111,7 +3111,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedIfTaskNotStarted() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -3155,7 +3155,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -3229,7 +3229,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -3276,7 +3276,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -3334,7 +3334,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedWithHeartbeatSuccess() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -3406,7 +3406,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	activityInput := payloads.EncodeString("input1")
 	failure := failure.NewServerFailure("failed", false)
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		ScheduledEventId: common.EmptyEventID,
@@ -3461,7 +3461,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -3509,7 +3509,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -3567,7 +3567,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -3612,7 +3612,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Scheduled() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -3657,7 +3657,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -3720,7 +3720,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		ScheduledEventId: common.EmptyEventID,
@@ -3772,7 +3772,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNoRunID() {
 	namespaceID := tests.NamespaceID
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		ScheduledEventId: 2,
@@ -3802,7 +3802,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 	taskqueue := "testTaskQueue"
 
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		ScheduledEventId: common.EmptyEventID,
@@ -3840,7 +3840,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {
 	taskqueue := "testTaskQueue"
 
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		ScheduledEventId: common.EmptyEventID,
@@ -3878,7 +3878,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -3940,7 +3940,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled()
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -4004,7 +4004,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Started() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -4065,7 +4065,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Completed()
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -4133,7 +4133,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -4189,7 +4189,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	att := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		RunId:            we.GetRunId(),
@@ -4237,7 +4237,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -4293,7 +4293,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	att := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		RunId:            we.GetRunId(),
@@ -4341,7 +4341,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -4443,7 +4443,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	att := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       tests.WorkflowID,
 		RunId:            we.GetRunId(),
@@ -4491,7 +4491,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -4539,7 +4539,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	di2 := addWorkflowTaskScheduledEvent(executionBuilder)
 	addWorkflowTaskStartedEvent(executionBuilder, di2.ScheduledEventID, tl, identity)
 	tt2 := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -4593,7 +4593,7 @@ func (s *engineSuite) TestUserTimer_RespondWorkflowTaskCompleted() {
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -4652,7 +4652,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,
@@ -4717,7 +4717,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 	}
 	tl := "testTaskQueue"
 	tt := &tokenspb.Task{
-		ScheduledAttempt: 1,
+		Attempt:          1,
 		NamespaceId:      namespaceID.String(),
 		WorkflowId:       we.WorkflowId,
 		RunId:            we.RunId,

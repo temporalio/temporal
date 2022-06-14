@@ -284,7 +284,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 			WorkflowId:       executionInfo.WorkflowId,
 			RunId:            runID,
 			ScheduledEventId: event.EventId,
-			ScheduledAttempt: ai.Attempt,
+			Attempt:          ai.Attempt,
 			ActivityId:       attr.ActivityId,
 			ActivityType:     attr.ActivityType.GetName(),
 			Clock:            shardClock,

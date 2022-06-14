@@ -288,7 +288,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 
 			scheduledEventID := token.GetScheduledEventId()
 			workflowTask, isRunning := mutableState.GetWorkflowTaskInfo(scheduledEventID)
-			if !isRunning || workflowTask.Attempt != token.ScheduledAttempt || workflowTask.StartedEventID == common.EmptyEventID {
+			if !isRunning || workflowTask.Attempt != token.Attempt || workflowTask.StartedEventID == common.EmptyEventID {
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 
@@ -354,7 +354,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		return nil, err
 	}
 
-	if !msBuilder.IsWorkflowExecutionRunning() || !currentWorkflowTaskRunning || currentWorkflowTask.Attempt != token.ScheduledAttempt ||
+	if !msBuilder.IsWorkflowExecutionRunning() || !currentWorkflowTaskRunning || currentWorkflowTask.Attempt != token.Attempt ||
 		currentWorkflowTask.StartedEventID == common.EmptyEventID {
 		return nil, serviceerror.NewNotFound("Workflow task not found.")
 	}

@@ -680,7 +680,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.EqualValues(time.Second*50, *result.StartToCloseTimeout)
 		s.EqualValues(time.Second*10, *result.HeartbeatTimeout)
 		taskToken := &tokenspb.Task{
-			ScheduledAttempt: 1,
+			Attempt:          1,
 			NamespaceId:      namespaceID.String(),
 			WorkflowId:       workflowID,
 			RunId:            runID,
@@ -847,7 +847,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		s.EqualValues(activityInput, result.Input)
 		s.EqualValues(workflowExecution, result.WorkflowExecution)
 		taskToken := &tokenspb.Task{
-			ScheduledAttempt: 1,
+			Attempt:          1,
 			NamespaceId:      namespaceID.String(),
 			WorkflowId:       workflowID,
 			RunId:            runID,
@@ -1053,7 +1053,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				s.EqualValues(activityHeader, result.Header)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
-					ScheduledAttempt: 1,
+					Attempt:          1,
 					NamespaceId:      namespaceID.String(),
 					WorkflowId:       workflowID,
 					RunId:            runID,
@@ -1180,7 +1180,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 				s.EqualValues(startedEventID, result.StartedEventId)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
-					ScheduledAttempt: 1,
+					Attempt:          1,
 					NamespaceId:      namespaceID.String(),
 					WorkflowId:       workflowID,
 					RunId:            runID,
@@ -1370,7 +1370,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				s.EqualValues(activityInput, result.Input)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
-					ScheduledAttempt: 1,
+					Attempt:          1,
 					NamespaceId:      namespaceID.String(),
 					WorkflowId:       workflowID,
 					RunId:            runID,
@@ -1511,7 +1511,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 				s.EqualValues(startedEventID, result.StartedEventId)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
-					ScheduledAttempt: 1,
+					Attempt:          1,
 					NamespaceId:      namespaceID.String(),
 					WorkflowId:       workflowID,
 					RunId:            runID,

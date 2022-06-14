@@ -1420,7 +1420,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 			}
 
 			if !isRunning || ai.StartedEventId == common.EmptyEventID ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.ScheduledAttempt != ai.Attempt) {
+				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
@@ -1506,7 +1506,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			}
 
 			if !isRunning || ai.StartedEventId == common.EmptyEventID ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.ScheduledAttempt != ai.Attempt) {
+				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
@@ -1611,7 +1611,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 			}
 
 			if !isRunning || ai.StartedEventId == common.EmptyEventID ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.ScheduledAttempt != ai.Attempt) {
+				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
@@ -1708,7 +1708,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 			}
 
 			if !isRunning || ai.StartedEventId == common.EmptyEventID ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.ScheduledAttempt != ai.Attempt) {
+				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
