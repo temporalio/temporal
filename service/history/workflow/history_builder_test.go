@@ -582,11 +582,11 @@ func (s *historyBuilderSuite) TestWorkflowExecutionContinueAsNew() {
 
 /* workflow tasks */
 func (s *historyBuilderSuite) TestWorkflowTaskScheduled() {
-	startToCloseTimeoutSeconds := rand.Int31()
+	startToCloseTimeout := time.Duration(rand.Int31()) * time.Second
 	attempt := rand.Int31()
 	event := s.historyBuilder.AddWorkflowTaskScheduledEvent(
 		testTaskQueue,
-		startToCloseTimeoutSeconds,
+		&startToCloseTimeout,
 		attempt,
 		s.now,
 	)
@@ -600,7 +600,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskScheduled() {
 		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
 			WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 				TaskQueue:           testTaskQueue,
-				StartToCloseTimeout: timestamp.DurationPtr(time.Duration(startToCloseTimeoutSeconds) * time.Second),
+				StartToCloseTimeout: &startToCloseTimeout,
 				Attempt:             attempt,
 			},
 		},

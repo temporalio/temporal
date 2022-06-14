@@ -69,7 +69,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
 	version int64,
 	scheduledEventID int64,
 	taskQueue *taskqueuepb.TaskQueue,
-	startToCloseTimeoutSeconds int32,
+	startToCloseTimeout *time.Duration,
 	attempt int32,
 	scheduledTime *time.Time,
 	originalScheduledTimestamp *time.Time,
@@ -92,7 +92,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
 		ScheduledEventID:      scheduledEventID,
 		StartedEventID:        common.EmptyEventID,
 		RequestID:             emptyUUID,
-		WorkflowTaskTimeout:   timestamp.DurationFromSeconds(int64(startToCloseTimeoutSeconds)),
+		WorkflowTaskTimeout:   startToCloseTimeout,
 		TaskQueue:             taskQueue,
 		Attempt:               attempt,
 		ScheduledTime:         scheduledTime,
@@ -258,7 +258,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		taskQueue.Name = m.ms.executionInfo.TaskQueue
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_NORMAL
 	}
-	taskTimeout := timestamp.DurationValue(m.ms.executionInfo.DefaultWorkflowTaskTimeout)
 
 	// Flush any buffered events before creating the workflow task, otherwise it will result in invalid IDs for transient
 	// workflow task and will cause in timeout processing to not work for transient workflow tasks
@@ -285,11 +284,11 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	// Avoid creating new history events when workflow tasks are continuously failing
 	scheduledTime := m.ms.timeSource.Now().UTC()
 	attempt := m.ms.executionInfo.WorkflowTaskAttempt
-	startToCloseTimeoutSeconds := int32(m.getStartToCloseTimeout(taskTimeout, attempt).Seconds())
+	startToCloseTimeout := m.getStartToCloseTimeout(m.ms.executionInfo.DefaultWorkflowTaskTimeout, attempt)
 	if attempt == 1 {
 		newWorkflowTaskEvent = m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			taskQueue,
-			startToCloseTimeoutSeconds,
+			startToCloseTimeout,
 			attempt,
 			m.ms.timeSource.Now(),
 		)
@@ -301,7 +300,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		m.ms.GetCurrentVersion(),
 		scheduledEventID,
 		taskQueue,
-		startToCloseTimeoutSeconds,
+		startToCloseTimeout,
 		attempt,
 		&scheduledTime,
 		originalScheduledTimestamp,
@@ -392,7 +391,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		// Also create a new WorkflowTaskScheduledEvent since new events came in when it was scheduled
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			taskQueue,
-			int32(workflowTask.WorkflowTaskTimeout.Seconds()),
+			workflowTask.WorkflowTaskTimeout,
 			1,
 			m.ms.timeSource.Now(),
 		)
@@ -455,7 +454,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		}
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			taskQueue,
-			int32(workflowTask.WorkflowTaskTimeout.Seconds()),
+			workflowTask.WorkflowTaskTimeout,
 			workflowTask.Attempt,
 			timestamp.TimeValue(workflowTask.ScheduledTime).UTC(),
 		)
@@ -783,15 +782,19 @@ func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
 }
 
 func (m *workflowTaskStateMachine) getStartToCloseTimeout(
-	defaultTimeout time.Duration,
+	defaultTimeout *time.Duration,
 	attempt int32,
-) time.Duration {
+) *time.Duration {
 	// This util function is only for calculating active workflow task timeout.
 	// Transient workflow task in passive cluster won't call this function and
 	// always use default timeout as it will either be completely overwritten by
 	// a replicated workflow schedule event from active cluster, or if used, it's
 	// attempt will be reset to 1.
 	// Check ReplicateTransientWorkflowTaskScheduled for details.
+
+	if defaultTimeout == nil {
+		defaultTimeout = timestamp.DurationPtr(0)
+	}
 
 	if attempt <= workflowTaskRetryBackoffMinAttempts {
 		return defaultTimeout
@@ -800,5 +803,6 @@ func (m *workflowTaskStateMachine) getStartToCloseTimeout(
 	policy := backoff.NewExponentialRetryPolicy(workflowTaskRetryInitialInterval)
 	policy.SetMaximumInterval(m.ms.shard.GetConfig().WorkflowTaskRetryMaxInterval())
 	policy.SetExpirationInterval(backoff.NoInterval)
-	return defaultTimeout + policy.ComputeNextDelay(0, int(attempt)-workflowTaskRetryBackoffMinAttempts)
+	startToCloseTimeout := *defaultTimeout + policy.ComputeNextDelay(0, int(attempt)-workflowTaskRetryBackoffMinAttempts)
+	return &startToCloseTimeout
 }

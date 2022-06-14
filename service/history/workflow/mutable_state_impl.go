@@ -1721,12 +1721,12 @@ func (e *MutableStateImpl) ReplicateWorkflowTaskScheduledEvent(
 	version int64,
 	scheduledEventID int64,
 	taskQueue *taskqueuepb.TaskQueue,
-	startToCloseTimeoutSeconds int32,
+	startToCloseTimeout *time.Duration,
 	attempt int32,
 	scheduleTimestamp *time.Time,
 	originalScheduledTimestamp *time.Time,
 ) (*WorkflowTaskInfo, error) {
-	return e.workflowTaskManager.ReplicateWorkflowTaskScheduledEvent(version, scheduledEventID, taskQueue, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
+	return e.workflowTaskManager.ReplicateWorkflowTaskScheduledEvent(version, scheduledEventID, taskQueue, startToCloseTimeout, attempt, scheduleTimestamp, originalScheduledTimestamp)
 }
 
 func (e *MutableStateImpl) AddWorkflowTaskStartedEvent(
