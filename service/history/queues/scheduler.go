@@ -60,7 +60,7 @@ type (
 func NewScheduler(
 	priorityAssigner PriorityAssigner,
 	options SchedulerOptions,
-	metricsClient metrics.Client,
+	metricsProvider metrics.MetricProvider,
 	logger log.Logger,
 ) *schedulerImpl {
 	return &schedulerImpl{
@@ -69,10 +69,10 @@ func NewScheduler(
 			options.InterleavedWeightedRoundRobinSchedulerOptions,
 			tasks.NewParallelProcessor(
 				&options.ParallelProcessorOptions,
-				metricsClient,
+				metricsProvider,
 				logger,
 			),
-			metricsClient,
+			metricsProvider,
 			logger,
 		),
 	}

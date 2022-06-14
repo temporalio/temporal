@@ -59,7 +59,7 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler(b *testing.B) {
 			PriorityToWeight: priorityToWeight,
 		},
 		&noopProcessor{},
-		metrics.NoopClient,
+		metrics.NoopMetricProvider,
 		logger,
 	)
 	scheduler.Start()

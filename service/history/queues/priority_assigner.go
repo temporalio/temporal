@@ -50,7 +50,7 @@ type (
 	priorityAssignerImpl struct {
 		currentClusterName string
 		namespaceRegistry  namespace.Registry
-		scope              metrics.Scope
+		metricsProvider    metrics.MetricProvider
 		options            PriorityAssignerOptions
 
 		sync.RWMutex
@@ -62,12 +62,12 @@ func NewPriorityAssigner(
 	currentClusterName string,
 	namespaceRegistry namespace.Registry,
 	options PriorityAssignerOptions,
-	metricsClient metrics.Client,
+	metricsProvider metrics.MetricProvider,
 ) PriorityAssigner {
 	return &priorityAssignerImpl{
 		currentClusterName: currentClusterName,
 		namespaceRegistry:  namespaceRegistry,
-		scope:              metricsClient.Scope(metrics.TaskPriorityAssignerScope),
+		metricsProvider:    metricsProvider.WithTags(metrics.OperationTag(OperationTaskPriorityAssigner)),
 		options:            options,
 		rateLimiters:       make(map[string]quotas.RateLimiter),
 	}
@@ -144,10 +144,12 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 	if !ratelimiter.Allow() {
 		executable.SetPriority(tasks.PriorityMedium)
 
-		a.scope.Tagged(
+		a.metricsProvider.Counter(TaskThrottledCounter, nil).Record(
+			1,
 			metrics.NamespaceTag(namespaceName),
 			metrics.TaskTypeTag(executable.GetType().String()),
-		).IncCounter(metrics.TaskThrottledCounter)
+		)
+
 		return nil
 	}
 

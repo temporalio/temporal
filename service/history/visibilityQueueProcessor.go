@@ -144,7 +144,7 @@ func newVisibilityQueueProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newVisibilityTaskScheduler(shard, logger)
+		scheduler = newVisibilityTaskScheduler(shard, logger, metricProvider)
 		retProcessor.ownedScheduler = scheduler
 	}
 
@@ -351,6 +351,7 @@ func (t *visibilityQueueProcessorImpl) queueShutdown() error {
 func newVisibilityTaskScheduler(
 	shard shard.Context,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 ) queues.Scheduler {
 	config := shard.GetConfig()
 	return queues.NewScheduler(
@@ -364,7 +365,7 @@ func newVisibilityTaskScheduler(
 				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.VisibilityProcessorSchedulerRoundRobinWeights(), logger),
 			},
 		},
-		shard.GetMetricsClient(),
+		metricProvider,
 		logger,
 	)
 }

@@ -223,7 +223,7 @@ func (s *parallelProcessorSuite) newTestProcessor() *ParallelProcessor {
 			QueueSize:   1,
 			WorkerCount: dynamicconfig.GetIntPropertyFn(1),
 		},
-		metrics.NoopClient,
+		metrics.NoopMetricProvider,
 		log.NewNoopLogger(),
 	)
 }

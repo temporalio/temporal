@@ -72,7 +72,7 @@ type (
 		NamespaceRegistry namespace.Registry
 		ClusterMetadata   cluster.Metadata
 		Config            *configs.Config
-		MetricsClient     metrics.Client
+		MetricProvider    metrics.MetricProvider
 		Logger            resource.SnTaggedLogger
 	}
 
@@ -171,7 +171,7 @@ func NewTransferQueueProcessorFactory(
 					HighPriorityRPS:       params.Config.TransferTaskHighPriorityRPS,
 					CriticalRetryAttempts: params.Config.TransferTaskMaxRetryCount,
 				},
-				params.MetricsClient,
+				params.MetricProvider,
 			),
 			queues.SchedulerOptions{
 				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
@@ -182,7 +182,7 @@ func NewTransferQueueProcessorFactory(
 					PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(params.Config.TransferProcessorSchedulerRoundRobinWeights(), params.Logger),
 				},
 			},
-			params.MetricsClient,
+			params.MetricProvider,
 			params.Logger,
 		)
 	}
@@ -230,7 +230,7 @@ func NewTimerQueueProcessorFactory(
 					HighPriorityRPS:       params.Config.TimerTaskHighPriorityRPS,
 					CriticalRetryAttempts: params.Config.TimerTaskMaxRetryCount,
 				},
-				params.MetricsClient,
+				params.MetricProvider,
 			),
 			queues.SchedulerOptions{
 				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
@@ -241,7 +241,7 @@ func NewTimerQueueProcessorFactory(
 					PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(params.Config.TimerProcessorSchedulerRoundRobinWeights(), params.Logger),
 				},
 			},
-			params.MetricsClient,
+			params.MetricProvider,
 			params.Logger,
 		)
 	}
@@ -287,7 +287,7 @@ func NewVisibilityQueueProcessorFactory(
 					HighPriorityRPS:       params.Config.VisibilityTaskHighPriorityRPS,
 					CriticalRetryAttempts: params.Config.VisibilityTaskMaxRetryCount,
 				},
-				params.MetricsClient,
+				params.MetricProvider,
 			),
 			queues.SchedulerOptions{
 				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
@@ -298,7 +298,7 @@ func NewVisibilityQueueProcessorFactory(
 					PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(params.Config.VisibilityProcessorSchedulerRoundRobinWeights(), params.Logger),
 				},
 			},
-			params.MetricsClient,
+			params.MetricProvider,
 			params.Logger,
 		)
 	}

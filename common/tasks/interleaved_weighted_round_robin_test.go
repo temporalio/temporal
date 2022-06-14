@@ -79,7 +79,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 			PriorityToWeight: priorityToWeight,
 		},
 		s.mockProcessor,
-		metrics.NoopClient,
+		metrics.NoopMetricProvider,
 		logger,
 	)
 }
