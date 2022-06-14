@@ -999,10 +999,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		WorkflowID:  key.WorkflowID,
 		RunID:       key.RunID,
 	}
-	op := func() error {
-		return s.GetExecutionManager().DeleteCurrentWorkflowExecution(ctx, delCurRequest)
-	}
-	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	err = s.GetExecutionManager().DeleteCurrentWorkflowExecution(ctx, delCurRequest)
 	if err != nil {
 		return err
 	}
@@ -1014,10 +1011,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		WorkflowID:  key.WorkflowID,
 		RunID:       key.RunID,
 	}
-	op = func() error {
-		return s.GetExecutionManager().DeleteWorkflowExecution(ctx, delRequest)
-	}
-	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	err = s.GetExecutionManager().DeleteWorkflowExecution(ctx, delRequest)
 	if err != nil {
 		return err
 	}
@@ -1028,10 +1022,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			BranchToken: branchToken,
 			ShardID:     s.shardID,
 		}
-		op := func() error {
-			return s.GetExecutionManager().DeleteHistoryBranch(ctx, delHistoryRequest)
-		}
-		err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+		err = s.GetExecutionManager().DeleteHistoryBranch(ctx, delHistoryRequest)
 		if err != nil {
 			return err
 		}
