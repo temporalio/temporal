@@ -40,6 +40,7 @@ type (
 		SplitByPredicate(tasks.Predicate) (pass Slice, fail Slice)
 		CanMergeByRange(Slice) bool
 		MergeByRange(Slice) Slice
+		CanMergeByPredicate(Slice) bool
 		MergeByPredicate(Slice) Slice
 		ShrinkRange()
 		SelectTasks(int) ([]Executable, error)
@@ -186,50 +187,50 @@ func (s *SliceImpl) splitExecutables(
 func (s *SliceImpl) CanMergeByRange(slice Slice) bool {
 	s.validateNotDestroyed()
 
-	return s.scope.CanMergeByRange(slice.Scope())
+	return s != slice && s.scope.CanMergeByRange(slice.Scope())
 }
 
 func (s *SliceImpl) MergeByRange(slice Slice) Slice {
 	if !s.CanMergeByRange(slice) {
-		panic(fmt.Sprintf("Unalbed to merge queue slice having scope %v with slice having scope %v", s.scope, slice.Scope()))
+		panic(fmt.Sprintf("Unable to merge queue slice having scope %v with slice having scope %v by range", s.scope, slice.Scope()))
 	}
 
 	incomingSlice, ok := slice.(*SliceImpl)
 	if !ok {
-		panic(fmt.Sprintf("Unabled to merge queue slice of type %T with type %T", s, slice))
+		panic(fmt.Sprintf("Unable to merge queue slice of type %T with type %T", s, slice))
 	}
-
-	mergedScope := s.scope.MergeByRange(incomingSlice.scope)
 
 	s.destroy()
 	incomingSlice.destroy()
 	return &SliceImpl{
 		executableInitializer:  s.executableInitializer,
-		scope:                  mergedScope,
+		scope:                  s.scope.MergeByRange(incomingSlice.scope),
 		outstandingExecutables: s.mergeExecutables(incomingSlice),
 		iterators:              s.mergeIterators(incomingSlice),
 	}
 }
 
-func (s *SliceImpl) MergeByPredicate(slice Slice) Slice {
+func (s *SliceImpl) CanMergeByPredicate(slice Slice) bool {
 	s.validateNotDestroyed()
+
+	return s != slice && s.scope.CanMergeByPredicate(slice.Scope())
+}
+
+func (s *SliceImpl) MergeByPredicate(slice Slice) Slice {
+	if !s.CanMergeByPredicate(slice) {
+		panic(fmt.Sprintf("Unable to merge queue slice having scope %v with slice having scope %v by predicate", s.scope, slice.Scope()))
+	}
 
 	incomingSlice, ok := slice.(*SliceImpl)
 	if !ok {
-		panic(fmt.Sprintf("Unabled to merge queue slice of type %T with type %T", s, slice))
+		panic(fmt.Sprintf("Unable to merge queue slice of type %T with type %T", s, slice))
 	}
-
-	if !s.scope.Range.Equal(incomingSlice.scope.Range) {
-		panic(fmt.Sprintf("Unabled to merge queue slice having range %v with slice having range %v", s.scope, incomingSlice.scope))
-	}
-
-	mergedScope := s.scope.MergeByPredicate(incomingSlice.scope)
 
 	s.destroy()
 	incomingSlice.destroy()
 	return &SliceImpl{
 		executableInitializer:  s.executableInitializer,
-		scope:                  mergedScope,
+		scope:                  s.scope.MergeByPredicate(incomingSlice.scope),
 		outstandingExecutables: s.mergeExecutables(incomingSlice),
 		iterators:              s.mergeIterators(incomingSlice),
 	}

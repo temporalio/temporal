@@ -34,6 +34,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/predicates"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -185,6 +186,8 @@ func (s *sliceSuite) TestCanMergeByRange() {
 		s.Equal(canMerge, slice.CanMergeByRange(testSlice))
 	}
 
+	s.False(slice.CanMergeByRange(slice))
+
 	testSlice := NewSlice(nil, nil, NewScope(NewRange(
 		tasks.MinimumKey,
 		tasks.NewKey(r.InclusiveMin.FireTime, r.InclusiveMin.TaskID-1),
@@ -224,6 +227,70 @@ func (s *sliceSuite) TestMergeByRange() {
 		NewRange(tasks.MinimumKey, r.ExclusiveMax),
 		predicate,
 	), mergedSlice.Scope())
+
+	s.validateSliceState(mergedSliceImpl)
+	s.Len(mergedSliceImpl.outstandingExecutables, totalExecutables)
+
+	s.Panics(func() { slice.validateNotDestroyed() })
+	s.Panics(func() { incomingSlice.validateNotDestroyed() })
+}
+
+func (s *sliceSuite) TestCanMergeByPredicate() {
+	r := NewRandomRange()
+	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	predicate := tasks.NewNamespacePredicate(namespaceIDs)
+	slice := NewSlice(nil, s.executableInitializer, NewScope(r, predicate))
+
+	testSlice := NewSlice(nil, s.executableInitializer, NewScope(r, predicate))
+	s.True(slice.CanMergeByPredicate(testSlice))
+
+	testSlice = NewSlice(nil, s.executableInitializer, NewScope(r, tasks.NewTypePredicate([]enumsspb.TaskType{})))
+	s.True(slice.CanMergeByPredicate(testSlice))
+
+	s.False(slice.CanMergeByPredicate(slice))
+
+	testSlice = NewSlice(nil, s.executableInitializer, NewScope(NewRandomRange(), predicate))
+	s.False(slice.CanMergeByPredicate(testSlice))
+
+	testSlice = NewSlice(nil, s.executableInitializer, NewScope(NewRandomRange(), predicates.All[tasks.Task]()))
+	s.False(slice.CanMergeByPredicate(testSlice))
+}
+
+func (s *sliceSuite) TestMergeByPredicate() {
+	r := NewRandomRange()
+	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	predicate := tasks.NewNamespacePredicate(namespaceIDs)
+
+	slice := NewSlice(nil, s.executableInitializer, NewScope(r, predicate))
+	for _, executable := range s.randomExecutablesInRange(r, rand.Intn(20)) {
+		mockExecutable := executable.(*MockExecutable)
+		mockExecutable.EXPECT().GetNamespaceID().Return(namespaceIDs[rand.Intn(len(namespaceIDs))]).AnyTimes()
+		mockExecutable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION).AnyTimes()
+		slice.outstandingExecutables[executable.GetKey()] = executable
+	}
+	totalExecutables := len(slice.outstandingExecutables)
+	slice.iterators = s.randomIteratorsInRange(r, rand.Intn(10), nil)
+
+	taskTypes := []enumsspb.TaskType{
+		enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
+		enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
+	}
+	incomingPredicate := tasks.NewTypePredicate(taskTypes)
+	incomingSlice := NewSlice(nil, s.executableInitializer, NewScope(r, incomingPredicate))
+	for _, executable := range s.randomExecutablesInRange(r, rand.Intn(20)) {
+		mockExecutable := executable.(*MockExecutable)
+		mockExecutable.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+		mockExecutable.EXPECT().GetType().Return(taskTypes[rand.Intn(len(taskTypes))]).AnyTimes()
+		incomingSlice.outstandingExecutables[executable.GetKey()] = executable
+	}
+	totalExecutables += len(incomingSlice.outstandingExecutables)
+	incomingSlice.iterators = s.randomIteratorsInRange(r, rand.Intn(10), nil)
+
+	mergedSlice := slice.MergeByPredicate(incomingSlice)
+	mergedSliceImpl := mergedSlice.(*SliceImpl)
+
+	s.Equal(r, mergedSlice.Scope().Range)
+	s.True(predicates.Or[tasks.Task](predicate, incomingPredicate).Equals(mergedSlice.Scope().Predicate))
 
 	s.validateSliceState(mergedSliceImpl)
 	s.Len(mergedSliceImpl.outstandingExecutables, totalExecutables)
