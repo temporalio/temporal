@@ -48,8 +48,19 @@ type (
 )
 
 var (
-	_                      MetricProvider = (*eventsMetricProvider)(nil)
-	defaultMetricNamespace                = "go.temporal.io/server"
+	_ MetricProvider = (*eventsMetricProvider)(nil)
+
+	defaultOptions *MetricOptions = &MetricOptions{
+		Namespace: defaultMetricNamespace,
+		Unit:      Dimensionless,
+	}
+
+	defaultTimerOptions *MetricOptions = &MetricOptions{
+		Namespace: defaultMetricNamespace,
+		Unit:      Milliseconds,
+	}
+
+	defaultMetricNamespace = "go.temporal.io/server"
 )
 
 // MetricHandlerFromConfig is used at startup to construct
@@ -119,6 +130,10 @@ func (emp *eventsMetricProvider) WithTags(tags ...Tag) MetricProvider {
 
 // Counter obtains a counter for the given name.
 func (emp *eventsMetricProvider) Counter(n string, m *MetricOptions) CounterMetric {
+	if m == nil {
+		m = defaultOptions
+	}
+
 	e := event.NewCounter(n, m)
 	return CounterMetricFunc(func(i int64, t ...Tag) {
 		e.Record(emp.ctx, i, tagsToLabels(emp.tags, t)...)
@@ -127,6 +142,10 @@ func (emp *eventsMetricProvider) Counter(n string, m *MetricOptions) CounterMetr
 
 // Gauge obtains a gauge for the given name.
 func (emp *eventsMetricProvider) Gauge(n string, m *MetricOptions) GaugeMetric {
+	if m == nil {
+		m = defaultOptions
+	}
+
 	e := event.NewFloatGauge(n, m)
 	return GaugeMetricFunc(func(f float64, t ...Tag) {
 		e.Record(emp.ctx, f, tagsToLabels(emp.tags, t)...)
@@ -135,6 +154,10 @@ func (emp *eventsMetricProvider) Gauge(n string, m *MetricOptions) GaugeMetric {
 
 // Timer obtains a timer for the given name.
 func (emp *eventsMetricProvider) Timer(n string, m *MetricOptions) TimerMetric {
+	if m == nil {
+		m = defaultTimerOptions
+	}
+
 	e := event.NewDuration(n, m)
 	return TimerMetricFunc(func(d time.Duration, t ...Tag) {
 		e.Record(emp.ctx, d, tagsToLabels(emp.tags, t)...)
@@ -143,6 +166,10 @@ func (emp *eventsMetricProvider) Timer(n string, m *MetricOptions) TimerMetric {
 
 // Histogram obtains a histogram for the given name.
 func (emp *eventsMetricProvider) Histogram(n string, m *MetricOptions) HistogramMetric {
+	if m == nil {
+		m = defaultOptions
+	}
+
 	e := event.NewIntDistribution(n, m)
 	return HistogramMetricFunc(func(i int64, t ...Tag) {
 		e.Record(emp.ctx, i, tagsToLabels(emp.tags, t)...)

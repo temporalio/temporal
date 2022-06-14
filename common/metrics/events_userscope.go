@@ -38,19 +38,7 @@ type (
 	}
 )
 
-var (
-	defaultOptions *MetricOptions = &MetricOptions{
-		Namespace: defaultMetricNamespace,
-		Unit:      Dimensionless,
-	}
-
-	defaultTimerOptions *MetricOptions = &MetricOptions{
-		Namespace: defaultMetricNamespace,
-		Unit:      Milliseconds,
-	}
-
-	_ UserScope = (*eventsUserScope)(nil)
-)
+var _ UserScope = (*eventsUserScope)(nil)
 
 func newEventsUserScope(provider MetricProvider, tags map[string]string) *eventsUserScope {
 	return &eventsUserScope{

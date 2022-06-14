@@ -154,9 +154,7 @@ func (s *eventsSuite) TestCounterMetricFunc_Record() {
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
 			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{}))
-			emp.Counter(tt.name, &MetricOptions{
-				Description: "what you see is not a test",
-			}).Record(tt.v, tt.tags...)
+			emp.Counter(tt.name, defaultOptions).Record(tt.v, tt.tags...)
 			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
@@ -212,9 +210,7 @@ func (s *eventsSuite) TestGaugeMetricFunc_Record() {
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
 			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{}))
-			emp.Gauge(tt.name, &MetricOptions{
-				Description: "what you see is not a test",
-			}).Record(tt.v, tt.tags...)
+			emp.Gauge(tt.name, defaultOptions).Record(tt.v, tt.tags...)
 			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
@@ -276,10 +272,7 @@ func (s *eventsSuite) TestTimerMetricFunc_Record() {
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
 			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{}))
-			emp.Timer(tt.name, &MetricOptions{
-				Description: "what you see is not a test",
-				Unit:        Milliseconds,
-			}).Record(tt.v, tt.tags...)
+			emp.Timer(tt.name, defaultTimerOptions).Record(tt.v, tt.tags...)
 			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
@@ -405,9 +398,7 @@ func (s *eventsSuite) TestCounterMetricWithTagsMergeFunc_Record() {
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
 			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{})).WithTags(tt.rootTags...).(*eventsMetricProvider)
-			emp.Counter(tt.name, &MetricOptions{
-				Description: "what you see is not a test",
-			}).Record(tt.v, tt.tags...)
+			emp.Counter(tt.name, defaultOptions).Record(tt.v, tt.tags...)
 			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
