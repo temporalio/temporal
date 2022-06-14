@@ -25,8 +25,10 @@
 package tasks
 
 import (
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/predicates"
+	"golang.org/x/exp/maps"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
@@ -66,6 +68,15 @@ func (n *NamespacePredicate) Test(task Task) bool {
 	return ok
 }
 
+func (n *NamespacePredicate) Equals(predicate Predicate) bool {
+	nsPrediate, ok := predicate.(*NamespacePredicate)
+	if !ok {
+		return false
+	}
+
+	return maps.Equal(n.NamespaceIDs, nsPrediate.NamespaceIDs)
+}
+
 func NewTypePredicate(
 	types []enumsspb.TaskType,
 ) *TypePredicate {
@@ -82,4 +93,13 @@ func NewTypePredicate(
 func (t *TypePredicate) Test(task Task) bool {
 	_, ok := t.Types[task.GetType()]
 	return ok
+}
+
+func (t *TypePredicate) Equals(predicate Predicate) bool {
+	typePrediate, ok := predicate.(*TypePredicate)
+	if !ok {
+		return false
+	}
+
+	return maps.Equal(t.Types, typePrediate.Types)
 }
