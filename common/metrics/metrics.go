@@ -26,16 +26,12 @@ package metrics
 
 import (
 	"time"
-
-	"golang.org/x/exp/event"
 )
 
 // Mostly cribbed from
 // https://github.com/temporalio/sdk-go/blob/master/internal/common/metrics/handler.go
 // and adapted to depend on golang.org/x/exp/event
 type (
-	MetricOptions = event.MetricOptions
-
 	// MetricProvider represents the main dependency for instrumentation
 	MetricProvider interface {
 		// WithTags creates a new MetricProvder with provided []Tag
@@ -43,16 +39,16 @@ type (
 		WithTags(...Tag) MetricProvider
 
 		// Counter obtains a counter for the given name and MetricOptions.
-		Counter(string, *MetricOptions) CounterMetric
+		Counter(string) CounterMetric
 
 		// Gauge obtains a gauge for the given name and MetricOptions.
-		Gauge(string, *MetricOptions) GaugeMetric
+		Gauge(string) GaugeMetric
 
 		// Timer obtains a timer for the given name and MetricOptions.
-		Timer(string, *MetricOptions) TimerMetric
+		Timer(string) TimerMetric
 
 		// Histogram obtains a histogram for the given name and MetricOptions.
-		Histogram(string, *MetricOptions) HistogramMetric
+		Histogram(string, MetricUnit) HistogramMetric
 	}
 
 	// CounterMetric is an ever-increasing counter.

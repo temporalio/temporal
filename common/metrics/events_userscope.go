@@ -27,7 +27,6 @@ package metrics
 import (
 	"time"
 
-	"golang.org/x/exp/event"
 	"golang.org/x/exp/maps"
 )
 
@@ -54,7 +53,7 @@ func (e *eventsUserScope) IncCounter(counter string) {
 
 // AddCounter adds delta to the counter metric
 func (e *eventsUserScope) AddCounter(counter string, delta int64) {
-	e.provider.Counter(counter, defaultOptions).Record(delta, mapToTags(e.tags)...)
+	e.provider.Counter(counter).Record(delta, mapToTags(e.tags)...)
 }
 
 // StartTimer starts a timer for the given metric name.
@@ -62,7 +61,7 @@ func (e *eventsUserScope) AddCounter(counter string, delta int64) {
 func (e *eventsUserScope) StartTimer(timer string) Stopwatch {
 	return &eventsStopwatch{
 		recordFunc: func(d time.Duration) {
-			e.provider.Timer(timer, defaultTimerOptions).Record(d, mapToTags(e.tags)...)
+			e.provider.Timer(timer).Record(d, mapToTags(e.tags)...)
 		},
 		start: time.Now(),
 	}
@@ -70,21 +69,18 @@ func (e *eventsUserScope) StartTimer(timer string) Stopwatch {
 
 // RecordTimer records a timer for the given metric name
 func (e *eventsUserScope) RecordTimer(timer string, d time.Duration) {
-	e.provider.Timer(timer, defaultTimerOptions).Record(d, mapToTags(e.tags)...)
+	e.provider.Timer(timer).Record(d, mapToTags(e.tags)...)
 }
 
 // RecordDistribution records a distribution (wrapper on top of timer) for the given
 // metric name
 func (e *eventsUserScope) RecordDistribution(id string, unit MetricUnit, d int) {
-	e.provider.Histogram(id, &MetricOptions{
-		Namespace: defaultMetricNamespace,
-		Unit:      event.Unit(unit),
-	}).Record(int64(d), mapToTags(e.tags)...)
+	e.provider.Histogram(id, unit).Record(int64(d), mapToTags(e.tags)...)
 }
 
 // UpdateGauge reports Gauge type absolute value metric
 func (e *eventsUserScope) UpdateGauge(gauge string, value float64) {
-	e.provider.Gauge(gauge, defaultOptions).Record(value, mapToTags(e.tags)...)
+	e.provider.Gauge(gauge).Record(value, mapToTags(e.tags)...)
 }
 
 // Tagged returns a new scope with added and/or overriden tags values that can be used

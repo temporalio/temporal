@@ -50,12 +50,12 @@ type (
 var (
 	_ MetricProvider = (*eventsMetricProvider)(nil)
 
-	defaultOptions *MetricOptions = &MetricOptions{
+	defaultOptions = &event.MetricOptions{
 		Namespace: defaultMetricNamespace,
 		Unit:      Dimensionless,
 	}
 
-	defaultTimerOptions *MetricOptions = &MetricOptions{
+	defaultTimerOptions = &event.MetricOptions{
 		Namespace: defaultMetricNamespace,
 		Unit:      Milliseconds,
 	}
@@ -129,48 +129,35 @@ func (emp *eventsMetricProvider) WithTags(tags ...Tag) MetricProvider {
 }
 
 // Counter obtains a counter for the given name.
-func (emp *eventsMetricProvider) Counter(n string, m *MetricOptions) CounterMetric {
-	if m == nil {
-		m = defaultOptions
-	}
-
-	e := event.NewCounter(n, m)
+func (emp *eventsMetricProvider) Counter(n string) CounterMetric {
+	e := event.NewCounter(n, defaultOptions)
 	return CounterMetricFunc(func(i int64, t ...Tag) {
 		e.Record(emp.ctx, i, tagsToLabels(emp.tags, t)...)
 	})
 }
 
 // Gauge obtains a gauge for the given name.
-func (emp *eventsMetricProvider) Gauge(n string, m *MetricOptions) GaugeMetric {
-	if m == nil {
-		m = defaultOptions
-	}
-
-	e := event.NewFloatGauge(n, m)
+func (emp *eventsMetricProvider) Gauge(n string) GaugeMetric {
+	e := event.NewFloatGauge(n, defaultOptions)
 	return GaugeMetricFunc(func(f float64, t ...Tag) {
 		e.Record(emp.ctx, f, tagsToLabels(emp.tags, t)...)
 	})
 }
 
 // Timer obtains a timer for the given name.
-func (emp *eventsMetricProvider) Timer(n string, m *MetricOptions) TimerMetric {
-	if m == nil {
-		m = defaultTimerOptions
-	}
-
-	e := event.NewDuration(n, m)
+func (emp *eventsMetricProvider) Timer(n string) TimerMetric {
+	e := event.NewDuration(n, defaultTimerOptions)
 	return TimerMetricFunc(func(d time.Duration, t ...Tag) {
 		e.Record(emp.ctx, d, tagsToLabels(emp.tags, t)...)
 	})
 }
 
 // Histogram obtains a histogram for the given name.
-func (emp *eventsMetricProvider) Histogram(n string, m *MetricOptions) HistogramMetric {
-	if m == nil {
-		m = defaultOptions
-	}
-
-	e := event.NewIntDistribution(n, m)
+func (emp *eventsMetricProvider) Histogram(n string, m MetricUnit) HistogramMetric {
+	e := event.NewIntDistribution(n, &event.MetricOptions{
+		Namespace: defaultMetricNamespace,
+		Unit:      event.Unit(m),
+	})
 	return HistogramMetricFunc(func(i int64, t ...Tag) {
 		e.Record(emp.ctx, i, tagsToLabels(emp.tags, t)...)
 	})

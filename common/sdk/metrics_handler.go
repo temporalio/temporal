@@ -81,13 +81,13 @@ func (m *MetricsHandler) Timer(name string) sdkclient.MetricsTimer {
 }
 
 func (m metricsCounter) Inc(i int64) {
-	m.provider.Counter(m.name, nil).Record(i)
+	m.provider.Counter(m.name).Record(i)
 }
 
 func (m metricsGauge) Update(f float64) {
-	m.provider.Gauge(m.name, nil).Record(f)
+	m.provider.Gauge(m.name).Record(f)
 }
 
 func (m metricsTimer) Record(duration time.Duration) {
-	m.provider.Timer(m.name, nil).Record(duration)
+	m.provider.Timer(m.name).Record(duration)
 }

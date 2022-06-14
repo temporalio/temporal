@@ -154,7 +154,7 @@ func (s *eventsSuite) TestCounterMetricFunc_Record() {
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
 			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{}))
-			emp.Counter(tt.name, defaultOptions).Record(tt.v, tt.tags...)
+			emp.Counter(tt.name).Record(tt.v, tt.tags...)
 			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
@@ -210,7 +210,7 @@ func (s *eventsSuite) TestGaugeMetricFunc_Record() {
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
 			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{}))
-			emp.Gauge(tt.name, defaultOptions).Record(tt.v, tt.tags...)
+			emp.Gauge(tt.name).Record(tt.v, tt.tags...)
 			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
@@ -272,7 +272,7 @@ func (s *eventsSuite) TestTimerMetricFunc_Record() {
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
 			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{}))
-			emp.Timer(tt.name, defaultTimerOptions).Record(tt.v, tt.tags...)
+			emp.Timer(tt.name).Record(tt.v, tt.tags...)
 			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
@@ -334,10 +334,7 @@ func (s *eventsSuite) TestHistogramMetricFunc_Record() {
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
 			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{}))
-			emp.Histogram(tt.name, &MetricOptions{
-				Description: "what you see is not a test",
-				Unit:        Bytes,
-			}).Record(tt.v, tt.tags...)
+			emp.Histogram(tt.name, Bytes).Record(tt.v, tt.tags...)
 			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
@@ -398,7 +395,7 @@ func (s *eventsSuite) TestCounterMetricWithTagsMergeFunc_Record() {
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
 			emp := NewEventsMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: meterProvider.Meter("test")}, ClientConfig{})).WithTags(tt.rootTags...).(*eventsMetricProvider)
-			emp.Counter(tt.name, defaultOptions).Record(tt.v, tt.tags...)
+			emp.Counter(tt.name).Record(tt.v, tt.tags...)
 			testexporter.Collect(ctx)
 
 			s.NotEmpty(testexporter.Records)
@@ -420,10 +417,7 @@ func BenchmarkParallelHistogram(b *testing.B) {
 	b.RunParallel(
 		func(p *testing.PB) {
 			for p.Next() {
-				emp.Histogram("test-bench-histogram", &MetricOptions{
-					Description: "what you see is not a test",
-					Unit:        Bytes,
-				}).Record(1024)
+				emp.Histogram("test-bench-histogram", Bytes).Record(1024)
 			}
 		},
 	)
@@ -437,7 +431,7 @@ func BenchmarkParallelCounter(b *testing.B) {
 	b.RunParallel(
 		func(p *testing.PB) {
 			for p.Next() {
-				emp.Counter("test-bench-counter", nil).Record(1024)
+				emp.Counter("test-bench-counter").Record(1024)
 			}
 		},
 	)
@@ -451,7 +445,7 @@ func BenchmarkParallelGauge(b *testing.B) {
 	b.RunParallel(
 		func(p *testing.PB) {
 			for p.Next() {
-				emp.Gauge("test-bench-gauge", nil).Record(1024)
+				emp.Gauge("test-bench-gauge").Record(1024)
 			}
 		},
 	)
@@ -465,7 +459,7 @@ func BenchmarkParallelTimer(b *testing.B) {
 	b.RunParallel(
 		func(p *testing.PB) {
 			for p.Next() {
-				emp.Timer("test-bench-timer", nil).Record(time.Hour)
+				emp.Timer("test-bench-timer").Record(time.Hour)
 			}
 		},
 	)
@@ -479,14 +473,10 @@ func BenchmarkAllTheMetrics(b *testing.B) {
 	b.RunParallel(
 		func(p *testing.PB) {
 			for p.Next() {
-				emp.Histogram("test-bench-histogram", &MetricOptions{
-					Unit: Bytes,
-				}).Record(1024, ServiceTypeTag("test-service"))
-				emp.Counter("test-bench-counter", nil).Record(1024, ServiceTypeTag("test-service"))
-				emp.Gauge("test-bench-gauge", nil).Record(1024, ServiceTypeTag("test-service"))
-				emp.Timer("test-bench-timer", &MetricOptions{
-					Unit: Milliseconds,
-				}).Record(time.Hour, ServiceTypeTag("test-service"))
+				emp.Histogram("test-bench-histogram", Bytes).Record(1024, ServiceTypeTag("test-service"))
+				emp.Counter("test-bench-counter").Record(1024, ServiceTypeTag("test-service"))
+				emp.Gauge("test-bench-gauge").Record(1024, ServiceTypeTag("test-service"))
+				emp.Timer("test-bench-timer").Record(time.Hour, ServiceTypeTag("test-service"))
 			}
 		},
 	)
@@ -501,30 +491,18 @@ func BenchmarkAllTheMetricsAgain(b *testing.B) {
 	b.RunParallel(
 		func(p *testing.PB) {
 			for p.Next() {
-				emp.Histogram("test-bench-histogram", &MetricOptions{
-					Unit: Bytes,
-				}).Record(1024, ServiceTypeTag("test-service"))
-				emp.Counter("test-bench-counter", nil).Record(1024, ServiceTypeTag("test-service"))
-				emp.Gauge("test-bench-gauge", nil).Record(1024, ServiceTypeTag("test-service"))
-				emp.Timer("test-bench-timer", &MetricOptions{
-					Unit: Milliseconds,
-				}).Record(time.Hour, ServiceTypeTag("test-service"))
-				emp.Histogram("test-bench-histogram", &MetricOptions{
-					Unit: Bytes,
-				}).Record(1024, ServiceTypeTag("test-service"))
-				emp.Counter("test-bench-counter", nil).Record(1024, ServiceTypeTag("test-service"))
-				emp.Gauge("test-bench-gauge", nil).Record(1024, ServiceTypeTag("test-service"))
-				emp.Timer("test-bench-timer", &MetricOptions{
-					Unit: Milliseconds,
-				}).Record(time.Hour, ServiceTypeTag("test-service"))
-				emp.Histogram("test-bench-histogram", &MetricOptions{
-					Unit: Bytes,
-				}).Record(1024, ServiceTypeTag("test-service"))
-				emp.Counter("test-bench-counter", nil).Record(1024, ServiceTypeTag("test-service"))
-				emp.Gauge("test-bench-gauge", nil).Record(1024, ServiceTypeTag("test-service"))
-				emp.Timer("test-bench-timer", &MetricOptions{
-					Unit: Milliseconds,
-				}).Record(time.Hour, ServiceTypeTag("test-service"))
+				emp.Histogram("test-bench-histogram", Bytes).Record(1024, ServiceTypeTag("test-service"))
+				emp.Counter("test-bench-counter").Record(1024, ServiceTypeTag("test-service"))
+				emp.Gauge("test-bench-gauge").Record(1024, ServiceTypeTag("test-service"))
+				emp.Timer("test-bench-timer").Record(time.Hour, ServiceTypeTag("test-service"))
+				emp.Histogram("test-bench-histogram", Bytes).Record(1024, ServiceTypeTag("test-service"))
+				emp.Counter("test-bench-counter").Record(1024, ServiceTypeTag("test-service"))
+				emp.Gauge("test-bench-gauge").Record(1024, ServiceTypeTag("test-service"))
+				emp.Timer("test-bench-timer").Record(time.Hour, ServiceTypeTag("test-service"))
+				emp.Histogram("test-bench-histogram", Bytes).Record(1024, ServiceTypeTag("test-service"))
+				emp.Counter("test-bench-counter").Record(1024, ServiceTypeTag("test-service"))
+				emp.Gauge("test-bench-gauge").Record(1024, ServiceTypeTag("test-service"))
+				emp.Timer("test-bench-timer").Record(time.Hour, ServiceTypeTag("test-service"))
 			}
 		},
 	)

@@ -74,7 +74,6 @@ func NewPriorityAssigner(
 }
 
 func (a *priorityAssignerImpl) Assign(executable Executable) error {
-
 	/*
 		Summary:
 		- High priority: active tasks from active queue processor and no-op tasks (currently ignoring overrides)
@@ -144,7 +143,7 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 	if !ratelimiter.Allow() {
 		executable.SetPriority(tasks.PriorityMedium)
 
-		a.metricsProvider.Counter(TaskThrottledCounter, nil).Record(
+		a.metricsProvider.Counter(TaskThrottledCounter).Record(
 			1,
 			metrics.NamespaceTag(namespaceName),
 			metrics.TaskTypeTag(executable.GetType().String()),
