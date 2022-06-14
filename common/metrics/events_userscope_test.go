@@ -25,27 +25,42 @@
 package metrics
 
 import (
+	"testing"
 	"time"
 )
 
-type CompositeStopwatch struct {
-	items []Stopwatch
-}
+func BenchmarkAllTheMetricsUserScope(b *testing.B) {
+	var emp MetricProvider = NewEventsMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-3"))
+	var us UserScope = newEventsUserScope(emp, defaultConfig.Tags)
 
-func NewCompositeStopwatch(items ...Stopwatch) *CompositeStopwatch {
-	return &CompositeStopwatch{
-		items: items,
-	}
-}
+	b.ResetTimer()
+	b.ReportAllocs()
 
-func (c CompositeStopwatch) Stop() {
-	for _, stopwatch := range c.items {
-		stopwatch.Stop()
-	}
-}
-
-func (c CompositeStopwatch) Subtract(d time.Duration) {
-	for _, stopwatch := range c.items {
-		stopwatch.Subtract(d)
-	}
+	b.RunParallel(
+		func(p *testing.PB) {
+			for p.Next() {
+				stp := us.StartTimer("stopwatch-1")
+				us.AddCounter("counter-1", 1)
+				us.IncCounter("counter-2")
+				us.RecordDistribution("dist-1", Bytes, 1024)
+				us.RecordTimer("timer-1", time.Hour*100)
+				us.UpdateGauge("gauge-1", 120.435)
+				stp.Stop()
+				stp = us.StartTimer("stopwatch-1")
+				us.AddCounter("counter-1", 1)
+				us.IncCounter("counter-2")
+				us.RecordDistribution("dist-1", Bytes, 1024)
+				us.RecordTimer("timer-1", time.Hour*100)
+				us.UpdateGauge("gauge-1", 120.435)
+				stp.Stop()
+				stp = us.StartTimer("stopwatch-1")
+				us.AddCounter("counter-1", 1)
+				us.IncCounter("counter-2")
+				us.RecordDistribution("dist-1", Bytes, 1024)
+				us.RecordTimer("timer-1", time.Hour*100)
+				us.UpdateGauge("gauge-1", 120.435)
+				stp.Stop()
+			}
+		},
+	)
 }

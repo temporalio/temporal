@@ -35,8 +35,8 @@ import (
 
 type (
 	eventsMetricProvider struct {
-		tags     []Tag
-		exporter *event.Exporter
+		tags []Tag
+		ctx  context.Context
 	}
 
 	// MetricHandler represents the extension point for collection instruments
@@ -47,7 +47,10 @@ type (
 	}
 )
 
-var _ MetricProvider = (*eventsMetricProvider)(nil)
+var (
+	_                      MetricProvider = (*eventsMetricProvider)(nil)
+	defaultMetricNamespace                = "go.temporal.io/server"
+)
 
 // MetricHandlerFromConfig is used at startup to construct
 func MetricHandlerFromConfig(logger log.Logger, c *Config) MetricHandler {
@@ -88,71 +91,61 @@ func MetricHandlerFromConfig(logger log.Logger, c *Config) MetricHandler {
 }
 
 // NewEventsMetricProvider provides an eventsMetricProvider given event.Exporter struct
-func NewEventsMetricProvider(h MetricHandler) eventsMetricProvider {
+func NewEventsMetricProvider(h MetricHandler) *eventsMetricProvider {
 	eo := &event.ExporterOptions{
 		DisableLogging:   true,
 		DisableTracing:   true,
 		EnableNamespaces: false,
 	}
 
-	return eventsMetricProvider{
-		exporter: event.NewExporter(h, eo),
-		tags:     []Tag{},
+	return &eventsMetricProvider{
+		ctx: event.WithExporter(context.Background(), event.NewExporter(h, eo)),
 	}
 }
 
 // WithTags creates a new MetricProvder with provided []Tag
 // Tags are merged with registered Tags from the source MetricProvider
-func (emp eventsMetricProvider) WithTags(tags ...Tag) MetricProvider {
+func (emp *eventsMetricProvider) WithTags(tags ...Tag) MetricProvider {
 	var t []Tag
-	t = append(t, emp.tags...)
+	if len(emp.tags) != 0 {
+		t = append(t, emp.tags...)
+	}
+
 	return &eventsMetricProvider{
-		exporter: emp.exporter,
-		tags:     append(t, tags...),
+		ctx:  emp.ctx,
+		tags: append(t, tags...),
 	}
 }
 
 // Counter obtains a counter for the given name.
-func (emp eventsMetricProvider) Counter(n string, m *MetricOptions) CounterMetric {
+func (emp *eventsMetricProvider) Counter(n string, m *MetricOptions) CounterMetric {
 	e := event.NewCounter(n, m)
 	return CounterMetricFunc(func(i int64, t ...Tag) {
-		e.Record(
-			event.WithExporter(context.Background(), emp.exporter),
-			i,
-			tagsToLabels(emp.tags, t)...)
+		e.Record(emp.ctx, i, tagsToLabels(emp.tags, t)...)
 	})
 }
 
 // Gauge obtains a gauge for the given name.
-func (emp eventsMetricProvider) Gauge(n string, m *MetricOptions) GaugeMetric {
+func (emp *eventsMetricProvider) Gauge(n string, m *MetricOptions) GaugeMetric {
 	e := event.NewFloatGauge(n, m)
 	return GaugeMetricFunc(func(f float64, t ...Tag) {
-		e.Record(
-			event.WithExporter(context.Background(), emp.exporter),
-			f,
-			tagsToLabels(emp.tags, t)...)
+		e.Record(emp.ctx, f, tagsToLabels(emp.tags, t)...)
 	})
 }
 
 // Timer obtains a timer for the given name.
-func (emp eventsMetricProvider) Timer(n string, m *MetricOptions) TimerMetric {
+func (emp *eventsMetricProvider) Timer(n string, m *MetricOptions) TimerMetric {
 	e := event.NewDuration(n, m)
 	return TimerMetricFunc(func(d time.Duration, t ...Tag) {
-		e.Record(
-			event.WithExporter(context.Background(), emp.exporter),
-			d,
-			tagsToLabels(emp.tags, t)...)
+		e.Record(emp.ctx, d, tagsToLabels(emp.tags, t)...)
 	})
 }
 
 // Histogram obtains a histogram for the given name.
-func (emp eventsMetricProvider) Histogram(n string, m *MetricOptions) HistogramMetric {
+func (emp *eventsMetricProvider) Histogram(n string, m *MetricOptions) HistogramMetric {
 	e := event.NewIntDistribution(n, m)
 	return HistogramMetricFunc(func(i int64, t ...Tag) {
-		e.Record(
-			event.WithExporter(context.Background(), emp.exporter),
-			i,
-			tagsToLabels(emp.tags, t)...)
+		e.Record(emp.ctx, i, tagsToLabels(emp.tags, t)...)
 	})
 }
 

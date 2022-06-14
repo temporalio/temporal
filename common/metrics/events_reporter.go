@@ -35,21 +35,21 @@ type (
 
 var _ Reporter = (*eventsReporter)(nil)
 
-func NewEventsReporter(h MetricHandler) eventsReporter {
-	return eventsReporter{
+func NewEventsReporter(h MetricHandler) *eventsReporter {
+	return &eventsReporter{
 		provider: NewEventsMetricProvider(h),
 		handler:  h,
 	}
 }
 
-func (e eventsReporter) MetricProvider() MetricProvider {
+func (e *eventsReporter) MetricProvider() MetricProvider {
 	return e.provider
 }
 
-func (e eventsReporter) Stop(logger log.Logger) {
+func (e *eventsReporter) Stop(logger log.Logger) {
 	e.handler.Stop(logger)
 }
 
-func (e eventsReporter) UserScope() UserScope {
-	return newEventsUserScope(e.provider)
+func (e *eventsReporter) UserScope() UserScope {
+	return newEventsUserScope(e.provider, nil)
 }

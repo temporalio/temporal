@@ -34,62 +34,92 @@ import (
 type (
 	eventsUserScope struct {
 		provider MetricProvider
+		tags     map[string]string
 	}
 )
 
-var _ UserScope = (*eventsUserScope)(nil)
+var (
+	defaultOptions *MetricOptions = &MetricOptions{
+		Namespace: defaultMetricNamespace,
+		Unit:      Dimensionless,
+	}
 
-func newEventsUserScope(provider MetricProvider) eventsUserScope {
-	return eventsUserScope{
+	defaultTimerOptions *MetricOptions = &MetricOptions{
+		Namespace: defaultMetricNamespace,
+		Unit:      Milliseconds,
+	}
+
+	_ UserScope = (*eventsUserScope)(nil)
+)
+
+func newEventsUserScope(provider MetricProvider, tags map[string]string) *eventsUserScope {
+	return &eventsUserScope{
 		provider: provider,
+		tags:     tags,
 	}
 }
 
 // IncCounter increments a counter metric
-func (e eventsUserScope) IncCounter(counter string) {
+func (e *eventsUserScope) IncCounter(counter string) {
 	e.AddCounter(counter, 1)
 }
 
 // AddCounter adds delta to the counter metric
-func (e eventsUserScope) AddCounter(counter string, delta int64) {
-	e.provider.Counter(counter, nil).Record(delta)
+func (e *eventsUserScope) AddCounter(counter string, delta int64) {
+	e.provider.Counter(counter, defaultOptions).Record(delta, mapToTags(e.tags)...)
 }
 
 // StartTimer starts a timer for the given metric name.
 // Time will be recorded when stopwatch is stopped.
-func (e eventsUserScope) StartTimer(timer string) Stopwatch {
+func (e *eventsUserScope) StartTimer(timer string) Stopwatch {
 	return &eventsStopwatch{
 		recordFunc: func(d time.Duration) {
-			e.provider.Timer(timer, nil).Record(d)
+			e.provider.Timer(timer, defaultTimerOptions).Record(d, mapToTags(e.tags)...)
 		},
+		start: time.Now(),
 	}
 }
 
 // RecordTimer records a timer for the given metric name
-func (e eventsUserScope) RecordTimer(timer string, d time.Duration) {
-	e.provider.Timer(timer, nil).Record(d)
+func (e *eventsUserScope) RecordTimer(timer string, d time.Duration) {
+	e.provider.Timer(timer, defaultTimerOptions).Record(d, mapToTags(e.tags)...)
 }
 
 // RecordDistribution records a distribution (wrapper on top of timer) for the given
 // metric name
-func (e eventsUserScope) RecordDistribution(id string, unit MetricUnit, d int) {
+func (e *eventsUserScope) RecordDistribution(id string, unit MetricUnit, d int) {
 	e.provider.Histogram(id, &MetricOptions{
-		Unit: event.Unit(unit),
-	}).Record(int64(d))
+		Namespace: defaultMetricNamespace,
+		Unit:      event.Unit(unit),
+	}).Record(int64(d), mapToTags(e.tags)...)
 }
 
 // UpdateGauge reports Gauge type absolute value metric
-func (e eventsUserScope) UpdateGauge(gauge string, value float64) {
-	e.provider.Gauge(gauge, nil).Record(value)
+func (e *eventsUserScope) UpdateGauge(gauge string, value float64) {
+	e.provider.Gauge(gauge, defaultOptions).Record(value, mapToTags(e.tags)...)
 }
 
 // Tagged returns a new scope with added and/or overriden tags values that can be used
 // to provide additional information to metrics
-func (e eventsUserScope) Tagged(tags map[string]string) UserScope {
-	return newEventsUserScope(e.provider.WithTags(mapToTags(tags)...))
+func (e *eventsUserScope) Tagged(tags map[string]string) UserScope {
+	if len(tags) == 0 {
+		return newEventsUserScope(e.provider, e.tags)
+	}
+
+	if len(e.tags) == 0 {
+		return newEventsUserScope(e.provider, tags)
+	}
+
+	m := maps.Clone(e.tags)
+	maps.Copy(m, tags)
+	return newEventsUserScope(e.provider, m)
 }
 
 func mapToTags(m map[string]string) []Tag {
+	if len(m) == 0 {
+		return nil
+	}
+
 	t := make([]Tag, 0, len(m))
 	for _, k := range maps.Keys(m) {
 		t = append(t, StringTag(k, m[k]))

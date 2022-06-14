@@ -60,7 +60,7 @@ func NewTallyMetricHandler(log log.Logger, scope tally.Scope, cfg ClientConfig, 
 	}
 }
 
-func (t TallyMetricHandler) Event(ctx context.Context, e *event.Event) context.Context {
+func (t *TallyMetricHandler) Event(ctx context.Context, e *event.Event) context.Context {
 	if e.Kind != event.MetricKind {
 		return ctx
 	}
@@ -85,7 +85,7 @@ func (t TallyMetricHandler) Event(ctx context.Context, e *event.Event) context.C
 	return ctx
 }
 
-func (t TallyMetricHandler) getRecordFunc(em event.Metric, tags map[string]string) tallyRecordFunc {
+func (t *TallyMetricHandler) getRecordFunc(em event.Metric, tags map[string]string) tallyRecordFunc {
 	name := em.Name()
 	unit := em.Options().Unit
 	switch em.(type) {
@@ -118,7 +118,7 @@ func (t TallyMetricHandler) getRecordFunc(em event.Metric, tags map[string]strin
 	}
 }
 
-func (t TallyMetricHandler) labelsToMap(attrs []event.Label) map[string]string {
+func (t *TallyMetricHandler) labelsToMap(attrs []event.Label) map[string]string {
 	tags := make(map[string]string)
 	for _, l := range attrs {
 		if vals, ok := t.excludeTags[l.Name]; ok {
@@ -136,6 +136,6 @@ func (t TallyMetricHandler) labelsToMap(attrs []event.Label) map[string]string {
 	return tags
 }
 
-func (t TallyMetricHandler) Stop(logger log.Logger) {
+func (t *TallyMetricHandler) Stop(logger log.Logger) {
 	// noop
 }

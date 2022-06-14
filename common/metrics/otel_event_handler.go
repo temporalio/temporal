@@ -58,7 +58,7 @@ func NewOtelMetricHandler(l log.Logger, o OpenTelemetryProvider, cfg ClientConfi
 	}
 }
 
-func (m OtelMetricHandler) Event(ctx context.Context, e *event.Event) context.Context {
+func (m *OtelMetricHandler) Event(ctx context.Context, e *event.Event) context.Context {
 	if e.Kind != event.MetricKind {
 		return ctx
 	}
@@ -83,7 +83,7 @@ func (m OtelMetricHandler) Event(ctx context.Context, e *event.Event) context.Co
 	return ctx
 }
 
-func (m OtelMetricHandler) getRecordFunc(em event.Metric) recordFunc {
+func (m *OtelMetricHandler) getRecordFunc(em event.Metric) recordFunc {
 	opts := em.Options()
 	name := em.Name()
 	otelOpts := []instrument.Option{
@@ -139,7 +139,7 @@ func (m OtelMetricHandler) getRecordFunc(em event.Metric) recordFunc {
 	}
 }
 
-func (m OtelMetricHandler) labelsToAttributes(ls []event.Label) []attribute.KeyValue {
+func (m *OtelMetricHandler) labelsToAttributes(ls []event.Label) []attribute.KeyValue {
 	var attrs []attribute.KeyValue
 	for _, l := range ls {
 		if vals, ok := m.excludeTags[l.Name]; ok {
@@ -173,7 +173,7 @@ func labelToAttribute(l event.Label) attribute.KeyValue {
 	}
 }
 
-func (m OtelMetricHandler) Stop(logger log.Logger) {
+func (m *OtelMetricHandler) Stop(logger log.Logger) {
 	m.provider.Stop(logger)
 }
 
