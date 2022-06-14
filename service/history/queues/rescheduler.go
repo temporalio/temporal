@@ -106,7 +106,7 @@ func (r *reschedulerImpl) Reschedule(
 	r.Lock()
 	defer r.Unlock()
 
-	r.metricProvider.Histogram(TaskReschedulerPendingTasks, nil).Record(int64(r.pq.Len()))
+	r.metricProvider.Histogram(TaskReschedulerPendingTasks, metrics.Dimensionless).Record(int64(r.pq.Len()))
 
 	if targetRescheduleSize == 0 {
 		targetRescheduleSize = r.pq.Len()

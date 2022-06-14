@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"time"
 
-	"golang.org/x/exp/event"
 	"golang.org/x/exp/maps"
 )
 
@@ -81,16 +80,10 @@ func (e *eventsScope) IncCounter(counter int) {
 func (e *eventsScope) AddCounter(counter int, delta int64) {
 	m := getDefinition(e.serviceIdx, counter)
 
-	e.provider.Counter(m.metricName.String(), &MetricOptions{
-		Namespace: defaultMetricNamespace,
-		Unit:      event.Unit(m.unit),
-	}).Record(int64(delta), e.scopeTags...)
+	e.provider.Counter(m.metricName.String()).Record(int64(delta), e.scopeTags...)
 
 	if !m.metricRollupName.Empty() {
-		e.provider.Counter(m.metricRollupName.String(), &event.MetricOptions{
-			Namespace: defaultMetricNamespace,
-			Unit:      event.Unit(m.unit),
-		}).Record(int64(delta), e.scopeTags...)
+		e.provider.Counter(m.metricRollupName.String()).Record(int64(delta), e.scopeTags...)
 	}
 }
 
@@ -101,16 +94,10 @@ func (e *eventsScope) StartTimer(timer int) Stopwatch {
 
 	return &eventsStopwatch{
 		recordFunc: func(d time.Duration) {
-			e.provider.Timer(m.metricName.String(), &MetricOptions{
-				Namespace: defaultMetricNamespace,
-				Unit:      event.Unit(m.unit),
-			}).Record(d, e.scopeTags...)
+			e.provider.Timer(m.metricName.String()).Record(d, e.scopeTags...)
 
 			if !m.metricRollupName.Empty() {
-				e.provider.Timer(m.metricRollupName.String(), &MetricOptions{
-					Namespace: defaultMetricNamespace,
-					Unit:      event.Unit(m.unit),
-				}).Record(d, e.scopeTags...)
+				e.provider.Timer(m.metricRollupName.String()).Record(d, e.scopeTags...)
 			}
 		},
 		start: time.Now(),
@@ -121,16 +108,10 @@ func (e *eventsScope) StartTimer(timer int) Stopwatch {
 func (e *eventsScope) RecordTimer(timer int, d time.Duration) {
 	m := getDefinition(e.serviceIdx, timer)
 
-	e.provider.Timer(m.metricName.String(), &MetricOptions{
-		Namespace: defaultMetricNamespace,
-		Unit:      event.Unit(m.unit),
-	}).Record(d, e.scopeTags...)
+	e.provider.Timer(m.metricName.String()).Record(d, e.scopeTags...)
 
 	if !m.metricRollupName.Empty() {
-		e.provider.Timer(m.metricRollupName.String(), &event.MetricOptions{
-			Namespace: defaultMetricNamespace,
-			Unit:      event.Unit(m.unit),
-		}).Record(d, e.scopeTags...)
+		e.provider.Timer(m.metricRollupName.String()).Record(d, e.scopeTags...)
 	}
 }
 
@@ -139,16 +120,10 @@ func (e *eventsScope) RecordTimer(timer int, d time.Duration) {
 func (e *eventsScope) RecordDistribution(id int, d int) {
 	m := getDefinition(e.serviceIdx, id)
 
-	e.provider.Histogram(m.metricName.String(), &MetricOptions{
-		Namespace: defaultMetricNamespace,
-		Unit:      event.Unit(m.unit),
-	}).Record(int64(d), e.scopeTags...)
+	e.provider.Histogram(m.metricName.String(), m.unit).Record(int64(d), e.scopeTags...)
 
 	if !m.metricRollupName.Empty() {
-		e.provider.Histogram(m.metricRollupName.String(), &event.MetricOptions{
-			Namespace: defaultMetricNamespace,
-			Unit:      event.Unit(m.unit),
-		}).Record(int64(d), e.scopeTags...)
+		e.provider.Histogram(m.metricRollupName.String(), m.unit).Record(int64(d), e.scopeTags...)
 	}
 }
 
@@ -156,16 +131,10 @@ func (e *eventsScope) RecordDistribution(id int, d int) {
 func (e *eventsScope) UpdateGauge(gauge int, value float64) {
 	m := getDefinition(e.serviceIdx, gauge)
 
-	e.provider.Gauge(m.metricName.String(), &MetricOptions{
-		Namespace: defaultMetricNamespace,
-		Unit:      event.Unit(m.unit),
-	}).Record(value, e.scopeTags...)
+	e.provider.Gauge(m.metricName.String()).Record(value, e.scopeTags...)
 
 	if !m.metricRollupName.Empty() {
-		e.provider.Gauge(m.metricRollupName.String(), &event.MetricOptions{
-			Namespace: defaultMetricNamespace,
-			Unit:      event.Unit(m.unit),
-		}).Record(value, e.scopeTags...)
+		e.provider.Gauge(m.metricRollupName.String()).Record(value, e.scopeTags...)
 	}
 }
 
