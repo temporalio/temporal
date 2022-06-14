@@ -240,7 +240,13 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 			closeTime,
 		)
 	}
-	err = backoff.Retry(op, PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	if err = backoff.Retry(
+		op,
+		PersistenceOperationRetryPolicy,
+		common.IsPersistenceTransientError,
+	); err != nil {
+		return err
+	}
 
 	// Clear workflow execution context here to prevent further readers to get stale copy of non-exiting workflow execution.
 	weCtx.Clear()
