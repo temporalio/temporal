@@ -374,9 +374,9 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskSchedule_CurrentVersionChan
 	})
 	s.NoError(err)
 
-	di, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc())
+	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc())
 	s.NoError(err)
-	s.NotNil(di)
+	s.NotNil(wt)
 
 	s.Equal(int32(1), s.mutableState.GetExecutionInfo().WorkflowTaskAttempt)
 	s.Equal(0, s.mutableState.hBuilder.BufferEventSize())
@@ -405,9 +405,9 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	})
 	s.NoError(err)
 
-	di, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc())
+	wt, err := s.mutableState.AddWorkflowTaskScheduledEventAsHeartbeat(true, timestamp.TimeNowPtrUtc())
 	s.NoError(err)
-	s.NotNil(di)
+	s.NotNil(wt)
 
 	err = s.mutableState.UpdateCurrentVersion(version+1, true)
 	s.NoError(err)
@@ -543,7 +543,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	s.Nil(err)
 
 	// setup transient workflow task
-	di, err := s.mutableState.ReplicateWorkflowTaskScheduledEvent(
+	wt, err := s.mutableState.ReplicateWorkflowTaskScheduledEvent(
 		workflowTaskScheduleEvent.GetVersion(),
 		workflowTaskScheduleEvent.GetEventId(),
 		workflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue(),
@@ -553,9 +553,9 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		nil,
 	)
 	s.Nil(err)
-	s.NotNil(di)
+	s.NotNil(wt)
 
-	di, err = s.mutableState.ReplicateWorkflowTaskStartedEvent(nil,
+	wt, err = s.mutableState.ReplicateWorkflowTaskStartedEvent(nil,
 		workflowTaskStartedEvent.GetVersion(),
 		workflowTaskScheduleEvent.GetEventId(),
 		workflowTaskStartedEvent.GetEventId(),
@@ -563,7 +563,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		timestamp.TimeValue(workflowTaskStartedEvent.GetEventTime()),
 	)
 	s.Nil(err)
-	s.NotNil(di)
+	s.NotNil(wt)
 
 	err = s.mutableState.ReplicateWorkflowTaskFailedEvent()
 	s.Nil(err)
@@ -594,7 +594,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	}
 	eventID++
 
-	di, err = s.mutableState.ReplicateWorkflowTaskScheduledEvent(
+	wt, err = s.mutableState.ReplicateWorkflowTaskScheduledEvent(
 		newWorkflowTaskScheduleEvent.GetVersion(),
 		newWorkflowTaskScheduleEvent.GetEventId(),
 		newWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetTaskQueue(),
@@ -604,9 +604,9 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		nil,
 	)
 	s.Nil(err)
-	s.NotNil(di)
+	s.NotNil(wt)
 
-	di, err = s.mutableState.ReplicateWorkflowTaskStartedEvent(nil,
+	wt, err = s.mutableState.ReplicateWorkflowTaskStartedEvent(nil,
 		newWorkflowTaskStartedEvent.GetVersion(),
 		newWorkflowTaskScheduleEvent.GetEventId(),
 		newWorkflowTaskStartedEvent.GetEventId(),
@@ -614,7 +614,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		timestamp.TimeValue(newWorkflowTaskStartedEvent.GetEventTime()),
 	)
 	s.Nil(err)
-	s.NotNil(di)
+	s.NotNil(wt)
 
 	s.mutableState.SetHistoryBuilder(NewImmutableHistoryBuilder([]*historypb.HistoryEvent{
 		newWorkflowTaskScheduleEvent,
