@@ -41,7 +41,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -493,12 +492,12 @@ func randomTaskInfo() *persistencespb.AllocatedTaskInfo {
 
 	return &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{
-			NamespaceId: uuid.New(),
-			WorkflowId:  uuid.New(),
-			RunId:       uuid.New(),
-			ScheduleId:  rand.Int63(),
-			CreateTime:  &rt1,
-			ExpiryTime:  &rt2,
+			NamespaceId:      uuid.New(),
+			WorkflowId:       uuid.New(),
+			RunId:            uuid.New(),
+			ScheduledEventId: rand.Int63(),
+			CreateTime:       &rt1,
+			ExpiryTime:       &rt2,
 		},
 		TaskId: rand.Int63(),
 	}

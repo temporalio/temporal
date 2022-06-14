@@ -42,7 +42,7 @@ type (
 		TargetWorkflowID        string
 		TargetRunID             string
 		TargetChildWorkflowOnly bool
-		InitiatedID             int64
+		InitiatedEventID        int64
 		Version                 int64
 	}
 )

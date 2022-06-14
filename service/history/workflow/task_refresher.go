@@ -267,17 +267,17 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 	}
 
 	// workflowTask already started
-	if workflowTask.StartedID != common.EmptyEventID {
+	if workflowTask.StartedEventID != common.EmptyEventID {
 		return taskGenerator.GenerateStartWorkflowTaskTasks(
 			now,
-			workflowTask.ScheduleID,
+			workflowTask.ScheduledEventID,
 		)
 	}
 
 	// workflowTask only scheduled
 	return taskGenerator.GenerateScheduleWorkflowTaskTasks(
 		now,
-		workflowTask.ScheduleID,
+		workflowTask.ScheduledEventID,
 	)
 }
 
@@ -309,7 +309,7 @@ Loop:
 			return err
 		}
 
-		if activityInfo.StartedId != common.EmptyEventID {
+		if activityInfo.StartedEventId != common.EmptyEventID {
 			continue Loop
 		}
 
@@ -319,7 +319,7 @@ Loop:
 				NamespaceID: namespace.ID(executionInfo.NamespaceId),
 				WorkflowID:  executionInfo.WorkflowId,
 				RunID:       executionState.RunId,
-				EventID:     activityInfo.ScheduleId,
+				EventID:     activityInfo.ScheduledEventId,
 				Version:     activityInfo.Version,
 			},
 			activityInfo.ScheduledEventBatchId,
@@ -393,7 +393,7 @@ func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 
 Loop:
 	for _, childWorkflowInfo := range pendingChildWorkflowInfos {
-		if childWorkflowInfo.StartedId != common.EmptyEventID {
+		if childWorkflowInfo.StartedEventId != common.EmptyEventID {
 			continue Loop
 		}
 
@@ -403,7 +403,7 @@ Loop:
 				NamespaceID: namespace.ID(executionInfo.NamespaceId),
 				WorkflowID:  executionInfo.WorkflowId,
 				RunID:       executionState.RunId,
-				EventID:     childWorkflowInfo.InitiatedId,
+				EventID:     childWorkflowInfo.InitiatedEventId,
 				Version:     childWorkflowInfo.Version,
 			},
 			childWorkflowInfo.InitiatedEventBatchId,
@@ -447,7 +447,7 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 				NamespaceID: namespace.ID(executionInfo.NamespaceId),
 				WorkflowID:  executionInfo.WorkflowId,
 				RunID:       executionState.RunId,
-				EventID:     requestCancelInfo.GetInitiatedId(),
+				EventID:     requestCancelInfo.GetInitiatedEventId(),
 				Version:     requestCancelInfo.GetVersion(),
 			},
 			requestCancelInfo.GetInitiatedEventBatchId(),
@@ -491,7 +491,7 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 				NamespaceID: namespace.ID(executionInfo.NamespaceId),
 				WorkflowID:  executionInfo.WorkflowId,
 				RunID:       executionState.RunId,
-				EventID:     signalInfo.GetInitiatedId(),
+				EventID:     signalInfo.GetInitiatedEventId(),
 				Version:     signalInfo.GetVersion(),
 			},
 			signalInfo.GetInitiatedEventBatchId(),

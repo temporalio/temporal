@@ -157,9 +157,9 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 				"some random workflow ID",
 				uuid.New(),
 			),
-			TaskID:     taskID1,
-			TaskQueue:  "some random task queue",
-			ScheduleID: 28,
+			TaskID:           taskID1,
+			TaskQueue:        "some random task queue",
+			ScheduledEventID: 28,
 		},
 	}
 
@@ -186,9 +186,9 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 				"some random workflow ID",
 				uuid.New(),
 			),
-			TaskID:     taskID2,
-			TaskQueue:  "some random task queue",
-			ScheduleID: 29,
+			TaskID:           taskID2,
+			TaskQueue:        "some random task queue",
+			ScheduledEventID: 29,
 		},
 	}
 
@@ -221,9 +221,9 @@ func (s *queueAckMgrSuite) TestReadCompleteTimerTasks() {
 				"some random workflow ID",
 				uuid.New(),
 			),
-			TaskID:     taskID,
-			TaskQueue:  "some random task queue",
-			ScheduleID: 28,
+			TaskID:           taskID,
+			TaskQueue:        "some random task queue",
+			ScheduledEventID: 28,
 		},
 	}
 
@@ -261,9 +261,9 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 				"some random workflow ID",
 				uuid.New(),
 			),
-			TaskID:     taskID1,
-			TaskQueue:  "some random task queue",
-			ScheduleID: 28,
+			TaskID:           taskID1,
+			TaskQueue:        "some random task queue",
+			ScheduledEventID: 28,
 		},
 		&tasks.WorkflowTask{
 			WorkflowKey: definition.NewWorkflowKey(
@@ -271,9 +271,9 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 				"some random workflow ID",
 				uuid.New(),
 			),
-			TaskID:     taskID2,
-			TaskQueue:  "some random task queue",
-			ScheduleID: 28,
+			TaskID:           taskID2,
+			TaskQueue:        "some random task queue",
+			ScheduledEventID: 28,
 		},
 		&tasks.WorkflowTask{
 			WorkflowKey: definition.NewWorkflowKey(
@@ -281,9 +281,9 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 				"some random workflow ID",
 				uuid.New(),
 			),
-			TaskID:     taskID3,
-			TaskQueue:  "some random task queue",
-			ScheduleID: 28,
+			TaskID:           taskID3,
+			TaskQueue:        "some random task queue",
+			ScheduledEventID: 28,
 		},
 	}
 
@@ -389,9 +389,9 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 				"some random workflow ID",
 				uuid.New(),
 			),
-			TaskID:     taskID1,
-			TaskQueue:  "some random task queue",
-			ScheduleID: 28,
+			TaskID:           taskID1,
+			TaskQueue:        "some random task queue",
+			ScheduledEventID: 28,
 		},
 	}
 
@@ -419,9 +419,9 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 				"some random workflow ID",
 				uuid.New(),
 			),
-			TaskID:     taskID2,
-			TaskQueue:  "some random task queue",
-			ScheduleID: 29,
+			TaskID:           taskID2,
+			TaskQueue:        "some random task queue",
+			ScheduledEventID: 29,
 		},
 	}
 
@@ -456,9 +456,9 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 				"some random workflow ID",
 				uuid.New(),
 			),
-			TaskID:     taskID1,
-			TaskQueue:  "some random task queue",
-			ScheduleID: 28,
+			TaskID:           taskID1,
+			TaskQueue:        "some random task queue",
+			ScheduledEventID: 28,
 		},
 		&tasks.WorkflowTask{
 			WorkflowKey: definition.NewWorkflowKey(
@@ -466,9 +466,9 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 				"some random workflow ID",
 				uuid.New(),
 			),
-			TaskID:     taskID2,
-			TaskQueue:  "some random task queue",
-			ScheduleID: 29,
+			TaskID:           taskID2,
+			TaskQueue:        "some random task queue",
+			ScheduledEventID: 29,
 		},
 	}
 

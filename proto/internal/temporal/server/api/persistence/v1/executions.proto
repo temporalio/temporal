@@ -89,12 +89,12 @@ message WorkflowExecutionInfo {
     reserved 16;
     int64 last_event_task_id = 17;
     int64 last_first_event_id = 18;
-    int64 last_workflow_task_start_id = 19;
+    int64 last_workflow_task_started_event_id = 19;
     google.protobuf.Timestamp start_time = 20 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp last_update_time = 21 [(gogoproto.stdtime) = true];
     int64 workflow_task_version = 22;
-    int64 workflow_task_schedule_id = 23;
-    int64 workflow_task_started_id = 24;
+    int64 workflow_task_scheduled_event_id = 23;
+    int64 workflow_task_started_event_id = 24;
     google.protobuf.Duration workflow_task_timeout = 25 [(gogoproto.stdduration) = true];
     int32 workflow_task_attempt = 26;
     google.protobuf.Timestamp workflow_task_started_time = 27 [(gogoproto.stdtime) = true];
@@ -169,7 +169,7 @@ message TransferTaskInfo {
     string target_run_id = 7;
     string task_queue = 8;
     bool target_child_workflow_only = 9;
-    int64 schedule_id = 10;
+    int64 scheduled_event_id = 10;
     int64 version = 11;
     int64 task_id = 12;
     google.protobuf.Timestamp visibility_time = 13 [(gogoproto.stdtime) = true];
@@ -188,7 +188,7 @@ message ReplicationTaskInfo {
     int64 version = 5;
     int64 first_event_id = 6;
     int64 next_event_id = 7;
-    int64 scheduled_id = 8;
+    int64 scheduled_event_id = 8;
     reserved 9;
     reserved 10;
     bytes branch_token = 11;
@@ -234,7 +234,7 @@ message ActivityInfo {
     int64 scheduled_event_batch_id = 2;
     reserved 3;
     google.protobuf.Timestamp scheduled_time = 4 [(gogoproto.stdtime) = true];
-    int64 started_id = 5;
+    int64 started_event_id = 5;
     reserved 6;
     google.protobuf.Timestamp started_time = 7 [(gogoproto.stdtime) = true];
     string activity_id = 8;
@@ -266,7 +266,7 @@ message ActivityInfo {
     string retry_last_worker_identity = 28;
     // TODO: remove this after 1.17 release.
     string namespace_id = 29;
-    int64 schedule_id = 30;
+    int64 scheduled_event_id = 30;
     temporal.api.common.v1.Payloads last_heartbeat_details = 31;
     google.protobuf.Timestamp last_heartbeat_update_time = 32 [(gogoproto.stdtime) = true];
 }
@@ -274,7 +274,7 @@ message ActivityInfo {
 // timer_map column
 message TimerInfo {
     int64 version = 1;
-    int64 started_id = 2;
+    int64 started_event_id = 2;
     google.protobuf.Timestamp expiry_time = 3 [(gogoproto.stdtime) = true];
     int64 task_status = 4;
     // timerId serves the purpose of indicating whether a timer task is generated for this timer info.
@@ -285,7 +285,7 @@ message TimerInfo {
 message ChildExecutionInfo {
     int64 version = 1;
     int64 initiated_event_batch_id = 2;
-    int64 started_id = 3;
+    int64 started_event_id = 3;
     reserved 4;
     string started_workflow_id = 5;
     string started_run_id = 6;
@@ -294,7 +294,7 @@ message ChildExecutionInfo {
     string namespace = 9;
     string workflow_type_name = 10;
     temporal.api.enums.v1.ParentClosePolicy parent_close_policy = 11;
-    int64 initiated_id = 12;
+    int64 initiated_event_id = 12;
     temporal.server.api.clock.v1.VectorClock clock = 13;
     string namespace_id = 14;
 }
@@ -304,7 +304,7 @@ message RequestCancelInfo {
     int64 version = 1;
     int64 initiated_event_batch_id = 2;
     string cancel_request_id = 3;
-    int64 initiated_id = 4;
+    int64 initiated_event_id = 4;
 }
 
 // signal_map column
@@ -315,7 +315,7 @@ message SignalInfo {
     reserved 4;
     reserved 5;
     reserved 6;
-    int64 initiated_id = 7;
+    int64 initiated_event_id = 7;
     reserved 8;
 }
 

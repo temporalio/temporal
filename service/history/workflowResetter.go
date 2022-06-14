@@ -487,9 +487,9 @@ func (r *workflowResetterImpl) failWorkflowTask(
 	}
 
 	var err error
-	if workflowTask.StartedID == common.EmptyVersion {
+	if workflowTask.StartedEventID == common.EmptyVersion {
 		_, workflowTask, err = resetMutableState.AddWorkflowTaskStartedEvent(
-			workflowTask.ScheduleID,
+			workflowTask.ScheduledEventID,
 			workflowTask.RequestID,
 			workflowTask.TaskQueue,
 			consts.IdentityHistoryService,
@@ -500,8 +500,8 @@ func (r *workflowResetterImpl) failWorkflowTask(
 	}
 
 	_, err = resetMutableState.AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduleID,
-		workflowTask.StartedID,
+		workflowTask.ScheduledEventID,
+		workflowTask.StartedEventID,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
@@ -520,7 +520,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 ) error {
 
 	for _, ai := range mutableState.GetPendingActivityInfos() {
-		switch ai.StartedId {
+		switch ai.StartedEventId {
 		case common.EmptyEventID:
 			// activity not started, noop
 			// override the activity time to now
@@ -536,8 +536,8 @@ func (r *workflowResetterImpl) failInflightActivity(
 
 		default:
 			if _, err := mutableState.AddActivityTaskFailedEvent(
-				ai.ScheduleId,
-				ai.StartedId,
+				ai.ScheduledEventId,
+				ai.StartedEventId,
 				failure.NewResetWorkflowFailure(terminateReason, ai.LastHeartbeatDetails),
 				enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 				ai.StartedIdentity,

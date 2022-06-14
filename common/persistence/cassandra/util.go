@@ -42,7 +42,7 @@ func applyWorkflowMutationBatch(
 ) error {
 
 	// TODO update all call sites to update LastUpdatetime
-	//cqlNowTimestampMillis := p.UnixMilliseconds(time.Now().UTC())
+	// cqlNowTimestampMillis := p.UnixMilliseconds(time.Now().UTC())
 
 	namespaceID := workflowMutation.NamespaceID
 	workflowID := workflowMutation.WorkflowID
@@ -160,7 +160,7 @@ func applyWorkflowSnapshotBatchAsReset(
 ) error {
 
 	// TODO: update call site
-	//cqlNowTimestampMillis := p.UnixMilliseconds(time.Now().UTC())
+	// cqlNowTimestampMillis := p.UnixMilliseconds(time.Now().UTC())
 
 	namespaceID := workflowSnapshot.NamespaceID
 	workflowID := workflowSnapshot.WorkflowID
@@ -607,9 +607,9 @@ func updateActivityInfos(
 	runID string,
 ) error {
 
-	for scheduledID, blob := range activityInfos {
+	for scheduledEventID, blob := range activityInfos {
 		batch.Query(templateUpdateActivityInfoQuery,
-			scheduledID,
+			scheduledEventID,
 			blob.Data,
 			blob.EncodingType.String(),
 			shardID,
@@ -1041,8 +1041,8 @@ func resetActivityInfoMap(
 
 	encoding := enumspb.ENCODING_TYPE_UNSPECIFIED
 	aMap := make(map[int64][]byte)
-	for scheduledID, blob := range activityInfos {
-		aMap[scheduledID] = blob.Data
+	for scheduledEventID, blob := range activityInfos {
+		aMap[scheduledEventID] = blob.Data
 		encoding = blob.EncodingType
 	}
 

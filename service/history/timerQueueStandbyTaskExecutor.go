@@ -291,7 +291,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
-		if activityInfo.StartedId != common.EmptyEventID {
+		if activityInfo.StartedEventId != common.EmptyEventID {
 			return nil, nil
 		}
 
@@ -619,7 +619,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 			Name: pushActivityInfo.taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		ScheduleId:             activityTask.EventID,
+		ScheduledEventId:       activityTask.EventID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), activityTask.TaskID),
 	})

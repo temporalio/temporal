@@ -120,7 +120,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 			Name: task.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		ScheduleId:             task.ScheduleID,
+		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
 	})
@@ -146,7 +146,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 			RunId:      task.RunID,
 		},
 		TaskQueue:              taskqueue,
-		ScheduleId:             task.ScheduleID,
+		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
 	})

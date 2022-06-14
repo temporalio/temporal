@@ -647,21 +647,21 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 
 	startTime := timestamp.TimePtr(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC))
 	info := &persistencespb.WorkflowExecutionInfo{
-		NamespaceId:                namespaceID.String(),
-		WorkflowId:                 we.GetWorkflowId(),
-		TaskQueue:                  tl,
-		WorkflowTypeName:           "wType",
-		WorkflowRunTimeout:         timestamp.DurationFromSeconds(200),
-		DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(100),
-		LastWorkflowTaskStartId:    int64(99),
-		LastUpdateTime:             timestamp.TimeNowPtrUtc(),
-		StartTime:                  startTime,
-		ExecutionTime:              startTime,
-		WorkflowTaskVersion:        failoverVersion,
-		WorkflowTaskScheduleId:     101,
-		WorkflowTaskStartedId:      102,
-		WorkflowTaskTimeout:        timestamp.DurationFromSeconds(100),
-		WorkflowTaskAttempt:        1,
+		NamespaceId:                    namespaceID.String(),
+		WorkflowId:                     we.GetWorkflowId(),
+		TaskQueue:                      tl,
+		WorkflowTypeName:               "wType",
+		WorkflowRunTimeout:             timestamp.DurationFromSeconds(200),
+		DefaultWorkflowTaskTimeout:     timestamp.DurationFromSeconds(100),
+		LastWorkflowTaskStartedEventId: int64(99),
+		LastUpdateTime:                 timestamp.TimeNowPtrUtc(),
+		StartTime:                      startTime,
+		ExecutionTime:                  startTime,
+		WorkflowTaskVersion:            failoverVersion,
+		WorkflowTaskScheduledEventId:   101,
+		WorkflowTaskStartedEventId:     102,
+		WorkflowTaskTimeout:            timestamp.DurationFromSeconds(100),
+		WorkflowTaskAttempt:            1,
 		VersionHistories: &historyspb.VersionHistories{
 			Histories: []*historyspb.VersionHistory{
 				{
@@ -683,9 +683,9 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 	activityInfos := map[int64]*persistencespb.ActivityInfo{
 		5: {
 			Version:                failoverVersion,
-			ScheduleId:             int64(90),
+			ScheduledEventId:       int64(90),
 			ScheduledTime:          timestamp.TimePtr(time.Now().UTC()),
-			StartedId:              common.EmptyEventID,
+			StartedEventId:         common.EmptyEventID,
 			StartedTime:            timestamp.TimePtr(time.Now().UTC()),
 			ActivityId:             "activityID_5",
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
@@ -698,19 +698,19 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 	expiryTime := timestamp.TimeNowPtrUtcAddDuration(time.Hour)
 	timerInfos := map[string]*persistencespb.TimerInfo{
 		"25": {
-			Version:    failoverVersion,
-			TimerId:    "25",
-			StartedId:  85,
-			ExpiryTime: expiryTime,
+			Version:        failoverVersion,
+			TimerId:        "25",
+			StartedEventId: 85,
+			ExpiryTime:     expiryTime,
 		},
 	}
 
 	childInfos := map[int64]*persistencespb.ChildExecutionInfo{
 		80: {
 			Version:               failoverVersion,
-			InitiatedId:           80,
+			InitiatedEventId:      80,
 			InitiatedEventBatchId: 20,
-			StartedId:             common.EmptyEventID,
+			StartedEventId:        common.EmptyEventID,
 			CreateRequestId:       uuid.New(),
 			Namespace:             tests.Namespace.String(),
 			WorkflowTypeName:      "code.uber.internal/test/foobar",
@@ -720,7 +720,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 	signalInfos := map[int64]*persistencespb.SignalInfo{
 		75: {
 			Version:               failoverVersion,
-			InitiatedId:           75,
+			InitiatedEventId:      75,
 			InitiatedEventBatchId: 17,
 			RequestId:             uuid.New(),
 		},

@@ -246,9 +246,9 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
 	di := addWorkflowTaskScheduledEvent(msBuilder)
-	workflowTasksStartEvent := addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, "testTaskQueue", uuid.New())
-	di.StartedID = workflowTasksStartEvent.GetEventId()
-	addWorkflowTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, "some random identity")
+	workflowTasksStartEvent := addWorkflowTaskStartedEvent(msBuilder, di.ScheduledEventID, "testTaskQueue", uuid.New())
+	di.StartedEventID = workflowTasksStartEvent.GetEventId()
+	addWorkflowTaskCompletedEvent(msBuilder, di.ScheduledEventID, di.StartedEventID, "some random identity")
 
 	ms := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}

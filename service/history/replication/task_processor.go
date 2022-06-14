@@ -385,13 +385,13 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistencespb.ReplicationTaskInfo{
-				NamespaceId: taskAttributes.GetNamespaceId(),
-				WorkflowId:  taskAttributes.GetWorkflowId(),
-				RunId:       taskAttributes.GetRunId(),
-				TaskId:      replicationTask.GetSourceTaskId(),
-				TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-				ScheduledId: taskAttributes.GetScheduledId(),
-				Version:     taskAttributes.GetVersion(),
+				NamespaceId:      taskAttributes.GetNamespaceId(),
+				WorkflowId:       taskAttributes.GetWorkflowId(),
+				RunId:            taskAttributes.GetRunId(),
+				TaskId:           replicationTask.GetSourceTaskId(),
+				TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+				ScheduledEventId: taskAttributes.GetScheduledEventId(),
+				Version:          taskAttributes.GetVersion(),
 			},
 		}, nil
 

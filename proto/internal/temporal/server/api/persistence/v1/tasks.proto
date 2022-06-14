@@ -41,7 +41,7 @@ message TaskInfo {
     string namespace_id = 1;
     string workflow_id = 2;
     string run_id = 3;
-    int64 schedule_id = 4;
+    int64 scheduled_event_id = 4;
     google.protobuf.Timestamp create_time = 5 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
     temporal.server.api.clock.v1.VectorClock clock = 7;

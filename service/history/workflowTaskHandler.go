@@ -280,14 +280,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 			return err
 		}
 		taskToken := &tokenspb.Task{
-			NamespaceId:     namespaceID.String(),
-			WorkflowId:      executionInfo.WorkflowId,
-			RunId:           runID,
-			ScheduleId:      event.EventId,
-			ScheduleAttempt: ai.Attempt,
-			ActivityId:      attr.ActivityId,
-			ActivityType:    attr.ActivityType.GetName(),
-			Clock:           shardClock,
+			NamespaceId:      namespaceID.String(),
+			WorkflowId:       executionInfo.WorkflowId,
+			RunId:            runID,
+			ScheduledEventId: event.EventId,
+			ScheduledAttempt: ai.Attempt,
+			ActivityId:       attr.ActivityId,
+			ActivityType:     attr.ActivityType.GetName(),
+			Clock:            shardClock,
 		}
 		serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 		if err != nil {
@@ -337,10 +337,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 		return err
 	}
 
-	scheduleID := attr.GetScheduledEventId()
+	scheduledEventID := attr.GetScheduledEventId()
 	actCancelReqEvent, ai, err := handler.mutableState.AddActivityTaskCancelRequestedEvent(
 		handler.workflowTaskCompletedID,
-		scheduleID,
+		scheduledEventID,
 		handler.identity,
 	)
 	if err != nil {
@@ -353,12 +353,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 		// If ai is nil, the activity has already been canceled/completed/timedout. The cancel request
 		// will be recorded in the history, but no further action will be taken.
 
-		if ai.StartedId == common.EmptyEventID {
+		if ai.StartedEventId == common.EmptyEventID {
 			// We haven't started the activity yet, we can cancel the activity right away and
 			// schedule a workflow task to ensure the workflow makes progress.
 			_, err = handler.mutableState.AddActivityTaskCanceledEvent(
-				ai.ScheduleId,
-				ai.StartedId,
+				ai.ScheduledEventId,
+				ai.StartedEventId,
 				actCancelReqEvent.GetEventId(),
 				payloads.EncodeString(activityCancellationMsgActivityNotStarted),
 				handler.identity,

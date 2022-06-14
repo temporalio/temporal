@@ -320,7 +320,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 		Name: "workflow",
 	}
 	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
-	scheduleID := int64(0)
+	scheduledEventID := int64(0)
 
 	// History service is using mock
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
@@ -328,8 +328,8 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest")
 			response := &historyservice.RecordWorkflowTaskStartedResponse{
 				WorkflowType:               workflowType,
-				PreviousStartedEventId:     scheduleID,
-				ScheduledEventId:           scheduleID + 1,
+				PreviousStartedEventId:     scheduledEventID,
+				ScheduledEventId:           scheduledEventID + 1,
 				Attempt:                    1,
 				StickyExecutionEnabled:     true,
 				WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -340,7 +340,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 	addRequest := matchingservice.AddWorkflowTaskRequest{
 		NamespaceId:            namespaceID.String(),
 		Execution:              execution,
-		ScheduleId:             scheduleID,
+		ScheduledEventId:       scheduledEventID,
 		TaskQueue:              stickyTaskQueue,
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 	}
@@ -377,7 +377,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 		TaskToken:              resp.TaskToken,
 		WorkflowExecution:      execution,
 		WorkflowType:           workflowType,
-		PreviousStartedEventId: scheduleID,
+		PreviousStartedEventId: scheduledEventID,
 		StartedEventId:         common.EmptyEventID,
 		Attempt:                1,
 		NextEventId:            common.EmptyEventID,
@@ -498,14 +498,14 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 	execution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	for i := int64(0); i < taskCount; i++ {
-		scheduleID := i * 3
+		scheduledEventID := i * 3
 		var err error
 		if taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 			addRequest := matchingservice.AddActivityTaskRequest{
 				SourceNamespaceId:      namespaceID.String(),
 				NamespaceId:            namespaceID.String(),
 				Execution:              execution,
-				ScheduleId:             scheduleID,
+				ScheduledEventId:       scheduledEventID,
 				TaskQueue:              taskQueue,
 				ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 			}
@@ -517,7 +517,7 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 			addRequest := matchingservice.AddWorkflowTaskRequest{
 				NamespaceId:            namespaceID.String(),
 				Execution:              execution,
-				ScheduleId:             scheduleID,
+				ScheduledEventId:       scheduledEventID,
 				TaskQueue:              taskQueue,
 				ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 			}
@@ -576,8 +576,8 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	tlmImpl.taskWriter.Stop()
 
 	// now attempt to add a task
-	scheduleID := int64(5)
-	addRequest.ScheduleId = scheduleID
+	scheduledEventID := int64(5)
+	addRequest.ScheduledEventId = scheduledEventID
 	_, err = s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
 	s.Error(err)
 }
@@ -606,12 +606,12 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	}
 
 	for i := int64(0); i < taskCount; i++ {
-		scheduleID := i * 3
+		scheduledEventID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
 			SourceNamespaceId:      namespaceID.String(),
 			NamespaceId:            namespaceID.String(),
 			Execution:              workflowExecution,
-			ScheduleId:             scheduleID,
+			ScheduledEventId:       scheduledEventID,
 			TaskQueue:              taskQueue,
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 		}
@@ -634,7 +634,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			resp := &historyservice.RecordActivityTaskStartedResponse{
 				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId: activityID,
 						TaskQueue: &taskqueuepb.TaskQueue{
@@ -654,7 +654,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		}).AnyTimes()
 
 	for i := int64(0); i < taskCount; {
-		scheduleID := i * 3
+		scheduledEventID := i * 3
 
 		result, err := s.matchingEngine.PollActivityTaskQueue(s.handlerContext, &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceID.String(),
@@ -680,13 +680,13 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.EqualValues(time.Second*50, *result.StartToCloseTimeout)
 		s.EqualValues(time.Second*10, *result.HeartbeatTimeout)
 		taskToken := &tokenspb.Task{
-			ScheduleAttempt: 1,
-			NamespaceId:     namespaceID.String(),
-			WorkflowId:      workflowID,
-			RunId:           runID,
-			ScheduleId:      scheduleID,
-			ActivityId:      activityID,
-			ActivityType:    activityTypeName,
+			ScheduledAttempt: 1,
+			NamespaceId:      namespaceID.String(),
+			WorkflowId:       workflowID,
+			RunId:            runID,
+			ScheduledEventId: scheduledEventID,
+			ActivityId:       activityID,
+			ActivityType:     activityTypeName,
 		}
 
 		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
@@ -765,7 +765,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
 				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId: activityID,
 						TaskQueue: &taskqueuepb.TaskQueue{
@@ -794,7 +794,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	}
 
 	for i := int64(0); i < taskCount; i++ {
-		scheduleID := i * 3
+		scheduledEventID := i * 3
 
 		var wg sync.WaitGroup
 		var result *matchingservice.PollActivityTaskQueueResponse
@@ -814,7 +814,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 			SourceNamespaceId:      namespaceID.String(),
 			NamespaceId:            namespaceID.String(),
 			Execution:              workflowExecution,
-			ScheduleId:             scheduleID,
+			ScheduledEventId:       scheduledEventID,
 			TaskQueue:              taskQueue,
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 		}
@@ -847,17 +847,17 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		s.EqualValues(activityInput, result.Input)
 		s.EqualValues(workflowExecution, result.WorkflowExecution)
 		taskToken := &tokenspb.Task{
-			ScheduleAttempt: 1,
-			NamespaceId:     namespaceID.String(),
-			WorkflowId:      workflowID,
-			RunId:           runID,
-			ScheduleId:      scheduleID,
-			ActivityId:      activityID,
-			ActivityType:    activityTypeName,
+			ScheduledAttempt: 1,
+			NamespaceId:      namespaceID.String(),
+			WorkflowId:       workflowID,
+			RunId:            runID,
+			ScheduledEventId: scheduledEventID,
+			ActivityId:       activityID,
+			ActivityType:     activityTypeName,
 		}
 
 		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
-		// s.EqualValues(scheduleID, result.Task)
+		// s.EqualValues(scheduledEventID, result.Task)
 
 		s.EqualValues(serializedToken, result.TaskToken)
 	}
@@ -937,7 +937,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 
 	const initialRangeID = 0
 	const rangeSize = 3
-	var scheduleID int64 = 123
+	var scheduledEventID int64 = 123
 	namespaceID := namespace.ID(uuid.New())
 	tl := "makeToast"
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
@@ -980,7 +980,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 					SourceNamespaceId:      namespaceID.String(),
 					NamespaceId:            namespaceID.String(),
 					Execution:              workflowExecution,
-					ScheduleId:             scheduleID,
+					ScheduledEventId:       scheduledEventID,
 					TaskQueue:              taskQueue,
 					ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 				}
@@ -1010,7 +1010,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
 				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId: activityID,
 						TaskQueue: &taskqueuepb.TaskQueue{
@@ -1053,13 +1053,13 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				s.EqualValues(activityHeader, result.Header)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
-					ScheduleAttempt: 1,
-					NamespaceId:     namespaceID.String(),
-					WorkflowId:      workflowID,
-					RunId:           runID,
-					ScheduleId:      scheduleID,
-					ActivityId:      activityID,
-					ActivityType:    activityTypeName,
+					ScheduledAttempt: 1,
+					NamespaceId:      namespaceID.String(),
+					WorkflowId:       workflowID,
+					RunId:            runID,
+					ScheduledEventId: scheduledEventID,
+					ActivityId:       activityID,
+					ActivityType:     activityTypeName,
 				}
 				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
 				s.NoError(err)
@@ -1104,7 +1104,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 	const taskCount = 100
 	const initialRangeID = 0
 	const rangeSize = 5
-	var scheduleID int64 = 123
+	var scheduledEventID int64 = 123
 	var startedEventID int64 = 1412
 
 	namespaceID := namespace.ID(uuid.New())
@@ -1127,7 +1127,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 				addRequest := matchingservice.AddWorkflowTaskRequest{
 					NamespaceId:            namespaceID.String(),
 					Execution:              workflowExecution,
-					ScheduleId:             scheduleID,
+					ScheduledEventId:       scheduledEventID,
 					TaskQueue:              taskQueue,
 					ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 				}
@@ -1152,7 +1152,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 			return &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId: startedEventID,
 				StartedEventId:         startedEventID,
-				ScheduledEventId:       scheduleID,
+				ScheduledEventId:       scheduledEventID,
 				WorkflowType:           workflowType,
 				Attempt:                1,
 			}, nil
@@ -1180,11 +1180,11 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 				s.EqualValues(startedEventID, result.StartedEventId)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
-					ScheduleAttempt: 1,
-					NamespaceId:     namespaceID.String(),
-					WorkflowId:      workflowID,
-					RunId:           runID,
-					ScheduleId:      scheduleID,
+					ScheduledAttempt: 1,
+					NamespaceId:      namespaceID.String(),
+					WorkflowId:       workflowID,
+					RunId:            runID,
+					ScheduledEventId: scheduledEventID,
 				}
 				resultToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {
@@ -1261,7 +1261,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	const iterations = 2
 	const initialRangeID = 0
 	const rangeSize = 10
-	var scheduleID int64 = 123
+	var scheduledEventID int64 = 123
 
 	namespaceID := namespace.ID(uuid.New())
 	tl := "makeToast"
@@ -1290,7 +1290,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 					SourceNamespaceId:      namespaceID.String(),
 					NamespaceId:            namespaceID.String(),
 					Execution:              workflowExecution,
-					ScheduleId:             scheduleID,
+					ScheduledEventId:       scheduledEventID,
 					TaskQueue:              taskQueue,
 					ScheduleToStartTimeout: timestamp.DurationFromSeconds(600),
 				}
@@ -1330,7 +1330,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 			startedTasks[taskRequest.TaskId] = true
 			return &historyservice.RecordActivityTaskStartedResponse{
 				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId: activityID,
 						TaskQueue: &taskqueuepb.TaskQueue{
@@ -1370,13 +1370,13 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				s.EqualValues(activityInput, result.Input)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
-					ScheduleAttempt: 1,
-					NamespaceId:     namespaceID.String(),
-					WorkflowId:      workflowID,
-					RunId:           runID,
-					ScheduleId:      scheduleID,
-					ActivityId:      activityID,
-					ActivityType:    activityTypeName,
+					ScheduledAttempt: 1,
+					NamespaceId:      namespaceID.String(),
+					WorkflowId:       workflowID,
+					RunId:            runID,
+					ScheduledEventId: scheduledEventID,
+					ActivityId:       activityID,
+					ActivityType:     activityTypeName,
 				}
 				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {
@@ -1417,7 +1417,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 	const iterations = 2
 	const initialRangeID = 0
 	const rangeSize = 10
-	var scheduleID int64 = 123
+	var scheduledEventID int64 = 123
 
 	namespaceID := namespace.ID(uuid.New())
 	tl := "makeToast"
@@ -1445,7 +1445,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 				addRequest := matchingservice.AddWorkflowTaskRequest{
 					NamespaceId:            namespaceID.String(),
 					Execution:              workflowExecution,
-					ScheduleId:             scheduleID,
+					ScheduledEventId:       scheduledEventID,
 					TaskQueue:              taskQueue,
 					ScheduleToStartTimeout: timestamp.DurationFromSeconds(600),
 				}
@@ -1482,7 +1482,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 			return &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId: startedEventID,
 				StartedEventId:         startedEventID,
-				ScheduledEventId:       scheduleID,
+				ScheduledEventId:       scheduledEventID,
 				WorkflowType:           workflowType,
 				Attempt:                1,
 			}, nil
@@ -1511,11 +1511,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 				s.EqualValues(startedEventID, result.StartedEventId)
 				s.EqualValues(workflowExecution, result.WorkflowExecution)
 				taskToken := &tokenspb.Task{
-					ScheduleAttempt: 1,
-					NamespaceId:     namespaceID.String(),
-					WorkflowId:      workflowID,
-					RunId:           runID,
-					ScheduleId:      scheduleID,
+					ScheduledAttempt: 1,
+					NamespaceId:      namespaceID.String(),
+					WorkflowId:       workflowID,
+					RunId:            runID,
+					ScheduledEventId: scheduledEventID,
 				}
 				resultToken, err := engine.tokenSerializer.Deserialize(result.TaskToken)
 				if err != nil {
@@ -1562,12 +1562,12 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 
-	scheduleID := int64(0)
+	scheduledEventID := int64(0)
 	addRequest := matchingservice.AddActivityTaskRequest{
 		SourceNamespaceId:      namespaceID.String(),
 		NamespaceId:            namespaceID.String(),
 		Execution:              workflowExecution,
-		ScheduleId:             scheduleID,
+		ScheduledEventId:       scheduledEventID,
 		TaskQueue:              taskQueue,
 		ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 	}
@@ -1587,7 +1587,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.NotEqual(ctx.event.GetTaskId(), ctx2.event.GetTaskId())
 	s.Equal(ctx.event.Data.GetWorkflowId(), ctx2.event.Data.GetWorkflowId())
 	s.Equal(ctx.event.Data.GetRunId(), ctx2.event.Data.GetRunId())
-	s.Equal(ctx.event.Data.GetScheduleId(), ctx2.event.Data.GetScheduleId())
+	s.Equal(ctx.event.Data.GetScheduledEventId(), ctx2.event.Data.GetScheduledEventId())
 
 	ctx2.finish(nil)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
@@ -1613,12 +1613,12 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	// add taskCount tasks
 	for i := int64(0); i < taskCount; i++ {
-		scheduleID := i * 3
+		scheduledEventID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
 			SourceNamespaceId:      namespaceID.String(),
 			NamespaceId:            namespaceID.String(),
 			Execution:              workflowExecution,
-			ScheduleId:             scheduleID,
+			ScheduledEventId:       scheduledEventID,
 			TaskQueue:              taskQueue,
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(1),
 		}
@@ -1778,12 +1778,12 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 
 	for _, tc := range testCases {
 		for i := int64(0); i < taskCount; i++ {
-			scheduleID := i * 3
+			scheduledEventID := i * 3
 			addRequest := matchingservice.AddActivityTaskRequest{
 				SourceNamespaceId:      namespaceID.String(),
 				NamespaceId:            namespaceID.String(),
 				Execution:              workflowExecution,
-				ScheduleId:             scheduleID,
+				ScheduledEventId:       scheduledEventID,
 				TaskQueue:              taskQueue,
 				ScheduleToStartTimeout: timestamp.DurationFromSeconds(5),
 			}
@@ -1841,7 +1841,7 @@ func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) 
 			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
 			return &historyservice.RecordActivityTaskStartedResponse{
 				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
 						ActivityId: activityID,
 						TaskQueue: &taskqueuepb.TaskQueue{

@@ -128,7 +128,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 	processTaskIfClosed := false
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
-		activityInfo, ok := mutableState.GetActivityInfo(transferTask.ScheduleID)
+		activityInfo, ok := mutableState.GetActivityInfo(transferTask.ScheduledEventID)
 		if !ok {
 			return nil, nil
 		}
@@ -138,7 +138,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return nil, nil
 		}
 
-		if activityInfo.StartedId == common.EmptyEventID {
+		if activityInfo.StartedEventId == common.EmptyEventID {
 			return newActivityTaskPostActionInfo(mutableState, *activityInfo.ScheduleToStartTimeout)
 		}
 
@@ -169,7 +169,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 	processTaskIfClosed := false
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
-		wtInfo, ok := mutableState.GetWorkflowTaskInfo(transferTask.ScheduleID)
+		wtInfo, ok := mutableState.GetWorkflowTaskInfo(transferTask.ScheduledEventID)
 		if !ok {
 			return nil, nil
 		}
@@ -194,7 +194,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 			return nil, nil
 		}
 
-		if wtInfo.StartedID == common.EmptyEventID {
+		if wtInfo.StartedEventID == common.EmptyEventID {
 			return newWorkflowTaskPostActionInfo(
 				mutableState,
 				taskScheduleToStartTimeoutSeconds,
@@ -331,7 +331,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 	processTaskIfClosed := false
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
-		requestCancelInfo, ok := mutableState.GetRequestCancelInfo(transferTask.InitiatedID)
+		requestCancelInfo, ok := mutableState.GetRequestCancelInfo(transferTask.InitiatedEventID)
 		if !ok {
 			return nil, nil
 		}
@@ -368,7 +368,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 	processTaskIfClosed := false
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
-		signalInfo, ok := mutableState.GetSignalInfo(transferTask.InitiatedID)
+		signalInfo, ok := mutableState.GetSignalInfo(transferTask.InitiatedEventID)
 		if !ok {
 			return nil, nil
 		}
@@ -405,7 +405,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 	processTaskIfClosed := true
 	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
-		childWorkflowInfo, ok := mutableState.GetChildExecutionInfo(transferTask.InitiatedID)
+		childWorkflowInfo, ok := mutableState.GetChildExecutionInfo(transferTask.InitiatedEventID)
 		if !ok {
 			return nil, nil
 		}
@@ -416,7 +416,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		}
 
 		workflowClosed := !mutableState.IsWorkflowExecutionRunning()
-		childStarted := childWorkflowInfo.StartedId != common.EmptyEventID
+		childStarted := childWorkflowInfo.StartedEventId != common.EmptyEventID
 		childAbandon := childWorkflowInfo.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON
 
 		if workflowClosed && !(childStarted && childAbandon) {
