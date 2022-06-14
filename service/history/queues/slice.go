@@ -187,6 +187,10 @@ func (s *SliceImpl) splitExecutables(
 func (s *SliceImpl) CanMergeByRange(slice Slice) bool {
 	s.validateNotDestroyed()
 
+	if _, ok := slice.(*SliceImpl); !ok {
+		panic(fmt.Sprintf("Unable to merge queue slice of type %T with type %T", s, slice))
+	}
+
 	return s != slice && s.scope.CanMergeByRange(slice.Scope())
 }
 
@@ -195,10 +199,7 @@ func (s *SliceImpl) MergeByRange(slice Slice) Slice {
 		panic(fmt.Sprintf("Unable to merge queue slice having scope %v with slice having scope %v by range", s.scope, slice.Scope()))
 	}
 
-	incomingSlice, ok := slice.(*SliceImpl)
-	if !ok {
-		panic(fmt.Sprintf("Unable to merge queue slice of type %T with type %T", s, slice))
-	}
+	incomingSlice := slice.(*SliceImpl)
 
 	s.destroy()
 	incomingSlice.destroy()
@@ -213,6 +214,10 @@ func (s *SliceImpl) MergeByRange(slice Slice) Slice {
 func (s *SliceImpl) CanMergeByPredicate(slice Slice) bool {
 	s.validateNotDestroyed()
 
+	if _, ok := slice.(*SliceImpl); !ok {
+		panic(fmt.Sprintf("Unable to merge queue slice of type %T with type %T", s, slice))
+	}
+
 	return s != slice && s.scope.CanMergeByPredicate(slice.Scope())
 }
 
@@ -221,10 +226,7 @@ func (s *SliceImpl) MergeByPredicate(slice Slice) Slice {
 		panic(fmt.Sprintf("Unable to merge queue slice having scope %v with slice having scope %v by predicate", s.scope, slice.Scope()))
 	}
 
-	incomingSlice, ok := slice.(*SliceImpl)
-	if !ok {
-		panic(fmt.Sprintf("Unable to merge queue slice of type %T with type %T", s, slice))
-	}
+	incomingSlice := slice.(*SliceImpl)
 
 	s.destroy()
 	incomingSlice.destroy()
