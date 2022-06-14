@@ -45,13 +45,13 @@ func And[T any](
 	for _, p := range predicates {
 		switch p := p.(type) {
 		case *AndImpl[T]:
-			flattened = append(flattened, p.Predicates...)
+			flattened = appendPredicates(flattened, p.Predicates...)
 		case *AllImpl[T]:
 			continue
 		case *EmptyImpl[T]:
 			return p
 		default:
-			flattened = append(flattened, p)
+			flattened = appendPredicates(flattened, p)
 		}
 	}
 
@@ -88,6 +88,30 @@ func (a *AndImpl[T]) Equals(
 	return predicatesEqual(a.Predicates, andPredicate.Predicates)
 }
 
+// appendPredicates adds new predicates to the slice of existing predicates
+// dropping any duplicated predicates where duplication is determined by Predicate.Equals.
+// appendPredicates assumes that there's no duplication in new predicates.
+func appendPredicates[T any](
+	current []Predicate[T],
+	new ...Predicate[T],
+) []Predicate[T] {
+	result := current
+
+AppendLoop:
+	for _, newPredicate := range new {
+		for _, currentPredicate := range current {
+			if currentPredicate.Equals(newPredicate) {
+				continue AppendLoop
+			}
+		}
+
+		result = append(result, newPredicate)
+	}
+
+	return result
+}
+
+// predicatesEqual assumes there's no duplication in the given slices of predicates
 func predicatesEqual[T any](
 	this []Predicate[T],
 	that []Predicate[T],
@@ -96,25 +120,15 @@ func predicatesEqual[T any](
 		return false
 	}
 
-	matchedThatIndex := make(map[int]struct{}, len(that))
+MatchLoop:
 	for _, thisPredicate := range this {
-		foundEqual := false
-
-		for idx, thatPredicate := range that {
-			if _, ok := matchedThatIndex[idx]; ok {
-				continue
-			}
-
+		for _, thatPredicate := range that {
 			if thisPredicate.Equals(thatPredicate) {
-				matchedThatIndex[idx] = struct{}{}
-				foundEqual = true
-				break
+				continue MatchLoop
 			}
 		}
 
-		if !foundEqual {
-			return false
-		}
+		return false
 	}
 
 	return true

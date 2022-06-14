@@ -45,13 +45,13 @@ func Or[T any](
 	for _, p := range predicates {
 		switch p := p.(type) {
 		case *OrImpl[T]:
-			flattened = append(flattened, p.Predicates...)
+			flattened = appendPredicates(flattened, p.Predicates...)
 		case *AllImpl[T]:
 			return p
 		case *EmptyImpl[T]:
 			continue
 		default:
-			flattened = append(flattened, p)
+			flattened = appendPredicates(flattened, p)
 		}
 	}
 

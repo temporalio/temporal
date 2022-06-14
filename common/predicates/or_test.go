@@ -94,6 +94,32 @@ func (s *orSuite) TestOr_None() {
 	}
 }
 
+func (s *orSuite) TestOr_Duplication() {
+	p1 := newTestPredicate(1, 2, 3)
+	p2 := newTestPredicate(2, 3, 4)
+	p3 := newTestPredicate(3, 4, 5)
+
+	_, ok := Or[int](p1, p1).(*testPredicate)
+	s.True(ok)
+
+	p := Or[int](p1, p2)
+	pOr, ok := Or[int](p, p1).(*OrImpl[int])
+	s.True(ok)
+	s.Len(pOr.Predicates, 2)
+
+	pOr, ok = Or(p, p).(*OrImpl[int])
+	s.True(ok)
+	s.Len(pOr.Predicates, 2)
+
+	pOr, ok = Or(p, Or[int](p1, p2)).(*OrImpl[int])
+	s.True(ok)
+	s.Len(pOr.Predicates, 2)
+
+	pOr, ok = Or(p, Or[int](p1, p2, p3)).(*OrImpl[int])
+	s.True(ok)
+	s.Len(pOr.Predicates, 3)
+}
+
 func (s *orSuite) TestOr_Equals() {
 	p1 := newTestPredicate(1, 2, 3)
 	p2 := newTestPredicate(2, 3, 4)
@@ -102,6 +128,7 @@ func (s *orSuite) TestOr_Equals() {
 	s.True(p.Equals(p))
 	s.True(p.Equals(Or[int](p1, p2)))
 	s.True(p.Equals(Or[int](p2, p1)))
+	s.True(p.Equals(Or[int](p1, p1, p2)))
 	s.True(p.Equals(Or[int](
 		newTestPredicate(4, 3, 2),
 		newTestPredicate(3, 2, 1),
@@ -109,7 +136,6 @@ func (s *orSuite) TestOr_Equals() {
 
 	s.False(p.Equals(p1))
 	s.False(p.Equals(Or[int](p2, p2)))
-	s.False(p.Equals(Or[int](p1, p1, p2)))
 	s.False(p.Equals(Or[int](p2, newTestPredicate(5, 6, 7))))
 	s.False(p.Equals(And[int](p1, p2)))
 	s.False(p.Equals(Not(p)))

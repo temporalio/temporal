@@ -94,6 +94,32 @@ func (s *andSuite) TestAnd_None() {
 	}
 }
 
+func (s *andSuite) TestAnd_Duplication() {
+	p1 := newTestPredicate(1, 2, 3)
+	p2 := newTestPredicate(2, 3, 4)
+	p3 := newTestPredicate(3, 4, 5)
+
+	_, ok := And[int](p1, p1).(*testPredicate)
+	s.True(ok)
+
+	p := And[int](p1, p2)
+	pAnd, ok := And[int](p, p1).(*AndImpl[int])
+	s.True(ok)
+	s.Len(pAnd.Predicates, 2)
+
+	pAnd, ok = And(p, p).(*AndImpl[int])
+	s.True(ok)
+	s.Len(pAnd.Predicates, 2)
+
+	pAnd, ok = And(p, And[int](p1, p2)).(*AndImpl[int])
+	s.True(ok)
+	s.Len(pAnd.Predicates, 2)
+
+	pAnd, ok = And(p, And[int](p1, p2, p3)).(*AndImpl[int])
+	s.True(ok)
+	s.Len(pAnd.Predicates, 3)
+}
+
 func (s *andSuite) TestAnd_Equals() {
 	p1 := newTestPredicate(1, 2, 3)
 	p2 := newTestPredicate(2, 3, 4)
@@ -102,6 +128,7 @@ func (s *andSuite) TestAnd_Equals() {
 	s.True(p.Equals(p))
 	s.True(p.Equals(And[int](p1, p2)))
 	s.True(p.Equals(And[int](p2, p1)))
+	s.True(p.Equals(And[int](p1, p1, p2)))
 	s.True(p.Equals(And[int](
 		newTestPredicate(4, 3, 2),
 		newTestPredicate(3, 2, 1),
@@ -109,7 +136,6 @@ func (s *andSuite) TestAnd_Equals() {
 
 	s.False(p.Equals(p1))
 	s.False(p.Equals(And[int](p2, p2)))
-	s.False(p.Equals(And[int](p1, p1, p2)))
 	s.False(p.Equals(And[int](p2, newTestPredicate(5, 6, 7))))
 	s.False(p.Equals(Or[int](p1, p2)))
 	s.False(p.Equals(Not(p)))
