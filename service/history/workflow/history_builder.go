@@ -197,7 +197,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 
 func (b *HistoryBuilder) AddWorkflowTaskScheduledEvent(
 	taskQueue *taskqueuepb.TaskQueue,
-	startToCloseTimeoutSeconds int32,
+	startToCloseTimeout *time.Duration,
 	attempt int32,
 	now time.Time,
 ) *historypb.HistoryEvent {
@@ -205,7 +205,7 @@ func (b *HistoryBuilder) AddWorkflowTaskScheduledEvent(
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
 		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 			TaskQueue:           taskQueue,
-			StartToCloseTimeout: timestamp.DurationPtr(time.Duration(startToCloseTimeoutSeconds) * time.Second),
+			StartToCloseTimeout: startToCloseTimeout,
 			Attempt:             attempt,
 		},
 	}
