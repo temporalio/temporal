@@ -246,12 +246,12 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadSuccess_Expired() {
 	allocatedTaskInfo := &persistencespb.AllocatedTaskInfo{
 		TaskId: s.lastAllocatedTaskID + 100,
 		Data: &persistencespb.TaskInfo{
-			NamespaceId: uuid.New().String(),
-			WorkflowId:  uuid.New().String(),
-			RunId:       uuid.New().String(),
-			ScheduleId:  rand.Int63(),
-			CreateTime:  timestamp.TimePtr(time.Now().UTC()),
-			ExpiryTime:  timestamp.TimePtr(time.Now().UTC().Add(-time.Minute)),
+			NamespaceId:      uuid.New().String(),
+			WorkflowId:       uuid.New().String(),
+			RunId:            uuid.New().String(),
+			ScheduledEventId: rand.Int63(),
+			CreateTime:       timestamp.TimePtr(time.Now().UTC()),
+			ExpiryTime:       timestamp.TimePtr(time.Now().UTC().Add(-time.Minute)),
 		},
 	}
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID)
@@ -285,12 +285,12 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadSuccess_Dispatch() {
 	allocatedTaskInfo := &persistencespb.AllocatedTaskInfo{
 		TaskId: s.lastAllocatedTaskID + 100,
 		Data: &persistencespb.TaskInfo{
-			NamespaceId: uuid.New().String(),
-			WorkflowId:  uuid.New().String(),
-			RunId:       uuid.New().String(),
-			ScheduleId:  rand.Int63(),
-			CreateTime:  timestamp.TimePtr(time.Now().UTC()),
-			ExpiryTime:  timestamp.TimePtr(time.Unix(0, 0)),
+			NamespaceId:      uuid.New().String(),
+			WorkflowId:       uuid.New().String(),
+			RunId:            uuid.New().String(),
+			ScheduledEventId: rand.Int63(),
+			CreateTime:       timestamp.TimePtr(time.Now().UTC()),
+			ExpiryTime:       timestamp.TimePtr(time.Unix(0, 0)),
 		},
 	}
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID)

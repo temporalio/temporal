@@ -628,7 +628,7 @@ func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 	activityCounter := int32(0)
 	scheduleActivity := true
 	requestCancellation := false
-	activityScheduleID := int64(0)
+	activityScheduledID := int64(0)
 
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
@@ -637,7 +637,7 @@ func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 
-			activityScheduleID = startedEventID + 2
+			activityScheduledID = startedEventID + 2
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -657,7 +657,7 @@ func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
-					ScheduledEventId: activityScheduleID,
+					ScheduledEventId: activityScheduledID,
 				}},
 			}}, nil
 		}
@@ -770,7 +770,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	activityCounter := int32(0)
 	scheduleActivity := true
 	requestCancellation := false
-	activityScheduleID := int64(0)
+	activityScheduledID := int64(0)
 
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
@@ -779,7 +779,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 			buf := new(bytes.Buffer)
 			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
 			s.Logger.Info("Scheduling activity")
-			activityScheduleID = startedEventID + 2
+			activityScheduledID = startedEventID + 2
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -800,7 +800,7 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
-					ScheduledEventId: activityScheduleID,
+					ScheduledEventId: activityScheduledID,
 				}},
 			}}, nil
 		}

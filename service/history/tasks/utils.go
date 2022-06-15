@@ -77,19 +77,19 @@ func GetTransferTaskEventID(
 	eventID := int64(0)
 	switch task := transferTask.(type) {
 	case *ActivityTask:
-		eventID = task.ScheduleID
+		eventID = task.ScheduledEventID
 	case *WorkflowTask:
-		eventID = task.ScheduleID
+		eventID = task.ScheduledEventID
 	case *CloseExecutionTask:
 		eventID = common.FirstEventID
 	case *DeleteExecutionTask:
 		eventID = common.FirstEventID
 	case *CancelExecutionTask:
-		eventID = task.InitiatedID
+		eventID = task.InitiatedEventID
 	case *SignalExecutionTask:
-		eventID = task.InitiatedID
+		eventID = task.InitiatedEventID
 	case *StartChildExecutionTask:
-		eventID = task.InitiatedID
+		eventID = task.InitiatedEventID
 	case *ResetWorkflowTask:
 		eventID = common.FirstEventID
 	case *fakeTask:

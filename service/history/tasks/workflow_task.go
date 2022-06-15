@@ -39,7 +39,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		TaskQueue           string
-		ScheduleID          int64
+		ScheduledEventID    int64
 		Version             int64
 	}
 )

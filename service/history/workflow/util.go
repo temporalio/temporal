@@ -45,8 +45,8 @@ func failWorkflowTask(
 ) error {
 
 	if _, err := mutableState.AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduleID,
-		workflowTask.StartedID,
+		workflowTask.ScheduledEventID,
+		workflowTask.StartedEventID,
 		workflowTaskFailureCause,
 		nil,
 		consts.IdentityHistoryService,

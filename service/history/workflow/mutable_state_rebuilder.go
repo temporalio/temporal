@@ -198,7 +198,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			// NOTE: at the beginning of the loop, stickyness is cleared
 			if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 				timestamp.TimeValue(event.GetEventTime()),
-				workflowTask.ScheduleID,
+				workflowTask.ScheduledEventID,
 			); err != nil {
 				return nil, err
 			}
@@ -219,7 +219,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateStartWorkflowTaskTasks(
 				timestamp.TimeValue(event.GetEventTime()),
-				workflowTask.ScheduleID,
+				workflowTask.ScheduledEventID,
 			); err != nil {
 				return nil, err
 			}
@@ -250,7 +250,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				// NOTE: at the beginning of the loop, stickyness is cleared
 				if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 					timestamp.TimeValue(event.GetEventTime()),
-					workflowTask.ScheduleID,
+					workflowTask.ScheduledEventID,
 				); err != nil {
 					return nil, err
 				}
@@ -273,7 +273,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				// NOTE: at the beginning of the loop, stickyness is cleared
 				if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 					timestamp.TimeValue(event.GetEventTime()),
-					workflowTask.ScheduleID,
+					workflowTask.ScheduledEventID,
 				); err != nil {
 					return nil, err
 				}

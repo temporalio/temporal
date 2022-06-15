@@ -235,9 +235,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	s.Nil(err)
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduledEventID, taskQueueName, uuid.New())
+	di.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduledEventID, di.StartedEventID, "some random identity")
 
 	taskID := int64(59)
 	activityID := "activity-1"
@@ -255,7 +255,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 		VisibilityTimestamp: now,
 		TaskID:              taskID,
 		TaskQueue:           taskQueueName,
-		ScheduleID:          event.GetEventId(),
+		ScheduledEventID:    event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -325,9 +325,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 	s.Nil(err)
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduledEventID, taskQueueName, uuid.New())
+	di.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduledEventID, di.StartedEventID, "some random identity")
 
 	taskID := int64(59)
 	activityID := "activity-1"
@@ -345,7 +345,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 		VisibilityTimestamp: now,
 		TaskID:              taskID,
 		TaskQueue:           taskQueueName,
-		ScheduleID:          event.GetEventId(),
+		ScheduledEventID:    event.GetEventId(),
 	}
 
 	event = addActivityTaskStartedEvent(mutableState, event.GetEventId(), "")
@@ -399,10 +399,10 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 		VisibilityTimestamp: now,
 		TaskID:              taskID,
 		TaskQueue:           taskQueueName,
-		ScheduleID:          di.ScheduleID,
+		ScheduledEventID:    di.ScheduledEventID,
 	}
 
-	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduledEventID, di.Version)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	// no-op post action
@@ -425,7 +425,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 		namespace.ID(transferTask.NamespaceID),
 		transferTask.WorkflowID,
 		transferTask.RunID,
-		di.ScheduleID,
+		di.ScheduledEventID,
 		s.version,
 		int64(0),
 		int64(0),
@@ -479,11 +479,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 		VisibilityTimestamp: now,
 		TaskID:              taskID,
 		TaskQueue:           taskQueueName,
-		ScheduleID:          di.ScheduleID,
+		ScheduledEventID:    di.ScheduledEventID,
 	}
 
-	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduledEventID, taskQueueName, uuid.New())
+	di.StartedEventID = event.GetEventId()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -519,9 +519,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	s.Nil(err)
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
-	addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduledEventID, taskQueueName, uuid.New())
+	di.StartedEventID = event.GetEventId()
+	addWorkflowTaskCompletedEvent(mutableState, di.ScheduledEventID, di.StartedEventID, "some random identity")
 
 	taskID := int64(59)
 	di = addWorkflowTaskScheduledEvent(mutableState)
@@ -537,11 +537,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 		VisibilityTimestamp: now,
 		TaskID:              taskID,
 		TaskQueue:           taskQueueName,
-		ScheduleID:          di.ScheduleID,
+		ScheduledEventID:    di.ScheduledEventID,
 	}
 
-	event = addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
+	event = addWorkflowTaskStartedEvent(mutableState, di.ScheduledEventID, taskQueueName, uuid.New())
+	di.StartedEventID = event.GetEventId()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -595,9 +595,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.Nil(err)
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduledEventID, taskQueueName, uuid.New())
+	di.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduledEventID, di.StartedEventID, "some random identity")
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
@@ -688,9 +688,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	s.Nil(err)
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduledEventID, taskQueueName, uuid.New())
+	di.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduledEventID, di.StartedEventID, "some random identity")
 
 	taskID := int64(59)
 	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
@@ -710,7 +710,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 		TargetRunID:             targetExecution.GetRunId(),
 		TargetChildWorkflowOnly: true,
 		TaskID:                  taskID,
-		InitiatedID:             event.GetEventId(),
+		InitiatedEventID:        event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -778,9 +778,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 	s.Nil(err)
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduledEventID, taskQueueName, uuid.New())
+	di.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduledEventID, di.StartedEventID, "some random identity")
 
 	taskID := int64(59)
 	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
@@ -798,7 +798,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 		TargetWorkflowID:    targetExecution.GetWorkflowId(),
 		TargetRunID:         targetExecution.GetRunId(),
 		TaskID:              taskID,
-		InitiatedID:         event.GetEventId(),
+		InitiatedEventID:    event.GetEventId(),
 	}
 
 	event = addCancelRequestedEvent(mutableState, event.GetEventId(), tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
@@ -845,9 +845,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 	s.Nil(err)
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduledEventID, taskQueueName, uuid.New())
+	di.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduledEventID, di.StartedEventID, "some random identity")
 
 	taskID := int64(59)
 	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
@@ -867,7 +867,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 		TargetWorkflowID:    targetExecution.GetWorkflowId(),
 		TargetRunID:         targetExecution.GetRunId(),
 		TaskID:              taskID,
-		InitiatedID:         event.GetEventId(),
+		InitiatedEventID:    event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -936,9 +936,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 	s.Nil(err)
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduledEventID, taskQueueName, uuid.New())
+	di.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduledEventID, di.StartedEventID, "some random identity")
 
 	taskID := int64(59)
 	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
@@ -957,7 +957,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 		TargetWorkflowID:    targetExecution.GetWorkflowId(),
 		TargetRunID:         targetExecution.GetRunId(),
 		TaskID:              taskID,
-		InitiatedID:         event.GetEventId(),
+		InitiatedEventID:    event.GetEventId(),
 	}
 
 	event = addSignaledEvent(mutableState, event.GetEventId(), tests.TargetNamespace, tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), "")
@@ -1002,9 +1002,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	s.Nil(err)
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduledEventID, taskQueueName, uuid.New())
+	di.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduledEventID, di.StartedEventID, "some random identity")
 
 	taskID := int64(59)
 	event, _ = addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
@@ -1023,7 +1023,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 		TargetNamespaceID:   tests.ChildNamespaceID.String(),
 		TargetWorkflowID:    childWorkflowID,
 		TaskID:              taskID,
-		InitiatedID:         event.GetEventId(),
+		InitiatedEventID:    event.GetEventId(),
 	}
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
@@ -1109,9 +1109,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	s.Nil(err)
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduledEventID, taskQueueName, uuid.New())
+	di.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduledEventID, di.StartedEventID, "some random identity")
 
 	taskID := int64(59)
 	event, childInfo := addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
@@ -1129,12 +1129,12 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 		TargetNamespaceID:   tests.ChildNamespaceID.String(),
 		TargetWorkflowID:    childWorkflowID,
 		TaskID:              taskID,
-		InitiatedID:         event.GetEventId(),
+		InitiatedEventID:    event.GetEventId(),
 	}
 	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), childWorkflowID, uuid.New(), childWorkflowType, nil)
 	// Flush buffered events so real IDs get assigned
 	mutableState.FlushBufferedEvents()
-	childInfo.StartedId = event.GetEventId()
+	childInfo.StartedEventId = event.GetEventId()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)

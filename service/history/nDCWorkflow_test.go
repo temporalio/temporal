@@ -279,14 +279,14 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastEventVersion, true).Return(nil).AnyTimes()
 	inFlightWorkflowTask := &workflow.WorkflowTaskInfo{
-		Version:    1234,
-		ScheduleID: 5678,
-		StartedID:  9012,
+		Version:          1234,
+		ScheduledEventID: 5678,
+		StartedEventID:   9012,
 	}
 	s.mockMutableState.EXPECT().GetInFlightWorkflowTask().Return(inFlightWorkflowTask, true)
 	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		inFlightWorkflowTask.ScheduleID,
-		inFlightWorkflowTask.StartedID,
+		inFlightWorkflowTask.ScheduledEventID,
+		inFlightWorkflowTask.StartedEventID,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,

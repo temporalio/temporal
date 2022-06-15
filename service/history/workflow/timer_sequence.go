@@ -253,7 +253,7 @@ func (t *timerSequenceImpl) getUserTimerTimeout(
 	expiryTime := timerInfo.ExpiryTime
 
 	return &TimerSequenceID{
-		EventID:      timerInfo.GetStartedId(),
+		EventID:      timerInfo.GetStartedEventId(),
 		Timestamp:    timestamp.TimeValue(expiryTime),
 		TimerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		TimerCreated: timerInfo.TaskStatus == TimerTaskStatusCreated,
@@ -266,12 +266,12 @@ func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
 ) *TimerSequenceID {
 
 	// activity is not scheduled yet, probably due to retry & backoff
-	if activityInfo.ScheduleId == common.EmptyEventID {
+	if activityInfo.ScheduledEventId == common.EmptyEventID {
 		return nil
 	}
 
 	// activity is already started
-	if activityInfo.StartedId != common.EmptyEventID {
+	if activityInfo.StartedEventId != common.EmptyEventID {
 		return nil
 	}
 
@@ -283,7 +283,7 @@ func (t *timerSequenceImpl) getActivityScheduleToStartTimeout(
 	timeoutTime := timestamp.TimeValue(activityInfo.ScheduledTime).Add(scheduleToStartDuration)
 
 	return &TimerSequenceID{
-		EventID:      activityInfo.ScheduleId,
+		EventID:      activityInfo.ScheduledEventId,
 		Timestamp:    timeoutTime,
 		TimerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		TimerCreated: (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedScheduleToStart) > 0,
@@ -296,7 +296,7 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 ) *TimerSequenceID {
 
 	// activity is not scheduled yet, probably due to retry & backoff
-	if activityInfo.ScheduleId == common.EmptyEventID {
+	if activityInfo.ScheduledEventId == common.EmptyEventID {
 		return nil
 	}
 
@@ -308,7 +308,7 @@ func (t *timerSequenceImpl) getActivityScheduleToCloseTimeout(
 	timeoutTime := timestamp.TimeValue(activityInfo.ScheduledTime).Add(scheduleToCloseDuration)
 
 	return &TimerSequenceID{
-		EventID:      activityInfo.ScheduleId,
+		EventID:      activityInfo.ScheduledEventId,
 		Timestamp:    timeoutTime,
 		TimerType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		TimerCreated: (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedScheduleToClose) > 0,
@@ -321,12 +321,12 @@ func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
 ) *TimerSequenceID {
 
 	// activity is not scheduled yet, probably due to retry & backoff
-	if activityInfo.ScheduleId == common.EmptyEventID {
+	if activityInfo.ScheduledEventId == common.EmptyEventID {
 		return nil
 	}
 
 	// activity is not started yet
-	if activityInfo.StartedId == common.EmptyEventID {
+	if activityInfo.StartedEventId == common.EmptyEventID {
 		return nil
 	}
 
@@ -338,7 +338,7 @@ func (t *timerSequenceImpl) getActivityStartToCloseTimeout(
 	timeoutTime := timestamp.TimeValue(activityInfo.StartedTime).Add(startToCloseDuration)
 
 	return &TimerSequenceID{
-		EventID:      activityInfo.ScheduleId,
+		EventID:      activityInfo.ScheduledEventId,
 		Timestamp:    timeoutTime,
 		TimerType:    enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		TimerCreated: (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedStartToClose) > 0,
@@ -351,12 +351,12 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 ) *TimerSequenceID {
 
 	// activity is not scheduled yet, probably due to retry & backoff
-	if activityInfo.ScheduleId == common.EmptyEventID {
+	if activityInfo.ScheduledEventId == common.EmptyEventID {
 		return nil
 	}
 
 	// activity is not started yet
-	if activityInfo.StartedId == common.EmptyEventID {
+	if activityInfo.StartedEventId == common.EmptyEventID {
 		return nil
 	}
 
@@ -379,7 +379,7 @@ func (t *timerSequenceImpl) getActivityHeartbeatTimeout(
 	heartbeatTimeout := lastHeartbeat.Add(heartbeatDuration)
 
 	return &TimerSequenceID{
-		EventID:      activityInfo.ScheduleId,
+		EventID:      activityInfo.ScheduledEventId,
 		Timestamp:    heartbeatTimeout,
 		TimerType:    enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		TimerCreated: (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) > 0,

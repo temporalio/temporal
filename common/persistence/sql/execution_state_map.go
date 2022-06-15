@@ -53,13 +53,13 @@ func updateActivityInfos(
 
 	if len(activityInfos) > 0 {
 		rows := make([]sqlplugin.ActivityInfoMapsRow, 0, len(activityInfos))
-		for scheduleId, blob := range activityInfos {
+		for scheduledEventId, blob := range activityInfos {
 			rows = append(rows, sqlplugin.ActivityInfoMapsRow{
 				ShardID:      shardID,
 				NamespaceID:  namespaceID,
 				WorkflowID:   workflowID,
 				RunID:        runID,
-				ScheduleID:   scheduleId,
+				ScheduleID:   scheduledEventId,
 				Data:         blob.Data,
 				DataEncoding: blob.EncodingType.String(),
 			})

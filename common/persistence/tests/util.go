@@ -116,8 +116,8 @@ func RandomMutation(
 		DeleteSignalInfos:         map[int64]struct{}{rand.Int63(): {}},
 		UpsertSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
 		DeleteSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
-		//NewBufferedEvents: see below
-		//ClearBufferedEvents: see below
+		// NewBufferedEvents: see below
+		// ClearBufferedEvents: see below
 
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer:    {},
@@ -209,7 +209,7 @@ func RandomActivityInfo() *persistencespb.ActivityInfo {
 		Version:                rand.Int63(),
 		ScheduledEventBatchId:  rand.Int63(),
 		ScheduledTime:          RandomTime(),
-		StartedId:              rand.Int63(),
+		StartedEventId:         rand.Int63(),
 		StartedTime:            RandomTime(),
 		ActivityId:             uuid.New().String(),
 		RequestId:              uuid.New().String(),

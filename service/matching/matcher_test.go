@@ -493,12 +493,12 @@ func randomTaskInfo() *persistencespb.AllocatedTaskInfo {
 
 	return &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{
-			NamespaceId: uuid.New(),
-			WorkflowId:  uuid.New(),
-			RunId:       uuid.New(),
-			ScheduleId:  rand.Int63(),
-			CreateTime:  &rt1,
-			ExpiryTime:  &rt2,
+			NamespaceId:      uuid.New(),
+			WorkflowId:       uuid.New(),
+			RunId:            uuid.New(),
+			ScheduledEventId: rand.Int63(),
+			CreateTime:       &rt1,
+			ExpiryTime:       &rt2,
 		},
 		TaskId: rand.Int63(),
 	}

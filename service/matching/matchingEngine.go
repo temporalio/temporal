@@ -280,13 +280,13 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
-		NamespaceId: namespaceID.String(),
-		RunId:       addRequest.Execution.GetRunId(),
-		WorkflowId:  addRequest.Execution.GetWorkflowId(),
-		ScheduleId:  addRequest.GetScheduleId(),
-		Clock:       addRequest.GetClock(),
-		ExpiryTime:  expirationTime,
-		CreateTime:  now,
+		NamespaceId:      namespaceID.String(),
+		RunId:            addRequest.Execution.GetRunId(),
+		WorkflowId:       addRequest.Execution.GetWorkflowId(),
+		ScheduledEventId: addRequest.GetScheduledEventId(),
+		Clock:            addRequest.GetClock(),
+		ExpiryTime:       expirationTime,
+		CreateTime:       now,
 	}
 
 	return tqm.AddTask(hCtx.Context, addTaskParams{
@@ -332,13 +332,13 @@ func (e *matchingEngineImpl) AddActivityTask(
 		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
-		NamespaceId: namespaceID.String(),
-		RunId:       runID,
-		WorkflowId:  addRequest.Execution.GetWorkflowId(),
-		ScheduleId:  addRequest.GetScheduleId(),
-		Clock:       addRequest.GetClock(),
-		CreateTime:  now,
-		ExpiryTime:  expirationTime,
+		NamespaceId:      namespaceID.String(),
+		RunId:            runID,
+		WorkflowId:       addRequest.Execution.GetWorkflowId(),
+		ScheduledEventId: addRequest.GetScheduledEventId(),
+		Clock:            addRequest.GetClock(),
+		CreateTime:       now,
+		ExpiryTime:       expirationTime,
 	}
 
 	return tlMgr.AddTask(hCtx.Context, addTaskParams{
@@ -434,7 +434,7 @@ pollLoop:
 					tag.WorkflowTaskQueueName(taskQueueName),
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
-					tag.WorkflowEventID(task.event.Data.GetScheduleId()),
+					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
 					tag.Error(err),
 				)
 				task.finish(nil)
@@ -512,7 +512,7 @@ pollLoop:
 					tag.WorkflowTaskQueueName(taskQueueName),
 					tag.TaskID(task.event.GetTaskId()),
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
-					tag.WorkflowEventID(task.event.Data.GetScheduleId()),
+					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
 					tag.Error(err),
 				)
 				task.finish(nil)
@@ -801,20 +801,20 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	if task.isQuery() {
 		// for a query task
 		queryRequest := task.query.request
-		taskToken := &tokenspb.QueryTask{
+		queryTaskToken := &tokenspb.QueryTask{
 			NamespaceId: queryRequest.GetNamespaceId(),
 			TaskQueue:   queryRequest.TaskQueue.Name,
 			TaskId:      task.query.taskID,
 		}
-		serializedToken, _ = e.tokenSerializer.SerializeQueryTaskToken(taskToken)
+		serializedToken, _ = e.tokenSerializer.SerializeQueryTaskToken(queryTaskToken)
 	} else {
 		taskToken := &tokenspb.Task{
-			NamespaceId:     task.event.Data.GetNamespaceId(),
-			WorkflowId:      task.event.Data.GetWorkflowId(),
-			RunId:           task.event.Data.GetRunId(),
-			ScheduleId:      historyResponse.GetScheduledEventId(),
-			ScheduleAttempt: historyResponse.GetAttempt(),
-			Clock:           historyResponse.GetClock(),
+			NamespaceId:      task.event.Data.GetNamespaceId(),
+			WorkflowId:       task.event.Data.GetWorkflowId(),
+			RunId:            task.event.Data.GetRunId(),
+			ScheduledEventId: historyResponse.GetScheduledEventId(),
+			Attempt:          historyResponse.GetAttempt(),
+			Clock:            historyResponse.GetClock(),
 		}
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
@@ -827,6 +827,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 		historyResponse,
 		task.workflowExecution(),
 		serializedToken)
+
 	if task.query != nil {
 		response.Query = task.query.request.QueryRequest.Query
 	}
@@ -855,14 +856,14 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	}
 
 	taskToken := &tokenspb.Task{
-		NamespaceId:     task.event.Data.GetNamespaceId(),
-		WorkflowId:      task.event.Data.GetWorkflowId(),
-		RunId:           task.event.Data.GetRunId(),
-		ScheduleId:      task.event.Data.GetScheduleId(),
-		ScheduleAttempt: historyResponse.GetAttempt(),
-		ActivityId:      attributes.GetActivityId(),
-		ActivityType:    attributes.GetActivityType().GetName(),
-		Clock:           historyResponse.GetClock(),
+		NamespaceId:      task.event.Data.GetNamespaceId(),
+		WorkflowId:       task.event.Data.GetWorkflowId(),
+		RunId:            task.event.Data.GetRunId(),
+		ScheduledEventId: task.event.Data.GetScheduledEventId(),
+		Attempt:          historyResponse.GetAttempt(),
+		ActivityId:       attributes.GetActivityId(),
+		ActivityType:     attributes.GetActivityType().GetName(),
+		Clock:            historyResponse.GetClock(),
 	}
 
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
@@ -880,7 +881,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		StartToCloseTimeout:         attributes.StartToCloseTimeout,
 		HeartbeatTimeout:            attributes.HeartbeatTimeout,
 		TaskToken:                   serializedToken,
-		Attempt:                     taskToken.ScheduleAttempt,
+		Attempt:                     taskToken.Attempt,
 		HeartbeatDetails:            historyResponse.HeartbeatDetails,
 		WorkflowType:                historyResponse.WorkflowType,
 		WorkflowNamespace:           historyResponse.WorkflowNamespace,
@@ -895,7 +896,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	request := &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
-		ScheduleId:        task.event.Data.GetScheduleId(),
+		ScheduledEventId:  task.event.Data.GetScheduledEventId(),
 		Clock:             task.event.Data.GetClock(),
 		TaskId:            task.event.GetTaskId(),
 		RequestId:         uuid.New(),
@@ -925,7 +926,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	request := &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
-		ScheduleId:        task.event.Data.GetScheduleId(),
+		ScheduledEventId:  task.event.Data.GetScheduledEventId(),
 		Clock:             task.event.Data.GetClock(),
 		TaskId:            task.event.GetTaskId(),
 		RequestId:         uuid.New(),

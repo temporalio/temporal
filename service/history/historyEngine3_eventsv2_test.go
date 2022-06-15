@@ -198,7 +198,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	request := historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &we,
-		ScheduleId:        2,
+		ScheduledEventId:  2,
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -212,12 +212,12 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = msBuilder.GetWorkflowType()
 	executionInfo = msBuilder.GetExecutionInfo()
-	if executionInfo.LastWorkflowTaskStartId != common.EmptyEventID {
-		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartId
+	if executionInfo.LastWorkflowTaskStartedEventId != common.EmptyEventID {
+		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
 	}
-	expectedResponse.ScheduledEventId = di.ScheduleID
+	expectedResponse.ScheduledEventId = di.ScheduledEventID
 	expectedResponse.ScheduledTime = di.ScheduledTime
-	expectedResponse.StartedEventId = di.ScheduleID + 1
+	expectedResponse.StartedEventId = di.ScheduledEventID + 1
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
 	expectedResponse.Attempt = di.Attempt

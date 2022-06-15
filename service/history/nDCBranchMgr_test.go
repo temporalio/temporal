@@ -236,16 +236,16 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastWriteVersion, true).Return(nil)
 	workflowTask := &workflow.WorkflowTaskInfo{
-		ScheduleID: 1234,
-		StartedID:  2345,
+		ScheduledEventID: 1234,
+		StartedEventID:   2345,
 	}
 	s.mockMutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		VersionHistories: versionHistories,
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduleID,
-		workflowTask.StartedID,
+		workflowTask.ScheduledEventID,
+		workflowTask.StartedEventID,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,

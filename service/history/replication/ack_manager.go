@@ -167,7 +167,7 @@ func (p *ackMgrImpl) GetTask(
 			VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
 			TaskID:              taskInfo.TaskId,
 			Version:             taskInfo.Version,
-			ScheduledID:         taskInfo.ScheduledId,
+			ScheduledEventID:    taskInfo.ScheduledEventId,
 		})
 	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
 		return p.taskInfoToTask(ctx, &tasks.HistoryReplicationTask{
@@ -366,7 +366,7 @@ func (p *ackMgrImpl) generateSyncActivityTask(
 		workflowID,
 		runID,
 		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
-			activityInfo, ok := mutableState.GetActivityInfo(taskInfo.ScheduledID)
+			activityInfo, ok := mutableState.GetActivityInfo(taskInfo.ScheduledEventID)
 			if !ok {
 				return nil, nil
 			}
@@ -376,7 +376,7 @@ func (p *ackMgrImpl) generateSyncActivityTask(
 			scheduledTime := activityInfo.ScheduledTime
 
 			// Todo: Comment why this exists? Why not set?
-			if activityInfo.StartedId != common.EmptyEventID {
+			if activityInfo.StartedEventId != common.EmptyEventID {
 				startedTime = activityInfo.StartedTime
 			}
 
@@ -398,9 +398,9 @@ func (p *ackMgrImpl) generateSyncActivityTask(
 						WorkflowId:         workflowID,
 						RunId:              runID,
 						Version:            activityInfo.Version,
-						ScheduledId:        activityInfo.ScheduleId,
+						ScheduledEventId:   activityInfo.ScheduledEventId,
 						ScheduledTime:      scheduledTime,
-						StartedId:          activityInfo.StartedId,
+						StartedEventId:     activityInfo.StartedEventId,
 						StartedTime:        startedTime,
 						LastHeartbeatTime:  heartbeatTime,
 						Details:            activityInfo.LastHeartbeatDetails,

@@ -31,6 +31,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -148,9 +149,9 @@ func (e *taskExecutorImpl) handleActivityTask(
 		WorkflowId:         attr.WorkflowId,
 		RunId:              attr.RunId,
 		Version:            attr.Version,
-		ScheduledId:        attr.ScheduledId,
+		ScheduledEventId:   attr.ScheduledEventId,
 		ScheduledTime:      attr.ScheduledTime,
-		StartedId:          attr.StartedId,
+		StartedEventId:     attr.StartedEventId,
 		StartedTime:        attr.StartedTime,
 		LastHeartbeatTime:  attr.LastHeartbeatTime,
 		Details:            attr.Details,

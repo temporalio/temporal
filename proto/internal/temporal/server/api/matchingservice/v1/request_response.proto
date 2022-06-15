@@ -101,7 +101,7 @@ message AddWorkflowTaskRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 3;
-    int64 schedule_id = 4;
+    int64 scheduled_event_id = 4;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration schedule_to_start_timeout = 5 [(gogoproto.stdduration) = true];
@@ -119,7 +119,7 @@ message AddActivityTaskRequest {
     // TODO: remove after 1.17 release.
     string source_namespace_id = 3;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 4;
-    int64 schedule_id = 5;
+    int64 scheduled_event_id = 5;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration schedule_to_start_timeout = 6 [(gogoproto.stdduration) = true];

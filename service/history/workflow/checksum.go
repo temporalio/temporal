@@ -61,55 +61,55 @@ func newMutableStateChecksumPayload(ms MutableState) *checksumspb.MutableStateCh
 	executionInfo := ms.GetExecutionInfo()
 	executionState := ms.GetExecutionState()
 	payload := &checksumspb.MutableStateChecksumPayload{
-		CancelRequested:         executionInfo.CancelRequested,
-		State:                   executionState.State,
-		LastFirstEventId:        executionInfo.LastFirstEventId,
-		NextEventId:             ms.GetNextEventID(),
-		LastProcessedEventId:    executionInfo.LastWorkflowTaskStartId,
-		SignalCount:             executionInfo.SignalCount,
-		WorkflowTaskAttempt:     executionInfo.WorkflowTaskAttempt,
-		WorkflowTaskScheduledId: executionInfo.WorkflowTaskScheduleId,
-		WorkflowTaskStartedId:   executionInfo.WorkflowTaskStartedId,
-		WorkflowTaskVersion:     executionInfo.WorkflowTaskVersion,
-		StickyTaskQueueName:     executionInfo.StickyTaskQueue,
-		VersionHistories:        executionInfo.VersionHistories,
+		CancelRequested:              executionInfo.CancelRequested,
+		State:                        executionState.State,
+		LastFirstEventId:             executionInfo.LastFirstEventId,
+		NextEventId:                  ms.GetNextEventID(),
+		LastProcessedEventId:         executionInfo.LastWorkflowTaskStartedEventId,
+		SignalCount:                  executionInfo.SignalCount,
+		WorkflowTaskAttempt:          executionInfo.WorkflowTaskAttempt,
+		WorkflowTaskScheduledEventId: executionInfo.WorkflowTaskScheduledEventId,
+		WorkflowTaskStartedEventId:   executionInfo.WorkflowTaskStartedEventId,
+		WorkflowTaskVersion:          executionInfo.WorkflowTaskVersion,
+		StickyTaskQueueName:          executionInfo.StickyTaskQueue,
+		VersionHistories:             executionInfo.VersionHistories,
 	}
 
 	// for each of the pendingXXX ids below, sorting is needed to guarantee that
 	// same serialized bytes can be generated during verification
 	pendingTimerIDs := make([]int64, 0, len(ms.GetPendingTimerInfos()))
 	for _, ti := range ms.GetPendingTimerInfos() {
-		pendingTimerIDs = append(pendingTimerIDs, ti.GetStartedId())
+		pendingTimerIDs = append(pendingTimerIDs, ti.GetStartedEventId())
 	}
 	common.SortInt64Slice(pendingTimerIDs)
-	payload.PendingTimerStartedIds = pendingTimerIDs
+	payload.PendingTimerStartedEventIds = pendingTimerIDs
 
 	pendingActivityIDs := make([]int64, 0, len(ms.GetPendingActivityInfos()))
 	for id := range ms.GetPendingActivityInfos() {
 		pendingActivityIDs = append(pendingActivityIDs, id)
 	}
 	common.SortInt64Slice(pendingActivityIDs)
-	payload.PendingActivityScheduledIds = pendingActivityIDs
+	payload.PendingActivityScheduledEventIds = pendingActivityIDs
 
 	pendingChildIDs := make([]int64, 0, len(ms.GetPendingChildExecutionInfos()))
 	for id := range ms.GetPendingChildExecutionInfos() {
 		pendingChildIDs = append(pendingChildIDs, id)
 	}
 	common.SortInt64Slice(pendingChildIDs)
-	payload.PendingChildInitiatedIds = pendingChildIDs
+	payload.PendingChildInitiatedEventIds = pendingChildIDs
 
 	signalIDs := make([]int64, 0, len(ms.GetPendingSignalExternalInfos()))
 	for id := range ms.GetPendingSignalExternalInfos() {
 		signalIDs = append(signalIDs, id)
 	}
 	common.SortInt64Slice(signalIDs)
-	payload.PendingSignalInitiatedIds = signalIDs
+	payload.PendingSignalInitiatedEventIds = signalIDs
 
 	requestCancelIDs := make([]int64, 0, len(ms.GetPendingRequestCancelExternalInfos()))
 	for id := range ms.GetPendingRequestCancelExternalInfos() {
 		requestCancelIDs = append(requestCancelIDs, id)
 	}
 	common.SortInt64Slice(requestCancelIDs)
-	payload.PendingReqCancelInitiatedIds = requestCancelIDs
+	payload.PendingReqCancelInitiatedEventIds = requestCancelIDs
 	return payload
 }
