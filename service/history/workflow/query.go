@@ -98,7 +98,6 @@ func (q *queryImpl) GetTerminationState() (*QueryTerminationState, error) {
 	}
 	return ts.(*QueryTerminationState), nil
 }
-
 func (q *queryImpl) setTerminationState(terminationState *QueryTerminationState) error {
 	if err := q.validateTerminationState(terminationState); err != nil {
 		return err
@@ -125,7 +124,6 @@ func (q *queryImpl) validateTerminationState(
 		}
 		queryResult := terminationState.QueryResult
 		validAnswered := queryResult.GetResultType() == enumspb.QUERY_RESULT_TYPE_ANSWERED &&
-			queryResult.Answer != nil &&
 			queryResult.GetErrorMessage() == ""
 		validFailed := queryResult.GetResultType() == enumspb.QUERY_RESULT_TYPE_FAILED &&
 			queryResult.Answer == nil &&

@@ -26,6 +26,7 @@ package workflow
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -79,7 +80,7 @@ func (s *QuerySuite) TestValidateTerminationState() {
 					ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
 				},
 			},
-			expectErr: true,
+			expectErr: false,
 		},
 		{
 			ts: &QueryTerminationState{
@@ -165,12 +166,14 @@ func (s *QuerySuite) TestValidateTerminationState() {
 	}
 
 	queryImpl := &queryImpl{}
-	for _, tc := range testCases {
-		if tc.expectErr {
-			s.Error(queryImpl.validateTerminationState(tc.ts))
-		} else {
-			s.NoError(queryImpl.validateTerminationState(tc.ts))
-		}
+	for i, tc := range testCases {
+		s.T().Run(strconv.Itoa(i), func(t *testing.T) {
+			if tc.expectErr {
+				s.Error(queryImpl.validateTerminationState(tc.ts))
+			} else {
+				s.NoError(queryImpl.validateTerminationState(tc.ts))
+			}
+		})
 	}
 }
 
