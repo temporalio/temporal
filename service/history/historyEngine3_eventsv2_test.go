@@ -186,7 +186,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	executionInfo.StickyTaskQueue = stickyTl
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	di := addWorkflowTaskScheduledEvent(msBuilder)
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
 
 	ms := workflow.TestCloneToProto(msBuilder)
 
@@ -215,12 +215,12 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	if executionInfo.LastWorkflowTaskStartedEventId != common.EmptyEventID {
 		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
 	}
-	expectedResponse.ScheduledEventId = di.ScheduledEventID
-	expectedResponse.ScheduledTime = di.ScheduledTime
-	expectedResponse.StartedEventId = di.ScheduledEventID + 1
+	expectedResponse.ScheduledEventId = wt.ScheduledEventID
+	expectedResponse.ScheduledTime = wt.ScheduledTime
+	expectedResponse.StartedEventId = wt.ScheduledEventID + 1
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
-	expectedResponse.Attempt = di.Attempt
+	expectedResponse.Attempt = wt.Attempt
 	expectedResponse.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
 		Name: executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,

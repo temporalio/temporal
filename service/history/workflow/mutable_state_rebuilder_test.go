@@ -732,7 +732,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskScheduled() {
 			Attempt:             workflowTaskAttempt,
 		}},
 	}
-	di := &WorkflowTaskInfo{
+	wt := &WorkflowTaskInfo{
 		Version:             event.GetVersion(),
 		ScheduledEventID:    event.GetEventId(),
 		StartedEventID:      common.EmptyEventID,
@@ -744,11 +744,11 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskScheduled() {
 	s.executionInfo.TaskQueue = taskqueue.GetName()
 	s.mockMutableState.EXPECT().ReplicateWorkflowTaskScheduledEvent(
 		event.GetVersion(), event.GetEventId(), taskqueue, &timeout, workflowTaskAttempt, event.GetEventTime(), event.GetEventTime(),
-	).Return(di, nil)
+	).Return(wt, nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateScheduleWorkflowTaskTasks(
 		timestamp.TimeValue(event.GetEventTime()),
-		di.ScheduledEventID,
+		wt.ScheduledEventID,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -782,7 +782,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 			RequestId:        workflowTaskRequestID,
 		}},
 	}
-	di := &WorkflowTaskInfo{
+	wt := &WorkflowTaskInfo{
 		Version:             event.GetVersion(),
 		ScheduledEventID:    scheduledEventID,
 		StartedEventID:      event.GetEventId(),
@@ -793,11 +793,11 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 	}
 	s.mockMutableState.EXPECT().ReplicateWorkflowTaskStartedEvent(
 		(*WorkflowTaskInfo)(nil), event.GetVersion(), scheduledEventID, event.GetEventId(), workflowTaskRequestID, timestamp.TimeValue(event.GetEventTime()),
-	).Return(di, nil)
+	).Return(wt, nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateStartWorkflowTaskTasks(
 		timestamp.TimeValue(event.GetEventTime()),
-		di.ScheduledEventID,
+		wt.ScheduledEventID,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 

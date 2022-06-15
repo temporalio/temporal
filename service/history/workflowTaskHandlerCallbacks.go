@@ -669,7 +669,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		response.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
 	}
 
-	// Starting workflowTask could result in different scheduledEventID if workflowTask was transient and new new events came in
+	// Starting workflowTask could result in different scheduledEventID if workflowTask was transient and new events came in
 	// before it was started.
 	response.ScheduledEventId = workflowTask.ScheduledEventID
 	response.StartedEventId = workflowTask.StartedEventID

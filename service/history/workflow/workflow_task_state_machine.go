@@ -549,8 +549,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 	startedEventID int64,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskTimedOut
-	dt, ok := m.GetWorkflowTaskInfo(scheduledEventID)
-	if !ok || dt.StartedEventID != startedEventID {
+	workflowTask, ok := m.GetWorkflowTaskInfo(scheduledEventID)
+	if !ok || workflowTask.StartedEventID != startedEventID {
 		m.ms.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(m.ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -561,7 +561,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 
 	var event *historypb.HistoryEvent
 	// Avoid creating new history events when workflow tasks are continuously timing out
-	if dt.Attempt == 1 {
+	if workflowTask.Attempt == 1 {
 		event = m.ms.hBuilder.AddWorkflowTaskTimedOutEvent(
 			scheduledEventID,
 			startedEventID,

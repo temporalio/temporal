@@ -209,7 +209,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	executionInfo.StickyTaskQueue = stickyTl
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	di := addWorkflowTaskScheduledEvent(msBuilder)
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
 
 	ms := workflow.TestCloneToProto(msBuilder)
 
@@ -238,12 +238,12 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	if executionInfo.LastWorkflowTaskStartedEventId != common.EmptyEventID {
 		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
 	}
-	expectedResponse.ScheduledEventId = di.ScheduledEventID
-	expectedResponse.ScheduledTime = di.ScheduledTime
-	expectedResponse.StartedEventId = di.ScheduledEventID + 1
+	expectedResponse.ScheduledEventId = wt.ScheduledEventID
+	expectedResponse.ScheduledTime = wt.ScheduledTime
+	expectedResponse.StartedEventId = wt.ScheduledEventID + 1
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
-	expectedResponse.Attempt = di.Attempt
+	expectedResponse.Attempt = wt.Attempt
 	expectedResponse.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
 		Name: executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -909,9 +909,9 @@ func (s *engine2Suite) createExecutionStartedStateWithParent(
 	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
 		s.logger, we.GetRunId())
 	addWorkflowExecutionStartedEventWithParent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, parentInfo, identity)
-	di := addWorkflowTaskScheduledEvent(msBuilder)
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
 	if startWorkflowTask {
-		addWorkflowTaskStartedEvent(msBuilder, di.ScheduledEventID, tl, identity)
+		addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, tl, identity)
 	}
 	_ = msBuilder.SetHistoryTree(we.GetRunId())
 	versionHistory, _ := versionhistory.GetCurrentVersionHistory(
@@ -947,8 +947,8 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
 		log.NewTestLogger(), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	di := addWorkflowTaskScheduledEvent(msBuilder)
-	addWorkflowTaskStartedEvent(msBuilder, di.ScheduledEventID, tl, identity)
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
+	addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, tl, identity)
 
 	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
@@ -1002,8 +1002,8 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
 		log.NewTestLogger(), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, nil, 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	di := addWorkflowTaskScheduledEvent(msBuilder)
-	addWorkflowTaskStartedEvent(msBuilder, di.ScheduledEventID, tl, identity)
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
+	addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, tl, identity)
 
 	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
@@ -1680,10 +1680,10 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 	s.IsType(&serviceerror.NotFound{}, err)
 
 	// add child init event
-	di := addWorkflowTaskScheduledEvent(msBuilder)
-	workflowTasksStartEvent := addWorkflowTaskStartedEvent(msBuilder, di.ScheduledEventID, "testTaskQueue", uuid.New())
-	di.StartedEventID = workflowTasksStartEvent.GetEventId()
-	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, di.ScheduledEventID, di.StartedEventID, "some random identity")
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
+	workflowTasksStartEvent := addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, "testTaskQueue", uuid.New())
+	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(msBuilder, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
@@ -1860,10 +1860,10 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", taskQueueName, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-	di := addWorkflowTaskScheduledEvent(msBuilder)
-	workflowTasksStartEvent := addWorkflowTaskStartedEvent(msBuilder, di.ScheduledEventID, taskQueueName, uuid.New())
-	di.StartedEventID = workflowTasksStartEvent.GetEventId()
-	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, di.ScheduledEventID, di.StartedEventID, "some random identity")
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
+	workflowTasksStartEvent := addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, taskQueueName, uuid.New())
+	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 	initiatedEvent, ci := addStartChildWorkflowExecutionInitiatedEvent(msBuilder, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 
