@@ -696,18 +696,18 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 		buffered := qr.GetBufferedIDs()
 		for _, id := range buffered {
 			resultType := enumspb.QUERY_RESULT_TYPE_ANSWERED
-			completedTerminationState := &workflow.QueryTerminationState{
-				QueryTerminationType: workflow.QueryTerminationTypeCompleted,
-				QueryResult: &querypb.WorkflowQueryResult{
+			succeededCompletionState := &workflow.QueryCompletionState{
+				Type: workflow.QueryCompletionTypeSucceeded,
+				Result: &querypb.WorkflowQueryResult{
 					ResultType: resultType,
 					Answer:     payloads.EncodeBytes(answer),
 				},
 			}
-			err := qr.SetTerminationState(id, completedTerminationState)
+			err := qr.SetCompletionState(id, succeededCompletionState)
 			s.NoError(err)
-			state, err := qr.GetTerminationState(id)
+			state, err := qr.GetCompletionState(id)
 			s.NoError(err)
-			s.Equal(workflow.QueryTerminationTypeCompleted, state.QueryTerminationType)
+			s.Equal(workflow.QueryCompletionTypeSucceeded, state.Type)
 		}
 	}
 
@@ -767,10 +767,10 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 		qr := builder.GetQueryRegistry()
 		buffered := qr.GetBufferedIDs()
 		for _, id := range buffered {
-			s.NoError(qr.SetTerminationState(id, &workflow.QueryTerminationState{QueryTerminationType: workflow.QueryTerminationTypeUnblocked}))
-			state, err := qr.GetTerminationState(id)
+			s.NoError(qr.SetCompletionState(id, &workflow.QueryCompletionState{Type: workflow.QueryCompletionTypeUnblocked}))
+			state, err := qr.GetCompletionState(id)
 			s.NoError(err)
-			s.Equal(workflow.QueryTerminationTypeUnblocked, state.QueryTerminationType)
+			s.Equal(workflow.QueryCompletionTypeUnblocked, state.Type)
 		}
 	}
 
@@ -4423,21 +4423,21 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 	s.Len(qr.GetCompletedIDs(), 2)
-	completed1, err := qr.GetTerminationState(id1)
+	succeeded1, err := qr.GetCompletionState(id1)
 	s.NoError(err)
-	s.EqualValues(completed1.QueryResult, result1)
-	s.Equal(workflow.QueryTerminationTypeCompleted, completed1.QueryTerminationType)
-	completed2, err := qr.GetTerminationState(id2)
+	s.EqualValues(succeeded1.Result, result1)
+	s.Equal(workflow.QueryCompletionTypeSucceeded, succeeded1.Type)
+	succeeded2, err := qr.GetCompletionState(id2)
 	s.NoError(err)
-	s.EqualValues(completed2.QueryResult, result2)
-	s.Equal(workflow.QueryTerminationTypeCompleted, completed2.QueryTerminationType)
+	s.EqualValues(succeeded2.Result, result2)
+	s.Equal(workflow.QueryCompletionTypeSucceeded, succeeded2.Type)
 	s.Len(qr.GetBufferedIDs(), 0)
 	s.Len(qr.GetFailedIDs(), 0)
 	s.Len(qr.GetUnblockedIDs(), 1)
-	unblocked1, err := qr.GetTerminationState(id3)
+	unblocked1, err := qr.GetCompletionState(id3)
 	s.NoError(err)
-	s.Nil(unblocked1.QueryResult)
-	s.Equal(workflow.QueryTerminationTypeUnblocked, unblocked1.QueryTerminationType)
+	s.Nil(unblocked1.Result)
+	s.Equal(workflow.QueryCompletionTypeUnblocked, unblocked1.Type)
 
 	// Try recording activity heartbeat
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
