@@ -63,6 +63,67 @@ func NewClient(
 	}
 }
 
+func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, c.timeout)
+}
+
+func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, c.longPollTimeout)
+}
+
+func (c *clientImpl) getRandomClient() (workflowservice.WorkflowServiceClient, error) {
+	// generate a random shard key to do load balancing
+	key := uuid.New()
+	client, err := c.clients.GetClientForKey(key)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.(workflowservice.WorkflowServiceClient), nil
+}
+
+func (c *clientImpl) CountWorkflowExecutions(
+	ctx context.Context,
+	request *workflowservice.CountWorkflowExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CountWorkflowExecutionsResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.CountWorkflowExecutions(ctx, request, opts...)
+}
+
+func (c *clientImpl) CreateSchedule(
+	ctx context.Context,
+	request *workflowservice.CreateScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CreateScheduleResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.CreateSchedule(ctx, request, opts...)
+}
+
+func (c *clientImpl) DeleteSchedule(
+	ctx context.Context,
+	request *workflowservice.DeleteScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteScheduleResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.DeleteSchedule(ctx, request, opts...)
+}
+
 func (c *clientImpl) DeprecateNamespace(
 	ctx context.Context,
 	request *workflowservice.DeprecateNamespaceRequest,
@@ -91,6 +152,20 @@ func (c *clientImpl) DescribeNamespace(
 	return client.DescribeNamespace(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeSchedule(
+	ctx context.Context,
+	request *workflowservice.DescribeScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeScheduleResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.DescribeSchedule(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeTaskQueue(
 	ctx context.Context,
 	request *workflowservice.DescribeTaskQueueRequest,
@@ -117,6 +192,48 @@ func (c *clientImpl) DescribeWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.DescribeWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetClusterInfo(
+	ctx context.Context,
+	request *workflowservice.GetClusterInfoRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetClusterInfoResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetClusterInfo(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetSearchAttributes(
+	ctx context.Context,
+	request *workflowservice.GetSearchAttributesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetSearchAttributesResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetSearchAttributes(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetSystemInfo(
+	ctx context.Context,
+	request *workflowservice.GetSystemInfoRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetSystemInfoResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetSystemInfo(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetWorkflowExecutionHistory(
@@ -203,6 +320,48 @@ func (c *clientImpl) ListOpenWorkflowExecutions(
 	return client.ListOpenWorkflowExecutions(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListScheduleMatchingTimes(
+	ctx context.Context,
+	request *workflowservice.ListScheduleMatchingTimesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListScheduleMatchingTimesResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListScheduleMatchingTimes(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListSchedules(
+	ctx context.Context,
+	request *workflowservice.ListSchedulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListSchedulesResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListSchedules(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListTaskQueuePartitions(
+	ctx context.Context,
+	request *workflowservice.ListTaskQueuePartitionsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListTaskQueuePartitionsResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListTaskQueuePartitions(ctx, request, opts...)
+}
+
 func (c *clientImpl) ListWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListWorkflowExecutionsRequest,
@@ -217,46 +376,18 @@ func (c *clientImpl) ListWorkflowExecutions(
 	return client.ListWorkflowExecutions(ctx, request, opts...)
 }
 
-func (c *clientImpl) ScanWorkflowExecutions(
+func (c *clientImpl) PatchSchedule(
 	ctx context.Context,
-	request *workflowservice.ScanWorkflowExecutionsRequest,
+	request *workflowservice.PatchScheduleRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ScanWorkflowExecutionsResponse, error) {
+) (*workflowservice.PatchScheduleResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.ScanWorkflowExecutions(ctx, request, opts...)
-}
-
-func (c *clientImpl) CountWorkflowExecutions(
-	ctx context.Context,
-	request *workflowservice.CountWorkflowExecutionsRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.CountWorkflowExecutionsResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.CountWorkflowExecutions(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetSearchAttributes(
-	ctx context.Context,
-	request *workflowservice.GetSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetSearchAttributesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetSearchAttributes(ctx, request, opts...)
+	return client.PatchSchedule(ctx, request, opts...)
 }
 
 func (c *clientImpl) PollActivityTaskQueue(
@@ -334,7 +465,6 @@ func (c *clientImpl) RegisterNamespace(
 	request *workflowservice.RegisterNamespaceRequest,
 	opts ...grpc.CallOption,
 ) (*workflowservice.RegisterNamespaceResponse, error) {
-
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
@@ -470,6 +600,20 @@ func (c *clientImpl) RespondActivityTaskFailedById(
 	return client.RespondActivityTaskFailedById(ctx, request, opts...)
 }
 
+func (c *clientImpl) RespondQueryTaskCompleted(
+	ctx context.Context,
+	request *workflowservice.RespondQueryTaskCompletedRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.RespondQueryTaskCompletedResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.RespondQueryTaskCompleted(ctx, request, opts...)
+}
+
 func (c *clientImpl) RespondWorkflowTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
@@ -498,18 +642,18 @@ func (c *clientImpl) RespondWorkflowTaskFailed(
 	return client.RespondWorkflowTaskFailed(ctx, request, opts...)
 }
 
-func (c *clientImpl) RespondQueryTaskCompleted(
+func (c *clientImpl) ScanWorkflowExecutions(
 	ctx context.Context,
-	request *workflowservice.RespondQueryTaskCompletedRequest,
+	request *workflowservice.ScanWorkflowExecutionsRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondQueryTaskCompletedResponse, error) {
+) (*workflowservice.ScanWorkflowExecutionsResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RespondQueryTaskCompleted(ctx, request, opts...)
+	return client.ScanWorkflowExecutions(ctx, request, opts...)
 }
 
 func (c *clientImpl) SignalWithStartWorkflowExecution(
@@ -582,79 +726,6 @@ func (c *clientImpl) UpdateNamespace(
 	return client.UpdateNamespace(ctx, request, opts...)
 }
 
-func (c *clientImpl) GetClusterInfo(
-	ctx context.Context,
-	request *workflowservice.GetClusterInfoRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetClusterInfoResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetClusterInfo(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetSystemInfo(
-	ctx context.Context,
-	request *workflowservice.GetSystemInfoRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.GetSystemInfoResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetSystemInfo(ctx, request, opts...)
-}
-
-func (c *clientImpl) ListTaskQueuePartitions(
-	ctx context.Context,
-	request *workflowservice.ListTaskQueuePartitionsRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.ListTaskQueuePartitionsResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-
-	return client.ListTaskQueuePartitions(ctx, request, opts...)
-}
-
-func (c *clientImpl) CreateSchedule(
-	ctx context.Context,
-	request *workflowservice.CreateScheduleRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.CreateScheduleResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-
-	return client.CreateSchedule(ctx, request, opts...)
-}
-
-func (c *clientImpl) DescribeSchedule(
-	ctx context.Context,
-	request *workflowservice.DescribeScheduleRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.DescribeScheduleResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-
-	return client.DescribeSchedule(ctx, request, opts...)
-}
-
 func (c *clientImpl) UpdateSchedule(
 	ctx context.Context,
 	request *workflowservice.UpdateScheduleRequest,
@@ -666,85 +737,5 @@ func (c *clientImpl) UpdateSchedule(
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-
 	return client.UpdateSchedule(ctx, request, opts...)
-}
-
-func (c *clientImpl) PatchSchedule(
-	ctx context.Context,
-	request *workflowservice.PatchScheduleRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.PatchScheduleResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-
-	return client.PatchSchedule(ctx, request, opts...)
-}
-
-func (c *clientImpl) ListScheduleMatchingTimes(
-	ctx context.Context,
-	request *workflowservice.ListScheduleMatchingTimesRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.ListScheduleMatchingTimesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-
-	return client.ListScheduleMatchingTimes(ctx, request, opts...)
-}
-
-func (c *clientImpl) DeleteSchedule(
-	ctx context.Context,
-	request *workflowservice.DeleteScheduleRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.DeleteScheduleResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-
-	return client.DeleteSchedule(ctx, request, opts...)
-}
-
-func (c *clientImpl) ListSchedules(
-	ctx context.Context,
-	request *workflowservice.ListSchedulesRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.ListSchedulesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-
-	return client.ListSchedules(ctx, request, opts...)
-}
-
-func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(parent, c.timeout)
-}
-
-func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(parent, c.longPollTimeout)
-}
-
-func (c *clientImpl) getRandomClient() (workflowservice.WorkflowServiceClient, error) {
-	// generate a random shard key to do load balancing
-	key := uuid.New()
-	client, err := c.clients.GetClientForKey(key)
-	if err != nil {
-		return nil, err
-	}
-
-	return client.(workflowservice.WorkflowServiceClient), nil
 }
