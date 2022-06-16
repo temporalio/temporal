@@ -415,6 +415,24 @@ const (
 	HistoryClientGetReplicationStatusScope
 	// HistoryClientDeleteWorkflowVisibilityRecordScope tracks RPC calls to history service
 	HistoryClientDeleteWorkflowVisibilityRecordScope
+	// HistoryClientCloseShardScope tracks RPC calls to history service
+	HistoryClientCloseShardScope
+	// HistoryClientDescribeMutableStateScope tracks RPC calls to history service
+	HistoryClientDescribeMutableStateScope
+	// HistoryClientGetDLQReplicationMessagesScope tracks RPC calls to history service
+	HistoryClientGetDLQReplicationMessagesScope
+	// HistoryClientGetShardScope tracks RPC calls to history service
+	HistoryClientGetShardScope
+	// HistoryClientRebuildMutableStateScope tracks RPC calls to history service
+	HistoryClientRebuildMutableStateScope
+	// HistoryClientRemoveTaskScope tracks RPC calls to history service
+	HistoryClientRemoveTaskScope
+	// HistoryClientVerifyFirstWorkflowTaskScheduledScope tracks RPC calls to history service
+	HistoryClientVerifyFirstWorkflowTaskScheduledScope
+	// HistoryClientDescribeHistoryHostScope tracks RPC calls to history service
+	HistoryClientDescribeHistoryHostScope
+	// HistoryClientGetReplicationMessagesScope tracks RPC calls to history service
+	HistoryClientGetReplicationMessagesScope
 	// MatchingClientPollWorkflowTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollWorkflowTaskQueueScope
 	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service

@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 )
 
 type (
@@ -55,10 +56,11 @@ var (
 			metricPrefix: "AdminClient",
 			service:      reflect.TypeOf((*adminservice.AdminServiceClient)(nil)),
 		},
-		// service{
-		// 	name:    "history",
-		// 	service: reflect.TypeOf((*historyservice.HistoryServiceClient)(nil)),
-		// },
+		service{
+			name:         "history",
+			metricPrefix: "HistoryClient",
+			service:      reflect.TypeOf((*historyservice.HistoryServiceClient)(nil)),
+		},
 		// service{
 		// 	name:    "matching",
 		// 	service: reflect.TypeOf((*matchingservice.MatchingServiceClient)(nil)),
@@ -66,12 +68,18 @@ var (
 	}
 
 	longPollContext = map[string]bool{
-		"ListArchivedWorkflowExecutions": true,
-		"PollActivityTaskQueue":          true,
-		"PollWorkflowTaskQueue":          true,
+		"client.frontend.ListArchivedWorkflowExecutions": true,
+		"client.frontend.PollActivityTaskQueue":          true,
+		"client.frontend.PollWorkflowTaskQueue":          true,
 	}
 	largeTimeoutContext = map[string]bool{
-		"GetReplicationMessages": true,
+		"client.admin.GetReplicationMessages": true,
+	}
+	ignoreMethod = map[string]bool{
+		// these are non-standard implementations. do not generate.
+		"client.history.DescribeHistoryHost":    true,
+		"client.history.GetReplicationMessages": true,
+		"client.history.GetReplicationStatus":   true,
 	}
 )
 
@@ -114,7 +122,60 @@ func writeTemplatedCode(w io.Writer, service service, text string) {
 	w.Write([]byte(text))
 }
 
-func writeTemplatedMethod(w io.Writer, service service, m reflect.Method, text string) {
+func pathToField(t reflect.Type, name string, path string) string {
+	if t.Kind() != reflect.Struct {
+		return ""
+	}
+	if len(path) > 100 { // we have some recursive types
+		return ""
+	}
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.Name == name {
+			return path + "." + name
+		}
+		ft := f.Type
+		if ft.Kind() == reflect.Pointer {
+			if try := pathToField(ft.Elem(), name, path+"."+f.Name); try != "" {
+				return try
+			}
+		}
+	}
+	return ""
+}
+
+func makeGetClientMagic(reqType reflect.Type) string {
+	// this magically figures out how to get a HistoryServiceClient from a request in many cases
+	t := reqType.Elem() // we know it's a pointer
+	if path := pathToField(t, "ShardId", "request"); path != "" {
+		return fmt.Sprintf("client, err := c.getClientForShardID(%s)", path)
+	}
+	if path := pathToField(t, "WorkflowId", "request"); path != "" {
+		return fmt.Sprintf("client, err := c.getClientForWorkflowID(request.NamespaceId, %s)", path)
+	}
+	if path := pathToField(t, "TaskToken", "request"); path != "" {
+		return fmt.Sprintf(`taskToken, err := c.tokenSerializer.Deserialize(%s)
+	if err != nil {
+		return nil, err
+	}
+	client, err := c.getClientForWorkflowID(request.NamespaceId, taskToken.GetWorkflowId())
+`, path)
+	}
+	// slice needs a tiny bit of extra handling for namespace
+	if path := pathToField(t, "TaskInfos", "request"); path != "" {
+		return fmt.Sprintf(`// All workflow IDs are in the same shard per request
+	client, err := c.getClientForWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, path, path)
+	}
+
+	panic("I don't know how to get a client from a " + t.String())
+}
+
+func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.Method, text string) {
+	key := fmt.Sprintf("%s.%s.%s", impl, service.name, m.Name)
+	if ignoreMethod[key] {
+		return
+	}
+
 	mt := m.Type // should look like: func(context.Context, request reqt, opts []grpc.CallOption) (respt, error)
 
 	if !mt.IsVariadic() ||
@@ -127,12 +188,16 @@ func writeTemplatedMethod(w io.Writer, service service, m reflect.Method, text s
 	respType := mt.Out(0)
 
 	longPoll := ""
-	if longPollContext[m.Name] {
+	if longPollContext[key] {
 		longPoll = "LongPoll"
 	}
 	withLargeTimeout := ""
-	if largeTimeoutContext[m.Name] {
+	if largeTimeoutContext[key] {
 		withLargeTimeout = "WithLargeTimeout"
+	}
+	getClientMagic := ""
+	if impl == "client" && service.name == "history" {
+		getClientMagic = makeGetClientMagic(reqType)
 	}
 
 	text = strings.Replace(text, "{METHOD}", m.Name, -1)
@@ -141,18 +206,19 @@ func writeTemplatedMethod(w io.Writer, service service, m reflect.Method, text s
 	text = strings.Replace(text, "{LONGPOLL}", longPoll, -1)
 	text = strings.Replace(text, "{WITHLARGETIMEOUT}", withLargeTimeout, -1)
 	text = strings.Replace(text, "{METRICPREFIX}", service.metricPrefix, -1)
+	text = strings.Replace(text, "{GETCLIENTMAGIC}", getClientMagic, -1)
 
 	w.Write([]byte(text))
 }
 
-func writeTemplatedMethods(w io.Writer, service service, text string) {
+func writeTemplatedMethods(w io.Writer, service service, impl string, text string) {
 	sType := service.service.Elem()
 	for n := 0; n < sType.NumMethod(); n++ {
-		writeTemplatedMethod(w, service, sType.Method(n), text)
+		writeTemplatedMethod(w, service, impl, sType.Method(n), text)
 	}
 }
 
-func generateClient(w io.Writer, service service) {
+func generateFrontendOrAdminClient(w io.Writer, service service) {
 	copyright(w)
 
 	writeTemplatedCode(w, service, `
@@ -166,7 +232,7 @@ import (
 )
 `)
 
-	writeTemplatedMethods(w, service, `
+	writeTemplatedMethods(w, service, "client", `
 func (c *clientImpl) {METHOD}(
 	ctx context.Context,
 	request {REQT},
@@ -181,6 +247,52 @@ func (c *clientImpl) {METHOD}(
 	return client.{METHOD}(ctx, request, opts...)
 }
 `)
+}
+
+func generateHistoryClient(w io.Writer, service service) {
+	copyright(w)
+
+	writeTemplatedCode(w, service, `
+package {SERVICENAME}
+
+import (
+	"context"
+
+	"{SERVICEPKGPATH}"
+	"google.golang.org/grpc"
+)
+`)
+
+	writeTemplatedMethods(w, service, "client", `
+func (c *clientImpl) {METHOD}(
+	ctx context.Context,
+	request {REQT},
+	opts ...grpc.CallOption,
+) ({RESPT}, error) {
+	{GETCLIENTMAGIC}
+	if err != nil {
+		return nil, err
+	}
+	var response {RESPT}
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.{METHOD}(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+`)
+	// TODO: some methods call client.{METHOD} directly and do not use executeWithRedirect. should we preserve this?
+	// GetDLQReplicationMessages
+	// GetDLQMessages
+	// PurgeDLQMessages
+	// MergeDLQMessages
 }
 
 func generateMetricClient(w io.Writer, service service) {
@@ -199,7 +311,7 @@ import (
 )
 `)
 
-	writeTemplatedMethods(w, service, `
+	writeTemplatedMethods(w, service, "metrics", `
 func (c *metricClient) {METHOD}(
 	ctx context.Context,
 	request {REQT},
@@ -220,6 +332,48 @@ func (c *metricClient) {METHOD}(
 `)
 }
 
+func generateHistoryMetricClient(w io.Writer, service service) {
+	copyright(w)
+
+	writeTemplatedCode(w, service, `
+package {SERVICENAME}
+
+import (
+	"context"
+
+	"{SERVICEPKGPATH}"
+	"google.golang.org/grpc"
+
+	"go.temporal.io/server/common/metrics"
+)
+`)
+
+	writeTemplatedMethods(w, service, "metrics", `
+func (c *metricClient) {METHOD}(
+	ctx context.Context,
+	request {REQT},
+	opts ...grpc.CallOption,
+) (_ {RESPT}, retError error) {
+
+	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClient{METHOD}Scope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	return c.client.{METHOD}(ctx, request, opts...)
+}
+`)
+	// TODO: some methods did not touch metrics. should we preserve this?
+	// DescribeHistoryHost
+	// RemoveTask
+	// CloseShard
+	// GetShard
+	// RebuildMutableState
+	// DescribeMutableState
+	// TODO: DeleteWorkflowExecution doesn't work like the others in history
+	// service (the code looks like the frontend/admin client version)
+}
+
 func generateRetryableClient(w io.Writer, service service) {
 	copyright(w)
 
@@ -236,7 +390,7 @@ import (
 )
 `)
 
-	writeTemplatedMethods(w, service, `
+	writeTemplatedMethods(w, service, "retry", `
 func (c *retryableClient) {METHOD}(
 	ctx context.Context,
 	request {REQT},
@@ -268,8 +422,14 @@ func callWithFile(f func(io.Writer, service), service service, filename string) 
 
 func main() {
 	for _, service := range services {
-		callWithFile(generateClient, service, "client")
-		callWithFile(generateMetricClient, service, "metricClient")
+		switch service.name {
+		case "frontend", "admin":
+			callWithFile(generateFrontendOrAdminClient, service, "client")
+			callWithFile(generateMetricClient, service, "metricClient")
+		case "history":
+			callWithFile(generateHistoryClient, service, "client")
+			callWithFile(generateHistoryMetricClient, service, "metricClient")
+		}
 		callWithFile(generateRetryableClient, service, "retryableClient")
 	}
 }
