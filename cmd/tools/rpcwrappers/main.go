@@ -25,6 +25,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -32,6 +33,8 @@ import (
 	"strings"
 
 	"go.temporal.io/api/workflowservice/v1"
+	"golang.org/x/exp/slices"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -39,33 +42,43 @@ import (
 
 type (
 	service struct {
-		name         string
-		metricPrefix string
-		service      reflect.Type
+		name               string
+		clientType         reflect.Type
+		clientGenerator    func(io.Writer, service)
+		metricGenerator    func(io.Writer, service)
+		retryableGenerator func(io.Writer, service)
 	}
 )
 
 var (
 	services = []service{
 		service{
-			name:         "frontend",
-			metricPrefix: "FrontendClient",
-			service:      reflect.TypeOf((*workflowservice.WorkflowServiceClient)(nil)),
+			name:               "frontend",
+			clientType:         reflect.TypeOf((*workflowservice.WorkflowServiceClient)(nil)),
+			clientGenerator:    generateFrontendOrAdminClient,
+			metricGenerator:    generateFrontendOrAdminMetricClient,
+			retryableGenerator: generateRetryableClient,
 		},
 		service{
-			name:         "admin",
-			metricPrefix: "AdminClient",
-			service:      reflect.TypeOf((*adminservice.AdminServiceClient)(nil)),
+			name:               "admin",
+			clientType:         reflect.TypeOf((*adminservice.AdminServiceClient)(nil)),
+			clientGenerator:    generateFrontendOrAdminClient,
+			metricGenerator:    generateFrontendOrAdminMetricClient,
+			retryableGenerator: generateRetryableClient,
 		},
 		service{
-			name:         "history",
-			metricPrefix: "HistoryClient",
-			service:      reflect.TypeOf((*historyservice.HistoryServiceClient)(nil)),
+			name:               "history",
+			clientType:         reflect.TypeOf((*historyservice.HistoryServiceClient)(nil)),
+			clientGenerator:    generateHistoryClient,
+			metricGenerator:    generateHistoryOrMatchingMetricClient,
+			retryableGenerator: generateRetryableClient,
 		},
 		service{
-			name:         "matching",
-			metricPrefix: "MatchingClient",
-			service:      reflect.TypeOf((*matchingservice.MatchingServiceClient)(nil)),
+			name:               "matching",
+			clientType:         reflect.TypeOf((*matchingservice.MatchingServiceClient)(nil)),
+			clientGenerator:    generateMatchingClient,
+			metricGenerator:    generateHistoryOrMatchingMetricClient,
+			retryableGenerator: generateRetryableClient,
 		},
 	}
 
@@ -89,15 +102,15 @@ var (
 		"client.matching.PollWorkflowTaskQueue": true,
 		"client.matching.QueryWorkflow":         true,
 		// these do forwarding stats. too complicated.
-		"metrics.matching.AddActivityTask":       true,
-		"metrics.matching.AddWorkflowTask":       true,
-		"metrics.matching.PollActivityTaskQueue": true,
-		"metrics.matching.PollWorkflowTaskQueue": true,
-		"metrics.matching.QueryWorkflow":         true,
+		"metricsClient.matching.AddActivityTask":       true,
+		"metricsClient.matching.AddWorkflowTask":       true,
+		"metricsClient.matching.PollActivityTaskQueue": true,
+		"metricsClient.matching.PollWorkflowTaskQueue": true,
+		"metricsClient.matching.QueryWorkflow":         true,
 	}
 )
 
-func copyright(w io.Writer) {
+func writeCopyright(w io.Writer) {
 	fmt.Fprintf(w, `// The MIT License
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
@@ -127,7 +140,7 @@ func copyright(w io.Writer) {
 }
 
 func writeTemplatedCode(w io.Writer, service service, text string) {
-	sType := service.service.Elem()
+	sType := service.clientType.Elem()
 
 	text = strings.Replace(text, "{SERVICENAME}", service.name, -1)
 	text = strings.Replace(text, "{SERVICETYPE}", sType.String(), -1)
@@ -200,7 +213,9 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 
 	if !mt.IsVariadic() ||
 		mt.NumIn() != 3 ||
-		mt.NumOut() != 2 {
+		mt.NumOut() != 2 ||
+		mt.In(0).String() != "context.Context" ||
+		mt.Out(1).String() != "error" {
 		panic(m.Name + " doesn't look like a grpc handler method")
 	}
 
@@ -215,6 +230,7 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 	if largeTimeoutContext[key] {
 		withLargeTimeout = "WithLargeTimeout"
 	}
+	metricPrefix := fmt.Sprintf("%s%sClient", strings.ToUpper(service.name[:1]), service.name[1:])
 	getClientMagic := ""
 	if impl == "client" {
 		if service.name == "history" {
@@ -229,21 +245,21 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 	text = strings.Replace(text, "{RESPT}", respType.String(), -1)
 	text = strings.Replace(text, "{LONGPOLL}", longPoll, -1)
 	text = strings.Replace(text, "{WITHLARGETIMEOUT}", withLargeTimeout, -1)
-	text = strings.Replace(text, "{METRICPREFIX}", service.metricPrefix, -1)
+	text = strings.Replace(text, "{METRICPREFIX}", metricPrefix, -1)
 	text = strings.Replace(text, "{GETCLIENTMAGIC}", getClientMagic, -1)
 
 	w.Write([]byte(text))
 }
 
 func writeTemplatedMethods(w io.Writer, service service, impl string, text string) {
-	sType := service.service.Elem()
+	sType := service.clientType.Elem()
 	for n := 0; n < sType.NumMethod(); n++ {
 		writeTemplatedMethod(w, service, impl, sType.Method(n), text)
 	}
 }
 
 func generateFrontendOrAdminClient(w io.Writer, service service) {
-	copyright(w)
+	writeCopyright(w)
 
 	writeTemplatedCode(w, service, `
 package {SERVICENAME}
@@ -274,7 +290,7 @@ func (c *clientImpl) {METHOD}(
 }
 
 func generateHistoryClient(w io.Writer, service service) {
-	copyright(w)
+	writeCopyright(w)
 
 	writeTemplatedCode(w, service, `
 package {SERVICENAME}
@@ -320,7 +336,7 @@ func (c *clientImpl) {METHOD}(
 }
 
 func generateMatchingClient(w io.Writer, service service) {
-	copyright(w)
+	writeCopyright(w)
 
 	writeTemplatedCode(w, service, `
 package {SERVICENAME}
@@ -351,8 +367,8 @@ func (c *clientImpl) {METHOD}(
 `)
 }
 
-func generateMetricClient(w io.Writer, service service) {
-	copyright(w)
+func generateFrontendOrAdminMetricClient(w io.Writer, service service) {
+	writeCopyright(w)
 
 	writeTemplatedCode(w, service, `
 package {SERVICENAME}
@@ -367,7 +383,7 @@ import (
 )
 `)
 
-	writeTemplatedMethods(w, service, "metrics", `
+	writeTemplatedMethods(w, service, "metricsClient", `
 func (c *metricClient) {METHOD}(
 	ctx context.Context,
 	request {REQT},
@@ -389,7 +405,7 @@ func (c *metricClient) {METHOD}(
 }
 
 func generateHistoryOrMatchingMetricClient(w io.Writer, service service) {
-	copyright(w)
+	writeCopyright(w)
 
 	writeTemplatedCode(w, service, `
 package {SERVICENAME}
@@ -404,7 +420,7 @@ import (
 )
 `)
 
-	writeTemplatedMethods(w, service, "metrics", `
+	writeTemplatedMethods(w, service, "metricsClient", `
 func (c *metricClient) {METHOD}(
 	ctx context.Context,
 	request {REQT},
@@ -426,12 +442,12 @@ func (c *metricClient) {METHOD}(
 	// GetShard
 	// RebuildMutableState
 	// DescribeMutableState
-	// TODO: DeleteWorkflowExecution doesn't work like the others in history
-	// service (the code looks like the frontend/admin client version)
+	// TODO: DeleteWorkflowExecution didn't work like the others in history (the code looked
+	// like the frontend/admin client version). should we preserve that?
 }
 
 func generateRetryableClient(w io.Writer, service service) {
-	copyright(w)
+	writeCopyright(w)
 
 	writeTemplatedCode(w, service, `
 package {SERVICENAME}
@@ -446,7 +462,7 @@ import (
 )
 `)
 
-	writeTemplatedMethods(w, service, "retry", `
+	writeTemplatedMethods(w, service, "retryableClient", `
 func (c *retryableClient) {METHOD}(
 	ctx context.Context,
 	request {REQT},
@@ -465,7 +481,7 @@ func (c *retryableClient) {METHOD}(
 }
 
 func callWithFile(f func(io.Writer, service), service service, filename string) {
-	file, err := os.Create(fmt.Sprintf("client/%s/%s_gen.go", service.name, filename))
+	file, err := os.Create(filename + "_gen.go")
 	if err != nil {
 		panic(err)
 	}
@@ -477,20 +493,16 @@ func callWithFile(f func(io.Writer, service), service service, filename string) 
 }
 
 func main() {
-	for _, service := range services {
-		switch service.name {
-		case "frontend", "admin":
-			callWithFile(generateFrontendOrAdminClient, service, "client")
-			callWithFile(generateMetricClient, service, "metricClient")
-			callWithFile(generateRetryableClient, service, "retryableClient")
-		case "history":
-			callWithFile(generateHistoryClient, service, "client")
-			callWithFile(generateHistoryOrMatchingMetricClient, service, "metricClient")
-			callWithFile(generateRetryableClient, service, "retryableClient")
-		case "matching":
-			callWithFile(generateMatchingClient, service, "client")
-			callWithFile(generateHistoryOrMatchingMetricClient, service, "metricClient")
-			callWithFile(generateRetryableClient, service, "retryableClient")
-		}
+	serviceFlag := flag.String("service", "", "which service to generate rpc client wrappers for")
+	flag.Parse()
+
+	i := slices.IndexFunc(services, func(s service) bool { return s.name == *serviceFlag })
+	if i < 0 {
+		panic("unknown service")
 	}
+	svc := services[i]
+
+	callWithFile(svc.clientGenerator, svc, "client")
+	callWithFile(svc.metricGenerator, svc, "metricClient")
+	callWithFile(svc.retryableGenerator, svc, "retryableClient")
 }

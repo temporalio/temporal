@@ -22,6 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// Generates all three generated files in this package:
+//go:generate go run ../../cmd/tools/rpcwrappers -service matching
+
 package matching
 
 import (
