@@ -28,19 +28,19 @@ import "go.temporal.io/server/common/log"
 
 type (
 	metricsReporter struct {
-		provider MetricProvider
+		provider MetricsHandler
 	}
 )
 
 var _ Reporter = (*metricsReporter)(nil)
 
-func NewMetricsReporter(mp MetricProvider) *metricsReporter {
+func NewReporter(mp MetricsHandler) *metricsReporter {
 	return &metricsReporter{
 		provider: mp,
 	}
 }
 
-func (e *metricsReporter) MetricProvider() MetricProvider {
+func (e *metricsReporter) MetricsHandler() MetricsHandler {
 	return e.provider
 }
 
@@ -49,5 +49,5 @@ func (e *metricsReporter) Stop(logger log.Logger) {
 }
 
 func (e *metricsReporter) UserScope() UserScope {
-	return newMetricsUserScope(e.provider, nil)
+	return newUserScope(e.provider, nil)
 }

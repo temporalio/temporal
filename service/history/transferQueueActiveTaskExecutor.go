@@ -31,6 +31,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -82,7 +83,7 @@ func newTransferQueueActiveTaskExecutor(
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	logger log.Logger,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Executor {
@@ -112,8 +113,7 @@ func newTransferQueueActiveTaskExecutor(
 func (t *transferQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.MetricProvider, error) {
-
+) (metrics.MetricsHandler, error) {
 	task := executable.GetTask()
 	taskType := queues.GetActiveTransferTaskTypeTagValue(task)
 	metricsProvider := t.metricProvider.WithTags(
@@ -221,7 +221,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	// the correct logic should check whether the workflow task is a sticky workflowTask
 	// task or not.
 	var taskQueue *taskqueuepb.TaskQueue
-	var taskScheduleToStartTimeoutSeconds = int64(0)
+	taskScheduleToStartTimeoutSeconds := int64(0)
 	if mutableState.GetExecutionInfo().TaskQueue != task.TaskQueue {
 		// this workflowTask is an sticky workflowTask
 		// there shall already be an timer set
@@ -968,7 +968,6 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 	runID string,
 	clock *clockspb.VectorClock,
 ) error {
-
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -1002,7 +1001,6 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 	initiatedAttributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 	failedCause enumspb.StartChildWorkflowExecutionFailedCause,
 ) error {
-
 	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -1031,7 +1029,6 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 	execution *commonpb.WorkflowExecution,
 	clock *clockspb.VectorClock,
 ) error {
-
 	_, err := t.historyClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
 		NamespaceId:         namespaceID,
 		WorkflowExecution:   execution,
@@ -1051,7 +1048,6 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 	targetWorkflowID string,
 	targetRunID string,
 ) error {
-
 	err := t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -1086,7 +1082,6 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 	targetRunID string,
 	control string,
 ) error {
-
 	err := t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -1121,7 +1116,6 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 	targetRunID string,
 	failedCause enumspb.CancelExternalWorkflowExecutionFailedCause,
 ) error {
-
 	err := t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -1158,7 +1152,6 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 	control string,
 	failedCause enumspb.SignalExternalWorkflowExecutionFailedCause,
 ) error {
-
 	err := t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -1191,7 +1184,6 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 	createWorkflowTask bool,
 	action func(builder workflow.MutableState) error,
 ) error {
-
 	mutableState, err := context.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return err
@@ -1219,7 +1211,6 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 	requestCancelInfo *persistencespb.RequestCancelInfo,
 	attributes *historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes,
 ) error {
-
 	request := &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: task.TargetNamespaceID,
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
@@ -1262,7 +1253,6 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 	signalInfo *persistencespb.SignalInfo,
 	attributes *historypb.SignalExternalWorkflowExecutionInitiatedEventAttributes,
 ) error {
-
 	request := &historyservice.SignalWorkflowExecutionRequest{
 		NamespaceId: task.TargetNamespaceID,
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
@@ -1369,7 +1359,6 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	currentMutableState workflow.MutableState,
 	logger log.Logger,
 ) error {
-
 	var err error
 	ctx, cancel := context.WithTimeout(context.Background(), taskHistoryOpTimeout)
 	defer cancel()
@@ -1441,7 +1430,6 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	parentExecution commonpb.WorkflowExecution,
 	childInfos map[int64]*persistencespb.ChildExecutionInfo,
 ) error {
-
 	if len(childInfos) == 0 {
 		return nil
 	}
@@ -1588,7 +1576,6 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 func copyChildWorkflowInfos(
 	input map[int64]*persistencespb.ChildExecutionInfo,
 ) map[int64]*persistencespb.ChildExecutionInfo {
-
 	result := make(map[int64]*persistencespb.ChildExecutionInfo)
 	if input == nil {
 		return result

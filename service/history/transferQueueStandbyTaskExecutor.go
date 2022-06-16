@@ -65,7 +65,7 @@ func newTransferQueueStandbyTaskExecutor(
 	archivalClient archiver.Client,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 	clusterName string,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Executor {
@@ -86,8 +86,7 @@ func newTransferQueueStandbyTaskExecutor(
 func (t *transferQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.MetricProvider, error) {
-
+) (metrics.MetricsHandler, error) {
 	task := executable.GetTask()
 	taskType := queues.GetStandbyTransferTaskTypeTagValue(task)
 	metricsProvider := t.metricProvider.WithTags(
@@ -124,10 +123,8 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 	ctx context.Context,
 	transferTask *tasks.ActivityTask,
 ) error {
-
 	processTaskIfClosed := false
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-
 		activityInfo, ok := mutableState.GetActivityInfo(transferTask.ScheduledEventID)
 		if !ok {
 			return nil, nil
@@ -165,10 +162,8 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 	ctx context.Context,
 	transferTask *tasks.WorkflowTask,
 ) error {
-
 	processTaskIfClosed := false
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-
 		wtInfo, ok := mutableState.GetWorkflowTaskInfo(transferTask.ScheduledEventID)
 		if !ok {
 			return nil, nil
@@ -225,10 +220,8 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 	ctx context.Context,
 	transferTask *tasks.CloseExecutionTask,
 ) error {
-
 	processTaskIfClosed := true
 	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-
 		if mutableState.IsWorkflowExecutionRunning() {
 			// this can happen if workflow is reset.
 			return nil, nil
@@ -327,10 +320,8 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 	ctx context.Context,
 	transferTask *tasks.CancelExecutionTask,
 ) error {
-
 	processTaskIfClosed := false
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-
 		requestCancelInfo, ok := mutableState.GetRequestCancelInfo(transferTask.InitiatedEventID)
 		if !ok {
 			return nil, nil
@@ -364,10 +355,8 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 	ctx context.Context,
 	transferTask *tasks.SignalExecutionTask,
 ) error {
-
 	processTaskIfClosed := false
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-
 		signalInfo, ok := mutableState.GetSignalInfo(transferTask.InitiatedEventID)
 		if !ok {
 			return nil, nil
@@ -401,10 +390,8 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 	ctx context.Context,
 	transferTask *tasks.StartChildExecutionTask,
 ) error {
-
 	processTaskIfClosed := true
 	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
-
 		childWorkflowInfo, ok := mutableState.GetChildExecutionInfo(transferTask.InitiatedEventID)
 		if !ok {
 			return nil, nil
@@ -520,7 +507,6 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 	postActionInfo interface{},
 	logger log.Logger,
 ) error {
-
 	if postActionInfo == nil {
 		return nil
 	}
@@ -540,7 +526,6 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 	postActionInfo interface{},
 	logger log.Logger,
 ) error {
-
 	if postActionInfo == nil {
 		return nil
 	}
@@ -579,7 +564,6 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	postActionInfo interface{},
 	logger log.Logger,
 ) error {
-
 	var resendInfo *historyResendInfo
 	switch postActionInfo := postActionInfo.(type) {
 	case nil:

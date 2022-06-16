@@ -116,7 +116,7 @@ type (
 	// Reporter is an interface for base constructor for metrics client.
 	// Deprecated
 	Reporter interface {
-		MetricProvider() MetricProvider
+		MetricsHandler() MetricsHandler
 		Stop(logger log.Logger)
 		UserScope() UserScope
 	}

@@ -33,6 +33,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/clock"
@@ -95,10 +96,10 @@ func (s *executableSuite) TestExecute_TaskExecuted() {
 		return true
 	})
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(metrics.NoopMetricProvider, errors.New("some random error"))
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(metrics.NoopMetricsHandler, errors.New("some random error"))
 	s.Error(executable.Execute())
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(metrics.NoopMetricProvider, nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(metrics.NoopMetricsHandler, nil)
 	s.NoError(executable.Execute())
 }
 
@@ -112,7 +113,7 @@ func (s *executableSuite) TestExecute_UserLatency() {
 		metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency, expectedUserLatency)
 	}
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(metrics.NoopMetricProvider, nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(metrics.NoopMetricsHandler, nil)
 	s.NoError(executable.Execute())
 	s.Equal(time.Duration(expectedUserLatency), executable.(*executableImpl).userLatency)
 }

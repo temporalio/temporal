@@ -36,7 +36,7 @@ var (
 	NoopScope          Scope          = newNoopScope()
 	NoopUserScope      UserScope      = newNoopUserScope()
 	NoopStopwatch      Stopwatch      = newNoopStopwatch()
-	NoopMetricProvider MetricProvider = newNoopMetricProvider()
+	NoopMetricsHandler MetricsHandler = newNoopMetricsHandler()
 )
 
 type (
@@ -45,16 +45,15 @@ type (
 	noopMetricsUserScope struct{}
 	noopStopwatchImpl    struct{}
 	noopScopeImpl        struct{}
-	noopMetricHandler    struct{}
-	noopMetricProvider   struct{}
+	noopMetricsHandler   struct{}
 )
 
 func newNoopReporter() *noopReporterImpl {
 	return &noopReporterImpl{}
 }
 
-func (*noopReporterImpl) MetricProvider() MetricProvider {
-	return NoopMetricProvider
+func (*noopReporterImpl) MetricsHandler() MetricsHandler {
+	return NoopMetricsHandler
 }
 
 func (*noopReporterImpl) Stop(logger log.Logger) {}
@@ -151,32 +150,32 @@ func newNoopStopwatch() *noopStopwatchImpl {
 func (n *noopStopwatchImpl) Stop()                       {}
 func (n *noopStopwatchImpl) Subtract(nsec time.Duration) {}
 
-func newNoopMetricProvider() *noopMetricProvider { return &noopMetricProvider{} }
+func newNoopMetricsHandler() *noopMetricsHandler { return &noopMetricsHandler{} }
 
 // WithTags creates a new MetricProvder with provided []Tag
-// Tags are merged with registered Tags from the source MetricProvider
-func (n *noopMetricProvider) WithTags(...Tag) MetricProvider {
+// Tags are merged with registered Tags from the source MetricsHandler
+func (n *noopMetricsHandler) WithTags(...Tag) MetricsHandler {
 	return n
 }
 
 // Counter obtains a counter for the given name and MetricOptions.
-func (*noopMetricProvider) Counter(string) CounterMetric {
+func (*noopMetricsHandler) Counter(string) CounterMetric {
 	return CounterMetricFunc(func(i int64, t ...Tag) {})
 }
 
 // Gauge obtains a gauge for the given name and MetricOptions.
-func (*noopMetricProvider) Gauge(string) GaugeMetric {
+func (*noopMetricsHandler) Gauge(string) GaugeMetric {
 	return GaugeMetricFunc(func(f float64, t ...Tag) {})
 }
 
 // Timer obtains a timer for the given name and MetricOptions.
-func (*noopMetricProvider) Timer(string) TimerMetric {
+func (*noopMetricsHandler) Timer(string) TimerMetric {
 	return TimerMetricFunc(func(d time.Duration, t ...Tag) {})
 }
 
 // Histogram obtains a histogram for the given name and MetricOptions.
-func (*noopMetricProvider) Histogram(string, MetricUnit) HistogramMetric {
+func (*noopMetricsHandler) Histogram(string, MetricUnit) HistogramMetric {
 	return HistogramMetricFunc(func(i int64, t ...Tag) {})
 }
 
-func (*noopMetricProvider) Stop(log.Logger) {}
+func (*noopMetricsHandler) Stop(log.Logger) {}

@@ -51,9 +51,7 @@ import (
 	"go.temporal.io/server/service/worker/archiver"
 )
 
-var (
-	errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
-)
+var errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
 
 type (
 	taskFilter func(task tasks.Task) bool
@@ -67,7 +65,7 @@ type (
 		sdkClientFactory          sdk.ClientFactory
 		taskAllocator             taskAllocator
 		config                    *configs.Config
-		metricProvider            metrics.MetricProvider
+		metricProvider            metrics.MetricsHandler
 		metricsClient             metrics.Client
 		clientBean                client.Bean
 		matchingClient            matchingservice.MatchingServiceClient
@@ -94,10 +92,9 @@ func newTransferQueueProcessor(
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
 ) queues.Processor {
-
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
 		shard.GetConfig().TransferProcessorEnableSingleCursor()
 
@@ -181,7 +178,6 @@ func (t *transferQueueProcessorImpl) NotifyNewTasks(
 	clusterName string,
 	transferTasks []tasks.Task,
 ) {
-
 	if clusterName == t.currentClusterName || t.singleProcessor {
 		// we will ignore the current time passed in, since the active processor process task immediately
 		if len(transferTasks) != 0 {

@@ -54,7 +54,7 @@ func (t *testProvider) Stop(log.Logger) {}
 func TestMeter(t *testing.T) {
 	ctx := context.Background()
 	mp, exp := metrictest.NewTestMeterProvider()
-	p := NewOtelMetricProvider(log.NewTestLogger(), &testProvider{meter: mp.Meter("test")}, defaultConfig)
+	p := NewOtelMetricsHandler(log.NewTestLogger(), &testProvider{meter: mp.Meter("test")}, defaultConfig)
 	recordMetrics(p)
 
 	err := exp.Collect(ctx)
@@ -120,7 +120,7 @@ func valuesEqual(v1, v2 attribute.Value) bool {
 	return v1.AsInterface() == v2.AsInterface()
 }
 
-func recordMetrics(mp MetricProvider) {
+func recordMetrics(mp MetricsHandler) {
 	c := mp.Counter("hits")
 	g := mp.Gauge("temp")
 	d := mp.Timer("latency")

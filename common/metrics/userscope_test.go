@@ -30,8 +30,8 @@ import (
 )
 
 func BenchmarkAllTheMetricsUserScope(b *testing.B) {
-	var emp MetricProvider = NoopMetricProvider.WithTags(OperationTag("everything-is-awesome-3"))
-	var us UserScope = newMetricsUserScope(emp, defaultConfig.Tags)
+	var emp MetricsHandler = NoopMetricsHandler.WithTags(OperationTag("everything-is-awesome-3"))
+	var us UserScope = newUserScope(emp, defaultConfig.Tags)
 
 	b.ResetTimer()
 	b.ReportAllocs()

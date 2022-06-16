@@ -65,10 +65,9 @@ func newTransferQueueStandbyProcessor(
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueStandbyProcessorImpl {
-
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		BatchSize:                           config.TransferTaskBatchSize,

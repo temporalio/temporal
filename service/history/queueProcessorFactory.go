@@ -72,7 +72,7 @@ type (
 		NamespaceRegistry namespace.Registry
 		ClusterMetadata   cluster.Metadata
 		Config            *configs.Config
-		MetricProvider    metrics.MetricProvider
+		MetricsHandler    metrics.MetricsHandler
 		Logger            resource.SnTaggedLogger
 	}
 
@@ -86,7 +86,7 @@ type (
 		SdkClientFactory sdk.ClientFactory
 		MatchingClient   resource.MatchingClient
 		HistoryClient    historyservice.HistoryServiceClient
-		MetricProvider   metrics.MetricProvider
+		MetricsHandler   metrics.MetricsHandler
 	}
 
 	timerQueueProcessorFactoryParams struct {
@@ -97,7 +97,7 @@ type (
 		ClientBean     client.Bean
 		ArchivalClient archiver.Client
 		MatchingClient resource.MatchingClient
-		MetricProvider metrics.MetricProvider
+		MetricsHandler metrics.MetricsHandler
 	}
 
 	visibilityQueueProcessorFactoryParams struct {
@@ -106,7 +106,7 @@ type (
 		SchedulerParams
 
 		VisibilityMgr  manager.VisibilityManager
-		MetricProvider metrics.MetricProvider
+		MetricsHandler metrics.MetricsHandler
 	}
 
 	queueProcessorFactoryBase struct {
@@ -171,7 +171,7 @@ func NewTransferQueueProcessorFactory(
 					HighPriorityRPS:       params.Config.TransferTaskHighPriorityRPS,
 					CriticalRetryAttempts: params.Config.TransferTaskMaxRetryCount,
 				},
-				params.MetricProvider,
+				params.MetricsHandler,
 			),
 			queues.SchedulerOptions{
 				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
@@ -182,7 +182,7 @@ func NewTransferQueueProcessorFactory(
 					PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(params.Config.TransferProcessorSchedulerRoundRobinWeights(), params.Logger),
 				},
 			},
-			params.MetricProvider,
+			params.MetricsHandler,
 			params.Logger,
 		)
 	}
@@ -212,7 +212,7 @@ func (f *transferQueueProcessorFactory) CreateProcessor(
 		f.SdkClientFactory,
 		f.MatchingClient,
 		f.HistoryClient,
-		f.MetricProvider,
+		f.MetricsHandler,
 		f.hostRateLimiter,
 	)
 }
@@ -230,7 +230,7 @@ func NewTimerQueueProcessorFactory(
 					HighPriorityRPS:       params.Config.TimerTaskHighPriorityRPS,
 					CriticalRetryAttempts: params.Config.TimerTaskMaxRetryCount,
 				},
-				params.MetricProvider,
+				params.MetricsHandler,
 			),
 			queues.SchedulerOptions{
 				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
@@ -241,7 +241,7 @@ func NewTimerQueueProcessorFactory(
 					PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(params.Config.TimerProcessorSchedulerRoundRobinWeights(), params.Logger),
 				},
 			},
-			params.MetricProvider,
+			params.MetricsHandler,
 			params.Logger,
 		)
 	}
@@ -269,7 +269,7 @@ func (f *timerQueueProcessorFactory) CreateProcessor(
 		f.ClientBean,
 		f.ArchivalClient,
 		f.MatchingClient,
-		f.MetricProvider,
+		f.MetricsHandler,
 		f.hostRateLimiter,
 	)
 }
@@ -287,7 +287,7 @@ func NewVisibilityQueueProcessorFactory(
 					HighPriorityRPS:       params.Config.VisibilityTaskHighPriorityRPS,
 					CriticalRetryAttempts: params.Config.VisibilityTaskMaxRetryCount,
 				},
-				params.MetricProvider,
+				params.MetricsHandler,
 			),
 			queues.SchedulerOptions{
 				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
@@ -298,7 +298,7 @@ func NewVisibilityQueueProcessorFactory(
 					PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(params.Config.VisibilityProcessorSchedulerRoundRobinWeights(), params.Logger),
 				},
 			},
-			params.MetricProvider,
+			params.MetricsHandler,
 			params.Logger,
 		)
 	}
@@ -324,7 +324,7 @@ func (f *visibilityQueueProcessorFactory) CreateProcessor(
 		workflowCache,
 		f.scheduler,
 		f.VisibilityMgr,
-		f.MetricProvider,
+		f.MetricsHandler,
 		f.hostRateLimiter,
 	)
 }

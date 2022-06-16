@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -49,21 +50,19 @@ type (
 		shard          shard.Context
 		cache          workflow.Cache
 		logger         log.Logger
-		metricProvider metrics.MetricProvider
+		metricProvider metrics.MetricsHandler
 		visibilityMgr  manager.VisibilityManager
 	}
 )
 
-var (
-	errUnknownVisibilityTask = serviceerror.NewInternal("unknown visibility task")
-)
+var errUnknownVisibilityTask = serviceerror.NewInternal("unknown visibility task")
 
 func newVisibilityQueueTaskExecutor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 ) *visibilityQueueTaskExecutor {
 	return &visibilityQueueTaskExecutor{
 		shard:          shard,
@@ -77,8 +76,7 @@ func newVisibilityQueueTaskExecutor(
 func (t *visibilityQueueTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.MetricProvider, error) {
-
+) (metrics.MetricsHandler, error) {
 	task := executable.GetTask()
 	taskType := queues.GetVisibilityTaskTypeTagValue(task)
 	metricsProvider := t.metricProvider.WithTags(
@@ -237,7 +235,6 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 	visibilityMemo *commonpb.Memo,
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
-
 	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -280,7 +277,6 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 	visibilityMemo *commonpb.Memo,
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
-
 	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -395,7 +391,6 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	taskQueue string,
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
-
 	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -445,7 +440,6 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 func getWorkflowMemo(
 	memoFields map[string]*commonpb.Payload,
 ) *commonpb.Memo {
-
 	if memoFields == nil {
 		return nil
 	}
@@ -455,7 +449,6 @@ func getWorkflowMemo(
 func copyMemo(
 	memoFields map[string]*commonpb.Payload,
 ) map[string]*commonpb.Payload {
-
 	if memoFields == nil {
 		return nil
 	}
@@ -470,7 +463,6 @@ func copyMemo(
 func getSearchAttributes(
 	indexedFields map[string]*commonpb.Payload,
 ) *commonpb.SearchAttributes {
-
 	if indexedFields == nil {
 		return nil
 	}
@@ -480,7 +472,6 @@ func getSearchAttributes(
 func copySearchAttributes(
 	input map[string]*commonpb.Payload,
 ) map[string]*commonpb.Payload {
-
 	if input == nil {
 		return nil
 	}

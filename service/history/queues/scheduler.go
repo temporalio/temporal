@@ -60,7 +60,7 @@ type (
 func NewScheduler(
 	priorityAssigner PriorityAssigner,
 	options SchedulerOptions,
-	metricsProvider metrics.MetricProvider,
+	metricsProvider metrics.MetricsHandler,
 	logger log.Logger,
 ) *schedulerImpl {
 	return &schedulerImpl{

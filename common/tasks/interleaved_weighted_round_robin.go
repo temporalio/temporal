@@ -49,7 +49,7 @@ type (
 		status int32
 
 		processor       Processor
-		metricsProvider metrics.MetricProvider
+		metricsProvider metrics.MetricsHandler
 		logger          log.Logger
 
 		notifyChan   chan struct{}
@@ -74,7 +74,7 @@ type (
 func NewInterleavedWeightedRoundRobinScheduler(
 	option InterleavedWeightedRoundRobinSchedulerOptions,
 	processor Processor,
-	metricsProvider metrics.MetricProvider,
+	metricsProvider metrics.MetricsHandler,
 	logger log.Logger,
 ) *InterleavedWeightedRoundRobinScheduler {
 	return &InterleavedWeightedRoundRobinScheduler{
@@ -228,7 +228,6 @@ func (s *InterleavedWeightedRoundRobinScheduler) notifyDispatcher() {
 func (s *InterleavedWeightedRoundRobinScheduler) doDispatchTasks(
 	channels []*WeightedChannel,
 ) {
-
 LoopDispatch:
 	for _, channel := range channels {
 		select {

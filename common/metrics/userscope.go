@@ -31,35 +31,35 @@ import (
 )
 
 type (
-	metricsUserScope struct {
-		provider MetricProvider
+	userScope struct {
+		provider MetricsHandler
 		tags     map[string]string
 	}
 )
 
-var _ UserScope = (*metricsUserScope)(nil)
+var _ UserScope = (*userScope)(nil)
 
-func newMetricsUserScope(provider MetricProvider, tags map[string]string) *metricsUserScope {
-	return &metricsUserScope{
+func newUserScope(provider MetricsHandler, tags map[string]string) *userScope {
+	return &userScope{
 		provider: provider,
 		tags:     tags,
 	}
 }
 
 // IncCounter increments a counter metric
-func (e *metricsUserScope) IncCounter(counter string) {
+func (e *userScope) IncCounter(counter string) {
 	e.AddCounter(counter, 1)
 }
 
 // AddCounter adds delta to the counter metric
-func (e *metricsUserScope) AddCounter(counter string, delta int64) {
+func (e *userScope) AddCounter(counter string, delta int64) {
 	e.provider.Counter(counter).Record(delta, mapToTags(e.tags)...)
 }
 
 // StartTimer starts a timer for the given metric name.
 // Time will be recorded when stopwatch is stopped.
-func (e *metricsUserScope) StartTimer(timer string) Stopwatch {
-	return &metricsStopwatch{
+func (e *userScope) StartTimer(timer string) Stopwatch {
+	return &stopwatch{
 		recordFunc: func(d time.Duration) {
 			e.provider.Timer(timer).Record(d, mapToTags(e.tags)...)
 		},
@@ -68,35 +68,35 @@ func (e *metricsUserScope) StartTimer(timer string) Stopwatch {
 }
 
 // RecordTimer records a timer for the given metric name
-func (e *metricsUserScope) RecordTimer(timer string, d time.Duration) {
+func (e *userScope) RecordTimer(timer string, d time.Duration) {
 	e.provider.Timer(timer).Record(d, mapToTags(e.tags)...)
 }
 
 // RecordDistribution records a distribution (wrapper on top of timer) for the given
 // metric name
-func (e *metricsUserScope) RecordDistribution(id string, unit MetricUnit, d int) {
+func (e *userScope) RecordDistribution(id string, unit MetricUnit, d int) {
 	e.provider.Histogram(id, unit).Record(int64(d), mapToTags(e.tags)...)
 }
 
 // UpdateGauge reports Gauge type absolute value metric
-func (e *metricsUserScope) UpdateGauge(gauge string, value float64) {
+func (e *userScope) UpdateGauge(gauge string, value float64) {
 	e.provider.Gauge(gauge).Record(value, mapToTags(e.tags)...)
 }
 
 // Tagged returns a new scope with added and/or overriden tags values that can be used
 // to provide additional information to metrics
-func (e *metricsUserScope) Tagged(tags map[string]string) UserScope {
+func (e *userScope) Tagged(tags map[string]string) UserScope {
 	if len(tags) == 0 {
-		return newMetricsUserScope(e.provider, e.tags)
+		return newUserScope(e.provider, e.tags)
 	}
 
 	if len(e.tags) == 0 {
-		return newMetricsUserScope(e.provider, tags)
+		return newUserScope(e.provider, tags)
 	}
 
 	m := maps.Clone(e.tags)
 	maps.Copy(m, tags)
-	return newMetricsUserScope(e.provider, m)
+	return newUserScope(e.provider, m)
 }
 
 func mapToTags(m map[string]string) []Tag {

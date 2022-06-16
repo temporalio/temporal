@@ -386,17 +386,25 @@ func histogramBoundariesToHistogramObjectives(boundaries []float64) []prometheus
 	return result
 }
 
-// MetricProviderFromConfig is used at startup to construct a MetricProvider
-func MetricProviderFromConfig(logger log.Logger, c *Config) MetricProvider {
+// MetricsHandlerFromConfig is used at startup to construct a MetricsHandler
+func MetricsHandlerFromConfig(logger log.Logger, c *Config) MetricsHandler {
 	if c == nil {
-		return NoopMetricProvider
+		return NoopMetricsHandler
 	}
 
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
-	if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
+	if c.Prometheus != nil {
 		switch c.Prometheus.Framework {
+		case FrameworkOpentelemetry:
+			otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
+			if err != nil {
+				logger.Fatal(err.Error())
+			}
+
+			return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
 		case FrameworkTally:
-			return NewTallyMetricProvider(
+		default:
+			return NewTallyMetricsHandler(
 				c.ClientConfig,
 				newPrometheusScope(
 					logger,
@@ -404,23 +412,12 @@ func MetricProviderFromConfig(logger log.Logger, c *Config) MetricProvider {
 					&c.ClientConfig,
 				),
 			)
-		case FrameworkOpentelemetry:
-			otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
-			if err != nil {
-				logger.Fatal(err.Error())
-			}
-
-			return NewOtelMetricProvider(logger, otelProvider, c.ClientConfig)
 		}
 	}
 
-	return NewTallyMetricProvider(
+	return NewTallyMetricsHandler(
 		c.ClientConfig,
-		newPrometheusScope(
-			logger,
-			convertPrometheusConfigToTally(c.Prometheus),
-			&c.ClientConfig,
-		),
+		newStatsdScope(logger, c),
 	)
 }
 

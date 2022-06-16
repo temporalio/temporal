@@ -50,7 +50,7 @@ type (
 	priorityAssignerImpl struct {
 		currentClusterName string
 		namespaceRegistry  namespace.Registry
-		metricsProvider    metrics.MetricProvider
+		metricsProvider    metrics.MetricsHandler
 		options            PriorityAssignerOptions
 
 		sync.RWMutex
@@ -62,7 +62,7 @@ func NewPriorityAssigner(
 	currentClusterName string,
 	namespaceRegistry namespace.Registry,
 	options PriorityAssignerOptions,
-	metricsProvider metrics.MetricProvider,
+	metricsProvider metrics.MetricsHandler,
 ) PriorityAssigner {
 	return &priorityAssignerImpl{
 		currentClusterName: currentClusterName,

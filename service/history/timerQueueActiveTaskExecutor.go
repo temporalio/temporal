@@ -70,7 +70,7 @@ func newTimerQueueActiveTaskExecutor(
 	workflowDeleteManager workflow.DeleteManager,
 	queueProcessor *timerQueueActiveProcessorImpl,
 	logger log.Logger,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Executor {
@@ -91,8 +91,7 @@ func newTimerQueueActiveTaskExecutor(
 func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.MetricProvider, error) {
-
+) (metrics.MetricsHandler, error) {
 	task := executable.GetTask()
 	taskType := queues.GetActiveTimerTaskTypeTagValue(task)
 	metricsProvider := t.metricProvider.WithTags(
@@ -571,7 +570,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 	mutableState workflow.MutableState,
 ) workflow.TimerSequence {
-
 	return workflow.NewTimerSequence(mutableState)
 }
 
@@ -581,7 +579,6 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	mutableState workflow.MutableState,
 	scheduleNewWorkflowTask bool,
 ) error {
-
 	var err error
 	if scheduleNewWorkflowTask {
 		// Schedule a new workflow task.

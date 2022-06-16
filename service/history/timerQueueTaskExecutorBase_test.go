@@ -32,6 +32,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -67,11 +68,9 @@ func TestTimerQueueTaskExecutorBaseSuite(t *testing.T) {
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) SetupSuite() {
-
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TearDownSuite() {
-
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
@@ -88,7 +87,8 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: 0,
 				RangeId: 1,
-			}},
+			},
+		},
 		config,
 	)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -99,7 +99,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		s.mockDeleteManager,
 		nil,
 		s.testShardContext.GetLogger(),
-		metrics.NoopMetricProvider,
+		metrics.NoopMetricsHandler,
 		config,
 	)
 }

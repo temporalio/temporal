@@ -129,7 +129,7 @@ func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.JW
 // Provider, err := NewCustomProviderImplementation(logger)
 // reporter, err2 := metrics.NewEventsReporter(Provider)
 // server := temporal.NewServer(temporal.WithCustomMetricsReporter(repoter))
-// Deprecated use WithCustomMetricProvider
+// Deprecated use WithCustomMetricsHandler
 func WithCustomMetricsReporter(reporter metrics.Reporter) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.metricsReporter = reporter
@@ -192,9 +192,9 @@ func WithChainedFrontendGrpcInterceptors(
 	})
 }
 
-// WithCustomerMetricsProvider sets a custom implementation of the metrics.MetricProvider interface
-// metrics.MetricProvider is the base interface for publishing metric events
-func WithCustomMetricProvider(provider metrics.MetricProvider) ServerOption {
+// WithCustomerMetricsProvider sets a custom implementation of the metrics.MetricsHandler interface
+// metrics.MetricsHandler is the base interface for publishing metric events
+func WithCustomMetricsHandler(provider metrics.MetricsHandler) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.metricProvider = provider
 	})

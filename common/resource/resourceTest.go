@@ -164,8 +164,8 @@ func NewTest(
 	membershipMonitor.EXPECT().GetResolver(common.WorkerServiceName).Return(workerServiceResolver, nil).AnyTimes()
 
 	scope := tally.NewTestScope("test", nil)
-	metricClient := metrics.NewMetricsClient(
-		metrics.NewTallyMetricProvider(metrics.ClientConfig{}, scope),
+	metricClient := metrics.NewClient(
+		metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope),
 		serviceMetricsIndex,
 	)
 

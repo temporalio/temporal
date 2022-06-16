@@ -35,7 +35,7 @@ import (
 
 func TestTallyScope(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
-	mp := NewTallyMetricProvider(defaultConfig, scope)
+	mp := NewTallyMetricsHandler(defaultConfig, scope)
 	recordTallyMetrics(mp)
 
 	snap := scope.Snapshot()
@@ -64,7 +64,7 @@ func TestTallyScope(t *testing.T) {
 	assert.EqualValues(t, map[string]string{}, histograms["test.transmission+"].Tags())
 }
 
-func recordTallyMetrics(mp MetricProvider) {
+func recordTallyMetrics(mp MetricsHandler) {
 	c := mp.Counter("hits")
 	g := mp.Gauge("temp")
 	d := mp.Timer("latency")
