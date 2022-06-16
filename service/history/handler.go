@@ -303,7 +303,7 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 			tag.Error(err),
 			tag.WorkflowID(request.WorkflowExecution.GetWorkflowId()),
 			tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
-			tag.WorkflowScheduleID(request.GetScheduleId()),
+			tag.WorkflowScheduledEventID(request.GetScheduledEventId()),
 		)
 		return nil, h.convertError(err)
 	}
@@ -456,7 +456,7 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
 		tag.WorkflowRunID(token.GetRunId()),
-		tag.WorkflowScheduleID(token.GetScheduleId()))
+		tag.WorkflowScheduledEventID(token.GetScheduledEventId()))
 
 	err0 = validateTaskToken(token)
 	if err0 != nil {
@@ -501,7 +501,7 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
 		tag.WorkflowRunID(token.GetRunId()),
-		tag.WorkflowScheduleID(token.GetScheduleId()))
+		tag.WorkflowScheduledEventID(token.GetScheduledEventId()))
 
 	err0 = validateTaskToken(token)
 	if err0 != nil {

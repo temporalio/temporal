@@ -371,6 +371,7 @@ func (t *timerQueueProcessorBase) submitTask(
 func newTimerTaskScheduler(
 	shard shard.Context,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 ) queues.Scheduler {
 	config := shard.GetConfig()
 	return queues.NewScheduler(
@@ -384,7 +385,7 @@ func newTimerTaskScheduler(
 				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TimerProcessorSchedulerRoundRobinWeights(), logger),
 			},
 		},
-		shard.GetMetricsClient(),
+		metricProvider,
 		logger,
 	)
 }

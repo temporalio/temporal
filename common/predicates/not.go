@@ -22,30 +22,41 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package metrics
+package predicates
 
-import (
-	"time"
+type (
+	NotImpl[T any] struct {
+		Predicate Predicate[T]
+	}
 )
 
-type CompositeStopwatch struct {
-	items []Stopwatch
-}
-
-func NewCompositeStopwatch(items ...Stopwatch) *CompositeStopwatch {
-	return &CompositeStopwatch{
-		items: items,
+func Not[T any](
+	predicate Predicate[T],
+) Predicate[T] {
+	switch p := predicate.(type) {
+	case *NotImpl[T]:
+		return p.Predicate
+	case *AllImpl[T]:
+		return Empty[T]()
+	case *EmptyImpl[T]:
+		return All[T]()
+	default:
+		return &NotImpl[T]{
+			Predicate: predicate,
+		}
 	}
 }
 
-func (c CompositeStopwatch) Stop() {
-	for _, stopwatch := range c.items {
-		stopwatch.Stop()
-	}
+func (n *NotImpl[T]) Test(t T) bool {
+	return !n.Predicate.Test(t)
 }
 
-func (c CompositeStopwatch) Subtract(d time.Duration) {
-	for _, stopwatch := range c.items {
-		stopwatch.Subtract(d)
+func (n *NotImpl[T]) Equals(
+	predicate Predicate[T],
+) bool {
+	notPredicate, ok := predicate.(*NotImpl[T])
+	if !ok {
+		return false
 	}
+	return n.Predicate.Equals(notPredicate.Predicate)
 }

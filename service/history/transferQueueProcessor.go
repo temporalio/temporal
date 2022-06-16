@@ -67,6 +67,7 @@ type (
 		sdkClientFactory          sdk.ClientFactory
 		taskAllocator             taskAllocator
 		config                    *configs.Config
+		metricProvider            metrics.MetricProvider
 		metricsClient             metrics.Client
 		clientBean                client.Bean
 		matchingClient            matchingservice.MatchingServiceClient
@@ -93,6 +94,7 @@ func newTransferQueueProcessor(
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
+	metricProvider metrics.MetricProvider,
 	hostRateLimiter quotas.RateLimiter,
 ) queues.Processor {
 
@@ -113,6 +115,7 @@ func newTransferQueueProcessor(
 		sdkClientFactory:   sdkClientFactory,
 		taskAllocator:      taskAllocator,
 		config:             config,
+		metricProvider:     metricProvider,
 		metricsClient:      shard.GetMetricsClient(),
 		clientBean:         clientBean,
 		matchingClient:     matchingClient,
@@ -137,6 +140,7 @@ func newTransferQueueProcessor(
 				config.TransferProcessorMaxPollRPS,
 			),
 			logger,
+			metricProvider,
 			singleProcessor,
 		),
 		standbyTaskProcessors: make(map[string]*transferQueueStandbyProcessorImpl),
@@ -243,6 +247,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 			t.config.TransferProcessorFailoverMaxPollRPS,
 		),
 		t.logger,
+		t.metricProvider,
 	)
 
 	// NOTE: READ REF BEFORE MODIFICATION
@@ -394,6 +399,7 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 					t.config.TransferProcessorMaxPollRPS,
 				),
 				t.logger,
+				t.metricProvider,
 				t.matchingClient,
 			)
 			processor.Start()

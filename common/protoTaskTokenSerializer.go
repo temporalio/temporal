@@ -37,27 +37,27 @@ func NewProtoTaskTokenSerializer() TaskTokenSerializer {
 	return &protoTaskTokenSerializer{}
 }
 
-func (j *protoTaskTokenSerializer) Serialize(taskToken *tokenspb.Task) ([]byte, error) {
+func (s *protoTaskTokenSerializer) Serialize(taskToken *tokenspb.Task) ([]byte, error) {
 	if taskToken == nil {
 		return nil, nil
 	}
 	return taskToken.Marshal()
 }
 
-func (j *protoTaskTokenSerializer) Deserialize(data []byte) (*tokenspb.Task, error) {
+func (s *protoTaskTokenSerializer) Deserialize(data []byte) (*tokenspb.Task, error) {
 	taskToken := &tokenspb.Task{}
 	err := taskToken.Unmarshal(data)
 	return taskToken, err
 }
 
-func (j *protoTaskTokenSerializer) SerializeQueryTaskToken(taskToken *tokenspb.QueryTask) ([]byte, error) {
+func (s *protoTaskTokenSerializer) SerializeQueryTaskToken(taskToken *tokenspb.QueryTask) ([]byte, error) {
 	if taskToken == nil {
 		return nil, nil
 	}
 	return taskToken.Marshal()
 }
 
-func (j *protoTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*tokenspb.QueryTask, error) {
+func (s *protoTaskTokenSerializer) DeserializeQueryTaskToken(data []byte) (*tokenspb.QueryTask, error) {
 	taskToken := tokenspb.QueryTask{}
 	err := taskToken.Unmarshal(data)
 	return &taskToken, err

@@ -106,9 +106,9 @@ var (
 
 type (
 	MutableStateImpl struct {
-		pendingActivityTimerHeartbeats map[int64]time.Time                    // Schedule Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
-		pendingActivityInfoIDs         map[int64]*persistencespb.ActivityInfo // Schedule Event ID -> Activity Info.
-		pendingActivityIDToEventID     map[string]int64                       // Activity ID -> Schedule Event ID of the activity.
+		pendingActivityTimerHeartbeats map[int64]time.Time                    // Scheduled Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
+		pendingActivityInfoIDs         map[int64]*persistencespb.ActivityInfo // Scheduled Event ID -> Activity Info.
+		pendingActivityIDToEventID     map[string]int64                       // Activity ID -> Scheduled Event ID of the activity.
 		updateActivityInfos            map[int64]*persistencespb.ActivityInfo // Modified activities from last update.
 		deleteActivityInfos            map[int64]struct{}                     // Deleted activities from last update.
 		syncActivityTasks              map[int64]struct{}                     // Activity to be sync to remote
@@ -240,14 +240,14 @@ func NewMutableState(
 	}
 
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
-		WorkflowTaskVersion:    common.EmptyVersion,
-		WorkflowTaskScheduleId: common.EmptyEventID,
-		WorkflowTaskStartedId:  common.EmptyEventID,
-		WorkflowTaskRequestId:  emptyUUID,
-		WorkflowTaskTimeout:    timestamp.DurationFromSeconds(0),
-		WorkflowTaskAttempt:    1,
+		WorkflowTaskVersion:          common.EmptyVersion,
+		WorkflowTaskScheduledEventId: common.EmptyEventID,
+		WorkflowTaskStartedEventId:   common.EmptyEventID,
+		WorkflowTaskRequestId:        emptyUUID,
+		WorkflowTaskTimeout:          timestamp.DurationFromSeconds(0),
+		WorkflowTaskAttempt:          1,
 
-		LastWorkflowTaskStartId: common.EmptyEventID,
+		LastWorkflowTaskStartedEventId: common.EmptyEventID,
 
 		StartTime:        timestamp.TimePtr(startTime),
 		VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
@@ -286,11 +286,11 @@ func newMutableStateBuilderFromDB(
 		mutableState.pendingActivityInfoIDs = dbRecord.ActivityInfos
 	}
 	for _, activityInfo := range dbRecord.ActivityInfos {
-		mutableState.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduleId
+		mutableState.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduledEventId
 		if (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) > 0 {
 			// Sets last pending timer heartbeat to year 2000.
 			// This ensures at least one heartbeat task will be processed for the pending activity.
-			mutableState.pendingActivityTimerHeartbeats[activityInfo.ScheduleId] = time.Unix(946684800, 0)
+			mutableState.pendingActivityTimerHeartbeats[activityInfo.ScheduledEventId] = time.Unix(946684800, 0)
 		}
 	}
 
@@ -298,7 +298,7 @@ func newMutableStateBuilderFromDB(
 		mutableState.pendingTimerInfoIDs = dbRecord.TimerInfos
 	}
 	for _, timerInfo := range dbRecord.TimerInfos {
-		mutableState.pendingTimerEventIDToID[timerInfo.GetStartedId()] = timerInfo.GetTimerId()
+		mutableState.pendingTimerEventIDToID[timerInfo.GetStartedEventId()] = timerInfo.GetTimerId()
 	}
 
 	if dbRecord.ChildExecutionInfos != nil {
@@ -598,15 +598,15 @@ func (e *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 
 func (e *MutableStateImpl) GetActivityScheduledEvent(
 	ctx context.Context,
-	scheduleEventID int64,
+	scheduledEventID int64,
 ) (*historypb.HistoryEvent, error) {
 
-	ai, ok := e.pendingActivityInfoIDs[scheduleEventID]
+	ai, ok := e.pendingActivityInfoIDs[scheduledEventID]
 	if !ok {
 		return nil, ErrMissingActivityInfo
 	}
 
-	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(ai.ScheduleId)
+	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(ai.ScheduledEventId)
 	if err != nil {
 		return nil, err
 	}
@@ -616,7 +616,7 @@ func (e *MutableStateImpl) GetActivityScheduledEvent(
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
-			EventID:     ai.ScheduleId,
+			EventID:     ai.ScheduledEventId,
 			Version:     version,
 		},
 		ai.ScheduledEventBatchId,
@@ -633,19 +633,19 @@ func (e *MutableStateImpl) GetActivityScheduledEvent(
 
 // GetActivityInfo gives details about an activity that is currently in progress.
 func (e *MutableStateImpl) GetActivityInfo(
-	scheduleEventID int64,
+	scheduledEventID int64,
 ) (*persistencespb.ActivityInfo, bool) {
 
-	ai, ok := e.pendingActivityInfoIDs[scheduleEventID]
+	ai, ok := e.pendingActivityInfoIDs[scheduledEventID]
 	return ai, ok
 }
 
 // GetActivityInfoWithTimerHeartbeat gives details about an activity that is currently in progress.
 func (e *MutableStateImpl) GetActivityInfoWithTimerHeartbeat(
-	scheduleEventID int64,
+	scheduledEventID int64,
 ) (*persistencespb.ActivityInfo, time.Time, bool) {
-	ai, ok := e.pendingActivityInfoIDs[scheduleEventID]
-	timerVis, ok := e.pendingActivityTimerHeartbeats[scheduleEventID]
+	ai, ok := e.pendingActivityInfoIDs[scheduledEventID]
+	timerVis, ok := e.pendingActivityTimerHeartbeats[scheduledEventID]
 
 	return ai, timerVis, ok
 }
@@ -683,7 +683,7 @@ func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
 		return nil, ErrMissingChildWorkflowInfo
 	}
 
-	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(ci.InitiatedId)
+	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(ci.InitiatedEventId)
 	if err != nil {
 		return nil, err
 	}
@@ -693,7 +693,7 @@ func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
-			EventID:     ci.InitiatedId,
+			EventID:     ci.InitiatedEventId,
 			Version:     version,
 		},
 		ci.InitiatedEventBatchId,
@@ -726,7 +726,7 @@ func (e *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 		return nil, ErrMissingRequestCancelInfo
 	}
 
-	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(ri.InitiatedId)
+	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(ri.InitiatedEventId)
 	if err != nil {
 		return nil, err
 	}
@@ -736,7 +736,7 @@ func (e *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
-			EventID:     ri.InitiatedId,
+			EventID:     ri.InitiatedEventId,
 			Version:     version,
 		},
 		ri.InitiatedEventBatchId,
@@ -800,7 +800,7 @@ func (e *MutableStateImpl) GetSignalExternalInitiatedEvent(
 		return nil, ErrMissingSignalInfo
 	}
 
-	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(si.InitiatedId)
+	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(si.InitiatedEventId)
 	if err != nil {
 		return nil, err
 	}
@@ -810,7 +810,7 @@ func (e *MutableStateImpl) GetSignalExternalInitiatedEvent(
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
-			EventID:     si.InitiatedId,
+			EventID:     si.InitiatedEventId,
 			Version:     version,
 		},
 		si.InitiatedEventBatchId,
@@ -1022,8 +1022,8 @@ func (e *MutableStateImpl) UpdateActivityProgress(
 	ai.LastHeartbeatDetails = request.Details
 	now := e.timeSource.Now()
 	ai.LastHeartbeatUpdateTime = &now
-	e.updateActivityInfos[ai.ScheduleId] = ai
-	e.syncActivityTasks[ai.ScheduleId] = struct{}{}
+	e.updateActivityInfos[ai.ScheduledEventId] = ai
+	e.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 }
 
 // ReplicateActivityInfo replicate the necessary activity information
@@ -1031,10 +1031,10 @@ func (e *MutableStateImpl) ReplicateActivityInfo(
 	request *historyservice.SyncActivityRequest,
 	resetActivityTimerTaskStatus bool,
 ) error {
-	ai, ok := e.pendingActivityInfoIDs[request.GetScheduledId()]
+	ai, ok := e.pendingActivityInfoIDs[request.GetScheduledEventId()]
 	if !ok {
 		e.logError(
-			fmt.Sprintf("unable to find activity event ID: %v in mutable state", request.GetScheduledId()),
+			fmt.Sprintf("unable to find activity event ID: %v in mutable state", request.GetScheduledEventId()),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingActivityInfo
@@ -1042,9 +1042,9 @@ func (e *MutableStateImpl) ReplicateActivityInfo(
 
 	ai.Version = request.GetVersion()
 	ai.ScheduledTime = request.GetScheduledTime()
-	ai.StartedId = request.GetStartedId()
+	ai.StartedEventId = request.GetStartedEventId()
 	ai.LastHeartbeatUpdateTime = request.GetLastHeartbeatTime()
-	if ai.StartedId == common.EmptyEventID {
+	if ai.StartedEventId == common.EmptyEventID {
 		ai.StartedTime = timestamp.TimePtr(time.Time{})
 	} else {
 		ai.StartedTime = request.GetStartedTime()
@@ -1058,7 +1058,7 @@ func (e *MutableStateImpl) ReplicateActivityInfo(
 		ai.TimerTaskStatus = TimerTaskStatusNone
 	}
 
-	e.updateActivityInfos[ai.ScheduleId] = ai
+	e.updateActivityInfos[ai.ScheduledEventId] = ai
 	return nil
 }
 
@@ -1067,7 +1067,7 @@ func (e *MutableStateImpl) UpdateActivity(
 	ai *persistencespb.ActivityInfo,
 ) error {
 
-	if _, ok := e.pendingActivityInfoIDs[ai.ScheduleId]; !ok {
+	if _, ok := e.pendingActivityInfoIDs[ai.ScheduledEventId]; !ok {
 		e.logError(
 			fmt.Sprintf("unable to find activity ID: %v in mutable state", ai.ActivityId),
 			tag.ErrorTypeInvalidMutableStateAction,
@@ -1075,8 +1075,8 @@ func (e *MutableStateImpl) UpdateActivity(
 		return ErrMissingActivityInfo
 	}
 
-	e.pendingActivityInfoIDs[ai.ScheduleId] = ai
-	e.updateActivityInfos[ai.ScheduleId] = ai
+	e.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
+	e.updateActivityInfos[ai.ScheduledEventId] = ai
 	return nil
 }
 
@@ -1091,18 +1091,18 @@ func (e *MutableStateImpl) UpdateActivityWithTimerHeartbeat(
 		return err
 	}
 
-	e.pendingActivityTimerHeartbeats[ai.ScheduleId] = timerTimeoutVisibility
+	e.pendingActivityTimerHeartbeats[ai.ScheduledEventId] = timerTimeoutVisibility
 	return nil
 }
 
 // DeleteActivity deletes details about an activity.
 func (e *MutableStateImpl) DeleteActivity(
-	scheduleEventID int64,
+	scheduledEventID int64,
 ) error {
 
-	if activityInfo, ok := e.pendingActivityInfoIDs[scheduleEventID]; ok {
-		delete(e.pendingActivityInfoIDs, scheduleEventID)
-		delete(e.pendingActivityTimerHeartbeats, scheduleEventID)
+	if activityInfo, ok := e.pendingActivityInfoIDs[scheduledEventID]; ok {
+		delete(e.pendingActivityInfoIDs, scheduledEventID)
+		delete(e.pendingActivityTimerHeartbeats, scheduledEventID)
 
 		if _, ok = e.pendingActivityIDToEventID[activityInfo.ActivityId]; ok {
 			delete(e.pendingActivityIDToEventID, activityInfo.ActivityId)
@@ -1116,16 +1116,16 @@ func (e *MutableStateImpl) DeleteActivity(
 		}
 	} else {
 		e.logError(
-			fmt.Sprintf("unable to find activity event id: %v in mutable state", scheduleEventID),
+			fmt.Sprintf("unable to find activity event id: %v in mutable state", scheduledEventID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		// log data inconsistency instead of returning an error
 		e.logDataInconsistency()
 	}
 
-	delete(e.updateActivityInfos, scheduleEventID)
-	delete(e.syncActivityTasks, scheduleEventID)
-	e.deleteActivityInfos[scheduleEventID] = struct{}{}
+	delete(e.updateActivityInfos, scheduledEventID)
+	delete(e.syncActivityTasks, scheduledEventID)
+	e.deleteActivityInfos[scheduledEventID] = struct{}{}
 	return nil
 }
 
@@ -1155,10 +1155,10 @@ func (e *MutableStateImpl) UpdateUserTimer(
 	ti *persistencespb.TimerInfo,
 ) error {
 
-	timerID, ok := e.pendingTimerEventIDToID[ti.GetStartedId()]
+	timerID, ok := e.pendingTimerEventIDToID[ti.GetStartedEventId()]
 	if !ok {
 		e.logError(
-			fmt.Sprintf("unable to find timer event ID: %v in mutable state", ti.GetStartedId()),
+			fmt.Sprintf("unable to find timer event ID: %v in mutable state", ti.GetStartedEventId()),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingTimerInfo
@@ -1185,8 +1185,8 @@ func (e *MutableStateImpl) DeleteUserTimer(
 	if timerInfo, ok := e.pendingTimerInfoIDs[timerID]; ok {
 		delete(e.pendingTimerInfoIDs, timerID)
 
-		if _, ok = e.pendingTimerEventIDToID[timerInfo.GetStartedId()]; ok {
-			delete(e.pendingTimerEventIDToID, timerInfo.GetStartedId())
+		if _, ok = e.pendingTimerEventIDToID[timerInfo.GetStartedEventId()]; ok {
+			delete(e.pendingTimerEventIDToID, timerInfo.GetStartedEventId())
 		} else {
 			e.logError(
 				fmt.Sprintf("unable to find timer event ID: %v in mutable state", timerID),
@@ -1223,8 +1223,8 @@ func (e *MutableStateImpl) getWorkflowTaskInfo() *WorkflowTaskInfo {
 
 	return &WorkflowTaskInfo{
 		Version:               e.executionInfo.WorkflowTaskVersion,
-		ScheduleID:            e.executionInfo.WorkflowTaskScheduleId,
-		StartedID:             e.executionInfo.WorkflowTaskStartedId,
+		ScheduledEventID:      e.executionInfo.WorkflowTaskScheduledEventId,
+		StartedEventID:        e.executionInfo.WorkflowTaskStartedEventId,
 		RequestID:             e.executionInfo.WorkflowTaskRequestId,
 		WorkflowTaskTimeout:   e.executionInfo.WorkflowTaskTimeout,
 		Attempt:               e.executionInfo.WorkflowTaskAttempt,
@@ -1237,9 +1237,9 @@ func (e *MutableStateImpl) getWorkflowTaskInfo() *WorkflowTaskInfo {
 
 // GetWorkflowTaskInfo returns details about the in-progress workflow task
 func (e *MutableStateImpl) GetWorkflowTaskInfo(
-	scheduleEventID int64,
+	scheduledEventID int64,
 ) (*WorkflowTaskInfo, bool) {
-	return e.workflowTaskManager.GetWorkflowTaskInfo(scheduleEventID)
+	return e.workflowTaskManager.GetWorkflowTaskInfo(scheduledEventID)
 }
 
 func (e *MutableStateImpl) GetPendingActivityInfos() map[int64]*persistencespb.ActivityInfo {
@@ -1287,7 +1287,7 @@ func (e *MutableStateImpl) HasTransientWorkflowTask() bool {
 	if !ok {
 		return false
 	}
-	return workflowTask.ScheduleID >= e.GetNextEventID()
+	return workflowTask.ScheduledEventID >= e.GetNextEventID()
 }
 
 func (e *MutableStateImpl) ClearTransientWorkflowTask() error {
@@ -1296,10 +1296,10 @@ func (e *MutableStateImpl) ClearTransientWorkflowTask() error {
 		return serviceerror.NewInternal("cannot clear transient workflow task when task is missing")
 	}
 
-	if workflowTask.ScheduleID < e.GetNextEventID() {
+	if workflowTask.ScheduledEventID < e.GetNextEventID() {
 		return serviceerror.NewInternal("cannot clear transient workflow task when task is not transient")
 	}
-	// workflowTask.ScheduleID >= e.GetNextEventID()
+	// workflowTask.ScheduledEventID >= e.GetNextEventID()
 	// this is transient workflow
 	if e.HasBufferedEvents() {
 		return serviceerror.NewInternal("cannot clear transient workflow task when there are buffered events")
@@ -1307,8 +1307,8 @@ func (e *MutableStateImpl) ClearTransientWorkflowTask() error {
 	// no buffered event
 	resetWorkflowTaskInfo := &WorkflowTaskInfo{
 		Version:             common.EmptyVersion,
-		ScheduleID:          common.EmptyEventID,
-		StartedID:           common.EmptyEventID,
+		ScheduledEventID:    common.EmptyEventID,
+		StartedEventID:      common.EmptyEventID,
 		RequestID:           emptyUUID,
 		WorkflowTaskTimeout: timestamp.DurationFromSeconds(0),
 		Attempt:             1,
@@ -1349,7 +1349,7 @@ func (e *MutableStateImpl) GetNextEventID() int64 {
 
 // GetPreviousStartedEventID returns last started workflow task event ID
 func (e *MutableStateImpl) GetPreviousStartedEventID() int64 {
-	return e.executionInfo.LastWorkflowTaskStartId
+	return e.executionInfo.LastWorkflowTaskStartedEventId
 }
 
 func (e *MutableStateImpl) IsWorkflowExecutionRunning() bool {
@@ -1599,12 +1599,12 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	); err != nil {
 		return err
 	}
-	e.executionInfo.LastWorkflowTaskStartId = common.EmptyEventID
+	e.executionInfo.LastWorkflowTaskStartedEventId = common.EmptyEventID
 	e.executionInfo.LastFirstEventId = startEvent.GetEventId()
 
 	e.executionInfo.WorkflowTaskVersion = common.EmptyVersion
-	e.executionInfo.WorkflowTaskScheduleId = common.EmptyEventID
-	e.executionInfo.WorkflowTaskStartedId = common.EmptyEventID
+	e.executionInfo.WorkflowTaskScheduledEventId = common.EmptyEventID
+	e.executionInfo.WorkflowTaskStartedEventId = common.EmptyEventID
 	e.executionInfo.WorkflowTaskRequestId = emptyUUID
 	e.executionInfo.WorkflowTaskTimeout = timestamp.DurationFromSeconds(0)
 
@@ -1719,18 +1719,18 @@ func (e *MutableStateImpl) ReplicateTransientWorkflowTaskScheduled() (*WorkflowT
 
 func (e *MutableStateImpl) ReplicateWorkflowTaskScheduledEvent(
 	version int64,
-	scheduleID int64,
+	scheduledEventID int64,
 	taskQueue *taskqueuepb.TaskQueue,
-	startToCloseTimeoutSeconds int32,
+	startToCloseTimeout *time.Duration,
 	attempt int32,
 	scheduleTimestamp *time.Time,
 	originalScheduledTimestamp *time.Time,
 ) (*WorkflowTaskInfo, error) {
-	return e.workflowTaskManager.ReplicateWorkflowTaskScheduledEvent(version, scheduleID, taskQueue, startToCloseTimeoutSeconds, attempt, scheduleTimestamp, originalScheduledTimestamp)
+	return e.workflowTaskManager.ReplicateWorkflowTaskScheduledEvent(version, scheduledEventID, taskQueue, startToCloseTimeout, attempt, scheduleTimestamp, originalScheduledTimestamp)
 }
 
 func (e *MutableStateImpl) AddWorkflowTaskStartedEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	requestID string,
 	taskQueue *taskqueuepb.TaskQueue,
 	identity string,
@@ -1739,19 +1739,19 @@ func (e *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return e.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduleEventID, requestID, taskQueue, identity)
+	return e.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduledEventID, requestID, taskQueue, identity)
 }
 
 func (e *MutableStateImpl) ReplicateWorkflowTaskStartedEvent(
 	workflowTask *WorkflowTaskInfo,
 	version int64,
-	scheduleID int64,
-	startedID int64,
+	scheduledEventID int64,
+	startedEventID int64,
 	requestID string,
 	timestamp time.Time,
 ) (*WorkflowTaskInfo, error) {
 
-	return e.workflowTaskManager.ReplicateWorkflowTaskStartedEvent(workflowTask, version, scheduleID, startedID, requestID, timestamp)
+	return e.workflowTaskManager.ReplicateWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID, startedEventID, requestID, timestamp)
 }
 
 func (e *MutableStateImpl) CreateTransientWorkflowTaskEvents(
@@ -1844,7 +1844,7 @@ func (e *MutableStateImpl) CheckResettable() error {
 }
 
 func (e *MutableStateImpl) AddWorkflowTaskCompletedEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	startedEventID int64,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 	maxResetPoints int,
@@ -1853,7 +1853,7 @@ func (e *MutableStateImpl) AddWorkflowTaskCompletedEvent(
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return e.workflowTaskManager.AddWorkflowTaskCompletedEvent(scheduleEventID, startedEventID, request, maxResetPoints)
+	return e.workflowTaskManager.AddWorkflowTaskCompletedEvent(scheduledEventID, startedEventID, request, maxResetPoints)
 }
 
 func (e *MutableStateImpl) ReplicateWorkflowTaskCompletedEvent(
@@ -1863,14 +1863,14 @@ func (e *MutableStateImpl) ReplicateWorkflowTaskCompletedEvent(
 }
 
 func (e *MutableStateImpl) AddWorkflowTaskTimedOutEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	startedEventID int64,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskTimedOut
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return e.workflowTaskManager.AddWorkflowTaskTimedOutEvent(scheduleEventID, startedEventID)
+	return e.workflowTaskManager.AddWorkflowTaskTimedOutEvent(scheduledEventID, startedEventID)
 }
 
 func (e *MutableStateImpl) ReplicateWorkflowTaskTimedOutEvent(
@@ -1880,17 +1880,17 @@ func (e *MutableStateImpl) ReplicateWorkflowTaskTimedOutEvent(
 }
 
 func (e *MutableStateImpl) AddWorkflowTaskScheduleToStartTimeoutEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 ) (*historypb.HistoryEvent, error) {
 	opTag := tag.WorkflowActionWorkflowTaskTimedOut
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
 	}
-	return e.workflowTaskManager.AddWorkflowTaskScheduleToStartTimeoutEvent(scheduleEventID)
+	return e.workflowTaskManager.AddWorkflowTaskScheduleToStartTimeoutEvent(scheduledEventID)
 }
 
 func (e *MutableStateImpl) AddWorkflowTaskFailedEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	startedEventID int64,
 	cause enumspb.WorkflowTaskFailedCause,
 	failure *failurepb.Failure,
@@ -1905,7 +1905,7 @@ func (e *MutableStateImpl) AddWorkflowTaskFailedEvent(
 		return nil, err
 	}
 	return e.workflowTaskManager.AddWorkflowTaskFailedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		cause,
 		failure,
@@ -1962,15 +1962,15 @@ func (e *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 
 	attributes := event.GetActivityTaskScheduledEventAttributes()
 
-	scheduleEventID := event.GetEventId()
+	scheduledEventID := event.GetEventId()
 	scheduleToCloseTimeout := attributes.GetScheduleToCloseTimeout()
 
 	ai := &persistencespb.ActivityInfo{
 		Version:                 event.GetVersion(),
-		ScheduleId:              scheduleEventID,
+		ScheduledEventId:        scheduledEventID,
 		ScheduledEventBatchId:   firstEventID,
 		ScheduledTime:           event.GetEventTime(),
-		StartedId:               common.EmptyEventID,
+		StartedEventId:          common.EmptyEventID,
 		StartedTime:             timestamp.TimePtr(time.Time{}),
 		ActivityId:              attributes.ActivityId,
 		NamespaceId:             e.executionInfo.NamespaceId,
@@ -2001,26 +2001,26 @@ func (e *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		}
 	}
 
-	e.pendingActivityInfoIDs[ai.ScheduleId] = ai
-	e.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduleId
-	e.updateActivityInfos[ai.ScheduleId] = ai
+	e.pendingActivityInfoIDs[ai.ScheduledEventId] = ai
+	e.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
+	e.updateActivityInfos[ai.ScheduledEventId] = ai
 
 	e.writeEventToCache(event)
 	return ai, nil
 }
 
 func (e *MutableStateImpl) addTransientActivityStartedEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 ) error {
 
-	ai, ok := e.GetActivityInfo(scheduleEventID)
-	if !ok || ai.StartedId != common.TransientEventID {
+	ai, ok := e.GetActivityInfo(scheduledEventID)
+	if !ok || ai.StartedEventId != common.TransientEventID {
 		return nil
 	}
 
 	// activity task was started (as transient event), we need to add it now.
 	event := e.hBuilder.AddActivityTaskStartedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		ai.Attempt,
 		ai.RequestId,
 		ai.StartedIdentity,
@@ -2035,7 +2035,7 @@ func (e *MutableStateImpl) addTransientActivityStartedEvent(
 
 func (e *MutableStateImpl) AddActivityTaskStartedEvent(
 	ai *persistencespb.ActivityInfo,
-	scheduleEventID int64,
+	scheduledEventID int64,
 	requestID string,
 	identity string,
 ) (*historypb.HistoryEvent, error) {
@@ -2047,7 +2047,7 @@ func (e *MutableStateImpl) AddActivityTaskStartedEvent(
 
 	if !ai.HasRetryPolicy {
 		event := e.hBuilder.AddActivityTaskStartedEvent(
-			scheduleEventID,
+			scheduledEventID,
 			ai.Attempt,
 			requestID,
 			identity,
@@ -2062,7 +2062,7 @@ func (e *MutableStateImpl) AddActivityTaskStartedEvent(
 	// we might need to retry, so do not append started event just yet,
 	// instead update mutable state and will record started event when activity task is closed
 	ai.Version = e.GetCurrentVersion()
-	ai.StartedId = common.TransientEventID
+	ai.StartedEventId = common.TransientEventID
 	ai.RequestId = requestID
 	ai.StartedTime = timestamp.TimePtr(e.timeSource.Now())
 	ai.LastHeartbeatUpdateTime = ai.StartedTime
@@ -2070,7 +2070,7 @@ func (e *MutableStateImpl) AddActivityTaskStartedEvent(
 	if err := e.UpdateActivity(ai); err != nil {
 		return nil, err
 	}
-	e.syncActivityTasks[ai.ScheduleId] = struct{}{}
+	e.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 	return nil, nil
 }
 
@@ -2079,27 +2079,27 @@ func (e *MutableStateImpl) ReplicateActivityTaskStartedEvent(
 ) error {
 
 	attributes := event.GetActivityTaskStartedEventAttributes()
-	scheduleID := attributes.GetScheduledEventId()
-	ai, ok := e.GetActivityInfo(scheduleID)
+	scheduledEventID := attributes.GetScheduledEventId()
+	ai, ok := e.GetActivityInfo(scheduledEventID)
 	if !ok {
 		e.logError(
-			fmt.Sprintf("unable to find activity event id: %v in mutable state", scheduleID),
+			fmt.Sprintf("unable to find activity event id: %v in mutable state", scheduledEventID),
 			tag.ErrorTypeInvalidMutableStateAction,
 		)
 		return ErrMissingActivityInfo
 	}
 
 	ai.Version = event.GetVersion()
-	ai.StartedId = event.GetEventId()
+	ai.StartedEventId = event.GetEventId()
 	ai.RequestId = attributes.GetRequestId()
 	ai.StartedTime = event.GetEventTime()
 	ai.LastHeartbeatUpdateTime = ai.StartedTime
-	e.updateActivityInfos[ai.ScheduleId] = ai
+	e.updateActivityInfos[ai.ScheduledEventId] = ai
 	return nil
 }
 
 func (e *MutableStateImpl) AddActivityTaskCompletedEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	startedEventID int64,
 	request *workflowservice.RespondActivityTaskCompletedRequest,
 ) (*historypb.HistoryEvent, error) {
@@ -2109,21 +2109,21 @@ func (e *MutableStateImpl) AddActivityTaskCompletedEvent(
 		return nil, err
 	}
 
-	if ai, ok := e.GetActivityInfo(scheduleEventID); !ok || ai.StartedId != startedEventID {
+	if ai, ok := e.GetActivityInfo(scheduledEventID); !ok || ai.StartedEventId != startedEventID {
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.Bool(ok),
-			tag.WorkflowScheduleID(scheduleEventID),
-			tag.WorkflowStartedID(startedEventID))
+			tag.WorkflowScheduledEventID(scheduledEventID),
+			tag.WorkflowStartedEventID(startedEventID))
 		return nil, e.createInternalServerError(opTag)
 	}
 
-	if err := e.addTransientActivityStartedEvent(scheduleEventID); err != nil {
+	if err := e.addTransientActivityStartedEvent(scheduledEventID); err != nil {
 		return nil, err
 	}
 	event := e.hBuilder.AddActivityTaskCompletedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		request.Identity,
 		request.Result,
@@ -2140,13 +2140,13 @@ func (e *MutableStateImpl) ReplicateActivityTaskCompletedEvent(
 ) error {
 
 	attributes := event.GetActivityTaskCompletedEventAttributes()
-	scheduleID := attributes.GetScheduledEventId()
+	scheduledEventID := attributes.GetScheduledEventId()
 
-	return e.DeleteActivity(scheduleID)
+	return e.DeleteActivity(scheduledEventID)
 }
 
 func (e *MutableStateImpl) AddActivityTaskFailedEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	startedEventID int64,
 	failure *failurepb.Failure,
 	retryState enumspb.RetryState,
@@ -2158,21 +2158,21 @@ func (e *MutableStateImpl) AddActivityTaskFailedEvent(
 		return nil, err
 	}
 
-	if ai, ok := e.GetActivityInfo(scheduleEventID); !ok || ai.StartedId != startedEventID {
+	if ai, ok := e.GetActivityInfo(scheduledEventID); !ok || ai.StartedEventId != startedEventID {
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.Bool(ok),
-			tag.WorkflowScheduleID(scheduleEventID),
-			tag.WorkflowStartedID(startedEventID))
+			tag.WorkflowScheduledEventID(scheduledEventID),
+			tag.WorkflowStartedEventID(startedEventID))
 		return nil, e.createInternalServerError(opTag)
 	}
 
-	if err := e.addTransientActivityStartedEvent(scheduleEventID); err != nil {
+	if err := e.addTransientActivityStartedEvent(scheduledEventID); err != nil {
 		return nil, err
 	}
 	event := e.hBuilder.AddActivityTaskFailedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		failure,
 		retryState,
@@ -2190,13 +2190,13 @@ func (e *MutableStateImpl) ReplicateActivityTaskFailedEvent(
 ) error {
 
 	attributes := event.GetActivityTaskFailedEventAttributes()
-	scheduleID := attributes.GetScheduledEventId()
+	scheduledEventID := attributes.GetScheduledEventId()
 
-	return e.DeleteActivity(scheduleID)
+	return e.DeleteActivity(scheduledEventID)
 }
 
 func (e *MutableStateImpl) AddActivityTaskTimedOutEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	startedEventID int64,
 	timeoutFailure *failurepb.Failure,
 	retryState enumspb.RetryState,
@@ -2208,26 +2208,26 @@ func (e *MutableStateImpl) AddActivityTaskTimedOutEvent(
 	}
 	timeoutType := timeoutFailure.GetTimeoutFailureInfo().GetTimeoutType()
 
-	ai, ok := e.GetActivityInfo(scheduleEventID)
-	if !ok || ai.StartedId != startedEventID || ((timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
-		timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT) && ai.StartedId == common.EmptyEventID) {
+	ai, ok := e.GetActivityInfo(scheduledEventID)
+	if !ok || ai.StartedEventId != startedEventID || ((timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
+		timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT) && ai.StartedEventId == common.EmptyEventID) {
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.Bool(ok),
-			tag.WorkflowScheduleID(ai.ScheduleId),
-			tag.WorkflowStartedID(ai.StartedId),
+			tag.WorkflowScheduledEventID(ai.ScheduledEventId),
+			tag.WorkflowStartedEventID(ai.StartedEventId),
 			tag.WorkflowTimeoutType(timeoutType))
 		return nil, e.createInternalServerError(opTag)
 	}
 
 	timeoutFailure.Cause = ai.RetryLastFailure
 
-	if err := e.addTransientActivityStartedEvent(scheduleEventID); err != nil {
+	if err := e.addTransientActivityStartedEvent(scheduledEventID); err != nil {
 		return nil, err
 	}
 	event := e.hBuilder.AddActivityTaskTimedOutEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		timeoutFailure,
 		retryState,
@@ -2244,14 +2244,14 @@ func (e *MutableStateImpl) ReplicateActivityTaskTimedOutEvent(
 ) error {
 
 	attributes := event.GetActivityTaskTimedOutEventAttributes()
-	scheduleID := attributes.GetScheduledEventId()
+	scheduledEventID := attributes.GetScheduledEventId()
 
-	return e.DeleteActivity(scheduleID)
+	return e.DeleteActivity(scheduledEventID)
 }
 
 func (e *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 	workflowTaskCompletedEventID int64,
-	scheduleID int64,
+	scheduledEventID int64,
 	_ string,
 ) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error) {
 
@@ -2260,17 +2260,17 @@ func (e *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 		return nil, nil, err
 	}
 
-	ai, ok := e.GetActivityInfo(scheduleID)
+	ai, ok := e.GetActivityInfo(scheduledEventID)
 	if !ok {
 		// It is possible both started and completed events are buffered for this activity
-		if !e.hBuilder.HasActivityFinishEvent(scheduleID) {
+		if !e.hBuilder.HasActivityFinishEvent(scheduledEventID) {
 			e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 				tag.WorkflowEventID(e.GetNextEventID()),
 				tag.ErrorTypeInvalidHistoryAction,
 				tag.Bool(ok),
-				tag.WorkflowScheduleID(scheduleID))
+				tag.WorkflowScheduledEventID(scheduledEventID))
 
-			return nil, nil, e.createCallerError(opTag, fmt.Sprintf("ScheduledID: %d", scheduleID))
+			return nil, nil, e.createCallerError(opTag, fmt.Sprintf("ScheduledEventID: %d", scheduledEventID))
 		}
 	}
 
@@ -2280,13 +2280,13 @@ func (e *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.Bool(ok),
-			tag.WorkflowScheduleID(scheduleID))
+			tag.WorkflowScheduledEventID(scheduledEventID))
 
-		return nil, nil, e.createCallerError(opTag, fmt.Sprintf("ScheduledID: %d", scheduleID))
+		return nil, nil, e.createCallerError(opTag, fmt.Sprintf("ScheduledEventID: %d", scheduledEventID))
 	}
 
 	// At this point we know this is a valid activity cancellation request
-	actCancelReqEvent := e.hBuilder.AddActivityTaskCancelRequestedEvent(workflowTaskCompletedEventID, scheduleID)
+	actCancelReqEvent := e.hBuilder.AddActivityTaskCancelRequestedEvent(workflowTaskCompletedEventID, scheduledEventID)
 
 	if err := e.ReplicateActivityTaskCancelRequestedEvent(actCancelReqEvent); err != nil {
 		return nil, nil, err
@@ -2300,8 +2300,8 @@ func (e *MutableStateImpl) ReplicateActivityTaskCancelRequestedEvent(
 ) error {
 
 	attributes := event.GetActivityTaskCancelRequestedEventAttributes()
-	scheduleID := attributes.GetScheduledEventId()
-	ai, ok := e.GetActivityInfo(scheduleID)
+	scheduledEventID := attributes.GetScheduledEventId()
+	ai, ok := e.GetActivityInfo(scheduledEventID)
 	if !ok {
 		// This will only be called on active cluster if activity info is found in mutable state
 		// Passive side logic should always have activity info in mutable state if this is called, as the only
@@ -2318,12 +2318,12 @@ func (e *MutableStateImpl) ReplicateActivityTaskCancelRequestedEvent(
 	ai.CancelRequested = true
 
 	ai.CancelRequestId = event.GetEventId()
-	e.updateActivityInfos[ai.ScheduleId] = ai
+	e.updateActivityInfos[ai.ScheduledEventId] = ai
 	return nil
 }
 
 func (e *MutableStateImpl) AddActivityTaskCanceledEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	startedEventID int64,
 	latestCancelRequestedEventID int64,
 	details *commonpb.Payloads,
@@ -2335,12 +2335,12 @@ func (e *MutableStateImpl) AddActivityTaskCanceledEvent(
 		return nil, err
 	}
 
-	ai, ok := e.GetActivityInfo(scheduleEventID)
-	if !ok || ai.StartedId != startedEventID {
+	ai, ok := e.GetActivityInfo(scheduledEventID)
+	if !ok || ai.StartedEventId != startedEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowScheduleID(scheduleEventID))
+			tag.WorkflowScheduledEventID(scheduledEventID))
 		return nil, e.createInternalServerError(opTag)
 	}
 
@@ -2349,17 +2349,17 @@ func (e *MutableStateImpl) AddActivityTaskCanceledEvent(
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.WorkflowScheduleID(scheduleEventID),
+			tag.WorkflowScheduledEventID(scheduledEventID),
 			tag.WorkflowActivityID(ai.ActivityId),
-			tag.WorkflowStartedID(ai.StartedId))
+			tag.WorkflowStartedEventID(ai.StartedEventId))
 		return nil, e.createInternalServerError(opTag)
 	}
 
-	if err := e.addTransientActivityStartedEvent(scheduleEventID); err != nil {
+	if err := e.addTransientActivityStartedEvent(scheduledEventID); err != nil {
 		return nil, err
 	}
 	event := e.hBuilder.AddActivityTaskCanceledEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		latestCancelRequestedEventID,
 		details,
@@ -2377,9 +2377,9 @@ func (e *MutableStateImpl) ReplicateActivityTaskCanceledEvent(
 ) error {
 
 	attributes := event.GetActivityTaskCanceledEventAttributes()
-	scheduleID := attributes.GetScheduledEventId()
+	scheduledEventID := attributes.GetScheduledEventId()
 
-	return e.DeleteActivity(scheduleID)
+	return e.DeleteActivity(scheduledEventID)
 }
 
 func (e *MutableStateImpl) AddCompletedWorkflowEvent(
@@ -2633,12 +2633,12 @@ func (e *MutableStateImpl) ReplicateRequestCancelExternalWorkflowExecutionInitia
 	rci := &persistencespb.RequestCancelInfo{
 		Version:               event.GetVersion(),
 		InitiatedEventBatchId: firstEventID,
-		InitiatedId:           initiatedEventID,
+		InitiatedEventId:      initiatedEventID,
 		CancelRequestId:       cancelRequestID,
 	}
 
-	e.pendingRequestCancelInfoIDs[rci.InitiatedId] = rci
-	e.updateRequestCancelInfos[rci.InitiatedId] = rci
+	e.pendingRequestCancelInfoIDs[rci.InitiatedEventId] = rci
+	e.updateRequestCancelInfos[rci.InitiatedEventId] = rci
 
 	e.writeEventToCache(event)
 	return rci, nil
@@ -2773,12 +2773,12 @@ func (e *MutableStateImpl) ReplicateSignalExternalWorkflowExecutionInitiatedEven
 	si := &persistencespb.SignalInfo{
 		Version:               event.GetVersion(),
 		InitiatedEventBatchId: firstEventID,
-		InitiatedId:           initiatedEventID,
+		InitiatedEventId:      initiatedEventID,
 		RequestId:             signalRequestID,
 	}
 
-	e.pendingSignalInfoIDs[si.InitiatedId] = si
-	e.updateSignalInfos[si.InitiatedId] = si
+	e.pendingSignalInfoIDs[si.InitiatedEventId] = si
+	e.updateSignalInfos[si.InitiatedEventId] = si
 
 	e.writeEventToCache(event)
 	return si, nil
@@ -2964,15 +2964,15 @@ func (e *MutableStateImpl) ReplicateTimerStartedEvent(
 	expiryTime := timestamp.TimeValue(event.GetEventTime()).Add(startToFireTimeout) // should use the event time, not now
 
 	ti := &persistencespb.TimerInfo{
-		Version:    event.GetVersion(),
-		TimerId:    timerID,
-		ExpiryTime: &expiryTime,
-		StartedId:  event.GetEventId(),
-		TaskStatus: TimerTaskStatusNone,
+		Version:        event.GetVersion(),
+		TimerId:        timerID,
+		ExpiryTime:     &expiryTime,
+		StartedEventId: event.GetEventId(),
+		TaskStatus:     TimerTaskStatusNone,
 	}
 
 	e.pendingTimerInfoIDs[ti.TimerId] = ti
-	e.pendingTimerEventIDToID[ti.StartedId] = ti.TimerId
+	e.pendingTimerEventIDToID[ti.StartedEventId] = ti.TimerId
 	e.updateTimerInfos[ti.TimerId] = ti
 
 	return ti, nil
@@ -2997,7 +2997,7 @@ func (e *MutableStateImpl) AddTimerFiredEvent(
 	}
 
 	// Timer is running.
-	event := e.hBuilder.AddTimerFiredEvent(timerInfo.GetStartedId(), timerInfo.TimerId)
+	event := e.hBuilder.AddTimerFiredEvent(timerInfo.GetStartedEventId(), timerInfo.TimerId)
 	if err := e.ReplicateTimerFiredEvent(event); err != nil {
 		return nil, err
 	}
@@ -3025,7 +3025,7 @@ func (e *MutableStateImpl) AddTimerCanceledEvent(
 		return nil, err
 	}
 
-	var timerStartedID int64
+	var timerStartedEventID int64
 	timerID := command.GetTimerId()
 	ti, ok := e.GetUserTimerInfo(timerID)
 	if !ok {
@@ -3040,15 +3040,15 @@ func (e *MutableStateImpl) AddTimerCanceledEvent(
 				tag.WorkflowTimerID(timerID))
 			return nil, e.createCallerError(opTag, "TimerID: "+command.GetTimerId())
 		}
-		timerStartedID = timerFiredEvent.GetTimerFiredEventAttributes().GetStartedEventId()
+		timerStartedEventID = timerFiredEvent.GetTimerFiredEventAttributes().GetStartedEventId()
 	} else {
-		timerStartedID = ti.GetStartedId()
+		timerStartedEventID = ti.GetStartedEventId()
 	}
 
 	// Timer is running.
 	event := e.hBuilder.AddTimerCanceledEvent(
 		workflowTaskCompletedEventID,
-		timerStartedID,
+		timerStartedEventID,
 		timerID,
 		identity,
 	)
@@ -3321,9 +3321,9 @@ func (e *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 	attributes := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 	ci := &persistencespb.ChildExecutionInfo{
 		Version:               event.GetVersion(),
-		InitiatedId:           initiatedEventID,
+		InitiatedEventId:      initiatedEventID,
 		InitiatedEventBatchId: firstEventID,
-		StartedId:             common.EmptyEventID,
+		StartedEventId:        common.EmptyEventID,
 		StartedWorkflowId:     attributes.GetWorkflowId(),
 		CreateRequestId:       createRequestID,
 		Namespace:             attributes.GetNamespace(),
@@ -3332,8 +3332,8 @@ func (e *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 		ParentClosePolicy:     attributes.GetParentClosePolicy(),
 	}
 
-	e.pendingChildExecutionInfoIDs[ci.InitiatedId] = ci
-	e.updateChildExecutionInfos[ci.InitiatedId] = ci
+	e.pendingChildExecutionInfoIDs[ci.InitiatedEventId] = ci
+	e.updateChildExecutionInfos[ci.InitiatedEventId] = ci
 
 	e.writeEventToCache(event)
 	return ci, nil
@@ -3353,7 +3353,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedId != common.EmptyEventID {
+	if !ok || ci.StartedEventId != common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3393,10 +3393,10 @@ func (e *MutableStateImpl) ReplicateChildWorkflowExecutionStartedEvent(
 		return ErrMissingChildWorkflowInfo
 	}
 
-	ci.StartedId = event.GetEventId()
+	ci.StartedEventId = event.GetEventId()
 	ci.StartedRunId = attributes.GetWorkflowExecution().GetRunId()
 	ci.Clock = clock
-	e.updateChildExecutionInfos[ci.InitiatedId] = ci
+	e.updateChildExecutionInfos[ci.InitiatedEventId] = ci
 
 	return nil
 }
@@ -3413,7 +3413,7 @@ func (e *MutableStateImpl) AddStartChildWorkflowExecutionFailedEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedId != common.EmptyEventID {
+	if !ok || ci.StartedEventId != common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3460,7 +3460,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionCompletedEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedId == common.EmptyEventID {
+	if !ok || ci.StartedEventId == common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3474,8 +3474,8 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionCompletedEvent(
 	}
 
 	event := e.hBuilder.AddChildWorkflowExecutionCompletedEvent(
-		ci.InitiatedId,
-		ci.StartedId,
+		ci.InitiatedEventId,
+		ci.StartedEventId,
 		namespace.Name(ci.Namespace),
 		namespace.ID(ci.NamespaceId),
 		childExecution,
@@ -3510,7 +3510,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionFailedEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedId == common.EmptyEventID {
+	if !ok || ci.StartedEventId == common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3524,8 +3524,8 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionFailedEvent(
 	}
 
 	event := e.hBuilder.AddChildWorkflowExecutionFailedEvent(
-		ci.InitiatedId,
-		ci.StartedId,
+		ci.InitiatedEventId,
+		ci.StartedEventId,
 		namespace.Name(ci.Namespace),
 		namespace.ID(ci.NamespaceId),
 		childExecution,
@@ -3561,7 +3561,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionCanceledEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedId == common.EmptyEventID {
+	if !ok || ci.StartedEventId == common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3575,8 +3575,8 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionCanceledEvent(
 	}
 
 	event := e.hBuilder.AddChildWorkflowExecutionCanceledEvent(
-		ci.InitiatedId,
-		ci.StartedId,
+		ci.InitiatedEventId,
+		ci.StartedEventId,
 		namespace.Name(ci.Namespace),
 		namespace.ID(ci.NamespaceId),
 		childExecution,
@@ -3611,7 +3611,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionTerminatedEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedId == common.EmptyEventID {
+	if !ok || ci.StartedEventId == common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3625,8 +3625,8 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionTerminatedEvent(
 	}
 
 	event := e.hBuilder.AddChildWorkflowExecutionTerminatedEvent(
-		ci.InitiatedId,
-		ci.StartedId,
+		ci.InitiatedEventId,
+		ci.StartedEventId,
 		namespace.Name(ci.Namespace),
 		namespace.ID(ci.NamespaceId),
 		childExecution,
@@ -3660,7 +3660,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionTimedOutEvent(
 	}
 
 	ci, ok := e.GetChildExecutionInfo(initiatedID)
-	if !ok || ci.StartedId == common.EmptyEventID {
+	if !ok || ci.StartedEventId == common.EmptyEventID {
 		e.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
@@ -3674,8 +3674,8 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionTimedOutEvent(
 	}
 
 	event := e.hBuilder.AddChildWorkflowExecutionTimedOutEvent(
-		ci.InitiatedId,
-		ci.StartedId,
+		ci.InitiatedEventId,
+		ci.StartedEventId,
 		namespace.Name(ci.Namespace),
 		namespace.ID(ci.NamespaceId),
 		childExecution,
@@ -3737,7 +3737,7 @@ func (e *MutableStateImpl) RetryActivity(
 	ai.Version = e.GetCurrentVersion()
 	ai.Attempt++
 	ai.ScheduledTime = timestamp.TimePtr(now.Add(backoffInterval)) // update to next schedule time
-	ai.StartedId = common.EmptyEventID
+	ai.StartedEventId = common.EmptyEventID
 	ai.RequestId = ""
 	ai.StartedTime = timestamp.TimePtr(time.Time{})
 	ai.TimerTaskStatus = TimerTaskStatusNone
@@ -3745,13 +3745,13 @@ func (e *MutableStateImpl) RetryActivity(
 	ai.RetryLastFailure = failure
 
 	if err := e.taskGenerator.GenerateActivityRetryTasks(
-		ai.ScheduleId,
+		ai.ScheduledEventId,
 	); err != nil {
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
 
-	e.updateActivityInfos[ai.ScheduleId] = ai
-	e.syncActivityTasks[ai.ScheduleId] = struct{}{}
+	e.updateActivityInfos[ai.ScheduledEventId] = ai
+	e.syncActivityTasks[ai.ScheduledEventId] = struct{}{}
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 
@@ -4093,7 +4093,7 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 	newBufferBatch := historyMutation.DBBufferBatch
 	clearBuffer := historyMutation.DBClearBuffer
 	newEventsBatches := historyMutation.DBEventsBatches
-	e.updatePendingEventIDs(historyMutation.ScheduleIDToStartID)
+	e.updatePendingEventIDs(historyMutation.ScheduledIDToStartedID)
 
 	workflowEventsSeq := make([]*persistence.WorkflowEvents, len(newEventsBatches))
 	historyNodeTxnIDs, err := e.shard.GenerateTaskIDs(len(newEventsBatches))
@@ -4185,19 +4185,18 @@ func (e *MutableStateImpl) syncActivityToReplicationTask(
 }
 
 func (e *MutableStateImpl) updatePendingEventIDs(
-	scheduleIDToStartID map[int64]int64,
+	scheduledIDToStartedID map[int64]int64,
 ) {
-Loop:
-	for scheduleID, startID := range scheduleIDToStartID {
-		if activityInfo, ok := e.GetActivityInfo(scheduleID); ok {
-			activityInfo.StartedId = startID
-			e.updateActivityInfos[activityInfo.ScheduleId] = activityInfo
-			continue Loop
+	for scheduledEventID, startedEventID := range scheduledIDToStartedID {
+		if activityInfo, ok := e.GetActivityInfo(scheduledEventID); ok {
+			activityInfo.StartedEventId = startedEventID
+			e.updateActivityInfos[activityInfo.ScheduledEventId] = activityInfo
+			continue
 		}
-		if childInfo, ok := e.GetChildExecutionInfo(scheduleID); ok {
-			childInfo.StartedId = startID
-			e.updateChildExecutionInfos[childInfo.InitiatedId] = childInfo
-			continue Loop
+		if childInfo, ok := e.GetChildExecutionInfo(scheduledEventID); ok {
+			childInfo.StartedEventId = startedEventID
+			e.updateChildExecutionInfos[childInfo.InitiatedEventId] = childInfo
+			continue
 		}
 	}
 }

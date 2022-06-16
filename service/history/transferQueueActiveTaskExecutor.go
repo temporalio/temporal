@@ -82,6 +82,7 @@ func newTransferQueueActiveTaskExecutor(
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Executor {
@@ -91,6 +92,7 @@ func newTransferQueueActiveTaskExecutor(
 			workflowCache,
 			archivalClient,
 			logger,
+			metricProvider,
 			matchingClient,
 		),
 		workflowResetter: newWorkflowResetter(
@@ -110,33 +112,35 @@ func newTransferQueueActiveTaskExecutor(
 func (t *transferQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.Scope, error) {
+) (metrics.MetricProvider, error) {
 
 	task := executable.GetTask()
-	scope := t.metricsClient.Scope(
-		tasks.GetActiveTransferTaskMetricsScope(task),
-		getNamespaceTagByID(t.registry, task.GetNamespaceID()),
+	taskType := queues.GetActiveTransferTaskTypeTagValue(task)
+	metricsProvider := t.metricProvider.WithTags(
+		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType), // for backward compatibility
 	)
 
 	switch task := task.(type) {
 	case *tasks.ActivityTask:
-		return scope, t.processActivityTask(ctx, task)
+		return metricsProvider, t.processActivityTask(ctx, task)
 	case *tasks.WorkflowTask:
-		return scope, t.processWorkflowTask(ctx, task)
+		return metricsProvider, t.processWorkflowTask(ctx, task)
 	case *tasks.CloseExecutionTask:
-		return scope, t.processCloseExecution(ctx, task)
+		return metricsProvider, t.processCloseExecution(ctx, task)
 	case *tasks.CancelExecutionTask:
-		return scope, t.processCancelExecution(ctx, task)
+		return metricsProvider, t.processCancelExecution(ctx, task)
 	case *tasks.SignalExecutionTask:
-		return scope, t.processSignalExecution(ctx, task)
+		return metricsProvider, t.processSignalExecution(ctx, task)
 	case *tasks.StartChildExecutionTask:
-		return scope, t.processStartChildExecution(ctx, task)
+		return metricsProvider, t.processStartChildExecution(ctx, task)
 	case *tasks.ResetWorkflowTask:
-		return scope, t.processResetWorkflow(ctx, task)
+		return metricsProvider, t.processResetWorkflow(ctx, task)
 	case *tasks.DeleteExecutionTask:
-		return scope, t.processDeleteExecutionTask(ctx, task)
+		return metricsProvider, t.processDeleteExecutionTask(ctx, task)
 	default:
-		return scope, errUnknownTransferTask
+		return metricsProvider, errUnknownTransferTask
 	}
 }
 
@@ -161,7 +165,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 		return nil
 	}
 
-	ai, ok := mutableState.GetActivityInfo(task.ScheduleID)
+	ai, ok := mutableState.GetActivityInfo(task.ScheduledEventID)
 	if !ok {
 		return nil
 	}
@@ -200,7 +204,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		return nil
 	}
 
-	workflowTask, found := mutableState.GetWorkflowTaskInfo(task.ScheduleID)
+	workflowTask, found := mutableState.GetWorkflowTaskInfo(task.ScheduledEventID)
 	if !found {
 		return nil
 	}
@@ -420,7 +424,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		return nil
 	}
 
-	requestCancelInfo, ok := mutableState.GetRequestCancelInfo(task.InitiatedID)
+	requestCancelInfo, ok := mutableState.GetRequestCancelInfo(task.InitiatedEventID)
 	if !ok {
 		return nil
 	}
@@ -429,7 +433,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		return nil
 	}
 
-	initiatedEvent, err := mutableState.GetRequesteCancelExternalInitiatedEvent(ctx, task.InitiatedID)
+	initiatedEvent, err := mutableState.GetRequesteCancelExternalInitiatedEvent(ctx, task.InitiatedEventID)
 	if err != nil {
 		return err
 	}
@@ -540,7 +544,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		return nil
 	}
 
-	signalInfo, ok := mutableState.GetSignalInfo(task.InitiatedID)
+	signalInfo, ok := mutableState.GetSignalInfo(task.InitiatedEventID)
 	if !ok {
 		// TODO: here we should also RemoveSignalMutableState from target workflow
 		// Otherwise, target SignalRequestID still can leak if shard restart after signalExternalExecutionCompleted
@@ -552,7 +556,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		return nil
 	}
 
-	initiatedEvent, err := mutableState.GetSignalExternalInitiatedEvent(ctx, task.InitiatedID)
+	initiatedEvent, err := mutableState.GetSignalExternalInitiatedEvent(ctx, task.InitiatedEventID)
 	if err != nil {
 		return err
 	}
@@ -685,7 +689,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return nil
 	}
 
-	childInfo, ok := mutableState.GetChildExecutionInfo(task.InitiatedID)
+	childInfo, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
 	if !ok {
 		return nil
 	}
@@ -697,7 +701,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// workflow running or not, child started or not, parent close policy is abandon or not
 	// 8 cases in total
 	workflowRunning := mutableState.IsWorkflowExecutionRunning()
-	childStarted := childInfo.StartedId != common.EmptyEventID
+	childStarted := childInfo.StartedEventId != common.EmptyEventID
 	if !workflowRunning && (!childStarted || childInfo.ParentClosePolicy != enumspb.PARENT_CLOSE_POLICY_ABANDON) {
 		// three cases here:
 		// case 1: workflow not running, child started, parent close policy is not abandon
@@ -742,7 +746,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// remaining 2 cases:
 	// case 7, 8: workflow running, child not started, parent close policy is or is not abandon
 
-	initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, task.InitiatedID)
+	initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, task.InitiatedEventID)
 	if err != nil {
 		return err
 	}
@@ -971,8 +975,8 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
-			ci, ok := mutableState.GetChildExecutionInfo(task.InitiatedID)
-			if !ok || ci.StartedId != common.EmptyEventID {
+			ci, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
+			if !ok || ci.StartedEventId != common.EmptyEventID {
 				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
 
@@ -982,7 +986,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 					RunId:      runID,
 				},
 				initiatedAttributes.WorkflowType,
-				task.InitiatedID,
+				task.InitiatedEventID,
 				initiatedAttributes.Header,
 				clock,
 			)
@@ -1005,13 +1009,13 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
-			ci, ok := mutableState.GetChildExecutionInfo(task.InitiatedID)
-			if !ok || ci.StartedId != common.EmptyEventID {
+			ci, ok := mutableState.GetChildExecutionInfo(task.InitiatedEventID)
+			if !ok || ci.StartedEventId != common.EmptyEventID {
 				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
 
 			_, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(
-				task.InitiatedID,
+				task.InitiatedEventID,
 				failedCause,
 				initiatedAttributes,
 			)
@@ -1054,13 +1058,13 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
-			_, ok := mutableState.GetRequestCancelInfo(task.InitiatedID)
+			_, ok := mutableState.GetRequestCancelInfo(task.InitiatedEventID)
 			if !ok {
 				return workflow.ErrMissingRequestCancelInfo
 			}
 
 			_, err := mutableState.AddExternalWorkflowExecutionCancelRequested(
-				task.InitiatedID,
+				task.InitiatedEventID,
 				targetNamespace,
 				targetNamespaceID,
 				targetWorkflowID,
@@ -1089,13 +1093,13 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
-			_, ok := mutableState.GetSignalInfo(task.InitiatedID)
+			_, ok := mutableState.GetSignalInfo(task.InitiatedEventID)
 			if !ok {
 				return workflow.ErrMissingSignalInfo
 			}
 
 			_, err := mutableState.AddExternalWorkflowExecutionSignaled(
-				task.InitiatedID,
+				task.InitiatedEventID,
 				targetNamespace,
 				targetNamespaceID,
 				targetWorkflowID,
@@ -1124,13 +1128,13 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
-			_, ok := mutableState.GetRequestCancelInfo(task.InitiatedID)
+			_, ok := mutableState.GetRequestCancelInfo(task.InitiatedEventID)
 			if !ok {
 				return workflow.ErrMissingRequestCancelInfo
 			}
 
 			_, err := mutableState.AddRequestCancelExternalWorkflowExecutionFailedEvent(
-				task.InitiatedID,
+				task.InitiatedEventID,
 				targetNamespace,
 				targetNamespaceID,
 				targetWorkflowID,
@@ -1161,13 +1165,13 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 				return serviceerror.NewNotFound("Workflow is not running.")
 			}
 
-			_, ok := mutableState.GetSignalInfo(task.InitiatedID)
+			_, ok := mutableState.GetSignalInfo(task.InitiatedEventID)
 			if !ok {
 				return workflow.ErrMissingSignalInfo
 			}
 
 			_, err := mutableState.AddSignalExternalWorkflowExecutionFailedEvent(
-				task.InitiatedID,
+				task.InitiatedEventID,
 				targetNamespace,
 				targetNamespaceID,
 				targetWorkflowID,
@@ -1229,7 +1233,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 			RequestId: requestCancelInfo.GetCancelRequestId(),
 			Reason:    attributes.Reason,
 		},
-		ExternalInitiatedEventId: task.InitiatedID,
+		ExternalInitiatedEventId: task.InitiatedEventID,
 		ExternalWorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
 			RunId:      task.RunID,
@@ -1331,7 +1335,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 				WorkflowId: task.WorkflowID,
 				RunId:      task.RunID,
 			},
-			InitiatedId:      task.InitiatedID,
+			InitiatedId:      task.InitiatedEventID,
 			InitiatedVersion: task.Version,
 			Clock:            vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
 		},

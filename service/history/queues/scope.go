@@ -33,13 +33,13 @@ import (
 
 type (
 	Scope struct {
-		Range     tasks.Range
+		Range     Range
 		Predicate tasks.Predicate
 	}
 )
 
 func NewScope(
-	r tasks.Range,
+	r Range,
 	predicate tasks.Predicate,
 ) Scope {
 	return Scope{
@@ -91,9 +91,8 @@ func (s *Scope) SplitByPredicate(
 func (s *Scope) CanMergeByRange(
 	incomingScope Scope,
 ) bool {
-	// TODO: validate two scopes' predicates are equal
-
-	return s.Range.CanMerge(incomingScope.Range)
+	return s.Range.CanMerge(incomingScope.Range) &&
+		s.Predicate.Equals(incomingScope.Predicate)
 }
 
 func (s *Scope) MergeByRange(

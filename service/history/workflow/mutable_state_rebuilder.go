@@ -179,12 +179,12 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
 			attributes := event.GetWorkflowTaskScheduledEventAttributes()
-			// use Timestamp.TimeValue(event.GetEventTime()) as WorkflowTaskOriginalScheduledTimestamp, because the heartbeat is not happening here.
+			// use event.GetEventTime() as WorkflowTaskOriginalScheduledTimestamp, because the heartbeat is not happening here.
 			workflowTask, err := b.mutableState.ReplicateWorkflowTaskScheduledEvent(
 				event.GetVersion(),
 				event.GetEventId(),
 				attributes.TaskQueue,
-				int32(timestamp.DurationValue(attributes.GetStartToCloseTimeout()).Seconds()),
+				attributes.GetStartToCloseTimeout(),
 				attributes.GetAttempt(),
 				event.GetEventTime(),
 				event.GetEventTime(),
@@ -198,7 +198,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			// NOTE: at the beginning of the loop, stickyness is cleared
 			if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 				timestamp.TimeValue(event.GetEventTime()),
-				workflowTask.ScheduleID,
+				workflowTask.ScheduledEventID,
 			); err != nil {
 				return nil, err
 			}
@@ -219,7 +219,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateStartWorkflowTaskTasks(
 				timestamp.TimeValue(event.GetEventTime()),
-				workflowTask.ScheduleID,
+				workflowTask.ScheduledEventID,
 			); err != nil {
 				return nil, err
 			}
@@ -250,7 +250,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				// NOTE: at the beginning of the loop, stickyness is cleared
 				if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 					timestamp.TimeValue(event.GetEventTime()),
-					workflowTask.ScheduleID,
+					workflowTask.ScheduledEventID,
 				); err != nil {
 					return nil, err
 				}
@@ -273,7 +273,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				// NOTE: at the beginning of the loop, stickyness is cleared
 				if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 					timestamp.TimeValue(event.GetEventTime()),
-					workflowTask.ScheduleID,
+					workflowTask.ScheduledEventID,
 				); err != nil {
 					return nil, err
 				}

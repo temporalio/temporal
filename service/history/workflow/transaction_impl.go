@@ -645,7 +645,7 @@ func NotifyNewHistorySnapshotEvent(
 	workflowStatus := executionState.Status
 	lastFirstEventID := executionInfo.LastFirstEventId
 	lastFirstEventTxnID := executionInfo.LastFirstEventTxnId
-	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartId
+	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartedEventId
 	nextEventID := workflowSnapshot.NextEventID
 
 	engine.NotifyNewHistoryEvent(events.NewNotification(
@@ -689,7 +689,7 @@ func NotifyNewHistoryMutationEvent(
 	workflowStatus := executionState.Status
 	lastFirstEventID := executionInfo.LastFirstEventId
 	lastFirstEventTxnID := executionInfo.LastFirstEventTxnId
-	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartId
+	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartedEventId
 	nextEventID := workflowMutation.NextEventID
 
 	engine.NotifyNewHistoryEvent(events.NewNotification(

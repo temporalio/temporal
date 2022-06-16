@@ -66,6 +66,7 @@ func newTimerQueueActiveProcessor(
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 	singleProcessor bool,
 ) *timerQueueActiveProcessorImpl {
 
@@ -91,14 +92,14 @@ func newTimerQueueActiveProcessor(
 	processor := &timerQueueActiveProcessorImpl{}
 
 	if scheduler == nil {
-		scheduler = newTimerTaskScheduler(shard, logger)
+		scheduler = newTimerTaskScheduler(shard, logger, metricProvider)
 		processor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		metricsClient.Scope(metrics.TimerActiveQueueProcessorScope),
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationTimerActiveQueueProcessor)),
 	)
 
 	timerTaskFilter := func(task tasks.Task) bool {
@@ -110,6 +111,7 @@ func newTimerQueueActiveProcessor(
 		workflowDeleteManager,
 		processor,
 		logger,
+		metricProvider,
 		config,
 		matchingClient,
 	)
@@ -144,6 +146,7 @@ func newTimerQueueActiveProcessor(
 				),
 				matchingClient,
 				logger,
+				metricProvider,
 				// note: the cluster name is for calculating time for standby tasks,
 				// here we are basically using current cluster time
 				// this field will be deprecated soon, currently exists so that
@@ -211,6 +214,7 @@ func newTimerQueueFailoverProcessor(
 	taskAllocator taskAllocator,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 ) (func(ackLevel tasks.Key) error, *timerQueueActiveProcessorImpl) {
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
@@ -256,19 +260,20 @@ func newTimerQueueFailoverProcessor(
 		workflowDeleteManager,
 		processor,
 		logger,
+		metricProvider,
 		shard.GetConfig(),
 		matchingClient,
 	)
 
 	if scheduler == nil {
-		scheduler = newTimerTaskScheduler(shard, logger)
+		scheduler = newTimerTaskScheduler(shard, logger, metricProvider)
 		processor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationTimerActiveQueueProcessor)),
 	)
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(

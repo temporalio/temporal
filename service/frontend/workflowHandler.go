@@ -998,11 +998,11 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	}
 	if request.GetReturnNewWorkflowTask() && histResp != nil && histResp.StartedResponse != nil {
 		taskToken := &tokenspb.Task{
-			NamespaceId:     taskToken.GetNamespaceId(),
-			WorkflowId:      taskToken.GetWorkflowId(),
-			RunId:           taskToken.GetRunId(),
-			ScheduleId:      histResp.StartedResponse.GetScheduledEventId(),
-			ScheduleAttempt: histResp.StartedResponse.GetAttempt(),
+			NamespaceId:      taskToken.GetNamespaceId(),
+			WorkflowId:       taskToken.GetWorkflowId(),
+			RunId:            taskToken.GetRunId(),
+			ScheduledEventId: histResp.StartedResponse.GetScheduledEventId(),
+			Attempt:          histResp.StartedResponse.GetAttempt(),
 		}
 		token, err := wh.tokenSerializer.Serialize(taskToken)
 		if err != nil {
@@ -1311,12 +1311,12 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	}
 
 	taskToken := &tokenspb.Task{
-		NamespaceId:     namespaceID.String(),
-		RunId:           runID,
-		WorkflowId:      workflowID,
-		ScheduleId:      common.EmptyEventID,
-		ActivityId:      activityID,
-		ScheduleAttempt: 1,
+		NamespaceId:      namespaceID.String(),
+		RunId:            runID,
+		WorkflowId:       workflowID,
+		ScheduledEventId: common.EmptyEventID,
+		ActivityId:       activityID,
+		Attempt:          1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1491,12 +1491,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	}
 
 	taskToken := &tokenspb.Task{
-		NamespaceId:     namespaceID.String(),
-		RunId:           runID,
-		WorkflowId:      workflowID,
-		ScheduleId:      common.EmptyEventID,
-		ActivityId:      activityID,
-		ScheduleAttempt: 1,
+		NamespaceId:      namespaceID.String(),
+		RunId:            runID,
+		WorkflowId:       workflowID,
+		ScheduledEventId: common.EmptyEventID,
+		ActivityId:       activityID,
+		Attempt:          1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1688,12 +1688,12 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	}
 
 	taskToken := &tokenspb.Task{
-		NamespaceId:     namespaceID.String(),
-		RunId:           runID,
-		WorkflowId:      workflowID,
-		ScheduleId:      common.EmptyEventID,
-		ActivityId:      activityID,
-		ScheduleAttempt: 1,
+		NamespaceId:      namespaceID.String(),
+		RunId:            runID,
+		WorkflowId:       workflowID,
+		ScheduledEventId: common.EmptyEventID,
+		ActivityId:       activityID,
+		Attempt:          1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -1877,12 +1877,12 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	}
 
 	taskToken := &tokenspb.Task{
-		NamespaceId:     namespaceID.String(),
-		RunId:           runID,
-		WorkflowId:      workflowID,
-		ScheduleId:      common.EmptyEventID,
-		ActivityId:      activityID,
-		ScheduleAttempt: 1,
+		NamespaceId:      namespaceID.String(),
+		RunId:            runID,
+		WorkflowId:       workflowID,
+		ScheduledEventId: common.EmptyEventID,
+		ActivityId:       activityID,
+		Attempt:          1,
 	}
 	token, err := wh.tokenSerializer.Serialize(taskToken)
 	if err != nil {

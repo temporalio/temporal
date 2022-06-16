@@ -466,11 +466,11 @@ func (s *dbTaskOwnershipSuite) randomTaskQueue(
 
 func (s *dbTaskOwnershipSuite) randomTask() *persistencespb.TaskInfo {
 	return &persistencespb.TaskInfo{
-		NamespaceId: s.namespaceID,
-		WorkflowId:  uuid.New().String(),
-		RunId:       uuid.New().String(),
-		ScheduleId:  rand.Int63(),
-		CreateTime:  timestamp.TimePtr(time.Unix(0, rand.Int63())),
-		ExpiryTime:  timestamp.TimePtr(time.Unix(0, rand.Int63())),
+		NamespaceId:      s.namespaceID,
+		WorkflowId:       uuid.New().String(),
+		RunId:            uuid.New().String(),
+		ScheduledEventId: rand.Int63(),
+		CreateTime:       timestamp.TimePtr(time.Unix(0, rand.Int63())),
+		ExpiryTime:       timestamp.TimePtr(time.Unix(0, rand.Int63())),
 	}
 }

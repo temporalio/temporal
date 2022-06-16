@@ -141,7 +141,7 @@ message ResetStickyTaskQueueResponse {
 message RecordWorkflowTaskStartedRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
-    int64 schedule_id = 3;
+    int64 scheduled_event_id = 3;
     int64 task_id = 4;
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
     string request_id = 5;
@@ -170,7 +170,7 @@ message RecordWorkflowTaskStartedResponse {
 message RecordActivityTaskStartedRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
-    int64 schedule_id = 3;
+    int64 scheduled_event_id = 3;
     int64 task_id = 4;
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
     string request_id = 5;
@@ -403,9 +403,9 @@ message SyncActivityRequest {
     string workflow_id = 2;
     string run_id = 3;
     int64 version = 4;
-    int64 scheduled_id = 5;
+    int64 scheduled_event_id = 5;
     google.protobuf.Timestamp scheduled_time = 6 [(gogoproto.stdtime) = true];
-    int64 started_id = 7;
+    int64 started_event_id = 7;
     google.protobuf.Timestamp started_time = 8 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp last_heartbeat_time = 9 [(gogoproto.stdtime) = true];
     temporal.api.common.v1.Payloads details = 10;

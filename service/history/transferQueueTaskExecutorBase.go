@@ -63,6 +63,7 @@ type (
 		cache                    workflow.Cache
 		archivalClient           archiver.Client
 		logger                   log.Logger
+		metricProvider           metrics.MetricProvider
 		metricsClient            metrics.Client
 		historyClient            historyservice.HistoryServiceClient
 		matchingClient           matchingservice.MatchingServiceClient
@@ -77,6 +78,7 @@ func newTransferQueueTaskExecutorBase(
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
@@ -86,6 +88,7 @@ func newTransferQueueTaskExecutorBase(
 		cache:                    workflowCache,
 		archivalClient:           archivalClient,
 		logger:                   logger,
+		metricProvider:           metricProvider,
 		metricsClient:            shard.GetMetricsClient(),
 		historyClient:            shard.GetHistoryClient(),
 		matchingClient:           matchingClient,
@@ -117,7 +120,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 			Name: task.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		ScheduleId:             task.ScheduleID,
+		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
 	})
@@ -143,7 +146,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 			RunId:      task.RunID,
 		},
 		TaskQueue:              taskqueue,
-		ScheduleId:             task.ScheduleID,
+		ScheduledEventId:       task.ScheduledEventID,
 		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
 	})

@@ -60,7 +60,7 @@ func BenchmarkLoggerWithFields(b *testing.B) {
 	logger := NewZapLogger(buildZapLogger(Config{Level: "info"}, true))
 
 	for i := 0; i < b.N; i++ {
-		loggerWith := logger.With(tag.WorkflowScheduleID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
+		loggerWith := logger.With(tag.WorkflowScheduledEventID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
 		loggerWith.Info("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
 			tag.WorkflowNamespace("test-namespace"))
 		loggerWith.Debug("msg NOT to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
@@ -87,9 +87,9 @@ func BenchmarkLoggerWithoutFields(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		logger.Info("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
 			tag.WorkflowNamespace("test-namespace"),
-			tag.WorkflowScheduleID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
+			tag.WorkflowScheduledEventID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
 		logger.Debug("msg NOT to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
 			tag.WorkflowNamespace("test-namespace"),
-			tag.WorkflowScheduleID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
+			tag.WorkflowScheduledEventID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
 	}
 }

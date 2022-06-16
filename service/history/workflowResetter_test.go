@@ -361,30 +361,30 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 
 	mutableState := workflow.NewMockMutableState(s.controller)
 	workflowTaskSchedule := &workflow.WorkflowTaskInfo{
-		ScheduleID: baseRebuildLastEventID - 12,
-		StartedID:  common.EmptyEventID,
-		RequestID:  uuid.New(),
+		ScheduledEventID: baseRebuildLastEventID - 12,
+		StartedEventID:   common.EmptyEventID,
+		RequestID:        uuid.New(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "random task queue name",
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 	}
 	workflowTaskStart := &workflow.WorkflowTaskInfo{
-		ScheduleID: workflowTaskSchedule.ScheduleID,
-		StartedID:  workflowTaskSchedule.ScheduleID + 1,
-		RequestID:  workflowTaskSchedule.RequestID,
-		TaskQueue:  workflowTaskSchedule.TaskQueue,
+		ScheduledEventID: workflowTaskSchedule.ScheduledEventID,
+		StartedEventID:   workflowTaskSchedule.ScheduledEventID + 1,
+		RequestID:        workflowTaskSchedule.RequestID,
+		TaskQueue:        workflowTaskSchedule.TaskQueue,
 	}
 	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTaskSchedule, true).AnyTimes()
 	mutableState.EXPECT().AddWorkflowTaskStartedEvent(
-		workflowTaskSchedule.ScheduleID,
+		workflowTaskSchedule.ScheduledEventID,
 		workflowTaskSchedule.RequestID,
 		workflowTaskSchedule.TaskQueue,
 		consts.IdentityHistoryService,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		workflowTaskStart.ScheduleID,
-		workflowTaskStart.StartedID,
+		workflowTaskStart.ScheduledEventID,
+		workflowTaskStart.StartedEventID,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
@@ -414,9 +414,9 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskStarted() {
 
 	mutableState := workflow.NewMockMutableState(s.controller)
 	workflowTask := &workflow.WorkflowTaskInfo{
-		ScheduleID: baseRebuildLastEventID - 12,
-		StartedID:  baseRebuildLastEventID - 10,
-		RequestID:  uuid.New(),
+		ScheduledEventID: baseRebuildLastEventID - 12,
+		StartedEventID:   baseRebuildLastEventID - 10,
+		RequestID:        uuid.New(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "random task queue name",
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -424,8 +424,8 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskStarted() {
 	}
 	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTask, true).AnyTimes()
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduleID,
-		workflowTask.StartedID,
+		workflowTask.ScheduledEventID,
+		workflowTask.StartedEventID,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
 		consts.IdentityHistoryService,
@@ -454,36 +454,36 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 
 	activity1 := &persistencespb.ActivityInfo{
 		Version:              12,
-		ScheduleId:           123,
+		ScheduledEventId:     123,
 		ScheduledTime:        timestamp.TimePtr(now.Add(-10 * time.Second)),
-		StartedId:            124,
+		StartedEventId:       124,
 		LastHeartbeatDetails: payloads.EncodeString("some random activity 1 details"),
 		StartedIdentity:      "some random activity 1 started identity",
 	}
 	activity2 := &persistencespb.ActivityInfo{
-		Version:       12,
-		ScheduleId:    456,
-		ScheduledTime: timestamp.TimePtr(now.Add(-10 * time.Second)),
-		StartedId:     common.EmptyEventID,
+		Version:          12,
+		ScheduledEventId: 456,
+		ScheduledTime:    timestamp.TimePtr(now.Add(-10 * time.Second)),
+		StartedEventId:   common.EmptyEventID,
 	}
 	mutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{
-		activity1.ScheduleId: activity1,
-		activity2.ScheduleId: activity2,
+		activity1.ScheduledEventId: activity1,
+		activity2.ScheduledEventId: activity2,
 	}).AnyTimes()
 
 	mutableState.EXPECT().AddActivityTaskFailedEvent(
-		activity1.ScheduleId,
-		activity1.StartedId,
+		activity1.ScheduledEventId,
+		activity1.StartedEventId,
 		failure.NewResetWorkflowFailure(terminateReason, activity1.LastHeartbeatDetails),
 		enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 		activity1.StartedIdentity,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	mutableState.EXPECT().UpdateActivity(&persistencespb.ActivityInfo{
-		Version:       activity2.Version,
-		ScheduleId:    activity2.ScheduleId,
-		ScheduledTime: timestamp.TimePtr(now),
-		StartedId:     activity2.StartedId,
+		Version:          activity2.Version,
+		ScheduledEventId: activity2.ScheduledEventId,
+		ScheduledTime:    timestamp.TimePtr(now),
+		StartedEventId:   activity2.StartedEventId,
 	}).Return(nil)
 
 	err := s.workflowResetter.failInflightActivity(now, mutableState, terminateReason)
@@ -513,9 +513,9 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 
 func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	workflowTask := &workflow.WorkflowTaskInfo{
-		Version:    123,
-		ScheduleID: 1234,
-		StartedID:  5678,
+		Version:          123,
+		ScheduledEventID: 1234,
+		StartedEventID:   5678,
 	}
 	nextEventID := int64(666)
 	terminateReason := "some random terminate reason"
@@ -525,8 +525,8 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	mutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduleID,
-		workflowTask.StartedID,
+		workflowTask.ScheduledEventID,
+		workflowTask.StartedEventID,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,

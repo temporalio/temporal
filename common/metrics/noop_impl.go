@@ -34,12 +34,13 @@ import (
 )
 
 var (
-	NoopReporter      Reporter      = newNoopReporter()
-	NoopClient        Client        = newNoopClient()
-	NoopScope         Scope         = newNoopScope()
-	NoopUserScope     UserScope     = newNoopUserScope()
-	NoopStopwatch     Stopwatch     = newNoopStopwatch()
-	NoopMetricHandler MetricHandler = newNoopMetricHandler()
+	NoopReporter       Reporter       = newNoopReporter()
+	NoopClient         Client         = newNoopClient()
+	NoopScope          Scope          = newNoopScope()
+	NoopUserScope      UserScope      = newNoopUserScope()
+	NoopStopwatch      Stopwatch      = newNoopStopwatch()
+	NoopMetricHandler  MetricHandler  = newNoopMetricHandler()
+	NoopMetricProvider MetricProvider = NewEventsMetricProvider(NoopMetricHandler)
 )
 
 type (

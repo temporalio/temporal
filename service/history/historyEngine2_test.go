@@ -209,7 +209,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	executionInfo.StickyTaskQueue = stickyTl
 
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	di := addWorkflowTaskScheduledEvent(msBuilder)
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
 
 	ms := workflow.TestCloneToProto(msBuilder)
 
@@ -221,7 +221,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	request := historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &we,
-		ScheduleId:        2,
+		ScheduledEventId:  2,
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -235,15 +235,15 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = msBuilder.GetWorkflowType()
 	executionInfo = msBuilder.GetExecutionInfo()
-	if executionInfo.LastWorkflowTaskStartId != common.EmptyEventID {
-		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartId
+	if executionInfo.LastWorkflowTaskStartedEventId != common.EmptyEventID {
+		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
 	}
-	expectedResponse.ScheduledEventId = di.ScheduleID
-	expectedResponse.ScheduledTime = di.ScheduledTime
-	expectedResponse.StartedEventId = di.ScheduleID + 1
+	expectedResponse.ScheduledEventId = wt.ScheduledEventID
+	expectedResponse.ScheduledTime = wt.ScheduledTime
+	expectedResponse.StartedEventId = wt.ScheduledEventID + 1
 	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
-	expectedResponse.Attempt = di.Attempt
+	expectedResponse.Attempt = wt.Attempt
 	expectedResponse.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
 		Name: executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -276,7 +276,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfNoExecution() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: workflowExecution,
-		ScheduleId:        2,
+		ScheduledEventId:  2,
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -306,7 +306,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfGetExecutionFailed() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: workflowExecution,
-		ScheduleId:        2,
+		ScheduledEventId:  2,
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -339,7 +339,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyStarted() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
-		ScheduleId:        2,
+		ScheduledEventId:  2,
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -376,7 +376,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
-		ScheduleId:        2,
+		ScheduledEventId:  2,
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -419,7 +419,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
-		ScheduleId:        2,
+		ScheduledEventId:  2,
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -462,7 +462,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskRetrySameRequest() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
-		ScheduleId:        2,
+		ScheduledEventId:  2,
 		TaskId:            100,
 		RequestId:         requestID,
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -506,7 +506,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskRetryDifferentRequest() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
-		ScheduleId:        2,
+		ScheduledEventId:  2,
 		TaskId:            100,
 		RequestId:         requestID,
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -547,7 +547,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedMaxAttemptsExceeded() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
-		ScheduleId:        2,
+		ScheduledEventId:  2,
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -600,7 +600,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskSuccess() {
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
-		ScheduleId:        2,
+		ScheduledEventId:  2,
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -641,7 +641,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 		&historyservice.RecordActivityTaskStartedRequest{
 			NamespaceId:       namespaceID.String(),
 			WorkflowExecution: workflowExecution,
-			ScheduleId:        5,
+			ScheduledEventId:  5,
 			TaskId:            100,
 			RequestId:         "reqId",
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
@@ -699,7 +699,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	response, err := s.historyEngine.RecordActivityTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
-		ScheduleId:        5,
+		ScheduledEventId:  5,
 		TaskId:            100,
 		RequestId:         "reqId",
 		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
@@ -909,9 +909,9 @@ func (s *engine2Suite) createExecutionStartedStateWithParent(
 	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
 		s.logger, we.GetRunId())
 	addWorkflowExecutionStartedEventWithParent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, parentInfo, identity)
-	di := addWorkflowTaskScheduledEvent(msBuilder)
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
 	if startWorkflowTask {
-		addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+		addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, tl, identity)
 	}
 	_ = msBuilder.SetHistoryTree(we.GetRunId())
 	versionHistory, _ := versionhistory.GetCurrentVersionHistory(
@@ -933,11 +933,11 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	}
 	tl := "testTaskQueue"
 	taskToken := &tokenspb.Task{
-		ScheduleAttempt: 1,
-		NamespaceId:     namespaceID.String(),
-		WorkflowId:      "wId",
-		RunId:           we.GetRunId(),
-		ScheduleId:      2,
+		Attempt:          1,
+		NamespaceId:      namespaceID.String(),
+		WorkflowId:       "wId",
+		RunId:            we.GetRunId(),
+		ScheduledEventId: 2,
 	}
 	serializedTaskToken, _ := taskToken.Marshal()
 	identity := "testIdentity"
@@ -947,8 +947,8 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
 		log.NewTestLogger(), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	di := addWorkflowTaskScheduledEvent(msBuilder)
-	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
+	addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, tl, identity)
 
 	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
@@ -977,7 +977,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	s.Nil(err)
 	executionBuilder := s.getBuilder(namespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartedEventId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
@@ -990,11 +990,11 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 	}
 	tl := "testTaskQueue"
 	taskToken := &tokenspb.Task{
-		ScheduleAttempt: 1,
-		NamespaceId:     namespaceID.String(),
-		WorkflowId:      "wId",
-		RunId:           we.GetRunId(),
-		ScheduleId:      2,
+		Attempt:          1,
+		NamespaceId:      namespaceID.String(),
+		WorkflowId:       "wId",
+		RunId:            we.GetRunId(),
+		ScheduledEventId: 2,
 	}
 	serializedTaskToken, _ := taskToken.Marshal()
 	identity := "testIdentity"
@@ -1002,8 +1002,8 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
 		log.NewTestLogger(), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, nil, 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	di := addWorkflowTaskScheduledEvent(msBuilder)
-	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
+	addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, tl, identity)
 
 	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
@@ -1680,10 +1680,10 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 	s.IsType(&serviceerror.NotFound{}, err)
 
 	// add child init event
-	di := addWorkflowTaskScheduledEvent(msBuilder)
-	workflowTasksStartEvent := addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, "testTaskQueue", uuid.New())
-	di.StartedID = workflowTasksStartEvent.GetEventId()
-	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, "some random identity")
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
+	workflowTasksStartEvent := addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, "testTaskQueue", uuid.New())
+	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(msBuilder, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
@@ -1860,10 +1860,10 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", taskQueueName, payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-	di := addWorkflowTaskScheduledEvent(msBuilder)
-	workflowTasksStartEvent := addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = workflowTasksStartEvent.GetEventId()
-	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, "some random identity")
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
+	workflowTasksStartEvent := addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, taskQueueName, uuid.New())
+	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 	initiatedEvent, ci := addStartChildWorkflowExecutionInitiatedEvent(msBuilder, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 
@@ -1902,7 +1902,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	// child completion recorded
 	addChildWorkflowExecutionCompletedEvent(
 		msBuilder,
-		ci.InitiatedId,
+		ci.InitiatedEventId,
 		&commonpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,
 			RunId:      childRunID,

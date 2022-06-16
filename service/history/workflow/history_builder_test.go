@@ -582,11 +582,11 @@ func (s *historyBuilderSuite) TestWorkflowExecutionContinueAsNew() {
 
 /* workflow tasks */
 func (s *historyBuilderSuite) TestWorkflowTaskScheduled() {
-	startToCloseTimeoutSeconds := rand.Int31()
+	startToCloseTimeout := time.Duration(rand.Int31()) * time.Second
 	attempt := rand.Int31()
 	event := s.historyBuilder.AddWorkflowTaskScheduledEvent(
 		testTaskQueue,
-		startToCloseTimeoutSeconds,
+		&startToCloseTimeout,
 		attempt,
 		s.now,
 	)
@@ -600,7 +600,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskScheduled() {
 		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
 			WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 				TaskQueue:           testTaskQueue,
-				StartToCloseTimeout: timestamp.DurationPtr(time.Duration(startToCloseTimeoutSeconds) * time.Second),
+				StartToCloseTimeout: &startToCloseTimeout,
 				Attempt:             attempt,
 			},
 		},
@@ -608,9 +608,9 @@ func (s *historyBuilderSuite) TestWorkflowTaskScheduled() {
 }
 
 func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	event := s.historyBuilder.AddWorkflowTaskStartedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		testRequestID,
 		testIdentity,
 		s.now,
@@ -624,7 +624,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
 			WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
-				ScheduledEventId: scheduleEventID,
+				ScheduledEventId: scheduledEventID,
 				Identity:         testIdentity,
 				RequestId:        testRequestID,
 			},
@@ -633,11 +633,11 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 }
 
 func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	checksum := "random checksum"
 	event := s.historyBuilder.AddWorkflowTaskCompletedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		testIdentity,
 		checksum,
@@ -651,7 +651,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 			WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-				ScheduledEventId: scheduleEventID,
+				ScheduledEventId: scheduledEventID,
 				StartedEventId:   startedEventID,
 				Identity:         testIdentity,
 				BinaryChecksum:   checksum,
@@ -661,7 +661,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 }
 
 func (s *historyBuilderSuite) TestWorkflowTaskFailed() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	cause := enumspb.WorkflowTaskFailedCause(rand.Int31n(int32(len(enumspb.WorkflowTaskFailedCause_name))))
 	baseRunID := uuid.New()
@@ -669,7 +669,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskFailed() {
 	forkEventVersion := rand.Int63()
 	checksum := "random checksum"
 	event := s.historyBuilder.AddWorkflowTaskFailedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		cause,
 		testFailure,
@@ -688,7 +688,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskFailed() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{
 			WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
-				ScheduledEventId: scheduleEventID,
+				ScheduledEventId: scheduledEventID,
 				StartedEventId:   startedEventID,
 				Cause:            cause,
 				Failure:          testFailure,
@@ -703,11 +703,11 @@ func (s *historyBuilderSuite) TestWorkflowTaskFailed() {
 }
 
 func (s *historyBuilderSuite) TestWorkflowTaskTimeout() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	timeoutType := enumspb.TimeoutType(rand.Int31n(int32(len(enumspb.TimeoutType_name))))
 	event := s.historyBuilder.AddWorkflowTaskTimedOutEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		timeoutType,
 	)
@@ -720,7 +720,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskTimeout() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes{
 			WorkflowTaskTimedOutEventAttributes: &historypb.WorkflowTaskTimedOutEventAttributes{
-				ScheduledEventId: scheduleEventID,
+				ScheduledEventId: scheduledEventID,
 				StartedEventId:   startedEventID,
 				TimeoutType:      timeoutType,
 			},
@@ -780,10 +780,10 @@ func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 }
 
 func (s *historyBuilderSuite) TestActivityTaskStarted() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	attempt := rand.Int31()
 	event := s.historyBuilder.AddActivityTaskStartedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		attempt,
 		testRequestID,
 		testIdentity,
@@ -798,7 +798,7 @@ func (s *historyBuilderSuite) TestActivityTaskStarted() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
 			ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
-				ScheduledEventId: scheduleEventID,
+				ScheduledEventId: scheduledEventID,
 				Attempt:          attempt,
 				Identity:         testIdentity,
 				RequestId:        testRequestID,
@@ -810,10 +810,10 @@ func (s *historyBuilderSuite) TestActivityTaskStarted() {
 
 func (s *historyBuilderSuite) TestActivityTaskCancelRequested() {
 	workflowTaskCompletionEventID := rand.Int63()
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	event := s.historyBuilder.AddActivityTaskCancelRequestedEvent(
 		workflowTaskCompletionEventID,
-		scheduleEventID,
+		scheduledEventID,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -825,17 +825,17 @@ func (s *historyBuilderSuite) TestActivityTaskCancelRequested() {
 		Attributes: &historypb.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{
 			ActivityTaskCancelRequestedEventAttributes: &historypb.ActivityTaskCancelRequestedEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
-				ScheduledEventId:             scheduleEventID,
+				ScheduledEventId:             scheduledEventID,
 			},
 		},
 	}, event)
 }
 
 func (s *historyBuilderSuite) TestActivityTaskCompleted() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	event := s.historyBuilder.AddActivityTaskCompletedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		testIdentity,
 		testPayloads,
@@ -849,7 +849,7 @@ func (s *historyBuilderSuite) TestActivityTaskCompleted() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
 			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
-				ScheduledEventId: scheduleEventID,
+				ScheduledEventId: scheduledEventID,
 				StartedEventId:   startedEventID,
 				Result:           testPayloads,
 				Identity:         testIdentity,
@@ -859,11 +859,11 @@ func (s *historyBuilderSuite) TestActivityTaskCompleted() {
 }
 
 func (s *historyBuilderSuite) TestActivityTaskFailed() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	retryState := enumspb.RetryState(rand.Int31n(int32(len(enumspb.RetryState_name))))
 	event := s.historyBuilder.AddActivityTaskFailedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		testFailure,
 		retryState,
@@ -878,7 +878,7 @@ func (s *historyBuilderSuite) TestActivityTaskFailed() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ActivityTaskFailedEventAttributes{
 			ActivityTaskFailedEventAttributes: &historypb.ActivityTaskFailedEventAttributes{
-				ScheduledEventId: scheduleEventID,
+				ScheduledEventId: scheduledEventID,
 				StartedEventId:   startedEventID,
 				Failure:          testFailure,
 				RetryState:       retryState,
@@ -889,11 +889,11 @@ func (s *historyBuilderSuite) TestActivityTaskFailed() {
 }
 
 func (s *historyBuilderSuite) TestActivityTaskTimeout() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	retryState := enumspb.RetryState(rand.Int31n(int32(len(enumspb.RetryState_name))))
 	event := s.historyBuilder.AddActivityTaskTimedOutEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		testFailure,
 		retryState,
@@ -907,7 +907,7 @@ func (s *historyBuilderSuite) TestActivityTaskTimeout() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ActivityTaskTimedOutEventAttributes{
 			ActivityTaskTimedOutEventAttributes: &historypb.ActivityTaskTimedOutEventAttributes{
-				ScheduledEventId: scheduleEventID,
+				ScheduledEventId: scheduledEventID,
 				StartedEventId:   startedEventID,
 				Failure:          testFailure,
 				RetryState:       retryState,
@@ -917,11 +917,11 @@ func (s *historyBuilderSuite) TestActivityTaskTimeout() {
 }
 
 func (s *historyBuilderSuite) TestActivityTaskCancelled() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	cancelRequestedEventID := rand.Int63()
 	event := s.historyBuilder.AddActivityTaskCanceledEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		cancelRequestedEventID,
 		testPayloads,
@@ -936,7 +936,7 @@ func (s *historyBuilderSuite) TestActivityTaskCancelled() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ActivityTaskCanceledEventAttributes{
 			ActivityTaskCanceledEventAttributes: &historypb.ActivityTaskCanceledEventAttributes{
-				ScheduledEventId:             scheduleEventID,
+				ScheduledEventId:             scheduledEventID,
 				StartedEventId:               startedEventID,
 				LatestCancelRequestedEventId: cancelRequestedEventID,
 				Details:                      testPayloads,
@@ -1072,9 +1072,9 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionInitiate
 }
 
 func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionSuccess() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	event := s.historyBuilder.AddExternalWorkflowExecutionCancelRequested(
-		scheduleEventID,
+		scheduledEventID,
 		testNamespaceName,
 		testNamespaceID,
 		testWorkflowID,
@@ -1089,7 +1089,7 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionSuccess(
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ExternalWorkflowExecutionCancelRequestedEventAttributes{
 			ExternalWorkflowExecutionCancelRequestedEventAttributes: &historypb.ExternalWorkflowExecutionCancelRequestedEventAttributes{
-				InitiatedEventId: scheduleEventID,
+				InitiatedEventId: scheduledEventID,
 				Namespace:        testNamespaceName.String(),
 				NamespaceId:      testNamespaceID.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
@@ -1103,11 +1103,11 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionSuccess(
 
 func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionFailed() {
 	workflowTaskCompletionEventID := rand.Int63()
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	cause := enumspb.CancelExternalWorkflowExecutionFailedCause(rand.Int31n(int32(len(enumspb.CancelExternalWorkflowExecutionFailedCause_name))))
 	event := s.historyBuilder.AddRequestCancelExternalWorkflowExecutionFailedEvent(
 		workflowTaskCompletionEventID,
-		scheduleEventID,
+		scheduledEventID,
 		testNamespaceName,
 		testNamespaceID,
 		testWorkflowID,
@@ -1124,7 +1124,7 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionFailed()
 		Attributes: &historypb.HistoryEvent_RequestCancelExternalWorkflowExecutionFailedEventAttributes{
 			RequestCancelExternalWorkflowExecutionFailedEventAttributes: &historypb.RequestCancelExternalWorkflowExecutionFailedEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
-				InitiatedEventId:             scheduleEventID,
+				InitiatedEventId:             scheduledEventID,
 				Namespace:                    testNamespaceName.String(),
 				NamespaceId:                  testNamespaceID.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
@@ -1189,10 +1189,10 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionInitiated() {
 }
 
 func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionSuccess() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	control := "random control"
 	event := s.historyBuilder.AddExternalWorkflowExecutionSignaled(
-		scheduleEventID,
+		scheduledEventID,
 		testNamespaceName,
 		testNamespaceID,
 		testWorkflowID,
@@ -1208,7 +1208,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionSuccess() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ExternalWorkflowExecutionSignaledEventAttributes{
 			ExternalWorkflowExecutionSignaledEventAttributes: &historypb.ExternalWorkflowExecutionSignaledEventAttributes{
-				InitiatedEventId: scheduleEventID,
+				InitiatedEventId: scheduledEventID,
 				Namespace:        testNamespaceName.String(),
 				NamespaceId:      testNamespaceID.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
@@ -1223,12 +1223,12 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionSuccess() {
 
 func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionFailed() {
 	workflowTaskCompletionEventID := rand.Int63()
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	control := "random control"
 	cause := enumspb.SignalExternalWorkflowExecutionFailedCause(rand.Int31n(int32(len(enumspb.SignalExternalWorkflowExecutionFailedCause_name))))
 	event := s.historyBuilder.AddSignalExternalWorkflowExecutionFailedEvent(
 		workflowTaskCompletionEventID,
-		scheduleEventID,
+		scheduledEventID,
 		testNamespaceName,
 		testNamespaceID,
 		testWorkflowID,
@@ -1246,7 +1246,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionFailed() {
 		Attributes: &historypb.HistoryEvent_SignalExternalWorkflowExecutionFailedEventAttributes{
 			SignalExternalWorkflowExecutionFailedEventAttributes: &historypb.SignalExternalWorkflowExecutionFailedEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
-				InitiatedEventId:             scheduleEventID,
+				InitiatedEventId:             scheduledEventID,
 				Namespace:                    testNamespaceName.String(),
 				NamespaceId:                  testNamespaceID.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
@@ -1328,9 +1328,9 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 }
 
 func (s *historyBuilderSuite) TestStartChildWorkflowExecutionSuccess() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	event := s.historyBuilder.AddChildWorkflowExecutionStartedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		testNamespaceName,
 		testNamespaceID,
 		&commonpb.WorkflowExecution{
@@ -1356,7 +1356,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionSuccess() {
 					RunId:      testRunID,
 				},
 				WorkflowType:     testWorkflowType,
-				InitiatedEventId: scheduleEventID,
+				InitiatedEventId: scheduledEventID,
 				Header:           testHeader,
 			},
 		},
@@ -1365,12 +1365,12 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionSuccess() {
 
 func (s *historyBuilderSuite) TestStartChildWorkflowExecutionFailed() {
 	workflowTaskCompletionEventID := rand.Int63()
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	control := "random control"
 	cause := enumspb.StartChildWorkflowExecutionFailedCause(rand.Int31n(int32(len(enumspb.StartChildWorkflowExecutionFailedCause_name))))
 	event := s.historyBuilder.AddStartChildWorkflowExecutionFailedEvent(
 		workflowTaskCompletionEventID,
-		scheduleEventID,
+		scheduledEventID,
 		cause,
 		testNamespaceName,
 		testNamespaceID,
@@ -1392,7 +1392,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionFailed() {
 				NamespaceId:                  testNamespaceID.String(),
 				WorkflowId:                   testWorkflowID,
 				WorkflowType:                 testWorkflowType,
-				InitiatedEventId:             scheduleEventID,
+				InitiatedEventId:             scheduledEventID,
 				Control:                      control,
 				Cause:                        cause,
 			},
@@ -1401,11 +1401,11 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionFailed() {
 }
 
 func (s *historyBuilderSuite) TestChildWorkflowExecutionCompleted() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 
 	event := s.historyBuilder.AddChildWorkflowExecutionCompletedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		testNamespaceName,
 		testNamespaceID,
@@ -1425,7 +1425,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionCompleted() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{
 			ChildWorkflowExecutionCompletedEventAttributes: &historypb.ChildWorkflowExecutionCompletedEventAttributes{
-				InitiatedEventId: scheduleEventID,
+				InitiatedEventId: scheduledEventID,
 				StartedEventId:   startedEventID,
 				Namespace:        testNamespaceName.String(),
 				NamespaceId:      testNamespaceID.String(),
@@ -1441,11 +1441,11 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionCompleted() {
 }
 
 func (s *historyBuilderSuite) TestChildWorkflowExecutionFailed() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	retryState := enumspb.RetryState(rand.Int31n(int32(len(enumspb.RetryState_name))))
 	event := s.historyBuilder.AddChildWorkflowExecutionFailedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		testNamespaceName,
 		testNamespaceID,
@@ -1466,7 +1466,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionFailed() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{
 			ChildWorkflowExecutionFailedEventAttributes: &historypb.ChildWorkflowExecutionFailedEventAttributes{
-				InitiatedEventId: scheduleEventID,
+				InitiatedEventId: scheduledEventID,
 				StartedEventId:   startedEventID,
 				Namespace:        testNamespaceName.String(),
 				NamespaceId:      testNamespaceID.String(),
@@ -1483,11 +1483,11 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionFailed() {
 }
 
 func (s *historyBuilderSuite) TestChildWorkflowExecutionTimeout() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	retryState := enumspb.RetryState(rand.Int31n(int32(len(enumspb.RetryState_name))))
 	event := s.historyBuilder.AddChildWorkflowExecutionTimedOutEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		testNamespaceName,
 		testNamespaceID,
@@ -1507,7 +1507,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionTimeout() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{
 			ChildWorkflowExecutionTimedOutEventAttributes: &historypb.ChildWorkflowExecutionTimedOutEventAttributes{
-				InitiatedEventId: scheduleEventID,
+				InitiatedEventId: scheduledEventID,
 				StartedEventId:   startedEventID,
 				Namespace:        testNamespaceName.String(),
 				NamespaceId:      testNamespaceID.String(),
@@ -1523,10 +1523,10 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionTimeout() {
 }
 
 func (s *historyBuilderSuite) TestChildWorkflowExecutionCancelled() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	event := s.historyBuilder.AddChildWorkflowExecutionCanceledEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		testNamespaceName,
 		testNamespaceID,
@@ -1546,7 +1546,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionCancelled() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{
 			ChildWorkflowExecutionCanceledEventAttributes: &historypb.ChildWorkflowExecutionCanceledEventAttributes{
-				InitiatedEventId: scheduleEventID,
+				InitiatedEventId: scheduledEventID,
 				StartedEventId:   startedEventID,
 				Namespace:        testNamespaceName.String(),
 				NamespaceId:      testNamespaceID.String(),
@@ -1562,10 +1562,10 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionCancelled() {
 }
 
 func (s *historyBuilderSuite) TestChildWorkflowExecutionTerminated() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	event := s.historyBuilder.AddChildWorkflowExecutionTerminatedEvent(
-		scheduleEventID,
+		scheduledEventID,
 		startedEventID,
 		testNamespaceName,
 		testNamespaceID,
@@ -1584,7 +1584,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionTerminated() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{
 			ChildWorkflowExecutionTerminatedEventAttributes: &historypb.ChildWorkflowExecutionTerminatedEventAttributes{
-				InitiatedEventId: scheduleEventID,
+				InitiatedEventId: scheduledEventID,
 				StartedEventId:   startedEventID,
 				Namespace:        testNamespaceName.String(),
 				NamespaceId:      testNamespaceID.String(),
@@ -1634,11 +1634,11 @@ func (s *historyBuilderSuite) testAppendFlushFinishEventWithoutBufferSingleBatch
 	s.assertEventIDTaskID(historyMutation)
 
 	s.Equal(&HistoryMutation{
-		DBEventsBatches:     [][]*historypb.HistoryEvent{{event1, event2}},
-		DBClearBuffer:       false,
-		DBBufferBatch:       nil,
-		MemBufferBatch:      nil,
-		ScheduleIDToStartID: make(map[int64]int64),
+		DBEventsBatches:        [][]*historypb.HistoryEvent{{event1, event2}},
+		DBClearBuffer:          false,
+		DBBufferBatch:          nil,
+		MemBufferBatch:         nil,
+		ScheduledIDToStartedID: make(map[int64]int64),
 	}, historyMutation)
 }
 
@@ -1714,10 +1714,10 @@ func (s *historyBuilderSuite) testAppendFlushFinishEventWithoutBufferMultiBatch(
 			{event21, event22},
 			{event31, event32},
 		},
-		DBClearBuffer:       false,
-		DBBufferBatch:       nil,
-		MemBufferBatch:      nil,
-		ScheduleIDToStartID: make(map[int64]int64),
+		DBClearBuffer:          false,
+		DBBufferBatch:          nil,
+		MemBufferBatch:         nil,
+		ScheduledIDToStartedID: make(map[int64]int64),
 	}, historyMutation)
 }
 
@@ -1745,11 +1745,11 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithoutDBBuf
 	s.assertEventIDTaskID(historyMutation)
 
 	s.Equal(&HistoryMutation{
-		DBEventsBatches:     nil,
-		DBClearBuffer:       false,
-		DBBufferBatch:       []*historypb.HistoryEvent{event1, event2},
-		MemBufferBatch:      []*historypb.HistoryEvent{event1, event2},
-		ScheduleIDToStartID: make(map[int64]int64),
+		DBEventsBatches:        nil,
+		DBClearBuffer:          false,
+		DBBufferBatch:          []*historypb.HistoryEvent{event1, event2},
+		MemBufferBatch:         []*historypb.HistoryEvent{event1, event2},
+		ScheduledIDToStartedID: make(map[int64]int64),
 	}, historyMutation)
 }
 
@@ -1777,11 +1777,11 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithoutDBBuf
 	s.assertEventIDTaskID(historyMutation)
 
 	s.Equal(&HistoryMutation{
-		DBEventsBatches:     [][]*historypb.HistoryEvent{{event1, event2}},
-		DBClearBuffer:       false,
-		DBBufferBatch:       nil,
-		MemBufferBatch:      nil,
-		ScheduleIDToStartID: make(map[int64]int64),
+		DBEventsBatches:        [][]*historypb.HistoryEvent{{event1, event2}},
+		DBClearBuffer:          false,
+		DBBufferBatch:          nil,
+		MemBufferBatch:         nil,
+		ScheduledIDToStartedID: make(map[int64]int64),
 	}, historyMutation)
 }
 
@@ -1807,11 +1807,11 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_WithDBBuf
 	s.assertEventIDTaskID(historyMutation)
 
 	s.Equal(&HistoryMutation{
-		DBEventsBatches:     nil,
-		DBClearBuffer:       false,
-		DBBufferBatch:       nil,
-		MemBufferBatch:      []*historypb.HistoryEvent{event1, event2},
-		ScheduleIDToStartID: make(map[int64]int64),
+		DBEventsBatches:        nil,
+		DBClearBuffer:          false,
+		DBBufferBatch:          nil,
+		MemBufferBatch:         []*historypb.HistoryEvent{event1, event2},
+		ScheduledIDToStartedID: make(map[int64]int64),
 	}, historyMutation)
 }
 
@@ -1837,11 +1837,11 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_WithDBBuf
 	s.assertEventIDTaskID(historyMutation)
 
 	s.Equal(&HistoryMutation{
-		DBEventsBatches:     [][]*historypb.HistoryEvent{{event1, event2}},
-		DBClearBuffer:       true,
-		DBBufferBatch:       nil,
-		MemBufferBatch:      nil,
-		ScheduleIDToStartID: make(map[int64]int64),
+		DBEventsBatches:        [][]*historypb.HistoryEvent{{event1, event2}},
+		DBClearBuffer:          true,
+		DBBufferBatch:          nil,
+		MemBufferBatch:         nil,
+		ScheduledIDToStartedID: make(map[int64]int64),
 	}, historyMutation)
 }
 
@@ -1874,11 +1874,11 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer
 	s.assertEventIDTaskID(historyMutation)
 
 	s.Equal(&HistoryMutation{
-		DBEventsBatches:     nil,
-		DBClearBuffer:       false,
-		DBBufferBatch:       []*historypb.HistoryEvent{event1, event2},
-		MemBufferBatch:      []*historypb.HistoryEvent{event0, event1, event2},
-		ScheduleIDToStartID: make(map[int64]int64),
+		DBEventsBatches:        nil,
+		DBClearBuffer:          false,
+		DBBufferBatch:          []*historypb.HistoryEvent{event1, event2},
+		MemBufferBatch:         []*historypb.HistoryEvent{event0, event1, event2},
+		ScheduledIDToStartedID: make(map[int64]int64),
 	}, historyMutation)
 }
 
@@ -1911,23 +1911,23 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer
 	s.assertEventIDTaskID(historyMutation)
 
 	s.Equal(&HistoryMutation{
-		DBEventsBatches:     [][]*historypb.HistoryEvent{{event0, event1, event2}},
-		DBClearBuffer:       true,
-		DBBufferBatch:       nil,
-		MemBufferBatch:      nil,
-		ScheduleIDToStartID: make(map[int64]int64),
+		DBEventsBatches:        [][]*historypb.HistoryEvent{{event0, event1, event2}},
+		DBClearBuffer:          true,
+		DBBufferBatch:          nil,
+		MemBufferBatch:         nil,
+		ScheduledIDToStartedID: make(map[int64]int64),
 	}, historyMutation)
 }
 
 func (s *historyBuilderSuite) TestWireEventIDs_Activity() {
-	scheduleEventID := rand.Int63()
+	scheduledEventID := rand.Int63()
 	startEvent := &historypb.HistoryEvent{
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 		EventId:   common.BufferedEventID,
 		TaskId:    common.EmptyEventTaskID,
 		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
 			ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
-				ScheduledEventId: scheduleEventID,
+				ScheduledEventId: scheduledEventID,
 			},
 		},
 	}
@@ -1937,7 +1937,7 @@ func (s *historyBuilderSuite) TestWireEventIDs_Activity() {
 		TaskId:    common.EmptyEventTaskID,
 		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
 			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
-				ScheduledEventId: scheduleEventID,
+				ScheduledEventId: scheduledEventID,
 			},
 		},
 	}
@@ -1947,7 +1947,7 @@ func (s *historyBuilderSuite) TestWireEventIDs_Activity() {
 		TaskId:    common.EmptyEventTaskID,
 		Attributes: &historypb.HistoryEvent_ActivityTaskFailedEventAttributes{
 			ActivityTaskFailedEventAttributes: &historypb.ActivityTaskFailedEventAttributes{
-				ScheduledEventId: scheduleEventID,
+				ScheduledEventId: scheduledEventID,
 			},
 		},
 	}
@@ -1957,7 +1957,7 @@ func (s *historyBuilderSuite) TestWireEventIDs_Activity() {
 		TaskId:    common.EmptyEventTaskID,
 		Attributes: &historypb.HistoryEvent_ActivityTaskTimedOutEventAttributes{
 			ActivityTaskTimedOutEventAttributes: &historypb.ActivityTaskTimedOutEventAttributes{
-				ScheduledEventId: scheduleEventID,
+				ScheduledEventId: scheduledEventID,
 			},
 		},
 	}
@@ -1967,15 +1967,15 @@ func (s *historyBuilderSuite) TestWireEventIDs_Activity() {
 		TaskId:    common.EmptyEventTaskID,
 		Attributes: &historypb.HistoryEvent_ActivityTaskCanceledEventAttributes{
 			ActivityTaskCanceledEventAttributes: &historypb.ActivityTaskCanceledEventAttributes{
-				ScheduledEventId: scheduleEventID,
+				ScheduledEventId: scheduledEventID,
 			},
 		},
 	}
 
-	s.testWireEventIDs(scheduleEventID, startEvent, completeEvent)
-	s.testWireEventIDs(scheduleEventID, startEvent, failedEvent)
-	s.testWireEventIDs(scheduleEventID, startEvent, timeoutEvent)
-	s.testWireEventIDs(scheduleEventID, startEvent, cancelEvent)
+	s.testWireEventIDs(scheduledEventID, startEvent, completeEvent)
+	s.testWireEventIDs(scheduledEventID, startEvent, failedEvent)
+	s.testWireEventIDs(scheduledEventID, startEvent, timeoutEvent)
+	s.testWireEventIDs(scheduledEventID, startEvent, cancelEvent)
 }
 
 func (s *historyBuilderSuite) TestWireEventIDs_ChildWorkflow() {
@@ -2049,7 +2049,7 @@ func (s *historyBuilderSuite) TestWireEventIDs_ChildWorkflow() {
 }
 
 func (s *historyBuilderSuite) testWireEventIDs(
-	scheduleID int64,
+	scheduledEventID int64,
 	startEvent *historypb.HistoryEvent,
 	finishEvent *historypb.HistoryEvent,
 ) {
@@ -2072,8 +2072,8 @@ func (s *historyBuilderSuite) testWireEventIDs(
 	s.Empty(s.historyBuilder.memBufferBatch)
 
 	s.Equal(map[int64]int64{
-		scheduleID: startEvent.GetEventId(),
-	}, s.historyBuilder.scheduleIDToStartedID)
+		scheduledEventID: startEvent.GetEventId(),
+	}, s.historyBuilder.scheduledIDToStartedID)
 
 	switch finishEvent.GetEventType() {
 	case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
@@ -2281,7 +2281,7 @@ func (s *historyBuilderSuite) flush() *historypb.HistoryEvent {
 	historyMutation, err := s.historyBuilder.Finish(false)
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
-	s.Equal(make(map[int64]int64), historyMutation.ScheduleIDToStartID)
+	s.Equal(make(map[int64]int64), historyMutation.ScheduledIDToStartedID)
 
 	if !hasBufferEvents {
 		s.Equal(1, len(historyMutation.DBEventsBatches))

@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -189,9 +190,9 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
 				WorkflowId:         workflowID,
 				RunId:              runID,
 				Version:            1234,
-				ScheduledId:        2345,
+				ScheduledEventId:   2345,
 				ScheduledTime:      nil,
-				StartedId:          2346,
+				StartedEventId:     2346,
 				StartedTime:        nil,
 				LastHeartbeatTime:  nil,
 				Attempt:            10,
@@ -205,9 +206,9 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
 		WorkflowId:         workflowID,
 		RunId:              runID,
 		Version:            1234,
-		ScheduledId:        2345,
+		ScheduledEventId:   2345,
 		ScheduledTime:      nil,
-		StartedId:          2346,
+		StartedEventId:     2346,
 		StartedTime:        nil,
 		LastHeartbeatTime:  nil,
 		Attempt:            10,
@@ -232,9 +233,9 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 				WorkflowId:         workflowID,
 				RunId:              runID,
 				Version:            1234,
-				ScheduledId:        2345,
+				ScheduledEventId:   2345,
 				ScheduledTime:      nil,
-				StartedId:          2346,
+				StartedEventId:     2346,
 				StartedTime:        nil,
 				LastHeartbeatTime:  nil,
 				Attempt:            10,
@@ -248,9 +249,9 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 		WorkflowId:         workflowID,
 		RunId:              runID,
 		Version:            1234,
-		ScheduledId:        2345,
+		ScheduledEventId:   2345,
 		ScheduledTime:      nil,
-		StartedId:          2346,
+		StartedEventId:     2346,
 		StartedTime:        nil,
 		LastHeartbeatTime:  nil,
 		Attempt:            10,

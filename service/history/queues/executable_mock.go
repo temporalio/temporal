@@ -439,10 +439,10 @@ func (m *MockExecutor) EXPECT() *MockExecutorMockRecorder {
 }
 
 // Execute mocks base method.
-func (m *MockExecutor) Execute(arg0 context.Context, arg1 Executable) (metrics.Scope, error) {
+func (m *MockExecutor) Execute(arg0 context.Context, arg1 Executable) (metrics.MetricProvider, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", arg0, arg1)
-	ret0, _ := ret[0].(metrics.Scope)
+	ret0, _ := ret[0].(metrics.MetricProvider)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

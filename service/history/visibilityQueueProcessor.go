@@ -78,6 +78,7 @@ func newVisibilityQueueProcessor(
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
 	visibilityMgr manager.VisibilityManager,
+	metricProvider metrics.MetricProvider,
 	hostRateLimiter quotas.RateLimiter,
 ) queues.Processor {
 
@@ -139,17 +140,18 @@ func newVisibilityQueueProcessor(
 		workflowCache,
 		visibilityMgr,
 		logger,
+		metricProvider,
 	)
 
 	if scheduler == nil {
-		scheduler = newVisibilityTaskScheduler(shard, logger)
+		scheduler = newVisibilityTaskScheduler(shard, logger, metricProvider)
 		retProcessor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
 	)
 
 	queueAckMgr := newQueueAckMgr(
@@ -349,6 +351,7 @@ func (t *visibilityQueueProcessorImpl) queueShutdown() error {
 func newVisibilityTaskScheduler(
 	shard shard.Context,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 ) queues.Scheduler {
 	config := shard.GetConfig()
 	return queues.NewScheduler(
@@ -362,7 +365,7 @@ func newVisibilityTaskScheduler(
 				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.VisibilityProcessorSchedulerRoundRobinWeights(), logger),
 			},
 		},
-		shard.GetMetricsClient(),
+		metricProvider,
 		logger,
 	)
 }

@@ -62,8 +62,8 @@ type (
 		DBClearBuffer bool
 		// accumulated buffered events, equal to all buffer events from execution table
 		MemBufferBatch []*historypb.HistoryEvent
-		// schedule to start event ID mapping for flushed buffered event
-		ScheduleIDToStartID map[int64]int64
+		// scheduled to started event ID mapping for flushed buffered event
+		ScheduledIDToStartedID map[int64]int64
 	}
 
 	TaskIDGenerator func(number int) ([]int64, error)
@@ -88,8 +88,8 @@ type (
 		memLatestBatch   []*historypb.HistoryEvent
 		memBufferBatch   []*historypb.HistoryEvent
 
-		// schedule to start event ID mapping
-		scheduleIDToStartedID map[int64]int64
+		// scheduled to started event ID mapping
+		scheduledIDToStartedID map[int64]int64
 	}
 )
 
@@ -110,12 +110,12 @@ func NewMutableHistoryBuilder(
 
 		workflowFinished: false,
 
-		dbBufferBatch:         dbBufferBatch,
-		dbClearBuffer:         false,
-		memEventsBatches:      nil,
-		memLatestBatch:        nil,
-		memBufferBatch:        nil,
-		scheduleIDToStartedID: make(map[int64]int64),
+		dbBufferBatch:          dbBufferBatch,
+		dbClearBuffer:          false,
+		memEventsBatches:       nil,
+		memLatestBatch:         nil,
+		memBufferBatch:         nil,
+		scheduledIDToStartedID: make(map[int64]int64),
 	}
 }
 
@@ -133,12 +133,12 @@ func NewImmutableHistoryBuilder(
 
 		workflowFinished: false,
 
-		dbBufferBatch:         nil,
-		dbClearBuffer:         false,
-		memEventsBatches:      nil,
-		memLatestBatch:        history,
-		memBufferBatch:        nil,
-		scheduleIDToStartedID: nil,
+		dbBufferBatch:          nil,
+		dbClearBuffer:          false,
+		memEventsBatches:       nil,
+		memLatestBatch:         history,
+		memBufferBatch:         nil,
+		scheduledIDToStartedID: nil,
 	}
 }
 
@@ -197,7 +197,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 
 func (b *HistoryBuilder) AddWorkflowTaskScheduledEvent(
 	taskQueue *taskqueuepb.TaskQueue,
-	startToCloseTimeoutSeconds int32,
+	startToCloseTimeout *time.Duration,
 	attempt int32,
 	now time.Time,
 ) *historypb.HistoryEvent {
@@ -205,7 +205,7 @@ func (b *HistoryBuilder) AddWorkflowTaskScheduledEvent(
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
 		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
 			TaskQueue:           taskQueue,
-			StartToCloseTimeout: timestamp.DurationPtr(time.Duration(startToCloseTimeoutSeconds) * time.Second),
+			StartToCloseTimeout: startToCloseTimeout,
 			Attempt:             attempt,
 		},
 	}
@@ -214,7 +214,7 @@ func (b *HistoryBuilder) AddWorkflowTaskScheduledEvent(
 }
 
 func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	requestID string,
 	identity string,
 	now time.Time,
@@ -222,7 +222,7 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, now)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
 		WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
-			ScheduledEventId: scheduleEventID,
+			ScheduledEventId: scheduledEventID,
 			Identity:         identity,
 			RequestId:        requestID,
 		},
@@ -232,7 +232,7 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 }
 
 func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	startedEventID int64,
 	identity string,
 	checksum string,
@@ -240,7 +240,7 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{
 		WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
-			ScheduledEventId: scheduleEventID,
+			ScheduledEventId: scheduledEventID,
 			StartedEventId:   startedEventID,
 			Identity:         identity,
 			BinaryChecksum:   checksum,
@@ -251,14 +251,14 @@ func (b *HistoryBuilder) AddWorkflowTaskCompletedEvent(
 }
 
 func (b *HistoryBuilder) AddWorkflowTaskTimedOutEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	startedEventID int64,
 	timeoutType enumspb.TimeoutType,
 ) *historypb.HistoryEvent {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes{
 		WorkflowTaskTimedOutEventAttributes: &historypb.WorkflowTaskTimedOutEventAttributes{
-			ScheduledEventId: scheduleEventID,
+			ScheduledEventId: scheduledEventID,
 			StartedEventId:   startedEventID,
 			TimeoutType:      timeoutType,
 		},
@@ -268,7 +268,7 @@ func (b *HistoryBuilder) AddWorkflowTaskTimedOutEvent(
 }
 
 func (b *HistoryBuilder) AddWorkflowTaskFailedEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	startedEventID int64,
 	cause enumspb.WorkflowTaskFailedCause,
 	failure *failurepb.Failure,
@@ -281,7 +281,7 @@ func (b *HistoryBuilder) AddWorkflowTaskFailedEvent(
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{
 		WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
-			ScheduledEventId: scheduleEventID,
+			ScheduledEventId: scheduledEventID,
 			StartedEventId:   startedEventID,
 			Cause:            cause,
 			Failure:          failure,
@@ -320,7 +320,7 @@ func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 }
 
 func (b *HistoryBuilder) AddActivityTaskStartedEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	attempt int32,
 	requestID string,
 	identity string,
@@ -329,7 +329,7 @@ func (b *HistoryBuilder) AddActivityTaskStartedEvent(
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
 		ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
-			ScheduledEventId: scheduleEventID,
+			ScheduledEventId: scheduledEventID,
 			Attempt:          attempt,
 			Identity:         identity,
 			RequestId:        requestID,
@@ -341,7 +341,7 @@ func (b *HistoryBuilder) AddActivityTaskStartedEvent(
 }
 
 func (b *HistoryBuilder) AddActivityTaskCompletedEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	startedEventID int64,
 	identity string,
 	result *commonpb.Payloads,
@@ -349,7 +349,7 @@ func (b *HistoryBuilder) AddActivityTaskCompletedEvent(
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
 		ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
-			ScheduledEventId: scheduleEventID,
+			ScheduledEventId: scheduledEventID,
 			StartedEventId:   startedEventID,
 			Result:           result,
 			Identity:         identity,
@@ -360,7 +360,7 @@ func (b *HistoryBuilder) AddActivityTaskCompletedEvent(
 }
 
 func (b *HistoryBuilder) AddActivityTaskFailedEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	startedEventID int64,
 	failure *failurepb.Failure,
 	retryState enumspb.RetryState,
@@ -369,7 +369,7 @@ func (b *HistoryBuilder) AddActivityTaskFailedEvent(
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskFailedEventAttributes{
 		ActivityTaskFailedEventAttributes: &historypb.ActivityTaskFailedEventAttributes{
-			ScheduledEventId: scheduleEventID,
+			ScheduledEventId: scheduledEventID,
 			StartedEventId:   startedEventID,
 			Failure:          failure,
 			RetryState:       retryState,
@@ -381,7 +381,7 @@ func (b *HistoryBuilder) AddActivityTaskFailedEvent(
 }
 
 func (b *HistoryBuilder) AddActivityTaskTimedOutEvent(
-	scheduleEventID,
+	scheduledEventID,
 	startedEventID int64,
 	timeoutFailure *failurepb.Failure,
 	retryState enumspb.RetryState,
@@ -389,7 +389,7 @@ func (b *HistoryBuilder) AddActivityTaskTimedOutEvent(
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskTimedOutEventAttributes{
 		ActivityTaskTimedOutEventAttributes: &historypb.ActivityTaskTimedOutEventAttributes{
-			ScheduledEventId: scheduleEventID,
+			ScheduledEventId: scheduledEventID,
 			StartedEventId:   startedEventID,
 			Failure:          timeoutFailure,
 			RetryState:       retryState,
@@ -529,13 +529,13 @@ func (b *HistoryBuilder) AddTimerFiredEvent(
 
 func (b *HistoryBuilder) AddActivityTaskCancelRequestedEvent(
 	workflowTaskCompletedEventID int64,
-	scheduleID int64,
+	scheduledEventID int64,
 ) *historypb.HistoryEvent {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskCancelRequestedEventAttributes{
 		ActivityTaskCancelRequestedEventAttributes: &historypb.ActivityTaskCancelRequestedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
-			ScheduledEventId:             scheduleID,
+			ScheduledEventId:             scheduledEventID,
 		},
 	}
 
@@ -543,7 +543,7 @@ func (b *HistoryBuilder) AddActivityTaskCancelRequestedEvent(
 }
 
 func (b *HistoryBuilder) AddActivityTaskCanceledEvent(
-	scheduleEventID int64,
+	scheduledEventID int64,
 	startedEventID int64,
 	latestCancelRequestedEventID int64,
 	details *commonpb.Payloads,
@@ -552,7 +552,7 @@ func (b *HistoryBuilder) AddActivityTaskCanceledEvent(
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_ActivityTaskCanceledEventAttributes{
 		ActivityTaskCanceledEventAttributes: &historypb.ActivityTaskCanceledEventAttributes{
-			ScheduledEventId:             scheduleEventID,
+			ScheduledEventId:             scheduledEventID,
 			StartedEventId:               startedEventID,
 			LatestCancelRequestedEventId: latestCancelRequestedEventID,
 			Details:                      details,
@@ -904,7 +904,7 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionFailedEvent(
 
 func (b *HistoryBuilder) AddChildWorkflowExecutionCompletedEvent(
 	initiatedID int64,
-	startedID int64,
+	startedEventID int64,
 	targetNamespace namespace.Name,
 	targetNamespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
@@ -915,7 +915,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionCompletedEvent(
 	event.Attributes = &historypb.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{
 		ChildWorkflowExecutionCompletedEventAttributes: &historypb.ChildWorkflowExecutionCompletedEventAttributes{
 			InitiatedEventId:  initiatedID,
-			StartedEventId:    startedID,
+			StartedEventId:    startedEventID,
 			Namespace:         targetNamespace.String(),
 			NamespaceId:       targetNamespaceID.String(),
 			WorkflowExecution: execution,
@@ -929,7 +929,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionCompletedEvent(
 
 func (b *HistoryBuilder) AddChildWorkflowExecutionFailedEvent(
 	initiatedID int64,
-	startedID int64,
+	startedEventID int64,
 	targetNamespace namespace.Name,
 	targetNamespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
@@ -941,7 +941,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionFailedEvent(
 	event.Attributes = &historypb.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{
 		ChildWorkflowExecutionFailedEventAttributes: &historypb.ChildWorkflowExecutionFailedEventAttributes{
 			InitiatedEventId:  initiatedID,
-			StartedEventId:    startedID,
+			StartedEventId:    startedEventID,
 			Namespace:         targetNamespace.String(),
 			NamespaceId:       targetNamespaceID.String(),
 			WorkflowExecution: execution,
@@ -956,7 +956,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionFailedEvent(
 
 func (b *HistoryBuilder) AddChildWorkflowExecutionCanceledEvent(
 	initiatedID int64,
-	startedID int64,
+	startedEventID int64,
 	targetNamespace namespace.Name,
 	targetNamespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
@@ -967,7 +967,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionCanceledEvent(
 	event.Attributes = &historypb.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{
 		ChildWorkflowExecutionCanceledEventAttributes: &historypb.ChildWorkflowExecutionCanceledEventAttributes{
 			InitiatedEventId:  initiatedID,
-			StartedEventId:    startedID,
+			StartedEventId:    startedEventID,
 			Namespace:         targetNamespace.String(),
 			NamespaceId:       targetNamespaceID.String(),
 			WorkflowExecution: execution,
@@ -981,7 +981,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionCanceledEvent(
 
 func (b *HistoryBuilder) AddChildWorkflowExecutionTerminatedEvent(
 	initiatedID int64,
-	startedID int64,
+	startedEventID int64,
 	targetNamespace namespace.Name,
 	targetNamespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
@@ -991,7 +991,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionTerminatedEvent(
 	event.Attributes = &historypb.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{
 		ChildWorkflowExecutionTerminatedEventAttributes: &historypb.ChildWorkflowExecutionTerminatedEventAttributes{
 			InitiatedEventId:  initiatedID,
-			StartedEventId:    startedID,
+			StartedEventId:    startedEventID,
 			Namespace:         targetNamespace.String(),
 			NamespaceId:       targetNamespaceID.String(),
 			WorkflowExecution: execution,
@@ -1004,7 +1004,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionTerminatedEvent(
 
 func (b *HistoryBuilder) AddChildWorkflowExecutionTimedOutEvent(
 	initiatedID int64,
-	startedID int64,
+	startedEventID int64,
 	targetNamespace namespace.Name,
 	targetNamespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
@@ -1015,7 +1015,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionTimedOutEvent(
 	event.Attributes = &historypb.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{
 		ChildWorkflowExecutionTimedOutEventAttributes: &historypb.ChildWorkflowExecutionTimedOutEventAttributes{
 			InitiatedEventId:  initiatedID,
-			StartedEventId:    startedID,
+			StartedEventId:    startedEventID,
 			Namespace:         targetNamespace.String(),
 			NamespaceId:       targetNamespaceID.String(),
 			WorkflowExecution: execution,
@@ -1053,7 +1053,7 @@ func (b *HistoryBuilder) NextEventID() int64 {
 
 func (b *HistoryBuilder) FlushBufferToCurrentBatch() map[int64]int64 {
 	if len(b.dbBufferBatch) == 0 && len(b.memBufferBatch) == 0 {
-		return b.scheduleIDToStartedID
+		return b.scheduledIDToStartedID
 	}
 
 	b.assertMutable()
@@ -1065,7 +1065,7 @@ func (b *HistoryBuilder) FlushBufferToCurrentBatch() map[int64]int64 {
 		// above will generate 2 then 1
 		b.dbBufferBatch = nil
 		b.memBufferBatch = nil
-		return b.scheduleIDToStartedID
+		return b.scheduledIDToStartedID
 	}
 
 	b.dbClearBuffer = b.dbClearBuffer || len(b.dbBufferBatch) > 0
@@ -1088,7 +1088,7 @@ func (b *HistoryBuilder) FlushBufferToCurrentBatch() map[int64]int64 {
 
 	b.memLatestBatch = append(b.memLatestBatch, bufferBatch...)
 
-	return b.scheduleIDToStartedID
+	return b.scheduledIDToStartedID
 }
 
 func (b *HistoryBuilder) FlushAndCreateNewBatch() {
@@ -1118,25 +1118,25 @@ func (b *HistoryBuilder) Finish(
 	dbBufferBatch := b.memBufferBatch
 	memBufferBatch := b.dbBufferBatch
 	memBufferBatch = append(memBufferBatch, dbBufferBatch...)
-	scheduleIDToStartedID := b.scheduleIDToStartedID
+	scheduledIDToStartedID := b.scheduledIDToStartedID
 
 	b.memEventsBatches = nil
 	b.memBufferBatch = nil
 	b.memLatestBatch = nil
 	b.dbClearBuffer = false
 	b.dbBufferBatch = nil
-	b.scheduleIDToStartedID = nil
+	b.scheduledIDToStartedID = nil
 
 	if err := b.assignTaskIDs(dbEventsBatches); err != nil {
 		return nil, err
 	}
 
 	return &HistoryMutation{
-		DBEventsBatches:     dbEventsBatches,
-		DBClearBuffer:       dbClearBuffer,
-		DBBufferBatch:       dbBufferBatch,
-		MemBufferBatch:      memBufferBatch,
-		ScheduleIDToStartID: scheduleIDToStartedID,
+		DBEventsBatches:        dbEventsBatches,
+		DBClearBuffer:          dbClearBuffer,
+		DBBufferBatch:          dbBufferBatch,
+		MemBufferBatch:         memBufferBatch,
+		ScheduledIDToStartedID: scheduledIDToStartedID,
 	}, nil
 }
 
@@ -1286,57 +1286,57 @@ func (b *HistoryBuilder) wireEventIDs(
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
 			attributes := event.GetActivityTaskStartedEventAttributes()
-			scheduledID := attributes.GetScheduledEventId()
-			b.scheduleIDToStartedID[scheduledID] = event.GetEventId()
+			scheduledEventID := attributes.GetScheduledEventId()
+			b.scheduledIDToStartedID[scheduledEventID] = event.GetEventId()
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
 			attributes := event.GetActivityTaskCompletedEventAttributes()
-			if startedID, ok := b.scheduleIDToStartedID[attributes.GetScheduledEventId()]; ok {
-				attributes.StartedEventId = startedID
+			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetScheduledEventId()]; ok {
+				attributes.StartedEventId = startedEventID
 			}
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
 			attributes := event.GetActivityTaskFailedEventAttributes()
-			if startedID, ok := b.scheduleIDToStartedID[attributes.GetScheduledEventId()]; ok {
-				attributes.StartedEventId = startedID
+			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetScheduledEventId()]; ok {
+				attributes.StartedEventId = startedEventID
 			}
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
 			attributes := event.GetActivityTaskTimedOutEventAttributes()
-			if startedID, ok := b.scheduleIDToStartedID[attributes.GetScheduledEventId()]; ok {
-				attributes.StartedEventId = startedID
+			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetScheduledEventId()]; ok {
+				attributes.StartedEventId = startedEventID
 			}
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
 			attributes := event.GetActivityTaskCanceledEventAttributes()
-			if startedID, ok := b.scheduleIDToStartedID[attributes.GetScheduledEventId()]; ok {
-				attributes.StartedEventId = startedID
+			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetScheduledEventId()]; ok {
+				attributes.StartedEventId = startedEventID
 			}
 
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
 			attributes := event.GetChildWorkflowExecutionStartedEventAttributes()
-			initiatedID := attributes.GetInitiatedEventId()
-			b.scheduleIDToStartedID[initiatedID] = event.GetEventId()
+			initiatedEventID := attributes.GetInitiatedEventId()
+			b.scheduledIDToStartedID[initiatedEventID] = event.GetEventId()
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
 			attributes := event.GetChildWorkflowExecutionCompletedEventAttributes()
-			if startedID, ok := b.scheduleIDToStartedID[attributes.GetInitiatedEventId()]; ok {
-				attributes.StartedEventId = startedID
+			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
+				attributes.StartedEventId = startedEventID
 			}
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
 			attributes := event.GetChildWorkflowExecutionFailedEventAttributes()
-			if startedID, ok := b.scheduleIDToStartedID[attributes.GetInitiatedEventId()]; ok {
-				attributes.StartedEventId = startedID
+			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
+				attributes.StartedEventId = startedEventID
 			}
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
 			attributes := event.GetChildWorkflowExecutionTimedOutEventAttributes()
-			if startedID, ok := b.scheduleIDToStartedID[attributes.GetInitiatedEventId()]; ok {
-				attributes.StartedEventId = startedID
+			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
+				attributes.StartedEventId = startedEventID
 			}
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
 			attributes := event.GetChildWorkflowExecutionCanceledEventAttributes()
-			if startedID, ok := b.scheduleIDToStartedID[attributes.GetInitiatedEventId()]; ok {
-				attributes.StartedEventId = startedID
+			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
+				attributes.StartedEventId = startedEventID
 			}
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
 			attributes := event.GetChildWorkflowExecutionTerminatedEventAttributes()
-			if startedID, ok := b.scheduleIDToStartedID[attributes.GetInitiatedEventId()]; ok {
-				attributes.StartedEventId = startedID
+			if startedEventID, ok := b.scheduledIDToStartedID[attributes.GetInitiatedEventId()]; ok {
+				attributes.StartedEventId = startedEventID
 			}
 		}
 	}
@@ -1373,23 +1373,23 @@ func (b *HistoryBuilder) reorderBuffer(
 }
 
 func (b *HistoryBuilder) HasActivityFinishEvent(
-	scheduleID int64,
+	scheduledEventID int64,
 ) bool {
 
-	if hasActivityFinishEvent(scheduleID, b.dbBufferBatch) {
+	if hasActivityFinishEvent(scheduledEventID, b.dbBufferBatch) {
 		return true
 	}
 
-	if hasActivityFinishEvent(scheduleID, b.memBufferBatch) {
+	if hasActivityFinishEvent(scheduledEventID, b.memBufferBatch) {
 		return true
 	}
 
-	if hasActivityFinishEvent(scheduleID, b.memLatestBatch) {
+	if hasActivityFinishEvent(scheduledEventID, b.memLatestBatch) {
 		return true
 	}
 
 	for _, batch := range b.memEventsBatches {
-		if hasActivityFinishEvent(scheduleID, batch) {
+		if hasActivityFinishEvent(scheduledEventID, batch) {
 			return true
 		}
 	}
@@ -1398,28 +1398,28 @@ func (b *HistoryBuilder) HasActivityFinishEvent(
 }
 
 func hasActivityFinishEvent(
-	scheduleID int64,
+	scheduledEventID int64,
 	events []*historypb.HistoryEvent,
 ) bool {
 	for _, event := range events {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
-			if event.GetActivityTaskCompletedEventAttributes().GetScheduledEventId() == scheduleID {
+			if event.GetActivityTaskCompletedEventAttributes().GetScheduledEventId() == scheduledEventID {
 				return true
 			}
 
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
-			if event.GetActivityTaskFailedEventAttributes().GetScheduledEventId() == scheduleID {
+			if event.GetActivityTaskFailedEventAttributes().GetScheduledEventId() == scheduledEventID {
 				return true
 			}
 
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
-			if event.GetActivityTaskTimedOutEventAttributes().GetScheduledEventId() == scheduleID {
+			if event.GetActivityTaskTimedOutEventAttributes().GetScheduledEventId() == scheduledEventID {
 				return true
 			}
 
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
-			if event.GetActivityTaskCanceledEventAttributes().GetScheduledEventId() == scheduleID {
+			if event.GetActivityTaskCanceledEventAttributes().GetScheduledEventId() == scheduledEventID {
 				return true
 			}
 		}
