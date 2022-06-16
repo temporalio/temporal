@@ -31,6 +31,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"text/template"
 
 	"go.temporal.io/api/workflowservice/v1"
 	"golang.org/x/exp/slices"
@@ -140,13 +141,11 @@ func writeCopyright(w io.Writer) {
 }
 
 func writeTemplatedCode(w io.Writer, service service, text string) {
-	sType := service.clientType.Elem()
-
-	text = strings.Replace(text, "{SERVICENAME}", service.name, -1)
-	text = strings.Replace(text, "{SERVICETYPE}", sType.String(), -1)
-	text = strings.Replace(text, "{SERVICEPKGPATH}", sType.PkgPath(), -1)
-
-	w.Write([]byte(text))
+	t := template.Must(template.New("code").Parse(text))
+	t.Execute(w, map[string]string{
+		"ServiceName":        service.name,
+		"ServicePackagePath": service.clientType.Elem().PkgPath(),
+	})
 }
 
 func pathToField(t reflect.Type, name string, path string, maxDepth int) string {
@@ -168,7 +167,7 @@ func pathToField(t reflect.Type, name string, path string, maxDepth int) string 
 	return ""
 }
 
-func makeGetHistoryClientMagic(reqType reflect.Type) string {
+func makeGetHistoryClient(reqType reflect.Type) string {
 	// this magically figures out how to get a HistoryServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
 	if path := pathToField(t, "ShardId", "request", 1); path != "" {
@@ -190,11 +189,10 @@ func makeGetHistoryClientMagic(reqType reflect.Type) string {
 		return fmt.Sprintf(`// All workflow IDs are in the same shard per request
 	client, err := c.getClientForWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, path, path)
 	}
-
 	panic("I don't know how to get a client from a " + t.String())
 }
 
-func makeGetMatchingClientMagic(reqType reflect.Type) string {
+func makeGetMatchingClient(reqType reflect.Type) string {
 	// this magically figures out how to get a MatchingServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
 	if path := pathToField(t, "TaskQueue", "request", 2); path != "" {
@@ -210,7 +208,6 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 	}
 
 	mt := m.Type // should look like: func(context.Context, request reqType, opts []grpc.CallOption) (respType, error)
-
 	if !mt.IsVariadic() ||
 		mt.NumIn() != 3 ||
 		mt.NumOut() != 2 ||
@@ -222,33 +219,28 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 	reqType := mt.In(1)
 	respType := mt.Out(0)
 
-	longPoll := ""
+	fields := map[string]string{
+		"Method":       m.Name,
+		"RequestType":  reqType.String(),
+		"ResponseType": respType.String(),
+		"MetricPrefix": fmt.Sprintf("%s%sClient", strings.ToUpper(service.name[:1]), service.name[1:]),
+	}
 	if longPollContext[key] {
-		longPoll = "LongPoll"
+		fields["LongPoll"] = "LongPoll"
 	}
-	withLargeTimeout := ""
 	if largeTimeoutContext[key] {
-		withLargeTimeout = "WithLargeTimeout"
+		fields["WithLargeTimeout"] = "WithLargeTimeout"
 	}
-	metricPrefix := fmt.Sprintf("%s%sClient", strings.ToUpper(service.name[:1]), service.name[1:])
-	getClientMagic := ""
 	if impl == "client" {
 		if service.name == "history" {
-			getClientMagic = makeGetHistoryClientMagic(reqType)
+			fields["GetClient"] = makeGetHistoryClient(reqType)
 		} else if service.name == "matching" {
-			getClientMagic = makeGetMatchingClientMagic(reqType)
+			fields["GetClient"] = makeGetMatchingClient(reqType)
 		}
 	}
 
-	text = strings.Replace(text, "{METHOD}", m.Name, -1)
-	text = strings.Replace(text, "{REQT}", reqType.String(), -1)
-	text = strings.Replace(text, "{RESPT}", respType.String(), -1)
-	text = strings.Replace(text, "{LONGPOLL}", longPoll, -1)
-	text = strings.Replace(text, "{WITHLARGETIMEOUT}", withLargeTimeout, -1)
-	text = strings.Replace(text, "{METRICPREFIX}", metricPrefix, -1)
-	text = strings.Replace(text, "{GETCLIENTMAGIC}", getClientMagic, -1)
-
-	w.Write([]byte(text))
+	t := template.Must(template.New("code").Parse(text))
+	t.Execute(w, fields)
 }
 
 func writeTemplatedMethods(w io.Writer, service service, impl string, text string) {
@@ -262,29 +254,29 @@ func generateFrontendOrAdminClient(w io.Writer, service service) {
 	writeCopyright(w)
 
 	writeTemplatedCode(w, service, `
-package {SERVICENAME}
+package {{.ServiceName}}
 
 import (
 	"context"
 
-	"{SERVICEPKGPATH}"
+	"{{.ServicePackagePath}}"
 	"google.golang.org/grpc"
 )
 `)
 
 	writeTemplatedMethods(w, service, "client", `
-func (c *clientImpl) {METHOD}(
+func (c *clientImpl) {{.Method}}(
 	ctx context.Context,
-	request {REQT},
+	request {{.RequestType}},
 	opts ...grpc.CallOption,
-) ({RESPT}, error) {
+) ({{.ResponseType}}, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.create{LONGPOLL}Context{WITHLARGETIMEOUT}(ctx)
+	ctx, cancel := c.create{{or .LongPoll ""}}Context{{or .WithLargeTimeout ""}}(ctx)
 	defer cancel()
-	return client.{METHOD}(ctx, request, opts...)
+	return client.{{.Method}}(ctx, request, opts...)
 }
 `)
 }
@@ -293,32 +285,32 @@ func generateHistoryClient(w io.Writer, service service) {
 	writeCopyright(w)
 
 	writeTemplatedCode(w, service, `
-package {SERVICENAME}
+package {{.ServiceName}}
 
 import (
 	"context"
 
-	"{SERVICEPKGPATH}"
+	"{{.ServicePackagePath}}"
 	"google.golang.org/grpc"
 )
 `)
 
 	writeTemplatedMethods(w, service, "client", `
-func (c *clientImpl) {METHOD}(
+func (c *clientImpl) {{.Method}}(
 	ctx context.Context,
-	request {REQT},
+	request {{.RequestType}},
 	opts ...grpc.CallOption,
-) ({RESPT}, error) {
-	{GETCLIENTMAGIC}
+) ({{.ResponseType}}, error) {
+	{{.GetClient}}
 	if err != nil {
 		return nil, err
 	}
-	var response {RESPT}
+	var response {{.ResponseType}}
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
-		response, err = client.{METHOD}(ctx, request, opts...)
+		response, err = client.{{.Method}}(ctx, request, opts...)
 		return err
 	}
 	err = c.executeWithRedirect(ctx, client, op)
@@ -328,7 +320,7 @@ func (c *clientImpl) {METHOD}(
 	return response, nil
 }
 `)
-	// TODO: some methods call client.{METHOD} directly and do not use executeWithRedirect. should we preserve this?
+	// TODO: some methods call client.{{.Method}} directly and do not use executeWithRedirect. should we preserve this?
 	// GetDLQReplicationMessages
 	// GetDLQMessages
 	// PurgeDLQMessages
@@ -339,30 +331,30 @@ func generateMatchingClient(w io.Writer, service service) {
 	writeCopyright(w)
 
 	writeTemplatedCode(w, service, `
-package {SERVICENAME}
+package {{.ServiceName}}
 
 import (
 	"context"
 
-	"{SERVICEPKGPATH}"
+	"{{.ServicePackagePath}}"
 	"google.golang.org/grpc"
 )
 `)
 
 	writeTemplatedMethods(w, service, "client", `
-func (c *clientImpl) {METHOD}(
+func (c *clientImpl) {{.Method}}(
 	ctx context.Context,
-	request {REQT},
+	request {{.RequestType}},
 	opts ...grpc.CallOption,
-) ({RESPT}, error) {
+) ({{.ResponseType}}, error) {
 
-	{GETCLIENTMAGIC}
+	{{.GetClient}}
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.{METHOD}(ctx, request, opts...)
+	return client.{{.Method}}(ctx, request, opts...)
 }
 `)
 }
@@ -371,12 +363,12 @@ func generateFrontendOrAdminMetricClient(w io.Writer, service service) {
 	writeCopyright(w)
 
 	writeTemplatedCode(w, service, `
-package {SERVICENAME}
+package {{.ServiceName}}
 
 import (
 	"context"
 
-	"{SERVICEPKGPATH}"
+	"{{.ServicePackagePath}}"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/metrics"
@@ -384,20 +376,20 @@ import (
 `)
 
 	writeTemplatedMethods(w, service, "metricsClient", `
-func (c *metricClient) {METHOD}(
+func (c *metricClient) {{.Method}}(
 	ctx context.Context,
-	request {REQT},
+	request {{.RequestType}},
 	opts ...grpc.CallOption,
-) ({RESPT}, error) {
+) ({{.ResponseType}}, error) {
 
-	c.metricsClient.IncCounter(metrics.{METRICPREFIX}{METHOD}Scope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.{{.MetricPrefix}}{{.Method}}Scope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.{METRICPREFIX}{METHOD}Scope, metrics.ClientLatency)
-	resp, err := c.client.{METHOD}(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.{{.MetricPrefix}}{{.Method}}Scope, metrics.ClientLatency)
+	resp, err := c.client.{{.Method}}(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.{METRICPREFIX}{METHOD}Scope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.{{.MetricPrefix}}{{.Method}}Scope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -408,12 +400,12 @@ func generateHistoryOrMatchingMetricClient(w io.Writer, service service) {
 	writeCopyright(w)
 
 	writeTemplatedCode(w, service, `
-package {SERVICENAME}
+package {{.ServiceName}}
 
 import (
 	"context"
 
-	"{SERVICEPKGPATH}"
+	"{{.ServicePackagePath}}"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/metrics"
@@ -421,18 +413,18 @@ import (
 `)
 
 	writeTemplatedMethods(w, service, "metricsClient", `
-func (c *metricClient) {METHOD}(
+func (c *metricClient) {{.Method}}(
 	ctx context.Context,
-	request {REQT},
+	request {{.RequestType}},
 	opts ...grpc.CallOption,
-) (_ {RESPT}, retError error) {
+) (_ {{.ResponseType}}, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.{METRICPREFIX}{METHOD}Scope)
+	scope, stopwatch := c.startMetricsRecording(metrics.{{.MetricPrefix}}{{.Method}}Scope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
 
-	return c.client.{METHOD}(ctx, request, opts...)
+	return c.client.{{.Method}}(ctx, request, opts...)
 }
 `)
 	// TODO: some history methods did not touch metrics. should we preserve this?
@@ -450,12 +442,12 @@ func generateRetryableClient(w io.Writer, service service) {
 	writeCopyright(w)
 
 	writeTemplatedCode(w, service, `
-package {SERVICENAME}
+package {{.ServiceName}}
 
 import (
 	"context"
 
-	"{SERVICEPKGPATH}"
+	"{{.ServicePackagePath}}"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/backoff"
@@ -463,15 +455,15 @@ import (
 `)
 
 	writeTemplatedMethods(w, service, "retryableClient", `
-func (c *retryableClient) {METHOD}(
+func (c *retryableClient) {{.Method}}(
 	ctx context.Context,
-	request {REQT},
+	request {{.RequestType}},
 	opts ...grpc.CallOption,
-) ({RESPT}, error) {
-	var resp {RESPT}
+) ({{.ResponseType}}, error) {
+	var resp {{.ResponseType}}
 	op := func() error {
 		var err error
-		resp, err = c.client.{METHOD}(ctx, request, opts...)
+		resp, err = c.client.{{.Method}}(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
