@@ -52,7 +52,7 @@ type clientImpl struct {
 	loadBalancer    LoadBalancer
 }
 
-// NewClient creates a new history service TChannel client
+// NewClient creates a new history service gRPC client
 func NewClient(
 	timeout time.Duration,
 	longPollTimeout time.Duration,

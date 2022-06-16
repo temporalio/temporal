@@ -160,103 +160,10 @@ package {SERVICENAME}
 
 import (
 	"context"
-	"time"
 
-	"github.com/pborman/uuid"
 	"{SERVICEPKGPATH}"
 	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common"
 )
-`)
-
-	if service.name == "frontend" {
-		writeTemplatedCode(w, service, `
-const (
-	// DefaultTimeout is the default timeout used to make calls
-	DefaultTimeout = 10 * time.Second
-	// DefaultLongPollTimeout is the long poll default timeout used to make calls
-	DefaultLongPollTimeout = time.Minute * 3
-)
-
-var _ {SERVICETYPE} = (*clientImpl)(nil)
-
-type clientImpl struct {
-	timeout         time.Duration
-	longPollTimeout time.Duration
-	clients         common.ClientCache
-}
-
-// NewClient creates a new frontend service gRPC client
-func NewClient(
-	timeout time.Duration,
-	longPollTimeout time.Duration,
-	clients common.ClientCache,
-) {SERVICETYPE} {
-	return &clientImpl{
-		timeout:         timeout,
-		longPollTimeout: longPollTimeout,
-		clients:         clients,
-	}
-}
-
-func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(parent, c.longPollTimeout)
-}
-`)
-	} else if service.name == "admin" {
-		writeTemplatedCode(w, service, `
-const (
-	// DefaultTimeout is the default timeout used to make calls
-	DefaultTimeout = 10 * time.Second
-	// DefaultLargeTimeout is the default timeout used to make calls
-	DefaultLargeTimeout = time.Minute
-)
-
-var _ {SERVICETYPE} = (*clientImpl)(nil)
-
-type clientImpl struct {
-	timeout      time.Duration
-	largeTimeout time.Duration
-	clients      common.ClientCache
-}
-
-// NewClient creates a new admin service gRPC client
-func NewClient(
-	timeout time.Duration,
-	largeTimeout time.Duration,
-	clients common.ClientCache,
-) {SERVICETYPE} {
-	return &clientImpl{
-		timeout:      timeout,
-		largeTimeout: largeTimeout,
-		clients:      clients,
-	}
-}
-
-func (c *clientImpl) createContextWithLargeTimeout(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		return context.WithTimeout(context.Background(), c.largeTimeout)
-	}
-	return context.WithTimeout(parent, c.largeTimeout)
-}
-`)
-	}
-
-	writeTemplatedCode(w, service, `
-func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(parent, c.timeout)
-}
-
-func (c *clientImpl) getRandomClient() ({SERVICETYPE}, error) {
-	// generate a random shard key to do load balancing
-	key := uuid.New()
-	client, err := c.clients.GetClientForKey(key)
-	if err != nil {
-		return nil, err
-	}
-	return client.({SERVICETYPE}), nil
-}
 `)
 
 	writeTemplatedMethods(w, service, `
@@ -290,21 +197,6 @@ import (
 
 	"go.temporal.io/server/common/metrics"
 )
-
-var _ {SERVICETYPE} = (*metricClient)(nil)
-
-type metricClient struct {
-	client        {SERVICETYPE}
-	metricsClient metrics.Client
-}
-
-// NewMetricClient creates a new instance of {SERVICETYPE} that emits metrics
-func NewMetricClient(client {SERVICETYPE}, metricsClient metrics.Client) {SERVICETYPE} {
-	return &metricClient{
-		client:        client,
-		metricsClient: metricsClient,
-	}
-}
 `)
 
 	writeTemplatedMethods(w, service, `
@@ -342,23 +234,6 @@ import (
 
 	"go.temporal.io/server/common/backoff"
 )
-
-var _ {SERVICETYPE} = (*retryableClient)(nil)
-
-type retryableClient struct {
-	client      {SERVICETYPE}
-	policy      backoff.RetryPolicy
-	isRetryable backoff.IsRetryable
-}
-
-// NewRetryableClient creates a new instance of {SERVICETYPE} with retry policy
-func NewRetryableClient(client {SERVICETYPE}, policy backoff.RetryPolicy, isRetryable backoff.IsRetryable) {SERVICETYPE} {
-	return &retryableClient{
-		client:      client,
-		policy:      policy,
-		isRetryable: isRetryable,
-	}
-}
 `)
 
 	writeTemplatedMethods(w, service, `
@@ -380,7 +255,7 @@ func (c *retryableClient) {METHOD}(
 }
 
 func callWithFile(f func(io.Writer, service), service service, filename string) {
-	file, err := os.Create(fmt.Sprintf("client/%s/%s.go", service.name, filename))
+	file, err := os.Create(fmt.Sprintf("client/%s/%s_gen.go", service.name, filename))
 	if err != nil {
 		panic(err)
 	}

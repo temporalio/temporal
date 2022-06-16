@@ -29,11 +29,12 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.temporal.io/server/api/adminservice/v1"
-	"google.golang.org/grpc"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 )
+
+var _ adminservice.AdminServiceClient = (*clientImpl)(nil)
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
@@ -41,8 +42,6 @@ const (
 	// DefaultLargeTimeout is the default timeout used to make calls
 	DefaultLargeTimeout = time.Minute
 )
-
-var _ adminservice.AdminServiceClient = (*clientImpl)(nil)
 
 type clientImpl struct {
 	timeout      time.Duration
@@ -63,15 +62,15 @@ func NewClient(
 	}
 }
 
+func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, c.timeout)
+}
+
 func (c *clientImpl) createContextWithLargeTimeout(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		return context.WithTimeout(context.Background(), c.largeTimeout)
 	}
 	return context.WithTimeout(parent, c.largeTimeout)
-}
-
-func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(parent, c.timeout)
 }
 
 func (c *clientImpl) getRandomClient() (adminservice.AdminServiceClient, error) {
@@ -81,383 +80,6 @@ func (c *clientImpl) getRandomClient() (adminservice.AdminServiceClient, error) 
 	if err != nil {
 		return nil, err
 	}
+
 	return client.(adminservice.AdminServiceClient), nil
-}
-
-func (c *clientImpl) AddOrUpdateRemoteCluster(
-	ctx context.Context,
-	request *adminservice.AddOrUpdateRemoteClusterRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.AddOrUpdateRemoteCluster(ctx, request, opts...)
-}
-
-func (c *clientImpl) AddSearchAttributes(
-	ctx context.Context,
-	request *adminservice.AddSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.AddSearchAttributesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.AddSearchAttributes(ctx, request, opts...)
-}
-
-func (c *clientImpl) CloseShard(
-	ctx context.Context,
-	request *adminservice.CloseShardRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.CloseShardResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.CloseShard(ctx, request, opts...)
-}
-
-func (c *clientImpl) DeleteWorkflowExecution(
-	ctx context.Context,
-	request *adminservice.DeleteWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.DeleteWorkflowExecutionResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.DeleteWorkflowExecution(ctx, request, opts...)
-}
-
-func (c *clientImpl) DescribeCluster(
-	ctx context.Context,
-	request *adminservice.DescribeClusterRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.DescribeClusterResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.DescribeCluster(ctx, request, opts...)
-}
-
-func (c *clientImpl) DescribeHistoryHost(
-	ctx context.Context,
-	request *adminservice.DescribeHistoryHostRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.DescribeHistoryHostResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.DescribeHistoryHost(ctx, request, opts...)
-}
-
-func (c *clientImpl) DescribeMutableState(
-	ctx context.Context,
-	request *adminservice.DescribeMutableStateRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.DescribeMutableStateResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.DescribeMutableState(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetDLQMessages(
-	ctx context.Context,
-	request *adminservice.GetDLQMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetDLQMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetDLQMessages(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetDLQReplicationMessages(
-	ctx context.Context,
-	request *adminservice.GetDLQReplicationMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetDLQReplicationMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetDLQReplicationMessages(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetNamespaceReplicationMessages(
-	ctx context.Context,
-	request *adminservice.GetNamespaceReplicationMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetNamespaceReplicationMessages(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetReplicationMessages(
-	ctx context.Context,
-	request *adminservice.GetReplicationMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetReplicationMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContextWithLargeTimeout(ctx)
-	defer cancel()
-	return client.GetReplicationMessages(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetSearchAttributes(
-	ctx context.Context,
-	request *adminservice.GetSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetSearchAttributesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetSearchAttributes(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetShard(
-	ctx context.Context,
-	request *adminservice.GetShardRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetShardResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetShard(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetTaskQueueTasks(
-	ctx context.Context,
-	request *adminservice.GetTaskQueueTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetTaskQueueTasksResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetTaskQueueTasks(ctx, request, opts...)
-}
-
-func (c *clientImpl) GetWorkflowExecutionRawHistoryV2(
-	ctx context.Context,
-	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
-	opts ...grpc.CallOption,
-) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
-}
-
-func (c *clientImpl) ListClusterMembers(
-	ctx context.Context,
-	request *adminservice.ListClusterMembersRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ListClusterMembersResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.ListClusterMembers(ctx, request, opts...)
-}
-
-func (c *clientImpl) ListClusters(
-	ctx context.Context,
-	request *adminservice.ListClustersRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ListClustersResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.ListClusters(ctx, request, opts...)
-}
-
-func (c *clientImpl) ListHistoryTasks(
-	ctx context.Context,
-	request *adminservice.ListHistoryTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ListHistoryTasksResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.ListHistoryTasks(ctx, request, opts...)
-}
-
-func (c *clientImpl) MergeDLQMessages(
-	ctx context.Context,
-	request *adminservice.MergeDLQMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.MergeDLQMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.MergeDLQMessages(ctx, request, opts...)
-}
-
-func (c *clientImpl) PurgeDLQMessages(
-	ctx context.Context,
-	request *adminservice.PurgeDLQMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.PurgeDLQMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.PurgeDLQMessages(ctx, request, opts...)
-}
-
-func (c *clientImpl) ReapplyEvents(
-	ctx context.Context,
-	request *adminservice.ReapplyEventsRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ReapplyEventsResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.ReapplyEvents(ctx, request, opts...)
-}
-
-func (c *clientImpl) RebuildMutableState(
-	ctx context.Context,
-	request *adminservice.RebuildMutableStateRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RebuildMutableStateResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.RebuildMutableState(ctx, request, opts...)
-}
-
-func (c *clientImpl) RefreshWorkflowTasks(
-	ctx context.Context,
-	request *adminservice.RefreshWorkflowTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RefreshWorkflowTasksResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.RefreshWorkflowTasks(ctx, request, opts...)
-}
-
-func (c *clientImpl) RemoveRemoteCluster(
-	ctx context.Context,
-	request *adminservice.RemoveRemoteClusterRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RemoveRemoteClusterResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.RemoveRemoteCluster(ctx, request, opts...)
-}
-
-func (c *clientImpl) RemoveSearchAttributes(
-	ctx context.Context,
-	request *adminservice.RemoveSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RemoveSearchAttributesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.RemoveSearchAttributes(ctx, request, opts...)
-}
-
-func (c *clientImpl) RemoveTask(
-	ctx context.Context,
-	request *adminservice.RemoveTaskRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RemoveTaskResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.RemoveTask(ctx, request, opts...)
-}
-
-func (c *clientImpl) ResendReplicationTasks(
-	ctx context.Context,
-	request *adminservice.ResendReplicationTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ResendReplicationTasksResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.ResendReplicationTasks(ctx, request, opts...)
 }
