@@ -32,25 +32,29 @@ import (
 	"strings"
 
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 )
 
 type (
 	service struct {
-		name    string
-		service reflect.Type
+		name         string
+		metricPrefix string
+		service      reflect.Type
 	}
 )
 
 var (
 	services = []service{
 		service{
-			name:    "frontend",
-			service: reflect.TypeOf((*workflowservice.WorkflowServiceClient)(nil)),
+			name:         "frontend",
+			metricPrefix: "FrontendClient",
+			service:      reflect.TypeOf((*workflowservice.WorkflowServiceClient)(nil)),
 		},
-		// service{
-		// 	name:    "admin",
-		// 	service: reflect.TypeOf((*adminservice.AdminServiceClient)(nil)),
-		// },
+		service{
+			name:         "admin",
+			metricPrefix: "AdminClient",
+			service:      reflect.TypeOf((*adminservice.AdminServiceClient)(nil)),
+		},
 		// service{
 		// 	name:    "history",
 		// 	service: reflect.TypeOf((*historyservice.HistoryServiceClient)(nil)),
@@ -65,6 +69,9 @@ var (
 		"ListArchivedWorkflowExecutions": true,
 		"PollActivityTaskQueue":          true,
 		"PollWorkflowTaskQueue":          true,
+	}
+	largeTimeoutContext = map[string]bool{
+		"GetReplicationMessages": true,
 	}
 )
 
@@ -95,7 +102,17 @@ func copyright(w io.Writer) {
 `)
 }
 
-func writeTemplatedMethod(w io.Writer, m reflect.Method, text string) {
+func writeTemplatedCode(w io.Writer, service service, text string) {
+	sType := service.service.Elem()
+
+	text = strings.Replace(text, "{SERVICENAME}", service.name, -1)
+	text = strings.Replace(text, "{SERVICETYPE}", sType.String(), -1)
+	text = strings.Replace(text, "{SERVICEPKGPATH}", sType.PkgPath(), -1)
+
+	w.Write([]byte(text))
+}
+
+func writeTemplatedMethod(w io.Writer, service service, m reflect.Method, text string) {
 	mt := m.Type // should look like: func(context.Context, request reqt, opts []grpc.CallOption) (respt, error)
 
 	if !mt.IsVariadic() ||
@@ -104,48 +121,55 @@ func writeTemplatedMethod(w io.Writer, m reflect.Method, text string) {
 		panic("bad method")
 	}
 
-	reqT := mt.In(1)
-	respT := mt.Out(0)
+	reqType := mt.In(1)
+	respType := mt.Out(0)
 
 	longPoll := ""
 	if longPollContext[m.Name] {
 		longPoll = "LongPoll"
 	}
+	withLargeTimeout := ""
+	if largeTimeoutContext[m.Name] {
+		withLargeTimeout = "WithLargeTimeout"
+	}
 
 	text = strings.Replace(text, "{METHOD}", m.Name, -1)
-	text = strings.Replace(text, "{REQT}", reqT.String(), -1)
-	text = strings.Replace(text, "{RESPT}", respT.String(), -1)
+	text = strings.Replace(text, "{REQT}", reqType.String(), -1)
+	text = strings.Replace(text, "{RESPT}", respType.String(), -1)
 	text = strings.Replace(text, "{LONGPOLL}", longPoll, -1)
+	text = strings.Replace(text, "{WITHLARGETIMEOUT}", withLargeTimeout, -1)
+	text = strings.Replace(text, "{METRICPREFIX}", service.metricPrefix, -1)
 
 	w.Write([]byte(text))
 }
 
 func writeTemplatedMethods(w io.Writer, service service, text string) {
-	s := service.service.Elem()
-	for n := 0; n < s.NumMethod(); n++ {
-		writeTemplatedMethod(w, s.Method(n), text)
+	sType := service.service.Elem()
+	for n := 0; n < sType.NumMethod(); n++ {
+		writeTemplatedMethod(w, service, sType.Method(n), text)
 	}
 }
 
 func generateClient(w io.Writer, service service) {
 	copyright(w)
 
-	fmt.Fprintf(w, `
-package %s
-`, service.name)
+	writeTemplatedCode(w, service, `
+package {SERVICENAME}
 
-	fmt.Fprintf(w, `
 import (
 	"context"
 	"time"
 
 	"github.com/pborman/uuid"
-	"go.temporal.io/api/workflowservice/v1"
+	"{SERVICEPKGPATH}"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common"
 )
+`)
 
+	if service.name == "frontend" {
+		writeTemplatedCode(w, service, `
 const (
 	// DefaultTimeout is the default timeout used to make calls
 	DefaultTimeout = 10 * time.Second
@@ -153,7 +177,7 @@ const (
 	DefaultLongPollTimeout = time.Minute * 3
 )
 
-var _ workflowservice.WorkflowServiceClient = (*clientImpl)(nil)
+var _ {SERVICETYPE} = (*clientImpl)(nil)
 
 type clientImpl struct {
 	timeout         time.Duration
@@ -166,7 +190,7 @@ func NewClient(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 	clients common.ClientCache,
-) workflowservice.WorkflowServiceClient {
+) {SERVICETYPE} {
 	return &clientImpl{
 		timeout:         timeout,
 		longPollTimeout: longPollTimeout,
@@ -174,23 +198,62 @@ func NewClient(
 	}
 }
 
+func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, c.longPollTimeout)
+}
+`)
+	} else if service.name == "admin" {
+		writeTemplatedCode(w, service, `
+const (
+	// DefaultTimeout is the default timeout used to make calls
+	DefaultTimeout = 10 * time.Second
+	// DefaultLargeTimeout is the default timeout used to make calls
+	DefaultLargeTimeout = time.Minute
+)
+
+var _ {SERVICETYPE} = (*clientImpl)(nil)
+
+type clientImpl struct {
+	timeout      time.Duration
+	largeTimeout time.Duration
+	clients      common.ClientCache
+}
+
+// NewClient creates a new admin service gRPC client
+func NewClient(
+	timeout time.Duration,
+	largeTimeout time.Duration,
+	clients common.ClientCache,
+) {SERVICETYPE} {
+	return &clientImpl{
+		timeout:      timeout,
+		largeTimeout: largeTimeout,
+		clients:      clients,
+	}
+}
+
+func (c *clientImpl) createContextWithLargeTimeout(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		return context.WithTimeout(context.Background(), c.largeTimeout)
+	}
+	return context.WithTimeout(parent, c.largeTimeout)
+}
+`)
+	}
+
+	writeTemplatedCode(w, service, `
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.timeout)
 }
 
-func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(parent, c.longPollTimeout)
-}
-
-func (c *clientImpl) getRandomClient() (workflowservice.WorkflowServiceClient, error) {
+func (c *clientImpl) getRandomClient() ({SERVICETYPE}, error) {
 	// generate a random shard key to do load balancing
 	key := uuid.New()
 	client, err := c.clients.GetClientForKey(key)
 	if err != nil {
 		return nil, err
 	}
-
-	return client.(workflowservice.WorkflowServiceClient), nil
+	return client.({SERVICETYPE}), nil
 }
 `)
 
@@ -204,7 +267,7 @@ func (c *clientImpl) {METHOD}(
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.create{LONGPOLL}Context(ctx)
+	ctx, cancel := c.create{LONGPOLL}Context{WITHLARGETIMEOUT}(ctx)
 	defer cancel()
 	return client.{METHOD}(ctx, request, opts...)
 }
@@ -214,29 +277,27 @@ func (c *clientImpl) {METHOD}(
 func generateMetricClient(w io.Writer, service service) {
 	copyright(w)
 
-	fmt.Fprintf(w, `
-package %s
-`, service.name)
+	writeTemplatedCode(w, service, `
+package {SERVICENAME}
 
-	fmt.Fprintf(w, `
 import (
 	"context"
 
-	"go.temporal.io/api/workflowservice/v1"
+	"{SERVICEPKGPATH}"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/metrics"
 )
 
-var _ workflowservice.WorkflowServiceClient = (*metricClient)(nil)
+var _ {SERVICETYPE} = (*metricClient)(nil)
 
 type metricClient struct {
-	client        workflowservice.WorkflowServiceClient
+	client        {SERVICETYPE}
 	metricsClient metrics.Client
 }
 
-// NewMetricClient creates a new instance of workflowservice.WorkflowServiceClient that emits metrics
-func NewMetricClient(client workflowservice.WorkflowServiceClient, metricsClient metrics.Client) workflowservice.WorkflowServiceClient {
+// NewMetricClient creates a new instance of {SERVICETYPE} that emits metrics
+func NewMetricClient(client {SERVICETYPE}, metricsClient metrics.Client) {SERVICETYPE} {
 	return &metricClient{
 		client:        client,
 		metricsClient: metricsClient,
@@ -251,14 +312,14 @@ func (c *metricClient) {METHOD}(
 	opts ...grpc.CallOption,
 ) ({RESPT}, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClient{METHOD}Scope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.{METRICPREFIX}{METHOD}Scope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClient{METHOD}Scope, metrics.ClientLatency)
+	sw := c.metricsClient.StartTimer(metrics.{METRICPREFIX}{METHOD}Scope, metrics.ClientLatency)
 	resp, err := c.client.{METHOD}(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClient{METHOD}Scope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.{METRICPREFIX}{METHOD}Scope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -268,30 +329,28 @@ func (c *metricClient) {METHOD}(
 func generateRetryableClient(w io.Writer, service service) {
 	copyright(w)
 
-	fmt.Fprintf(w, `
-package %s
-`, service.name)
+	writeTemplatedCode(w, service, `
+package {SERVICENAME}
 
-	fmt.Fprintf(w, `
 import (
 	"context"
 
-	"go.temporal.io/api/workflowservice/v1"
+	"{SERVICEPKGPATH}"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/backoff"
 )
 
-var _ workflowservice.WorkflowServiceClient = (*retryableClient)(nil)
+var _ {SERVICETYPE} = (*retryableClient)(nil)
 
 type retryableClient struct {
-	client      workflowservice.WorkflowServiceClient
+	client      {SERVICETYPE}
 	policy      backoff.RetryPolicy
 	isRetryable backoff.IsRetryable
 }
 
-// NewRetryableClient creates a new instance of workflowservice.WorkflowServiceClient with retry policy
-func NewRetryableClient(client workflowservice.WorkflowServiceClient, policy backoff.RetryPolicy, isRetryable backoff.IsRetryable) workflowservice.WorkflowServiceClient {
+// NewRetryableClient creates a new instance of {SERVICETYPE} with retry policy
+func NewRetryableClient(client {SERVICETYPE}, policy backoff.RetryPolicy, isRetryable backoff.IsRetryable) {SERVICETYPE} {
 	return &retryableClient{
 		client:      client,
 		policy:      policy,
