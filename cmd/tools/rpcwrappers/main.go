@@ -29,6 +29,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"strings"
 
 	"go.temporal.io/api/workflowservice/v1"
 )
@@ -61,9 +62,9 @@ var (
 	}
 
 	longPollContext = map[string]bool{
-		"frontend.ListArchivedWorkflowExecutions": true,
-		"frontend.PollActivityTaskQueue":          true,
-		"frontend.PollWorkflowTaskQueue":          true,
+		"ListArchivedWorkflowExecutions": true,
+		"PollActivityTaskQueue":          true,
+		"PollWorkflowTaskQueue":          true,
 	}
 )
 
@@ -94,11 +95,39 @@ func copyright(w io.Writer) {
 `)
 }
 
-func needsLongPollContext(service, method string) bool {
-	return longPollContext[service+"."+method]
+func writeTemplatedMethod(w io.Writer, m reflect.Method, text string) {
+	mt := m.Type // should look like: func(context.Context, request reqt, opts []grpc.CallOption) (respt, error)
+
+	if !mt.IsVariadic() ||
+		mt.NumIn() != 3 ||
+		mt.NumOut() != 2 {
+		panic("bad method")
+	}
+
+	reqT := mt.In(1)
+	respT := mt.Out(0)
+
+	longPoll := ""
+	if longPollContext[m.Name] {
+		longPoll = "LongPoll"
+	}
+
+	text = strings.Replace(text, "{METHOD}", m.Name, -1)
+	text = strings.Replace(text, "{REQT}", reqT.String(), -1)
+	text = strings.Replace(text, "{RESPT}", respT.String(), -1)
+	text = strings.Replace(text, "{LONGPOLL}", longPoll, -1)
+
+	w.Write([]byte(text))
 }
 
-func generateClient(service service, w io.Writer) {
+func writeTemplatedMethods(w io.Writer, service service, text string) {
+	s := service.service.Elem()
+	for n := 0; n < s.NumMethod(); n++ {
+		writeTemplatedMethod(w, s.Method(n), text)
+	}
+}
+
+func generateClient(w io.Writer, service service) {
 	copyright(w)
 
 	fmt.Fprintf(w, `
@@ -144,47 +173,7 @@ func NewClient(
 		clients:         clients,
 	}
 }
-`)
 
-	s := service.service.Elem()
-	for n := 0; n < s.NumMethod(); n++ {
-		m := s.Method(n)
-		mt := m.Type // func(context.Context, request reqt, opts []grpc.CallOption) (respt, error)
-		if !mt.IsVariadic() ||
-			mt.NumIn() != 3 ||
-			mt.NumOut() != 2 {
-			panic("bad method")
-		}
-		reqt := mt.In(1)
-		respt := mt.Out(0)
-		longPoll := ""
-		if needsLongPollContext(service.name, m.Name) {
-			longPoll = "LongPoll"
-		}
-		fmt.Fprintf(w, `
-func (c *clientImpl) %s(
-	ctx context.Context,
-	request %s,
-	opts ...grpc.CallOption,
-) (%s, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.create%sContext(ctx)
-	defer cancel()
-	return client.%s(ctx, request, opts...)
-}
-`,
-			m.Name,
-			reqt.String(),
-			respt.String(),
-			longPoll,
-			m.Name,
-		)
-	}
-
-	fmt.Fprintf(w, `
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.timeout)
 }
@@ -204,9 +193,25 @@ func (c *clientImpl) getRandomClient() (workflowservice.WorkflowServiceClient, e
 	return client.(workflowservice.WorkflowServiceClient), nil
 }
 `)
+
+	writeTemplatedMethods(w, service, `
+func (c *clientImpl) {METHOD}(
+	ctx context.Context,
+	request {REQT},
+	opts ...grpc.CallOption,
+) ({RESPT}, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.create{LONGPOLL}Context(ctx)
+	defer cancel()
+	return client.{METHOD}(ctx, request, opts...)
+}
+`)
 }
 
-func generateMetricClient(service service, w io.Writer) {
+func generateMetricClient(w io.Writer, service service) {
 	copyright(w)
 
 	fmt.Fprintf(w, `
@@ -239,48 +244,28 @@ func NewMetricClient(client workflowservice.WorkflowServiceClient, metricsClient
 }
 `)
 
-	s := service.service.Elem()
-	for n := 0; n < s.NumMethod(); n++ {
-		m := s.Method(n)
-		mt := m.Type // func(context.Context, request reqt, opts []grpc.CallOption) (respt, error)
-		if !mt.IsVariadic() ||
-			mt.NumIn() != 3 ||
-			mt.NumOut() != 2 {
-			panic("bad method")
-		}
-		reqt := mt.In(1)
-		respt := mt.Out(0)
-		fmt.Fprintf(w, `
-func (c *metricClient) %s(
+	writeTemplatedMethods(w, service, `
+func (c *metricClient) {METHOD}(
 	ctx context.Context,
-	request %s,
+	request {REQT},
 	opts ...grpc.CallOption,
-) (%s, error) {
+) ({RESPT}, error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClient%sScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.FrontendClient{METHOD}Scope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClient%sScope, metrics.ClientLatency)
-	resp, err := c.client.%s(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.FrontendClient{METHOD}Scope, metrics.ClientLatency)
+	resp, err := c.client.{METHOD}(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClient%sScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.FrontendClient{METHOD}Scope, metrics.ClientFailures)
 	}
 	return resp, err
 }
-`,
-			m.Name,
-			reqt.String(),
-			respt.String(),
-			m.Name,
-			m.Name,
-			m.Name,
-			m.Name,
-		)
-	}
+`)
 }
 
-func generateRetryableClient(service service, w io.Writer) {
+func generateRetryableClient(w io.Writer, service service) {
 	copyright(w)
 
 	fmt.Fprintf(w, `
@@ -315,48 +300,30 @@ func NewRetryableClient(client workflowservice.WorkflowServiceClient, policy bac
 }
 `)
 
-	s := service.service.Elem()
-	for n := 0; n < s.NumMethod(); n++ {
-		m := s.Method(n)
-		mt := m.Type // func(context.Context, request reqt, opts []grpc.CallOption) (respt, error)
-		if !mt.IsVariadic() ||
-			mt.NumIn() != 3 ||
-			mt.NumOut() != 2 {
-			panic("bad method")
-		}
-		reqt := mt.In(1)
-		respt := mt.Out(0)
-		fmt.Fprintf(w, `
-func (c *retryableClient) %s(
+	writeTemplatedMethods(w, service, `
+func (c *retryableClient) {METHOD}(
 	ctx context.Context,
-	request %s,
+	request {REQT},
 	opts ...grpc.CallOption,
-) (%s, error) {
-	var resp %s
+) ({RESPT}, error) {
+	var resp {RESPT}
 	op := func() error {
 		var err error
-		resp, err = c.client.%s(ctx, request, opts...)
+		resp, err = c.client.{METHOD}(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
-`,
-			m.Name,
-			reqt.String(),
-			respt.String(),
-			respt.String(),
-			m.Name,
-		)
-	}
+`)
 }
 
-func callWithFile(f func(service, io.Writer), service service, filename string) {
+func callWithFile(f func(io.Writer, service), service service, filename string) {
 	file, err := os.Create(fmt.Sprintf("client/%s/%s.go", service.name, filename))
 	if err != nil {
 		panic(err)
 	}
-	f(service, file)
+	f(file, service)
 	err = file.Close()
 	if err != nil {
 		panic(err)
