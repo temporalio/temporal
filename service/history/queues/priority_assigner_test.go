@@ -70,7 +70,7 @@ func (s *priorityAssignerSuite) SetupTest() {
 			HighPriorityRPS:       dynamicconfig.GetIntPropertyFilteredByNamespace(3),
 			CriticalRetryAttempts: dynamicconfig.GetIntPropertyFn(100),
 		},
-		metrics.NoopMetricProvider,
+		metrics.NoopMetricsHandler,
 	).(*priorityAssignerImpl)
 }
 

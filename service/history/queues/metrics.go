@@ -29,7 +29,7 @@ import (
 )
 
 // TODO: Following is a copy of existing metrics scope and name definition
-// for using the new MetricProvider interface. We should probably move them
+// for using the new MetricsHandler interface. We should probably move them
 // to a common place once all the metrics refactoring work is done.
 
 // Metric names

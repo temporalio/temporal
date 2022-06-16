@@ -70,10 +70,9 @@ func newTransferQueueActiveProcessor(
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 	singleProcessor bool,
 ) *transferQueueActiveProcessorImpl {
-
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		BatchSize:                           config.TransferTaskBatchSize,
@@ -245,9 +244,8 @@ func newTransferQueueFailoverProcessor(
 	taskAllocator taskAllocator,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
-
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		BatchSize:                           config.TransferTaskBatchSize,

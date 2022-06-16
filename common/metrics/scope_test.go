@@ -30,8 +30,8 @@ import (
 )
 
 func BenchmarkAllTheMetricsScope(b *testing.B) {
-	var emp MetricProvider = NewEventsMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-3"))
-	var us Scope = newEventsScope(emp, UnitTestService, TestScope1).Tagged(ServiceRoleTag("testing"), ServiceTypeTag("test"))
+	var emp MetricsHandler = NoopMetricsHandler.WithTags(OperationTag("everything-is-awesome-3"))
+	var us Scope = newScope(emp, UnitTestService, TestScope1).Tagged(ServiceRoleTag("testing"), ServiceTypeTag("test"))
 
 	b.ResetTimer()
 	b.ReportAllocs()

@@ -414,7 +414,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 			return sdk.NewClientFactory(
 				c.FrontendGRPCAddress(),
 				nil,
-				sdk.NewMetricHandler(metrics.NewEventsMetricProvider(metrics.NoopMetricHandler)),
+				sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
 			)
 		}),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
@@ -513,7 +513,7 @@ func (c *temporalImpl) startHistory(
 				return sdk.NewClientFactory(
 					c.FrontendGRPCAddress(),
 					nil,
-					sdk.NewMetricHandler(metrics.NewEventsMetricProvider(metrics.NoopMetricHandler)),
+					sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
 				)
 			}),
 			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
@@ -684,7 +684,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 			return sdk.NewClientFactory(
 				c.FrontendGRPCAddress(),
 				nil,
-				sdk.NewMetricHandler(metrics.NewEventsMetricProvider(metrics.NoopMetricHandler)),
+				sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
 			)
 		}),
 		fx.Provide(func() sdk.WorkerFactory { return sdk.NewWorkerFactory() }),

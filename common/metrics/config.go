@@ -32,6 +32,7 @@ import (
 	"github.com/uber-go/tally/v4"
 	"github.com/uber-go/tally/v4/m3"
 	"github.com/uber-go/tally/v4/prometheus"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	statsdreporter "go.temporal.io/server/common/metrics/tally/statsd"
@@ -383,4 +384,51 @@ func histogramBoundariesToHistogramObjectives(boundaries []float64) []prometheus
 		)
 	}
 	return result
+}
+
+// MetricsHandlerFromConfig is used at startup to construct a MetricsHandler
+func MetricsHandlerFromConfig(logger log.Logger, c *Config) MetricsHandler {
+	if c == nil {
+		return NoopMetricsHandler
+	}
+
+	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
+	if c.Prometheus != nil {
+		switch c.Prometheus.Framework {
+		case FrameworkOpentelemetry:
+			otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
+			if err != nil {
+				logger.Fatal(err.Error())
+			}
+
+			return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
+		case FrameworkTally:
+		default:
+			return NewTallyMetricsHandler(
+				c.ClientConfig,
+				newPrometheusScope(
+					logger,
+					convertPrometheusConfigToTally(c.Prometheus),
+					&c.ClientConfig,
+				),
+			)
+		}
+	}
+
+	return NewTallyMetricsHandler(
+		c.ClientConfig,
+		newStatsdScope(logger, c),
+	)
+}
+
+func configExcludeTags(cfg ClientConfig) map[string]map[string]struct{} {
+	tagsToFilter := make(map[string]map[string]struct{})
+	for key, val := range cfg.ExcludeTags {
+		exclusions := make(map[string]struct{})
+		for _, val := range val {
+			exclusions[val] = struct{}{}
+		}
+		tagsToFilter[key] = exclusions
+	}
+	return tagsToFilter
 }

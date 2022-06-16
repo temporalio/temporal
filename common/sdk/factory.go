@@ -58,12 +58,13 @@ type (
 		once            *sync.Once
 	}
 
-	workerFactory struct {
-	}
+	workerFactory struct{}
 )
 
-var _ ClientFactory = (*clientFactory)(nil)
-var _ WorkerFactory = (*workerFactory)(nil)
+var (
+	_ ClientFactory = (*clientFactory)(nil)
+	_ WorkerFactory = (*workerFactory)(nil)
+)
 
 func NewClientFactory(hostPort string, tlsConfig *tls.Config, metricsHandler *MetricsHandler) *clientFactory {
 	return &clientFactory{
@@ -102,7 +103,6 @@ func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkc
 func (f *clientFactory) GetSystemClient(logger log.Logger) sdkclient.Client {
 	f.once.Do(func() {
 		client, err := f.NewClient(common.SystemLocalNamespace, logger)
-
 		if err != nil {
 			logger.Fatal(
 				"error getting system sdk client",

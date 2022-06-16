@@ -97,7 +97,6 @@ func newTimerQueueProcessorBase(
 	logger log.Logger,
 	metricsScope metrics.Scope,
 ) *timerQueueProcessorBase {
-
 	logger = log.With(logger, tag.ComponentTimerQueue)
 	config := shard.GetConfig()
 
@@ -180,7 +179,6 @@ RetryProcessor:
 func (t *timerQueueProcessorBase) notifyNewTimers(
 	timerTasks []tasks.Task,
 ) {
-
 	if len(timerTasks) == 0 {
 		return
 	}
@@ -199,7 +197,6 @@ func (t *timerQueueProcessorBase) notifyNewTimers(
 func (t *timerQueueProcessorBase) notifyNewTimer(
 	newTime time.Time,
 ) {
-
 	t.newTimeLock.Lock()
 	defer t.newTimeLock.Unlock()
 	if t.newTime.IsZero() || newTime.Before(t.newTime) {
@@ -358,7 +355,6 @@ func (t *timerQueueProcessorBase) verifyReschedulerSize() bool {
 func (t *timerQueueProcessorBase) submitTask(
 	executable queues.Executable,
 ) {
-
 	submitted, err := t.scheduler.TrySubmit(executable)
 	if err != nil {
 		t.logger.Error("Failed to submit task", tag.Error(err))
@@ -371,7 +367,7 @@ func (t *timerQueueProcessorBase) submitTask(
 func newTimerTaskScheduler(
 	shard shard.Context,
 	logger log.Logger,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
 	return queues.NewScheduler(

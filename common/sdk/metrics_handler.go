@@ -34,28 +34,28 @@ import (
 
 type (
 	MetricsHandler struct {
-		provider metrics.MetricProvider
+		provider metrics.MetricsHandler
 	}
 
 	metricsCounter struct {
 		name     string
-		provider metrics.MetricProvider
+		provider metrics.MetricsHandler
 	}
 
 	metricsGauge struct {
 		name     string
-		provider metrics.MetricProvider
+		provider metrics.MetricsHandler
 	}
 
 	metricsTimer struct {
 		name     string
-		provider metrics.MetricProvider
+		provider metrics.MetricsHandler
 	}
 )
 
 var _ sdkclient.MetricsHandler = &MetricsHandler{}
 
-func NewMetricHandler(provider metrics.MetricProvider) *MetricsHandler {
+func NewMetricsHandler(provider metrics.MetricsHandler) *MetricsHandler {
 	return &MetricsHandler{provider: provider}
 }
 
@@ -65,7 +65,7 @@ func (m *MetricsHandler) WithTags(tags map[string]string) sdkclient.MetricsHandl
 		t = append(t, metrics.StringTag(k, v))
 	}
 
-	return NewMetricHandler(m.provider.WithTags(t...))
+	return NewMetricsHandler(m.provider.WithTags(t...))
 }
 
 func (m *MetricsHandler) Counter(name string) sdkclient.MetricsCounter {

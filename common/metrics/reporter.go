@@ -24,43 +24,30 @@
 
 package metrics
 
-import (
-	"testing"
-	"time"
+import "go.temporal.io/server/common/log"
+
+type (
+	metricsReporter struct {
+		provider MetricsHandler
+	}
 )
 
-func BenchmarkAllTheMetricsUserScope(b *testing.B) {
-	var emp MetricProvider = NewEventsMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-3"))
-	var us UserScope = newEventsUserScope(emp, defaultConfig.Tags)
+var _ Reporter = (*metricsReporter)(nil)
 
-	b.ResetTimer()
-	b.ReportAllocs()
+func NewReporter(mp MetricsHandler) *metricsReporter {
+	return &metricsReporter{
+		provider: mp,
+	}
+}
 
-	b.RunParallel(
-		func(p *testing.PB) {
-			for p.Next() {
-				stp := us.StartTimer("stopwatch-1")
-				us.AddCounter("counter-1", 1)
-				us.IncCounter("counter-2")
-				us.RecordDistribution("dist-1", Bytes, 1024)
-				us.RecordTimer("timer-1", time.Hour*100)
-				us.UpdateGauge("gauge-1", 120.435)
-				stp.Stop()
-				stp = us.StartTimer("stopwatch-1")
-				us.AddCounter("counter-1", 1)
-				us.IncCounter("counter-2")
-				us.RecordDistribution("dist-1", Bytes, 1024)
-				us.RecordTimer("timer-1", time.Hour*100)
-				us.UpdateGauge("gauge-1", 120.435)
-				stp.Stop()
-				stp = us.StartTimer("stopwatch-1")
-				us.AddCounter("counter-1", 1)
-				us.IncCounter("counter-2")
-				us.RecordDistribution("dist-1", Bytes, 1024)
-				us.RecordTimer("timer-1", time.Hour*100)
-				us.UpdateGauge("gauge-1", 120.435)
-				stp.Stop()
-			}
-		},
-	)
+func (e *metricsReporter) MetricsHandler() MetricsHandler {
+	return e.provider
+}
+
+func (e *metricsReporter) Stop(logger log.Logger) {
+	e.provider.Stop(logger)
+}
+
+func (e *metricsReporter) UserScope() UserScope {
+	return newUserScope(e.provider, nil)
 }

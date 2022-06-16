@@ -428,8 +428,6 @@ github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.7.1 h1:5TQK59W5E3v0r2duFAb7P95B6hEeOyEnHRa8MjYSMTY=
 github.com/stretchr/testify v1.7.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
-github.com/temporalio/exp/event v0.0.0-20220528000931-d461cfabbedf h1:0vMxGlMO9mqCZarDudfWUPZq35TuPN2dJ+n+ClA8Lr4=
-github.com/temporalio/exp/event v0.0.0-20220528000931-d461cfabbedf/go.mod h1:8iySQOcJLf6MVp9fpByxY3gZjC/LtsFPtMijwvdk4yM=
 github.com/temporalio/ringpop-go v0.0.0-20211012191444-6f91b5915e95 h1:8G34e73qtrkG9sDFcSC8uot0np3e6BLoMZxleTcpUiA=
 github.com/temporalio/ringpop-go v0.0.0-20211012191444-6f91b5915e95/go.mod h1:Ek9J8CAfI1IwVSqHpTOgj7FjzRSJ5SM/ud52eCmkhsw=
 github.com/twmb/murmur3 v1.1.5/go.mod h1:Qq/R7NUyOfr65zD+6Q5IHKsJLwP7exErjN6lyyq3OSQ=

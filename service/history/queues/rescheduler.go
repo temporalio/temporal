@@ -65,7 +65,7 @@ type (
 	reschedulerImpl struct {
 		scheduler      Scheduler
 		timeSource     clock.TimeSource
-		metricProvider metrics.MetricProvider
+		metricProvider metrics.MetricsHandler
 
 		sync.Mutex
 		pq collection.Queue[rescheduledExecuable]
@@ -75,7 +75,7 @@ type (
 func NewRescheduler(
 	scheduler Scheduler,
 	timeSource clock.TimeSource,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 ) *reschedulerImpl {
 	return &reschedulerImpl{
 		scheduler:      scheduler,

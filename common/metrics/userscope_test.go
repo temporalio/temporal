@@ -24,32 +24,43 @@
 
 package metrics
 
-import "go.temporal.io/server/common/log"
-
-type (
-	eventsReporter struct {
-		provider MetricProvider
-		handler  MetricHandler
-	}
+import (
+	"testing"
+	"time"
 )
 
-var _ Reporter = (*eventsReporter)(nil)
+func BenchmarkAllTheMetricsUserScope(b *testing.B) {
+	var emp MetricsHandler = NoopMetricsHandler.WithTags(OperationTag("everything-is-awesome-3"))
+	var us UserScope = newUserScope(emp, defaultConfig.Tags)
 
-func NewEventsReporter(h MetricHandler) *eventsReporter {
-	return &eventsReporter{
-		provider: NewEventsMetricProvider(h),
-		handler:  h,
-	}
-}
+	b.ResetTimer()
+	b.ReportAllocs()
 
-func (e *eventsReporter) MetricProvider() MetricProvider {
-	return e.provider
-}
-
-func (e *eventsReporter) Stop(logger log.Logger) {
-	e.handler.Stop(logger)
-}
-
-func (e *eventsReporter) UserScope() UserScope {
-	return newEventsUserScope(e.provider, nil)
+	b.RunParallel(
+		func(p *testing.PB) {
+			for p.Next() {
+				stp := us.StartTimer("stopwatch-1")
+				us.AddCounter("counter-1", 1)
+				us.IncCounter("counter-2")
+				us.RecordDistribution("dist-1", Bytes, 1024)
+				us.RecordTimer("timer-1", time.Hour*100)
+				us.UpdateGauge("gauge-1", 120.435)
+				stp.Stop()
+				stp = us.StartTimer("stopwatch-1")
+				us.AddCounter("counter-1", 1)
+				us.IncCounter("counter-2")
+				us.RecordDistribution("dist-1", Bytes, 1024)
+				us.RecordTimer("timer-1", time.Hour*100)
+				us.UpdateGauge("gauge-1", 120.435)
+				stp.Stop()
+				stp = us.StartTimer("stopwatch-1")
+				us.AddCounter("counter-1", 1)
+				us.IncCounter("counter-2")
+				us.RecordDistribution("dist-1", Bytes, 1024)
+				us.RecordTimer("timer-1", time.Hour*100)
+				us.UpdateGauge("gauge-1", 120.435)
+				stp.Stop()
+			}
+		},
+	)
 }
