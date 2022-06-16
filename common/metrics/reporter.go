@@ -27,29 +27,27 @@ package metrics
 import "go.temporal.io/server/common/log"
 
 type (
-	eventsReporter struct {
+	metricsReporter struct {
 		provider MetricProvider
-		handler  MetricHandler
 	}
 )
 
-var _ Reporter = (*eventsReporter)(nil)
+var _ Reporter = (*metricsReporter)(nil)
 
-func NewEventsReporter(h MetricHandler) *eventsReporter {
-	return &eventsReporter{
-		provider: NewEventsMetricProvider(h),
-		handler:  h,
+func NewMetricsReporter(mp MetricProvider) *metricsReporter {
+	return &metricsReporter{
+		provider: mp,
 	}
 }
 
-func (e *eventsReporter) MetricProvider() MetricProvider {
+func (e *metricsReporter) MetricProvider() MetricProvider {
 	return e.provider
 }
 
-func (e *eventsReporter) Stop(logger log.Logger) {
-	e.handler.Stop(logger)
+func (e *metricsReporter) Stop(logger log.Logger) {
+	e.provider.Stop(logger)
 }
 
-func (e *eventsReporter) UserScope() UserScope {
-	return newEventsUserScope(e.provider, nil)
+func (e *metricsReporter) UserScope() UserScope {
+	return newMetricsUserScope(e.provider, nil)
 }

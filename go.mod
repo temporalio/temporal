@@ -17,7 +17,9 @@ require (
 	github.com/gocql/gocql v1.0.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
+	github.com/golang-jwt/jwt/v4 v4.4.1
 	github.com/golang/mock v1.6.0
+	github.com/google/go-cmp v0.5.8
 	github.com/google/uuid v1.3.0
 	github.com/iancoleman/strcase v0.2.0
 	github.com/jmoiron/sqlx v1.3.4
@@ -48,7 +50,6 @@ require (
 	go.uber.org/multierr v1.8.0
 	go.uber.org/zap v1.21.0
 	golang.org/x/exp v0.0.0-20220428152302-39d4317da171
-	golang.org/x/exp/event v0.0.0-20220428152302-39d4317da171
 	golang.org/x/oauth2 v0.0.0-20220524215830-622c5d57e401
 	golang.org/x/time v0.0.0-20220411224347-583f2d630306
 	google.golang.org/api v0.81.0
@@ -83,11 +84,9 @@ require (
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/googleapis v1.4.1 // indirect
-	github.com/golang-jwt/jwt/v4 v4.4.1
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/go-cmp v0.5.8
 	github.com/googleapis/gax-go/v2 v2.4.0 // indirect
 	github.com/googleapis/go-type-adapters v1.0.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
@@ -136,5 +135,3 @@ require (
 	modernc.org/strutil v1.1.2 // indirect
 	modernc.org/token v1.0.0 // indirect
 )
-
-replace golang.org/x/exp/event => github.com/jbreiding/exp/event v0.0.0-20220615202747-cf8edd9a4a76

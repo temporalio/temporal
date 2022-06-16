@@ -365,7 +365,7 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient 
 // TODO: rework to depend on...
 func MetricsClientProvider(logger log.Logger, serviceName ServiceName, provider metrics.MetricProvider) metrics.Client {
 	serviceIdx := metrics.GetMetricsServiceIdx(string(serviceName), logger)
-	return metrics.NewEventsClient(provider, serviceIdx)
+	return metrics.NewMetricsClient(provider, serviceIdx)
 }
 
 func PersistenceConfigProvider(persistenceConfig config.Persistence, dc *dynamicconfig.Collection) *config.Persistence {

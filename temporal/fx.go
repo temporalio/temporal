@@ -122,7 +122,7 @@ type (
 		TLSConfigProvider       encryption.TLSConfigProvider
 		EsConfig                *esclient.Config
 		EsClient                esclient.Client
-		MetricHandler           metrics.MetricHandler
+		MetricProvider          metrics.MetricProvider
 	}
 )
 
@@ -181,24 +181,20 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		clientFactoryProvider = client.NewFactoryProvider()
 	}
 
-	// MetricHandler
-	handler := so.metricHandler
-	if handler == nil {
-		if so.config.Global.Metrics != nil {
-			handler = metrics.MetricHandlerFromConfig(logger, so.config.Global.Metrics)
-		} else {
-			handler = metrics.NoopMetricHandler
-		}
+	// MetricProvider
+	provider := so.metricProvider
+	if provider == nil {
+		provider = metrics.MetricProviderFromConfig(logger, so.config.Global.Metrics)
 	}
 
 	// ServerReporter
 	serverReporter := so.metricsReporter
 	if serverReporter == nil {
-		serverReporter = metrics.NewEventsReporter(handler)
+		serverReporter = metrics.NewMetricsReporter(provider)
 	}
 
 	// MetricsClient
-	var metricsClient metrics.Client = metrics.NewEventsClient(serverReporter.MetricProvider(), metrics.Server)
+	var metricsClient metrics.Client = metrics.NewMetricsClient(provider, metrics.Server)
 
 	// DynamicConfigClient
 	dcClient := so.dynamicConfigClient
@@ -280,7 +276,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		TLSConfigProvider:       tlsConfigProvider,
 		EsConfig:                esConfig,
 		EsClient:                esClient,
-		MetricHandler:           handler,
+		MetricProvider:          provider,
 	}, nil
 }
 

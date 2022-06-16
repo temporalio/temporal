@@ -26,6 +26,8 @@ package metrics
 
 import (
 	"time"
+
+	"go.temporal.io/server/common/log"
 )
 
 // Mostly cribbed from
@@ -49,6 +51,8 @@ type (
 
 		// Histogram obtains a histogram for the given name and MetricOptions.
 		Histogram(string, MetricUnit) HistogramMetric
+
+		Stop(log.Logger)
 	}
 
 	// CounterMetric is an ever-increasing counter.

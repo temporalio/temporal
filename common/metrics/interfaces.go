@@ -123,8 +123,8 @@ type (
 )
 
 var sanitizer = tally.NewSanitizer(tally.SanitizeOptions{
-	NameCharacters:       tally.ValidCharacters{tally.AlphanumericRange, tally.UnderscoreCharacters},
-	KeyCharacters:        tally.ValidCharacters{tally.AlphanumericRange, tally.UnderscoreCharacters},
-	ValueCharacters:      tally.ValidCharacters{tally.AlphanumericRange, tally.UnderscoreCharacters},
+	NameCharacters:       tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
+	KeyCharacters:        tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
+	ValueCharacters:      tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
 	ReplacementCharacter: '_',
 })

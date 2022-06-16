@@ -25,24 +25,18 @@
 package metrics
 
 import (
-	"context"
 	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/uber-go/tally/v4"
-	"golang.org/x/exp/event"
-
-	"go.temporal.io/server/common/log"
 )
 
 func TestTallyScope(t *testing.T) {
-	ctx := context.Background()
 	scope := tally.NewTestScope("test", map[string]string{})
-	mh := NewTallyMetricHandler(log.NewTestLogger(), scope, defaultConfig, defaultConfig.PerUnitHistogramBoundaries)
-	ctx = event.WithExporter(ctx, event.NewExporter(mh, nil))
-	recordTallyMetrics(ctx)
+	mp := NewTallyMetricProvider(defaultConfig, scope)
+	recordTallyMetrics(mp)
 
 	snap := scope.Snapshot()
 	counters, gauges, timers, histograms := snap.Counters(), snap.Gauges(), snap.Timers(), snap.Histograms()
@@ -70,15 +64,15 @@ func TestTallyScope(t *testing.T) {
 	assert.EqualValues(t, map[string]string{}, histograms["test.transmission+"].Tags())
 }
 
-func recordTallyMetrics(ctx context.Context) {
-	c := event.NewCounter("hits", &event.MetricOptions{Description: "Earth meteorite hits"})
-	g := event.NewFloatGauge("temp", &event.MetricOptions{Description: "moon surface temperature in Kelvin"})
-	d := event.NewDuration("latency", &event.MetricOptions{Description: "Earth-moon comms lag, milliseconds"})
-	h := event.NewIntDistribution("transmission", &event.MetricOptions{Description: "Earth-moon comms sent, bytes", Unit: event.UnitBytes})
+func recordTallyMetrics(mp MetricProvider) {
+	c := mp.Counter("hits")
+	g := mp.Gauge("temp")
+	d := mp.Timer("latency")
+	h := mp.Histogram("transmission", Bytes)
 
-	c.Record(ctx, 8)
-	g.Record(ctx, -100, event.String("location", "Mare Imbrium"))
-	d.Record(ctx, 1248*time.Millisecond)
-	d.Record(ctx, 1255*time.Millisecond)
-	h.Record(ctx, 1234567)
+	c.Record(8)
+	g.Record(-100, StringTag("location", "Mare Imbrium"))
+	d.Record(1248 * time.Millisecond)
+	d.Record(1255 * time.Millisecond)
+	h.Record(1234567)
 }

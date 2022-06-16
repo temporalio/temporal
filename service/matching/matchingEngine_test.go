@@ -722,7 +722,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	// So we can get snapshots
 	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsClient = metrics.NewEventsClient(metrics.NewEventsMetricProvider(metrics.NewTallyMetricHandler(log.NewTestLogger(), scope, metrics.ClientConfig{}, nil)), metrics.Matching)
+	s.matchingEngine.metricsClient = metrics.NewMetricsClient(metrics.NewTallyMetricProvider(metrics.ClientConfig{}, scope), metrics.Matching)
 
 	var err error
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
@@ -930,7 +930,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	dispatchLimitFn func(int, int64) float64,
 ) int64 {
 	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsClient = metrics.NewEventsClient(metrics.NewEventsMetricProvider(metrics.NewTallyMetricHandler(log.NewTestLogger(), scope, metrics.ClientConfig{}, nil)), metrics.Matching)
+	s.matchingEngine.metricsClient = metrics.NewMetricsClient(metrics.NewTallyMetricProvider(metrics.ClientConfig{}, scope), metrics.Matching)
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
