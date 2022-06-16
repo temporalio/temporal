@@ -452,7 +452,7 @@ func (c *clientImpl) RecordActivityTaskStarted(
 	request *historyservice.RecordActivityTaskStartedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	client, err := c.getClientForShardID(request.Clock.ShardId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -476,7 +476,7 @@ func (c *clientImpl) RecordChildExecutionCompleted(
 	request *historyservice.RecordChildExecutionCompletedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RecordChildExecutionCompletedResponse, error) {
-	client, err := c.getClientForShardID(request.Clock.ShardId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -500,7 +500,7 @@ func (c *clientImpl) RecordWorkflowTaskStarted(
 	request *historyservice.RecordWorkflowTaskStartedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	client, err := c.getClientForShardID(request.Clock.ShardId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -837,7 +837,7 @@ func (c *clientImpl) ScheduleWorkflowTask(
 	request *historyservice.ScheduleWorkflowTaskRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.ScheduleWorkflowTaskResponse, error) {
-	client, err := c.getClientForShardID(request.Clock.ShardId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -909,7 +909,7 @@ func (c *clientImpl) StartWorkflowExecution(
 	request *historyservice.StartWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	client, err := c.getClientForShardID(request.ParentExecutionInfo.Clock.ShardId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.StartRequest.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -1005,7 +1005,7 @@ func (c *clientImpl) VerifyChildExecutionCompletionRecorded(
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
-	client, err := c.getClientForShardID(request.Clock.ShardId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.ParentExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -1029,7 +1029,7 @@ func (c *clientImpl) VerifyFirstWorkflowTaskScheduled(
 	request *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.VerifyFirstWorkflowTaskScheduledResponse, error) {
-	client, err := c.getClientForShardID(request.Clock.ShardId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}

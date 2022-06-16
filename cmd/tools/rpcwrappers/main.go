@@ -122,11 +122,8 @@ func writeTemplatedCode(w io.Writer, service service, text string) {
 	w.Write([]byte(text))
 }
 
-func pathToField(t reflect.Type, name string, path string) string {
-	if t.Kind() != reflect.Struct {
-		return ""
-	}
-	if len(path) > 100 { // we have some recursive types
+func pathToField(t reflect.Type, name string, path string, maxDepth int) string {
+	if t.Kind() != reflect.Struct || maxDepth <= 0 {
 		return ""
 	}
 	for i := 0; i < t.NumField(); i++ {
@@ -136,7 +133,7 @@ func pathToField(t reflect.Type, name string, path string) string {
 		}
 		ft := f.Type
 		if ft.Kind() == reflect.Pointer {
-			if try := pathToField(ft.Elem(), name, path+"."+f.Name); try != "" {
+			if try := pathToField(ft.Elem(), name, path+"."+f.Name, maxDepth-1); try != "" {
 				return try
 			}
 		}
@@ -147,13 +144,13 @@ func pathToField(t reflect.Type, name string, path string) string {
 func makeGetClientMagic(reqType reflect.Type) string {
 	// this magically figures out how to get a HistoryServiceClient from a request in many cases
 	t := reqType.Elem() // we know it's a pointer
-	if path := pathToField(t, "ShardId", "request"); path != "" {
+	if path := pathToField(t, "ShardId", "request", 1); path != "" {
 		return fmt.Sprintf("client, err := c.getClientForShardID(%s)", path)
 	}
-	if path := pathToField(t, "WorkflowId", "request"); path != "" {
+	if path := pathToField(t, "WorkflowId", "request", 3); path != "" {
 		return fmt.Sprintf("client, err := c.getClientForWorkflowID(request.NamespaceId, %s)", path)
 	}
-	if path := pathToField(t, "TaskToken", "request"); path != "" {
+	if path := pathToField(t, "TaskToken", "request", 2); path != "" {
 		return fmt.Sprintf(`taskToken, err := c.tokenSerializer.Deserialize(%s)
 	if err != nil {
 		return nil, err
@@ -162,7 +159,7 @@ func makeGetClientMagic(reqType reflect.Type) string {
 `, path)
 	}
 	// slice needs a tiny bit of extra handling for namespace
-	if path := pathToField(t, "TaskInfos", "request"); path != "" {
+	if path := pathToField(t, "TaskInfos", "request", 1); path != "" {
 		return fmt.Sprintf(`// All workflow IDs are in the same shard per request
 	client, err := c.getClientForWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, path, path)
 	}
