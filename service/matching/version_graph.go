@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/gogo/protobuf/proto"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -12,9 +13,26 @@ import (
 
 // TODO: Add validator of requests that can return proper error codes @ frontend
 
-func ToBuildIdOrderingResponse(g *persistence.VersioningData) *workflowservice.GetWorkerBuildIdOrderingResponse {
+func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdOrderingResponse {
+	curDefault := g.GetCurrentDefault()
+	curDepth := 1
+	if maxDepth > 0 {
+		// Mutating the passed in graph is a no-no.
+		curDefault = proto.Clone(g.GetCurrentDefault()).(*taskqueuepb.VersionIdNode)
+		curNode := curDefault
+		for curDepth < maxDepth {
+			if curNode.GetPreviousIncompatible() == nil {
+				break
+			}
+			curNode = curNode.GetPreviousIncompatible()
+			curDepth++
+		}
+		if curNode != nil {
+			curNode.PreviousIncompatible = nil
+		}
+	}
 	return &workflowservice.GetWorkerBuildIdOrderingResponse{
-		CurrentDefault:   g.GetCurrentDefault(),
+		CurrentDefault:   curDefault,
 		CompatibleLeaves: g.GetCompatibleLeaves(),
 	}
 }
@@ -28,29 +46,24 @@ func UpdateVersionsGraph(
 		// the currently set one.
 		if req.GetBecomeDefault() {
 			curDefault := existingData.GetCurrentDefault()
-			isExistingDefault := false
-			asWorkerId := curDefault.GetVersion().GetWorkerBuildId()
-			// There is already a default worker-build-id based version, replace it.
-			if asWorkerId != "" {
-				isExistingDefault = true
+			if curDefault != nil {
 				// If the current default is going to be the previous compat version with the one we're adding,
 				// then we need to skip over it when setting the previous *incompatible* version.
-				if req.GetPreviousCompatible().GetWorkerBuildId() == asWorkerId {
-					curDefault = &taskqueuepb.VersionIdNode{
+				if req.GetPreviousCompatible().GetWorkerBuildId() == curDefault.GetVersion().GetWorkerBuildId() {
+					existingData.CurrentDefault = &taskqueuepb.VersionIdNode{
 						Version:              req.VersionId,
 						PreviousCompatible:   curDefault,
 						PreviousIncompatible: curDefault.PreviousIncompatible,
 					}
 				} else {
 					// Otherwise, set the previous incompatible version to the current default.
-					curDefault = &taskqueuepb.VersionIdNode{
+					existingData.CurrentDefault = &taskqueuepb.VersionIdNode{
 						Version:              req.VersionId,
 						PreviousCompatible:   nil,
 						PreviousIncompatible: curDefault,
 					}
 				}
-			}
-			if !isExistingDefault {
+			} else {
 				if req.GetPreviousCompatible() != nil {
 					return serviceerror.NewInvalidArgument("adding a new default version which is compatible " +
 						" with some previous version, when there is no existing default version, is not allowed." +

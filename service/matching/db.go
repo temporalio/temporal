@@ -274,7 +274,8 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 	return n, err
 }
 
-// GetVersioningData returns the versioning data for this task queue
+// GetVersioningData returns the versioning data for this task queue. Do not mutate the returned pointer, as doing so
+// will cause cache inconsistency.
 func (db *taskQueueDB) GetVersioningData(
 	ctx context.Context,
 ) (*persistencespb.VersioningData, error) {
@@ -293,6 +294,7 @@ func (db *taskQueueDB) GetVersioningData(
 	if err != nil {
 		return nil, err
 	}
+	db.versioningDat = tqInfo.TaskQueueInfo.GetVersioningData()
 
 	return tqInfo.TaskQueueInfo.GetVersioningData(), nil
 }
