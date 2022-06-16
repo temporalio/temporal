@@ -149,7 +149,7 @@ func NewClient(
 	s := service.service.Elem()
 	for n := 0; n < s.NumMethod(); n++ {
 		m := s.Method(n)
-		mt := m.Type // func(context.Context, request REQT, opts []grpc.CallOption) (RESPT, error)
+		mt := m.Type // func(context.Context, request reqt, opts []grpc.CallOption) (respt, error)
 		if !mt.IsVariadic() ||
 			mt.NumIn() != 3 ||
 			mt.NumOut() != 2 {
@@ -207,6 +207,77 @@ func (c *clientImpl) getRandomClient() (workflowservice.WorkflowServiceClient, e
 }
 
 func generateMetricClient(service service, w io.Writer) {
+	copyright(w)
+
+	fmt.Fprintf(w, `
+package %s
+`, service.name)
+
+	fmt.Fprintf(w, `
+import (
+	"context"
+
+	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc"
+
+	"go.temporal.io/server/common/metrics"
+)
+
+var _ workflowservice.WorkflowServiceClient = (*metricClient)(nil)
+
+type metricClient struct {
+	client        workflowservice.WorkflowServiceClient
+	metricsClient metrics.Client
+}
+
+// NewMetricClient creates a new instance of workflowservice.WorkflowServiceClient that emits metrics
+func NewMetricClient(client workflowservice.WorkflowServiceClient, metricsClient metrics.Client) workflowservice.WorkflowServiceClient {
+	return &metricClient{
+		client:        client,
+		metricsClient: metricsClient,
+	}
+}
+`)
+
+	s := service.service.Elem()
+	for n := 0; n < s.NumMethod(); n++ {
+		m := s.Method(n)
+		mt := m.Type // func(context.Context, request reqt, opts []grpc.CallOption) (respt, error)
+		if !mt.IsVariadic() ||
+			mt.NumIn() != 3 ||
+			mt.NumOut() != 2 {
+			panic("bad method")
+		}
+		reqt := mt.In(1)
+		respt := mt.Out(0)
+		fmt.Fprintf(w, `
+func (c *metricClient) %s(
+	ctx context.Context,
+	request %s,
+	opts ...grpc.CallOption,
+) (%s, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClient%sScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClient%sScope, metrics.ClientLatency)
+	resp, err := c.client.%s(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClient%sScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+`,
+			m.Name,
+			reqt.String(),
+			respt.String(),
+			m.Name,
+			m.Name,
+			m.Name,
+			m.Name,
+		)
+	}
 }
 
 func generateRetryableClient(service service, w io.Writer) {
@@ -227,5 +298,6 @@ func callWithFile(f func(service, io.Writer), service service, filename string) 
 func main() {
 	for _, service := range services {
 		callWithFile(generateClient, service, "client")
+		callWithFile(generateMetricClient, service, "metricClient")
 	}
 }
