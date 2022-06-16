@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 )
 
 type (
@@ -61,10 +62,11 @@ var (
 			metricPrefix: "HistoryClient",
 			service:      reflect.TypeOf((*historyservice.HistoryServiceClient)(nil)),
 		},
-		// service{
-		// 	name:    "matching",
-		// 	service: reflect.TypeOf((*matchingservice.MatchingServiceClient)(nil)),
-		// },
+		service{
+			name:         "matching",
+			metricPrefix: "MatchingClient",
+			service:      reflect.TypeOf((*matchingservice.MatchingServiceClient)(nil)),
+		},
 	}
 
 	longPollContext = map[string]bool{
@@ -80,6 +82,18 @@ var (
 		"client.history.DescribeHistoryHost":    true,
 		"client.history.GetReplicationMessages": true,
 		"client.history.GetReplicationStatus":   true,
+		// these need to pick a partition. too complicated.
+		"client.matching.AddActivityTask":       true,
+		"client.matching.AddWorkflowTask":       true,
+		"client.matching.PollActivityTaskQueue": true,
+		"client.matching.PollWorkflowTaskQueue": true,
+		"client.matching.QueryWorkflow":         true,
+		// these do forwarding stats. too complicated.
+		"metrics.matching.AddActivityTask":       true,
+		"metrics.matching.AddWorkflowTask":       true,
+		"metrics.matching.PollActivityTaskQueue": true,
+		"metrics.matching.PollWorkflowTaskQueue": true,
+		"metrics.matching.QueryWorkflow":         true,
 	}
 )
 
@@ -141,8 +155,8 @@ func pathToField(t reflect.Type, name string, path string, maxDepth int) string 
 	return ""
 }
 
-func makeGetClientMagic(reqType reflect.Type) string {
-	// this magically figures out how to get a HistoryServiceClient from a request in many cases
+func makeGetHistoryClientMagic(reqType reflect.Type) string {
+	// this magically figures out how to get a HistoryServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
 	if path := pathToField(t, "ShardId", "request", 1); path != "" {
 		return fmt.Sprintf("client, err := c.getClientForShardID(%s)", path)
@@ -167,18 +181,27 @@ func makeGetClientMagic(reqType reflect.Type) string {
 	panic("I don't know how to get a client from a " + t.String())
 }
 
+func makeGetMatchingClientMagic(reqType reflect.Type) string {
+	// this magically figures out how to get a MatchingServiceClient from a request
+	t := reqType.Elem() // we know it's a pointer
+	if path := pathToField(t, "TaskQueue", "request", 2); path != "" {
+		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s.GetName())", path)
+	}
+	panic("I don't know how to get a client from a " + t.String())
+}
+
 func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.Method, text string) {
 	key := fmt.Sprintf("%s.%s.%s", impl, service.name, m.Name)
 	if ignoreMethod[key] {
 		return
 	}
 
-	mt := m.Type // should look like: func(context.Context, request reqt, opts []grpc.CallOption) (respt, error)
+	mt := m.Type // should look like: func(context.Context, request reqType, opts []grpc.CallOption) (respType, error)
 
 	if !mt.IsVariadic() ||
 		mt.NumIn() != 3 ||
 		mt.NumOut() != 2 {
-		panic("bad method")
+		panic(m.Name + " doesn't look like a grpc handler method")
 	}
 
 	reqType := mt.In(1)
@@ -193,8 +216,12 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 		withLargeTimeout = "WithLargeTimeout"
 	}
 	getClientMagic := ""
-	if impl == "client" && service.name == "history" {
-		getClientMagic = makeGetClientMagic(reqType)
+	if impl == "client" {
+		if service.name == "history" {
+			getClientMagic = makeGetHistoryClientMagic(reqType)
+		} else if service.name == "matching" {
+			getClientMagic = makeGetMatchingClientMagic(reqType)
+		}
 	}
 
 	text = strings.Replace(text, "{METHOD}", m.Name, -1)
@@ -292,6 +319,38 @@ func (c *clientImpl) {METHOD}(
 	// MergeDLQMessages
 }
 
+func generateMatchingClient(w io.Writer, service service) {
+	copyright(w)
+
+	writeTemplatedCode(w, service, `
+package {SERVICENAME}
+
+import (
+	"context"
+
+	"{SERVICEPKGPATH}"
+	"google.golang.org/grpc"
+)
+`)
+
+	writeTemplatedMethods(w, service, "client", `
+func (c *clientImpl) {METHOD}(
+	ctx context.Context,
+	request {REQT},
+	opts ...grpc.CallOption,
+) ({RESPT}, error) {
+
+	{GETCLIENTMAGIC}
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.{METHOD}(ctx, request, opts...)
+}
+`)
+}
+
 func generateMetricClient(w io.Writer, service service) {
 	copyright(w)
 
@@ -329,7 +388,7 @@ func (c *metricClient) {METHOD}(
 `)
 }
 
-func generateHistoryMetricClient(w io.Writer, service service) {
+func generateHistoryOrMatchingMetricClient(w io.Writer, service service) {
 	copyright(w)
 
 	writeTemplatedCode(w, service, `
@@ -352,7 +411,7 @@ func (c *metricClient) {METHOD}(
 	opts ...grpc.CallOption,
 ) (_ {RESPT}, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClient{METHOD}Scope)
+	scope, stopwatch := c.startMetricsRecording(metrics.{METRICPREFIX}{METHOD}Scope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -360,7 +419,7 @@ func (c *metricClient) {METHOD}(
 	return c.client.{METHOD}(ctx, request, opts...)
 }
 `)
-	// TODO: some methods did not touch metrics. should we preserve this?
+	// TODO: some history methods did not touch metrics. should we preserve this?
 	// DescribeHistoryHost
 	// RemoveTask
 	// CloseShard
@@ -423,10 +482,15 @@ func main() {
 		case "frontend", "admin":
 			callWithFile(generateFrontendOrAdminClient, service, "client")
 			callWithFile(generateMetricClient, service, "metricClient")
+			callWithFile(generateRetryableClient, service, "retryableClient")
 		case "history":
 			callWithFile(generateHistoryClient, service, "client")
-			callWithFile(generateHistoryMetricClient, service, "metricClient")
+			callWithFile(generateHistoryOrMatchingMetricClient, service, "metricClient")
+			callWithFile(generateRetryableClient, service, "retryableClient")
+		case "matching":
+			callWithFile(generateMatchingClient, service, "client")
+			callWithFile(generateHistoryOrMatchingMetricClient, service, "metricClient")
+			callWithFile(generateRetryableClient, service, "retryableClient")
 		}
-		callWithFile(generateRetryableClient, service, "retryableClient")
 	}
 }
