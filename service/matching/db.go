@@ -314,7 +314,6 @@ func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*p
 	if err := mutator(verDat); err != nil {
 		return err
 	}
-	db.logger.Info("Updating versioning data "+verDat.String(), tag.ShardRangeID(db.rangeID))
 	db.versioningDat = verDat
 
 	queueInfo := db.cachedQueueInfo()

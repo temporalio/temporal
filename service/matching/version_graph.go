@@ -2,10 +2,10 @@ package matching
 
 import (
 	"fmt"
-	"go.temporal.io/api/serviceerror"
 	"reflect"
 
-	"go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/persistence/v1"
 )
@@ -14,7 +14,7 @@ import (
 
 func ToBuildIdOrderingResponse(g *persistence.VersioningData) *workflowservice.GetWorkerBuildIdOrderingResponse {
 	return &workflowservice.GetWorkerBuildIdOrderingResponse{
-		CurrentDefaults:  g.GetCurrentDefaults(),
+		CurrentDefault:   g.GetCurrentDefault(),
 		CompatibleLeaves: g.GetCompatibleLeaves(),
 	}
 }
@@ -27,28 +27,26 @@ func UpdateVersionsGraph(
 		// If the version is to become the new default, add it to the list of current defaults, possibly replacing
 		// the currently set one.
 		if req.GetBecomeDefault() {
-			curDefaults := existingData.GetCurrentDefaults()
+			curDefault := existingData.GetCurrentDefault()
 			isExistingDefault := false
-			for i, def := range curDefaults {
-				asWorkerId := def.GetVersion().GetWorkerBuildId()
-				// There is already a default worker-build-id based version, replace it.
-				if asWorkerId != "" {
-					isExistingDefault = true
-					// If the current default is going to be the previous compat version with the one we're adding,
-					// then we need to skip over it when setting the previous *incompatible* version.
-					if req.GetPreviousCompatible().GetWorkerBuildId() == asWorkerId {
-						curDefaults[i] = &workflow.VersionIdNode{
-							Version:              req.VersionId,
-							PreviousCompatible:   def,
-							PreviousIncompatible: def.PreviousIncompatible,
-						}
-					} else {
-						// Otherwise, set the previous incompatible version to the current default.
-						curDefaults[i] = &workflow.VersionIdNode{
-							Version:              req.VersionId,
-							PreviousCompatible:   nil,
-							PreviousIncompatible: def,
-						}
+			asWorkerId := curDefault.GetVersion().GetWorkerBuildId()
+			// There is already a default worker-build-id based version, replace it.
+			if asWorkerId != "" {
+				isExistingDefault = true
+				// If the current default is going to be the previous compat version with the one we're adding,
+				// then we need to skip over it when setting the previous *incompatible* version.
+				if req.GetPreviousCompatible().GetWorkerBuildId() == asWorkerId {
+					curDefault = &taskqueuepb.VersionIdNode{
+						Version:              req.VersionId,
+						PreviousCompatible:   curDefault,
+						PreviousIncompatible: curDefault.PreviousIncompatible,
+					}
+				} else {
+					// Otherwise, set the previous incompatible version to the current default.
+					curDefault = &taskqueuepb.VersionIdNode{
+						Version:              req.VersionId,
+						PreviousCompatible:   nil,
+						PreviousIncompatible: curDefault,
 					}
 				}
 			}
@@ -58,18 +56,18 @@ func UpdateVersionsGraph(
 						" with some previous version, when there is no existing default version, is not allowed." +
 						" There must be a default version before this operation makes sense")
 				}
-				newNode := &workflow.VersionIdNode{
+				newNode := &taskqueuepb.VersionIdNode{
 					Version:              req.VersionId,
 					PreviousCompatible:   nil,
 					PreviousIncompatible: nil,
 				}
-				existingData.CurrentDefaults = append(existingData.CurrentDefaults, newNode)
+				existingData.CurrentDefault = newNode
 			}
 		} else {
 			if req.GetPreviousCompatible() != nil {
 				prevCompat, indexInCompatLeaves := findCompatibleNode(existingData, req.GetPreviousCompatible())
 				if prevCompat != nil {
-					newNode := &workflow.VersionIdNode{
+					newNode := &taskqueuepb.VersionIdNode{
 						Version:              req.VersionId,
 						PreviousCompatible:   prevCompat,
 						PreviousIncompatible: nil,
@@ -85,19 +83,15 @@ func UpdateVersionsGraph(
 				}
 			} else {
 				// Check if the version is already a default, and remove it from being one if it is.
-				for i, def := range existingData.GetCurrentDefaults() {
-					if def.GetVersion().Equal(req.GetVersionId()) {
-						existingData.CurrentDefaults =
-							append(existingData.CurrentDefaults[:i], existingData.CurrentDefaults[i+1:]...)
-						if def.GetPreviousCompatible() != nil {
-							existingData.CurrentDefaults =
-								append(existingData.CurrentDefaults, def.GetPreviousCompatible())
-						} else if def.GetPreviousIncompatible() != nil {
-							existingData.CurrentDefaults =
-								append(existingData.CurrentDefaults, def.GetPreviousIncompatible())
-						}
-						return nil
+				curDefault := existingData.GetCurrentDefault()
+				if curDefault.GetVersion().Equal(req.GetVersionId()) {
+					existingData.CurrentDefault = nil
+					if curDefault.GetPreviousCompatible() != nil {
+						existingData.CurrentDefault = curDefault.GetPreviousCompatible()
+					} else if curDefault.GetPreviousIncompatible() != nil {
+						existingData.CurrentDefault = curDefault.GetPreviousIncompatible()
 					}
+					return nil
 				}
 				// Check if it's a compatible leaf, and remove it from being one if it is.
 				for i, def := range existingData.GetCompatibleLeaves() {
@@ -128,8 +122,8 @@ func UpdateVersionsGraph(
 // will be returned.
 func findCompatibleNode(
 	existingData *persistence.VersioningData,
-	versionId *workflow.VersionId,
-) (*workflow.VersionIdNode, int) {
+	versionId *taskqueuepb.VersionId,
+) (*taskqueuepb.VersionIdNode, int) {
 	// First search down from all existing compatible leaves, as if any of those chains point at the desired version,
 	// we will need to return that leaf.
 	for ix, node := range existingData.GetCompatibleLeaves() {
@@ -141,15 +135,14 @@ func findCompatibleNode(
 		}
 	}
 	// Otherwise, this must be targeting some version in the default/incompatible chain, and it will become a new leaf
-	for _, node := range existingData.GetCurrentDefaults() {
-		// There can only be one version of each type in the default list, so ignore any others.
-		if reflect.TypeOf(versionId) == reflect.TypeOf(node.GetVersion()) {
-			if node.GetVersion().Equal(versionId) {
-				return node, -1
-			}
-			if nn := findInNode(node, versionId); nn != nil {
-				return nn, -1
-			}
+	curDefault := existingData.GetCurrentDefault()
+	// There can only be one version of each type in the default list, so ignore any others.
+	if reflect.TypeOf(versionId) == reflect.TypeOf(curDefault.GetVersion()) {
+		if curDefault.GetVersion().Equal(versionId) {
+			return curDefault, -1
+		}
+		if nn := findInNode(curDefault, versionId); nn != nil {
+			return nn, -1
 		}
 	}
 
@@ -157,9 +150,9 @@ func findCompatibleNode(
 }
 
 func findInNode(
-	node *workflow.VersionIdNode,
-	versionId *workflow.VersionId,
-) *workflow.VersionIdNode {
+	node *taskqueuepb.VersionIdNode,
+	versionId *taskqueuepb.VersionId,
+) *taskqueuepb.VersionIdNode {
 	if node.GetVersion().Equal(versionId) {
 		return node
 	}

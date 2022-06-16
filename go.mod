@@ -2,13 +2,10 @@ module go.temporal.io/server
 
 go 1.18
 
-replace (
-	go.temporal.io/api => ../api-go
-	go.temporal.io/sdk => ../sdk-go
-)
+replace go.temporal.io/sdk => ../sdk-go
 
 require (
-	cloud.google.com/go/storage v1.22.0
+	cloud.google.com/go/storage v1.22.1
 	github.com/aws/aws-sdk-go v1.43.38
 	github.com/aws/aws-sdk-go-v2 v1.16.3
 	github.com/aws/aws-sdk-go-v2/config v1.15.5
@@ -21,7 +18,7 @@ require (
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gocql/gocql v1.0.0
 	github.com/gogo/protobuf v1.3.2
-	github.com/gogo/status v1.1.0
+	github.com/gogo/status v1.1.1
 	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.3.0
 	github.com/iancoleman/strcase v0.2.0
@@ -33,7 +30,7 @@ require (
 	github.com/pborman/uuid v1.2.1
 	github.com/prometheus/client_golang v1.12.1
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/stretchr/testify v1.7.1
+	github.com/stretchr/testify v1.7.2
 	github.com/temporalio/ringpop-go v0.0.0-20211012191444-6f91b5915e95
 	github.com/uber-go/tally/v4 v4.1.1
 	github.com/uber/tchannel-go v1.22.3
@@ -45,7 +42,7 @@ require (
 	go.opentelemetry.io/otel/metric v0.30.0
 	go.opentelemetry.io/otel/sdk v1.7.0
 	go.opentelemetry.io/otel/sdk/metric v0.30.0
-	go.temporal.io/api v1.8.1-0.20220603192404-e65836719706
+	go.temporal.io/api v1.9.0
 	go.temporal.io/sdk v1.15.0
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.9.0
@@ -54,14 +51,14 @@ require (
 	go.uber.org/zap v1.21.0
 	golang.org/x/exp v0.0.0-20220602145555-4a0574d9293f
 	golang.org/x/exp/event v0.0.0-20220602145555-4a0574d9293f
-	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
+	golang.org/x/oauth2 v0.0.0-20220608161450-d0670ef3b1eb
 	golang.org/x/time v0.0.0-20220411224347-583f2d630306
-	google.golang.org/api v0.74.0
+	google.golang.org/api v0.84.0
 	google.golang.org/grpc v1.47.0
 	google.golang.org/grpc/examples v0.0.0-20220412212246-3bf6719fc8ab
 	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/validator.v2 v2.0.1
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.16.0
 )
 
@@ -75,11 +72,12 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.11.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.16.4 // indirect
 	github.com/aws/smithy-go v1.11.2 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.1.0 // indirect
 )
 
 require (
-	cloud.google.com/go v0.100.2 // indirect
-	cloud.google.com/go/compute v1.5.0 // indirect
+	cloud.google.com/go v0.102.0 // indirect
+	cloud.google.com/go/compute v1.6.1 // indirect
 	cloud.google.com/go/iam v0.3.0 // indirect
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
 	github.com/benbjohnson/clock v1.3.0 // indirect
@@ -95,8 +93,8 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/go-cmp v0.5.7
-	github.com/googleapis/gax-go/v2 v2.3.0 // indirect
+	github.com/google/go-cmp v0.5.8
+	github.com/googleapis/gax-go/v2 v2.4.0 // indirect
 	github.com/googleapis/go-type-adapters v1.0.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
@@ -125,13 +123,13 @@ require (
 	go.uber.org/dig v1.14.1 // indirect
 	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
-	golang.org/x/net v0.0.0-20220517181318-183a9ca12b87 // indirect
-	golang.org/x/sys v0.0.0-20220517195934-5e4e11fc645e // indirect
+	golang.org/x/net v0.0.0-20220615171555-694bf12d69de // indirect
+	golang.org/x/sys v0.0.0-20220615213510-4f61da869c0c // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/tools v0.1.10 // indirect
-	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
+	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20220505152158-f39f71e6c8f3 // indirect
+	google.golang.org/genproto v0.0.0-20220616135557-88e70c0c3a90 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	lukechampine.com/uint128 v1.2.0 // indirect

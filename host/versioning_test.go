@@ -10,7 +10,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -25,7 +24,7 @@ func (s *integrationSuite) TestBasicVersionUpdate() {
 	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
 		Namespace:          s.namespace,
 		TaskQueue:          tq,
-		VersionId:          &workflow.VersionId{Version: &workflow.VersionId_WorkerBuildId{WorkerBuildId: "foo"}},
+		VersionId:          &taskqueuepb.VersionId{WorkerBuildId: "foo"},
 		PreviousCompatible: nil,
 		BecomeDefault:      true,
 	})
@@ -38,8 +37,7 @@ func (s *integrationSuite) TestBasicVersionUpdate() {
 	})
 	s.NoError(err)
 	s.NotNil(res2)
-	s.Equal(len(res2.CurrentDefaults), 1)
-	s.Equal(res2.CurrentDefaults[0].GetVersion().GetWorkerBuildId(), "foo")
+	s.Equal(res2.CurrentDefault.GetVersion().GetWorkerBuildId(), "foo")
 }
 
 func (s *integrationSuite) TestSeriesOfUpdates() {
@@ -49,10 +47,9 @@ func (s *integrationSuite) TestSeriesOfUpdates() {
 
 	for i := 0; i < 10; i++ {
 		res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
-			Namespace: s.namespace,
-			TaskQueue: tq,
-			VersionId: &workflow.VersionId{
-				Version: &workflow.VersionId_WorkerBuildId{WorkerBuildId: fmt.Sprintf("foo-%d", i)}},
+			Namespace:          s.namespace,
+			TaskQueue:          tq,
+			VersionId:          &taskqueuepb.VersionId{WorkerBuildId: fmt.Sprintf("foo-%d", i)},
 			PreviousCompatible: nil,
 			BecomeDefault:      true,
 		})
@@ -60,13 +57,11 @@ func (s *integrationSuite) TestSeriesOfUpdates() {
 		s.NotNil(res)
 	}
 	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
-		Namespace: s.namespace,
-		TaskQueue: tq,
-		VersionId: &workflow.VersionId{
-			Version: &workflow.VersionId_WorkerBuildId{WorkerBuildId: "foo-2.1"}},
-		PreviousCompatible: &workflow.VersionId{
-			Version: &workflow.VersionId_WorkerBuildId{WorkerBuildId: "foo-2"}},
-		BecomeDefault: false,
+		Namespace:          s.namespace,
+		TaskQueue:          tq,
+		VersionId:          &taskqueuepb.VersionId{WorkerBuildId: "foo-2.1"},
+		PreviousCompatible: &taskqueuepb.VersionId{WorkerBuildId: "foo-2"},
+		BecomeDefault:      false,
 	})
 	s.NoError(err)
 	s.NotNil(res)
@@ -77,8 +72,7 @@ func (s *integrationSuite) TestSeriesOfUpdates() {
 	})
 	s.NoError(err)
 	s.NotNil(res2)
-	s.Equal(len(res2.CurrentDefaults), 1)
-	s.Equal(res2.CurrentDefaults[0].GetVersion().GetWorkerBuildId(), "foo-9")
+	s.Equal(res2.CurrentDefault.GetVersion().GetWorkerBuildId(), "foo-9")
 	s.Equal(len(res2.CompatibleLeaves), 1)
 	s.Equal(res2.CompatibleLeaves[0].GetVersion().GetWorkerBuildId(), "foo-2.1")
 }
@@ -91,8 +85,8 @@ func (s *integrationSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound
 	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
 		Namespace:          s.namespace,
 		TaskQueue:          tq,
-		VersionId:          &workflow.VersionId{Version: &workflow.VersionId_WorkerBuildId{WorkerBuildId: "foo"}},
-		PreviousCompatible: &workflow.VersionId{Version: &workflow.VersionId_WorkerBuildId{WorkerBuildId: "i don't exist yo"}},
+		VersionId:          &taskqueuepb.VersionId{WorkerBuildId: "foo"},
+		PreviousCompatible: &taskqueuepb.VersionId{WorkerBuildId: "i don't exist yo"},
 	})
 	s.Error(err)
 	s.Nil(res)
@@ -107,7 +101,7 @@ func (s *integrationSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
 		Namespace:          s.namespace,
 		TaskQueue:          tq,
-		VersionId:          &workflow.VersionId{Version: &workflow.VersionId_WorkerBuildId{WorkerBuildId: "foo"}},
+		VersionId:          &taskqueuepb.VersionId{WorkerBuildId: "foo"},
 		PreviousCompatible: nil,
 		BecomeDefault:      true,
 	})
@@ -155,8 +149,7 @@ func (s *integrationSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	})
 	s.NoError(err)
 	s.NotNil(res2)
-	s.Equal(len(res2.CurrentDefaults), 1)
-	s.Equal(res2.CurrentDefaults[0].GetVersion().GetWorkerBuildId(), "foo")
+	s.Equal(res2.CurrentDefault.GetVersion().GetWorkerBuildId(), "foo")
 }
 
 func (s *integrationSuite) prepareQueue(ctx context.Context, tq string) {

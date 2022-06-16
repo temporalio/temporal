@@ -28,7 +28,7 @@ import "google/protobuf/timestamp.proto";
 import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/api/enums/v1/task_queue.proto";
-import "temporal/api/workflow/v1/message.proto";
+import "temporal/api/taskqueue/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
 
@@ -65,9 +65,9 @@ message TaskQueueInfo {
 message VersioningData {
     // The currently established default versions. There will be one per version type as defined in
     // the `VersionId` message.
-    repeated temporal.api.workflow.v1.VersionIdNode current_defaults = 1;
+    temporal.api.taskqueue.v1.VersionIdNode current_default = 1;
     // Other current latest-compatible versions who are not the overall default. These are the
     // versions that will be used when generating new tasks by following the graph from the
     // version of the last task out to a leaf.
-    repeated temporal.api.workflow.v1.VersionIdNode compatible_leaves = 2;
+    repeated temporal.api.taskqueue.v1.VersionIdNode compatible_leaves = 2;
 }
