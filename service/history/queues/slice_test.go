@@ -312,11 +312,13 @@ func (s *sliceSuite) TestShrinkRange() {
 	})
 
 	firstPendingIdx := len(executables)
+	numAcked := 0
 	for idx, executable := range executables {
 		mockExecutable := executable.(*MockExecutable)
 		acked := rand.Intn(10) < 8
 		if acked {
 			mockExecutable.EXPECT().State().Return(ctasks.TaskStateAcked).MaxTimes(1)
+			numAcked++
 		} else {
 			mockExecutable.EXPECT().State().Return(ctasks.TaskStatePending).MaxTimes(1)
 			if firstPendingIdx == len(executables) {
@@ -328,7 +330,7 @@ func (s *sliceSuite) TestShrinkRange() {
 	}
 
 	slice.ShrinkRange()
-	s.Len(slice.outstandingExecutables, len(executables)-firstPendingIdx)
+	s.Len(slice.outstandingExecutables, len(executables)-numAcked)
 
 	newInclusiveMin := r.ExclusiveMax
 
