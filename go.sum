@@ -483,6 +483,8 @@ go.opentelemetry.io/otel/trace v1.7.0/go.mod h1:fzLSB9nqR2eXzxPXb2JW9IKE+ScyXA48
 go.opentelemetry.io/proto/otlp v0.7.0/go.mod h1:PqfVotwruBrMGOCsRd/89rSnXhoiJIqeYNgFYFoEGnI=
 go.temporal.io/api v1.9.0 h1:sGQsxB4aHdgW4ShTzfiq+oVk8iwmz/2YPklVjrIIJNY=
 go.temporal.io/api v1.9.0/go.mod h1:zC63KfUwMgyUwySOWscIL1fhztYnlaCYJT6HjChZpHQ=
+go.temporal.io/sdk v1.15.1-0.20220616213014-706af9738b9c h1:5+MBa2S+1bzBj8dMcyP2iNABAA+nN/KbTkXchsSYBAA=
+go.temporal.io/sdk v1.15.1-0.20220616213014-706af9738b9c/go.mod h1:0IMH7fcPp9sVtK2oi8KaztQxt8aCIpy2xXyf+zuAO6I=
 go.temporal.io/version v0.3.0 h1:dMrei9l9NyHt8nG6EB8vAwDLLTwx2SvRyucCSumAiig=
 go.temporal.io/version v0.3.0/go.mod h1:UA9S8/1LaKYae6TyD9NaPMJTZb911JcbqghI2CBSP78=
 go.uber.org/atomic v1.4.0/go.mod h1:gD2HeocX3+yG+ygLZcrzQJaqmWj9AIm7n08wl/qW/PE=
