@@ -27,9 +27,9 @@ package admin
 import (
 	"context"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"google.golang.org/grpc"
 
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/backoff"
 )
 
@@ -50,80 +50,30 @@ func NewRetryableClient(client adminservice.AdminServiceClient, policy backoff.R
 	}
 }
 
+func (c *retryableClient) AddOrUpdateRemoteCluster(
+	ctx context.Context,
+	request *adminservice.AddOrUpdateRemoteClusterRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
+	var resp *adminservice.AddOrUpdateRemoteClusterResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.AddOrUpdateRemoteCluster(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) AddSearchAttributes(
 	ctx context.Context,
 	request *adminservice.AddSearchAttributesRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.AddSearchAttributesResponse, error) {
-
 	var resp *adminservice.AddSearchAttributesResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.AddSearchAttributes(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) RemoveSearchAttributes(
-	ctx context.Context,
-	request *adminservice.RemoveSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RemoveSearchAttributesResponse, error) {
-
-	var resp *adminservice.RemoveSearchAttributesResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.RemoveSearchAttributes(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) GetSearchAttributes(
-	ctx context.Context,
-	request *adminservice.GetSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetSearchAttributesResponse, error) {
-
-	var resp *adminservice.GetSearchAttributesResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.GetSearchAttributes(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) DescribeHistoryHost(
-	ctx context.Context,
-	request *adminservice.DescribeHistoryHostRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.DescribeHistoryHostResponse, error) {
-
-	var resp *adminservice.DescribeHistoryHostResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.DescribeHistoryHost(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) RemoveTask(
-	ctx context.Context,
-	request *adminservice.RemoveTaskRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RemoveTaskResponse, error) {
-
-	var resp *adminservice.RemoveTaskResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.RemoveTask(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -135,7 +85,6 @@ func (c *retryableClient) CloseShard(
 	request *adminservice.CloseShardRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.CloseShardResponse, error) {
-
 	var resp *adminservice.CloseShardResponse
 	op := func() error {
 		var err error
@@ -146,80 +95,15 @@ func (c *retryableClient) CloseShard(
 	return resp, err
 }
 
-func (c *retryableClient) GetShard(
+func (c *retryableClient) DeleteWorkflowExecution(
 	ctx context.Context,
-	request *adminservice.GetShardRequest,
+	request *adminservice.DeleteWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.GetShardResponse, error) {
-
-	var resp *adminservice.GetShardResponse
+) (*adminservice.DeleteWorkflowExecutionResponse, error) {
+	var resp *adminservice.DeleteWorkflowExecutionResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.GetShard(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) ListHistoryTasks(
-	ctx context.Context,
-	request *adminservice.ListHistoryTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ListHistoryTasksResponse, error) {
-
-	var resp *adminservice.ListHistoryTasksResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.ListHistoryTasks(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) RebuildMutableState(
-	ctx context.Context,
-	request *adminservice.RebuildMutableStateRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RebuildMutableStateResponse, error) {
-
-	var resp *adminservice.RebuildMutableStateResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.RebuildMutableState(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) DescribeMutableState(
-	ctx context.Context,
-	request *adminservice.DescribeMutableStateRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.DescribeMutableStateResponse, error) {
-
-	var resp *adminservice.DescribeMutableStateResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.DescribeMutableState(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) GetWorkflowExecutionRawHistoryV2(
-	ctx context.Context,
-	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
-	opts ...grpc.CallOption,
-) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
-
-	var resp *adminservice.GetWorkflowExecutionRawHistoryV2Response
-	op := func() error {
-		var err error
-		resp, err = c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
+		resp, err = c.client.DeleteWorkflowExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -231,7 +115,6 @@ func (c *retryableClient) DescribeCluster(
 	request *adminservice.DescribeClusterRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.DescribeClusterResponse, error) {
-
 	var resp *adminservice.DescribeClusterResponse
 	op := func() error {
 		var err error
@@ -242,93 +125,45 @@ func (c *retryableClient) DescribeCluster(
 	return resp, err
 }
 
-func (c *retryableClient) ListClusters(
+func (c *retryableClient) DescribeHistoryHost(
 	ctx context.Context,
-	request *adminservice.ListClustersRequest,
+	request *adminservice.DescribeHistoryHostRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.ListClustersResponse, error) {
-
-	var resp *adminservice.ListClustersResponse
+) (*adminservice.DescribeHistoryHostResponse, error) {
+	var resp *adminservice.DescribeHistoryHostResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ListClusters(ctx, request, opts...)
+		resp, err = c.client.DescribeHistoryHost(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
 
-func (c *retryableClient) ListClusterMembers(
+func (c *retryableClient) DescribeMutableState(
 	ctx context.Context,
-	request *adminservice.ListClusterMembersRequest,
+	request *adminservice.DescribeMutableStateRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.ListClusterMembersResponse, error) {
-
-	var resp *adminservice.ListClusterMembersResponse
+) (*adminservice.DescribeMutableStateResponse, error) {
+	var resp *adminservice.DescribeMutableStateResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ListClusterMembers(ctx, request, opts...)
+		resp, err = c.client.DescribeMutableState(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
 
-func (c *retryableClient) AddOrUpdateRemoteCluster(
+func (c *retryableClient) GetDLQMessages(
 	ctx context.Context,
-	request *adminservice.AddOrUpdateRemoteClusterRequest,
+	request *adminservice.GetDLQMessagesRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
-
-	var resp *adminservice.AddOrUpdateRemoteClusterResponse
+) (*adminservice.GetDLQMessagesResponse, error) {
+	var resp *adminservice.GetDLQMessagesResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.AddOrUpdateRemoteCluster(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-func (c *retryableClient) RemoveRemoteCluster(
-	ctx context.Context,
-	request *adminservice.RemoveRemoteClusterRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RemoveRemoteClusterResponse, error) {
-
-	var resp *adminservice.RemoveRemoteClusterResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.RemoveRemoteCluster(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) GetReplicationMessages(
-	ctx context.Context,
-	request *adminservice.GetReplicationMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetReplicationMessagesResponse, error) {
-	var resp *adminservice.GetReplicationMessagesResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.GetReplicationMessages(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) GetNamespaceReplicationMessages(
-	ctx context.Context,
-	request *adminservice.GetNamespaceReplicationMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
-	var resp *adminservice.GetNamespaceReplicationMessagesResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.GetNamespaceReplicationMessages(ctx, request, opts...)
+		resp, err = c.client.GetDLQMessages(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -350,6 +185,171 @@ func (c *retryableClient) GetDLQReplicationMessages(
 	return resp, err
 }
 
+func (c *retryableClient) GetNamespaceReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetNamespaceReplicationMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
+	var resp *adminservice.GetNamespaceReplicationMessagesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetNamespaceReplicationMessages(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetReplicationMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetReplicationMessagesResponse, error) {
+	var resp *adminservice.GetReplicationMessagesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetReplicationMessages(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetSearchAttributes(
+	ctx context.Context,
+	request *adminservice.GetSearchAttributesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetSearchAttributesResponse, error) {
+	var resp *adminservice.GetSearchAttributesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetSearchAttributes(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetShard(
+	ctx context.Context,
+	request *adminservice.GetShardRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetShardResponse, error) {
+	var resp *adminservice.GetShardResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetShard(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetTaskQueueTasks(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetTaskQueueTasksResponse, error) {
+	var resp *adminservice.GetTaskQueueTasksResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetTaskQueueTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetWorkflowExecutionRawHistoryV2(
+	ctx context.Context,
+	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
+	opts ...grpc.CallOption,
+) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+	var resp *adminservice.GetWorkflowExecutionRawHistoryV2Response
+	op := func() error {
+		var err error
+		resp, err = c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ListClusterMembers(
+	ctx context.Context,
+	request *adminservice.ListClusterMembersRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListClusterMembersResponse, error) {
+	var resp *adminservice.ListClusterMembersResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.ListClusterMembers(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ListClusters(
+	ctx context.Context,
+	request *adminservice.ListClustersRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListClustersResponse, error) {
+	var resp *adminservice.ListClustersResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.ListClusters(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ListHistoryTasks(
+	ctx context.Context,
+	request *adminservice.ListHistoryTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListHistoryTasksResponse, error) {
+	var resp *adminservice.ListHistoryTasksResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.ListHistoryTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) MergeDLQMessages(
+	ctx context.Context,
+	request *adminservice.MergeDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MergeDLQMessagesResponse, error) {
+	var resp *adminservice.MergeDLQMessagesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.MergeDLQMessages(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) PurgeDLQMessages(
+	ctx context.Context,
+	request *adminservice.PurgeDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.PurgeDLQMessagesResponse, error) {
+	var resp *adminservice.PurgeDLQMessagesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.PurgeDLQMessages(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ReapplyEvents(
 	ctx context.Context,
 	request *adminservice.ReapplyEventsRequest,
@@ -365,48 +365,15 @@ func (c *retryableClient) ReapplyEvents(
 	return resp, err
 }
 
-func (c *retryableClient) GetDLQMessages(
+func (c *retryableClient) RebuildMutableState(
 	ctx context.Context,
-	request *adminservice.GetDLQMessagesRequest,
+	request *adminservice.RebuildMutableStateRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.GetDLQMessagesResponse, error) {
-
-	var resp *adminservice.GetDLQMessagesResponse
+) (*adminservice.RebuildMutableStateResponse, error) {
+	var resp *adminservice.RebuildMutableStateResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.GetDLQMessages(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) PurgeDLQMessages(
-	ctx context.Context,
-	request *adminservice.PurgeDLQMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.PurgeDLQMessagesResponse, error) {
-
-	var resp *adminservice.PurgeDLQMessagesResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.PurgeDLQMessages(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) MergeDLQMessages(
-	ctx context.Context,
-	request *adminservice.MergeDLQMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.MergeDLQMessagesResponse, error) {
-
-	var resp *adminservice.MergeDLQMessagesResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.MergeDLQMessages(ctx, request, opts...)
+		resp, err = c.client.RebuildMutableState(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -418,11 +385,55 @@ func (c *retryableClient) RefreshWorkflowTasks(
 	request *adminservice.RefreshWorkflowTasksRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.RefreshWorkflowTasksResponse, error) {
-
 	var resp *adminservice.RefreshWorkflowTasksResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.RefreshWorkflowTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) RemoveRemoteCluster(
+	ctx context.Context,
+	request *adminservice.RemoveRemoteClusterRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RemoveRemoteClusterResponse, error) {
+	var resp *adminservice.RemoveRemoteClusterResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.RemoveRemoteCluster(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) RemoveSearchAttributes(
+	ctx context.Context,
+	request *adminservice.RemoveSearchAttributesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RemoveSearchAttributesResponse, error) {
+	var resp *adminservice.RemoveSearchAttributesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.RemoveSearchAttributes(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) RemoveTask(
+	ctx context.Context,
+	request *adminservice.RemoveTaskRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RemoveTaskResponse, error) {
+	var resp *adminservice.RemoveTaskResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.RemoveTask(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
@@ -434,43 +445,10 @@ func (c *retryableClient) ResendReplicationTasks(
 	request *adminservice.ResendReplicationTasksRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.ResendReplicationTasksResponse, error) {
-
 	var resp *adminservice.ResendReplicationTasksResponse
 	op := func() error {
 		var err error
 		resp, err = c.client.ResendReplicationTasks(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) GetTaskQueueTasks(
-	ctx context.Context,
-	request *adminservice.GetTaskQueueTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetTaskQueueTasksResponse, error) {
-
-	var resp *adminservice.GetTaskQueueTasksResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.GetTaskQueueTasks(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) DeleteWorkflowExecution(
-	ctx context.Context,
-	request *adminservice.DeleteWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.DeleteWorkflowExecutionResponse, error) {
-
-	var resp *adminservice.DeleteWorkflowExecutionResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.DeleteWorkflowExecution(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)

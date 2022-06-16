@@ -63,12 +63,12 @@ func NewClient(
 	}
 }
 
-func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(parent, c.timeout)
-}
-
 func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.longPollTimeout)
+}
+
+func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, c.timeout)
 }
 
 func (c *clientImpl) getRandomClient() (workflowservice.WorkflowServiceClient, error) {
@@ -78,7 +78,6 @@ func (c *clientImpl) getRandomClient() (workflowservice.WorkflowServiceClient, e
 	if err != nil {
 		return nil, err
 	}
-
 	return client.(workflowservice.WorkflowServiceClient), nil
 }
 

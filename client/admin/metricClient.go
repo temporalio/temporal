@@ -27,9 +27,9 @@ package admin
 import (
 	"context"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"google.golang.org/grpc"
 
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -48,6 +48,24 @@ func NewMetricClient(client adminservice.AdminServiceClient, metricsClient metri
 	}
 }
 
+func (c *metricClient) AddOrUpdateRemoteCluster(
+	ctx context.Context,
+	request *adminservice.AddOrUpdateRemoteClusterRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientAddOrUpdateRemoteClusterScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientAddOrUpdateRemoteClusterScope, metrics.ClientLatency)
+	resp, err := c.client.AddOrUpdateRemoteCluster(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientAddOrUpdateRemoteClusterScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) AddSearchAttributes(
 	ctx context.Context,
 	request *adminservice.AddSearchAttributesRequest,
@@ -62,78 +80,6 @@ func (c *metricClient) AddSearchAttributes(
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributesScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) RemoveSearchAttributes(
-	ctx context.Context,
-	request *adminservice.RemoveSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RemoveSearchAttributesResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientRemoveSearchAttributesScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientRemoveSearchAttributesScope, metrics.ClientLatency)
-	resp, err := c.client.RemoveSearchAttributes(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientRemoveSearchAttributesScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) GetSearchAttributes(
-	ctx context.Context,
-	request *adminservice.GetSearchAttributesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetSearchAttributesResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientGetSearchAttributesScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientGetSearchAttributesScope, metrics.ClientLatency)
-	resp, err := c.client.GetSearchAttributes(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientGetSearchAttributesScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) DescribeHistoryHost(
-	ctx context.Context,
-	request *adminservice.DescribeHistoryHostRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.DescribeHistoryHostResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientDescribeHistoryHostScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeHistoryHostScope, metrics.ClientLatency)
-	resp, err := c.client.DescribeHistoryHost(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientDescribeHistoryHostScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) RemoveTask(
-	ctx context.Context,
-	request *adminservice.RemoveTaskRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RemoveTaskResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientCloseShardScope, metrics.ClientLatency)
-	resp, err := c.client.RemoveTask(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientCloseShardScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -156,91 +102,20 @@ func (c *metricClient) CloseShard(
 	return resp, err
 }
 
-func (c *metricClient) GetShard(
+func (c *metricClient) DeleteWorkflowExecution(
 	ctx context.Context,
-	request *adminservice.GetShardRequest,
+	request *adminservice.DeleteWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.GetShardResponse, error) {
+) (*adminservice.DeleteWorkflowExecutionResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.AdminClientGetShardScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.AdminClientDeleteWorkflowExecutionScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.AdminClientGetShardScope, metrics.ClientLatency)
-	resp, err := c.client.GetShard(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientDeleteWorkflowExecutionScope, metrics.ClientLatency)
+	resp, err := c.client.DeleteWorkflowExecution(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientGetShardScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) ListHistoryTasks(
-	ctx context.Context,
-	request *adminservice.ListHistoryTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ListHistoryTasksResponse, error) {
-	c.metricsClient.IncCounter(metrics.AdminClientListHistoryTasksScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientListHistoryTasksScope, metrics.ClientLatency)
-	resp, err := c.client.ListHistoryTasks(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientListHistoryTasksScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) RebuildMutableState(
-	ctx context.Context,
-	request *adminservice.RebuildMutableStateRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RebuildMutableStateResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientRebuildMutableStateScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientRebuildMutableStateScope, metrics.ClientLatency)
-	resp, err := c.client.RebuildMutableState(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientRebuildMutableStateScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) DescribeMutableState(
-	ctx context.Context,
-	request *adminservice.DescribeMutableStateRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.DescribeMutableStateResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientDescribeMutableStateScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeMutableStateScope, metrics.ClientLatency)
-	resp, err := c.client.DescribeMutableState(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientDescribeMutableStateScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
-	ctx context.Context,
-	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
-	opts ...grpc.CallOption,
-) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientGetWorkflowExecutionRawHistoryV2Scope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientGetWorkflowExecutionRawHistoryV2Scope, metrics.ClientLatency)
-	resp, err := c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientGetWorkflowExecutionRawHistoryV2Scope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.AdminClientDeleteWorkflowExecutionScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -263,20 +138,182 @@ func (c *metricClient) DescribeCluster(
 	return resp, err
 }
 
-func (c *metricClient) ListClusters(
+func (c *metricClient) DescribeHistoryHost(
 	ctx context.Context,
-	request *adminservice.ListClustersRequest,
+	request *adminservice.DescribeHistoryHostRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.ListClustersResponse, error) {
+) (*adminservice.DescribeHistoryHostResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.AdminClientListClustersScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.AdminClientDescribeHistoryHostScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.AdminClientListClustersScope, metrics.ClientLatency)
-	resp, err := c.client.ListClusters(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeHistoryHostScope, metrics.ClientLatency)
+	resp, err := c.client.DescribeHistoryHost(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientListClustersScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.AdminClientDescribeHistoryHostScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) DescribeMutableState(
+	ctx context.Context,
+	request *adminservice.DescribeMutableStateRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DescribeMutableStateResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientDescribeMutableStateScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeMutableStateScope, metrics.ClientLatency)
+	resp, err := c.client.DescribeMutableState(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientDescribeMutableStateScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetDLQMessages(
+	ctx context.Context,
+	request *adminservice.GetDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetDLQMessagesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientGetDLQMessagesScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientGetDLQMessagesScope, metrics.ClientLatency)
+	resp, err := c.client.GetDLQMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientGetDLQMessagesScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetDLQReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetDLQReplicationMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetDLQReplicationMessagesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientGetDLQReplicationMessagesScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientGetDLQReplicationMessagesScope, metrics.ClientLatency)
+	resp, err := c.client.GetDLQReplicationMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientGetDLQReplicationMessagesScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetNamespaceReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetNamespaceReplicationMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientGetNamespaceReplicationMessagesScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientGetNamespaceReplicationMessagesScope, metrics.ClientLatency)
+	resp, err := c.client.GetNamespaceReplicationMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientGetNamespaceReplicationMessagesScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetReplicationMessages(
+	ctx context.Context,
+	request *adminservice.GetReplicationMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetReplicationMessagesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientGetReplicationMessagesScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientGetReplicationMessagesScope, metrics.ClientLatency)
+	resp, err := c.client.GetReplicationMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientGetReplicationMessagesScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetSearchAttributes(
+	ctx context.Context,
+	request *adminservice.GetSearchAttributesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetSearchAttributesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientGetSearchAttributesScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientGetSearchAttributesScope, metrics.ClientLatency)
+	resp, err := c.client.GetSearchAttributes(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientGetSearchAttributesScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetShard(
+	ctx context.Context,
+	request *adminservice.GetShardRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetShardResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientGetShardScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientGetShardScope, metrics.ClientLatency)
+	resp, err := c.client.GetShard(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientGetShardScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetTaskQueueTasks(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetTaskQueueTasksResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientGetTaskQueueTasksScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientGetTaskQueueTasksScope, metrics.ClientLatency)
+	resp, err := c.client.GetTaskQueueTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientGetTaskQueueTasksScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
+	ctx context.Context,
+	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
+	opts ...grpc.CallOption,
+) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientGetWorkflowExecutionRawHistoryV2Scope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientGetWorkflowExecutionRawHistoryV2Scope, metrics.ClientLatency)
+	resp, err := c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientGetWorkflowExecutionRawHistoryV2Scope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -299,20 +336,128 @@ func (c *metricClient) ListClusterMembers(
 	return resp, err
 }
 
-func (c *metricClient) AddOrUpdateRemoteCluster(
+func (c *metricClient) ListClusters(
 	ctx context.Context,
-	request *adminservice.AddOrUpdateRemoteClusterRequest,
+	request *adminservice.ListClustersRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
+) (*adminservice.ListClustersResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.AdminClientAddOrUpdateRemoteClusterScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.AdminClientListClustersScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.AdminClientAddOrUpdateRemoteClusterScope, metrics.ClientLatency)
-	resp, err := c.client.AddOrUpdateRemoteCluster(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientListClustersScope, metrics.ClientLatency)
+	resp, err := c.client.ListClusters(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientAddOrUpdateRemoteClusterScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.AdminClientListClustersScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) ListHistoryTasks(
+	ctx context.Context,
+	request *adminservice.ListHistoryTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListHistoryTasksResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientListHistoryTasksScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientListHistoryTasksScope, metrics.ClientLatency)
+	resp, err := c.client.ListHistoryTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientListHistoryTasksScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) MergeDLQMessages(
+	ctx context.Context,
+	request *adminservice.MergeDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MergeDLQMessagesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientMergeDLQMessagesScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientMergeDLQMessagesScope, metrics.ClientLatency)
+	resp, err := c.client.MergeDLQMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientMergeDLQMessagesScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) PurgeDLQMessages(
+	ctx context.Context,
+	request *adminservice.PurgeDLQMessagesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.PurgeDLQMessagesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientPurgeDLQMessagesScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientPurgeDLQMessagesScope, metrics.ClientLatency)
+	resp, err := c.client.PurgeDLQMessages(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientPurgeDLQMessagesScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) ReapplyEvents(
+	ctx context.Context,
+	request *adminservice.ReapplyEventsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ReapplyEventsResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientReapplyEventsScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientReapplyEventsScope, metrics.ClientLatency)
+	resp, err := c.client.ReapplyEvents(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientReapplyEventsScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) RebuildMutableState(
+	ctx context.Context,
+	request *adminservice.RebuildMutableStateRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RebuildMutableStateResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientRebuildMutableStateScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientRebuildMutableStateScope, metrics.ClientLatency)
+	resp, err := c.client.RebuildMutableState(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientRebuildMutableStateScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) RefreshWorkflowTasks(
+	ctx context.Context,
+	request *adminservice.RefreshWorkflowTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RefreshWorkflowTasksResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientRefreshWorkflowTasksScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientRefreshWorkflowTasksScope, metrics.ClientLatency)
+	resp, err := c.client.RefreshWorkflowTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientRefreshWorkflowTasksScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -335,138 +480,38 @@ func (c *metricClient) RemoveRemoteCluster(
 	return resp, err
 }
 
-func (c *metricClient) GetReplicationMessages(
+func (c *metricClient) RemoveSearchAttributes(
 	ctx context.Context,
-	request *adminservice.GetReplicationMessagesRequest,
+	request *adminservice.RemoveSearchAttributesRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.GetReplicationMessagesResponse, error) {
-	c.metricsClient.IncCounter(metrics.FrontendClientGetReplicationTasksScope, metrics.ClientRequests)
+) (*adminservice.RemoveSearchAttributesResponse, error) {
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetReplicationTasksScope, metrics.ClientLatency)
-	resp, err := c.client.GetReplicationMessages(ctx, request, opts...)
+	c.metricsClient.IncCounter(metrics.AdminClientRemoveSearchAttributesScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientRemoveSearchAttributesScope, metrics.ClientLatency)
+	resp, err := c.client.RemoveSearchAttributes(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientGetReplicationTasksScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.AdminClientRemoveSearchAttributesScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
 
-func (c *metricClient) GetNamespaceReplicationMessages(
+func (c *metricClient) RemoveTask(
 	ctx context.Context,
-	request *adminservice.GetNamespaceReplicationMessagesRequest,
+	request *adminservice.RemoveTaskRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
-	c.metricsClient.IncCounter(metrics.FrontendClientGetNamespaceReplicationTasksScope, metrics.ClientRequests)
+) (*adminservice.RemoveTaskResponse, error) {
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetNamespaceReplicationTasksScope, metrics.ClientLatency)
-	resp, err := c.client.GetNamespaceReplicationMessages(ctx, request, opts...)
+	c.metricsClient.IncCounter(metrics.AdminClientRemoveTaskScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientRemoveTaskScope, metrics.ClientLatency)
+	resp, err := c.client.RemoveTask(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientGetNamespaceReplicationTasksScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) GetDLQReplicationMessages(
-	ctx context.Context,
-	request *adminservice.GetDLQReplicationMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetDLQReplicationMessagesResponse, error) {
-	c.metricsClient.IncCounter(metrics.FrontendClientGetDLQReplicationTasksScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetDLQReplicationTasksScope, metrics.ClientLatency)
-	resp, err := c.client.GetDLQReplicationMessages(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientGetDLQReplicationTasksScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) ReapplyEvents(
-	ctx context.Context,
-	request *adminservice.ReapplyEventsRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ReapplyEventsResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.FrontendClientReapplyEventsScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientReapplyEventsScope, metrics.ClientLatency)
-	resp, err := c.client.ReapplyEvents(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientReapplyEventsScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) GetDLQMessages(
-	ctx context.Context,
-	request *adminservice.GetDLQMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetDLQMessagesResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientGetDLQMessagesScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.AdminClientGetDLQMessagesScope, metrics.ClientLatency)
-	resp, err := c.client.GetDLQMessages(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientGetDLQMessagesScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) PurgeDLQMessages(
-	ctx context.Context,
-	request *adminservice.PurgeDLQMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.PurgeDLQMessagesResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientPurgeDLQMessagesScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.AdminClientPurgeDLQMessagesScope, metrics.ClientLatency)
-	resp, err := c.client.PurgeDLQMessages(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientPurgeDLQMessagesScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) MergeDLQMessages(
-	ctx context.Context,
-	request *adminservice.MergeDLQMessagesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.MergeDLQMessagesResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientMergeDLQMessagesScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.AdminClientMergeDLQMessagesScope, metrics.ClientLatency)
-	resp, err := c.client.MergeDLQMessages(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientMergeDLQMessagesScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) RefreshWorkflowTasks(
-	ctx context.Context,
-	request *adminservice.RefreshWorkflowTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RefreshWorkflowTasksResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientRefreshWorkflowTasksScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.AdminClientRefreshWorkflowTasksScope, metrics.ClientLatency)
-	resp, err := c.client.RefreshWorkflowTasks(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientRefreshWorkflowTasksScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.AdminClientRemoveTaskScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -478,46 +523,13 @@ func (c *metricClient) ResendReplicationTasks(
 ) (*adminservice.ResendReplicationTasksResponse, error) {
 
 	c.metricsClient.IncCounter(metrics.AdminClientResendReplicationTasksScope, metrics.ClientRequests)
+
 	sw := c.metricsClient.StartTimer(metrics.AdminClientResendReplicationTasksScope, metrics.ClientLatency)
 	resp, err := c.client.ResendReplicationTasks(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.AdminClientResendReplicationTasksScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) GetTaskQueueTasks(
-	ctx context.Context,
-	request *adminservice.GetTaskQueueTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.GetTaskQueueTasksResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientResendReplicationTasksScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.AdminClientResendReplicationTasksScope, metrics.ClientLatency)
-	resp, err := c.client.GetTaskQueueTasks(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientResendReplicationTasksScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) DeleteWorkflowExecution(
-	ctx context.Context,
-	request *adminservice.DeleteWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.DeleteWorkflowExecutionResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientDeleteWorkflowExecutionScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.AdminClientDeleteWorkflowExecutionScope, metrics.ClientLatency)
-	resp, err := c.client.DeleteWorkflowExecution(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientDeleteWorkflowExecutionScope, metrics.ClientFailures)
 	}
 	return resp, err
 }

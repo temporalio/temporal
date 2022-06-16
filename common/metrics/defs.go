@@ -511,14 +511,6 @@ const (
 	FrontendClientCountWorkflowExecutionsScope
 	// FrontendClientGetSearchAttributesScope tracks RPC calls to frontend service
 	FrontendClientGetSearchAttributesScope
-	// FrontendClientGetReplicationTasksScope tracks RPC calls to frontend service
-	FrontendClientGetReplicationTasksScope
-	// FrontendClientGetNamespaceReplicationTasksScope tracks RPC calls to frontend service
-	FrontendClientGetNamespaceReplicationTasksScope
-	// FrontendClientGetDLQReplicationTasksScope tracks RPC calls to frontend service
-	FrontendClientGetDLQReplicationTasksScope
-	// FrontendClientReapplyEventsScope tracks RPC calls to frontend service
-	FrontendClientReapplyEventsScope
 	// FrontendClientGetClusterInfoScope tracks RPC calls to frontend
 	FrontendClientGetClusterInfoScope
 	// FrontendClientGetSystemInfoScope tracks RPC calls to frontend
@@ -551,6 +543,8 @@ const (
 	AdminClientGetShardScope
 	// AdminClientListHistoryTasksScope tracks RPC calls to admin service
 	AdminClientListHistoryTasksScope
+	// AdminClientRemoveTaskScope tracks RPC calls to admin service
+	AdminClientRemoveTaskScope
 	// AdminClientDescribeHistoryHostScope tracks RPC calls to admin service
 	AdminClientDescribeHistoryHostScope
 	// AdminClientRebuildMutableStateScope tracks RPC calls to admin service
@@ -571,6 +565,14 @@ const (
 	AdminClientAddOrUpdateRemoteClusterScope
 	// AdminClientRemoveRemoteClusterScope tracks RPC calls to admin service
 	AdminClientRemoveRemoteClusterScope
+	// AdminClientGetReplicationMessagesScope tracks RPC calls to admin service
+	AdminClientGetReplicationMessagesScope
+	// AdminClientGetNamespaceReplicationMessagesScope tracks RPC calls to admin service
+	AdminClientGetNamespaceReplicationMessagesScope
+	// AdminClientGetDLQReplicationMessagesScope tracks RPC calls to admin service
+	AdminClientGetDLQReplicationMessagesScope
+	// AdminClientReapplyEventsScope tracks RPC calls to admin service
+	AdminClientReapplyEventsScope
 	// AdminClientGetDLQMessagesScope tracks RPC calls to admin service
 	AdminClientGetDLQMessagesScope
 	// AdminClientPurgeDLQMessagesScope tracks RPC calls to admin service
@@ -1469,10 +1471,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientScanWorkflowExecutionsScope:             {operation: "FrontendClientScanWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientCountWorkflowExecutionsScope:            {operation: "FrontendClientCountWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetSearchAttributesScope:                {operation: "FrontendClientGetSearchAttributes", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetReplicationTasksScope:                {operation: "FrontendClientGetReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetNamespaceReplicationTasksScope:       {operation: "FrontendClientGetNamespaceReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetDLQReplicationTasksScope:             {operation: "FrontendClientGetDLQReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientReapplyEventsScope:                      {operation: "FrontendClientReapplyEventsScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetClusterInfoScope:                     {operation: "FrontendClientGetClusterInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetSystemInfoScope:                      {operation: "FrontendClientGetSystemInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListTaskQueuePartitionsScope:            {operation: "FrontendClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1503,6 +1501,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientCloseShardScope:                       {operation: "AdminClientCloseShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetShardScope:                         {operation: "AdminClientGetShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientListHistoryTasksScope:                 {operation: "AdminClientListHistoryTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientRemoveTaskScope:                       {operation: "AdminClientRemoveTask", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetReplicationMessagesScope:           {operation: "AdminClientGetReplicationMessagesScope", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetNamespaceReplicationMessagesScope:  {operation: "AdminClientGetNamespaceReplicationMessagesScope", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetDLQReplicationMessagesScope:        {operation: "AdminClientGetDLQReplicationMessagesScope", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientReapplyEventsScope:                    {operation: "AdminClientReapplyEventsScope", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetDLQMessagesScope:                   {operation: "AdminClientGetDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientPurgeDLQMessagesScope:                 {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientMergeDLQMessagesScope:                 {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
