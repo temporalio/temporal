@@ -36,6 +36,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -129,7 +130,6 @@ var (
 // Returns true if the Wait() call succeeded before the timeout
 // Returns false if the Wait() did not return before the timeout
 func AwaitWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
-
 	doneC := make(chan struct{})
 
 	go func() {
@@ -598,12 +598,11 @@ func CheckEventBlobSizeLimit(
 	namespace string,
 	workflowID string,
 	runID string,
-	scope metrics.Scope,
+	handler metrics.MetricsHandler,
 	logger log.Logger,
 	blobSizeViolationOperationTag tag.ZapTag,
 ) error {
-
-	scope.RecordDistribution(metrics.EventBlobSize, actualSize)
+	handler.RecordDistribution(metrics.EventBlobSize, actualSize)
 
 	if actualSize > warnLimit {
 		if logger != nil {
@@ -630,7 +629,6 @@ func ValidateLongPollContextTimeout(
 	handlerName string,
 	logger log.Logger,
 ) error {
-
 	deadline, err := ValidateLongPollContextTimeoutIsSet(ctx, handlerName, logger)
 	if err != nil {
 		return err
@@ -655,7 +653,6 @@ func ValidateLongPollContextTimeoutIsSet(
 	handlerName string,
 	logger log.Logger,
 ) (time.Time, error) {
-
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		err := ErrContextTimeoutNotSet
@@ -681,7 +678,6 @@ func OverrideWorkflowRunTimeout(
 	workflowRunTimeout time.Duration,
 	workflowExecutionTimeout time.Duration,
 ) time.Duration {
-
 	if workflowExecutionTimeout == 0 {
 		return workflowRunTimeout
 	} else if workflowRunTimeout == 0 {
@@ -697,7 +693,6 @@ func OverrideWorkflowTaskTimeout(
 	workflowRunTimeout time.Duration,
 	getDefaultTimeoutFunc dynamicconfig.DurationPropertyFnWithNamespaceFilter,
 ) time.Duration {
-
 	if taskStartToCloseTimeout == 0 {
 		taskStartToCloseTimeout = getDefaultTimeoutFunc(namespace)
 	}

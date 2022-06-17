@@ -435,10 +435,10 @@ func (mr *MockContextMockRecorder) GetMetricsClient() *gomock.Call {
 }
 
 // GetMetricsReporter mocks base method.
-func (m *MockContext) GetMetricsReporter() metrics.Reporter {
+func (m *MockContext) GetMetricsReporter() metrics.MetricsHandler {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetricsReporter")
-	ret0, _ := ret[0].(metrics.Reporter)
+	ret0, _ := ret[0].(metrics.MetricsHandler)
 	return ret0
 }
 

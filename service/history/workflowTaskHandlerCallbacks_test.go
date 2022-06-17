@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -87,7 +88,8 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: 1,
 				RangeId: 1,
-			}},
+			},
+		},
 		config,
 	)
 	mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
@@ -112,11 +114,11 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		throttledLogger:    s.logger,
-		metricsClient:      metrics.NoopClient,
+		metricsHandler:     metrics.NoopMetricsHandler,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		config:             config,
 		timeSource:         mockShard.GetTimeSource(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopClient, func(namespace.ID, string) int32 { return 1 }),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		searchAttributesValidator: searchattribute.NewValidator(
 			searchattribute.NewTestProvider(),
 			mockShard.Resource.SearchAttributesMapper,

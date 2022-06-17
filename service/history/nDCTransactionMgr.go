@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 
 	"github.com/pborman/uuid"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -161,7 +162,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		executionManager  persistence.ExecutionManager
 		serializer        serialization.Serializer
-		metricsClient     metrics.Client
+		metricsHandler    metrics.MetricsHandler
 		workflowResetter  workflowResetter
 		eventsReapplier   nDCEventsReapplier
 		logger            log.Logger
@@ -179,7 +180,6 @@ func newNDCTransactionMgr(
 	eventsReapplier nDCEventsReapplier,
 	logger log.Logger,
 ) *nDCTransactionMgrImpl {
-
 	transactionMgr := &nDCTransactionMgrImpl{
 		shard:             shard,
 		namespaceRegistry: shard.GetNamespaceRegistry(),
@@ -187,7 +187,7 @@ func newNDCTransactionMgr(
 		clusterMetadata:   shard.GetClusterMetadata(),
 		executionManager:  shard.GetExecutionManager(),
 		serializer:        shard.GetPayloadSerializer(),
-		metricsClient:     shard.GetMetricsClient(),
+		metricsHandler:    shard.GetMetricsClient(),
 		workflowResetter: newWorkflowResetter(
 			shard,
 			historyCache,
@@ -209,7 +209,6 @@ func (r *nDCTransactionMgrImpl) createWorkflow(
 	now time.Time,
 	targetWorkflow nDCWorkflow,
 ) error {
-
 	return r.createMgr.dispatchForNewWorkflow(
 		ctx,
 		now,
@@ -224,7 +223,6 @@ func (r *nDCTransactionMgrImpl) updateWorkflow(
 	targetWorkflow nDCWorkflow,
 	newWorkflow nDCWorkflow,
 ) error {
-
 	return r.updateMgr.dispatchForExistingWorkflow(
 		ctx,
 		now,
@@ -240,7 +238,6 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 	targetWorkflow nDCWorkflow,
 	targetWorkflowEvents *persistence.WorkflowEvents,
 ) (retError error) {
-
 	defer func() {
 		if rec := recover(); rec != nil {
 			targetWorkflow.getReleaseFn()(errPanic)
@@ -282,7 +279,6 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 	targetWorkflow nDCWorkflow,
 	targetWorkflowEvents *persistence.WorkflowEvents,
 ) (persistence.UpdateWorkflowMode, workflow.TransactionPolicy, error) {
-
 	isCurrentWorkflow, err := r.isWorkflowCurrent(ctx, targetWorkflow)
 	if err != nil {
 		return 0, workflow.TransactionPolicyActive, err
@@ -331,7 +327,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(workflowID),
 			)
-			r.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
+			r.metricsHandler.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
 			return persistence.UpdateWorkflowModeBypassCurrent, workflow.TransactionPolicyPassive, nil
 		}
 
@@ -368,7 +364,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 			// no-op. Usually this is due to reset workflow with pending child workflows
 			r.logger.Warn("Cannot reset workflow. Ignoring reapply events.", tag.Error(err))
 		case nil:
-			//no-op
+			// no-op
 		default:
 			return 0, workflow.TransactionPolicyActive, err
 		}
@@ -397,7 +393,6 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 	workflowID string,
 	runID string,
 ) (bool, error) {
-
 	_, err := r.shard.GetWorkflowExecution(
 		ctx,
 		&persistence.GetWorkflowExecutionRequest{
@@ -423,7 +418,6 @@ func (r *nDCTransactionMgrImpl) getCurrentWorkflowRunID(
 	namespaceID namespace.ID,
 	workflowID string,
 ) (string, error) {
-
 	resp, err := r.shard.GetCurrentExecution(
 		ctx,
 		&persistence.GetCurrentExecutionRequest{
@@ -449,7 +443,6 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 	workflowID string,
 	runID string,
 ) (nDCWorkflow, error) {
-
 	// we need to check the current workflow execution
 	weContext, release, err := r.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -477,7 +470,6 @@ func (r *nDCTransactionMgrImpl) isWorkflowCurrent(
 	ctx context.Context,
 	targetWorkflow nDCWorkflow,
 ) (bool, error) {
-
 	// since we are not rebuilding the mutable state (when doing back fill) then we
 	// can trust the result from IsCurrentWorkflowGuaranteed
 	if targetWorkflow.getMutableState().IsCurrentWorkflowGuaranteed() {

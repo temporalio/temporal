@@ -125,14 +125,12 @@ type (
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                  log.Logger
 		ClientFactoryProvider   client.FactoryProvider
-		ServerReporter          metrics.Reporter
-		MetricsClient           metrics.Client
+		MetricsHandler          metrics.MetricsHandler
 		DynamicConfigClient     dynamicconfig.Client
 		DynamicConfigCollection *dynamicconfig.Collection
 		TLSConfigProvider       encryption.TLSConfigProvider
 		EsConfig                *esclient.Config
 		EsClient                esclient.Client
-		MetricsHandler          metrics.MetricsHandler
 	}
 )
 
@@ -193,19 +191,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	// MetricsHandler
-	provider := so.metricProvider
-	if provider == nil {
-		provider = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
+	metricsHandler := so.metricHandler
+	if metricsHandler == nil {
+		metricsHandler = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
 	}
-
-	// ServerReporter
-	serverReporter := so.metricsReporter
-	if serverReporter == nil {
-		serverReporter = metrics.NewReporter(provider)
-	}
-
-	// MetricsClient
-	var metricsClient metrics.Client = metrics.NewClient(provider, metrics.Server)
 
 	// DynamicConfigClient
 	dcClient := so.dynamicConfigClient
@@ -226,7 +215,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// TLSConfigProvider
 	tlsConfigProvider := so.tlsConfigProvider
 	if tlsConfigProvider == nil {
-		tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricsClient, logger, nil)
+		tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricsHandler, logger, nil)
 		if err != nil {
 			return serverOptionsProvider{}, err
 		}
@@ -280,14 +269,12 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 
 		Logger:                  logger,
 		ClientFactoryProvider:   clientFactoryProvider,
-		ServerReporter:          serverReporter,
-		MetricsClient:           metricsClient,
+		MetricsHandler:          metricsHandler,
 		DynamicConfigClient:     dcClient,
 		DynamicConfigCollection: dynamicconfig.NewCollection(dcClient, logger),
 		TLSConfigProvider:       tlsConfigProvider,
 		EsConfig:                esConfig,
 		EsClient:                esClient,
-		MetricsHandler:          provider,
 	}, nil
 }
 
@@ -324,7 +311,7 @@ type (
 		Logger                     log.Logger
 		NamespaceLogger            resource.NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
-		ServerReporter             metrics.Reporter
+		MetricsHandler             metrics.MetricsHandler
 		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
 		TlsConfigProvider          encryption.TLSConfigProvider
@@ -382,7 +369,7 @@ func HistoryServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
@@ -442,7 +429,7 @@ func MatchingServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Supply(params.SpanExporters),
@@ -499,7 +486,7 @@ func FrontendServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
@@ -557,7 +544,7 @@ func WorkerServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Supply(params.SpanExporters),
@@ -605,7 +592,7 @@ func ApplyClusterMetadataConfigProvider(
 		Cfg:               &config.Persistence,
 		PersistenceMaxQPS: nil,
 		ClusterName:       persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
-		MetricsClient:     nil,
+		MetricsHandler:    nil,
 		Logger:            logger,
 	})
 	defer factory.Close()

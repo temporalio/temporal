@@ -58,7 +58,7 @@ func newNamespaceReplicationMessageProcessor(
 	sourceCluster string,
 	logger log.Logger,
 	remotePeer adminservice.AdminServiceClient,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	taskExecutor namespace.ReplicationTaskExecutor,
 	hostInfo *membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
@@ -77,7 +77,7 @@ func newNamespaceReplicationMessageProcessor(
 		logger:                    logger,
 		remotePeer:                remotePeer,
 		taskExecutor:              taskExecutor,
-		metricsClient:             metricsClient,
+		metricsHandler:            metricsHandler,
 		retryPolicy:               retryPolicy,
 		lastProcessedMessageID:    -1,
 		lastRetrievedMessageID:    -1,
@@ -96,7 +96,7 @@ type (
 		logger                    log.Logger
 		remotePeer                adminservice.AdminServiceClient
 		taskExecutor              namespace.ReplicationTaskExecutor
-		metricsClient             metrics.Client
+		metricsHandler            metrics.MetricsHandler
 		retryPolicy               backoff.RetryPolicy
 		lastProcessedMessageID    int64
 		lastRetrievedMessageID    int64
@@ -166,9 +166,8 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 		err := backoff.Retry(func() error {
 			return p.handleNamespaceReplicationTask(task)
 		}, p.retryPolicy, isTransientRetryableError)
-
 		if err != nil {
-			p.metricsClient.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorFailures)
+			p.metricsHandler.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorFailures)
 			p.logger.Error("Failed to apply namespace replication tasks", tag.Error(err))
 
 			dlqErr := backoff.Retry(func() error {
@@ -176,7 +175,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 			}, p.retryPolicy, isTransientRetryableError)
 			if dlqErr != nil {
 				p.logger.Error("Failed to put replication tasks to DLQ", tag.Error(dlqErr))
-				p.metricsClient.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorDLQFailures)
+				p.metricsHandler.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorDLQFailures)
 				return
 			}
 		}
@@ -189,14 +188,13 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 	task *replicationspb.ReplicationTask,
 ) error {
-
 	namespaceAttribute := task.GetNamespaceTaskAttributes()
 	if namespaceAttribute == nil {
 		return serviceerror.NewUnavailable(
 			"Namespace replication task does not set namespace task attribute",
 		)
 	}
-	p.metricsClient.Scope(
+	p.metricsHandler.Scope(
 		metrics.NamespaceReplicationTaskScope,
 		metrics.NamespaceTag(namespaceAttribute.GetInfo().GetName()),
 	).IncCounter(metrics.NamespaceReplicationEnqueueDLQCount)
@@ -206,8 +204,8 @@ func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
 	task *replicationspb.ReplicationTask,
 ) error {
-	p.metricsClient.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorMessages)
-	sw := p.metricsClient.StartTimer(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorLatency)
+	p.metricsHandler.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorMessages)
+	sw := p.metricsHandler.StartTimer(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
 	return p.taskExecutor.Execute(context.TODO(), task.GetNamespaceTaskAttributes())

@@ -46,9 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 )
 
-var (
-	errUploadNonRetryable = errors.New("upload non-retryable error")
-)
+var errUploadNonRetryable = errors.New("upload non-retryable error")
 
 const (
 	// URIScheme is the scheme for the gcloud storage implementation
@@ -108,7 +106,7 @@ func newHistoryArchiver(container *archiver.HistoryBootstrapContainer, historyIt
 // between retry attempts.
 // This method will be invoked after a workflow passes its retention period.
 func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiver.ArchiveHistoryRequest, opts ...archiver.ArchiveOption) (err error) {
-	scope := h.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.NamespaceTag(request.Namespace))
+	scope := h.container.MetricsHandler.WithTags(metrics.HistoryArchiverScope, metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
@@ -206,7 +204,6 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 // The URI identifies the resource from which history should be accessed and it is up to the implementor to interpret this URI.
 // This method should thrift errors - see filestore as an example.
 func (h *historyArchiver) Get(ctx context.Context, URI archiver.URI, request *archiver.GetHistoryRequest) (*archiver.GetHistoryResponse, error) {
-
 	err := h.ValidateURI(URI)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(archiver.ErrInvalidURI.Error())
@@ -293,7 +290,6 @@ outer:
 
 // ValidateURI is used to define what a valid URI for an implementation is.
 func (h *historyArchiver) ValidateURI(URI archiver.URI) (err error) {
-
 	if err = h.validateURI(URI); err == nil {
 		_, err = h.gcloudStorage.Exist(context.Background(), URI, "")
 	}
@@ -347,9 +343,7 @@ func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*h
 }
 
 func (h *historyArchiver) getHighestVersion(ctx context.Context, URI archiver.URI, request *archiver.GetHistoryRequest) (*int64, *int, *int, error) {
-
 	filenames, err := h.gcloudStorage.Query(ctx, URI, constructHistoryFilenamePrefix(request.NamespaceID, request.WorkflowID, request.RunID))
-
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -386,7 +380,6 @@ func (h *historyArchiver) getHighestVersion(ctx context.Context, URI archiver.UR
 }
 
 func loadHistoryIterator(ctx context.Context, request *archiver.ArchiveHistoryRequest, executionManager persistence.ExecutionManager, featureCatalog *archiver.ArchiveFeatureCatalog, progress *progress) (historyIterator archiver.HistoryIterator, err error) {
-
 	defer func() {
 		if err != nil || historyIterator == nil {
 			historyIterator, err = archiver.NewHistoryIteratorFromState(request, executionManager, targetHistoryBlobSize, nil)
@@ -400,7 +393,6 @@ func loadHistoryIterator(ctx context.Context, request *archiver.ArchiveHistoryRe
 				historyIterator, err = archiver.NewHistoryIteratorFromState(request, executionManager, targetHistoryBlobSize, progress.IteratorState)
 			}
 		}
-
 	}
 	return
 }

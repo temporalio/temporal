@@ -34,11 +34,12 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/fx"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/fx"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -89,7 +90,7 @@ type (
 		persistenceShardManager       persistence.ShardManager
 		persistenceVisibilityManager  manager.VisibilityManager
 		historyServiceResolver        membership.ServiceResolver
-		metricsClient                 metrics.Client
+		metricsHandler                metrics.MetricsHandler
 		payloadSerializer             serialization.Serializer
 		timeSource                    clock.TimeSource
 		namespaceRegistry             namespace.Registry
@@ -112,7 +113,7 @@ type (
 		PersistenceShardManager       persistence.ShardManager
 		PersistenceVisibilityManager  manager.VisibilityManager
 		HistoryServiceResolver        membership.ServiceResolver
-		MetricsClient                 metrics.Client
+		MetricsHandler                metrics.MetricsHandler
 		PayloadSerializer             serialization.Serializer
 		TimeSource                    clock.TimeSource
 		NamespaceRegistry             namespace.Registry
@@ -205,6 +206,7 @@ func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest)
 	}
 	return hs, nil
 }
+
 func (h *Handler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
 	return serviceerror.NewUnimplemented("Watch is not implemented.")
 }
@@ -1275,7 +1277,6 @@ func (h *Handler) VerifyChildExecutionCompletionRecorded(
 // 1. StickyTaskQueue
 // 2. StickyScheduleToStartTimeout
 func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyservice.ResetStickyTaskQueueRequest) (_ *historyservice.ResetStickyTaskQueueResponse, retError error) {
-
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
@@ -1743,7 +1744,6 @@ func (h *Handler) GenerateLastHistoryReplicationTasks(
 	}
 
 	resp, err := engine.GenerateLastHistoryReplicationTasks(ctx, request)
-
 	if err != nil {
 		err = h.convertError(err)
 		return nil, err

@@ -119,7 +119,7 @@ type (
 		matcher           *TaskMatcher // for matching a task producer with a poller
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
-		metricsClient     metrics.Client
+		metricsHandler    metrics.MetricsHandler
 		namespace         namespace.Name
 		metricScope       metrics.Scope // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
@@ -171,7 +171,7 @@ func newTaskQueueManager(
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
 		tag.WorkflowNamespace(nsName.String()))
 	metricsScope := metrics.GetPerTaskQueueScope(
-		e.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope),
+		e.metricsHandler.Scope(metrics.MatchingTaskQueueMgrScope),
 		nsName.String(),
 		taskQueue.name,
 		taskQueueKind,
@@ -179,7 +179,7 @@ func newTaskQueueManager(
 	tlMgr := &taskQueueManagerImpl{
 		status:              common.DaemonStatusInitialized,
 		namespaceRegistry:   e.namespaceRegistry,
-		metricsClient:       e.metricsClient,
+		metricsHandler:      e.metricsHandler,
 		taskQueueID:         taskQueue,
 		taskQueueKind:       taskQueueKind,
 		logger:              logger,

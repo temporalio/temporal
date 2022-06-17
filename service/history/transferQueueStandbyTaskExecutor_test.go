@@ -189,7 +189,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
+		metricsHandler:     s.mockShard.GetMetricsClient(),
 	}
 	s.mockShard.SetEngineForTesting(h)
 	s.clusterName = cluster.TestAlternativeClusterName

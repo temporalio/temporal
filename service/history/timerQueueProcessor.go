@@ -64,7 +64,7 @@ type (
 		taskAllocator              taskAllocator
 		config                     *configs.Config
 		metricProvider             metrics.MetricsHandler
-		metricsClient              metrics.Client
+		metricsHandler             metrics.MetricsHandler
 		workflowCache              workflow.Cache
 		scheduler                  queues.Scheduler
 		workflowDeleteManager      workflow.DeleteManager
@@ -114,7 +114,7 @@ func newTimerQueueProcessor(
 		taskAllocator:         taskAllocator,
 		config:                config,
 		metricProvider:        metricProvider,
-		metricsClient:         shard.GetMetricsClient(),
+		metricsHandler:        shard.GetMetricsClient(),
 		workflowCache:         workflowCache,
 		scheduler:             scheduler,
 		workflowDeleteManager: workflowDeleteManager,
@@ -339,7 +339,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 		return nil
 	}
 
-	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.TaskBatchCompleteCounter)
+	t.metricsHandler.IncCounter(metrics.TimerQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel.FireTime.Before(upperAckLevel.FireTime) {
 		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{

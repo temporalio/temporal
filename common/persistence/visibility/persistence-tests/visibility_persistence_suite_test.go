@@ -31,6 +31,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -75,7 +76,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		resolver.NewNoopResolver(),
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
-		metrics.NoopClient,
+		metrics.NoopMetricsHandler,
 		s.Logger)
 
 	if err != nil {
@@ -763,7 +764,8 @@ func (s *VisibilityPersistenceSuite) createOpenWorkflowRecord(
 }
 
 func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
-	req *manager.RecordWorkflowExecutionClosedRequest, resp *workflowpb.WorkflowExecutionInfo) {
+	req *manager.RecordWorkflowExecutionClosedRequest, resp *workflowpb.WorkflowExecutionInfo,
+) {
 	s.Equal(req.Execution.RunId, resp.Execution.RunId)
 	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
@@ -774,7 +776,8 @@ func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
 }
 
 func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
-	req *manager.RecordWorkflowExecutionStartedRequest, resp *workflowpb.WorkflowExecutionInfo) {
+	req *manager.RecordWorkflowExecutionStartedRequest, resp *workflowpb.WorkflowExecutionInfo,
+) {
 	s.Equal(req.Execution.GetRunId(), resp.Execution.GetRunId())
 	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())

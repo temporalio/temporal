@@ -63,11 +63,11 @@ var Module = fx.Options(
 func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
-		metricsClient,
+		metricsHandler,
 		metrics.MatchingAPIMetricsScopes(),
 		logger,
 	)
@@ -106,7 +106,7 @@ func HandlerProvider(
 	historyClient historyservice.HistoryServiceClient,
 	matchingRawClient resource.MatchingRawClient,
 	matchingServiceResolver membership.ServiceResolver,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 ) *Handler {
@@ -118,7 +118,7 @@ func HandlerProvider(
 		historyClient,
 		matchingRawClient,
 		matchingServiceResolver,
-		metricsClient,
+		metricsHandler,
 		namespaceRegistry,
 		clusterMetadata,
 	)
@@ -146,5 +146,4 @@ func ServiceLifetimeHooks(
 			},
 		},
 	)
-
 }

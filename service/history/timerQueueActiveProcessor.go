@@ -85,7 +85,7 @@ func newTimerQueueActiveProcessor(
 		)
 	}
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
-	metricsClient := shard.GetMetricsClient()
+	metricsHandler := shard.GetMetricsClient()
 	config := shard.GetConfig()
 
 	processor := &timerQueueActiveProcessorImpl{}
@@ -195,7 +195,7 @@ func newTimerQueueActiveProcessor(
 		rescheduler,
 		rateLimiter,
 		logger,
-		metricsClient.Scope(metrics.TimerActiveQueueProcessorScope),
+		metricsHandler.Scope(metrics.TimerActiveQueueProcessorScope),
 	)
 
 	return processor

@@ -43,7 +43,7 @@ type (
 	Activities struct {
 		visibilityManager manager.VisibilityManager
 		metadataManager   persistence.MetadataManager
-		metricsClient     metrics.Client
+		metricsHandler    metrics.MetricsHandler
 		logger            log.Logger
 	}
 )
@@ -51,16 +51,17 @@ type (
 func NewActivities(
 	visibilityManager manager.VisibilityManager,
 	metadataManager persistence.MetadataManager,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) *Activities {
 	return &Activities{
 		visibilityManager: visibilityManager,
 		metadataManager:   metadataManager,
-		metricsClient:     metricsClient,
+		metricsHandler:    metricsHandler,
 		logger:            logger,
 	}
 }
+
 func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context) (bool, error) {
 	return strings.Contains(a.visibilityManager.GetName(), "elasticsearch"), nil
 }
@@ -72,7 +73,7 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 	}
 	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
+		a.metricsHandler.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
 		a.logger.Error("Unable to count workflow executions.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
@@ -84,7 +85,7 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 		if activity.HasHeartbeatDetails(ctx) && activityInfo.Attempt > 7 {
 			var previousAttemptCount int
 			if err := activity.GetHeartbeatDetails(ctx, &previousAttemptCount); err != nil {
-				a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
+				a.metricsHandler.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
 				a.logger.Error("Unable to get previous heartbeat details.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 				return err
 			}
@@ -123,7 +124,7 @@ func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
+		a.metricsHandler.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
 		a.logger.Error("Unable to count workflow executions using list.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
@@ -144,12 +145,12 @@ func (a *Activities) DeleteNamespaceActivity(ctx context.Context, nsID namespace
 
 	err := a.metadataManager.DeleteNamespaceByName(ctx, deleteNamespaceRequest)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+		a.metricsHandler.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.DeleteNamespaceFailuresCount)
 		a.logger.Error("Unable to delete namespace from persistence.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
 
-	a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.DeleteNamespaceSuccessCount)
+	a.metricsHandler.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.DeleteNamespaceSuccessCount)
 	a.logger.Info("Namespace is deleted.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespaceID(nsID.String()))
 	return nil
 }

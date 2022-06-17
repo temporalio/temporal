@@ -29,11 +29,12 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 
-	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
+
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -53,11 +54,15 @@ type (
 )
 
 const (
-	RequestUnauthorized = "Request unauthorized."
+	requestUnauthorized = "Request unauthorized."
+	authorizationError  = "Authorization error"
+	authHeader          = "authorization"
+	authExtraHeader     = "authorization-extras"
+	authOperation       = "Authorization"
 )
 
 var (
-	errUnauthorized = serviceerror.NewPermissionDenied(RequestUnauthorized, "")
+	errUnauthorized = serviceerror.NewPermissionDenied(requestUnauthorized, "")
 
 	MappedClaims contextKeyMappedClaims
 	AuthHeader   contextKeyAuthHeader
@@ -69,7 +74,6 @@ func (a *interceptor) Interceptor(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-
 	var claims *Claims
 
 	if a.claimMapper != nil && a.authorizer != nil {
@@ -79,8 +83,8 @@ func (a *interceptor) Interceptor(
 		var tlsConnection *credentials.TLSInfo
 
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
-			authHeaders = md["authorization"]
-			authExtraHeaders = md["authorization-extras"]
+			authHeaders = md[authHeader]
+			authExtraHeaders = md[authExtraHeader]
 		}
 		tlsConnection = TLSInfoFormContext(ctx)
 		clientCert := PeerCert(tlsConnection)
@@ -111,7 +115,7 @@ func (a *interceptor) Interceptor(
 			}
 			mappedClaims, err := a.claimMapper.GetClaims(&authInfo)
 			if err != nil {
-				a.logAuthError(err)
+				a.logger.Error(authorizationError, tag.Error(err))
 				return nil, errUnauthorized // return a generic error to the caller without disclosing details
 			}
 			claims = mappedClaims
@@ -129,22 +133,31 @@ func (a *interceptor) Interceptor(
 			namespace = requestWithNamespace.GetNamespace()
 		}
 
-		scope := a.getMetricsScope(metrics.AuthorizationScope, namespace)
-		result, err := a.authorize(ctx, claims, &CallTarget{
+		scope := a.metricsHandler.WithTags(metrics.OperationTag("Authorization"), metrics.NamespaceUnknownTag())
+		if namespace != "" {
+			scope = scope.WithTags(metrics.NamespaceTag(namespace))
+		}
+
+		sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
+
+		result, err := a.authorizer.Authorize(ctx, claims, &CallTarget{
 			Namespace: namespace,
 			APIName:   info.FullMethod,
 			Request:   req,
-		}, scope)
+		})
+
+		sw.Stop()
+
 		if err != nil {
 			scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
-			a.logAuthError(err)
+			a.logger.Error(authorizationError, tag.Error(err))
 			return nil, errUnauthorized // return a generic error to the caller without disclosing details
 		}
 		if result.Decision != DecisionAllow {
 			scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
 			// if a reason is included in the result, include it in the error message
 			if result.Reason != "" {
-				return nil, serviceerror.NewPermissionDenied(RequestUnauthorized, result.Reason)
+				return nil, serviceerror.NewPermissionDenied(requestUnauthorized, result.Reason)
 			}
 			return nil, errUnauthorized // return a generic error to the caller without disclosing details
 		}
@@ -152,20 +165,10 @@ func (a *interceptor) Interceptor(
 	return handler(ctx, req)
 }
 
-func (a *interceptor) authorize(ctx context.Context, claims *Claims, callTarget *CallTarget, scope metrics.Scope) (Result, error) {
-	sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
-	defer sw.Stop()
-	return a.authorizer.Authorize(ctx, claims, callTarget)
-}
-
-func (a *interceptor) logAuthError(err error) {
-	a.logger.Error("Authorization error", tag.Error(err))
-}
-
 type interceptor struct {
 	authorizer     Authorizer
 	claimMapper    ClaimMapper
-	metricsClient  metrics.Client
+	metricsHandler metrics.MetricsHandler
 	logger         log.Logger
 	audienceGetter JWTAudienceMapper
 }
@@ -174,35 +177,20 @@ type interceptor struct {
 func NewAuthorizationInterceptor(
 	claimMapper ClaimMapper,
 	authorizer Authorizer,
-	metrics metrics.Client,
+	metrics metrics.MetricsHandler,
 	logger log.Logger,
 	audienceGetter JWTAudienceMapper,
 ) grpc.UnaryServerInterceptor {
 	return (&interceptor{
 		claimMapper:    claimMapper,
 		authorizer:     authorizer,
-		metricsClient:  metrics,
+		metricsHandler: metrics,
 		logger:         logger,
 		audienceGetter: audienceGetter,
 	}).Interceptor
 }
 
-// getMetricsScope return metrics scope with namespace tag
-func (a *interceptor) getMetricsScope(
-	scope int,
-	namespace string,
-) metrics.Scope {
-	var metricsScope metrics.Scope
-	if namespace != "" {
-		metricsScope = a.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespace))
-	} else {
-		metricsScope = a.metricsClient.Scope(scope).Tagged(metrics.NamespaceUnknownTag())
-	}
-	return metricsScope
-}
-
 func TLSInfoFormContext(ctx context.Context) *credentials.TLSInfo {
-
 	p, ok := peer.FromContext(ctx)
 	if !ok {
 		return nil
@@ -214,7 +202,6 @@ func TLSInfoFormContext(ctx context.Context) *credentials.TLSInfo {
 }
 
 func PeerCert(tlsInfo *credentials.TLSInfo) *x509.Certificate {
-
 	if tlsInfo == nil || len(tlsInfo.State.VerifiedChains) == 0 || len(tlsInfo.State.VerifiedChains[0]) == 0 {
 		return nil
 	}

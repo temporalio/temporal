@@ -33,13 +33,12 @@ import (
 )
 
 func emitWorkflowHistoryStats(
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	namespace namespace.Name,
 	historySize int,
 	historyCount int,
 ) {
-
-	executionScope := metricsClient.Scope(metrics.ExecutionStatsScope, metrics.NamespaceTag(namespace.String()))
+	executionScope := metricsHandler.Scope(metrics.ExecutionStatsScope, metrics.NamespaceTag(namespace.String()))
 	executionScope.RecordDistribution(metrics.HistorySize, historySize)
 	executionScope.RecordDistribution(metrics.HistoryCount, historyCount)
 }
@@ -85,12 +84,12 @@ func emitMutableStateStatus(
 }
 
 func emitWorkflowCompletionStats(
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	namespace namespace.Name,
 	taskQueue string,
 	status enumspb.WorkflowExecutionStatus,
 ) {
-	scope := metricsClient.Scope(
+	scope := metricsHandler.Scope(
 		metrics.WorkflowCompletionStatsScope,
 		metrics.NamespaceTag(namespace.String()),
 		metrics.TaskQueueTag(taskQueue),

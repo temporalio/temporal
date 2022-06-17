@@ -32,12 +32,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+
+	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -215,7 +216,7 @@ type Service struct {
 	visibilityManager manager.VisibilityManager
 	server            *grpc.Server
 
-	serverMetricsReporter          metrics.Reporter
+	serverMetricsReporter          metrics.MetricsHandler
 	logger                         log.Logger
 	grpcListener                   net.Listener
 	userMetricsScope               metrics.UserScope
@@ -345,7 +346,6 @@ func namespaceRPS(
 func numFrontendHosts(
 	frontendResolver membership.ServiceResolver,
 ) int {
-
 	defaultHosts := 1
 	if frontendResolver == nil {
 		return defaultHosts

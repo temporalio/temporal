@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -96,7 +97,6 @@ func (s *taskProcessorSuite) SetupSuite() {
 }
 
 func (s *taskProcessorSuite) TearDownSuite() {
-
 }
 
 func (s *taskProcessorSuite) SetupTest() {
@@ -143,13 +143,13 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
-	metricsClient := metrics.NoopClient
+	metricsHandler := metrics.NoopMetricsHandler
 
 	s.replicationTaskProcessor = NewTaskProcessor(
 		s.mockShard,
 		s.mockEngine,
 		s.config,
-		metricsClient,
+		metricsHandler,
 		s.mockReplicationTaskFetcher,
 		s.mockReplicationTaskExecutor,
 		serialization.NewSerializer(),
@@ -546,7 +546,6 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_NoMore() {
 }
 
 func (s *taskProcessorSuite) TestPaginationFn_Error() {
-
 	maxRxProcessedTaskID := rand.Int63()
 	maxRxReceivedTaskID := rand.Int63()
 	rxTaskBackoff := time.Duration(rand.Int63())

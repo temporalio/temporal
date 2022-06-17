@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -170,13 +171,13 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 
 		switch typedErr := err.(type) {
 		case nil:
-			processor.metricsClient.IncCounter(metrics.ParentClosePolicyProcessorScope, metrics.ParentClosePolicyProcessorSuccess)
+			processor.metricsHandler.IncCounter(metrics.ParentClosePolicyProcessorScope, metrics.ParentClosePolicyProcessorSuccess)
 		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 			// no-op
 		case *serviceerror.NamespaceNotActive:
 			remoteExecutions[typedErr.ActiveCluster] = append(remoteExecutions[typedErr.ActiveCluster], execution)
 		default:
-			processor.metricsClient.IncCounter(metrics.ParentClosePolicyProcessorScope, metrics.ParentClosePolicyProcessorFailures)
+			processor.metricsHandler.IncCounter(metrics.ParentClosePolicyProcessorScope, metrics.ParentClosePolicyProcessorFailures)
 			getActivityLogger(ctx).Error("failed to process parent close policy", tag.Error(err))
 			return err
 		}

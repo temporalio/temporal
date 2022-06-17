@@ -29,13 +29,14 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -65,7 +66,7 @@ type (
 		esConfig          *esclient.Config
 		esClient          esclient.Client
 		sdkClientFactory  sdk.ClientFactory
-		metricsClient     metrics.Client
+		metricsHandler    metrics.MetricsHandler
 		saProvider        searchattribute.Provider
 		saManager         searchattribute.Manager
 		healthServer      *health.Server
@@ -79,7 +80,7 @@ type (
 		EsClient          esclient.Client
 		Logger            log.Logger
 		sdkClientFactory  sdk.ClientFactory
-		MetricsClient     metrics.Client
+		MetricsHandler    metrics.MetricsHandler
 		SaProvider        searchattribute.Provider
 		SaManager         searchattribute.Manager
 		healthServer      *health.Server
@@ -92,7 +93,6 @@ type (
 func NewOperatorHandlerImpl(
 	args NewOperatorHandlerImplArgs,
 ) *OperatorHandlerImpl {
-
 	handler := &OperatorHandlerImpl{
 		logger:            args.Logger,
 		status:            common.DaemonStatusInitialized,
@@ -100,7 +100,7 @@ func NewOperatorHandlerImpl(
 		esConfig:          args.EsConfig,
 		esClient:          args.EsClient,
 		sdkClientFactory:  args.sdkClientFactory,
-		metricsClient:     args.MetricsClient,
+		metricsHandler:    args.MetricsClient,
 		saProvider:        args.SaProvider,
 		saManager:         args.SaManager,
 		healthServer:      args.healthServer,
@@ -370,7 +370,7 @@ func (h *OperatorHandlerImpl) DeleteWorkflowExecution(ctx context.Context, reque
 
 // startRequestProfile initiates recording of request metrics
 func (h *OperatorHandlerImpl) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
-	metricsScope := h.metricsClient.Scope(scope)
+	metricsScope := h.metricsHandler.Scope(scope)
 	sw := metricsScope.StartTimer(metrics.ServiceLatency)
 	metricsScope.IncCounter(metrics.ServiceRequests)
 	return metricsScope, sw

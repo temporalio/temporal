@@ -70,7 +70,7 @@ type (
 		historyEngine      shard.Engine
 		deleteManager      workflow.DeleteManager
 		workflowCache      workflow.Cache
-		metricsClient      metrics.Client
+		metricsHandler     metrics.MetricsHandler
 		logger             log.Logger
 	}
 )
@@ -94,7 +94,7 @@ func NewTaskExecutor(
 		historyEngine:      historyEngine,
 		deleteManager:      deleteManager,
 		workflowCache:      workflowCache,
-		metricsClient:      shard.GetMetricsClient(),
+		metricsHandler:     shard.GetMetricsClient(),
 		logger:             shard.GetLogger(),
 	}
 }
@@ -134,14 +134,13 @@ func (e *taskExecutorImpl) handleActivityTask(
 	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) error {
-
 	attr := task.GetSyncActivityTaskAttributes()
 	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
 
-	replicationStopWatch := e.metricsClient.StartTimer(metrics.SyncActivityTaskScope, metrics.ServiceLatency)
+	replicationStopWatch := e.metricsHandler.StartTimer(metrics.SyncActivityTaskScope, metrics.ServiceLatency)
 	defer replicationStopWatch.Stop()
 
 	request := &historyservice.SyncActivityRequest{
@@ -169,8 +168,8 @@ func (e *taskExecutorImpl) handleActivityTask(
 		return nil
 
 	case *serviceerrors.RetryReplication:
-		e.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientRequests)
-		stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientLatency)
+		e.metricsHandler.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientRequests)
+		stopwatch := e.metricsHandler.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientLatency)
 		defer stopwatch.Stop()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
@@ -204,14 +203,13 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) error {
-
 	attr := task.GetHistoryTaskAttributes()
 	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
 
-	replicationStopWatch := e.metricsClient.StartTimer(metrics.HistoryReplicationTaskScope, metrics.ServiceLatency)
+	replicationStopWatch := e.metricsHandler.StartTimer(metrics.HistoryReplicationTaskScope, metrics.ServiceLatency)
 	defer replicationStopWatch.Stop()
 
 	request := &historyservice.ReplicateEventsV2Request{
@@ -234,8 +232,8 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		return nil
 
 	case *serviceerrors.RetryReplication:
-		e.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientRequests)
-		resendStopWatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
+		e.metricsHandler.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientRequests)
+		resendStopWatch := e.metricsHandler.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
 		defer resendStopWatch.Stop()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
@@ -270,7 +268,6 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) (retErr error) {
-
 	attr := task.GetSyncWorkflowStateTaskAttributes()
 	executionInfo := attr.GetWorkflowState().GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
@@ -293,7 +290,6 @@ func (e *taskExecutorImpl) filterTask(
 	namespaceID namespace.ID,
 	forceApply bool,
 ) (bool, error) {
-
 	if forceApply {
 		return true, nil
 	}

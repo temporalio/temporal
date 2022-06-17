@@ -54,7 +54,7 @@ func (t *testProvider) Stop(log.Logger) {}
 func TestMeter(t *testing.T) {
 	ctx := context.Background()
 	mp, exp := metrictest.NewTestMeterProvider()
-	p := NewOtelMetricsHandler(log.NewTestLogger(), &testProvider{meter: mp.Meter("test")}, defaultConfig)
+	p := NewOtelMetricsHandler(log.NewTestLogger(), &testProvider{meter: mp.Meter("test")}, defaultTestConfig)
 	recordMetrics(p)
 
 	err := exp.Collect(ctx)

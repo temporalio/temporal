@@ -74,7 +74,6 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
 	clusterName string,
 ) (int64, error) {
-
 	engine, err := t.shard.GetEngine()
 	if err != nil {
 		return 0, err
@@ -112,7 +111,6 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 	clusterName string,
 ) (int64, int64, int64, error) {
-
 	engine, err := t.shard.GetEngine()
 	if err != nil {
 		return 0, 0, 0, err
@@ -168,7 +166,6 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
 	clusterName string,
 ) (int64, int64, error) {
-
 	engine, err := t.shard.GetEngine()
 	if err != nil {
 		return 0, 0, err
@@ -209,7 +206,6 @@ func (t *TransactionImpl) SetWorkflowExecution(
 	workflowSnapshot *persistence.WorkflowSnapshot,
 	clusterName string,
 ) error {
-
 	engine, err := t.shard.GetEngine()
 	if err != nil {
 		return err
@@ -234,7 +230,6 @@ func PersistWorkflowEvents(
 	shard shard.Context,
 	workflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
-
 	if len(workflowEvents.Events) == 0 {
 		return 0, nil // allow update workflow without events
 	}
@@ -251,7 +246,6 @@ func persistFirstWorkflowEvents(
 	shard shard.Context,
 	workflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
-
 	namespaceID := namespace.ID(workflowEvents.NamespaceID)
 	workflowID := workflowEvents.WorkflowID
 	runID := workflowEvents.RunID
@@ -286,7 +280,6 @@ func persistNonFirstWorkflowEvents(
 	shard shard.Context,
 	workflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
-
 	if len(workflowEvents.Events) == 0 {
 		return 0, nil // allow update workflow without events
 	}
@@ -324,7 +317,6 @@ func appendHistoryV2EventsWithRetry(
 	execution commonpb.WorkflowExecution,
 	request *persistence.AppendHistoryNodesRequest,
 ) (int64, error) {
-
 	resp := 0
 	op := func(ctx context.Context) error {
 		var err error
@@ -346,7 +338,6 @@ func createWorkflowExecutionWithRetry(
 	shard shard.Context,
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
-
 	var resp *persistence.CreateWorkflowExecutionResponse
 	op := func(ctx context.Context) error {
 		var err error
@@ -396,7 +387,6 @@ func conflictResolveWorkflowExecutionWithRetry(
 	shard shard.Context,
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
-
 	var resp *persistence.ConflictResolveWorkflowExecutionResponse
 	op := func(ctx context.Context) error {
 		var err error
@@ -455,7 +445,6 @@ func getWorkflowExecutionWithRetry(
 	shard shard.Context,
 	request *persistence.GetWorkflowExecutionRequest,
 ) (*persistence.GetWorkflowExecutionResponse, error) {
-
 	var resp *persistence.GetWorkflowExecutionResponse
 	op := func(ctx context.Context) error {
 		var err error
@@ -503,7 +492,6 @@ func updateWorkflowExecutionWithRetry(
 	shard shard.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
-
 	var resp *persistence.UpdateWorkflowExecutionResponse
 	var err error
 	op := func(ctx context.Context) error {
@@ -562,7 +550,6 @@ func setWorkflowExecutionWithRetry(
 	shard shard.Context,
 	request *persistence.SetWorkflowExecutionRequest,
 ) (*persistence.SetWorkflowExecutionResponse, error) {
-
 	var resp *persistence.SetWorkflowExecutionResponse
 	var err error
 	op := func(ctx context.Context) error {
@@ -625,7 +612,6 @@ func NotifyNewHistorySnapshotEvent(
 	engine shard.Engine,
 	workflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
-
 	if workflowSnapshot == nil {
 		return nil
 	}
@@ -669,7 +655,6 @@ func NotifyNewHistoryMutationEvent(
 	engine shard.Engine,
 	workflowMutation *persistence.WorkflowMutation,
 ) error {
-
 	if workflowMutation == nil {
 		return nil
 	}
@@ -714,11 +699,11 @@ func emitMutationMetrics(
 	namespace *namespace.Namespace,
 	stats ...*persistence.MutableStateStatistics,
 ) {
-	metricsClient := shard.GetMetricsClient()
+	metricsHandler := shard.GetMetricsClient()
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.SessionStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsHandler.Scope(metrics.SessionStatsScope, metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}
@@ -729,11 +714,11 @@ func emitGetMetrics(
 	namespace *namespace.Namespace,
 	stats ...*persistence.MutableStateStatistics,
 ) {
-	metricsClient := shard.GetMetricsClient()
+	metricsHandler := shard.GetMetricsClient()
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.ExecutionStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsHandler.Scope(metrics.ExecutionStatsScope, metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}
@@ -770,7 +755,7 @@ func emitCompletionMetrics(
 	namespace *namespace.Namespace,
 	completionMetrics ...completionMetric,
 ) {
-	metricsClient := shard.GetMetricsClient()
+	metricsHandler := shard.GetMetricsClient()
 	namespaceName := namespace.Name()
 
 	for _, completionMetric := range completionMetrics {
@@ -778,7 +763,7 @@ func emitCompletionMetrics(
 			continue
 		}
 		emitWorkflowCompletionStats(
-			metricsClient,
+			metricsHandler,
 			namespaceName,
 			completionMetric.taskQueue,
 			completionMetric.status,

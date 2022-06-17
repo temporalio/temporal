@@ -60,10 +60,8 @@ const (
 	replicationTimeout             = 30 * time.Second
 )
 
-var (
-	// ErrUnknownReplicationTask is the error to indicate unknown replication task type
-	ErrUnknownReplicationTask = serviceerror.NewInvalidArgument("unknown replication task")
-)
+// ErrUnknownReplicationTask is the error to indicate unknown replication task type
+var ErrUnknownReplicationTask = serviceerror.NewInvalidArgument("unknown replication task")
 
 type (
 	// TaskProcessor is the interface for task processor
@@ -80,7 +78,7 @@ type (
 		historyEngine           shard.Engine
 		historySerializer       serialization.Serializer
 		config                  *configs.Config
-		metricsClient           metrics.Client
+		metricsHandler          metrics.MetricsHandler
 		logger                  log.Logger
 		replicationTaskExecutor TaskExecutor
 
@@ -113,7 +111,7 @@ func NewTaskProcessor(
 	shard shard.Context,
 	historyEngine shard.Engine,
 	config *configs.Config,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	replicationTaskFetcher taskFetcher,
 	replicationTaskExecutor TaskExecutor,
 	eventSerializer serialization.Serializer,
@@ -139,7 +137,7 @@ func NewTaskProcessor(
 		historyEngine:           historyEngine,
 		historySerializer:       eventSerializer,
 		config:                  config,
-		metricsClient:           metricsClient,
+		metricsHandler:          metricsHandler,
 		logger:                  shard.GetLogger(),
 		replicationTaskExecutor: replicationTaskExecutor,
 		rateLimiter: quotas.NewMultiRateLimiter([]quotas.RateLimiter{
@@ -215,7 +213,7 @@ func (p *taskProcessorImpl) eventLoop() {
 		case <-syncShardTimer.C:
 			if err := p.handleSyncShardStatus(syncShardTask); err != nil {
 				p.logger.Error("unable to sync shard status", tag.Error(err))
-				p.metricsClient.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteFailure)
+				p.metricsHandler.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteFailure)
 			}
 			syncShardTimer.Reset(backoff.JitDuration(
 				p.config.ShardSyncMinInterval(),
@@ -225,7 +223,7 @@ func (p *taskProcessorImpl) eventLoop() {
 		case <-cleanupTimer.C:
 			if err := p.cleanupReplicationTasks(); err != nil {
 				p.logger.Error("Failed to clean up replication messages.", tag.Error(err))
-				p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupFailure)
+				p.metricsHandler.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupFailure)
 			}
 			cleanupTimer.Reset(backoff.JitDuration(
 				p.config.ReplicationTaskProcessorCleanupInterval(shardID),
@@ -263,7 +261,7 @@ func (p *taskProcessorImpl) pollProcessReplicationTasks() (retError error) {
 		taskCreationTime := replicationTask.GetVisibilityTime()
 		if taskCreationTime != nil {
 			now := p.shard.GetTimeSource().Now()
-			p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope).RecordTimer(
+			p.metricsHandler.Scope(metrics.ReplicationTaskFetcherScope).RecordTimer(
 				metrics.ReplicationLatency,
 				now.Sub(*taskCreationTime),
 			)
@@ -312,7 +310,6 @@ func (p *taskProcessorImpl) applyReplicationTask(
 func (p *taskProcessorImpl) handleSyncShardStatus(
 	status *replicationspb.SyncShardStatus,
 ) error {
-
 	now := p.shard.GetTimeSource().Now()
 	if status == nil {
 		return nil
@@ -320,7 +317,7 @@ func (p *taskProcessorImpl) handleSyncShardStatus(
 		return nil
 	}
 
-	p.metricsClient.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteCounter)
+	p.metricsHandler.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteCounter)
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
 	return p.historyEngine.SyncShardStatus(ctx, &historyservice.SyncShardStatusRequest{
@@ -346,7 +343,6 @@ func (p *taskProcessorImpl) handleReplicationTask(
 func (p *taskProcessorImpl) handleReplicationDLQTask(
 	request *persistence.PutReplicationTaskToDLQRequest,
 ) error {
-
 	_ = p.rateLimiter.Wait(context.Background())
 
 	p.logger.Info("enqueue replication task to DLQ",
@@ -356,7 +352,7 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 		tag.WorkflowRunID(request.TaskInfo.GetRunId()),
 		tag.TaskID(request.TaskInfo.GetTaskId()),
 	)
-	p.metricsClient.Scope(
+	p.metricsHandler.Scope(
 		metrics.ReplicationDLQStatsScope,
 		metrics.TargetClusterTag(p.sourceCluster),
 		metrics.InstanceTag(convert.Int32ToString(p.shard.GetShardID())),
@@ -369,7 +365,7 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 		err := p.shard.GetExecutionManager().PutReplicationTaskToDLQ(context.TODO(), request)
 		if err != nil {
 			p.logger.Error("failed to enqueue replication task to DLQ", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ReplicationTaskFetcherScope, metrics.ReplicationDLQFailed)
+			p.metricsHandler.IncCounter(metrics.ReplicationTaskFetcherScope, metrics.ReplicationDLQFailed)
 		}
 		return err
 	}, p.dlqRetryPolicy, p.isRetryableError)
@@ -476,7 +472,6 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 }
 
 func (p *taskProcessorImpl) cleanupReplicationTasks() error {
-
 	clusterMetadata := p.shard.GetClusterMetadata()
 	currentCluster := clusterMetadata.GetCurrentClusterName()
 	var minAckedTaskID *int64
@@ -495,8 +490,8 @@ func (p *taskProcessorImpl) cleanupReplicationTasks() error {
 	}
 
 	p.logger.Debug("cleaning up replication task queue", tag.ReadLevel(*minAckedTaskID))
-	p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupCount)
-	p.metricsClient.Scope(
+	p.metricsHandler.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupCount)
+	p.metricsHandler.Scope(
 		metrics.ReplicationTaskFetcherScope,
 		metrics.TargetClusterTag(p.currentCluster),
 	).RecordDistribution(
@@ -518,7 +513,7 @@ func (p *taskProcessorImpl) cleanupReplicationTasks() error {
 }
 
 func (p *taskProcessorImpl) emitTaskMetrics(scope int, err error) {
-	metricsScope := p.metricsClient.Scope(scope)
+	metricsScope := p.metricsHandler.Scope(scope)
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		metricsScope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
 		return

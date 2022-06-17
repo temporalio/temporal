@@ -28,10 +28,11 @@ import (
 	"context"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -46,7 +47,7 @@ type (
 
 	TelemetryInterceptor struct {
 		namespaceRegistry namespace.Registry
-		metricsClient     metrics.Client
+		metricsHandler    metrics.MetricsHandler
 		scopes            map[string]int
 		logger            log.Logger
 	}
@@ -88,13 +89,13 @@ var (
 
 func NewTelemetryInterceptor(
 	namespaceRegistry namespace.Registry,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	scopes map[string]int,
 	logger log.Logger,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
 		namespaceRegistry: namespaceRegistry,
-		metricsClient:     metricsClient,
+		metricsHandler:    metricsHandler,
 		scopes:            scopes,
 		logger:            logger,
 	}
@@ -211,7 +212,6 @@ func (ti *TelemetryInterceptor) metricsScopeLogTags(
 	req interface{},
 	methodName string,
 ) (metrics.Scope, []tag.Tag) {
-
 	// if the method name is not defined, will default to
 	// unknown scope, which carries value 0
 	scopeDef, _ := ti.scopes[methodName]
@@ -219,9 +219,9 @@ func (ti *TelemetryInterceptor) metricsScopeLogTags(
 
 	namespace := GetNamespace(ti.namespaceRegistry, req)
 	if namespace == "" {
-		return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceUnknownTag()), []tag.Tag{tag.Operation(methodName)}
+		return ti.metricsHandler.Scope(scopeDef).Tagged(metrics.NamespaceUnknownTag()), []tag.Tag{tag.Operation(methodName)}
 	}
-	return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceTag(namespace.String())), []tag.Tag{
+	return ti.metricsHandler.Scope(scopeDef).Tagged(metrics.NamespaceTag(namespace.String())), []tag.Tag{
 		tag.Operation(methodName),
 		tag.WorkflowNamespace(namespace.String()),
 	}
@@ -232,7 +232,6 @@ func (ti *TelemetryInterceptor) handleError(
 	logTags []tag.Tag,
 	err error,
 ) {
-
 	scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ServiceErrorWithType)
 
 	if common.IsContextDeadlineExceededErr(err) {

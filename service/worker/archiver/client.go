@@ -125,7 +125,7 @@ const (
 
 // NewClient creates a new Client
 func NewClient(
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
 	numWorkflows dynamicconfig.IntPropertyFn,
@@ -133,7 +133,7 @@ func NewClient(
 	archiverProvider provider.ArchiverProvider,
 ) Client {
 	return &client{
-		metricsScope:     metricsClient.Scope(metrics.ArchiverClientScope),
+		metricsScope:     metricsHandler.Scope(metrics.ArchiverClientScope),
 		logger:           logger,
 		sdkClientFactory: sdkClientFactory,
 		numWorkflows:     numWorkflows,

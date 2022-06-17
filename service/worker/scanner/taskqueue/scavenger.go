@@ -96,13 +96,13 @@ var (
 // two conditions
 //  - either all task queues are processed successfully (or)
 //  - Stop() method is called to stop the scavenger
-func NewScavenger(db p.TaskManager, metricsClient metrics.Client, logger log.Logger) *Scavenger {
+func NewScavenger(db p.TaskManager, metricsHandler metrics.MetricsHandler, logger log.Logger) *Scavenger {
 	stopC := make(chan struct{})
 	taskExecutor := executor.NewFixedSizePoolExecutor(
-		taskQueueBatchSize, executorMaxDeferredTasks, metricsClient, metrics.TaskQueueScavengerScope)
+		taskQueueBatchSize, executorMaxDeferredTasks, metricsHandler, metrics.TaskQueueScavengerScope)
 	return &Scavenger{
 		db:       db,
-		metrics:  metricsClient,
+		metrics:  metricsHandler,
 		logger:   logger,
 		stopC:    stopC,
 		executor: taskExecutor,

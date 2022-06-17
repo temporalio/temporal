@@ -72,7 +72,7 @@ type (
 		historyClient     historyservice.HistoryServiceClient
 		frontendClient    workflowservice.WorkflowServiceClient
 		logger            log.Logger
-		metricsClient     metrics.Client
+		metricsHandler    metrics.MetricsHandler
 	}
 
 	replicationStatus struct {
@@ -104,9 +104,7 @@ type (
 	}
 )
 
-var (
-	historyServiceRetryPolicy = common.CreateHistoryServiceRetryPolicy()
-)
+var historyServiceRetryPolicy = common.CreateHistoryServiceRetryPolicy()
 
 func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverParams) (retErr error) {
 	if err := validateAndSetNamespaceHandoverParams(&params); err != nil {

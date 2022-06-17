@@ -73,7 +73,7 @@ type (
 		NamespaceCache    *namespace.MockRegistry
 		TimeSource        clock.TimeSource
 		PayloadSerializer serialization.Serializer
-		MetricsClient     metrics.Client
+		MetricsHandler    metrics.MetricsHandler
 		ArchivalMetadata  *archiver.MockArchivalMetadata
 		ArchiverProvider  *provider.MockArchiverProvider
 

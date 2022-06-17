@@ -65,7 +65,7 @@ type (
 		shutdownCh       chan struct{}
 		config           *configs.Config
 		logger           log.Logger
-		metricsClient    metrics.Client
+		metricsHandler   metrics.MetricsHandler
 		metricsScope     metrics.Scope
 		timerProcessor   timerProcessor
 		timerQueueAckMgr timerQueueAckMgr
@@ -110,7 +110,7 @@ func newTimerQueueProcessorBase(
 		shutdownCh:       make(chan struct{}),
 		config:           config,
 		logger:           logger,
-		metricsClient:    shard.GetMetricsClient(),
+		metricsHandler:   shard.GetMetricsClient(),
 		metricsScope:     metricsScope,
 		timerQueueAckMgr: timerQueueAckMgr,
 		timerGate:        timerGate,
@@ -290,7 +290,7 @@ eventLoop:
 			t.newTime = emptyTime
 			t.newTimeLock.Unlock()
 			// New Timer has arrived.
-			t.metricsClient.IncCounter(t.scope, metrics.NewTimerNotifyCounter)
+			t.metricsHandler.IncCounter(t.scope, metrics.NewTimerNotifyCounter)
 			t.timerGate.Update(newTime)
 		}
 	}

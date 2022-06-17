@@ -75,7 +75,7 @@ type (
 func NewScavenger(
 	numHistoryShards int32,
 	executionManager persistence.ExecutionManager,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) *Scavenger {
 	return &Scavenger{
@@ -84,13 +84,13 @@ func NewScavenger(
 		executor: executor.NewFixedSizePoolExecutor(
 			executorPoolSize,
 			executorMaxDeferredTasks,
-			metricsClient,
+			metricsHandler,
 			metrics.ExecutionsScavengerScope,
 		),
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(rateOverall) },
 		),
-		metrics: metricsClient,
+		metrics: metricsHandler,
 		logger:  logger,
 
 		stopC: make(chan struct{}),

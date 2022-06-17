@@ -93,7 +93,7 @@ func NewTestController(
 		clientBean:                  resource.GetClientBean(),
 		historyClient:               resource.GetHistoryClient(),
 		historyServiceResolver:      resource.GetHistoryServiceResolver(),
-		metricsClient:               resource.GetMetricsClient(),
+		metricsHandler:              resource.GetMetricsClient(),
 		payloadSerializer:           resource.GetPayloadSerializer(),
 		timeSource:                  resource.GetTimeSource(),
 		namespaceRegistry:           resource.GetNamespaceRegistry(),
@@ -660,7 +660,6 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 	currentRangeID, newRangeID int64,
 	required bool,
 ) {
-
 	replicationAck := int64(201)
 	currentClusterTransferAck := int64(210)
 	alternativeClusterTransferAck := int64(320)

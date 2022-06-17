@@ -60,7 +60,7 @@ func NewManager(
 	enableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	enableWriteToSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFn,
 
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) (manager.VisibilityManager, error) {
 	stdVisibilityManager, err := NewStandardManager(
@@ -68,7 +68,7 @@ func NewManager(
 		persistenceResolver,
 		standardVisibilityPersistenceMaxReadQPS,
 		standardVisibilityPersistenceMaxWriteQPS,
-		metricsClient,
+		metricsHandler,
 		logger,
 	)
 	if err != nil {
@@ -83,7 +83,7 @@ func NewManager(
 		searchAttributesMapper,
 		advancedVisibilityPersistenceMaxReadQPS,
 		advancedVisibilityPersistenceMaxWriteQPS,
-		metricsClient,
+		metricsHandler,
 		logger,
 	)
 	if err != nil {
@@ -98,7 +98,7 @@ func NewManager(
 		searchAttributesMapper,
 		advancedVisibilityPersistenceMaxReadQPS,
 		advancedVisibilityPersistenceMaxWriteQPS,
-		metricsClient,
+		metricsHandler,
 		logger,
 	)
 	if err != nil {
@@ -158,10 +158,9 @@ func NewStandardManager(
 	standardVisibilityPersistenceMaxReadQPS dynamicconfig.IntPropertyFn,
 	standardVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn,
 
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) (manager.VisibilityManager, error) {
-
 	stdVisibilityStore, err := newStandardVisibilityStore(
 		persistenceCfg,
 		persistenceResolver,
@@ -174,7 +173,7 @@ func NewStandardManager(
 		stdVisibilityStore,
 		standardVisibilityPersistenceMaxReadQPS,
 		standardVisibilityPersistenceMaxWriteQPS,
-		metricsClient,
+		metricsHandler,
 		metrics.StandardVisibilityTypeTag(),
 		logger), nil
 }
@@ -189,7 +188,7 @@ func NewAdvancedManager(
 	advancedVisibilityPersistenceMaxReadQPS dynamicconfig.IntPropertyFn,
 	advancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn,
 
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) (manager.VisibilityManager, error) {
 	if defaultIndexName == "" {
@@ -202,14 +201,14 @@ func NewAdvancedManager(
 		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapper,
-		metricsClient,
+		metricsHandler,
 		logger)
 
 	return newVisibilityManager(
 		advVisibilityStore,
 		advancedVisibilityPersistenceMaxReadQPS,
 		advancedVisibilityPersistenceMaxWriteQPS,
-		metricsClient,
+		metricsHandler,
 		metrics.AdvancedVisibilityTypeTag(),
 		logger,
 	), nil
@@ -219,7 +218,7 @@ func newVisibilityManager(
 	store store.VisibilityStore,
 	maxReadQPS dynamicconfig.IntPropertyFn,
 	maxWriteQPS dynamicconfig.IntPropertyFn,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	tag metrics.Tag,
 	logger log.Logger,
 ) manager.VisibilityManager {
@@ -237,7 +236,7 @@ func newVisibilityManager(
 	// wrap with metrics client
 	manager = NewVisibilityManagerMetrics(
 		manager,
-		metricsClient,
+		metricsHandler,
 		logger,
 		tag)
 
@@ -285,7 +284,7 @@ func newAdvancedVisibilityStore(
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapper searchattribute.Mapper,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) store.VisibilityStore {
 	if esClient == nil {
@@ -297,7 +296,7 @@ func newAdvancedVisibilityStore(
 		esProcessorAckTimeout dynamicconfig.DurationPropertyFn
 	)
 	if esProcessorConfig != nil {
-		esProcessor = elasticsearch.NewProcessor(esProcessorConfig, esClient, logger, metricsClient)
+		esProcessor = elasticsearch.NewProcessor(esProcessorConfig, esClient, logger, metricsHandler)
 		esProcessor.Start()
 		esProcessorAckTimeout = esProcessorConfig.ESProcessorAckTimeout
 	}
@@ -308,6 +307,6 @@ func newAdvancedVisibilityStore(
 		searchAttributesMapper,
 		esProcessor,
 		esProcessorAckTimeout,
-		metricsClient)
+		metricsHandler)
 	return s
 }

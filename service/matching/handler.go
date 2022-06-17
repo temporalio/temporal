@@ -29,9 +29,10 @@ import (
 	"sync"
 	"time"
 
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -49,7 +50,7 @@ type (
 	Handler struct {
 		engine                  Engine
 		config                  *Config
-		metricsClient           metrics.Client
+		metricsHandler          metrics.MetricsHandler
 		logger                  log.Logger
 		startWG                 sync.WaitGroup
 		throttledLogger         log.Logger
@@ -62,9 +63,7 @@ const (
 	serviceName = "temporal.api.workflowservice.v1.MatchingService"
 )
 
-var (
-	_ matchingservice.MatchingServiceServer = (*Handler)(nil)
-)
+var _ matchingservice.MatchingServiceServer = (*Handler)(nil)
 
 // NewHandler creates a gRPC handler for the matchingservice
 func NewHandler(
@@ -75,13 +74,13 @@ func NewHandler(
 	historyClient historyservice.HistoryServiceClient,
 	matchingRawClient matchingservice.MatchingServiceClient,
 	matchingServiceResolver membership.ServiceResolver,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
-		metricsClient:   metricsClient,
+		metricsHandler:  metricsHandler,
 		logger:          logger,
 		throttledLogger: throttledLogger,
 		engine: NewEngine(
@@ -90,7 +89,7 @@ func NewHandler(
 			matchingRawClient, // Use non retry client inside matching
 			config,
 			logger,
-			metricsClient,
+			metricsHandler,
 			namespaceRegistry,
 			matchingServiceResolver,
 			clusterMetadata,
@@ -131,6 +130,7 @@ func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest)
 	}
 	return hs, nil
 }
+
 func (h *Handler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
 	return serviceerror.NewUnimplemented("Watch is not implemented.")
 }
@@ -145,7 +145,7 @@ func (h *Handler) newHandlerContext(
 		ctx,
 		h.namespaceName(namespaceID),
 		taskQueue,
-		h.metricsClient,
+		h.metricsHandler,
 		scope,
 		h.logger,
 	)
@@ -300,7 +300,8 @@ func (h *Handler) RespondQueryTaskCompleted(
 
 // CancelOutstandingPoll is used to cancel outstanding pollers
 func (h *Handler) CancelOutstandingPoll(ctx context.Context,
-	request *matchingservice.CancelOutstandingPollRequest) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
+	request *matchingservice.CancelOutstandingPollRequest,
+) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -342,7 +343,7 @@ func (h *Handler) ListTaskQueuePartitions(
 		ctx,
 		namespace.Name(request.GetNamespace()),
 		request.GetTaskQueue(),
-		h.metricsClient,
+		h.metricsHandler,
 		metrics.MatchingListTaskQueuePartitionsScope,
 		h.logger,
 	)
@@ -361,7 +362,7 @@ func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 
 func (h *Handler) reportForwardedPerTaskQueueCounter(hCtx *handlerContext, namespaceId namespace.ID) {
 	hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
-	h.metricsClient.
+	h.metricsHandler.
 		Scope(metrics.MatchingAddWorkflowTaskScope).
 		Tagged(metrics.NamespaceTag(h.namespaceName(namespaceId).String())).
 		Tagged(metrics.ServiceRoleTag(metrics.MatchingRoleTagValue)).

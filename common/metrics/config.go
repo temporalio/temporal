@@ -43,7 +43,7 @@ type (
 	Config struct {
 		ClientConfig `yaml:"clientConfig,inline"`
 
-		// M3 is the configuration for m3 metrics reporter
+		// M3 is the configuration for m3 metrics.MetricsHandler
 		M3 *m3.Configuration `yaml:"m3"`
 		// Statsd is the configuration for statsd reporter
 		Statsd *StatsdConfig `yaml:"statsd"`
@@ -75,7 +75,7 @@ type (
 		PerUnitHistogramBoundaries map[string][]float64 `yaml:"perUnitHistogramBoundaries"`
 	}
 
-	// StatsdConfig contains the config items for statsd metrics reporter
+	// StatsdConfig contains the config items for statsd metrics.MetricsHandler
 	StatsdConfig struct {
 		// The host and port of the statsd server
 		HostPort string `yaml:"hostPort" validate:"nonzero"`

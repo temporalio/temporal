@@ -27,11 +27,13 @@ package metrics
 import (
 	"time"
 
+	"github.com/uber-go/tally/v4"
+
 	"go.temporal.io/server/common/log"
 )
 
 // Mostly cribbed from
-// https://github.com/temporalio/sdk-go/blob/master/internal/common/metrics/handler.go
+// https://github.com/temporalio/sdk-go/blob/master/internal/common/metrics.MetricsHandler.go
 // and adapted to depend on golang.org/x/exp/event
 type (
 	// MetricsHandler represents the main dependency for instrumentation
@@ -87,6 +89,24 @@ type (
 	TimerMetricFunc     func(time.Duration, ...Tag)
 	HistogramMetricFunc func(int64, ...Tag)
 )
+
+var sanitizer = tally.NewSanitizer(tally.SanitizeOptions{
+	NameCharacters:       tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
+	KeyCharacters:        tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
+	ValueCharacters:      tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
+	ReplacementCharacter: '_',
+})
+
+var defaultTestConfig = ClientConfig{
+	Tags: nil,
+	ExcludeTags: map[string][]string{
+		"taskqueue":    {"__sticky__"},
+		"activityType": {},
+		"workflowType": {},
+	},
+	Prefix:                     "",
+	PerUnitHistogramBoundaries: map[string][]float64{Dimensionless: {0, 10, 100}, Bytes: {1024, 2048}},
+}
 
 func (c CounterMetricFunc) Record(v int64, tags ...Tag)       { c(v, tags...) }
 func (c GaugeMetricFunc) Record(v float64, tags ...Tag)       { c(v, tags...) }

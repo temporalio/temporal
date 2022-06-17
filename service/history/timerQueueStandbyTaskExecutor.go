@@ -458,7 +458,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, executionContext, timerTask, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, executionContext, timerTask, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -508,8 +508,8 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return err
 	}
 
-	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientRequests)
-	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientLatency)
+	t.metricsHandler.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientRequests)
+	stopwatch := t.metricsHandler.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
 	adminClient, err := t.shard.GetRemoteAdminClient(remoteClusterName)

@@ -31,6 +31,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -56,11 +57,9 @@ func TestHistoryEventNotifierSuite(t *testing.T) {
 }
 
 func (s *notifierSuite) SetupSuite() {
-
 }
 
 func (s *notifierSuite) TearDownSuite() {
-
 }
 
 func (s *notifierSuite) SetupTest() {
@@ -68,7 +67,7 @@ func (s *notifierSuite) SetupTest() {
 
 	s.notifier = NewNotifier(
 		clock.NewRealTimeSource(),
-		metrics.NoopClient,
+		metrics.NoopMetricsHandler,
 		func(namespaceID namespace.ID, workflowID string) int32 {
 			key := namespaceID.String() + "_" + workflowID
 			return int32(len(key))

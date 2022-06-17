@@ -38,6 +38,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -113,7 +114,6 @@ func TestEngineSuite(t *testing.T) {
 }
 
 func (s *engineSuite) SetupSuite() {
-
 }
 
 func (s *engineSuite) TearDownSuite() {
@@ -141,7 +141,8 @@ func (s *engineSuite) SetupTest() {
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: 1,
 				RangeId: 1,
-			}},
+			},
+		},
 		s.config,
 	)
 	s.workflowCache = workflow.NewCache(s.mockShard)
@@ -188,7 +189,7 @@ func (s *engineSuite) SetupTest() {
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.mockShard.GetLogger(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
+		metricsHandler:     s.mockShard.GetMetricsClient(),
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		eventNotifier:      eventNotifier,
 		config:             s.config,
@@ -802,7 +803,6 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedInvalidToken() {
-
 	invalidToken, _ := json.Marshal("bad token")
 	identity := "testIdentity"
 
@@ -1394,45 +1394,73 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 		expectWorkflowTaskFail  bool
 	}{
 		// No ScheduleToClose timeout, will use runTimeout
-		{0, 3, 7, 0,
-			runTimeout, 3, 7, false},
+		{
+			0, 3, 7, 0,
+			runTimeout, 3, 7, false,
+		},
 		// Has ScheduleToClose timeout but not ScheduleToStart or StartToClose,
 		// will use ScheduleToClose for ScheduleToStart and StartToClose
-		{7, 0, 0, 0,
-			7, 7, 7, false},
+		{
+			7, 0, 0, 0,
+			7, 7, 7, false,
+		},
 		// Only StartToClose timeout
-		{0, 0, 7, 0,
-			runTimeout, runTimeout, 7, false},
+		{
+			0, 0, 7, 0,
+			runTimeout, runTimeout, 7, false,
+		},
 		// No ScheduleToClose timeout, ScheduleToStart or StartToClose, expect error return
-		{0, 0, 0, 0,
-			0, 0, 0, true},
+		{
+			0, 0, 0, 0,
+			0, 0, 0, true,
+		},
 		// Negative ScheduleToClose, expect error return
-		{-1, 0, 0, 0,
-			0, 0, 0, true},
+		{
+			-1, 0, 0, 0,
+			0, 0, 0, true,
+		},
 		// Negative ScheduleToStart, expect error return
-		{0, -1, 0, 0,
-			0, 0, 0, true},
+		{
+			0, -1, 0, 0,
+			0, 0, 0, true,
+		},
 		// Negative StartToClose, expect error return
-		{0, 0, -1, 0,
-			0, 0, 0, true},
+		{
+			0, 0, -1, 0,
+			0, 0, 0, true,
+		},
 		// Negative HeartBeat, expect error return
-		{0, 0, 0, -1,
-			0, 0, 0, true},
+		{
+			0, 0, 0, -1,
+			0, 0, 0, true,
+		},
 		// Use workflow timeout
-		{runTimeout, 0, 0, 0,
-			runTimeout, runTimeout, runTimeout, false},
+		{
+			runTimeout, 0, 0, 0,
+			runTimeout, runTimeout, runTimeout, false,
+		},
 		// Timeout larger than workflow timeout
-		{runTimeout + 1, 0, 0, 0,
-			runTimeout, runTimeout, runTimeout, false},
-		{0, runTimeout + 1, 0, 0,
-			0, 0, 0, true},
-		{0, 0, runTimeout + 1, 0,
-			runTimeout, runTimeout, runTimeout, false},
-		{0, 0, 0, runTimeout + 1,
-			0, 0, 0, true},
+		{
+			runTimeout + 1, 0, 0, 0,
+			runTimeout, runTimeout, runTimeout, false,
+		},
+		{
+			0, runTimeout + 1, 0, 0,
+			0, 0, 0, true,
+		},
+		{
+			0, 0, runTimeout + 1, 0,
+			runTimeout, runTimeout, runTimeout, false,
+		},
+		{
+			0, 0, 0, runTimeout + 1,
+			0, 0, 0, true,
+		},
 		// No ScheduleToClose timeout, will use ScheduleToStart + StartToClose, but exceed limit
-		{0, runTimeout, 10, 0,
-			runTimeout, runTimeout, 10, false},
+		{
+			0, runTimeout, 10, 0,
+			runTimeout, runTimeout, 10, false,
+		},
 	}
 
 	for _, iVar := range testIterationVariables {
@@ -2376,7 +2404,6 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowFail
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedInvalidToken() {
-
 	invalidToken, _ := json.Marshal("bad token")
 	identity := "testIdentity"
 
@@ -2923,7 +2950,6 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedInvalidToken() {
-
 	invalidToken, _ := json.Marshal("bad token")
 	identity := "testIdentity"
 
@@ -5281,8 +5307,8 @@ func (s *engineSuite) getActivityScheduledEvent(
 
 func addWorkflowExecutionStartedEventWithParent(builder workflow.MutableState, workflowExecution commonpb.WorkflowExecution,
 	workflowType, taskQueue string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout time.Duration,
-	parentInfo *workflowspb.ParentExecutionInfo, identity string) *historypb.HistoryEvent {
-
+	parentInfo *workflowspb.ParentExecutionInfo, identity string,
+) *historypb.HistoryEvent {
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		WorkflowId:               workflowExecution.WorkflowId,
 		WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
@@ -5309,7 +5335,8 @@ func addWorkflowExecutionStartedEventWithParent(builder workflow.MutableState, w
 
 func addWorkflowExecutionStartedEvent(builder workflow.MutableState, workflowExecution commonpb.WorkflowExecution,
 	workflowType, taskQueue string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout time.Duration,
-	identity string) *historypb.HistoryEvent {
+	identity string,
+) *historypb.HistoryEvent {
 	return addWorkflowExecutionStartedEventWithParent(builder, workflowExecution, workflowType, taskQueue, input,
 		executionTimeout, runTimeout, taskTimeout, nil, identity)
 }
@@ -5320,12 +5347,14 @@ func addWorkflowTaskScheduledEvent(builder workflow.MutableState) *workflow.Work
 }
 
 func addWorkflowTaskStartedEvent(builder workflow.MutableState, scheduledEventID int64, taskQueue,
-	identity string) *historypb.HistoryEvent {
+	identity string,
+) *historypb.HistoryEvent {
 	return addWorkflowTaskStartedEventWithRequestID(builder, scheduledEventID, tests.RunID, taskQueue, identity)
 }
 
 func addWorkflowTaskStartedEventWithRequestID(builder workflow.MutableState, scheduledEventID int64, requestID string,
-	taskQueue, identity string) *historypb.HistoryEvent {
+	taskQueue, identity string,
+) *historypb.HistoryEvent {
 	event, _, _ := builder.AddWorkflowTaskStartedEvent(
 		scheduledEventID,
 		requestID,
@@ -5357,8 +5386,8 @@ func addActivityTaskScheduledEvent(
 	startToCloseTimeout time.Duration,
 	heartbeatTimeout time.Duration,
 ) (*historypb.HistoryEvent,
-	*persistencespb.ActivityInfo) {
-
+	*persistencespb.ActivityInfo,
+) {
 	event, ai, _ := builder.AddActivityTaskScheduledEvent(workflowTaskCompletedID, &commandpb.ScheduleActivityTaskCommandAttributes{
 		ActivityId:             activityID,
 		ActivityType:           &commonpb.ActivityType{Name: activityType},
@@ -5385,7 +5414,6 @@ func addActivityTaskScheduledEventWithRetry(
 	heartbeatTimeout time.Duration,
 	retryPolicy *commonpb.RetryPolicy,
 ) (*historypb.HistoryEvent, *persistencespb.ActivityInfo) {
-
 	event, ai, _ := builder.AddActivityTaskScheduledEvent(workflowTaskCompletedID, &commandpb.ScheduleActivityTaskCommandAttributes{
 		ActivityId:             activityID,
 		ActivityType:           &commonpb.ActivityType{Name: activityType},
@@ -5408,7 +5436,8 @@ func addActivityTaskStartedEvent(builder workflow.MutableState, scheduledEventID
 }
 
 func addActivityTaskCompletedEvent(builder workflow.MutableState, scheduledEventID, startedEventID int64, result *commonpb.Payloads,
-	identity string) *historypb.HistoryEvent {
+	identity string,
+) *historypb.HistoryEvent {
 	event, _ := builder.AddActivityTaskCompletedEvent(scheduledEventID, startedEventID, &workflowservice.RespondActivityTaskCompletedRequest{
 		Result:   result,
 		Identity: identity,
@@ -5423,7 +5452,8 @@ func addActivityTaskFailedEvent(builder workflow.MutableState, scheduledEventID,
 }
 
 func addTimerStartedEvent(builder workflow.MutableState, workflowTaskCompletedEventID int64, timerID string,
-	timeout time.Duration) (*historypb.HistoryEvent, *persistencespb.TimerInfo) {
+	timeout time.Duration,
+) (*historypb.HistoryEvent, *persistencespb.TimerInfo) {
 	event, ti, _ := builder.AddTimerStartedEvent(workflowTaskCompletedEventID,
 		&commandpb.StartTimerCommandAttributes{
 			TimerId:            timerID,
@@ -5438,7 +5468,8 @@ func addTimerFiredEvent(mutableState workflow.MutableState, timerID string) *his
 }
 
 func addRequestCancelInitiatedEvent(builder workflow.MutableState, workflowTaskCompletedEventID int64,
-	cancelRequestID string, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string) (*historypb.HistoryEvent, *persistencespb.RequestCancelInfo) {
+	cancelRequestID string, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string,
+) (*historypb.HistoryEvent, *persistencespb.RequestCancelInfo) {
 	event, rci, _ := builder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID,
 		cancelRequestID, &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
 			Namespace:  namespace.String(),
@@ -5458,7 +5489,8 @@ func addCancelRequestedEvent(builder workflow.MutableState, initiatedID int64, n
 
 func addRequestSignalInitiatedEvent(builder workflow.MutableState, workflowTaskCompletedEventID int64,
 	signalRequestID string, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID, signalName string, input *commonpb.Payloads,
-	control string, header *commonpb.Header) (*historypb.HistoryEvent, *persistencespb.SignalInfo) {
+	control string, header *commonpb.Header,
+) (*historypb.HistoryEvent, *persistencespb.SignalInfo) {
 	event, si, _ := builder.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, signalRequestID,
 		&commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 			Namespace: namespace.String(),
@@ -5491,7 +5523,6 @@ func addStartChildWorkflowExecutionInitiatedEvent(
 	executionTimeout, runTimeout, taskTimeout time.Duration,
 	parentClosePolicy enumspb.ParentClosePolicy,
 ) (*historypb.HistoryEvent, *persistencespb.ChildExecutionInfo) {
-
 	event, cei, _ := builder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedID, createRequestID,
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{
 			Namespace:                namespace.String(),
@@ -5509,7 +5540,8 @@ func addStartChildWorkflowExecutionInitiatedEvent(
 }
 
 func addChildWorkflowExecutionStartedEvent(builder workflow.MutableState, initiatedID int64, workflowID, runID string,
-	workflowType string, clock *clockspb.VectorClock) *historypb.HistoryEvent {
+	workflowType string, clock *clockspb.VectorClock,
+) *historypb.HistoryEvent {
 	event, _ := builder.AddChildWorkflowExecutionStartedEvent(
 		&commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
@@ -5524,13 +5556,15 @@ func addChildWorkflowExecutionStartedEvent(builder workflow.MutableState, initia
 }
 
 func addChildWorkflowExecutionCompletedEvent(builder workflow.MutableState, initiatedID int64, childExecution *commonpb.WorkflowExecution,
-	attributes *historypb.WorkflowExecutionCompletedEventAttributes) *historypb.HistoryEvent {
+	attributes *historypb.WorkflowExecutionCompletedEventAttributes,
+) *historypb.HistoryEvent {
 	event, _ := builder.AddChildWorkflowExecutionCompletedEvent(initiatedID, childExecution, attributes)
 	return event
 }
 
 func addCompleteWorkflowEvent(builder workflow.MutableState, workflowTaskCompletedEventID int64,
-	result *commonpb.Payloads) *historypb.HistoryEvent {
+	result *commonpb.Payloads,
+) *historypb.HistoryEvent {
 	event, _ := builder.AddCompletedWorkflowEvent(
 		workflowTaskCompletedEventID,
 		&commandpb.CompleteWorkflowExecutionCommandAttributes{

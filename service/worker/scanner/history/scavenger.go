@@ -105,10 +105,9 @@ func NewScavenger(
 	rps int,
 	client historyservice.HistoryServiceClient,
 	hbd ScavengerHeartbeatDetails,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) *Scavenger {
-
 	return &Scavenger{
 		numShards: numShards,
 		db:        db,
@@ -116,7 +115,7 @@ func NewScavenger(
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(rps) },
 		),
-		metrics: metricsClient,
+		metrics: metricsHandler,
 		logger:  logger,
 
 		hbd: hbd,
@@ -144,7 +143,6 @@ func (s *Scavenger) loadTasks(
 	ctx context.Context,
 	reqCh chan taskDetail,
 ) error {
-
 	defer close(reqCh)
 
 	iter := collection.NewPagingIteratorWithToken(s.getPaginationFn(ctx), s.hbd.NextPageToken)
@@ -180,7 +178,6 @@ func (s *Scavenger) taskWorker(
 	ctx context.Context,
 	taskCh chan taskDetail,
 ) {
-
 	defer s.WaitGroup.Done()
 
 	for {
@@ -211,7 +208,6 @@ func (s *Scavenger) heartbeat(ctx context.Context) {
 func (s *Scavenger) filterTask(
 	branch persistence.HistoryBranchDetail,
 ) *taskDetail {
-
 	if time.Now().UTC().Add(-cleanUpThreshold).Before(timestamp.TimeValue(branch.ForkTime)) {
 		s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerSkipCount)
 
@@ -266,7 +262,7 @@ func (s *Scavenger) handleTask(
 		return err
 	}
 
-	//deleting history branch
+	// deleting history branch
 	var branchToken []byte
 	branchToken, err = persistence.NewHistoryBranchTokenByBranchID(task.treeID, task.branchID)
 	if err != nil {

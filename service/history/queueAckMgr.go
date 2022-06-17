@@ -46,13 +46,13 @@ type (
 	// Outstanding tasks map uses the task id sequencer as the key, which is used by updateAckLevel to move the ack level
 	// for the shard when all preceding tasks are acknowledged.
 	queueAckMgrImpl struct {
-		isFailover    bool
-		shard         shard.Context
-		options       *QueueProcessorOptions
-		processor     processor
-		logger        log.Logger
-		metricsClient metrics.Client
-		finishedChan  chan struct{}
+		isFailover     bool
+		shard          shard.Context
+		options        *QueueProcessorOptions
+		processor      processor
+		logger         log.Logger
+		metricsHandler metrics.MetricsHandler
+		finishedChan   chan struct{}
 
 		sync.RWMutex
 		outstandingExecutables map[int64]queues.Executable
@@ -78,7 +78,6 @@ func newQueueAckMgr(
 	logger log.Logger,
 	executableInitializer taskExecutableInitializer,
 ) *queueAckMgrImpl {
-
 	return &queueAckMgrImpl{
 		isFailover:             false,
 		shard:                  shard,
@@ -88,7 +87,7 @@ func newQueueAckMgr(
 		readLevel:              ackLevel,
 		ackLevel:               ackLevel,
 		logger:                 logger,
-		metricsClient:          shard.GetMetricsClient(),
+		metricsHandler:         shard.GetMetricsClient(),
 		finishedChan:           nil,
 		executableInitializer:  executableInitializer,
 	}
@@ -102,7 +101,6 @@ func newQueueFailoverAckMgr(
 	logger log.Logger,
 	executableInitializer taskExecutableInitializer,
 ) *queueAckMgrImpl {
-
 	return &queueAckMgrImpl{
 		isFailover:             true,
 		shard:                  shard,
@@ -112,7 +110,7 @@ func newQueueFailoverAckMgr(
 		readLevel:              ackLevel,
 		ackLevel:               ackLevel,
 		logger:                 logger,
-		metricsClient:          shard.GetMetricsClient(),
+		metricsHandler:         shard.GetMetricsClient(),
 		finishedChan:           make(chan struct{}, 1),
 		executableInitializer:  executableInitializer,
 	}
@@ -186,7 +184,7 @@ func (a *queueAckMgrImpl) getFinishedChan() <-chan struct{} {
 }
 
 func (a *queueAckMgrImpl) updateQueueAckLevel() error {
-	a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateCounter)
+	a.metricsHandler.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateCounter)
 
 	a.Lock()
 	ackLevel := a.ackLevel
@@ -204,7 +202,7 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() error {
 		a.logger.Warn("Too many pending tasks")
 	}
 
-	metricsScope := a.metricsClient.Scope(metrics.ShardInfoScope)
+	metricsScope := a.metricsHandler.Scope(metrics.ShardInfoScope)
 	switch a.options.MetricScope {
 	case metrics.ReplicatorQueueProcessorScope:
 		metricsScope.RecordDistribution(metrics.ShardInfoReplicationPendingTasksTimer, pendingTasks)
@@ -244,7 +242,7 @@ MoveAckLevelLoop:
 
 	a.Unlock()
 	if err := a.processor.updateAckLevel(ackLevel); err != nil {
-		a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateFailedCounter)
+		a.metricsHandler.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateFailedCounter)
 		a.logger.Error("Error updating ack level for shard", tag.Error(err), tag.OperationFailed)
 		return err
 	}

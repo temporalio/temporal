@@ -52,7 +52,7 @@ type (
 	Batcher struct {
 		cfg              *Config
 		sdkClientFactory sdk.ClientFactory
-		metricsClient    metrics.Client
+		metricsHandler   metrics.MetricsHandler
 		logger           log.Logger
 	}
 )
@@ -60,14 +60,14 @@ type (
 // New returns a new instance of batcher daemon Batcher
 func New(
 	cfg *Config,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
 ) *Batcher {
 	return &Batcher{
 		cfg:              cfg,
 		sdkClientFactory: sdkClientFactory,
-		metricsClient:    metricsClient,
+		metricsHandler:   metricsHandler,
 		logger:           log.With(logger, tag.ComponentBatcher),
 	}
 }

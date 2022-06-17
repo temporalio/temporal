@@ -66,7 +66,7 @@ type (
 		taskAllocator             taskAllocator
 		config                    *configs.Config
 		metricProvider            metrics.MetricsHandler
-		metricsClient             metrics.Client
+		metricsHandler            metrics.MetricsHandler
 		clientBean                client.Bean
 		matchingClient            matchingservice.MatchingServiceClient
 		historyClient             historyservice.HistoryServiceClient
@@ -113,7 +113,7 @@ func newTransferQueueProcessor(
 		taskAllocator:      taskAllocator,
 		config:             config,
 		metricProvider:     metricProvider,
-		metricsClient:      shard.GetMetricsClient(),
+		metricsHandler:     shard.GetMetricsClient(),
 		clientBean:         clientBean,
 		matchingClient:     matchingClient,
 		historyClient:      historyClient,
@@ -336,7 +336,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 		return nil
 	}
 
-	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.TaskBatchCompleteCounter)
+	t.metricsHandler.IncCounter(metrics.TransferQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel < upperAckLevel {
 		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{

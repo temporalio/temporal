@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -75,8 +76,8 @@ type (
 		clientBean                  client.Bean
 		historyClient               historyservice.HistoryServiceClient
 		historyServiceResolver      membership.ServiceResolver
-		metricsClient               metrics.Client
-		metricsReporter             metrics.Reporter
+		metricsHandler              metrics.MetricsHandler
+		metricsReporter             metrics.MetricsHandler
 		payloadSerializer           serialization.Serializer
 		timeSource                  clock.TimeSource
 		namespaceRegistry           namespace.Registry
@@ -244,7 +245,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 		c.persistenceShardManager,
 		c.clientBean,
 		c.historyClient,
-		c.metricsClient,
+		c.metricsHandler,
 		c.metricsReporter,
 		c.payloadSerializer,
 		c.timeSource,

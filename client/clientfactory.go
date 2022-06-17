@@ -68,7 +68,7 @@ type (
 		NewFactory(
 			rpcFactory common.RPCFactory,
 			monitor membership.Monitor,
-			metricsClient metrics.Client,
+			metricsHandler metrics.MetricsHandler,
 			dc *dynamicconfig.Collection,
 			numberOfHistoryShards int32,
 			logger log.Logger,
@@ -82,22 +82,20 @@ type (
 	rpcClientFactory struct {
 		rpcFactory            common.RPCFactory
 		monitor               membership.Monitor
-		metricsClient         metrics.Client
+		metricsHandler        metrics.MetricsHandler
 		dynConfig             *dynamicconfig.Collection
 		numberOfHistoryShards int32
 		logger                log.Logger
 		throttledLogger       log.Logger
 	}
 
-	factoryProviderImpl struct {
-	}
+	factoryProviderImpl struct{}
 
 	serviceKeyResolverImpl struct {
 		resolver membership.ServiceResolver
 	}
 
-	constKeyResolverImpl struct {
-	}
+	constKeyResolverImpl struct{}
 )
 
 // NewFactoryProvider creates a default implementation of FactoryProvider.
@@ -109,7 +107,7 @@ func NewFactoryProvider() FactoryProvider {
 func (p *factoryProviderImpl) NewFactory(
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	dc *dynamicconfig.Collection,
 	numberOfHistoryShards int32,
 	logger log.Logger,
@@ -118,7 +116,7 @@ func (p *factoryProviderImpl) NewFactory(
 	return &rpcClientFactory{
 		rpcFactory:            rpcFactory,
 		monitor:               monitor,
-		metricsClient:         metricsClient,
+		metricsHandler:        metricsHandler,
 		dynConfig:             dc,
 		numberOfHistoryShards: numberOfHistoryShards,
 		logger:                logger,
@@ -151,8 +149,8 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	}
 	clientCache := common.NewClientCache(keyResolver, clientProvider)
 	client := history.NewClient(cf.numberOfHistoryShards, timeout, clientCache, cf.logger)
-	if cf.metricsClient != nil {
-		client = history.NewMetricClient(client, cf.metricsClient, cf.logger, cf.throttledLogger)
+	if cf.metricsHandler != nil {
+		client = history.NewMetricClient(client, cf.metricsHandler, cf.logger, cf.throttledLogger)
 	}
 	return client, nil
 }
@@ -179,11 +177,10 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig),
 	)
 
-	if cf.metricsClient != nil {
-		client = matching.NewMetricClient(client, cf.metricsClient, cf.logger, cf.throttledLogger)
+	if cf.metricsHandler != nil {
+		client = matching.NewMetricClient(client, cf.metricsHandler, cf.logger, cf.throttledLogger)
 	}
 	return client, nil
-
 }
 
 func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
@@ -197,8 +194,8 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 		return workflowservice.NewWorkflowServiceClient(connection), nil
 	}
 	client := frontend.NewClient(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
-	if cf.metricsClient != nil {
-		client = frontend.NewMetricClient(client, cf.metricsClient)
+	if cf.metricsHandler != nil {
+		client = frontend.NewMetricClient(client, cf.metricsHandler)
 	}
 	return client
 }
@@ -215,8 +212,8 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeout(
 	}
 
 	client := admin.NewClient(timeout, largeTimeout, common.NewClientCache(keyResolver, clientProvider))
-	if cf.metricsClient != nil {
-		client = admin.NewMetricClient(client, cf.metricsClient)
+	if cf.metricsHandler != nil {
+		client = admin.NewMetricClient(client, cf.metricsHandler)
 	}
 	return client
 }

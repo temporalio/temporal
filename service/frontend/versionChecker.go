@@ -56,14 +56,14 @@ type VersionChecker struct {
 
 func NewVersionChecker(
 	config *Config,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	sdkVersionRecorder *interceptor.SDKVersionInterceptor,
 ) *VersionChecker {
 	return &VersionChecker{
 		config:                 config,
 		shutdownChan:           make(chan struct{}),
-		metricsScope:           metricsClient.Scope(metrics.VersionCheckScope),
+		metricsScope:           metricsHandler.Scope(metrics.VersionCheckScope),
 		clusterMetadataManager: clusterMetadataManager,
 		sdkVersionRecorder:     sdkVersionRecorder,
 	}
@@ -169,7 +169,8 @@ func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *check.Versi
 	}
 	metadata.VersionInfo = versionInfo
 	saved, err := vc.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: metadata.ClusterMetadata, Version: metadata.Version})
+		ClusterMetadata: metadata.ClusterMetadata, Version: metadata.Version,
+	})
 	if err != nil {
 		return err
 	}

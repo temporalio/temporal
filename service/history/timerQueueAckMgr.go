@@ -44,9 +44,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-var (
-	maximumTime = time.Unix(0, math.MaxInt64).UTC()
-)
+var maximumTime = time.Unix(0, math.MaxInt64).UTC()
 
 type (
 	timerQueueAckMgrImpl struct {
@@ -55,7 +53,7 @@ type (
 		shard               shard.Context
 		executionMgr        persistence.ExecutionManager
 		logger              log.Logger
-		metricsClient       metrics.Client
+		metricsHandler      metrics.MetricsHandler
 		config              *configs.Config
 		timeNow             timeNow
 		updateTimerAckLevel updateTimerAckLevel
@@ -111,7 +109,7 @@ func newTimerQueueAckMgr(
 		isFailover:             false,
 		shard:                  shard,
 		executionMgr:           shard.GetExecutionManager(),
-		metricsClient:          shard.GetMetricsClient(),
+		metricsHandler:         shard.GetMetricsClient(),
 		logger:                 logger,
 		config:                 shard.GetConfig(),
 		timeNow:                timeNow,
@@ -150,7 +148,7 @@ func newTimerQueueFailoverAckMgr(
 		isFailover:             true,
 		shard:                  shard,
 		executionMgr:           shard.GetExecutionManager(),
-		metricsClient:          shard.GetMetricsClient(),
+		metricsHandler:         shard.GetMetricsClient(),
 		logger:                 logger,
 		config:                 shard.GetConfig(),
 		timeNow:                timeNow,
@@ -291,7 +289,7 @@ func (t *timerQueueAckMgrImpl) getAckLevel() tasks.Key {
 }
 
 func (t *timerQueueAckMgrImpl) updateAckLevel() error {
-	t.metricsClient.IncCounter(t.scope, metrics.AckLevelUpdateCounter)
+	t.metricsHandler.IncCounter(t.scope, metrics.AckLevelUpdateCounter)
 
 	t.Lock()
 	ackLevel := t.ackLevel
@@ -310,9 +308,9 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() error {
 	}
 	switch t.scope {
 	case metrics.TimerActiveQueueProcessorScope:
-		t.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTimerActivePendingTasksTimer, pendingTasks)
+		t.metricsHandler.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTimerActivePendingTasksTimer, pendingTasks)
 	case metrics.TimerStandbyQueueProcessorScope:
-		t.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTimerStandbyPendingTasksTimer, pendingTasks)
+		t.metricsHandler.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTimerStandbyPendingTasksTimer, pendingTasks)
 	}
 
 MoveAckLevelLoop:
@@ -343,7 +341,7 @@ MoveAckLevelLoop:
 
 	t.Unlock()
 	if err := t.updateTimerAckLevel(ackLevel); err != nil {
-		t.metricsClient.IncCounter(t.scope, metrics.AckLevelUpdateFailedCounter)
+		t.metricsHandler.IncCounter(t.scope, metrics.AckLevelUpdateFailedCounter)
 		t.logger.Error("Error updating timer ack level for shard", tag.Error(err))
 		return err
 	}

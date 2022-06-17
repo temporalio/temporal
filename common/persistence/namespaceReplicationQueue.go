@@ -59,10 +59,9 @@ func NewNamespaceReplicationQueue(
 	queue Queue,
 	serializer serialization.Serializer,
 	clusterName string,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) (NamespaceReplicationQueue, error) {
-
 	blob, err := serializer.QueueMetadataToBlob(
 		&persistence.QueueMetadata{
 			ClusterAckLevels: make(map[string]int64),
@@ -78,7 +77,7 @@ func NewNamespaceReplicationQueue(
 	return &namespaceReplicationQueueImpl{
 		queue:               queue,
 		clusterName:         clusterName,
-		metricsClient:       metricsClient,
+		metricsHandler:      metricsHandler,
 		logger:              logger,
 		ackNotificationChan: make(chan bool),
 		done:                make(chan bool),
@@ -91,7 +90,7 @@ type (
 	namespaceReplicationQueueImpl struct {
 		queue               Queue
 		clusterName         string
-		metricsClient       metrics.Client
+		metricsHandler      metrics.MetricsHandler
 		logger              log.Logger
 		ackLevelUpdated     bool
 		ackNotificationChan chan bool
@@ -166,7 +165,7 @@ func (q *namespaceReplicationQueueImpl) PublishToDLQ(
 		return err
 	}
 
-	q.metricsClient.Scope(
+	q.metricsHandler.Scope(
 		metrics.PersistenceNamespaceReplicationQueueScope,
 	).UpdateGauge(
 		metrics.NamespaceReplicationDLQMaxLevelGauge,
@@ -180,7 +179,6 @@ func (q *namespaceReplicationQueueImpl) GetReplicationMessages(
 	lastMessageID int64,
 	pageSize int,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
-
 	messages, err := q.queue.ReadMessages(ctx, lastMessageID, pageSize)
 	if err != nil {
 		return nil, lastMessageID, err
@@ -315,7 +313,6 @@ func (q *namespaceReplicationQueueImpl) GetMessagesFromDLQ(
 	pageSize int,
 	pageToken []byte,
 ) ([]*replicationspb.ReplicationTask, []byte, error) {
-
 	messages, token, err := q.queue.ReadMessagesFromDLQ(ctx, firstMessageID, lastMessageID, pageSize, pageToken)
 	if err != nil {
 		return nil, nil, err
@@ -367,7 +364,6 @@ func (q *namespaceReplicationQueueImpl) RangeDeleteMessagesFromDLQ(
 	firstMessageID int64,
 	lastMessageID int64,
 ) error {
-
 	if err := q.queue.RangeDeleteMessagesFromDLQ(
 		ctx,
 		firstMessageID,
@@ -383,7 +379,6 @@ func (q *namespaceReplicationQueueImpl) DeleteMessageFromDLQ(
 	ctx context.Context,
 	messageID int64,
 ) error {
-
 	return q.queue.DeleteMessageFromDLQ(ctx, messageID)
 }
 
@@ -413,7 +408,7 @@ func (q *namespaceReplicationQueueImpl) purgeAckedMessages(
 	if err != nil {
 		return fmt.Errorf("failed to purge messages: %v", err)
 	}
-	q.metricsClient.
+	q.metricsHandler.
 		Scope(metrics.PersistenceNamespaceReplicationQueueScope).
 		UpdateGauge(metrics.NamespaceReplicationTaskAckLevelGauge, float64(*minAckLevel))
 	return nil

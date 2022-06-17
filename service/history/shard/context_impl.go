@@ -87,8 +87,8 @@ type (
 		// These fields are constant:
 		shardID             int32
 		executionManager    persistence.ExecutionManager
-		metricsClient       metrics.Client
-		metricsReporter     metrics.Reporter
+		metricsHandler      metrics.MetricsHandler
+		metricsReporter     metrics.MetricsHandler
 		eventsCache         events.Cache
 		closeCallback       func(*ContextImpl)
 		config              *configs.Config
@@ -1437,8 +1437,8 @@ func (s *ContextImpl) isValid() bool {
 
 func (s *ContextImpl) wLock() {
 	scope := metrics.ShardInfoScope
-	s.metricsClient.IncCounter(scope, metrics.LockRequests)
-	sw := s.metricsClient.StartTimer(scope, metrics.LockLatency)
+	s.metricsHandler.IncCounter(scope, metrics.LockRequests)
+	sw := s.metricsHandler.StartTimer(scope, metrics.LockLatency)
 	defer sw.Stop()
 
 	s.rwLock.Lock()
@@ -1446,8 +1446,8 @@ func (s *ContextImpl) wLock() {
 
 func (s *ContextImpl) rLock() {
 	scope := metrics.ShardInfoScope
-	s.metricsClient.IncCounter(scope, metrics.LockRequests)
-	sw := s.metricsClient.StartTimer(scope, metrics.LockLatency)
+	s.metricsHandler.IncCounter(scope, metrics.LockRequests)
+	sw := s.metricsHandler.StartTimer(scope, metrics.LockLatency)
 	defer sw.Stop()
 
 	s.rwLock.RLock()
@@ -1812,8 +1812,8 @@ func newContext(
 	persistenceShardManager persistence.ShardManager,
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
-	metricsClient metrics.Client,
-	metricsReporter metrics.Reporter,
+	metricsHandler metrics.MetricsHandler,
+	metricsReporter metrics.MetricsHandler,
 	payloadSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
@@ -1831,7 +1831,7 @@ func newContext(
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
 		executionManager:        persistenceExecutionManager,
-		metricsClient:           metricsClient,
+		metricsHandler:          metricsHandler,
 		metricsReporter:         metricsReporter,
 		closeCallback:           closeCallback,
 		config:                  config,
@@ -1924,10 +1924,10 @@ func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 }
 
 func (s *ContextImpl) GetMetricsClient() metrics.Client {
-	return s.metricsClient
+	return s.metricsHandler
 }
 
-func (s *ContextImpl) GetMetricsReporter() metrics.Reporter {
+func (s *ContextImpl) GetMetricsReporter() metrics.MetricsHandler {
 	return s.metricsReporter
 }
 

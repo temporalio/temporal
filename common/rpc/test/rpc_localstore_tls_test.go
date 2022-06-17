@@ -129,7 +129,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 	s.logger = log.NewTestLogger()
 
-	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	insecureFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, dynamicconfig.NewNoopCollection(), clusterMetadata, noExtraInterceptors)
 	s.NotNil(insecureFactory)
@@ -337,22 +337,22 @@ func (s *localStoreRPCSuite) setupFrontend() {
 		},
 	}
 
-	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	frontendMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, dynamicconfig.NewNoopCollection(), clusterMetadata, noExtraInterceptors)
 	s.NotNil(frontendMutualTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	frontendServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, dynamicconfig.NewNoopCollection(), clusterMetadata, noExtraInterceptors)
 	s.NotNil(frontendServerTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSSystemWorker.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSSystemWorker.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	frontendSystemWorkerMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, dynamicconfig.NewNoopCollection(), clusterMetadata, noExtraInterceptors)
 	s.NotNil(frontendSystemWorkerMutualTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSWithRefresh.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSWithRefresh.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	frontendMutualTLSRefreshFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, dynamicconfig.NewNoopCollection(), clusterMetadata, noExtraInterceptors)
 	s.NotNil(frontendMutualTLSRefreshFactory)
@@ -374,13 +374,13 @@ func (s *localStoreRPCSuite) setupFrontend() {
 
 	s.frontendMutualTLSRPCRefreshFactory = f(frontendMutualTLSRefreshFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreRootCAForceTLS.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreRootCAForceTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	frontendRootCAForceTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, dynamicconfig.NewNoopCollection(), clusterMetadata, noExtraInterceptors)
 	s.NotNil(frontendServerTLSFactory)
 	s.frontendConfigRootCAForceTLSFactory = f(frontendRootCAForceTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSRemoteCluster.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSRemoteCluster.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	remoteClusterMutualTLSRPCFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, dynamicconfig.NewNoopCollection(), clusterMetadata, noExtraInterceptors)
 	s.NotNil(remoteClusterMutualTLSRPCFactory)
@@ -416,22 +416,22 @@ func (s *localStoreRPCSuite) setupInternode() {
 	localStoreMutualTLSWithRefresh.TLS.Internode = s.internodeConfigMutualTLSRefresh
 	localStoreMutualTLSWithRefresh.TLS.RefreshInterval = time.Second
 
-	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	internodeMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, dynamicconfig.NewNoopCollection(), clusterMetadata, noExtraInterceptors)
 	s.NotNil(internodeMutualTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	internodeServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, dynamicconfig.NewNoopCollection(), clusterMetadata, noExtraInterceptors)
 	s.NotNil(internodeServerTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreAltMutualTLS.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreAltMutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	internodeMutualAltTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, dynamicconfig.NewNoopCollection(), clusterMetadata, noExtraInterceptors)
 	s.NotNil(internodeMutualAltTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSWithRefresh.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSWithRefresh.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	internodeMutualTLSRefreshFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, dynamicconfig.NewNoopCollection(), clusterMetadata, noExtraInterceptors)
 	s.NotNil(internodeMutualTLSRefreshFactory)
@@ -645,7 +645,7 @@ func (s *localStoreRPCSuite) TestSystemWorkerOnlyConfig() {
 			SystemWorker: s.systemWorkerOnly,
 		},
 	}
-	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreSystemWorkerOnly.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreSystemWorkerOnly.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	tlsConfig, err := provider.GetFrontendClientConfig()
 	s.NoError(err)

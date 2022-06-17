@@ -42,7 +42,7 @@ import (
 type (
 	activities struct {
 		metadataManager persistence.MetadataManager
-		metricsClient   metrics.Client
+		metricsHandler  metrics.MetricsHandler
 		logger          log.Logger
 	}
 
@@ -54,12 +54,12 @@ type (
 
 func NewActivities(
 	metadataManager persistence.MetadataManager,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) *activities {
 	return &activities{
 		metadataManager: metadataManager,
-		metricsClient:   metricsClient,
+		metricsHandler:  metricsHandler,
 		logger:          logger,
 	}
 }
@@ -92,14 +92,14 @@ func (a *activities) MarkNamespaceDeletedActivity(ctx context.Context, nsName na
 
 	metadata, err := a.metadataManager.GetMetadata(ctx)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.ReadNamespaceFailuresCount)
+		a.metricsHandler.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.ReadNamespaceFailuresCount)
 		a.logger.Error("Unable to get cluster metadata.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
 
 	ns, err := a.metadataManager.GetNamespace(ctx, getNamespaceRequest)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.ReadNamespaceFailuresCount)
+		a.metricsHandler.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.ReadNamespaceFailuresCount)
 		a.logger.Error("Unable to get namespace details.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
@@ -114,7 +114,7 @@ func (a *activities) MarkNamespaceDeletedActivity(ctx context.Context, nsName na
 
 	err = a.metadataManager.UpdateNamespace(ctx, updateRequest)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.UpdateNamespaceFailuresCount)
+		a.metricsHandler.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.UpdateNamespaceFailuresCount)
 		a.logger.Error("Unable to update namespace state to Deleted.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
@@ -137,7 +137,7 @@ func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, n
 			a.logger.Info("Generated new name for deleted namespace.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespace(newName))
 			return namespace.Name(newName), nil
 		default:
-			a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.ReadNamespaceFailuresCount)
+			a.metricsHandler.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.ReadNamespaceFailuresCount)
 			a.logger.Error("Unable to get namespace details.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 			return namespace.EmptyName, err
 		}
@@ -154,12 +154,12 @@ func (a *activities) RenameNamespaceActivity(ctx context.Context, previousName n
 
 	err := a.metadataManager.RenameNamespace(ctx, renameNamespaceRequest)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.RenameNamespaceFailuresCount)
+		a.metricsHandler.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.RenameNamespaceFailuresCount)
 		a.logger.Error("Unable to rename namespace.", tag.WorkflowNamespace(previousName.String()), tag.Error(err))
 		return err
 	}
 
-	a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.RenameNamespaceSuccessCount)
+	a.metricsHandler.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.RenameNamespaceSuccessCount)
 	a.logger.Info("Namespace renamed successfully.", tag.WorkflowNamespace(previousName.String()), tag.WorkflowNamespace(newName.String()))
 	return nil
 }

@@ -69,7 +69,7 @@ type (
 		config             *configs.Config
 		historyCache       workflow.Cache
 		executionMgr       persistence.ExecutionManager
-		metricsClient      metrics.Client
+		metricsHandler     metrics.MetricsHandler
 		logger             log.Logger
 		retryPolicy        backoff.RetryPolicy
 		pageSize           int
@@ -81,9 +81,7 @@ type (
 	}
 )
 
-var (
-	errUnknownReplicationTask = serviceerror.NewInternal("unknown replication task")
-)
+var errUnknownReplicationTask = serviceerror.NewInternal("unknown replication task")
 
 func NewAckManager(
 	shard shard.Context,
@@ -91,7 +89,6 @@ func NewAckManager(
 	executionMgr persistence.ExecutionManager,
 	logger log.Logger,
 ) AckManager {
-
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 
@@ -105,7 +102,7 @@ func NewAckManager(
 		config:             shard.GetConfig(),
 		historyCache:       historyCache,
 		executionMgr:       executionMgr,
-		metricsClient:      shard.GetMetricsClient(),
+		metricsHandler:     shard.GetMetricsClient(),
 		logger:             log.With(logger, tag.ComponentReplicatorQueue),
 		retryPolicy:        retryPolicy,
 		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize(),
@@ -118,7 +115,6 @@ func NewAckManager(
 func (p *ackMgrImpl) NotifyNewTasks(
 	tasks []tasks.Task,
 ) {
-
 	if len(tasks) == 0 {
 		return
 	}
@@ -155,7 +151,6 @@ func (p *ackMgrImpl) GetTask(
 	ctx context.Context,
 	taskInfo *replicationspb.ReplicationTaskInfo,
 ) (*replicationspb.ReplicationTask, error) {
-
 	switch taskInfo.TaskType {
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 		return p.taskInfoToTask(ctx, &tasks.SyncActivityTask{
@@ -192,7 +187,6 @@ func (p *ackMgrImpl) GetTasks(
 	pollingCluster string,
 	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
-
 	minTaskID, maxTaskID := p.taskIDsRange(queryMessageID)
 	replicationTasks, lastTaskID, err := p.getTasks(
 		ctx,
@@ -205,7 +199,7 @@ func (p *ackMgrImpl) GetTasks(
 	}
 
 	// Note this is a very rough indicator of how much the remote DC is behind on this shard.
-	p.metricsClient.Scope(
+	p.metricsHandler.Scope(
 		metrics.ReplicatorQueueProcessorScope,
 		metrics.TargetClusterTag(pollingCluster),
 	).RecordDistribution(
@@ -213,13 +207,13 @@ func (p *ackMgrImpl) GetTasks(
 		int(maxTaskID-lastTaskID),
 	)
 
-	p.metricsClient.RecordDistribution(
+	p.metricsHandler.RecordDistribution(
 		metrics.ReplicatorQueueProcessorScope,
 		metrics.ReplicationTasksFetched,
 		len(replicationTasks),
 	)
 
-	p.metricsClient.RecordDistribution(
+	p.metricsHandler.RecordDistribution(
 		metrics.ReplicatorQueueProcessorScope,
 		metrics.ReplicationTasksReturned,
 		len(replicationTasks),
@@ -241,7 +235,6 @@ func (p *ackMgrImpl) getTasks(
 	maxTaskID int64,
 	batchSize int,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
-
 	if minTaskID == maxTaskID {
 		return []*replicationspb.ReplicationTask{}, maxTaskID, nil
 	}
@@ -338,7 +331,6 @@ func (p *ackMgrImpl) toReplicationTask(
 	ctx context.Context,
 	task tasks.Task,
 ) (*replicationspb.ReplicationTask, error) {
-
 	switch task := task.(type) {
 	case *tasks.SyncActivityTask:
 		return p.generateSyncActivityTask(ctx, task)
@@ -524,7 +516,6 @@ func (p *ackMgrImpl) getEventsBlob(
 	firstEventID int64,
 	nextEventID int64,
 ) (*commonpb.DataBlob, error) {
-
 	var eventBatchBlobs []*commonpb.DataBlob
 	var pageToken []byte
 	req := &persistence.ReadHistoryBranchRequest{
@@ -565,7 +556,6 @@ func (p *ackMgrImpl) processReplication(
 	runID string,
 	action func(workflow.MutableState) (*replicationspb.ReplicationTask, error),
 ) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
-
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
@@ -602,7 +592,6 @@ func getVersionHistoryItems(
 	eventID int64,
 	version int64,
 ) ([]*historyspb.VersionHistoryItem, []byte, error) {
-
 	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
 	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
 		versionHistories,

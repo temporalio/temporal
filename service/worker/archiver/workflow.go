@@ -47,15 +47,15 @@ func archivalWorkflow(ctx workflow.Context, carryover []ArchiveRequest) error {
 func archivalWorkflowHelper(
 	ctx workflow.Context,
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	config *Config,
 	handler Handler, // enables tests to inject mocks
 	pump Pump, // enables tests to inject mocks
 	carryover []ArchiveRequest,
 ) error {
-	metricsClient = NewReplayMetricsClient(metricsClient, ctx)
-	metricsClient.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStartedCount)
-	sw := metricsClient.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ServiceLatency)
+	metricsHandler = NewReplayMetricsClient(metricsHandler, ctx)
+	metricsHandler.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStartedCount)
+	sw := metricsHandler.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ServiceLatency)
 	workflowInfo := workflow.GetInfo(ctx)
 	logger = log.With(
 		logger,
@@ -83,26 +83,26 @@ func archivalWorkflowHelper(
 		}).Get(&dcResult)
 	requestCh := workflow.NewBufferedChannel(ctx, dcResult.ArchivalsPerIteration)
 	if handler == nil {
-		handler = NewHandler(ctx, logger, metricsClient, dcResult.ArchiverConcurrency, requestCh)
+		handler = NewHandler(ctx, logger, metricsHandler, dcResult.ArchiverConcurrency, requestCh)
 	}
-	handlerSW := metricsClient.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency)
+	handlerSW := metricsHandler.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency)
 	handler.Start()
 	signalCh := workflow.GetSignalChannel(ctx, signalName)
 	if pump == nil {
-		pump = NewPump(ctx, logger, metricsClient, carryover, dcResult.TimelimitPerIteration, dcResult.ArchivalsPerIteration, requestCh, signalCh)
+		pump = NewPump(ctx, logger, metricsHandler, carryover, dcResult.TimelimitPerIteration, dcResult.ArchivalsPerIteration, requestCh, signalCh)
 	}
 	pumpResult := pump.Run()
-	metricsClient.AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(len(pumpResult.PumpedHashes)))
+	metricsHandler.AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(len(pumpResult.PumpedHashes)))
 	handledHashes := handler.Finished()
 	handlerSW.Stop()
-	metricsClient.AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(len(handledHashes)))
+	metricsHandler.AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(len(handledHashes)))
 	if !hashesEqual(pumpResult.PumpedHashes, handledHashes) {
 		logger.Error("handled archival requests do not match pumped archival requests")
-		metricsClient.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverPumpedNotEqualHandledCount)
+		metricsHandler.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverPumpedNotEqualHandledCount)
 	}
 	if pumpResult.TimeoutWithoutSignals {
 		logger.Info("workflow stopping because pump did not get any signals within timeout threshold")
-		metricsClient.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStoppingCount)
+		metricsHandler.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStoppingCount)
 		sw.Stop()
 		return nil
 	}

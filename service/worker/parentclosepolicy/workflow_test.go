@@ -31,6 +31,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -80,8 +81,8 @@ func (s *parentClosePolicyWorkflowSuite) SetupTest() {
 	s.mockClientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(s.mockRemoteClient, nil).AnyTimes()
 
 	s.processor = &Processor{
-		metricsClient: metrics.NoopClient,
-		logger:        log.NewNoopLogger(),
+		metricsHandler: metrics.NoopMetricsHandler,
+		logger:         log.NewNoopLogger(),
 		cfg: Config{
 			MaxConcurrentActivityExecutionSize:     dynamicconfig.GetIntPropertyFn(1000),
 			MaxConcurrentWorkflowTaskExecutionSize: dynamicconfig.GetIntPropertyFn(1000),

@@ -49,6 +49,8 @@ const (
 	commandType   = "commandType"
 	serviceName   = "service_name"
 	actionType    = "action_type"
+	errorTag      = "error"
+	errorTypeTag  = "error_type"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
@@ -94,19 +96,26 @@ func (v *tagImpl) Value() string {
 // this converts that to an unknown namespace.
 func NamespaceTag(value string) Tag {
 	if len(value) == 0 {
-		value = unknownValue
+		return &tagImpl{
+			key:   namespace,
+			value: unknownValue,
+		}
 	}
+
 	return &tagImpl{
 		key:   namespace,
 		value: value,
 	}
 }
 
-var namespaceUnknownTag = &tagImpl{key: namespace, value: unknownValue}
-
 // NamespaceUnknownTag returns a new namespace:unknown tag-value
 func NamespaceUnknownTag() Tag {
-	return namespaceUnknownTag
+	return NamespaceTag(unknownValue)
+}
+
+// NamespaceAllTag returns a new namespace:all tag-value
+func NamespaceAllTag() Tag {
+	return NamespaceTag(namespaceAllValue)
 }
 
 var taskQueueUnknownTag = &tagImpl{key: taskQueue, value: unknownValue}
@@ -256,4 +265,16 @@ func OperationTag(value string) Tag {
 
 func StringTag(key string, value string) Tag {
 	return &tagImpl{key: key, value: value}
+}
+
+func ServiceTag(value ServiceIdx) Tag {
+	return &tagImpl{key: serviceName, value: MetricsServiceIdxToServiceName(value)}
+}
+
+func ErrorTag(err error) Tag {
+	return &tagImpl{key: errorTag, value: err.Error()}
+}
+
+func ErrorTypeTag(err error) Tag {
+	return &tagImpl{key: errorTypeTag, value: strings.TrimPrefix(fmt.Sprintf(getType, err), errorPrefix)}
 }

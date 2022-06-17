@@ -27,11 +27,11 @@ package metrics
 import enumspb "go.temporal.io/api/enums/v1"
 
 func GetPerTaskQueueScope(
-	baseScope Scope,
+	handler MetricsHandler,
 	namespaceName string,
 	taskQueueName string,
 	taskQueueKind enumspb.TaskQueueKind,
-) Scope {
+) MetricsHandler {
 	var metricTaskQueueName string
 	switch taskQueueKind {
 	case enumspb.TASK_QUEUE_KIND_NORMAL:
@@ -42,7 +42,7 @@ func GetPerTaskQueueScope(
 		metricTaskQueueName = unknownValue
 	}
 
-	return baseScope.Tagged(
+	return handler.WithTags(
 		NamespaceTag(namespaceName),
 		TaskQueueTag(metricTaskQueueName),
 	)

@@ -32,6 +32,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -103,7 +104,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		historyClient:     nil,
-		metricsClient:     nil,
+		metricsHandler:    nil,
 		logger:            nil,
 	}
 
@@ -302,7 +303,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		historyClient:     historyClient,
-		metricsClient:     metrics.NoopClient,
+		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
 
@@ -390,7 +391,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		historyClient:     historyClient,
-		metricsClient:     metrics.NoopClient,
+		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
 

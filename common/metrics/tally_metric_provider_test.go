@@ -35,7 +35,7 @@ import (
 
 func TestTallyScope(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
-	mp := NewTallyMetricsHandler(defaultConfig, scope)
+	mp := NewTallyMetricsHandler(defaultTestConfig, scope)
 	recordTallyMetrics(mp)
 
 	snap := scope.Snapshot()

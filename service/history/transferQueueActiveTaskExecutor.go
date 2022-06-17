@@ -157,7 +157,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -196,7 +196,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -278,7 +278,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -416,7 +416,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -536,7 +536,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -681,7 +681,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -848,7 +848,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	}
 	defer func() { currentRelease(retError) }()
 
-	currentMutableState, err := loadMutableStateForTransferTask(ctx, currentContext, task, t.metricsClient, t.logger)
+	currentMutableState, err := loadMutableStateForTransferTask(ctx, currentContext, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -935,7 +935,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			return err
 		}
 		defer func() { baseRelease(retError) }()
-		baseMutableState, err = loadMutableStateForTransferTask(ctx, baseContext, task, t.metricsClient, t.logger)
+		baseMutableState, err = loadMutableStateForTransferTask(ctx, baseContext, task, t.metricsHandler, t.logger)
 		if err != nil {
 			return err
 		}
@@ -1412,7 +1412,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		// This means the reset point is corrupted and not retry able.
 		// There must be a bug in our system that we must fix.(for example, history is not the same in active/passive)
-		t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.AutoResetPointCorruptionCounter)
+		t.metricsHandler.IncCounter(metrics.TransferQueueProcessorScope, metrics.AutoResetPointCorruptionCounter)
 		logger.Error("Auto-Reset workflow failed and not retryable. The reset point is corrupted.", tag.Error(err))
 		return nil
 
@@ -1434,7 +1434,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		return nil
 	}
 
-	scope := t.metricsClient.Scope(metrics.TransferActiveTaskCloseExecutionScope)
+	scope := t.metricsHandler.Scope(metrics.TransferActiveTaskCloseExecutionScope)
 
 	if t.shard.GetConfig().EnableParentClosePolicyWorker() &&
 		len(childInfos) >= t.shard.GetConfig().ParentClosePolicyThreshold(namespaceName) {

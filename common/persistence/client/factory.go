@@ -58,7 +58,7 @@ type (
 		dataStoreFactory DataStoreFactory
 		config           *config.Persistence
 		serializer       serialization.Serializer
-		metricsClient    metrics.Client
+		metricsHandler   metrics.MetricsHandler
 		logger           log.Logger
 		clusterName      string
 		ratelimiter      quotas.RateLimiter
@@ -78,14 +78,14 @@ func NewFactory(
 	ratelimiter quotas.RateLimiter,
 	serializer serialization.Serializer,
 	clusterName string,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) Factory {
 	return &factoryImpl{
 		dataStoreFactory: dataStoreFactory,
 		config:           cfg,
 		serializer:       serializer,
-		metricsClient:    metricsClient,
+		metricsHandler:   metricsHandler,
 		logger:           logger,
 		clusterName:      clusterName,
 		ratelimiter:      ratelimiter,
@@ -103,8 +103,8 @@ func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 	if f.ratelimiter != nil {
 		result = p.NewTaskPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}
-	if f.metricsClient != nil {
-		result = p.NewTaskPersistenceMetricsClient(result, f.metricsClient, f.logger)
+	if f.metricsHandler != nil {
+		result = p.NewTaskPersistenceMetricsClient(result, f.metricsHandler, f.logger)
 	}
 	return result, nil
 }
@@ -120,8 +120,8 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 	if f.ratelimiter != nil {
 		result = p.NewShardPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}
-	if f.metricsClient != nil {
-		result = p.NewShardPersistenceMetricsClient(result, f.metricsClient, f.logger)
+	if f.metricsHandler != nil {
+		result = p.NewShardPersistenceMetricsClient(result, f.metricsHandler, f.logger)
 	}
 	return result, nil
 }
@@ -137,8 +137,8 @@ func (f *factoryImpl) NewMetadataManager() (p.MetadataManager, error) {
 	if f.ratelimiter != nil {
 		result = p.NewMetadataPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}
-	if f.metricsClient != nil {
-		result = p.NewMetadataPersistenceMetricsClient(result, f.metricsClient, f.logger)
+	if f.metricsHandler != nil {
+		result = p.NewMetadataPersistenceMetricsClient(result, f.metricsHandler, f.logger)
 	}
 	return result, nil
 }
@@ -154,8 +154,8 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 	if f.ratelimiter != nil {
 		result = p.NewClusterMetadataPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}
-	if f.metricsClient != nil {
-		result = p.NewClusterMetadataPersistenceMetricsClient(result, f.metricsClient, f.logger)
+	if f.metricsHandler != nil {
+		result = p.NewClusterMetadataPersistenceMetricsClient(result, f.metricsHandler, f.logger)
 	}
 	return result, nil
 }
@@ -171,8 +171,8 @@ func (f *factoryImpl) NewExecutionManager() (p.ExecutionManager, error) {
 	if f.ratelimiter != nil {
 		result = p.NewExecutionPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}
-	if f.metricsClient != nil {
-		result = p.NewExecutionPersistenceMetricsClient(result, f.metricsClient, f.logger)
+	if f.metricsHandler != nil {
+		result = p.NewExecutionPersistenceMetricsClient(result, f.metricsHandler, f.logger)
 	}
 	return result, nil
 }
@@ -186,11 +186,11 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 	if f.ratelimiter != nil {
 		result = p.NewQueuePersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}
-	if f.metricsClient != nil {
-		result = p.NewQueuePersistenceMetricsClient(result, f.metricsClient, f.logger)
+	if f.metricsHandler != nil {
+		result = p.NewQueuePersistenceMetricsClient(result, f.metricsHandler, f.logger)
 	}
 
-	return p.NewNamespaceReplicationQueue(result, f.serializer, f.clusterName, f.metricsClient, f.logger)
+	return p.NewNamespaceReplicationQueue(result, f.serializer, f.clusterName, f.metricsHandler, f.logger)
 }
 
 // Close closes this factory

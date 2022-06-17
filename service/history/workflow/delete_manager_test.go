@@ -33,6 +33,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -76,11 +77,9 @@ func TestDeleteManagerSuite(t *testing.T) {
 }
 
 func (s *deleteManagerWorkflowSuite) SetupSuite() {
-
 }
 
 func (s *deleteManagerWorkflowSuite) TearDownSuite() {
-
 }
 
 func (s *deleteManagerWorkflowSuite) SetupTest() {
@@ -95,7 +94,7 @@ func (s *deleteManagerWorkflowSuite) SetupTest() {
 
 	config := tests.NewDynamicConfig()
 	s.mockShardContext = shard.NewMockContext(s.controller)
-	s.mockShardContext.EXPECT().GetMetricsClient().Return(metrics.NoopClient).AnyTimes()
+	s.mockShardContext.EXPECT().GetMetricsClient().Return(metrics.NoopMetricsHandler).AnyTimes()
 	s.mockShardContext.EXPECT().GetNamespaceRegistry().Return(s.mockNamespaceRegistry).AnyTimes()
 	s.mockShardContext.EXPECT().GetClusterMetadata().Return(s.mockMetadata).AnyTimes()
 
@@ -230,7 +229,8 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	// Both queues are right at the minimum level.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
-		CloseVisibilityTaskId: 1001}).
+		CloseVisibilityTaskId: 1001,
+	}).
 		Times(4)
 	err := s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
@@ -245,7 +245,8 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	// Workflow execution is not closed.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   0,
-		CloseVisibilityTaskId: 0}).
+		CloseVisibilityTaskId: 0,
+	}).
 		Times(2)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
@@ -260,7 +261,8 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	// Visibility close task is not processed.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
-		CloseVisibilityTaskId: 0}).
+		CloseVisibilityTaskId: 0,
+	}).
 		Times(3)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
@@ -275,7 +277,8 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	// Both queues are behind in active cluster.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
-		CloseVisibilityTaskId: 1001}).
+		CloseVisibilityTaskId: 1001,
+	}).
 		Times(2)
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
@@ -292,7 +295,8 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	// Only visibility queue is behind (cluster doesn't matter).
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
-		CloseVisibilityTaskId: 1001}).
+		CloseVisibilityTaskId: 1001,
+	}).
 		Times(4)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
@@ -307,7 +311,8 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	// Only transfer queue is behind in active cluster.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
-		CloseVisibilityTaskId: 1001}).
+		CloseVisibilityTaskId: 1001,
+	}).
 		Times(2)
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
@@ -324,7 +329,8 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	// Only transfer queue is behind in standby cluster.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
-		CloseVisibilityTaskId: 1001}).
+		CloseVisibilityTaskId: 1001,
+	}).
 		Times(4)
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName)
@@ -341,7 +347,8 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	// Both queues are behind in standby cluster.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
-		CloseVisibilityTaskId: 1001}).
+		CloseVisibilityTaskId: 1001,
+	}).
 		Times(4)
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName)

@@ -76,7 +76,7 @@ type (
 		cfg              *Config
 		logger           log.Logger
 		sdkSystemClient  sdkclient.Client
-		metricsClient    metrics.Client
+		metricsHandler   metrics.MetricsHandler
 		executionManager persistence.ExecutionManager
 		taskManager      persistence.TaskManager
 		historyClient    historyservice.HistoryServiceClient
@@ -99,7 +99,7 @@ func New(
 	logger log.Logger,
 	cfg *Config,
 	sdkSystemClient sdkclient.Client,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	executionManager persistence.ExecutionManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
@@ -109,7 +109,7 @@ func New(
 			cfg:              cfg,
 			sdkSystemClient:  sdkSystemClient,
 			logger:           logger,
-			metricsClient:    metricsClient,
+			metricsHandler:   metricsHandler,
 			executionManager: executionManager,
 			taskManager:      taskManager,
 			historyClient:    historyClient,
@@ -165,7 +165,6 @@ func (s *Scanner) startWorkflowWithRetry(
 	workflowType string,
 	workflowArgs ...interface{},
 ) {
-
 	// let history / matching service warm up
 	time.Sleep(scannerStartUpDelay)
 
@@ -188,7 +187,6 @@ func (s *Scanner) startWorkflow(
 	workflowType string,
 	workflowArgs ...interface{},
 ) error {
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	_, err := client.ExecuteWorkflow(ctx, options, workflowType, workflowArgs...)
 	cancel()

@@ -33,6 +33,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
@@ -63,11 +64,9 @@ func TestEventsCacheSuite(t *testing.T) {
 }
 
 func (s *eventsCacheSuite) SetupSuite() {
-
 }
 
 func (s *eventsCacheSuite) TearDownSuite() {
-
 }
 
 func (s *eventsCacheSuite) SetupTest() {
@@ -95,7 +94,7 @@ func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 		s.mockExecutionManager,
 		false,
 		s.logger,
-		metrics.NoopClient,
+		metrics.NoopMetricsHandler,
 	)
 }
 

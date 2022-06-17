@@ -30,6 +30,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
@@ -54,7 +55,7 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NoExecutions(t *testing.T) {
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		metadataManager:   nil,
-		metricsClient:     metrics.NoopClient,
+		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
 
@@ -79,7 +80,7 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_ExecutionsExist(t *testing.T) 
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		metadataManager:   nil,
-		metricsClient:     metrics.NoopClient,
+		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
@@ -108,7 +109,7 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NotDeletedExecutionsExist(t *t
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		metadataManager:   nil,
-		metricsClient:     metrics.NoopClient,
+		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
@@ -135,7 +136,7 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_NoExecutions(t *testing.T) {
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		metadataManager:   nil,
-		metricsClient:     metrics.NoopClient,
+		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
 
@@ -158,7 +159,7 @@ func Test_EnsureNoExecutionsStdVisibilityActivity_ExecutionsExist(t *testing.T) 
 	a := &Activities{
 		visibilityManager: visibilityManager,
 		metadataManager:   nil,
-		metricsClient:     metrics.NoopClient,
+		metricsHandler:    metrics.NoopMetricsHandler,
 		logger:            log.NewNoopLogger(),
 	}
 

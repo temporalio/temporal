@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -90,7 +91,7 @@ type (
 		matchingClient       matchingservice.MatchingServiceClient
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
-		metricsClient        metrics.Client
+		metricsHandler       metrics.MetricsHandler
 		taskQueuesLock       sync.RWMutex                     // locks mutation of taskQueues
 		taskQueues           map[taskQueueID]taskQueueManager // Convert to LRU cache
 		taskQueueCount       map[taskQueueCounterKey]int      // per-namespace task queue counter
@@ -126,12 +127,11 @@ func NewEngine(taskManager persistence.TaskManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	config *Config,
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	namespaceRegistry namespace.Registry,
 	resolver membership.ServiceResolver,
 	clusterMeta cluster.Metadata,
 ) Engine {
-
 	return &matchingEngineImpl{
 		status:               common.DaemonStatusInitialized,
 		taskManager:          taskManager,
@@ -140,7 +140,7 @@ func NewEngine(taskManager persistence.TaskManager,
 		taskQueues:           make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:       make(map[taskQueueCounterKey]int),
 		logger:               log.With(logger, tag.ComponentMatchingEngine),
-		metricsClient:        metricsClient,
+		metricsHandler:       metricsHandler,
 		matchingClient:       matchingClient,
 		config:               config,
 		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
@@ -686,7 +686,6 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 		*request.TaskQueue,
 		taskQueueType,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -782,7 +781,7 @@ func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, 
 		namespace = nsEntry.Name()
 	}
 
-	e.metricsClient.Scope(
+	e.metricsHandler.Scope(
 		metrics.MatchingEngineScope,
 		metrics.NamespaceTag(namespace.String()),
 		metrics.TaskTypeTag(countKey.taskType.String()),
@@ -796,7 +795,6 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	historyResponse *historyservice.RecordWorkflowTaskStartedResponse,
 	scope metrics.Scope,
 ) *matchingservice.PollWorkflowTaskQueueResponse {
-
 	var serializedToken []byte
 	if task.isQuery() {
 		// for a query task
@@ -841,7 +839,6 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	historyResponse *historyservice.RecordActivityTaskStartedResponse,
 	scope metrics.Scope,
 ) *matchingservice.PollActivityTaskQueueResponse {
-
 	scheduledEvent := historyResponse.ScheduledEvent
 	if scheduledEvent.GetActivityTaskScheduledEventAttributes() == nil {
 		panic("GetActivityTaskScheduledEventAttributes is not set")

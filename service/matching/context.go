@@ -44,14 +44,14 @@ func newHandlerContext(
 	ctx context.Context,
 	namespace namespace.Name,
 	taskQueue *taskqueuepb.TaskQueue,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	metricsScope int,
 	logger log.Logger,
 ) *handlerContext {
 	return &handlerContext{
 		Context: ctx,
 		scope: metrics.GetPerTaskQueueScope(
-			metricsClient.Scope(metricsScope),
+			metricsHandler.Scope(metricsScope),
 			namespace.String(),
 			taskQueue.GetName(),
 			taskQueue.GetKind(),

@@ -34,14 +34,15 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
@@ -111,7 +112,7 @@ type (
 		historyClient               historyservice.HistoryServiceClient
 		sdkClientFactory            sdk.ClientFactory
 		membershipMonitor           membership.Monitor
-		metricsClient               metrics.Client
+		metricsHandler              metrics.MetricsHandler
 		namespaceRegistry           namespace.Registry
 		saProvider                  searchattribute.Provider
 		saManager                   searchattribute.Manager
@@ -138,7 +139,7 @@ type (
 		sdkClientFactory                    sdk.ClientFactory
 		MembershipMonitor                   membership.Monitor
 		ArchiverProvider                    provider.ArchiverProvider
-		MetricsClient                       metrics.Client
+		MetricsHandler                      metrics.MetricsHandler
 		NamespaceRegistry                   namespace.Registry
 		SaProvider                          searchattribute.Provider
 		SaManager                           searchattribute.Manager
@@ -200,7 +201,7 @@ func NewAdminHandler(
 		historyClient:               args.HistoryClient,
 		sdkClientFactory:            args.sdkClientFactory,
 		membershipMonitor:           args.MembershipMonitor,
-		metricsClient:               args.MetricsClient,
+		metricsHandler:              args.MetricsClient,
 		namespaceRegistry:           args.NamespaceRegistry,
 		saProvider:                  args.SaProvider,
 		saManager:                   args.SaManager,
@@ -480,7 +481,6 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		NamespaceId: namespaceID.String(),
 		Execution:   request.Execution,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -787,7 +787,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	size := rawHistoryResponse.Size
 	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
 	// namespaces along with the individual namespaces stats
-	adh.metricsClient.
+	adh.metricsHandler.
 		Scope(metrics.AdminGetWorkflowExecutionRawHistoryScope).
 		RecordDistribution(metrics.HistorySize, size)
 	scope.RecordDistribution(metrics.HistorySize, size)
@@ -1200,7 +1200,6 @@ func (adh *AdminHandler) GetDLQMessages(
 	ctx context.Context,
 	request *adminservice.GetDLQMessagesRequest,
 ) (resp *adminservice.GetDLQMessagesResponse, retErr error) {
-
 	defer log.CapturePanic(adh.logger, &retErr)
 	scope, sw := adh.startRequestProfile(metrics.AdminReadDLQMessagesScope)
 	defer sw.Stop()
@@ -1274,7 +1273,6 @@ func (adh *AdminHandler) PurgeDLQMessages(
 	ctx context.Context,
 	request *adminservice.PurgeDLQMessagesRequest,
 ) (_ *adminservice.PurgeDLQMessagesResponse, err error) {
-
 	defer log.CapturePanic(adh.logger, &err)
 	scope, sw := adh.startRequestProfile(metrics.AdminPurgeDLQMessagesScope)
 	defer sw.Stop()
@@ -1327,7 +1325,6 @@ func (adh *AdminHandler) MergeDLQMessages(
 	ctx context.Context,
 	request *adminservice.MergeDLQMessagesRequest,
 ) (resp *adminservice.MergeDLQMessagesResponse, err error) {
-
 	defer log.CapturePanic(adh.logger, &err)
 	scope, sw := adh.startRequestProfile(metrics.AdminMergeDLQMessagesScope)
 	defer sw.Stop()
@@ -1639,7 +1636,6 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 ) error {
-
 	execution := request.Execution
 	if execution.GetWorkflowId() == "" {
 		return errWorkflowIDNotSet
@@ -1700,7 +1696,6 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 	versionHistories *historyspb.VersionHistories,
 ) (*historyspb.VersionHistory, error) {
-
 	targetBranch, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
 		return nil, err
@@ -1778,7 +1773,7 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 
 // startRequestProfile initiates recording of request metrics
 func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
-	metricsScope := adh.metricsClient.Scope(scope)
+	metricsScope := adh.metricsHandler.Scope(scope)
 	sw := metricsScope.StartTimer(metrics.ServiceLatency)
 	metricsScope.IncCounter(metrics.ServiceRequests)
 	return metricsScope, sw
@@ -1812,8 +1807,8 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 func (adh *AdminHandler) getNamespaceFromRequest(request interface {
 	GetNamespace() string
 	GetNamespaceId() string
-}) (*namespace.Namespace, error) {
-
+},
+) (*namespace.Namespace, error) {
 	if request.GetNamespaceId() != "" {
 		ns, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 		if err != nil {

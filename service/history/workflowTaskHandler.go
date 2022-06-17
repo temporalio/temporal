@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -78,7 +79,7 @@ type (
 
 		logger            log.Logger
 		namespaceRegistry namespace.Registry
-		metricsClient     metrics.Client
+		metricsHandler    metrics.MetricsHandler
 		config            *configs.Config
 		shard             shard.Context
 		tokenSerializer   common.TaskTokenSerializer
@@ -111,12 +112,11 @@ func newWorkflowTaskHandler(
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	config *configs.Config,
 	shard shard.Context,
 	searchAttributesMapper searchattribute.Mapper,
 ) *workflowTaskHandlerImpl {
-
 	return &workflowTaskHandlerImpl{
 		identity:                identity,
 		workflowTaskCompletedID: workflowTaskCompletedID,
@@ -137,7 +137,7 @@ func newWorkflowTaskHandler(
 
 		logger:            logger,
 		namespaceRegistry: namespaceRegistry,
-		metricsClient:     metricsClient,
+		metricsHandler:    metricsHandler,
 		config:            config,
 		shard:             shard,
 		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
@@ -234,7 +234,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	_ context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*handleCommandResponse, error) {
-
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeScheduleActivityCounter,
@@ -371,8 +370,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 	_ context.Context,
 	attr *commandpb.RequestCancelActivityTaskCommandAttributes,
 ) error {
-
-	handler.metricsClient.IncCounter(
+	handler.metricsHandler.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeCancelActivityCounter,
 	)
@@ -424,8 +422,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 	_ context.Context,
 	attr *commandpb.StartTimerCommandAttributes,
 ) error {
-
-	handler.metricsClient.IncCounter(
+	handler.metricsHandler.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeStartTimerCounter,
 	)
@@ -452,8 +449,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	ctx context.Context,
 	attr *commandpb.CompleteWorkflowExecutionCommandAttributes,
 ) error {
-
-	handler.metricsClient.IncCounter(
+	handler.metricsHandler.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeCompleteWorkflowCounter,
 	)
@@ -482,7 +478,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsClient.IncCounter(
+		handler.metricsHandler.IncCounter(
 			metrics.HistoryRespondWorkflowTaskCompletedScope,
 			metrics.MultipleCompletionCommandsCounter,
 		)
@@ -518,8 +514,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 	ctx context.Context,
 	attr *commandpb.FailWorkflowExecutionCommandAttributes,
 ) error {
-
-	handler.metricsClient.IncCounter(
+	handler.metricsHandler.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeFailWorkflowCounter,
 	)
@@ -548,7 +543,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsClient.IncCounter(
+		handler.metricsHandler.IncCounter(
 			metrics.HistoryRespondWorkflowTaskCompletedScope,
 			metrics.MultipleCompletionCommandsCounter,
 		)
@@ -598,8 +593,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 	_ context.Context,
 	attr *commandpb.CancelTimerCommandAttributes,
 ) error {
-
-	handler.metricsClient.IncCounter(
+	handler.metricsHandler.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeCancelTimerCounter,
 	)
@@ -635,8 +629,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 	_ context.Context,
 	attr *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) error {
-
-	handler.metricsClient.IncCounter(
+	handler.metricsHandler.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeCancelWorkflowCounter,
 	)
@@ -655,7 +648,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsClient.IncCounter(
+		handler.metricsHandler.IncCounter(
 			metrics.HistoryRespondWorkflowTaskCompletedScope,
 			metrics.MultipleCompletionCommandsCounter,
 		)
@@ -675,8 +668,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	_ context.Context,
 	attr *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) error {
-
-	handler.metricsClient.IncCounter(
+	handler.metricsHandler.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeCancelExternalWorkflowCounter,
 	)
@@ -717,8 +709,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
 	_ context.Context,
 	attr *commandpb.RecordMarkerCommandAttributes,
 ) error {
-
-	handler.metricsClient.IncCounter(
+	handler.metricsHandler.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeRecordMarkerCounter,
 	)
@@ -749,8 +740,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	_ context.Context,
 	attr *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) error {
-
-	handler.metricsClient.IncCounter(
+	handler.metricsHandler.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeContinueAsNewCounter,
 	)
@@ -811,7 +801,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsClient.IncCounter(
+		handler.metricsHandler.IncCounter(
 			metrics.HistoryRespondWorkflowTaskCompletedScope,
 			metrics.MultipleCompletionCommandsCounter,
 		)
@@ -851,7 +841,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	_ context.Context,
 	attr *commandpb.StartChildWorkflowExecutionCommandAttributes,
 ) error {
-	handler.metricsClient.IncCounter(
+	handler.metricsHandler.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeChildWorkflowCounter,
 	)
@@ -947,8 +937,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	_ context.Context,
 	attr *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 ) error {
-
-	handler.metricsClient.IncCounter(
+	handler.metricsHandler.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeSignalExternalWorkflowCounter,
 	)
@@ -997,8 +986,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	_ context.Context,
 	attr *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) error {
-
-	handler.metricsClient.IncCounter(
+	handler.metricsHandler.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeUpsertWorkflowSearchAttributesCounter,
 	)
@@ -1154,7 +1142,6 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 func (handler *workflowTaskHandlerImpl) validateCommandAttr(
 	validationFn commandAttrValidationFn,
 ) error {
-
 	if failedCause, err := validationFn(); err != nil {
 		if _, ok := err.(*serviceerror.InvalidArgument); ok {
 			return handler.failCommand(failedCause, err)

@@ -89,7 +89,6 @@ func (a *activities) WaitReplication(ctx context.Context, waitRequest waitReplic
 
 // Check if remote cluster has caught up on all shards on replication tasks
 func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitReplicationRequest) (bool, error) {
-
 	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster},
 	})
@@ -151,7 +150,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 	}
 
 	// emit metrics about how many shards are ready
-	a.metricsClient.Scope(
+	a.metricsHandler.Scope(
 		metrics.MigrationWorkflowScope,
 		metrics.TargetClusterTag(waitRequest.RemoteCluster),
 	).UpdateGauge(metrics.CatchUpReadyShardCountGauge, float64(readyShardCount))
@@ -176,7 +175,6 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 
 // Check if remote cluster has caught up on all shards on replication tasks
 func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest) (bool, error) {
-
 	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster},
 	})
@@ -225,7 +223,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	}
 
 	// emit metrics about how many shards are ready
-	a.metricsClient.Scope(
+	a.metricsHandler.Scope(
 		metrics.MigrationWorkflowScope,
 		metrics.TargetClusterTag(waitRequest.RemoteCluster),
 		metrics.NamespaceTag(waitRequest.Namespace),

@@ -33,4 +33,5 @@ const (
 	WorkerService   = "worker"
 	ServerService   = "server"
 	UnitTestService = "unittest"
+	ServiceUnknown  = "unknown"
 )

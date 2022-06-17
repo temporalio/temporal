@@ -62,7 +62,7 @@ type (
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
 		GetMetricsClient() metrics.Client
-		GetMetricsReporter() metrics.Reporter
+		GetMetricsReporter() metrics.MetricsHandler
 		GetTimeSource() clock.TimeSource
 
 		GetEngine() (Engine, error)

@@ -50,19 +50,18 @@ type (
 	}
 
 	nDCEventsReapplierImpl struct {
-		metricsClient metrics.Client
-		logger        log.Logger
+		metricsHandler metrics.MetricsHandler
+		logger         log.Logger
 	}
 )
 
 func newNDCEventsReapplier(
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) *nDCEventsReapplierImpl {
-
 	return &nDCEventsReapplierImpl{
-		metricsClient: metricsClient,
-		logger:        logger,
+		metricsHandler: metricsHandler,
+		logger:         logger,
 	}
 }
 
@@ -72,7 +71,6 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 	historyEvents []*historypb.HistoryEvent,
 	runID string,
 ) ([]*historypb.HistoryEvent, error) {
-
 	var reappliedEvents []*historypb.HistoryEvent
 	for _, event := range historyEvents {
 		switch event.GetEventType() {

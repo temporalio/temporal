@@ -58,15 +58,14 @@ func (c *metricClient) AddSearchAttributes(
 	request *adminservice.AddSearchAttributesRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.AddSearchAttributesResponse, error) {
+	c.metricsHandler.IncCounter(metrics.AdminClientAddSearchAttributesScope, metrics.ClientRequests)
 
-	c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributesScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientAddSearchAttributesScope, metrics.ClientLatency)
+	sw := c.metricsHandler.StartTimer(metrics.AdminClientAddSearchAttributesScope, metrics.ClientLatency)
 	resp, err := c.client.AddSearchAttributes(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributesScope, metrics.ClientFailures)
+		c.metricsHandler.IncCounter(metrics.AdminClientAddSearchAttributesScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -130,15 +129,14 @@ func (c *metricClient) DescribeHistoryHost(
 	request *adminservice.DescribeHistoryHostRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.DescribeHistoryHostResponse, error) {
+	c.metricsHandler.IncCounter(metrics.AdminClientDescribeHistoryHostScope, metrics.ClientRequests)
 
-	c.metricsClient.IncCounter(metrics.AdminClientDescribeHistoryHostScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeHistoryHostScope, metrics.ClientLatency)
+	sw := c.metricsHandler.StartTimer(metrics.AdminClientDescribeHistoryHostScope, metrics.ClientLatency)
 	resp, err := c.client.DescribeHistoryHost(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientDescribeHistoryHostScope, metrics.ClientFailures)
+		c.metricsHandler.IncCounter(metrics.AdminClientDescribeHistoryHostScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -310,15 +308,14 @@ func (c *metricClient) ListClusterMembers(
 	request *adminservice.ListClusterMembersRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.ListClusterMembersResponse, error) {
+	c.metricsHandler.IncCounter(metrics.AdminClientListClusterMembersScope, metrics.ClientRequests)
 
-	c.metricsClient.IncCounter(metrics.AdminClientListClusterMembersScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientListClusterMembersScope, metrics.ClientLatency)
+	sw := c.metricsHandler.StartTimer(metrics.AdminClientListClusterMembersScope, metrics.ClientLatency)
 	resp, err := c.client.ListClusterMembers(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientListClusterMembersScope, metrics.ClientFailures)
+		c.metricsHandler.IncCounter(metrics.AdminClientListClusterMembersScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -516,7 +513,7 @@ func (c *metricClient) ResendReplicationTasks(
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientResendReplicationTasksScope, metrics.ClientFailures)
+		c.metricsHandler.IncCounter(metrics.AdminClientResendReplicationTasksScope, metrics.ClientFailures)
 	}
 	return resp, err
 }

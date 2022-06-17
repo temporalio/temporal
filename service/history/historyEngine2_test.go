@@ -34,6 +34,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -105,7 +106,6 @@ func TestEngine2Suite(t *testing.T) {
 }
 
 func (s *engine2Suite) SetupSuite() {
-
 }
 
 func (s *engine2Suite) TearDownSuite() {
@@ -133,7 +133,8 @@ func (s *engine2Suite) SetupTest() {
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: 1,
 				RangeId: 1,
-			}},
+			},
+		},
 		s.config,
 	)
 	s.mockShard = mockShard
@@ -162,11 +163,11 @@ func (s *engine2Suite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		throttledLogger:    s.logger,
-		metricsClient:      metrics.NoopClient,
+		metricsHandler:     metrics.NoopMetricsHandler,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		config:             s.config,
 		timeSource:         s.mockShard.GetTimeSource(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopClient, func(namespace.ID, string) int32 { return 1 }),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		queueProcessors: map[tasks.Category]queues.Processor{
 			s.mockTxProcessor.Category():         s.mockTxProcessor,
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
@@ -1012,8 +1013,10 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 			WorkflowId:   tests.WorkflowID,
 			WorkflowType: &commonpb.WorkflowType{Name: "wType"},
 			TaskQueue:    &taskqueuepb.TaskQueue{Name: tl},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-				"AliasForCustomTextField": payload.EncodeString("search attribute value")},
+			SearchAttributes: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					"AliasForCustomTextField": payload.EncodeString("search attribute value"),
+				},
 			},
 		}},
 	}}
@@ -1116,7 +1119,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 			RequestId:                requestID,
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
 				"CustomKeywordField": payload.EncodeString("test"),
-			}}},
+			}},
+		},
 	})
 	s.Nil(err)
 	s.NotNil(resp.RunId)
@@ -1709,7 +1713,6 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExist() {
-
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
 		ParentExecution: &commonpb.WorkflowExecution{
@@ -1731,7 +1734,6 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExi
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed() {
-
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
 		ParentExecution: &commonpb.WorkflowExecution{
@@ -1767,7 +1769,6 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEventNotFound() {
-
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		ParentExecution: &commonpb.WorkflowExecution{
@@ -1797,7 +1798,6 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEventFoundOnNonCurrentBranch() {
-
 	inititatedVersion := tests.Version - 100
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -1847,7 +1847,6 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEventFoundOnCurrentBranch() {
-
 	taskQueueName := "testTaskQueue"
 
 	childWorkflowID := "some random child workflow ID"

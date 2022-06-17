@@ -51,9 +51,7 @@ const (
 	timeoutInSeconds          = 5
 )
 
-var (
-	errRetryable = errors.New("retryable error")
-)
+var errRetryable = errors.New("retryable error")
 
 type (
 	visibilityArchiver struct {
@@ -94,7 +92,7 @@ func NewVisibilityArchiver(container *archiver.VisibilityBootstrapContainer, con
 // Please make sure your implementation is lossless. If any in-memory batching mechanism is used, then those batched records will be lost during server restarts.
 // This method will be invoked when workflow closes. Note that because of conflict resolution, it is possible for a workflow to through the closing process multiple times, which means that this method can be invoked more than once after a workflow closes.
 func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiverspb.VisibilityRecord, opts ...archiver.ArchiveOption) (err error) {
-	scope := v.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.NamespaceTag(request.Namespace))
+	scope := v.container.MetricsHandler.WithTags(metrics.HistoryArchiverScope, metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
@@ -162,7 +160,6 @@ func (v *visibilityArchiver) Query(
 	request *archiver.QueryVisibilityRequest,
 	saTypeMap searchattribute.NameTypeMap,
 ) (*archiver.QueryVisibilityResponse, error) {
-
 	if err := v.ValidateURI(URI); err != nil {
 		return nil, &serviceerror.InvalidArgument{Message: archiver.ErrInvalidURI.Error()}
 	}
@@ -199,7 +196,6 @@ func (v *visibilityArchiver) query(
 	request *queryVisibilityRequest,
 	saTypeMap searchattribute.NameTypeMap,
 ) (*archiver.QueryVisibilityResponse, error) {
-
 	token := new(queryVisibilityToken)
 	if request.nextPageToken != nil {
 		var err error
@@ -209,7 +205,7 @@ func (v *visibilityArchiver) query(
 		}
 	}
 
-	var prefix = constructVisibilityFilenamePrefix(request.namespaceID, indexKeyCloseTimeout)
+	prefix := constructVisibilityFilenamePrefix(request.namespaceID, indexKeyCloseTimeout)
 	if !request.parsedQuery.closeTime.IsZero() {
 		prefix = constructTimeBasedSearchKey(request.namespaceID, indexKeyCloseTimeout, request.parsedQuery.closeTime, *request.parsedQuery.searchPrecision)
 	}

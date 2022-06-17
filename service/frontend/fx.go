@@ -141,13 +141,13 @@ func GrpcServerOptionsProvider(
 	claimMapper authorization.ClaimMapper,
 	audienceGetter authorization.JWTAudienceMapper,
 	customInterceptors []grpc.UnaryServerInterceptor,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 ) []grpc.ServerOption {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
 		PermitWithoutStream: serviceConfig.KeepAlivePermitWithoutStream(),
 	}
-	var kp = keepalive.ServerParameters{
+	kp := keepalive.ServerParameters{
 		MaxConnectionIdle:     serviceConfig.KeepAliveMaxConnectionIdle(),
 		MaxConnectionAge:      serviceConfig.KeepAliveMaxConnectionAge(),
 		MaxConnectionAgeGrace: serviceConfig.KeepAliveMaxConnectionAgeGrace(),
@@ -171,7 +171,7 @@ func GrpcServerOptionsProvider(
 		authorization.NewAuthorizationInterceptor(
 			claimMapper,
 			authorizer,
-			metricsClient,
+			metricsHandler,
 			logger,
 			audienceGetter,
 		),
@@ -217,12 +217,12 @@ func NamespaceLogInterceptorProvider(
 
 func TelemetryInterceptorProvider(
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	namespaceRegistry namespace.Registry,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
-		metricsClient,
+		metricsHandler,
 		metrics.FrontendAPIMetricsScopes(),
 		logger,
 	)
@@ -312,7 +312,7 @@ func PersistenceMaxQpsProvider(
 func VisibilityManagerProvider(
 	logger log.Logger,
 	persistenceConfig *config.Persistence,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	serviceConfig *Config,
 	esConfig *esclient.Config,
 	esClient esclient.Client,
@@ -337,7 +337,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
 		dynamicconfig.GetBoolPropertyFn(false), // frontend visibility never write
-		metricsClient,
+		metricsHandler,
 		logger,
 	)
 }
@@ -380,7 +380,7 @@ func AdminHandlerProvider(
 	sdkClientFactory sdk.ClientFactory,
 	membershipMonitor membership.Monitor,
 	archiverProvider provider.ArchiverProvider,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	namespaceRegistry namespace.Registry,
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
@@ -408,7 +408,7 @@ func AdminHandlerProvider(
 		sdkClientFactory,
 		membershipMonitor,
 		archiverProvider,
-		metricsClient,
+		metricsHandler,
 		namespaceRegistry,
 		saProvider,
 		saManager,
@@ -426,7 +426,7 @@ func OperatorHandlerProvider(
 	esClient esclient.Client,
 	logger resource.SnTaggedLogger,
 	sdkClientFactory sdk.ClientFactory,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
 	healthServer *health.Server,
@@ -439,7 +439,7 @@ func OperatorHandlerProvider(
 		esClient,
 		logger,
 		sdkClientFactory,
-		metricsClient,
+		metricsHandler,
 		saProvider,
 		saManager,
 		healthServer,
@@ -464,7 +464,7 @@ func HandlerProvider(
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient resource.MatchingClient,
 	archiverProvider provider.ArchiverProvider,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	payloadSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
@@ -494,7 +494,7 @@ func HandlerProvider(
 		archivalMetadata,
 		healthServer,
 	)
-	handler := NewDCRedirectionHandler(wfHandler, dcRedirectionPolicy, logger, clientBean, metricsClient, timeSource, namespaceRegistry, clusterMetadata)
+	handler := NewDCRedirectionHandler(wfHandler, dcRedirectionPolicy, logger, clientBean, metricsHandler, timeSource, namespaceRegistry, clusterMetadata)
 	return handler
 }
 

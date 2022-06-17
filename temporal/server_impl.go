@@ -50,7 +50,7 @@ type (
 		stoppedCh        chan interface{}
 		logger           log.Logger
 		namespaceLogger  resource.NamespaceLogger
-		serverReporter   metrics.Reporter
+		serverReporter   metrics.MetricsHandler
 
 		dcCollection *dynamicconfig.Collection
 
@@ -72,7 +72,7 @@ func NewServerFxImpl(
 	namespaceLogger resource.NamespaceLogger,
 	stoppedCh chan interface{},
 	dcCollection *dynamicconfig.Collection,
-	serverReporter metrics.Reporter,
+	serverReporter metrics.MetricsHandler,
 	servicesGroup ServicesGroupIn,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
@@ -170,7 +170,7 @@ func initSystemNamespaces(
 		Cfg:               cfg,
 		PersistenceMaxQPS: nil,
 		ClusterName:       persistenceClient.ClusterName(currentClusterName),
-		MetricsClient:     nil,
+		MetricsHandler:    nil,
 		Logger:            logger,
 	})
 	defer factory.Close()

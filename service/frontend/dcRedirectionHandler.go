@@ -52,7 +52,7 @@ type (
 		frontendHandler    Handler
 		logger             log.Logger
 		clientBean         client.Bean
-		metricsClient      metrics.Client
+		metricsHandler     metrics.MetricsHandler
 		timeSource         clock.TimeSource
 	}
 )
@@ -63,7 +63,7 @@ func NewDCRedirectionHandler(
 	policy config.DCRedirectionPolicy,
 	logger log.Logger,
 	clientBean client.Bean,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
@@ -83,7 +83,7 @@ func NewDCRedirectionHandler(
 		frontendHandler:    wfHandler,
 		logger:             logger,
 		clientBean:         clientBean,
-		metricsClient:      metricsClient,
+		metricsHandler:     metricsHandler,
 		timeSource:         timeSource,
 	}
 }
@@ -110,8 +110,7 @@ func (handler *DCRedirectionHandlerImpl) DeprecateNamespace(
 	ctx context.Context,
 	request *workflowservice.DeprecateNamespaceRequest,
 ) (resp *workflowservice.DeprecateNamespaceResponse, retError error) {
-
-	var cluster = handler.currentClusterName
+	cluster := handler.currentClusterName
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionDeprecateNamespaceScope)
 	defer func() {
@@ -126,8 +125,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeNamespace(
 	ctx context.Context,
 	request *workflowservice.DescribeNamespaceRequest,
 ) (resp *workflowservice.DescribeNamespaceResponse, retError error) {
-
-	var cluster = handler.currentClusterName
+	cluster := handler.currentClusterName
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeNamespaceScope)
 	defer func() {
@@ -142,8 +140,7 @@ func (handler *DCRedirectionHandlerImpl) ListNamespaces(
 	ctx context.Context,
 	request *workflowservice.ListNamespacesRequest,
 ) (resp *workflowservice.ListNamespacesResponse, retError error) {
-
-	var cluster = handler.currentClusterName
+	cluster := handler.currentClusterName
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionListNamespacesScope)
 	defer func() {
@@ -158,8 +155,7 @@ func (handler *DCRedirectionHandlerImpl) RegisterNamespace(
 	ctx context.Context,
 	request *workflowservice.RegisterNamespaceRequest,
 ) (resp *workflowservice.RegisterNamespaceResponse, retError error) {
-
-	var cluster = handler.currentClusterName
+	cluster := handler.currentClusterName
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionRegisterNamespaceScope)
 	defer func() {
@@ -174,8 +170,7 @@ func (handler *DCRedirectionHandlerImpl) UpdateNamespace(
 	ctx context.Context,
 	request *workflowservice.UpdateNamespaceRequest,
 ) (resp *workflowservice.UpdateNamespaceResponse, retError error) {
-
-	var cluster = handler.currentClusterName
+	cluster := handler.currentClusterName
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateNamespaceScope)
 	defer func() {
@@ -192,8 +187,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeTaskQueue(
 	ctx context.Context,
 	request *workflowservice.DescribeTaskQueueRequest,
 ) (resp *workflowservice.DescribeTaskQueueResponse, retError error) {
-
-	var apiName = "DescribeTaskQueue"
+	apiName := "DescribeTaskQueue"
 	var err error
 	var cluster string
 
@@ -226,8 +220,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.DescribeWorkflowExecutionRequest,
 ) (resp *workflowservice.DescribeWorkflowExecutionResponse, retError error) {
-
-	var apiName = "DescribeWorkflowExecution"
+	apiName := "DescribeWorkflowExecution"
 	var err error
 	var cluster string
 
@@ -260,8 +253,7 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *workflowservice.GetWorkflowExecutionHistoryRequest,
 ) (resp *workflowservice.GetWorkflowExecutionHistoryResponse, retError error) {
-
-	var apiName = "GetWorkflowExecutionHistory"
+	apiName := "GetWorkflowExecutionHistory"
 	var err error
 	var cluster string
 
@@ -294,8 +286,7 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistoryReverse(
 	ctx context.Context,
 	request *workflowservice.GetWorkflowExecutionHistoryReverseRequest,
 ) (resp *workflowservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
-
-	var apiName = "GetWorkflowExecutionHistoryReverse"
+	apiName := "GetWorkflowExecutionHistoryReverse"
 	var err error
 	var cluster string
 
@@ -328,8 +319,7 @@ func (handler *DCRedirectionHandlerImpl) ListArchivedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListArchivedWorkflowExecutionsRequest,
 ) (resp *workflowservice.ListArchivedWorkflowExecutionsResponse, retError error) {
-
-	var apiName = "ListArchivedWorkflowExecutions"
+	apiName := "ListArchivedWorkflowExecutions"
 	var err error
 	var cluster string
 
@@ -362,8 +352,7 @@ func (handler *DCRedirectionHandlerImpl) ListClosedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListClosedWorkflowExecutionsRequest,
 ) (resp *workflowservice.ListClosedWorkflowExecutionsResponse, retError error) {
-
-	var apiName = "ListClosedWorkflowExecutions"
+	apiName := "ListClosedWorkflowExecutions"
 	var err error
 	var cluster string
 
@@ -396,8 +385,7 @@ func (handler *DCRedirectionHandlerImpl) ListOpenWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListOpenWorkflowExecutionsRequest,
 ) (resp *workflowservice.ListOpenWorkflowExecutionsResponse, retError error) {
-
-	var apiName = "ListOpenWorkflowExecutions"
+	apiName := "ListOpenWorkflowExecutions"
 	var err error
 	var cluster string
 
@@ -430,8 +418,7 @@ func (handler *DCRedirectionHandlerImpl) ListWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListWorkflowExecutionsRequest,
 ) (resp *workflowservice.ListWorkflowExecutionsResponse, retError error) {
-
-	var apiName = "ListWorkflowExecutions"
+	apiName := "ListWorkflowExecutions"
 	var err error
 	var cluster string
 
@@ -464,8 +451,7 @@ func (handler *DCRedirectionHandlerImpl) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ScanWorkflowExecutionsRequest,
 ) (resp *workflowservice.ScanWorkflowExecutionsResponse, retError error) {
-
-	var apiName = "ScanWorkflowExecutions"
+	apiName := "ScanWorkflowExecutions"
 	var err error
 	var cluster string
 
@@ -497,8 +483,7 @@ func (handler *DCRedirectionHandlerImpl) CountWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.CountWorkflowExecutionsRequest,
 ) (resp *workflowservice.CountWorkflowExecutionsResponse, retError error) {
-
-	var apiName = "CountWorkflowExecutions"
+	apiName := "CountWorkflowExecutions"
 	var err error
 	var cluster string
 
@@ -531,8 +516,7 @@ func (handler *DCRedirectionHandlerImpl) GetSearchAttributes(
 	ctx context.Context,
 	request *workflowservice.GetSearchAttributesRequest,
 ) (resp *workflowservice.GetSearchAttributesResponse, retError error) {
-
-	var cluster = handler.currentClusterName
+	cluster := handler.currentClusterName
 
 	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetSearchAttributesScope)
 	defer func() {
@@ -547,8 +531,7 @@ func (handler *DCRedirectionHandlerImpl) PollActivityTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollActivityTaskQueueRequest,
 ) (resp *workflowservice.PollActivityTaskQueueResponse, retError error) {
-
-	var apiName = "PollActivityTaskQueue"
+	apiName := "PollActivityTaskQueue"
 	var err error
 	var cluster string
 
@@ -581,8 +564,7 @@ func (handler *DCRedirectionHandlerImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollWorkflowTaskQueueRequest,
 ) (resp *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
-
-	var apiName = "PollWorkflowTaskQueue"
+	apiName := "PollWorkflowTaskQueue"
 	var err error
 	var cluster string
 
@@ -614,8 +596,7 @@ func (handler *DCRedirectionHandlerImpl) QueryWorkflow(
 	ctx context.Context,
 	request *workflowservice.QueryWorkflowRequest,
 ) (resp *workflowservice.QueryWorkflowResponse, retError error) {
-
-	var apiName = "QueryWorkflow"
+	apiName := "QueryWorkflow"
 	var err error
 	var cluster string
 
@@ -648,8 +629,7 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeat(
 	ctx context.Context,
 	request *workflowservice.RecordActivityTaskHeartbeatRequest,
 ) (resp *workflowservice.RecordActivityTaskHeartbeatResponse, retError error) {
-
-	var apiName = "RecordActivityTaskHeartbeat"
+	apiName := "RecordActivityTaskHeartbeat"
 	var err error
 	var cluster string
 
@@ -687,8 +667,7 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeatById(
 	ctx context.Context,
 	request *workflowservice.RecordActivityTaskHeartbeatByIdRequest,
 ) (resp *workflowservice.RecordActivityTaskHeartbeatByIdResponse, retError error) {
-
-	var apiName = "RecordActivityTaskHeartbeatById"
+	apiName := "RecordActivityTaskHeartbeatById"
 	var err error
 	var cluster string
 
@@ -721,8 +700,7 @@ func (handler *DCRedirectionHandlerImpl) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.RequestCancelWorkflowExecutionRequest,
 ) (resp *workflowservice.RequestCancelWorkflowExecutionResponse, retError error) {
-
-	var apiName = "RequestCancelWorkflowExecution"
+	apiName := "RequestCancelWorkflowExecution"
 	var err error
 	var cluster string
 
@@ -755,8 +733,7 @@ func (handler *DCRedirectionHandlerImpl) ResetStickyTaskQueue(
 	ctx context.Context,
 	request *workflowservice.ResetStickyTaskQueueRequest,
 ) (resp *workflowservice.ResetStickyTaskQueueResponse, retError error) {
-
-	var apiName = "ResetStickyTaskQueue"
+	apiName := "ResetStickyTaskQueue"
 	var err error
 	var cluster string
 
@@ -789,8 +766,7 @@ func (handler *DCRedirectionHandlerImpl) ResetWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.ResetWorkflowExecutionRequest,
 ) (resp *workflowservice.ResetWorkflowExecutionResponse, retError error) {
-
-	var apiName = "ResetWorkflowExecution"
+	apiName := "ResetWorkflowExecution"
 	var err error
 	var cluster string
 
@@ -823,8 +799,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceled(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskCanceledRequest,
 ) (resp *workflowservice.RespondActivityTaskCanceledResponse, retError error) {
-
-	var apiName = "RespondActivityTaskCanceled"
+	apiName := "RespondActivityTaskCanceled"
 	var err error
 	var cluster string
 
@@ -862,8 +837,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceledById(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskCanceledByIdRequest,
 ) (resp *workflowservice.RespondActivityTaskCanceledByIdResponse, retError error) {
-
-	var apiName = "RespondActivityTaskCanceledById"
+	apiName := "RespondActivityTaskCanceledById"
 	var err error
 	var cluster string
 
@@ -896,8 +870,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskCompletedRequest,
 ) (resp *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
-
-	var apiName = "RespondActivityTaskCompleted"
+	apiName := "RespondActivityTaskCompleted"
 	var err error
 	var cluster string
 
@@ -935,8 +908,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompletedById(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskCompletedByIdRequest,
 ) (resp *workflowservice.RespondActivityTaskCompletedByIdResponse, retError error) {
-
-	var apiName = "RespondActivityTaskCompletedById"
+	apiName := "RespondActivityTaskCompletedById"
 	var err error
 	var cluster string
 
@@ -969,8 +941,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailed(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskFailedRequest,
 ) (resp *workflowservice.RespondActivityTaskFailedResponse, retError error) {
-
-	var apiName = "RespondActivityTaskFailed"
+	apiName := "RespondActivityTaskFailed"
 	var err error
 	var cluster string
 
@@ -1008,8 +979,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailedById(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskFailedByIdRequest,
 ) (resp *workflowservice.RespondActivityTaskFailedByIdResponse, retError error) {
-
-	var apiName = "RespondActivityTaskFailedById"
+	apiName := "RespondActivityTaskFailedById"
 	var err error
 	var cluster string
 
@@ -1042,8 +1012,7 @@ func (handler *DCRedirectionHandlerImpl) RespondWorkflowTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (resp *workflowservice.RespondWorkflowTaskCompletedResponse, retError error) {
-
-	var apiName = "RespondWorkflowTaskCompleted"
+	apiName := "RespondWorkflowTaskCompleted"
 	var err error
 	var cluster string
 
@@ -1081,8 +1050,7 @@ func (handler *DCRedirectionHandlerImpl) RespondWorkflowTaskFailed(
 	ctx context.Context,
 	request *workflowservice.RespondWorkflowTaskFailedRequest,
 ) (resp *workflowservice.RespondWorkflowTaskFailedResponse, retError error) {
-
-	var apiName = "RespondWorkflowTaskFailed"
+	apiName := "RespondWorkflowTaskFailed"
 	var err error
 	var cluster string
 
@@ -1120,8 +1088,7 @@ func (handler *DCRedirectionHandlerImpl) RespondQueryTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondQueryTaskCompletedRequest,
 ) (resp *workflowservice.RespondQueryTaskCompletedResponse, retError error) {
-
-	var apiName = "RespondQueryTaskCompleted"
+	apiName := "RespondQueryTaskCompleted"
 	var err error
 	var cluster string
 
@@ -1159,8 +1126,7 @@ func (handler *DCRedirectionHandlerImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (resp *workflowservice.SignalWithStartWorkflowExecutionResponse, retError error) {
-
-	var apiName = "SignalWithStartWorkflowExecution"
+	apiName := "SignalWithStartWorkflowExecution"
 	var err error
 	var cluster string
 
@@ -1193,8 +1159,7 @@ func (handler *DCRedirectionHandlerImpl) SignalWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.SignalWorkflowExecutionRequest,
 ) (resp *workflowservice.SignalWorkflowExecutionResponse, retError error) {
-
-	var apiName = "SignalWorkflowExecution"
+	apiName := "SignalWorkflowExecution"
 	var err error
 	var cluster string
 
@@ -1226,8 +1191,7 @@ func (handler *DCRedirectionHandlerImpl) StartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
 ) (resp *workflowservice.StartWorkflowExecutionResponse, retError error) {
-
-	var apiName = "StartWorkflowExecution"
+	apiName := "StartWorkflowExecution"
 	var err error
 	var cluster string
 
@@ -1260,8 +1224,7 @@ func (handler *DCRedirectionHandlerImpl) TerminateWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.TerminateWorkflowExecutionRequest,
 ) (resp *workflowservice.TerminateWorkflowExecutionResponse, retError error) {
-
-	var apiName = "TerminateWorkflowExecution"
+	apiName := "TerminateWorkflowExecution"
 	var err error
 	var cluster string
 
@@ -1294,8 +1257,7 @@ func (handler *DCRedirectionHandlerImpl) ListTaskQueuePartitions(
 	ctx context.Context,
 	request *workflowservice.ListTaskQueuePartitionsRequest,
 ) (resp *workflowservice.ListTaskQueuePartitionsResponse, retError error) {
-
-	var apiName = "ListTaskQueuePartitions"
+	apiName := "ListTaskQueuePartitions"
 	var err error
 	var cluster string
 
@@ -1344,7 +1306,7 @@ func (handler *DCRedirectionHandlerImpl) CreateSchedule(
 	ctx context.Context,
 	request *workflowservice.CreateScheduleRequest,
 ) (resp *workflowservice.CreateScheduleResponse, retError error) {
-	var apiName = "CreateSchedule"
+	apiName := "CreateSchedule"
 	var err error
 	var cluster string
 
@@ -1377,7 +1339,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeSchedule(
 	ctx context.Context,
 	request *workflowservice.DescribeScheduleRequest,
 ) (resp *workflowservice.DescribeScheduleResponse, retError error) {
-	var apiName = "DescribeSchedule"
+	apiName := "DescribeSchedule"
 	var err error
 	var cluster string
 
@@ -1410,7 +1372,7 @@ func (handler *DCRedirectionHandlerImpl) UpdateSchedule(
 	ctx context.Context,
 	request *workflowservice.UpdateScheduleRequest,
 ) (resp *workflowservice.UpdateScheduleResponse, retError error) {
-	var apiName = "UpdateSchedule"
+	apiName := "UpdateSchedule"
 	var err error
 	var cluster string
 
@@ -1443,7 +1405,7 @@ func (handler *DCRedirectionHandlerImpl) PatchSchedule(
 	ctx context.Context,
 	request *workflowservice.PatchScheduleRequest,
 ) (resp *workflowservice.PatchScheduleResponse, retError error) {
-	var apiName = "PatchSchedule"
+	apiName := "PatchSchedule"
 	var err error
 	var cluster string
 
@@ -1476,7 +1438,7 @@ func (handler *DCRedirectionHandlerImpl) ListScheduleMatchingTimes(
 	ctx context.Context,
 	request *workflowservice.ListScheduleMatchingTimesRequest,
 ) (resp *workflowservice.ListScheduleMatchingTimesResponse, retError error) {
-	var apiName = "ListScheduleMatchingTimes"
+	apiName := "ListScheduleMatchingTimes"
 	var err error
 	var cluster string
 
@@ -1509,7 +1471,7 @@ func (handler *DCRedirectionHandlerImpl) DeleteSchedule(
 	ctx context.Context,
 	request *workflowservice.DeleteScheduleRequest,
 ) (resp *workflowservice.DeleteScheduleResponse, retError error) {
-	var apiName = "DeleteSchedule"
+	apiName := "DeleteSchedule"
 	var err error
 	var cluster string
 
@@ -1542,7 +1504,7 @@ func (handler *DCRedirectionHandlerImpl) ListSchedules(
 	ctx context.Context,
 	request *workflowservice.ListSchedulesRequest,
 ) (resp *workflowservice.ListSchedulesResponse, retError error) {
-	var apiName = "ListSchedules"
+	apiName := "ListSchedules"
 	var err error
 	var cluster string
 
@@ -1573,8 +1535,7 @@ func (handler *DCRedirectionHandlerImpl) ListSchedules(
 func (handler *DCRedirectionHandlerImpl) beforeCall(
 	scope int,
 ) (metrics.Scope, time.Time) {
-
-	return handler.metricsClient.Scope(scope), handler.timeSource.Now()
+	return handler.metricsHandler.Scope(scope), handler.timeSource.Now()
 }
 
 func (handler *DCRedirectionHandlerImpl) afterCall(
@@ -1583,7 +1544,6 @@ func (handler *DCRedirectionHandlerImpl) afterCall(
 	cluster string,
 	retError *error,
 ) {
-
 	log.CapturePanic(handler.logger, retError)
 
 	scope = scope.Tagged(metrics.TargetClusterTag(cluster))

@@ -75,12 +75,10 @@ const (
 	stopping
 )
 
-var (
-	cacheOpts = cache.Options{
-		InitialCapacity: cacheInitialSize,
-		TTL:             cacheTTL,
-	}
-)
+var cacheOpts = cache.Options{
+	InitialCapacity: cacheInitialSize,
+	TTL:             cacheTTL,
+}
 
 type (
 	// Clock provides timestamping to Registry objects
@@ -92,7 +90,6 @@ type (
 	// Persistence describes the durable storage requirements for a Registry
 	// instance.
 	Persistence interface {
-
 		// GetNamespace reads the state for a single namespace by name or ID
 		// from persistent storage, returning an instance of
 		// serviceerror.NamespaceNotFound if there is no matching Namespace.
@@ -151,7 +148,7 @@ type (
 		persistence             Persistence
 		globalNamespacesEnabled bool
 		clock                   Clock
-		metricsClient           metrics.Client
+		metricsHandler          metrics.MetricsHandler
 		logger                  log.Logger
 		lastRefreshTime         atomic.Value
 		refreshInterval         dynamicconfig.DurationPropertyFn
@@ -181,7 +178,7 @@ func NewRegistry(
 	persistence Persistence,
 	enableGlobalNamespaces bool,
 	refreshInterval dynamicconfig.DurationPropertyFn,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) Registry {
 	reg := &registry{
@@ -189,7 +186,7 @@ func NewRegistry(
 		persistence:             persistence,
 		globalNamespacesEnabled: enableGlobalNamespaces,
 		clock:                   clock.NewRealTimeSource(),
-		metricsClient:           metricsClient,
+		metricsHandler:          metricsHandler,
 		logger:                  logger,
 		cacheNameToID:           cache.New(cacheMaxSize, &cacheOpts),
 		cacheByID:               cache.New(cacheMaxSize, &cacheOpts),
@@ -264,7 +261,6 @@ func (r *registry) RegisterNamespaceChangeCallback(
 	prepareCallback PrepareCallbackFn,
 	callback CallbackFn,
 ) {
-
 	r.callbackLock.Lock()
 	r.prepareCallbacks[listenerID] = prepareCallback
 	r.callbacks[listenerID] = callback
@@ -345,7 +341,6 @@ func (r *registry) GetNamespaceByID(id ID) (*Namespace, error) {
 func (r *registry) GetNamespaceID(
 	name Name,
 ) (ID, error) {
-
 	ns, err := r.GetNamespace(name)
 	if err != nil {
 		return "", err
@@ -357,7 +352,6 @@ func (r *registry) GetNamespaceID(
 func (r *registry) GetNamespaceName(
 	id ID,
 ) (Name, error) {
-
 	ns, err := r.getNamespaceByID(id)
 	if err != nil {
 		return "", err
@@ -568,7 +562,7 @@ func (r *registry) publishCacheUpdate(
 }
 
 func (r *registry) triggerNamespaceChangePrepareCallbackLocked() {
-	sw := r.metricsClient.StartTimer(
+	sw := r.metricsHandler.StartTimer(
 		metrics.NamespaceCacheScope, metrics.NamespaceCachePrepareCallbacksLatency)
 	defer sw.Stop()
 
@@ -581,8 +575,7 @@ func (r *registry) triggerNamespaceChangeCallbackLocked(
 	oldNamespaces []*Namespace,
 	newNamespaces []*Namespace,
 ) {
-
-	sw := r.metricsClient.StartTimer(
+	sw := r.metricsHandler.StartTimer(
 		metrics.NamespaceCacheScope, metrics.NamespaceCacheCallbacksLatency)
 	defer sw.Stop()
 

@@ -33,6 +33,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/pborman/uuid"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -63,10 +64,10 @@ type (
 
 	CacheImpl struct {
 		cache.Cache
-		shard         shard.Context
-		logger        log.Logger
-		metricsClient metrics.Client
-		config        *configs.Config
+		shard          shard.Context
+		logger         log.Logger
+		metricsHandler metrics.MetricsHandler
+		config         *configs.Config
 	}
 
 	NewCacheFn func(shard shard.Context) Cache
@@ -87,11 +88,11 @@ func NewCache(shard shard.Context) Cache {
 	opts.Pin = true
 
 	return &CacheImpl{
-		Cache:         cache.New(config.HistoryCacheMaxSize(), opts),
-		shard:         shard,
-		logger:        log.With(shard.GetLogger(), tag.ComponentHistoryCache),
-		metricsClient: shard.GetMetricsClient(),
-		config:        config,
+		Cache:          cache.New(config.HistoryCacheMaxSize(), opts),
+		shard:          shard,
+		logger:         log.With(shard.GetLogger(), tag.ComponentHistoryCache),
+		metricsHandler: shard.GetMetricsClient(),
+		config:         config,
 	}
 }
 
@@ -101,15 +102,14 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	execution commonpb.WorkflowExecution,
 	caller CallerType,
 ) (Context, ReleaseCacheFunc, error) {
-
 	if err := c.validateWorkflowExecutionInfo(ctx, namespaceID, &execution); err != nil {
 		return nil, nil, err
 	}
 
 	scope := metrics.HistoryCacheGetOrCreateScope
-	c.metricsClient.IncCounter(scope, metrics.CacheRequests)
+	c.metricsHandler.IncCounter(scope, metrics.CacheRequests)
 	start := time.Now()
-	sw := c.metricsClient.StartTimer(scope, metrics.CacheLatency)
+	sw := c.metricsHandler.StartTimer(scope, metrics.CacheLatency)
 	defer sw.Stop()
 
 	weCtx, weReleaseFunc, err := c.getOrCreateWorkflowExecutionInternal(
@@ -134,16 +134,15 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	forceClearContext bool,
 	caller CallerType,
 ) (Context, ReleaseCacheFunc, error) {
-
 	key := definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
 	workflowCtx, cacheHit := c.Get(key).(Context)
 	if !cacheHit {
-		c.metricsClient.IncCounter(scope, metrics.CacheMissCounter)
+		c.metricsHandler.IncCounter(scope, metrics.CacheMissCounter)
 		// Let's create the workflow execution workflowCtx
 		workflowCtx = NewContext(c.shard, key, c.logger)
 		elem, err := c.PutIfNotExist(key, workflowCtx)
 		if err != nil {
-			c.metricsClient.IncCounter(scope, metrics.CacheFailures)
+			c.metricsHandler.IncCounter(scope, metrics.CacheFailures)
 			return nil, nil, err
 		}
 		workflowCtx = elem.(Context)
@@ -156,8 +155,8 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	if err := workflowCtx.Lock(ctx, caller); err != nil {
 		// ctx is done before lock can be acquired
 		c.Release(key)
-		c.metricsClient.IncCounter(scope, metrics.CacheFailures)
-		c.metricsClient.IncCounter(scope, metrics.AcquireLockFailedCounter)
+		c.metricsHandler.IncCounter(scope, metrics.CacheFailures)
+		c.metricsHandler.IncCounter(scope, metrics.AcquireLockFailedCounter)
 		return nil, nil, err
 	}
 	return workflowCtx, releaseFunc, nil
@@ -169,7 +168,6 @@ func (c *CacheImpl) makeReleaseFunc(
 	forceClearContext bool,
 	caller CallerType,
 ) func(error) {
-
 	status := cacheNotReleased
 	return func(err error) {
 		if atomic.CompareAndSwapInt32(&status, cacheNotReleased, cacheReleased) {
@@ -195,7 +193,6 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 ) error {
-
 	if execution.GetWorkflowId() == "" {
 		return serviceerror.NewInvalidArgument("Can't load workflow execution.  WorkflowId not set.")
 	}
@@ -212,7 +209,6 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  execution.GetWorkflowId(),
 		})
-
 		if err != nil {
 			return err
 		}
@@ -228,7 +224,6 @@ func (c *CacheImpl) getCurrentExecutionWithRetry(
 	ctx context.Context,
 	request *persistence.GetCurrentExecutionRequest,
 ) (*persistence.GetCurrentExecutionResponse, error) {
-
 	var response *persistence.GetCurrentExecutionResponse
 	op := func() error {
 		var err error

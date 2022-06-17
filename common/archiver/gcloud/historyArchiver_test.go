@@ -33,6 +33,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -59,16 +60,14 @@ const (
 	twoEventsExampleHistoryRecord = `[{"events":[{"eventId":1,"eventTime": "2020-07-30T00:30:03.082421843Z","eventType":"WorkflowExecutionStarted","version":-24,"taskId":5242897,"workflowExecutionStartedEventAttributes":{"workflowType":{"name":"MobileOnlyWorkflow::processMobileOnly"},"taskQueue":{"name":"MobileOnly"},"input":null,"workflowExecutionTimeout":"300s","workflowTaskTimeout":"60s","originalExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","identity":"","firstExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","attempt":1,"firstWorkflowTaskBackoff":"0s"}},{"eventId":2,"eventTime": "2020-07-30T00:30:03.082421843Z","eventType":"WorkflowExecutionStarted","version":-24,"taskId":5242897,"workflowExecutionStartedEventAttributes":{"workflowType":{"name":"MobileOnlyWorkflow::processMobileOnly"},"taskQueue":{"name":"MobileOnly"},"input":null,"workflowExecutionTimeout":"300s","workflowTaskTimeout":"60s","originalExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","identity":"","firstExecutionRunId":"1fd5d4c8-1590-4a0a-8027-535e8729de8e","attempt":1,"firstWorkflowTaskBackoff":"0s"}}]}]`
 )
 
-var (
-	testBranchToken = []byte{1, 2, 3}
-)
+var testBranchToken = []byte{1, 2, 3}
 
 func (h *historyArchiverSuite) SetupTest() {
 	h.Assertions = require.New(h.T())
 	h.controller = gomock.NewController(h.T())
 	h.container = &archiver.HistoryBootstrapContainer{
-		Logger:        log.NewNoopLogger(),
-		MetricsClient: metrics.NoopClient,
+		Logger:         log.NewNoopLogger(),
+		MetricsHandler: metrics.NoopMetricsHandler,
 	}
 	h.testArchivalURI, _ = archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 }
@@ -210,7 +209,6 @@ func (h *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
 }
 
 func (h *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
-
 	ctx := getCanceledContext()
 	storageWrapper := connector.NewMockClient(h.controller)
 	storageWrapper.EXPECT().Exist(gomock.Any(), gomock.Any(), "").Return(true, nil)
@@ -278,7 +276,6 @@ func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 }
 
 func (h *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
-
 	ctx := context.Background()
 	storageWrapper := connector.NewMockClient(h.controller)
 	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
@@ -350,7 +347,6 @@ func (h *historyArchiverSuite) TestArchive_Skip() {
 }
 
 func (h *historyArchiverSuite) TestArchive_Success() {
-
 	ctx := context.Background()
 
 	storageWrapper := connector.NewMockClient(h.controller)
@@ -473,7 +469,6 @@ func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 }
 
 func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
-
 	ctx := context.Background()
 	storageWrapper := connector.NewMockClient(h.controller)
 	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
@@ -495,7 +490,6 @@ func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 }
 
 func (h *historyArchiverSuite) TestGet_Success_PageSize() {
-
 	ctx := context.Background()
 	storageWrapper := connector.NewMockClient(h.controller)
 	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
@@ -519,7 +513,6 @@ func (h *historyArchiverSuite) TestGet_Success_PageSize() {
 }
 
 func (h *historyArchiverSuite) TestGet_Success_FromToken() {
-
 	ctx := context.Background()
 	storageWrapper := connector.NewMockClient(h.controller)
 	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)

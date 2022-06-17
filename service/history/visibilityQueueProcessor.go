@@ -61,7 +61,7 @@ type (
 		visibilityTaskFilter     taskFilter
 		ownedScheduler           queues.Scheduler // this is the scheduler owned by this visibility queue processor
 		logger                   log.Logger
-		metricsClient            metrics.Client
+		metricsHandler           metrics.MetricsHandler
 
 		// from transferQueueProcessorImpl
 		config   *configs.Config
@@ -83,7 +83,7 @@ func newVisibilityQueueProcessor(
 ) queues.Processor {
 	config := shard.GetConfig()
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
-	metricsClient := shard.GetMetricsClient()
+	metricsHandler := shard.GetMetricsClient()
 
 	options := &QueueProcessorOptions{
 		BatchSize:                          config.VisibilityTaskBatchSize,
@@ -121,7 +121,7 @@ func newVisibilityQueueProcessor(
 		visibilityQueueShutdown:  visibilityQueueShutdown,
 		visibilityTaskFilter:     visibilityTaskFilter,
 		logger:                   logger,
-		metricsClient:            metricsClient,
+		metricsHandler:           metricsHandler,
 
 		config:       config,
 		ackLevel:     ackLevel,
@@ -291,7 +291,7 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 		return nil
 	}
 
-	t.metricsClient.IncCounter(metrics.VisibilityQueueProcessorScope, metrics.TaskBatchCompleteCounter)
+	t.metricsHandler.IncCounter(metrics.VisibilityQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel < upperAckLevel {
 		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{

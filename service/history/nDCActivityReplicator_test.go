@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -86,11 +87,9 @@ func TestActivityReplicatorSuite(t *testing.T) {
 }
 
 func (s *activityReplicatorSuite) SetupSuite() {
-
 }
 
 func (s *activityReplicatorSuite) TearDownSuite() {
-
 }
 
 func (s *activityReplicatorSuite) SetupTest() {
@@ -110,7 +109,8 @@ func (s *activityReplicatorSuite) SetupTest() {
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: 1,
 				RangeId: 1,
-			}},
+			},
+		},
 		tests.NewDynamicConfig(),
 	)
 	s.workflowCache = workflow.NewCache(s.mockShard).(*workflow.CacheImpl)
@@ -131,11 +131,11 @@ func (s *activityReplicatorSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
+		metricsHandler:     s.mockShard.GetMetricsClient(),
 		timeSource:         s.mockShard.GetTimeSource(),
 		eventNotifier: events.NewNotifier(
 			clock.NewRealTimeSource(),
-			metrics.NoopClient,
+			metrics.NoopMetricsHandler,
 			func(namespace.ID, string) int32 { return 1 },
 		),
 		queueProcessors: map[tasks.Category]queues.Processor{

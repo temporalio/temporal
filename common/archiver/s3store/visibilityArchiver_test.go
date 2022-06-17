@@ -38,6 +38,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/searchattribute"
@@ -136,8 +137,8 @@ func (s *visibilityArchiverSuite) SetupSuite() {
 	s.testArchivalURI, err = archiver.NewURI(testBucketURI)
 	s.Require().NoError(err)
 	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger:        log.NewNoopLogger(),
-		MetricsClient: metrics.NoopClient,
+		Logger:         log.NewNoopLogger(),
+		MetricsHandler: metrics.NoopMetricsHandler,
 	}
 }
 

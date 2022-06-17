@@ -150,13 +150,13 @@ type (
 
 type (
 	ContextImpl struct {
-		shard         shard.Context
-		workflowKey   definition.WorkflowKey
-		logger        log.Logger
-		metricsClient metrics.Client
-		timeSource    clock.TimeSource
-		config        *configs.Config
-		transaction   Transaction
+		shard          shard.Context
+		workflowKey    definition.WorkflowKey
+		logger         log.Logger
+		metricsHandler metrics.MetricsHandler
+		timeSource     clock.TimeSource
+		config         *configs.Config
+		transaction    Transaction
 
 		mutex        locks.PriorityMutex
 		MutableState MutableState
@@ -166,9 +166,7 @@ type (
 
 var _ Context = (*ContextImpl)(nil)
 
-var (
-	PersistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
-)
+var PersistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
 
 func NewContext(
 	shard shard.Context,
@@ -176,14 +174,14 @@ func NewContext(
 	logger log.Logger,
 ) *ContextImpl {
 	return &ContextImpl{
-		shard:         shard,
-		workflowKey:   workflowKey,
-		logger:        logger,
-		metricsClient: shard.GetMetricsClient(),
-		timeSource:    shard.GetTimeSource(),
-		config:        shard.GetConfig(),
-		mutex:         locks.NewPriorityMutex(),
-		transaction:   NewTransaction(shard),
+		shard:          shard,
+		workflowKey:    workflowKey,
+		logger:         logger,
+		metricsHandler: shard.GetMetricsClient(),
+		timeSource:     shard.GetTimeSource(),
+		config:         shard.GetConfig(),
+		mutex:          locks.NewPriorityMutex(),
+		transaction:    NewTransaction(shard),
 		stats: &persistencespb.ExecutionStats{
 			HistorySize: 0,
 		},
@@ -218,7 +216,7 @@ func (c *ContextImpl) Unlock(
 }
 
 func (c *ContextImpl) Clear() {
-	c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.WorkflowContextCleared)
+	c.metricsHandler.IncCounter(metrics.WorkflowContextScope, metrics.WorkflowContextCleared)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
 	}
@@ -339,7 +337,6 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	newWorkflow *persistence.WorkflowSnapshot,
 	newWorkflowEvents []*persistence.WorkflowEvents,
 ) (retError error) {
-
 	defer func() {
 		if retError != nil {
 			c.Clear()
@@ -372,7 +369,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		return err
 	}
 	NotifyWorkflowSnapshotTasks(engine, newWorkflow, newMutableState.GetNamespaceEntry().ActiveClusterName())
-	emitStateTransitionCount(c.metricsClient, newMutableState)
+	emitStateTransitionCount(c.metricsHandler, newMutableState)
 
 	return nil
 }
@@ -388,7 +385,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	currentMutableState MutableState,
 	currentTransactionPolicy *TransactionPolicy,
 ) (retError error) {
-
 	defer func() {
 		if retError != nil {
 			c.Clear()
@@ -481,9 +477,9 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}
 	}
 
-	emitStateTransitionCount(c.metricsClient, resetMutableState)
-	emitStateTransitionCount(c.metricsClient, newMutableState)
-	emitStateTransitionCount(c.metricsClient, currentMutableState)
+	emitStateTransitionCount(c.metricsHandler, resetMutableState)
+	emitStateTransitionCount(c.metricsHandler, newMutableState)
+	emitStateTransitionCount(c.metricsHandler, currentMutableState)
 
 	return nil
 }
@@ -492,7 +488,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 	ctx context.Context,
 	now time.Time,
 ) error {
-
 	// We only perform this check on active cluster for the namespace
 	forceTerminate, err := c.enforceSizeCheck(ctx)
 	if err != nil {
@@ -527,7 +522,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsActive(
 	newContext Context,
 	newMutableState MutableState,
 ) error {
-
 	return c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		now,
@@ -543,7 +537,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsPassive(
 	ctx context.Context,
 	now time.Time,
 ) error {
-
 	return c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		now,
@@ -561,7 +554,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsPassive(
 	newContext Context,
 	newMutableState MutableState,
 ) error {
-
 	return c.UpdateWorkflowExecutionWithNew(
 		ctx,
 		now,
@@ -582,7 +574,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	currentWorkflowTransactionPolicy TransactionPolicy,
 	newWorkflowTransactionPolicy *TransactionPolicy,
 ) (retError error) {
-
 	defer func() {
 		if retError != nil {
 			c.Clear()
@@ -654,13 +645,13 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 	}
 
-	emitStateTransitionCount(c.metricsClient, c.MutableState)
-	emitStateTransitionCount(c.metricsClient, newMutableState)
+	emitStateTransitionCount(c.metricsHandler, c.MutableState)
+	emitStateTransitionCount(c.metricsHandler, newMutableState)
 
 	// finally emit session stats
 	namespace := c.GetNamespace()
 	emitWorkflowHistoryStats(
-		c.metricsClient,
+		c.metricsHandler,
 		namespace,
 		int(c.GetHistorySize()),
 		int(c.MutableState.GetNextEventID()-1),
@@ -703,7 +694,6 @@ func (c *ContextImpl) mergeContinueAsNewReplicationTasks(
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
-
 	if currentWorkflowMutation.ExecutionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
 		return nil
 	} else if updateMode == persistence.UpdateWorkflowModeBypassCurrent && newWorkflowSnapshot == nil {
@@ -747,7 +737,6 @@ func (c *ContextImpl) updateWorkflowExecutionEventReapply(
 	eventBatch1 []*persistence.WorkflowEvents,
 	eventBatch2 []*persistence.WorkflowEvents,
 ) error {
-
 	if updateMode != persistence.UpdateWorkflowModeBypassCurrent {
 		return nil
 	}
@@ -763,7 +752,6 @@ func (c *ContextImpl) conflictResolveEventReapply(
 	eventBatch1 []*persistence.WorkflowEvents,
 	eventBatch2 []*persistence.WorkflowEvents,
 ) error {
-
 	if conflictResolveMode != persistence.ConflictResolveWorkflowModeBypassCurrent {
 		return nil
 	}
@@ -777,7 +765,6 @@ func (c *ContextImpl) conflictResolveEventReapply(
 func (c *ContextImpl) ReapplyEvents(
 	eventBatches []*persistence.WorkflowEvents,
 ) error {
-
 	// NOTE: this function should only be used to workflow which is
 	// not the caller, or otherwise deadlock will appear
 
@@ -933,14 +920,14 @@ func (c *ContextImpl) enforceSizeCheck(
 }
 
 func emitStateTransitionCount(
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	mutableState MutableState,
 ) {
 	if mutableState == nil {
 		return
 	}
 
-	metricsClient.Scope(
+	metricsHandler.Scope(
 		metrics.WorkflowContextScope,
 		metrics.NamespaceTag(mutableState.GetNamespaceEntry().Name().String()),
 	).RecordDistribution(metrics.StateTransitionCount, int(mutableState.GetExecutionInfo().StateTransitionCount))

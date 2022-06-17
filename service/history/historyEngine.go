@@ -33,6 +33,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel/trace"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -100,7 +101,7 @@ type (
 		replicationProcessorMgr    common.Daemon
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
-		metricsClient              metrics.Client
+		metricsHandler             metrics.MetricsHandler
 		logger                     log.Logger
 		throttledLogger            log.Logger
 		config                     *configs.Config
@@ -160,7 +161,7 @@ func NewEngineWithShardContext(
 		tokenSerializer:            common.NewProtoTaskTokenSerializer(),
 		logger:                     log.With(logger, tag.ComponentHistoryEngine),
 		throttledLogger:            log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
-		metricsClient:              shard.GetMetricsClient(),
+		metricsHandler:             shard.GetMetricsClient(),
 		eventNotifier:              eventNotifier,
 		config:                     config,
 		sdkClientFactory:           sdkClientFactory,
@@ -294,7 +295,6 @@ func (e *historyEngineImpl) Stop() {
 }
 
 func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
-
 	// NOTE: READ BEFORE MODIFICATION
 	//
 	// Tasks, e.g. transfer tasks and timer tasks, are created when holding the shard lock
@@ -398,7 +398,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	ctx context.Context,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
-
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(startRequest.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -551,7 +550,6 @@ func (e *historyEngineImpl) GetMutableState(
 	ctx context.Context,
 	request *historyservice.GetMutableStateRequest,
 ) (*historyservice.GetMutableStateResponse, error) {
-
 	return e.getMutableStateOrPolling(ctx, request)
 }
 
@@ -560,14 +558,12 @@ func (e *historyEngineImpl) PollMutableState(
 	ctx context.Context,
 	request *historyservice.PollMutableStateRequest,
 ) (*historyservice.PollMutableStateResponse, error) {
-
 	response, err := e.getMutableStateOrPolling(ctx, &historyservice.GetMutableStateRequest{
 		NamespaceId:         request.GetNamespaceId(),
 		Execution:           request.Execution,
 		ExpectedNextEventId: request.ExpectedNextEventId,
 		CurrentBranchToken:  request.CurrentBranchToken,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -593,7 +589,6 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 	ctx context.Context,
 	request *historyservice.GetMutableStateRequest,
 ) (*historyservice.GetMutableStateResponse, error) {
-
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := validateNamespaceUUID(namespaceID)
 	if err != nil {
@@ -689,8 +684,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 	ctx context.Context,
 	request *historyservice.QueryWorkflowRequest,
 ) (_ *historyservice.QueryWorkflowResponse, retErr error) {
-
-	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
+	scope := e.metricsHandler.Scope(metrics.HistoryQueryWorkflowScope)
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := validateNamespaceUUID(namespaceID)
 	if err != nil {
@@ -837,7 +831,6 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 	queryRequest *workflowservice.QueryWorkflowRequest,
 	scope metrics.Scope,
 ) (*historyservice.QueryWorkflowResponse, error) {
-
 	sw := scope.StartTimer(metrics.DirectQueryDispatchLatency)
 	defer sw.Stop()
 
@@ -864,7 +857,8 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 				Response: &workflowservice.QueryWorkflowResponse{
 					QueryResult:   matchingResp.GetQueryResult(),
 					QueryRejected: matchingResp.GetQueryRejected(),
-				}}, nil
+				},
+			}, nil
 		}
 		if !common.IsContextDeadlineExceededErr(err) && !common.IsContextCanceledErr(err) && !common.IsStickyWorkerUnavailable(err) {
 			return nil, err
@@ -907,14 +901,14 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		Response: &workflowservice.QueryWorkflowResponse{
 			QueryResult:   matchingResp.GetQueryResult(),
 			QueryRejected: matchingResp.GetQueryRejected(),
-		}}, err
+		},
+	}, err
 }
 
 func (e *historyEngineImpl) getMutableState(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 ) (_ *historyservice.GetMutableStateResponse, retError error) {
-
 	if len(workflowKey.RunID) == 0 {
 		return nil, serviceerror.NewInternal(fmt.Sprintf(
 			"getMutableState encountered empty run ID: %v", workflowKey,
@@ -984,7 +978,6 @@ func (e *historyEngineImpl) DescribeMutableState(
 	ctx context.Context,
 	request *historyservice.DescribeMutableStateRequest,
 ) (response *historyservice.DescribeMutableStateResponse, retError error) {
-
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := validateNamespaceUUID(namespaceID)
 	if err != nil {
@@ -1032,7 +1025,6 @@ func (e *historyEngineImpl) ResetStickyTaskQueue(
 	ctx context.Context,
 	resetRequest *historyservice.ResetStickyTaskQueueRequest,
 ) (*historyservice.ResetStickyTaskQueueResponse, error) {
-
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
 	err := validateNamespaceUUID(namespaceID)
 	if err != nil {
@@ -1073,7 +1065,6 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DescribeWorkflowExecutionRequest,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
-
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := validateNamespaceUUID(namespaceID)
 	if err != nil {
@@ -1223,7 +1214,6 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordActivityTaskStartedRequest,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -1250,7 +1240,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			requestID := request.GetRequestId()
 			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
 
-			metricsScope := e.metricsClient.Scope(metrics.HistoryRecordActivityTaskStartedScope)
+			metricsScope := e.metricsHandler.Scope(metrics.HistoryRecordActivityTaskStartedScope)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
@@ -1372,7 +1362,6 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 	ctx context.Context,
 	req *historyservice.RespondActivityTaskCompletedRequest,
 ) error {
-
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return err
@@ -1418,7 +1407,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskCompletedScope, metrics.StaleMutableStateCounter)
+				e.metricsHandler.IncCounter(metrics.HistoryRespondActivityTaskCompletedScope, metrics.StaleMutableStateCounter)
 				return nil, consts.ErrStaleState
 			}
 
@@ -1440,7 +1429,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 		})
 
 	if err == nil && !activityStartedTime.IsZero() {
-		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskCompletedScope).
+		scope := e.metricsHandler.Scope(metrics.HistoryRespondActivityTaskCompletedScope).
 			Tagged(
 				metrics.NamespaceTag(namespace.String()),
 				metrics.WorkflowTypeTag(workflowTypeName),
@@ -1457,7 +1446,6 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 	ctx context.Context,
 	req *historyservice.RespondActivityTaskFailedRequest,
 ) error {
-
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return err
@@ -1504,7 +1492,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskFailedScope, metrics.StaleMutableStateCounter)
+				e.metricsHandler.IncCounter(metrics.HistoryRespondActivityTaskFailedScope, metrics.StaleMutableStateCounter)
 				return nil, consts.ErrStaleState
 			}
 
@@ -1545,7 +1533,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			return postActions, nil
 		})
 	if err == nil && !activityStartedTime.IsZero() {
-		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskFailedScope).
+		scope := e.metricsHandler.Scope(metrics.HistoryRespondActivityTaskFailedScope).
 			Tagged(
 				metrics.NamespaceTag(namespace.String()),
 				metrics.WorkflowTypeTag(workflowTypeName),
@@ -1562,7 +1550,6 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	ctx context.Context,
 	req *historyservice.RespondActivityTaskCanceledRequest,
 ) error {
-
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return err
@@ -1609,7 +1596,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskCanceledScope, metrics.StaleMutableStateCounter)
+				e.metricsHandler.IncCounter(metrics.HistoryRespondActivityTaskCanceledScope, metrics.StaleMutableStateCounter)
 				return nil, consts.ErrStaleState
 			}
 
@@ -1642,7 +1629,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 		})
 
 	if err == nil && !activityStartedTime.IsZero() {
-		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskCanceledScope).
+		scope := e.metricsHandler.Scope(metrics.HistoryRespondActivityTaskCanceledScope).
 			Tagged(
 				metrics.NamespaceTag(namespace.String()),
 				metrics.WorkflowTypeTag(workflowTypeName),
@@ -1662,7 +1649,6 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 	ctx context.Context,
 	req *historyservice.RecordActivityTaskHeartbeatRequest,
 ) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
-
 	_, err := e.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -1706,7 +1692,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRecordActivityTaskHeartbeatScope, metrics.StaleMutableStateCounter)
+				e.metricsHandler.IncCounter(metrics.HistoryRecordActivityTaskHeartbeatScope, metrics.StaleMutableStateCounter)
 				return nil, consts.ErrStaleState
 			}
 
@@ -1740,7 +1726,6 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.RequestCancelWorkflowExecutionRequest,
 ) error {
-
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return err
@@ -1816,7 +1801,6 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 	ctx context.Context,
 	signalRequest *historyservice.SignalWorkflowExecutionRequest,
 ) error {
-
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(signalRequest.GetNamespaceId()))
 	if err != nil {
 		return err
@@ -1899,7 +1883,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	signalWithStartRequest *historyservice.SignalWithStartWorkflowExecutionRequest,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
-
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(signalWithStartRequest.GetNamespaceId()))
 	if err != nil {
 		return nil, err
@@ -1955,7 +1938,6 @@ func (e *historyEngineImpl) RemoveSignalMutableState(
 	ctx context.Context,
 	request *historyservice.RemoveSignalMutableStateRequest,
 ) error {
-
 	_, err := e.getActiveNamespaceEntry(namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return err
@@ -2051,7 +2033,6 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DeleteWorkflowExecutionRequest,
 ) (retError error) {
-
 	weCtx, err := e.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		nil,
@@ -2126,7 +2107,6 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	ctx context.Context,
 	completionRequest *historyservice.RecordChildExecutionCompletedRequest,
 ) error {
-
 	_, err := e.getActiveNamespaceEntry(namespace.ID(completionRequest.GetNamespaceId()))
 	if err != nil {
 		return err
@@ -2289,7 +2269,6 @@ func (e *historyEngineImpl) ReplicateEventsV2(
 	ctx context.Context,
 	replicateRequest *historyservice.ReplicateEventsV2Request,
 ) error {
-
 	return e.nDCReplicator.ApplyEvents(ctx, replicateRequest)
 }
 
@@ -2298,7 +2277,6 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 	ctx context.Context,
 	request *historyservice.ReplicateWorkflowStateRequest,
 ) error {
-
 	return e.nDCReplicator.ApplyWorkflowState(ctx, request)
 }
 
@@ -2306,7 +2284,6 @@ func (e *historyEngineImpl) SyncShardStatus(
 	ctx context.Context,
 	request *historyservice.SyncShardStatusRequest,
 ) error {
-
 	clusterName := request.GetSourceCluster()
 	now := timestamp.TimeValue(request.GetStatusTime())
 
@@ -2325,7 +2302,6 @@ func (e *historyEngineImpl) SyncActivity(
 	ctx context.Context,
 	request *historyservice.SyncActivityRequest,
 ) (retError error) {
-
 	return e.nDCActivityReplicator.SyncActivity(ctx, request)
 }
 
@@ -2335,7 +2311,6 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	ctx context.Context,
 	resetRequest *historyservice.ResetWorkflowExecutionRequest,
 ) (response *historyservice.ResetWorkflowExecutionResponse, retError error) {
-
 	request := resetRequest.ResetRequest
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
 	workflowID := request.WorkflowExecution.GetWorkflowId()
@@ -2501,7 +2476,6 @@ func (e *historyEngineImpl) failWorkflowTask(
 	wtFailedCause *workflowTaskFailedCause,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (workflow.MutableState, error) {
-
 	// clear any updates we have accumulated so far
 	wfContext.Clear()
 
@@ -2531,7 +2505,6 @@ func (e *historyEngineImpl) failWorkflowTask(
 func (e *historyEngineImpl) NotifyNewHistoryEvent(
 	notification *events.Notification,
 ) {
-
 	e.eventNotifier.NotifyNewHistoryEvent(notification)
 }
 
@@ -2561,7 +2534,6 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 	namespaceEntry *namespace.Namespace,
 	operation string,
 ) error {
-
 	workflowID := request.GetWorkflowId()
 	maxIDLengthLimit := e.config.MaxIDLengthLimit()
 
@@ -2629,7 +2601,7 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 	)
 	if workflowRunTimeout != timestamp.DurationValue(request.GetWorkflowRunTimeout()) {
 		request.WorkflowRunTimeout = timestamp.DurationPtr(workflowRunTimeout)
-		e.metricsClient.Scope(
+		e.metricsHandler.Scope(
 			metricsScope,
 			metrics.NamespaceTag(namespace),
 		).IncCounter(metrics.WorkflowRunTimeoutOverrideCount)
@@ -2643,7 +2615,7 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 	)
 	if workflowTaskStartToCloseTimeout != timestamp.DurationValue(request.GetWorkflowTaskTimeout()) {
 		request.WorkflowTaskTimeout = timestamp.DurationPtr(workflowTaskStartToCloseTimeout)
-		e.metricsClient.Scope(
+		e.metricsHandler.Scope(
 			metricsScope,
 			metrics.NamespaceTag(namespace),
 		).IncCounter(metrics.WorkflowTaskTimeoutOverrideCount)
@@ -2653,7 +2625,6 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 func validateNamespaceUUID(
 	namespaceUUID namespace.ID,
 ) error {
-
 	if namespaceUUID == "" {
 		return serviceerror.NewInvalidArgument("Missing namespace UUID.")
 	} else if uuid.Parse(namespaceUUID.String()) == nil {
@@ -2665,7 +2636,6 @@ func validateNamespaceUUID(
 func (e *historyEngineImpl) getActiveNamespaceEntry(
 	namespaceUUID namespace.ID,
 ) (*namespace.Namespace, error) {
-
 	return getActiveNamespaceEntryFromShard(e.shard, namespaceUUID)
 }
 
@@ -2673,7 +2643,6 @@ func getActiveNamespaceEntryFromShard(
 	shard shard.Context,
 	namespaceUUID namespace.ID,
 ) (*namespace.Namespace, error) {
-
 	err := validateNamespaceUUID(namespaceUUID)
 	if err != nil {
 		return nil, err
@@ -2696,7 +2665,6 @@ func getscheduledEventID(
 	activityID string,
 	mutableState workflow.MutableState,
 ) (int64, error) {
-
 	if activityID == "" {
 		return 0, serviceerror.NewInvalidArgument("activityID cannot be empty")
 	}
@@ -2711,7 +2679,6 @@ func (e *historyEngineImpl) getStartRequest(
 	namespaceID namespace.ID,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) *historyservice.StartWorkflowExecutionRequest {
-
 	req := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                request.GetNamespace(),
 		WorkflowId:               request.GetWorkflowId(),
@@ -2741,7 +2708,6 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	ackTimestampe time.Time,
 	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
-
 	if ackMessageID != persistence.EmptyQueueMessageID {
 		if err := e.shard.UpdateQueueClusterAckLevel(
 			tasks.CategoryReplication,
@@ -2771,7 +2737,6 @@ func (e *historyEngineImpl) GetDLQReplicationMessages(
 	ctx context.Context,
 	taskInfos []*replicationspb.ReplicationTaskInfo,
 ) ([]*replicationspb.ReplicationTask, error) {
-
 	tasks := make([]*replicationspb.ReplicationTask, 0, len(taskInfos))
 	for _, taskInfo := range taskInfos {
 		task, err := e.replicationAckMgr.GetTask(ctx, taskInfo)
@@ -2792,7 +2757,6 @@ func (e *historyEngineImpl) ReapplyEvents(
 	runID string,
 	reapplyEvents []*historypb.HistoryEvent,
 ) error {
-
 	if e.config.SkipReapplicationByNamespaceID(namespaceUUID.String()) {
 		return nil
 	}
@@ -2874,7 +2838,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 						tag.WorkflowNamespaceID(namespaceID.String()),
 						tag.WorkflowID(workflowID),
 					)
-					e.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
+					e.metricsHandler.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
 					return &api.UpdateWorkflowAction{
 						Noop:               true,
 						CreateWorkflowTask: false,
@@ -2963,7 +2927,6 @@ func (e *historyEngineImpl) GetDLQMessages(
 	ctx context.Context,
 	request *historyservice.GetDLQMessagesRequest,
 ) (*historyservice.GetDLQMessagesResponse, error) {
-
 	_, ok := e.clusterMetadata.GetAllClusterInfo()[request.GetSourceCluster()]
 	if !ok {
 		return nil, consts.ErrUnknownCluster
@@ -2990,7 +2953,6 @@ func (e *historyEngineImpl) PurgeDLQMessages(
 	ctx context.Context,
 	request *historyservice.PurgeDLQMessagesRequest,
 ) error {
-
 	_, ok := e.clusterMetadata.GetAllClusterInfo()[request.GetSourceCluster()]
 	if !ok {
 		return consts.ErrUnknownCluster
@@ -3007,7 +2969,6 @@ func (e *historyEngineImpl) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,
 ) (*historyservice.MergeDLQMessagesResponse, error) {
-
 	_, ok := e.clusterMetadata.GetAllClusterInfo()[request.GetSourceCluster()]
 	if !ok {
 		return nil, consts.ErrUnknownCluster
@@ -3048,7 +3009,6 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	namespaceUUID namespace.ID,
 	execution commonpb.WorkflowExecution,
 ) (retError error) {
-
 	err := validateNamespaceUUID(namespaceUUID)
 	if err != nil {
 		return err
@@ -3146,7 +3106,6 @@ func (e *historyEngineImpl) GetReplicationStatus(
 	ctx context.Context,
 	request *historyservice.GetReplicationStatusRequest,
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
-
 	resp := &historyservice.ShardReplicationStatus{
 		ShardId:        e.shard.GetShardID(),
 		ShardLocalTime: timestamp.TimePtr(e.shard.GetTimeSource().Now()),

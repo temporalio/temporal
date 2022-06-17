@@ -28,9 +28,10 @@ import (
 	"context"
 	"strings"
 
+	"google.golang.org/grpc"
+
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"google.golang.org/grpc"
 
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 
@@ -44,7 +45,7 @@ var _ matchingservice.MatchingServiceClient = (*metricClient)(nil)
 
 type metricClient struct {
 	client          matchingservice.MatchingServiceClient
-	metricsClient   metrics.Client
+	metricsHandler  metrics.MetricsHandler
 	logger          log.Logger
 	throttledLogger log.Logger
 }
@@ -52,13 +53,13 @@ type metricClient struct {
 // NewMetricClient creates a new instance of matchingservice.MatchingServiceClient that emits metrics
 func NewMetricClient(
 	client matchingservice.MatchingServiceClient,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 	throttledLogger log.Logger,
 ) matchingservice.MatchingServiceClient {
 	return &metricClient{
 		client:          client,
-		metricsClient:   metricsClient,
+		metricsHandler:  metricsHandler,
 		logger:          logger,
 		throttledLogger: throttledLogger,
 	}
@@ -69,7 +70,6 @@ func (c *metricClient) AddActivityTask(
 	request *matchingservice.AddActivityTaskRequest,
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.AddActivityTaskResponse, retError error) {
-
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientAddActivityTaskScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
@@ -89,7 +89,6 @@ func (c *metricClient) AddWorkflowTask(
 	request *matchingservice.AddWorkflowTaskRequest,
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
-
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientAddWorkflowTaskScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
@@ -109,7 +108,6 @@ func (c *metricClient) PollActivityTaskQueue(
 	request *matchingservice.PollActivityTaskQueueRequest,
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
-
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientPollActivityTaskQueueScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
@@ -131,7 +129,6 @@ func (c *metricClient) PollWorkflowTaskQueue(
 	request *matchingservice.PollWorkflowTaskQueueRequest,
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
-
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientPollWorkflowTaskQueueScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
@@ -153,7 +150,6 @@ func (c *metricClient) QueryWorkflow(
 	request *matchingservice.QueryWorkflowRequest,
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.QueryWorkflowResponse, retError error) {
-
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientQueryWorkflowScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
@@ -191,7 +187,7 @@ func (c *metricClient) emitForwardedSourceStats(
 func (c *metricClient) startMetricsRecording(
 	metricScope int,
 ) (metrics.Scope, metrics.Stopwatch) {
-	scope := c.metricsClient.Scope(metricScope)
+	scope := c.metricsHandler.Scope(metricScope)
 	scope.IncCounter(metrics.ClientRequests)
 	stopwatch := scope.StartTimer(metrics.ClientLatency)
 	return scope, stopwatch

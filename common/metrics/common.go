@@ -78,21 +78,21 @@ func GetMetricsServiceIdx(serviceName string, logger log.Logger) ServiceIdx {
 }
 
 // GetMetricsServiceIdx returns service id corresponding to serviceName
-func MetricsServiceIdxToServiceName(serviceIdx ServiceIdx) (string, error) {
+func MetricsServiceIdxToServiceName(serviceIdx ServiceIdx) string {
 	switch serviceIdx {
 	case Server:
-		return primitives.ServerService, nil
+		return primitives.ServerService
 	case Frontend:
-		return primitives.FrontendService, nil
+		return primitives.FrontendService
 	case History:
-		return primitives.HistoryService, nil
+		return primitives.HistoryService
 	case Matching:
-		return primitives.MatchingService, nil
+		return primitives.MatchingService
 	case Worker:
-		return primitives.WorkerService, nil
+		return primitives.WorkerService
 	case UnitTestService:
-		return primitives.UnitTestService, nil
+		return primitives.UnitTestService
 	default:
-		return "", fmt.Errorf(fmt.Sprintf("Unknown service idx for metrics: %d", serviceIdx))
+		return primitives.ServiceUnknown
 	}
 }

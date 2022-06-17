@@ -31,6 +31,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -76,7 +77,7 @@ func TestScavengerTestSuite(t *testing.T) {
 
 func (s *ScavengerTestSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
-	s.metric = metrics.NoopClient
+	s.metric = metrics.NoopMetricsHandler
 	s.numShards = 512
 }
 

@@ -29,6 +29,8 @@ import (
 	"fmt"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -36,7 +38,6 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"golang.org/x/time/rate"
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
@@ -244,7 +245,7 @@ func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetai
 			startOver = false
 		} else {
 			batcher := ctx.Value(batcherContextKey).(*Batcher)
-			batcher.metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
+			batcher.metricsHandler.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
 			logger.Error("Failed to recover from last heartbeat, start over from beginning", tag.Error(err))
 		}
 	}
@@ -362,7 +363,7 @@ func startTaskProcessor(
 					})
 			}
 			if err != nil {
-				batcher.metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
+				batcher.metricsHandler.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
 
 				_, ok := batchParams._nonRetryableErrors[err.Error()]
@@ -374,7 +375,7 @@ func startTaskProcessor(
 					taskCh <- task
 				}
 			} else {
-				batcher.metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorSuccess)
+				batcher.metricsHandler.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorSuccess)
 				respCh <- nil
 			}
 		}

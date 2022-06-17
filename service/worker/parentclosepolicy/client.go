@@ -48,7 +48,7 @@ type (
 	}
 
 	clientImpl struct {
-		metricsClient    metrics.Client
+		metricsHandler   metrics.MetricsHandler
 		logger           log.Logger
 		sdkClientFactory sdk.ClientFactory
 		numWorkflows     int
@@ -66,13 +66,13 @@ const (
 
 // NewClient creates a new Client
 func NewClient(
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
 	numWorkflows int,
 ) Client {
 	return &clientImpl{
-		metricsClient:    metricsClient,
+		metricsHandler:   metricsHandler,
 		logger:           logger,
 		sdkClientFactory: sdkClientFactory,
 		numWorkflows:     numWorkflows,

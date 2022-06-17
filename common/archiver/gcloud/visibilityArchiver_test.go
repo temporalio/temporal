@@ -33,6 +33,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/searchattribute"
@@ -55,8 +56,8 @@ func (s *visibilityArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger:        log.NewNoopLogger(),
-		MetricsClient: metrics.NoopClient,
+		Logger:         log.NewNoopLogger(),
+		MetricsHandler: metrics.NoopMetricsHandler,
 	}
 	s.expectedVisibilityRecords = []*archiverspb.VisibilityRecord{
 		{
@@ -284,7 +285,6 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
-
 	pageSize := 2
 	ctx := context.Background()
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")

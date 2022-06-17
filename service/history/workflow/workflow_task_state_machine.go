@@ -74,7 +74,6 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
 	scheduledTime *time.Time,
 	originalScheduledTimestamp *time.Time,
 ) (*WorkflowTaskInfo, error) {
-
 	// set workflow state to running, since workflow task is scheduled
 	// NOTE: for zombie workflow, should not change the state
 	state, _ := m.ms.GetWorkflowStateStatus()
@@ -767,7 +766,7 @@ func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
 	attempt int32,
 ) {
 	namespaceName := m.ms.GetNamespaceEntry().Name().String()
-	m.ms.metricsClient.Scope(
+	m.ms.metricsHandler.Scope(
 		metrics.WorkflowContextScope,
 		metrics.NamespaceTag(namespaceName),
 	).RecordDistribution(metrics.WorkflowTaskAttempt, int(attempt))

@@ -32,6 +32,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
@@ -74,7 +75,7 @@ func (s *registrySuite) SetupTest() {
 		s.regPersistence,
 		true,
 		dynamicconfig.GetDurationPropertyFn(time.Second),
-		metrics.NoopClient,
+		metrics.NoopMetricsHandler,
 		log.NewTestLogger())
 }
 
@@ -91,12 +92,14 @@ func (s *registrySuite) TestListNamespace() {
 				Id:    namespace.NewID().String(),
 				Name:  "some random namespace name",
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
-				Data:  make(map[string]string)},
+				Data:  make(map[string]string),
+			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
+				},
+			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -117,12 +120,14 @@ func (s *registrySuite) TestListNamespace() {
 				Id:    namespace.NewID().String(),
 				Name:  "another random namespace name",
 				State: enumspb.NAMESPACE_STATE_DELETED, // Still must be included.
-				Data:  make(map[string]string)},
+				Data:  make(map[string]string),
+			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
+				},
+			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []string{
@@ -143,12 +148,14 @@ func (s *registrySuite) TestListNamespace() {
 				Id:    namespace.NewID().String(),
 				Name:  "yet another random namespace name",
 				State: enumspb.NAMESPACE_STATE_DEPRECATED, // Still must be included.
-				Data:  make(map[string]string)},
+				Data:  make(map[string]string),
+			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(3),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
+				},
+			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []string{
@@ -186,7 +193,8 @@ func (s *registrySuite) TestListNamespace() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces: []*persistence.GetNamespaceResponse{
 			namespaceRecord2,
-			namespaceRecord3},
+			namespaceRecord3,
+		},
 		NextPageToken: nil,
 	}, nil)
 
@@ -216,12 +224,14 @@ func (s *registrySuite) TestRegisterCallback_CatchUp() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: "some random namespace name",
-				Data: make(map[string]string)},
+				Data: make(map[string]string),
+			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
+				},
+			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -243,12 +253,14 @@ func (s *registrySuite) TestRegisterCallback_CatchUp() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: "another random namespace name",
-				Data: make(map[string]string)},
+				Data: make(map[string]string),
+			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
+				},
+			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []string{
@@ -276,7 +288,8 @@ func (s *registrySuite) TestRegisterCallback_CatchUp() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces: []*persistence.GetNamespaceResponse{
 			namespaceRecord1,
-			namespaceRecord2},
+			namespaceRecord2,
+		},
 		NextPageToken: nil,
 	}, nil)
 
@@ -315,12 +328,14 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: "some random namespace name",
-				Data: make(map[string]string)},
+				Data: make(map[string]string),
+			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
+				},
+			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -342,12 +357,14 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: "another random namespace name",
-				Data: make(map[string]string)},
+				Data: make(map[string]string),
+			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
+				},
+			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []string{
@@ -406,7 +423,8 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:          namespaceRecord1Old.Namespace.Info.Id,
 				Name:        namespaceRecord1Old.Namespace.Info.Name,
-				Description: "updated description", Data: make(map[string]string)},
+				Description: "updated description", Data: make(map[string]string),
+			},
 			Config: namespaceRecord2Old.Namespace.Config,
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
@@ -455,7 +473,8 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces: []*persistence.GetNamespaceResponse{
 			namespaceRecord1New,
-			namespaceRecord2New},
+			namespaceRecord2New,
+		},
 		NextPageToken: nil,
 	}, nil)
 
@@ -484,7 +503,8 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
+				},
+			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -548,12 +568,14 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: "some random namespace name",
-				Data: make(map[string]string)},
+				Data: make(map[string]string),
+			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
+				},
+			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
 				Clusters: []string{
@@ -574,12 +596,14 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 			Info: &persistencespb.NamespaceInfo{
 				Id:   namespace.NewID().String(),
 				Name: "another random namespace name",
-				Data: make(map[string]string)},
+				Data: make(map[string]string),
+			},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
 					Binaries: map[string]*namespacepb.BadBinaryInfo{},
-				}},
+				},
+			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestAlternativeClusterName,
 				Clusters: []string{
@@ -606,7 +630,8 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces: []*persistence.GetNamespaceResponse{
 			namespaceRecord1,
-			namespaceRecord2},
+			namespaceRecord2,
+		},
 		NextPageToken: nil,
 	}, nil)
 
@@ -625,7 +650,8 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces: []*persistence.GetNamespaceResponse{
 			// namespaceRecord1 is removed
-			namespaceRecord2},
+			namespaceRecord2,
+		},
 		NextPageToken: nil,
 	}, nil)
 
@@ -660,7 +686,7 @@ func TestCacheByName(t *testing.T) {
 		Namespaces: []*persistence.GetNamespaceResponse{&nsrec},
 	}, nil)
 	reg := namespace.NewRegistry(
-		regPersist, false, dynamicconfig.GetDurationPropertyFn(time.Second), metrics.NoopClient, log.NewNoopLogger())
+		regPersist, false, dynamicconfig.GetDurationPropertyFn(time.Second), metrics.NoopMetricsHandler, log.NewNoopLogger())
 	reg.Start()
 	defer reg.Stop()
 	ns, err := reg.GetNamespace(namespace.Name("foo"))

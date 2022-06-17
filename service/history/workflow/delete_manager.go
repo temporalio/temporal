@@ -60,7 +60,7 @@ type (
 		shard          shard.Context
 		historyCache   Cache
 		config         *configs.Config
-		metricsClient  metrics.Client
+		metricsHandler metrics.MetricsHandler
 		archivalClient archiver.Client
 		timeSource     clock.TimeSource
 	}
@@ -78,7 +78,7 @@ func NewDeleteManager(
 	deleteManager := &DeleteManagerImpl{
 		shard:          shard,
 		historyCache:   cache,
-		metricsClient:  shard.GetMetricsClient(),
+		metricsHandler: shard.GetMetricsClient(),
 		config:         config,
 		archivalClient: archiverClient,
 		timeSource:     timeSource,
@@ -95,7 +95,6 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	transferQueueAckLevel int64,
 	visibilityQueueAckLevel int64,
 ) error {
-
 	// In active cluster, create `DeleteWorkflowExecutionTask` only if workflow is closed successfully
 	// and all pending transfer and visibility tasks are completed.
 	// This check is required to avoid race condition between close and delete tasks.
@@ -143,7 +142,6 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	ms MutableState,
 	forceDeleteFromOpenVisibility bool,
 ) error {
-
 	return m.deleteWorkflowExecutionInternal(
 		ctx,
 		nsID,
@@ -152,7 +150,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 		ms,
 		false,
 		forceDeleteFromOpenVisibility,
-		m.metricsClient.Scope(metrics.HistoryDeleteWorkflowExecutionScope),
+		m.metricsHandler.Scope(metrics.HistoryDeleteWorkflowExecutionScope),
 	)
 }
 
@@ -163,7 +161,6 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	weCtx Context,
 	ms MutableState,
 ) error {
-
 	return m.deleteWorkflowExecutionInternal(
 		ctx,
 		nsID,
@@ -172,7 +169,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 		ms,
 		true,  // When retention is fired, archive workflow execution.
 		false, // When retention is fired, workflow execution is always closed.
-		m.metricsClient.Scope(metrics.HistoryProcessDeleteHistoryEventScope),
+		m.metricsHandler.Scope(metrics.HistoryProcessDeleteHistoryEventScope),
 	)
 }
 
@@ -186,7 +183,6 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	forceDeleteFromOpenVisibility bool,
 	scope metrics.Scope,
 ) error {
-
 	currentBranchToken, err := ms.GetCurrentBranchToken()
 	if err != nil {
 		return err
@@ -258,7 +254,6 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	ms MutableState,
 	scope metrics.Scope,
 ) (bool, error) {
-
 	namespaceRegistryEntry := ms.GetNamespaceEntry()
 
 	clusterConfiguredForHistoryArchival := m.shard.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()

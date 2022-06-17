@@ -25,9 +25,10 @@
 package deletenamespace
 
 import (
+	"go.uber.org/fx"
+
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/log"
@@ -45,7 +46,7 @@ type (
 		visibilityManager manager.VisibilityManager
 		metadataManager   persistence.MetadataManager
 		historyClient     historyservice.HistoryServiceClient
-		metricsClient     metrics.Client
+		metricsHandler    metrics.MetricsHandler
 		logger            log.Logger
 	}
 
@@ -63,7 +64,7 @@ func newComponent(
 	visibilityManager manager.VisibilityManager,
 	metadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) component {
 	return component{
@@ -71,9 +72,10 @@ func newComponent(
 			visibilityManager: visibilityManager,
 			metadataManager:   metadataManager,
 			historyClient:     historyClient,
-			metricsClient:     metricsClient,
+			metricsHandler:    metricsHandler,
 			logger:            logger,
-		}}
+		},
+	}
 }
 
 func (wc *deleteNamespaceComponent) Register(worker sdkworker.Worker) {
@@ -93,13 +95,13 @@ func (wc *deleteNamespaceComponent) DedicatedWorkerOptions() *workercommon.Dedic
 }
 
 func (wc *deleteNamespaceComponent) deleteNamespaceActivities() *activities {
-	return NewActivities(wc.metadataManager, wc.metricsClient, wc.logger)
+	return NewActivities(wc.metadataManager, wc.metricsHandler, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) reclaimResourcesActivities() *reclaimresources.Activities {
-	return reclaimresources.NewActivities(wc.visibilityManager, wc.metadataManager, wc.metricsClient, wc.logger)
+	return reclaimresources.NewActivities(wc.visibilityManager, wc.metadataManager, wc.metricsHandler, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) deleteExecutionsActivities() *deleteexecutions.Activities {
-	return deleteexecutions.NewActivities(wc.visibilityManager, wc.historyClient, wc.metricsClient, wc.logger)
+	return deleteexecutions.NewActivities(wc.visibilityManager, wc.historyClient, wc.metricsHandler, wc.logger)
 }

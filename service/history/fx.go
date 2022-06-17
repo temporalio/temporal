@@ -120,7 +120,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		persistenceShardManager:       args.PersistenceShardManager,
 		persistenceVisibilityManager:  args.PersistenceVisibilityManager,
 		historyServiceResolver:        args.HistoryServiceResolver,
-		metricsClient:                 args.MetricsClient,
+		metricsHandler:                args.MetricsClient,
 		payloadSerializer:             args.PayloadSerializer,
 		timeSource:                    args.TimeSource,
 		namespaceRegistry:             args.NamespaceRegistry,
@@ -166,11 +166,11 @@ func ThrottledLoggerRpsFnProvider(serviceConfig *configs.Config) resource.Thrott
 func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
-		metricsClient,
+		metricsHandler,
 		metrics.HistoryAPIMetricsScopes(),
 		logger,
 	)
@@ -206,7 +206,7 @@ func PersistenceMaxQpsProvider(
 
 func VisibilityManagerProvider(
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	persistenceConfig *config.Persistence,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	serviceConfig *configs.Config,
@@ -233,19 +233,19 @@ func VisibilityManagerProvider(
 		serviceConfig.AdvancedVisibilityWritingMode,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
 		serviceConfig.EnableWriteToSecondaryAdvancedVisibility,
-		metricsClient,
+		metricsHandler,
 		logger,
 	)
 }
 
 func EventNotifierProvider(
 	timeSource clock.TimeSource,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	config *configs.Config,
 ) events.Notifier {
 	return events.NewNotifier(
 		timeSource,
-		metricsClient,
+		metricsHandler,
 		config.GetShardID,
 	)
 }
@@ -254,11 +254,11 @@ func ArchivalClientProvider(
 	archiverProvider provider.ArchiverProvider,
 	sdkClientFactory sdk.ClientFactory,
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	config *configs.Config,
 ) warchiver.Client {
 	return warchiver.NewClient(
-		metricsClient,
+		metricsHandler,
 		logger,
 		sdkClientFactory,
 		config.NumArchiveSystemWorkflows,

@@ -25,9 +25,10 @@
 package addsearchattributes
 
 import (
+	"go.uber.org/fx"
+
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -44,10 +45,10 @@ type (
 
 	initParams struct {
 		fx.In
-		EsClient      esclient.Client
-		Manager       searchattribute.Manager
-		MetricsClient metrics.Client
-		Logger        log.Logger
+		EsClient       esclient.Client
+		Manager        searchattribute.Manager
+		MetricsHandler metrics.MetricsHandler
+		Logger         log.Logger
 	}
 
 	fxResult struct {
@@ -81,9 +82,9 @@ func (wc *addSearchAttributes) DedicatedWorkerOptions() *workercommon.DedicatedW
 
 func (wc *addSearchAttributes) activities() *activities {
 	return &activities{
-		esClient:      wc.EsClient,
-		saManager:     wc.Manager,
-		metricsClient: wc.MetricsClient,
-		logger:        wc.Logger,
+		esClient:       wc.EsClient,
+		saManager:      wc.Manager,
+		metricsHandler: wc.MetricsClient,
+		logger:         wc.Logger,
 	}
 }

@@ -25,10 +25,11 @@
 package migration
 
 import (
+	"go.uber.org/fx"
+
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
@@ -48,7 +49,7 @@ type (
 		HistoryClient     historyservice.HistoryServiceClient
 		FrontendClient    workflowservice.WorkflowServiceClient
 		Logger            log.Logger
-		MetricsClient     metrics.Client
+		MetricsHandler    metrics.MetricsHandler
 	}
 
 	fxResult struct {
@@ -93,6 +94,6 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		historyClient:     wc.HistoryClient,
 		frontendClient:    wc.FrontendClient,
 		logger:            wc.Logger,
-		metricsClient:     wc.MetricsClient,
+		metricsHandler:    wc.MetricsClient,
 	}
 }

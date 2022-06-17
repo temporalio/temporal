@@ -52,7 +52,7 @@ type clientSuite struct {
 	archiverProvider   *provider.MockArchiverProvider
 	historyArchiver    *carchiver.MockHistoryArchiver
 	visibilityArchiver *carchiver.MockVisibilityArchiver
-	metricsClient      *metrics.MockClient
+	metricsHandler     *metrics.MockClient
 	metricsScope       *metrics.MockScope
 	sdkClientFactory   *sdk.MockClientFactory
 	sdkClient          *mocksdk.MockClient
@@ -70,14 +70,14 @@ func (s *clientSuite) SetupTest() {
 	s.archiverProvider = provider.NewMockArchiverProvider(s.controller)
 	s.historyArchiver = carchiver.NewMockHistoryArchiver(s.controller)
 	s.visibilityArchiver = carchiver.NewMockVisibilityArchiver(s.controller)
-	s.metricsClient = metrics.NewMockClient(s.controller)
+	s.metricsHandler = metrics.NewMockClient(s.controller)
 	s.metricsScope = metrics.NewMockScope(s.controller)
 	s.metricsClient.EXPECT().Scope(metrics.ArchiverClientScope, gomock.Any()).Return(s.metricsScope)
 	s.sdkClient = mocksdk.NewMockClient(s.controller)
 	s.sdkClientFactory = sdk.NewMockClientFactory(s.controller)
 	s.sdkClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(s.sdkClient).AnyTimes()
 	s.client = NewClient(
-		s.metricsClient,
+		s.metricsHandler,
 		log.NewNoopLogger(),
 		s.sdkClientFactory,
 		dynamicconfig.GetIntPropertyFn(1000),

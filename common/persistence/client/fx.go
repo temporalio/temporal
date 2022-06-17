@@ -47,7 +47,7 @@ type (
 		Cfg               *config.Persistence
 		PersistenceMaxQPS PersistenceMaxQps
 		ClusterName       ClusterName
-		MetricsClient     metrics.Client
+		MetricsHandler    metrics.MetricsHandler
 		Logger            log.Logger
 	}
 
@@ -79,7 +79,7 @@ func FactoryProvider(
 		ratelimiter,
 		serialization.NewSerializer(),
 		string(params.ClusterName),
-		params.MetricsClient,
+		params.MetricsHandler,
 		params.Logger,
 	)
 }
