@@ -254,7 +254,7 @@ var (
 // only one of them will be used for reporting.
 //
 // Current priority order is:
-// m3 > statsd > prometheus
+// statsd > prometheus
 func NewScope(logger log.Logger, c *Config) tally.Scope {
 	if c.Statsd != nil {
 		return newStatsdScope(logger, c)
@@ -386,31 +386,19 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) MetricsHandler {
 	}
 
 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
-	if c.Prometheus != nil {
-		switch c.Prometheus.Framework {
-		case FrameworkOpentelemetry:
-			otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
-			if err != nil {
-				logger.Fatal(err.Error())
-			}
 
-			return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
-		case FrameworkTally:
-		default:
-			return NewTallyMetricsHandler(
-				c.ClientConfig,
-				newPrometheusScope(
-					logger,
-					convertPrometheusConfigToTally(c.Prometheus),
-					&c.ClientConfig,
-				),
-			)
+	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
+		otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
+		if err != nil {
+			logger.Fatal(err.Error())
 		}
+
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
 	}
 
 	return NewTallyMetricsHandler(
 		c.ClientConfig,
-		newStatsdScope(logger, c),
+		NewScope(logger, c),
 	)
 }
 
