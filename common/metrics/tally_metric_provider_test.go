@@ -44,6 +44,12 @@ func TestTallyScope(t *testing.T) {
 	assert.EqualValues(t, 8, counters["test.hits+"].Value())
 	assert.EqualValues(t, map[string]string{}, counters["test.hits+"].Tags())
 
+	assert.EqualValues(t, 11, counters["test.hits-tagged+taskqueue=__sticky__"].Value())
+	assert.EqualValues(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
+
+	assert.EqualValues(t, 14, counters["test.hits-tagged-excluded+taskqueue="+tagExcludedValue].Value())
+	assert.EqualValues(t, map[string]string{"taskqueue": tagExcludedValue}, counters["test.hits-tagged-excluded+taskqueue="+tagExcludedValue].Tags())
+
 	assert.EqualValues(t, float64(-100), gauges["test.temp+location=Mare Imbrium"].Value())
 	assert.EqualValues(t, map[string]string{
 		"location": "Mare Imbrium",
@@ -69,10 +75,14 @@ func recordTallyMetrics(mp MetricsHandler) {
 	g := mp.Gauge("temp")
 	d := mp.Timer("latency")
 	h := mp.Histogram("transmission", Bytes)
+	t := mp.Counter("hits-tagged")
+	e := mp.Counter("hits-tagged-excluded")
 
 	c.Record(8)
 	g.Record(-100, StringTag("location", "Mare Imbrium"))
 	d.Record(1248 * time.Millisecond)
 	d.Record(1255 * time.Millisecond)
 	h.Record(1234567)
+	t.Record(11, TaskQueueTag("__sticky__"))
+	e.Record(14, TaskQueueTag("filtered"))
 }

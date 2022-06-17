@@ -55,7 +55,7 @@ type (
 		// Tags is the set of key-value pairs to be reported as part of every metric
 		Tags map[string]string `yaml:"tags"`
 		// IgnoreTags is a map from tag name string to tag values string list.
-		// Each value present in keys will have relevant tag value replaced with "__disabled__"
+		// Each value present in keys will have relevant tag value replaced with "_tag_excluded_"
 		// Each value in values list will white-list tag values to be reported as usual.
 		ExcludeTags map[string][]string `yaml:"excludeTags"`
 		// Prefix sets the prefix to all outgoing metrics
@@ -245,13 +245,6 @@ var (
 			8388608,
 			16777216,
 		},
-	}
-
-	defaultConfig = ClientConfig{
-		Tags:                       nil,
-		ExcludeTags:                map[string][]string{},
-		Prefix:                     "",
-		PerUnitHistogramBoundaries: map[string][]float64{Dimensionless: {0, 10, 100}, Bytes: {1024, 2048}},
 	}
 )
 

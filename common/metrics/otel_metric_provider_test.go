@@ -73,6 +73,32 @@ func TestMeter(t *testing.T) {
 			NumberKind:             number.Int64Kind,
 		},
 		{
+			InstrumentName: "hits-tagged",
+			Sum:            number.NewInt64Number(11),
+			Attributes: []attribute.KeyValue{
+				{
+					Key:   attribute.Key("taskqueue"),
+					Value: attribute.StringValue("__sticky__"),
+				},
+			},
+			InstrumentationLibrary: lib,
+			AggregationKind:        aggregation.SumKind,
+			NumberKind:             number.Int64Kind,
+		},
+		{
+			InstrumentName: "hits-tagged-excluded",
+			Sum:            number.NewInt64Number(14),
+			Attributes: []attribute.KeyValue{
+				{
+					Key:   attribute.Key("taskqueue"),
+					Value: attribute.StringValue(tagExcludedValue),
+				},
+			},
+			InstrumentationLibrary: lib,
+			AggregationKind:        aggregation.SumKind,
+			NumberKind:             number.Int64Kind,
+		},
+		{
 			InstrumentName:         "latency",
 			Sum:                    number.NewInt64Number(int64(2503 * time.Millisecond)),
 			Count:                  2,
@@ -125,10 +151,14 @@ func recordMetrics(mp MetricsHandler) {
 	g := mp.Gauge("temp")
 	d := mp.Timer("latency")
 	h := mp.Histogram("transmission", Bytes)
+	t := mp.Counter("hits-tagged")
+	e := mp.Counter("hits-tagged-excluded")
 
 	c.Record(8)
 	g.Record(-100, StringTag("location", "Mare Imbrium"))
 	d.Record(1248 * time.Millisecond)
 	d.Record(1255 * time.Millisecond)
 	h.Record(1234567)
+	t.Record(11, TaskQueueTag("__sticky__"))
+	e.Record(14, TaskQueueTag("filtered"))
 }
