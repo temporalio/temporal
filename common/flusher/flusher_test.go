@@ -67,7 +67,7 @@ func (fs *flusherSuite) SetupTest() {
 	fs.ctx = context.Background()
 	shutdownChan := channel.NewShutdownOnce()
 	logger := log.NewTestLogger()
-	writer := NewItemWriterImpl[int](logger)
+	writer := NewItemWriter[int](logger)
 	fs.capacity = 200
 	bufferQueueSize := 2
 	flushDuration := 100

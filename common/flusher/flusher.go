@@ -33,24 +33,27 @@ package flusher
 
 import (
 	"fmt"
+	"sync"
+	"time"
+
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"sync"
-	"time"
 )
 
 type (
 	Flusher[T any] struct {
-		flushDuration     int
-		bufferCount       int
-		bufferCapacity    int
-		flushNotifierChan chan struct{}
-		logger            log.Logger
-		shutdownChan      channel.ShutdownOnce
-		writer            *itemWriterImpl[T]
+		flushDuration      int
+		bufferCount        int
+		bufferCapacity     int
+		bufferNearCapacity int
+		flushNotifierChan  chan struct{}
+		logger             log.Logger
+		shutdownChan       channel.ShutdownOnce
+		writer             *ItemWriter[T]
 
 		sync.Mutex
 		flushTimer       *time.Timer
@@ -63,13 +66,15 @@ type (
 		fut  *future.FutureImpl[struct{}]
 	}
 	ItemWriter[T any] interface {
-		Write(item ...T) error
+		Write(flushItem ...FlushItem[T]) error
 	}
 	itemWriterImpl[T any] struct {
 		logger log.Logger
 		sync.Mutex
 	}
 )
+
+var _ ItemWriter = (*itemWriterImpl)(nil)
 
 const (
 	bufferCapacityGapPercent = 0.9
@@ -79,34 +84,33 @@ func NewFlusher[T any](
 	bufferCount int,
 	bufferCapacity int,
 	flushDuration int,
-	writer *itemWriterImpl[T],
+	writer *ItemWriter[T],
 	logger log.Logger,
 	shutdownChan channel.ShutdownOnce,
 ) *Flusher[T] {
 	return &Flusher[T]{
-		flushDuration:     flushDuration,  // time waited after first item insertion before flushing the buffer
-		bufferCount:       bufferCount,    // no of total flush buffers
-		bufferCapacity:    bufferCapacity, // buffer size, will flush a buffer once no of items added to the buffer nears this limit
-		flushTimer:        nil,
-		flushNotifierChan: make(chan struct{}, 1),
-		writer:            writer,
-		flushItemsBuffer:  make([]FlushItem[T], 0, bufferCapacity),
-		fullBufferChan:    make(chan []FlushItem[T], bufferCount),
-		freeBufferChan:    make(chan []FlushItem[T], bufferCount),
-		logger:            logger,
-		shutdownChan:      shutdownChan,
+		flushDuration:      flushDuration,                                           // time waited after first item insertion before flushing the buffer
+		bufferCount:        bufferCount,                                             // no of total flush buffers
+		bufferCapacity:     bufferCapacity,                                          // buffer size, will flush a buffer once no of items added to the buffer nears this limit
+		bufferNearCapacity: int(bufferCapacityGapPercent * float64(bufferCapacity)), // ^ will flush buffer once buffer size hits this number
+		flushTimer:         nil,
+		flushNotifierChan:  make(chan struct{}, 1),
+		writer:             writer,
+		flushItemsBuffer:   make([]FlushItem[T], 0, bufferCapacity),
+		fullBufferChan:     make(chan []FlushItem[T], bufferCount),
+		freeBufferChan:     make(chan []FlushItem[T], bufferCount),
+		logger:             logger,
+		shutdownChan:       shutdownChan,
 	}
 }
 
-func NewItemWriterImpl[T any](logger log.Logger) *itemWriterImpl[T] {
+func NewItemWriter[T any](logger log.Logger) *itemWriterImpl[T] {
 	return &itemWriterImpl[T]{
 		logger: logger,
 	}
 }
 
 func (iwi *itemWriterImpl[T]) Write(flushItem ...FlushItem[T]) error {
-	iwi.Lock()
-	defer iwi.Unlock()
 	return nil
 }
 
@@ -230,8 +234,7 @@ func (f *Flusher[T]) flushBuffer(flushBuffer []FlushItem[T]) {
 }
 
 func (f *Flusher[T]) isBufferCloseToFullLocked(flushBuffer []FlushItem[T]) bool {
-	bufferCap := int(bufferCapacityGapPercent * float64(cap(flushBuffer)))
-	return len(flushBuffer) >= bufferCap
+	return len(flushBuffer) >= f.bufferNearCapacity
 }
 
 func (f *Flusher[T]) stopFlushTimer() {
