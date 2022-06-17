@@ -49,15 +49,15 @@ const (
 type (
 	taskQueueDB struct {
 		sync.Mutex
-		namespaceID   namespace.ID
-		taskQueueName string
-		taskQueueKind enumspb.TaskQueueKind
-		taskType      enumspb.TaskQueueType
-		rangeID       int64
-		ackLevel      int64
-		versioningDat *persistencespb.VersioningData
-		store         persistence.TaskManager
-		logger        log.Logger
+		namespaceID    namespace.ID
+		taskQueueName  string
+		taskQueueKind  enumspb.TaskQueueKind
+		taskType       enumspb.TaskQueueType
+		rangeID        int64
+		ackLevel       int64
+		versioningData *persistencespb.VersioningData
+		store          persistence.TaskManager
+		logger         log.Logger
 	}
 	taskQueueState struct {
 		rangeID  int64
@@ -282,8 +282,8 @@ func (db *taskQueueDB) GetVersioningData(
 	db.Lock()
 	defer db.Unlock()
 
-	if db.versioningDat != nil {
-		return db.versioningDat, nil
+	if db.versioningData != nil {
+		return db.versioningData, nil
 	}
 
 	tqInfo, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
@@ -294,7 +294,7 @@ func (db *taskQueueDB) GetVersioningData(
 	if err != nil {
 		return nil, err
 	}
-	db.versioningDat = tqInfo.TaskQueueInfo.GetVersioningData()
+	db.versioningData = tqInfo.TaskQueueInfo.GetVersioningData()
 
 	return tqInfo.TaskQueueInfo.GetVersioningData(), nil
 }
@@ -316,7 +316,6 @@ func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*p
 	if err := mutator(verDat); err != nil {
 		return err
 	}
-	db.versioningDat = verDat
 
 	queueInfo := db.cachedQueueInfo()
 	queueInfo.VersioningData = verDat
@@ -326,6 +325,7 @@ func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*p
 		TaskQueueInfo: queueInfo,
 		PrevRangeID:   db.rangeID,
 	})
+	db.versioningData = verDat
 	return err
 }
 
@@ -347,7 +347,7 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		TaskType:       db.taskType,
 		Kind:           db.taskQueueKind,
 		AckLevel:       db.ackLevel,
-		VersioningData: db.versioningDat,
+		VersioningData: db.versioningData,
 		ExpiryTime:     db.expiryTime(),
 		LastUpdateTime: timestamp.TimeNowPtrUtc(),
 	}

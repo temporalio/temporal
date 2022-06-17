@@ -61,94 +61,114 @@ func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *wor
 	}
 }
 
+// Given an existing graph and an update request, update the graph appropriately.
+//
+// See the API docs for more detail. In short, the graph looks like one long line of default versions, each of which
+// is incompatible with the previous, optionally with branching compatibility branches. Like so:
+//
+// ─┬─1.0───2.0─┬─3.0───4.0
+//  │           ├─3.1
+//  │           └─3.2
+//  ├─1.1
+//  ├─1.2
+//  └─1.3
+//
+// In the above graph, 4.0 is the current default, and [1.3, 3.2] is the set of current compatible leaves. Links
+// going left are incompatible relationships, and links going up are compatible relationships.
+//
+// A request may:
+// 1. Add a new version to the graph, as a default version
+// 2. Add a new version to the graph, compatible with some existing version.
+// 3. Add a new version to the graph, compatible with some existing version and as the new default.
+// 4. Unset a version as a default. It will be dropped and its previous incompatible version becomes default.
+// 5. Unset a version as a compatible. It will be dropped and its previous compatible version will become the new
+//    compatible leaf for that branch.
 func UpdateVersionsGraph(
 	existingData *persistence.VersioningData,
 	req *workflowservice.UpdateWorkerBuildIdOrderingRequest,
 ) error {
-	if req.GetVersionId().GetWorkerBuildId() != "" {
-		// If the version is to become the new default, add it to the list of current defaults, possibly replacing
-		// the currently set one.
-		if req.GetBecomeDefault() {
-			curDefault := existingData.GetCurrentDefault()
-			if curDefault != nil {
-				// If the current default is going to be the previous compat version with the one we're adding,
-				// then we need to skip over it when setting the previous *incompatible* version.
-				if req.GetPreviousCompatible().GetWorkerBuildId() == curDefault.GetVersion().GetWorkerBuildId() {
-					existingData.CurrentDefault = &taskqueuepb.VersionIdNode{
-						Version:              req.VersionId,
-						PreviousCompatible:   curDefault,
-						PreviousIncompatible: curDefault.PreviousIncompatible,
-					}
-				} else {
-					// Otherwise, set the previous incompatible version to the current default.
-					existingData.CurrentDefault = &taskqueuepb.VersionIdNode{
-						Version:              req.VersionId,
-						PreviousCompatible:   nil,
-						PreviousIncompatible: curDefault,
-					}
+	if req.GetVersionId().GetWorkerBuildId() == "" {
+		return serviceerror.NewInvalidArgument(
+			"request to update worker build id ordering is missing a valid version identifier")
+	}
+	// If the version is to become the new default, add it to the list of current defaults, possibly replacing
+	// the currently set one.
+	if req.GetBecomeDefault() {
+		curDefault := existingData.GetCurrentDefault()
+		if curDefault != nil {
+			// If the current default is going to be the previous compat version with the one we're adding,
+			// then we need to skip over it when setting the previous *incompatible* version.
+			if req.GetPreviousCompatible().GetWorkerBuildId() == curDefault.GetVersion().GetWorkerBuildId() {
+				existingData.CurrentDefault = &taskqueuepb.VersionIdNode{
+					Version:              req.VersionId,
+					PreviousCompatible:   curDefault,
+					PreviousIncompatible: curDefault.PreviousIncompatible,
 				}
 			} else {
-				if req.GetPreviousCompatible() != nil {
-					return serviceerror.NewInvalidArgument("adding a new default version which is compatible " +
-						" with some previous version, when there is no existing default version, is not allowed." +
-						" There must be a default version before this operation makes sense")
-				}
-				newNode := &taskqueuepb.VersionIdNode{
+				// Otherwise, set the previous incompatible version to the current default.
+				existingData.CurrentDefault = &taskqueuepb.VersionIdNode{
 					Version:              req.VersionId,
 					PreviousCompatible:   nil,
-					PreviousIncompatible: nil,
+					PreviousIncompatible: curDefault,
 				}
-				existingData.CurrentDefault = newNode
 			}
 		} else {
 			if req.GetPreviousCompatible() != nil {
-				prevCompat, indexInCompatLeaves := findCompatibleNode(existingData, req.GetPreviousCompatible())
-				if prevCompat != nil {
-					newNode := &taskqueuepb.VersionIdNode{
-						Version:              req.VersionId,
-						PreviousCompatible:   prevCompat,
-						PreviousIncompatible: nil,
-					}
-					if indexInCompatLeaves >= 0 {
-						existingData.CompatibleLeaves[indexInCompatLeaves] = newNode
-					} else {
-						existingData.CompatibleLeaves = append(existingData.CompatibleLeaves, newNode)
-					}
-				} else {
-					return serviceerror.NewNotFound(
-						fmt.Sprintf("previous compatible version %v not found", req.GetPreviousCompatible()))
-				}
-			} else {
-				// Check if the version is already a default, and remove it from being one if it is.
-				curDefault := existingData.GetCurrentDefault()
-				if curDefault.GetVersion().Equal(req.GetVersionId()) {
-					existingData.CurrentDefault = nil
-					if curDefault.GetPreviousCompatible() != nil {
-						existingData.CurrentDefault = curDefault.GetPreviousCompatible()
-					} else if curDefault.GetPreviousIncompatible() != nil {
-						existingData.CurrentDefault = curDefault.GetPreviousIncompatible()
-					}
-					return nil
-				}
-				// Check if it's a compatible leaf, and remove it from being one if it is.
-				for i, def := range existingData.GetCompatibleLeaves() {
-					if def.GetVersion().Equal(req.GetVersionId()) {
-						existingData.CompatibleLeaves =
-							append(existingData.CompatibleLeaves[:i], existingData.CompatibleLeaves[i+1:]...)
-						if def.GetPreviousCompatible() != nil {
-							existingData.CompatibleLeaves =
-								append(existingData.CompatibleLeaves, def.GetPreviousCompatible())
-						}
-						return nil
-					}
-				}
-				return serviceerror.NewInvalidArgument(
-					"requests to update build id ordering cannot create a new non-default version with no links")
+				return serviceerror.NewInvalidArgument("adding a new default version which is compatible " +
+					" with some previous version, when there is no existing default version, is not allowed." +
+					" There must be a default version before this operation makes sense")
+			}
+			existingData.CurrentDefault = &taskqueuepb.VersionIdNode{
+				Version:              req.VersionId,
+				PreviousCompatible:   nil,
+				PreviousIncompatible: nil,
 			}
 		}
 	} else {
-		return serviceerror.NewInvalidArgument(
-			"request to update worker build id ordering is missing a valid version identifier")
+		if req.GetPreviousCompatible() != nil {
+			prevCompat, indexInCompatLeaves := findCompatibleNode(existingData, req.GetPreviousCompatible())
+			if prevCompat != nil {
+				newNode := &taskqueuepb.VersionIdNode{
+					Version:              req.VersionId,
+					PreviousCompatible:   prevCompat,
+					PreviousIncompatible: nil,
+				}
+				if indexInCompatLeaves >= 0 {
+					existingData.CompatibleLeaves[indexInCompatLeaves] = newNode
+				} else {
+					existingData.CompatibleLeaves = append(existingData.CompatibleLeaves, newNode)
+				}
+			} else {
+				return serviceerror.NewNotFound(
+					fmt.Sprintf("previous compatible version %v not found", req.GetPreviousCompatible()))
+			}
+		} else {
+			// Check if the version is already a default, and remove it from being one if it is.
+			curDefault := existingData.GetCurrentDefault()
+			if curDefault.GetVersion().Equal(req.GetVersionId()) {
+				existingData.CurrentDefault = nil
+				if curDefault.GetPreviousCompatible() != nil {
+					existingData.CurrentDefault = curDefault.GetPreviousCompatible()
+				} else if curDefault.GetPreviousIncompatible() != nil {
+					existingData.CurrentDefault = curDefault.GetPreviousIncompatible()
+				}
+				return nil
+			}
+			// Check if it's a compatible leaf, and remove it from being one if it is.
+			for i, def := range existingData.GetCompatibleLeaves() {
+				if def.GetVersion().Equal(req.GetVersionId()) {
+					existingData.CompatibleLeaves =
+						append(existingData.CompatibleLeaves[:i], existingData.CompatibleLeaves[i+1:]...)
+					if def.GetPreviousCompatible() != nil {
+						existingData.CompatibleLeaves =
+							append(existingData.CompatibleLeaves, def.GetPreviousCompatible())
+					}
+					return nil
+				}
+			}
+			return serviceerror.NewInvalidArgument(
+				"requests to update build id ordering cannot create a new non-default version with no links")
+		}
 	}
 	return nil
 }
