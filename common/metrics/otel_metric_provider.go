@@ -122,7 +122,7 @@ func tagsToAttributes(t1 []Tag, t2 []Tag, e excludeTags) []attribute.KeyValue {
 
 	convert := func(tag Tag) attribute.KeyValue {
 		if vals, ok := e[tag.Key()]; ok {
-			if _, ok := vals[tag.Value()]; ok {
+			if _, ok := vals[tag.Value()]; !ok {
 				return attribute.String(tag.Key(), tagExcludedValue)
 			}
 		}

@@ -29,6 +29,17 @@ import (
 	"time"
 )
 
+var defaultConfig = ClientConfig{
+	Tags: nil,
+	ExcludeTags: map[string][]string{
+		"taskqueue":    {"__sticky__"},
+		"activityType": {},
+		"workflowType": {},
+	},
+	Prefix:                     "",
+	PerUnitHistogramBoundaries: map[string][]float64{Dimensionless: {0, 10, 100}, Bytes: {1024, 2048}},
+}
+
 func BenchmarkAllTheMetricsUserScope(b *testing.B) {
 	var emp MetricsHandler = NoopMetricsHandler.WithTags(OperationTag("everything-is-awesome-3"))
 	var us UserScope = newUserScope(emp, defaultConfig.Tags)

@@ -108,7 +108,7 @@ func tagsToMap(t1 []Tag, t2 []Tag, e excludeTags) map[string]string {
 
 	convert := func(tag Tag) {
 		if vals, ok := e[tag.Key()]; ok {
-			if _, ok := vals[tag.Value()]; ok {
+			if _, ok := vals[tag.Value()]; !ok {
 				m[tag.Key()] = tagExcludedValue
 				return
 			}
