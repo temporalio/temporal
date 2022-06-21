@@ -50,10 +50,10 @@ type (
 
 		GetQueryTermCh(string) (<-chan struct{}, error)
 		GetQueryInput(string) (*querypb.WorkflowQuery, error)
-		GetTerminationState(string) (*QueryTerminationState, error)
+		GetCompletionState(string) (*QueryCompletionState, error)
 
 		BufferQuery(queryInput *querypb.WorkflowQuery) (string, <-chan struct{})
-		SetTerminationState(string, *QueryTerminationState) error
+		SetCompletionState(string, *QueryCompletionState) error
 		RemoveQuery(id string)
 		Clear()
 	}
@@ -132,7 +132,7 @@ func (r *queryRegistryImpl) GetQueryTermCh(id string) (<-chan struct{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	return q.getQueryTermCh(), nil
+	return q.getCompletionCh(), nil
 }
 
 func (r *queryRegistryImpl) GetQueryInput(id string) (*querypb.WorkflowQuery, error) {
@@ -145,42 +145,42 @@ func (r *queryRegistryImpl) GetQueryInput(id string) (*querypb.WorkflowQuery, er
 	return q.getQueryInput(), nil
 }
 
-func (r *queryRegistryImpl) GetTerminationState(id string) (*QueryTerminationState, error) {
+func (r *queryRegistryImpl) GetCompletionState(id string) (*QueryCompletionState, error) {
 	r.RLock()
 	defer r.RUnlock()
 	q, err := r.getQueryNoLock(id)
 	if err != nil {
 		return nil, err
 	}
-	return q.GetTerminationState()
+	return q.GetCompletionState()
 }
 
 func (r *queryRegistryImpl) BufferQuery(queryInput *querypb.WorkflowQuery) (string, <-chan struct{}) {
 	r.Lock()
 	defer r.Unlock()
 	q := newQuery(queryInput)
-	id := q.getQueryID()
+	id := q.getID()
 	r.buffered[id] = q
-	return id, q.getQueryTermCh()
+	return id, q.getCompletionCh()
 }
 
-func (r *queryRegistryImpl) SetTerminationState(id string, terminationState *QueryTerminationState) error {
+func (r *queryRegistryImpl) SetCompletionState(id string, completionState *QueryCompletionState) error {
 	r.Lock()
 	defer r.Unlock()
 	q, ok := r.buffered[id]
 	if !ok {
 		return errQueryNotExists
 	}
-	if err := q.setTerminationState(terminationState); err != nil {
+	if err := q.setCompletionState(completionState); err != nil {
 		return err
 	}
 	delete(r.buffered, id)
-	switch terminationState.QueryTerminationType {
-	case QueryTerminationTypeCompleted:
+	switch completionState.Type {
+	case QueryCompletionTypeSucceeded:
 		r.completed[id] = q
-	case QueryTerminationTypeUnblocked:
+	case QueryCompletionTypeUnblocked:
 		r.unblocked[id] = q
-	case QueryTerminationTypeFailed:
+	case QueryCompletionTypeFailed:
 		r.failed[id] = q
 	}
 	return nil
@@ -199,9 +199,9 @@ func (r *queryRegistryImpl) Clear() {
 	r.Lock()
 	defer r.Unlock()
 	for id, q := range r.buffered {
-		q.setTerminationState(&QueryTerminationState{
-			QueryTerminationType: QueryTerminationTypeFailed,
-			Failure:              consts.ErrBufferedQueryCleared,
+		_ = q.setCompletionState(&QueryCompletionState{
+			Type: QueryCompletionTypeFailed,
+			Err:  consts.ErrBufferedQueryCleared,
 		})
 		r.failed[id] = q
 	}
