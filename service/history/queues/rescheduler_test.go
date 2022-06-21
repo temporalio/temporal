@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -67,6 +68,7 @@ func (s *rescheudulerSuite) SetupTest() {
 	s.rescheduler = NewRescheduler(
 		s.mockScheduler,
 		s.timeSource,
+		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 	)
 }
@@ -96,31 +98,8 @@ func (s *rescheudulerSuite) TestReschedule_NoRescheduleLimit() {
 	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(true, nil).Times(numExecutable / 2)
 
 	s.timeSource.Update(now.Add(rescheduleInterval))
-	s.rescheduler.Reschedule(0)
+	s.rescheduler.reschedule()
 	s.Equal(numExecutable/2, s.rescheduler.Len())
-}
-
-func (s *rescheudulerSuite) TestReschedule_WithRescheduleLimit() {
-	now := time.Now()
-	s.timeSource.Update(now)
-	rescheduleInterval := time.Minute
-
-	numExecutable := 10
-	for i := 0; i != numExecutable; i++ {
-		s.rescheduler.Add(
-			NewMockExecutable(s.controller),
-			time.Duration(rand.Int63n(rescheduleInterval.Nanoseconds())),
-		)
-	}
-	s.Equal(numExecutable, s.rescheduler.Len())
-
-	rescheduleSize := 3
-
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(true, nil).Times(rescheduleSize)
-
-	s.timeSource.Update(now.Add(rescheduleInterval))
-	s.rescheduler.Reschedule(rescheduleSize)
-	s.Equal(numExecutable-rescheduleSize, s.rescheduler.Len())
 }
 
 func (s *rescheudulerSuite) TestReschedule_SubmissionFailed() {
@@ -147,6 +126,11 @@ func (s *rescheudulerSuite) TestReschedule_SubmissionFailed() {
 	}).Times(numExecutable)
 
 	s.timeSource.Update(now.Add(rescheduleInterval))
-	s.rescheduler.Reschedule(0)
+	s.rescheduler.reschedule()
 	s.Equal(numExecutable-numSubmitted, s.rescheduler.Len())
 }
+
+// TODO: add test for
+// 1. reschedule loop
+// 2. shutdown/drain logic
+// 3. submission after stop
