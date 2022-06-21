@@ -29,7 +29,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"sync"
@@ -65,14 +64,13 @@ func (fs *flusherSuite) TearDownSuite() {
 func (fs *flusherSuite) SetupTest() {
 	fs.controller = gomock.NewController(fs.T())
 	fs.ctx = context.Background()
-	shutdownChan := channel.NewShutdownOnce()
 	logger := log.NewTestLogger()
 	writer := NewItemWriter[int](logger)
 	fs.capacity = 200
-	bufferQueueSize := 2
+	bufferCount := 2
 	flushDuration := 100
 
-	fs.flusher = NewFlusher[int](bufferQueueSize, fs.capacity, flushDuration, writer, logger, shutdownChan)
+	fs.flusher = NewFlusher[int](bufferCount, fs.capacity, flushDuration, writer, logger)
 	fs.flusher.Start()
 }
 
@@ -86,7 +84,7 @@ func (fs *flusherSuite) TestFlushTimer() {
 	var futArr [200]*future.FutureImpl[struct{}]
 	baseVal := 25
 	for i := 0; i < fs.capacity-160; i++ {
-		futArr[i] = fs.flusher.addItemToBeFlushed(baseVal + i)
+		futArr[i] = fs.flusher.AddItemToBeFlushed(baseVal + i)
 	}
 	for i := 0; i < fs.capacity-160; i++ {
 		_, err := futArr[i].Get(fs.ctx)
@@ -98,7 +96,7 @@ func (fs *flusherSuite) TestBufferFullFlush() {
 	var futArr [200]*future.FutureImpl[struct{}]
 	baseVal := 25
 	for i := 0; i < fs.capacity; i++ {
-		futArr[i] = fs.flusher.addItemToBeFlushed(baseVal + i)
+		futArr[i] = fs.flusher.AddItemToBeFlushed(baseVal + i)
 	}
 	for i := 0; i < fs.capacity; i++ {
 		_, err := futArr[i].Get(fs.ctx)
@@ -110,7 +108,7 @@ func (fs *flusherSuite) TestBufferPastCapacityFlush() {
 	var futArr [300]*future.FutureImpl[struct{}]
 	baseVal := 25
 	for i := 0; i < fs.capacity+100; i++ {
-		futArr[i] = fs.flusher.addItemToBeFlushed(baseVal + i)
+		futArr[i] = fs.flusher.AddItemToBeFlushed(baseVal + i)
 	}
 	for i := 0; i < fs.capacity+100; i++ {
 		_, err := futArr[i].Get(fs.ctx)
