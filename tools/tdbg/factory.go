@@ -38,8 +38,6 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v2"
-	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -62,9 +60,7 @@ type HttpGetter interface {
 
 // ClientFactory is used to construct rpc clients
 type ClientFactory interface {
-	FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient
 	AdminClient(c *cli.Context) adminservice.AdminServiceClient
-	SDKClient(c *cli.Context, namespace string) sdkclient.Client
 	HealthClient(c *cli.Context) healthpb.HealthClient
 }
 
@@ -81,46 +77,11 @@ func NewClientFactory() ClientFactory {
 	}
 }
 
-// FrontendClient builds a frontend client
-func (b *clientFactory) FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient {
-	connection, _ := b.createGRPCConnection(c)
-
-	return workflowservice.NewWorkflowServiceClient(connection)
-}
-
 // AdminClient builds an admin client.
 func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceClient {
 	connection, _ := b.createGRPCConnection(c)
 
 	return adminservice.NewAdminServiceClient(connection)
-}
-
-// SDKClient builds an SDK client.
-func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Client {
-	hostPort := c.String(FlagAddress)
-	if hostPort == "" {
-		hostPort = localHostPort
-	}
-
-	tlsConfig, err := b.createTLSConfig(c)
-	if err != nil {
-		b.logger.Fatal("Failed to configure TLS for SDK client", tag.Error(err))
-	}
-
-	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
-		HostPort:  hostPort,
-		Namespace: namespace,
-		Logger:    log.NewSdkLogger(b.logger),
-		Identity:  getCliIdentity(),
-		ConnectionOptions: sdkclient.ConnectionOptions{
-			TLS: tlsConfig,
-		},
-	})
-	if err != nil {
-		b.logger.Fatal("Failed to create SDK client", tag.Error(err))
-	}
-
-	return sdkClient
 }
 
 // HealthClient builds a health client.

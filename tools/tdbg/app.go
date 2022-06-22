@@ -57,12 +57,6 @@ func NewCliApp() *cli.App {
 			EnvVars: []string{"TEMPORAL_CLI_ADDRESS"},
 		},
 		&cli.StringFlag{
-			Name:    FlagAuth,
-			Value:   "",
-			Usage:   "Authorization header to set for GRPC requests",
-			EnvVars: []string{"TEMPORAL_CLI_AUTH"},
-		},
-		&cli.StringFlag{
 			Name:    FlagNamespace,
 			Aliases: FlagNamespaceAlias,
 			Value:   "default",

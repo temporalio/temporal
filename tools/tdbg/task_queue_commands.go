@@ -29,60 +29,13 @@ import (
 	"os"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/temporalio/tctl-kit/pkg/color"
 	"github.com/urfave/cli/v2"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
-
-// AdminDescribeTaskQueue displays poller and status information of task queue.
-func AdminDescribeTaskQueue(c *cli.Context) error {
-	frontendClient := cFactory.FrontendClient(c)
-	namespace, err := getRequiredGlobalOption(c, FlagNamespace)
-	if err != nil {
-		return err
-	}
-	taskQueue := c.String(FlagTaskQueue)
-	tlTypeInt, err := stringToEnum(c.String(FlagTaskQueueType), enumspb.TaskQueueType_value)
-	if err != nil {
-		return fmt.Errorf("Failed to parse TaskQueue Type: %s", err)
-	}
-	tlType := enumspb.TaskQueueType(tlTypeInt)
-	if tlType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-		return fmt.Errorf("TaskQueue type Unspecified is currently not supported")
-	}
-	ctx, cancel := newContext(c)
-	defer cancel()
-	request := &workflowservice.DescribeTaskQueueRequest{
-		Namespace: namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		TaskQueueType:          tlType,
-		IncludeTaskQueueStatus: true,
-	}
-
-	response, err := frontendClient.DescribeTaskQueue(ctx, request)
-	if err != nil {
-		return fmt.Errorf("Operation DescribeTaskQueue failed.: %s", err)
-	}
-
-	taskQueueStatus := response.GetTaskQueueStatus()
-	if taskQueueStatus == nil {
-		return fmt.Errorf(color.Magenta(c, "No taskqueue status information"))
-	}
-	printTaskQueueStatus(taskQueueStatus)
-	fmt.Printf("\n")
-
-	pollers := response.Pollers
-	printPollerInfo(pollers, tlType)
-	return nil
-}
 
 func printPollerInfo(pollers []*taskqueuepb.PollerInfo, taskQueueType enumspb.TaskQueueType) {
 	table := tablewriter.NewWriter(os.Stdout)

@@ -43,7 +43,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 
 	"go.temporal.io/server/common/codec"
@@ -354,14 +353,6 @@ func mapKeysToArray(m map[string]interface{}) []string {
 		out = append(out, k)
 	}
 	return out
-}
-
-func getSDKClient(c *cli.Context) (sdkclient.Client, error) {
-	namespace, err := getRequiredGlobalOption(c, FlagNamespace)
-	if err != nil {
-		return nil, err
-	}
-	return cFactory.SDKClient(c, namespace), nil
 }
 
 func getRequiredGlobalOption(c *cli.Context, optionName string) (string, error) {

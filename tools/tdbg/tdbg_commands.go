@@ -398,25 +398,6 @@ func newAdminHistoryHostCommands() []*cli.Command {
 func newAdminTaskQueueCommands() []*cli.Command {
 	return []*cli.Command{
 		{
-			Name:    "describe",
-			Aliases: []string{"desc"},
-			Usage:   "Describe pollers and status information of task queue",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagTaskQueue,
-					Usage: "TaskQueue description",
-				},
-				&cli.StringFlag{
-					Name:  FlagTaskQueueType,
-					Value: "workflow",
-					Usage: "Optional TaskQueue type [workflow|activity]",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminDescribeTaskQueue(c)
-			},
-		},
-		{
 			Name:  "list-tasks",
 			Usage: "List tasks of a task queue",
 			Flags: []cli.Flag{

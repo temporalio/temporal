@@ -111,7 +111,6 @@ func AdminShowWorkflow(c *cli.Context) error {
 		if err != nil {
 			return fmt.Errorf("DeserializeEvents err: %s", err)
 		}
-		historyBatch := historyBatchThrift
 		allEvents.Events = append(allEvents.Events, historyBatch...)
 		encoder := codec.NewJSONPBEncoder()
 		data, err := encoder.EncodeHistoryEvents(historyBatch)

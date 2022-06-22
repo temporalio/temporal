@@ -76,13 +76,6 @@ var envKeysForUserName = []string{
 	"HOME",
 }
 
-var resetTypesMap = map[string]interface{}{
-	"FirstWorkflowTask":  "",
-	"LastWorkflowTask":   "",
-	"LastContinuedAsNew": "",
-	"BadBinary":          FlagResetBadBinaryChecksum,
-}
-
 var resetReapplyTypesMap = map[string]interface{}{
 	"":       enumspb.RESET_REAPPLY_TYPE_SIGNAL, // default value
 	"Signal": enumspb.RESET_REAPPLY_TYPE_SIGNAL,
