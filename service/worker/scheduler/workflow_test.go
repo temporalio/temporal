@@ -67,9 +67,8 @@ func (s *workflowSuite) AfterTest(suiteName, testName string) {
 
 func (s *workflowSuite) run(sched *schedpb.Schedule, iterations int) {
 	// test workflows will run until "completion", in our case that means until
-	// continue-as-new. we only need a small number of iterations to test, though. note the
-	// off-by-one error in the workflow, so we get one more iterations than this value.
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = iterations - 1
+	// continue-as-new. we only need a small number of iterations to test, though.
+	currentTweakablePolicies.IterationsBeforeContinueAsNew = iterations
 
 	// fixed start time
 	s.env.SetStartTime(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC))

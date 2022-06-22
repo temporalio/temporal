@@ -129,7 +129,7 @@ var (
 		FutureActionCountForList:          5,
 		RecentActionCountForList:          5,
 		MaxSearchAttrLen:                  2000, // server default is 2048 but leave a little room
-		IterationsBeforeContinueAsNew:     500,
+		IterationsBeforeContinueAsNew:     501,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -172,7 +172,7 @@ func (s *scheduler) run() error {
 	s.processPatch(s.InitialPatch)
 	s.InitialPatch = nil
 
-	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters >= 0; iters-- {
+	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0; iters-- {
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 		t2 := s.now()
 		if t2.Before(t1) {
