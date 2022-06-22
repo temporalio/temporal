@@ -26,8 +26,6 @@ package matching
 
 import (
 	"fmt"
-	"reflect"
-
 	"github.com/gogo/protobuf/proto"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -197,14 +195,11 @@ func findCompatibleNode(
 	}
 	// Otherwise, this must be targeting some version in the default/incompatible chain, and it will become a new leaf
 	curDefault := existingData.GetCurrentDefault()
-	// There can only be one version of each type in the default list, so ignore any others.
-	if reflect.TypeOf(versionId) == reflect.TypeOf(curDefault.GetVersion()) {
-		if curDefault.GetVersion().Equal(versionId) {
-			return curDefault, -1
-		}
-		if nn := findInNode(curDefault, versionId); nn != nil {
-			return nn, -1
-		}
+	if curDefault.GetVersion().Equal(versionId) {
+		return curDefault, -1
+	}
+	if nn := findInNode(curDefault, versionId); nn != nil {
+		return nn, -1
 	}
 
 	return nil, -1

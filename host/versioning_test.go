@@ -62,7 +62,7 @@ func (s *integrationSuite) TestBasicVersionUpdate() {
 	})
 	s.NoError(err)
 	s.NotNil(res2)
-	s.Equal(res2.CurrentDefault.GetVersion().GetWorkerBuildId(), "foo")
+	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
 }
 
 func (s *integrationSuite) TestSeriesOfUpdates() {
@@ -97,9 +97,9 @@ func (s *integrationSuite) TestSeriesOfUpdates() {
 	})
 	s.NoError(err)
 	s.NotNil(res2)
-	s.Equal(res2.CurrentDefault.GetVersion().GetWorkerBuildId(), "foo-9")
-	s.Equal(len(res2.CompatibleLeaves), 1)
-	s.Equal(res2.CompatibleLeaves[0].GetVersion().GetWorkerBuildId(), "foo-2.1")
+	s.Equal("foo-9", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
+	s.Equal(1, len(res2.CompatibleLeaves))
+	s.Equal("foo-2.1", res2.CompatibleLeaves[0].GetVersion().GetWorkerBuildId())
 }
 
 func (s *integrationSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound() {
@@ -174,7 +174,7 @@ func (s *integrationSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	})
 	s.NoError(err)
 	s.NotNil(res2)
-	s.Equal(res2.CurrentDefault.GetVersion().GetWorkerBuildId(), "foo")
+	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
 }
 
 func (s *integrationSuite) prepareQueue(ctx context.Context, tq string) {

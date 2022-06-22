@@ -325,7 +325,9 @@ func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*p
 		TaskQueueInfo: queueInfo,
 		PrevRangeID:   db.rangeID,
 	})
-	db.versioningData = verDat
+	if err != nil {
+		db.versioningData = verDat
+	}
 	return err
 }
 

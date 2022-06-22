@@ -1874,10 +1874,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.NotNil(res.GetResponse().GetCurrentDefault())
 	lastNode := res.GetResponse().GetCurrentDefault()
 	s.Equal(mkVerId("99"), lastNode.GetVersion())
-	for true {
-		if lastNode.GetPreviousIncompatible() == nil {
-			break
-		}
+	for lastNode.GetPreviousIncompatible() != nil {
 		lastNode = lastNode.GetPreviousIncompatible()
 	}
 	s.Equal(mkVerId("0"), lastNode.GetVersion())
