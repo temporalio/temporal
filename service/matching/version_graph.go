@@ -95,10 +95,19 @@ func UpdateVersionsGraph(
 	// the currently set one.
 	if req.GetBecomeDefault() {
 		curDefault := existingData.GetCurrentDefault()
+		isCompatWithCurDefault :=
+			req.GetPreviousCompatible().GetWorkerBuildId() == curDefault.GetVersion().GetWorkerBuildId()
+		if req.GetPreviousCompatible() != nil && !isCompatWithCurDefault {
+			// It does not make sense to introduce a version which is the new overall default, but is somehow also
+			// supposed to be compatible with some existing version, as that would necessarily imply that the newly
+			// added version is somehow both compatible and incompatible with the same target version.
+			return serviceerror.NewInvalidArgument("adding a new default version which is compatible " +
+				" with any version other than the existing default is not allowed.")
+		}
 		if curDefault != nil {
 			// If the current default is going to be the previous compat version with the one we're adding,
 			// then we need to skip over it when setting the previous *incompatible* version.
-			if req.GetPreviousCompatible().GetWorkerBuildId() == curDefault.GetVersion().GetWorkerBuildId() {
+			if isCompatWithCurDefault {
 				existingData.CurrentDefault = &taskqueuepb.VersionIdNode{
 					Version:              req.VersionId,
 					PreviousCompatible:   curDefault,
@@ -113,11 +122,6 @@ func UpdateVersionsGraph(
 				}
 			}
 		} else {
-			if req.GetPreviousCompatible() != nil {
-				return serviceerror.NewInvalidArgument("adding a new default version which is compatible " +
-					" with some previous version, when there is no existing default version, is not allowed." +
-					" There must be a default version before this operation makes sense")
-			}
 			existingData.CurrentDefault = &taskqueuepb.VersionIdNode{
 				Version:              req.VersionId,
 				PreviousCompatible:   nil,

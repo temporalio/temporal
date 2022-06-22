@@ -116,6 +116,25 @@ func TestNewDefaultGraphUpdateCompatWithCurDefault(t *testing.T) {
 	assert.Equal(t, "0", data.CurrentDefault.PreviousIncompatible.Version.GetWorkerBuildId())
 }
 
+func TestNewDefaultGraphUpdateCompatWithSomethingElse(t *testing.T) {
+	n0 := mkVerIdNode("0")
+	n1 := mkVerIdNode("1")
+	n1.PreviousIncompatible = n0
+	data := &persistencepb.VersioningData{
+		CurrentDefault: n1,
+	}
+
+	req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		VersionId:          mkVerId("2"),
+		PreviousCompatible: mkVerId("0"),
+		BecomeDefault:      true,
+	}
+
+	err := UpdateVersionsGraph(data, req)
+	assert.Error(t, err)
+	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
+}
+
 func TestNewCompatibleWithNodeDeepInIncompatChain(t *testing.T) {
 	n0 := mkVerIdNode("0")
 	n1 := mkVerIdNode("1")
