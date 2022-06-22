@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
+
 	"go.temporal.io/api/serviceerror"
 )
 
@@ -42,7 +43,7 @@ const (
 	ClientNameCLI           = "temporal-cli"
 	ClientNameUI            = "temporal-ui"
 
-	ServerVersion = "1.17.0"
+	ServerVersion = "1.18.0"
 
 	// SupportedServerVersions is used by CLI and inter role communication.
 	SupportedServerVersions = ">=1.0.0 <2.0.0"
