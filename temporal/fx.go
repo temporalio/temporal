@@ -817,13 +817,13 @@ var TraceExportModule = fx.Options(
 // - []go.opentelemetry.io/otel/sdk/trace.BatchSpanProcessorOption
 //   default: empty slice
 // - []go.opentelemetry.io/otel/sdk/trace.SpanProcessor
-//   default: wrap each sdktrace.SpanExporter with sdktrace.NewBatchSpanProcessor
+//   default: wrap each otelsdktrace.SpanExporter with otelsdktrace.NewBatchSpanProcessor
 // - *go.opentelemetry.io/otel/sdk/resource.Resource
 //   default: resource.Default() augmented with the supplied serviceName
 // - []go.opentelemetry.io/otel/sdk/trace.TracerProviderOption
-//   default: the provided resource.Resource and each of the sdktrace.SpanExporter
+//   default: the provided resource.Resource and each of the otelsdktrace.SpanExporter
 // - go.opentelemetry.io/otel/trace.TracerProvider
-//   default: sdktrace.NewTracerProvider with each of the sdktrace.TracerProviderOption
+//   default: otelsdktrace.NewTracerProvider with each of the otelsdktrace.TracerProviderOption
 // - go.opentelemetry.io/otel/ppropagation.TextMapPropagator
 //   default: propagation.TraceContext{}
 // - telemetry.ServerTraceInterceptor

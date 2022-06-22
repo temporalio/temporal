@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -129,7 +129,7 @@ type (
 		workerConfig                     *WorkerConfig
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
-		spanExporters                    []sdktrace.SpanExporter
+		spanExporters                    []otelsdktrace.SpanExporter
 	}
 
 	// HistoryConfig contains configs for history service
@@ -161,7 +161,7 @@ type (
 		WorkerConfig                     *WorkerConfig
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
-		SpanExporters                    []sdktrace.SpanExporter
+		SpanExporters                    []otelsdktrace.SpanExporter
 	}
 )
 
