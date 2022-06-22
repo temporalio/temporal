@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"go.uber.org/fx"
+	"google.golang.org/grpc"
 
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -62,6 +63,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 )
 
 type (
@@ -416,7 +418,18 @@ func RPCFactoryProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
 	clusterMetadata *cluster.Config,
+	traceInterceptor telemetry.ClientTraceInterceptor,
 ) common.RPCFactory {
 	svcCfg := cfg.Services[string(svcName)]
-	return rpc.NewFactory(&svcCfg.RPC, string(svcName), logger, tlsConfigProvider, dc, clusterMetadata)
+	return rpc.NewFactory(
+		&svcCfg.RPC,
+		string(svcName),
+		logger,
+		tlsConfigProvider,
+		dc,
+		clusterMetadata,
+		[]grpc.UnaryClientInterceptor{
+			grpc.UnaryClientInterceptor(traceInterceptor),
+		},
+	)
 }

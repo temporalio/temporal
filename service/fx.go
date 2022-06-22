@@ -35,6 +35,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/telemetry"
 )
 
 func PersistenceMaxQpsFn(
@@ -61,6 +62,7 @@ func GrpcServerOptionsProvider(
 	rpcFactory common.RPCFactory,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	tracingInterceptor telemetry.ServerTraceInterceptor,
 ) []grpc.ServerOption {
 
 	grpcServerOptions, err := rpcFactory.GetInternodeGRPCServerOptions()
@@ -72,6 +74,7 @@ func GrpcServerOptionsProvider(
 		grpcServerOptions,
 		grpc.ChainUnaryInterceptor(
 			rpc.ServiceErrorInterceptor,
+			grpc.UnaryServerInterceptor(tracingInterceptor),
 			metrics.NewServerMetricsContextInjectorInterceptor(),
 			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
 			telemetryInterceptor.Intercept,

@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 )
@@ -134,6 +135,7 @@ func GrpcServerOptionsProvider(
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	traceInterceptor telemetry.ServerTraceInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
@@ -159,6 +161,7 @@ func GrpcServerOptionsProvider(
 	interceptors := []grpc.UnaryServerInterceptor{
 		namespaceLogInterceptor.Intercept,
 		rpc.ServiceErrorInterceptor,
+		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		telemetryInterceptor.Intercept,
 		namespaceValidatorInterceptor.Intercept,
