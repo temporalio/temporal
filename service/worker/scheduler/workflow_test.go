@@ -40,7 +40,9 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	schedspb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -79,6 +81,16 @@ func (s *workflowSuite) run(sched *schedpb.Schedule, iterations int) {
 				WorkflowId:   "myid",
 				WorkflowType: &commonpb.WorkflowType{Name: "mywf"},
 				TaskQueue:    &taskqueuepb.TaskQueue{Name: "mytq"},
+				Memo: &commonpb.Memo{
+					Fields: map[string]*commonpb.Payload{
+						"mymemo": payload.EncodeString("value"),
+					},
+				},
+				SearchAttributes: &commonpb.SearchAttributes{
+					IndexedFields: map[string]*commonpb.Payload{
+						"myfield": payload.EncodeString("value"),
+					},
+				},
 			},
 		},
 	}
@@ -111,7 +123,10 @@ func (s *workflowSuite) TestStart() {
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
 		s.Equal("mywf", req.Request.WorkflowType.Name)
 		s.Equal("mytq", req.Request.TaskQueue.Name)
-		// FIXME: check search attrs here
+		s.Equal(`"value"`, payload.ToString(req.Request.Memo.Fields["mymemo"]))
+		s.Equal(`"value"`, payload.ToString(req.Request.SearchAttributes.IndexedFields["myfield"]))
+		s.Equal(`"myschedule"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledById]))
+		s.Equal(`"2022-06-01T00:15:00Z"`, payload.ToString(req.Request.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledStartTime]))
 
 		return &schedspb.StartWorkflowResponse{
 			RunId:         uuid.NewString(),
