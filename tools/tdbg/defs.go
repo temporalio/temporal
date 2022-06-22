@@ -28,16 +28,12 @@ import (
 	"time"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/temporalio/tctl-kit/pkg/config"
-	enumspb "go.temporal.io/api/enums/v1"
 )
 
 const (
 	localHostPort = "127.0.0.1:7233"
 
 	maxOutputStringLength = 200 // max length for output string
-	maxWorkflowTypeLength = 32  // max item length for output workflow type in table
-	defaultMaxFieldLength = 500 // default max length for each attribute field
 
 	// regex expression for parsing time durations, shorter, longer notations and numeric value respectively
 	defaultDateTimeRangeShortRE = "^[1-9][0-9]*[smhdwMy]$"                                // eg. 1s, 20m, 300h etc.
@@ -50,40 +46,15 @@ const (
 	month = 30 * day
 	year  = 365 * day
 
-	defaultTimeFormat                            = "15:04:05"   // used for converting UnixNano to string like 16:16:36 (only time)
-	defaultDateTimeFormat                        = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
-	defaultNamespaceRetention                    = 3 * 24 * time.Hour
-	defaultContextTimeoutInSeconds               = 5
-	defaultContextTimeout                        = defaultContextTimeoutInSeconds * time.Second
-	defaultContextTimeoutForLongPoll             = 2 * time.Minute
-	defaultContextTimeoutForListArchivedWorkflow = 3 * time.Minute
+	defaultTimeFormat              = "15:04:05"   // used for converting UnixNano to string like 16:16:36 (only time)
+	defaultDateTimeFormat          = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
+	defaultContextTimeoutInSeconds = 5
+	defaultContextTimeout          = defaultContextTimeoutInSeconds * time.Second
 
-	defaultWorkflowTaskTimeoutInSeconds = 10
-	defaultPageSizeForList              = 500
-	defaultPageSizeForScan              = 2000
-	defaultWorkflowIDReusePolicy        = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
-	defaultPageSizeDLQ                  = 1000
-
-	workflowStatusNotSet = -1
-	showErrorStackEnv    = `TEMPORAL_CLI_SHOW_STACKS`
-
-	searchAttrInputSeparator = "|"
+	showErrorStackEnv = `TEMPORAL_CLI_SHOW_STACKS`
 )
-
-var envKeysForUserName = []string{
-	"USER",
-	"LOGNAME",
-	"HOME",
-}
-
-var resetReapplyTypesMap = map[string]interface{}{
-	"":       enumspb.RESET_REAPPLY_TYPE_SIGNAL, // default value
-	"Signal": enumspb.RESET_REAPPLY_TYPE_SIGNAL,
-	"None":   enumspb.RESET_REAPPLY_TYPE_NONE,
-}
 
 var (
 	cFactory        ClientFactory
-	tctlConfig      *config.Config
 	tableHeaderBlue = tablewriter.Colors{tablewriter.FgHiBlueColor}
 )
