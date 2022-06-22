@@ -107,7 +107,7 @@ func AdminShowWorkflow(c *cli.Context) error {
 	for idx, b := range resp.HistoryBatches {
 		totalSize += len(b.Data)
 		fmt.Printf("======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
-		historyBatchThrift, err := serializer.DeserializeEvents(b)
+		historyBatch, err := serializer.DeserializeEvents(b)
 		if err != nil {
 			return fmt.Errorf("DeserializeEvents err: %s", err)
 		}
