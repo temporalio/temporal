@@ -119,10 +119,15 @@ make stop-dependencies
 If you need to make changes to the gRPC definitions while also working on code in this repo, do the following:
 
 1. Checkout [api](https://github.com/temporalio/api), [api-go](https://github.com/temporalio/api-go), and [sdk-go](https://github.com/temporalio/sdk-go)
-2. Make your changes to `api`, commit, and push your branch
+2. Make your changes to `api`, commit to a branch.
 3. In your copy of `api-go`:
    1. Initialize submodules: `git submodule update --init --recursive`
-   2. Point api submodule at your branch: `cd proto/api && git checkout <your branch>`
+   2. Point api submodule at your branch. If you make more commits to the api repo, run the last command again.
+      ```bash
+      git submodule set-url proto/api ../api
+      git submodule set-branch --branch mystuff proto/api
+      git submodule update --remote proto/api
+      ```
    3. Compile protos: `make proto`
 4. In your copy of `sdk-go`:
     1. Point `go.mod` at local `api-go`:
@@ -134,7 +139,12 @@ If you need to make changes to the gRPC definitions while also working on code i
     2. Compile & fix errors: `make bins`
 5. In this repo:
     1. Initialize submodules: `git submodule update --init --recursive`
-    2. Point api submodule at your branch: `cd proto/api && git checkout <your branch>`
+    2. Point api submodule at your branch. If you make more commits to the api repo, run the last command again.
+       ```bash
+       git submodule set-url proto/api ../api
+       git submodule set-branch --branch mystuff proto/api
+       git submodule update --remote proto/api
+       ```
     3. Stage the change: `git add -u` (otherwise makefile will blow it away)
     4. Point `go.mod` at local `api-go` and `sdk-go`:
        ```
