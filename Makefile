@@ -192,7 +192,7 @@ temporal-server: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-server with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-server ./cmd/server
 
-temporal-tdbg-tool: $(ALL_SRC)
+tdbg: $(ALL_SRC)
 	@printf $(COLOR) "Build tdbg with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -o tdbg ./cmd/tools/tdbg
 
