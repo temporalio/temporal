@@ -388,15 +388,6 @@ func (c *metricClient) {{.Method}}(
 	return c.client.{{.Method}}(ctx, request, opts...)
 }
 `)
-	// TODO: some history methods did not touch metrics. should we preserve this?
-	// DescribeHistoryHost
-	// RemoveTask
-	// CloseShard
-	// GetShard
-	// RebuildMutableState
-	// DescribeMutableState
-	// TODO: DeleteWorkflowExecution didn't work like the others in history (the code looked
-	// like the frontend/admin client version). should we preserve that?
 }
 
 func generateRetryableClient(w io.Writer, service service) {
@@ -470,6 +461,6 @@ func main() {
 	licenseText := readLicenseFile(*licenseFlag)
 
 	callWithFile(svc.clientGenerator, svc, "client", licenseText)
-	callWithFile(svc.metricGenerator, svc, "metricClient", licenseText)
-	callWithFile(svc.retryableGenerator, svc, "retryableClient", licenseText)
+	callWithFile(svc.metricGenerator, svc, "metric_client", licenseText)
+	callWithFile(svc.retryableGenerator, svc, "retryable_client", licenseText)
 }
