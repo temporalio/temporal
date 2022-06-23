@@ -81,7 +81,7 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
 PINNED_DEPENDENCIES := \
 	github.com/apache/thrift@v0.0.0-20161221203622-b2a4d4ae21c7 \
-	github.com/go-sql-driver/mysql@v1.5.0 
+	github.com/go-sql-driver/mysql@v1.5.0
 
 # Code coverage output files.
 COVER_ROOT                 := ./.coverage
@@ -103,10 +103,10 @@ update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
 	@go install golang.org/x/lint/golint@latest
 	@go install golang.org/x/tools/cmd/goimports@latest
-	@go install honnef.co/go/tools/cmd/staticcheck@master # TODO: Set concrete version above 0.2.2 here.
-	@go install github.com/kisielk/errcheck@v1.6.0
-	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.31.0
-	@go install github.com/bufbuild/buf/cmd/buf@v1.4.0
+	@go install honnef.co/go/tools/cmd/staticcheck@v0.3.2
+	@go install github.com/kisielk/errcheck@v1.6.1
+	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.32.3
+	@go install github.com/bufbuild/buf/cmd/buf@v1.6.0
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
@@ -123,7 +123,7 @@ update-tctl:
 	@printf $(COLOR) "Install/update tctl..."
 	@go install github.com/temporalio/tctl/cmd/tctl@latest
 
-update-new-ui:
+update-ui:
 	@printf $(COLOR) "Install/update temporal ui-server..."
 	@go install github.com/temporalio/ui-server/cmd/server@latest
 
