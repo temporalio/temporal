@@ -128,6 +128,20 @@ func (s *workflowSuite) expectWatch(f func(req *schedspb.WatchWorkflowRequest) (
 		})
 }
 
+func (s *workflowSuite) expectCancel(f func(req *schedspb.CancelWorkflowRequest) error) *testsuite.MockCallWrapper {
+	return s.env.OnActivity(new(activities).CancelWorkflow, mock.Anything, mock.Anything).Once().Return(
+		func(_ context.Context, req *schedspb.CancelWorkflowRequest) error {
+			return f(req)
+		})
+}
+
+func (s *workflowSuite) expectTerminate(f func(req *schedspb.TerminateWorkflowRequest) error) *testsuite.MockCallWrapper {
+	return s.env.OnActivity(new(activities).TerminateWorkflow, mock.Anything, mock.Anything).Once().Return(
+		func(_ context.Context, req *schedspb.TerminateWorkflowRequest) error {
+			return f(req)
+		})
+}
+
 func (s *workflowSuite) TestStart() {
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.env.Now()))
@@ -360,6 +374,133 @@ func (s *workflowSuite) TestOverlapBufferAll() {
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
+func (s *workflowSuite) TestOverlapCancel() {
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
+	})
+	// will cancel and then long poll to wait for it
+	s.expectCancel(func(req *schedspb.CancelWorkflowRequest) error {
+		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
+		return nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 1, 10, 15, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
+		s.True(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		}, nil
+	}).After(15 * time.Second)
+	// now it'll run the next one
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 1, 10, 15, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T01:10:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(55 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER,
+		},
+	}, 4)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestOverlapTerminate() {
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
+	})
+	// will terminate and then long poll to wait for it (could be improved since
+	// we don't have to wait after terminate)
+	s.expectTerminate(func(req *schedspb.TerminateWorkflowRequest) error {
+		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
+		return nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 1, 10, 1, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
+		s.True(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		}, nil
+	}).After(1 * time.Second)
+	// now it'll run the next one
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 1, 10, 1, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T01:10:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(55 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER,
+		},
+	}, 4)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestOverlapAllowAll() {
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T01:10:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(55 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}, 4)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
 /*
 
 initial patch (trigger immediate)
@@ -381,11 +522,6 @@ unpause with message
 catchup window
 
 remaining actions
-
-run another while first is still running, with:
-	overlap cancel other
-	overlap terminate other
-	overlap allow
 
 completed workflow is not in info anymore
 
