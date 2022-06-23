@@ -508,7 +508,7 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
-// the follow tests are written using these more high-level mock helpers
+// the following tests are written using these more high-level mock helpers
 
 type workflowRun struct {
 	id         string
@@ -696,9 +696,9 @@ func (s *workflowSuite) TestPause() {
 		})
 	}, 7*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
-		resp := s.describe()
-		s.True(resp.Schedule.State.Paused)
-		s.Equal("paused", resp.Schedule.State.Notes)
+		desc := s.describe()
+		s.True(desc.Schedule.State.Paused)
+		s.Equal("paused", desc.Schedule.State.Notes)
 	}, 12*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
 		s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
@@ -706,9 +706,9 @@ func (s *workflowSuite) TestPause() {
 		})
 	}, 26*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
-		resp := s.describe()
-		s.False(resp.Schedule.State.Paused)
-		s.Equal("go ahead", resp.Schedule.State.Notes)
+		desc := s.describe()
+		s.False(desc.Schedule.State.Paused)
+		s.Equal("go ahead", desc.Schedule.State.Notes)
 	}, 28*time.Minute)
 
 	s.run(&schedpb.Schedule{
@@ -727,8 +727,7 @@ func (s *workflowSuite) TestPause() {
 
 func (s *workflowSuite) TestCompileError() {
 	s.env.RegisterDelayedCallback(func() {
-		resp := s.describe()
-		s.Contains(resp.Info.InvalidScheduleError, "invalid syntax")
+		s.Contains(s.describe().Info.InvalidScheduleError, "invalid syntax")
 	}, 1*time.Minute)
 
 	s.run(&schedpb.Schedule{
@@ -772,9 +771,9 @@ func (s *workflowSuite) TestUpdate() {
 	})
 
 	s.env.RegisterDelayedCallback(func() {
-		resp := s.describe()
+		desc := s.describe()
 		s.env.SignalWorkflow(SignalNameUpdate, &schedspb.FullUpdateRequest{
-			ConflictToken: resp.ConflictToken,
+			ConflictToken: desc.ConflictToken,
 			Schedule: &schedpb.Schedule{
 				Spec: &schedpb.ScheduleSpec{
 					Interval: []*schedpb.IntervalSpec{{
@@ -789,9 +788,9 @@ func (s *workflowSuite) TestUpdate() {
 		})
 	}, 9*time.Minute+30*time.Second)
 	s.env.RegisterDelayedCallback(func() {
-		resp := s.describe()
+		desc := s.describe()
 		s.env.SignalWorkflow(SignalNameUpdate, &schedspb.FullUpdateRequest{
-			ConflictToken: resp.ConflictToken + 37, // conflict, should not take effect
+			ConflictToken: desc.ConflictToken + 37, // conflict, should not take effect
 			Schedule:      &schedpb.Schedule{},
 		})
 	}, 12*time.Minute)
@@ -810,19 +809,58 @@ func (s *workflowSuite) TestUpdate() {
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
+func (s *workflowSuite) TestLimitedActions() {
+	s.setupMocksForWorkflows([]workflowRun{
+		{
+			id:     "myid-2022-06-01T00:03:00Z",
+			start:  time.Date(2022, 6, 1, 0, 3, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 4, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		{
+			id:     "myid-2022-06-01T00:06:00Z",
+			start:  time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 7, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		// limited to 2
+	})
+
+	s.env.RegisterDelayedCallback(func() {
+		s.Equal(int64(2), s.describe().Schedule.State.RemainingActions)
+	}, 1*time.Minute)
+	s.env.RegisterDelayedCallback(func() {
+		s.Equal(int64(1), s.describe().Schedule.State.RemainingActions)
+	}, 5*time.Minute)
+	s.env.RegisterDelayedCallback(func() {
+		s.Equal(int64(0), s.describe().Schedule.State.RemainingActions)
+	}, 7*time.Minute)
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(3 * time.Minute),
+			}},
+		},
+		State: &schedpb.ScheduleState{
+			LimitedActions:   true,
+			RemainingActions: 2,
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}, 6)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
 /*
 
 initial patch (trigger immediate)
 
 time range stuff, e.g. what if we sleep for 55 min but only get woken up after 200?
 
-early wakeup (by signal). check signal handled and also no other workflows run
-
-schedule compile error
-
 catchup window
-
-remaining actions
 
 completed workflow is not in info anymore
 
@@ -835,8 +873,6 @@ continuedfailure
 refresh (maybe let this be done by integration test)
 
 failed StartWorkflow
-
-ensure watcher is started when necessary? or just test result? can't really, need mock results
 
 test that weird logic used to set scheduletoclosetimeout in startworkflow?
 
