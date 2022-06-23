@@ -39,7 +39,7 @@ func (c *clientImpl) CancelOutstandingPoll(
 	opts ...grpc.CallOption,
 ) (*matchingservice.CancelOutstandingPollResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
+	client, err := c.getClientForTaskqueue(request.GetTaskQueue().GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (c *clientImpl) DescribeTaskQueue(
 	opts ...grpc.CallOption,
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.DescRequest.TaskQueue.GetName())
+	client, err := c.getClientForTaskqueue(request.GetDescRequest().GetTaskQueue().GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
+	client, err := c.getClientForTaskqueue(request.GetTaskQueue().GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (c *clientImpl) RespondQueryTaskCompleted(
 	opts ...grpc.CallOption,
 ) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
+	client, err := c.getClientForTaskqueue(request.GetTaskQueue().GetName())
 	if err != nil {
 		return nil, err
 	}

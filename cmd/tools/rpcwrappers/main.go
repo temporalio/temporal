@@ -126,11 +126,11 @@ func pathToField(t reflect.Type, name string, path string, maxDepth int) string 
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		if f.Name == name {
-			return path + "." + name
+			return path + ".Get" + name + "()"
 		}
 		ft := f.Type
 		if ft.Kind() == reflect.Pointer {
-			if try := pathToField(ft.Elem(), name, path+"."+f.Name, maxDepth-1); try != "" {
+			if try := pathToField(ft.Elem(), name, path+".Get"+f.Name+"()", maxDepth-1); try != "" {
 				return try
 			}
 		}
@@ -158,7 +158,10 @@ func makeGetHistoryClient(reqType reflect.Type) string {
 	// slice needs a tiny bit of extra handling for namespace
 	if path := pathToField(t, "TaskInfos", "request", 1); path != "" {
 		return fmt.Sprintf(`// All workflow IDs are in the same shard per request
-	client, err := c.getClientForWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, path, path)
+	if len(%s) == 0 {
+		return nil, serviceerror.NewInvalidArgument("missing TaskInfos")
+	}
+	client, err := c.getClientForWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, path, path, path)
 	}
 	panic("I don't know how to get a client from a " + t.String())
 }
@@ -257,6 +260,7 @@ package {{.ServiceName}}
 import (
 	"context"
 
+	"go.temporal.io/api/serviceerror"
 	"{{.ServicePackagePath}}"
 	"google.golang.org/grpc"
 )
