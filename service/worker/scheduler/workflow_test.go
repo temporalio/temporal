@@ -67,19 +67,11 @@ func (s *workflowSuite) AfterTest(suiteName, testName string) {
 	s.env.AssertExpectations(s.T())
 }
 
-func (s *workflowSuite) run(sched *schedpb.Schedule, iterations int) {
-	// test workflows will run until "completion", in our case that means until
-	// continue-as-new. we only need a small number of iterations to test, though.
-	currentTweakablePolicies.IterationsBeforeContinueAsNew = iterations
-
-	// fixed start time
-	s.env.SetStartTime(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC))
-
-	// fill this in so callers don't need to
-	sched.Action = &schedpb.ScheduleAction{
+func (s *workflowSuite) defaultAction(id string) *schedpb.ScheduleAction {
+	return &schedpb.ScheduleAction{
 		Action: &schedpb.ScheduleAction_StartWorkflow{
 			StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-				WorkflowId:   "myid",
+				WorkflowId:   id,
 				WorkflowType: &commonpb.WorkflowType{Name: "mywf"},
 				TaskQueue:    &taskqueuepb.TaskQueue{Name: "mytq"},
 				Memo: &commonpb.Memo{
@@ -95,6 +87,18 @@ func (s *workflowSuite) run(sched *schedpb.Schedule, iterations int) {
 			},
 		},
 	}
+}
+
+func (s *workflowSuite) run(sched *schedpb.Schedule, iterations int) {
+	// test workflows will run until "completion", in our case that means until
+	// continue-as-new. we only need a small number of iterations to test, though.
+	currentTweakablePolicies.IterationsBeforeContinueAsNew = iterations
+
+	// fixed start time
+	s.env.SetStartTime(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC))
+
+	// fill this in so callers don't need to
+	sched.Action = s.defaultAction("myid")
 
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
 		Schedule: sched,
@@ -549,6 +553,14 @@ func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun) {
 	}
 }
 
+func (s *workflowSuite) describe() *schedspb.DescribeResponse {
+	encoded, err := s.env.QueryWorkflow(QueryNameDescribe)
+	s.NoError(err)
+	var resp schedspb.DescribeResponse
+	s.NoError(encoded.Get(&resp))
+	return &resp
+}
+
 func (s *workflowSuite) TestTriggerImmediate() {
 	s.setupMocksForWorkflows([]workflowRun{
 		{
@@ -684,10 +696,7 @@ func (s *workflowSuite) TestPause() {
 		})
 	}, 7*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
-		encoded, err := s.env.QueryWorkflow(QueryNameDescribe)
-		s.NoError(err)
-		var resp schedspb.DescribeResponse
-		s.NoError(encoded.Get(&resp))
+		resp := s.describe()
 		s.True(resp.Schedule.State.Paused)
 		s.Equal("paused", resp.Schedule.State.Notes)
 	}, 12*time.Minute)
@@ -697,10 +706,7 @@ func (s *workflowSuite) TestPause() {
 		})
 	}, 26*time.Minute)
 	s.env.RegisterDelayedCallback(func() {
-		encoded, err := s.env.QueryWorkflow(QueryNameDescribe)
-		s.NoError(err)
-		var resp schedspb.DescribeResponse
-		s.NoError(encoded.Get(&resp))
+		resp := s.describe()
 		s.False(resp.Schedule.State.Paused)
 		s.Equal("go ahead", resp.Schedule.State.Notes)
 	}, 28*time.Minute)
@@ -715,6 +721,91 @@ func (s *workflowSuite) TestPause() {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 		},
 	}, 12)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestCompileError() {
+	s.env.RegisterDelayedCallback(func() {
+		resp := s.describe()
+		s.Contains(resp.Info.InvalidScheduleError, "invalid syntax")
+	}, 1*time.Minute)
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Calendar: []*schedpb.CalendarSpec{{
+				Month: "juneuary",
+			}},
+		},
+	}, 1)
+	// doesn't end properly since it sleeps forever
+}
+
+func (s *workflowSuite) TestUpdate() {
+	s.setupMocksForWorkflows([]workflowRun{
+		{
+			id:     "myid-2022-06-01T00:03:00Z",
+			start:  time.Date(2022, 6, 1, 0, 3, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 7, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		// :06 skipped because still running
+		{
+			id:     "myid-2022-06-01T00:09:00Z",
+			start:  time.Date(2022, 6, 1, 0, 9, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 12, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		// updated to every 5m + allow all
+		{
+			id:     "newid-2022-06-01T00:10:00Z",
+			start:  time.Date(2022, 6, 1, 0, 10, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 16, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		{
+			id:     "newid-2022-06-01T00:15:00Z",
+			start:  time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 19, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+	})
+
+	s.env.RegisterDelayedCallback(func() {
+		resp := s.describe()
+		s.env.SignalWorkflow(SignalNameUpdate, &schedspb.FullUpdateRequest{
+			ConflictToken: resp.ConflictToken,
+			Schedule: &schedpb.Schedule{
+				Spec: &schedpb.ScheduleSpec{
+					Interval: []*schedpb.IntervalSpec{{
+						Interval: timestamp.DurationPtr(5 * time.Minute),
+					}},
+				},
+				Policies: &schedpb.SchedulePolicies{
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				},
+				Action: s.defaultAction("newid"),
+			},
+		})
+	}, 9*time.Minute+30*time.Second)
+	s.env.RegisterDelayedCallback(func() {
+		resp := s.describe()
+		s.env.SignalWorkflow(SignalNameUpdate, &schedspb.FullUpdateRequest{
+			ConflictToken: resp.ConflictToken + 37, // conflict, should not take effect
+			Schedule:      &schedpb.Schedule{},
+		})
+	}, 12*time.Minute)
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(3 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+		},
+	}, 8)
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -740,9 +831,6 @@ pause on failure
 last completion result
 
 continuedfailure
-
-update config
-	rejected update due to conflict token
 
 refresh (maybe let this be done by integration test)
 

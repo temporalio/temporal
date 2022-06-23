@@ -162,10 +162,8 @@ func (s *scheduler) run() error {
 	if s.State.LastProcessedTime == nil {
 		s.logger.Debug("Initializing internal state")
 		s.State.LastProcessedTime = timestamp.TimePtr(s.now())
-		s.Info = &schedpb.ScheduleInfo{
-			CreateTime: s.State.LastProcessedTime,
-		}
 		s.State.ConflictToken = InitialConflictToken
+		s.Info.CreateTime = s.State.LastProcessedTime
 	}
 
 	// A schedule may be created with an initial Patch, e.g. start one immediately. Handle that now.
