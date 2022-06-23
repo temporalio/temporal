@@ -79,8 +79,10 @@ UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(IN
 
 ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
+# TODO: remove tchannel-go if there is a version above 1.30.0.
 PINNED_DEPENDENCIES := \
 	github.com/apache/thrift@v0.0.0-20161221203622-b2a4d4ae21c7 \
+	github.com/uber/tchannel-go@v1.22.3 \
 	github.com/go-sql-driver/mysql@v1.5.0
 
 # Code coverage output files.

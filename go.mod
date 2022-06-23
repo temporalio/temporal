@@ -3,8 +3,8 @@ module go.temporal.io/server
 go 1.18
 
 require (
-	cloud.google.com/go/storage v1.22.1
-	github.com/aws/aws-sdk-go v1.44.40
+	cloud.google.com/go/storage v1.23.0
+	github.com/aws/aws-sdk-go v1.44.41
 	github.com/aws/aws-sdk-go-v2 v1.16.5
 	github.com/aws/aws-sdk-go-v2/config v1.15.11
 	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.1.22
@@ -57,11 +57,16 @@ require (
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
 	google.golang.org/api v0.85.0
 	google.golang.org/grpc v1.47.0
-	google.golang.org/grpc/examples v0.0.0-20220622233350-5cdb09fa29c1
+	google.golang.org/grpc/examples v0.0.0-20220623204041-06ad0b82211b
 	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/validator.v2 v2.0.1
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.17.3
+)
+
+require (
+	github.com/streadway/quantile v0.0.0-20220407130108-4246515d968d // indirect
+	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
 )
 
 require (
