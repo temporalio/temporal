@@ -964,6 +964,8 @@ func (s *workflowSuite) TestLimitedActions() {
 
 /*
 
+tests to write:
+
 initial patch (trigger immediate)
 
 time range stuff, e.g. what if we sleep for 55 min but only get woken up after 200?
@@ -985,5 +987,9 @@ test stuff across c-a-n
 activities:
 
 test long poll watcher more
+
+bugs to fix:
+
+start time should just be now, if run is buffered behind another then it'll be wrong
 
 */
