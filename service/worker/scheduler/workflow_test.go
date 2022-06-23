@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	schedpb "go.temporal.io/api/schedule/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -197,18 +198,12 @@ func (s *workflowSuite) TestOverlapSkip() {
 		s.True(time.Date(2022, 6, 1, 2, 5, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
-		return &schedspb.WatchWorkflowResponse{
-			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-			ResultFailure: &schedspb.WatchWorkflowResponse_Result{
-				Result: payloads.EncodeString("res1"),
-			},
-		}, nil
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
 	})
 	// now it'll run another
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 2, 5, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T02:05:00Z", req.Request.WorkflowId)
-		s.Equal(`["res1"]`, payloads.ToString(req.LastCompletionResult))
 		return nil, nil
 	})
 
@@ -504,6 +499,119 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 		},
 	}, 3)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
+		s.Nil(req.LastCompletionResult)
+		s.Nil(req.ContinuedFailure)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:05:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			ResultFailure: &schedspb.WatchWorkflowResponse_Result{
+				Result: payloads.EncodeString("res1"),
+			},
+		}, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:10:00Z", req.Request.WorkflowId)
+		s.Equal(`["res1"]`, payloads.ToString(req.LastCompletionResult))
+		s.Nil(req.ContinuedFailure)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:10:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			ResultFailure: &schedspb.WatchWorkflowResponse_Failure{
+				Failure: &failurepb.Failure{Message: "oops"},
+			},
+		}, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		s.Equal(`["res1"]`, payloads.ToString(req.LastCompletionResult))
+		s.Equal(`oops`, req.ContinuedFailure.Message)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			ResultFailure: &schedspb.WatchWorkflowResponse_Result{
+				Result: payloads.EncodeString("works again"),
+			},
+		}, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.Equal("myid-2022-06-01T00:20:00Z", req.Request.WorkflowId)
+		s.Equal(`["works again"]`, payloads.ToString(req.LastCompletionResult))
+		s.Nil(req.ContinuedFailure)
+		return nil, nil
+	})
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(5 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+		},
+	}, 5)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestPauseOnFailure() {
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
+		s.Nil(req.LastCompletionResult)
+		s.Nil(req.ContinuedFailure)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 10, 0, 0, time.UTC).Equal(s.env.Now()))
+		s.Equal("myid-2022-06-01T00:05:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			ResultFailure: &schedspb.WatchWorkflowResponse_Failure{
+				Failure: &failurepb.Failure{Message: "oops"},
+			},
+		}, nil
+	})
+	s.env.RegisterDelayedCallback(func() {
+		s.False(s.describe().Schedule.State.Paused)
+	}, 9*time.Minute)
+	s.env.RegisterDelayedCallback(func() {
+		desc := s.describe()
+		s.True(desc.Schedule.State.Paused)
+		s.Contains(desc.Schedule.State.Notes, "paused due to workflow failure")
+		s.Contains(desc.Schedule.State.Notes, "oops")
+	}, 11*time.Minute)
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(5 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			PauseOnFailure: true,
+		},
+	}, 6)
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -863,12 +971,6 @@ time range stuff, e.g. what if we sleep for 55 min but only get woken up after 2
 catchup window
 
 completed workflow is not in info anymore
-
-pause on failure
-
-last completion result
-
-continuedfailure
 
 refresh (maybe let this be done by integration test)
 
