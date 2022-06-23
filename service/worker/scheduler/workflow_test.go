@@ -107,6 +107,9 @@ func (s *workflowSuite) run(sched *schedpb.Schedule, iterations int) {
 	})
 }
 
+// TestStart and TestOverlap* are written using these low-level mock helpers to
+// check that long polls are only done when needed.
+
 func (s *workflowSuite) expectStart(f func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error)) *testsuite.MockCallWrapper {
 	return s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Once().Return(
 		func(_ context.Context, req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
@@ -496,7 +499,222 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 		Policies: &schedpb.SchedulePolicies{
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 		},
+	}, 3)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+// the follow tests are written using these more high-level mock helpers
+
+type workflowRun struct {
+	id         string
+	start, end time.Time
+	result     enumspb.WorkflowExecutionStatus
+}
+
+func (s *workflowSuite) setupMocksForWorkflows(runs []workflowRun) {
+	for _, runVar := range runs {
+		run := runVar
+		// one start per workflow (should be in order)
+		s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Once().Return(
+			func(_ context.Context, req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+				s.Equal(run.id, req.Request.WorkflowId)
+				s.True(run.start.Equal(s.env.Now()))
+				resp := &schedspb.StartWorkflowResponse{
+					RunId:         uuid.NewString(),
+					RealStartTime: timestamp.TimePtr(time.Now()),
+				}
+				return resp, nil
+			})
+		// set up short-poll watchers
+		matchShortPoll := mock.MatchedBy(func(req *schedspb.WatchWorkflowRequest) bool {
+			return req.Execution.WorkflowId == run.id && !req.LongPoll
+		})
+		s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, matchShortPoll).Times(0).Maybe().Return(
+			func(_ context.Context, req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+				if s.env.Now().Before(run.end) {
+					return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
+				}
+				return &schedspb.WatchWorkflowResponse{Status: run.result}, nil
+			})
+		// set up long-poll watchers
+		matchLongPoll := mock.MatchedBy(func(req *schedspb.WatchWorkflowRequest) bool {
+			return req.Execution.WorkflowId == run.id && req.LongPoll
+		})
+		s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, matchLongPoll).Times(0).Maybe().AfterFn(func() time.Duration {
+			return run.end.Sub(s.env.Now())
+		}).Return(func(_ context.Context, req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+			return &schedspb.WatchWorkflowResponse{Status: run.result}, nil
+		})
+	}
+}
+
+func (s *workflowSuite) TestTriggerImmediate() {
+	s.setupMocksForWorkflows([]workflowRun{
+		{
+			id:     "myid-2022-06-01T00:15:00Z",
+			start:  time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 40, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		{
+			id:     "myid-2022-06-01T00:30:00Z",
+			start:  time.Date(2022, 6, 1, 0, 30, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 50, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+	})
+
+	s.env.RegisterDelayedCallback(func() {
+		// this gets skipped because a scheduled run is still running
+		s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+			TriggerImmediately: &schedpb.TriggerImmediatelyRequest{},
+		})
+	}, 20*time.Minute)
+	s.env.RegisterDelayedCallback(func() {
+		// this one runs with overridden overlap policy
+		s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+			TriggerImmediately: &schedpb.TriggerImmediatelyRequest{
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			},
+		})
+	}, 30*time.Minute)
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(55 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+		},
 	}, 4)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestBackfill() {
+	s.setupMocksForWorkflows([]workflowRun{
+		{
+			id:     "myid-2022-05-31T19:00:00Z",
+			start:  time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 9, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		{
+			id:     "myid-2022-05-31T19:17:00Z",
+			start:  time.Date(2022, 6, 1, 0, 9, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 13, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		{
+			id:     "myid-2022-05-31T19:34:00Z",
+			start:  time.Date(2022, 6, 1, 0, 13, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 23, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		{
+			id:     "myid-2022-05-31T19:51:00Z",
+			start:  time.Date(2022, 6, 1, 0, 23, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 25, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		// this is the scheduled one
+		{
+			id:     "myid-2022-07-31T19:00:00Z",
+			start:  time.Date(2022, 7, 31, 19, 0, 0, 0, time.UTC),
+			end:    time.Date(2022, 7, 31, 19, 5, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+	})
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+			BackfillRequest: []*schedpb.BackfillRequest{{
+				StartTime:     timestamp.TimePtr(time.Date(2022, 5, 31, 0, 0, 0, 0, time.UTC)),
+				EndTime:       timestamp.TimePtr(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC)),
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			}},
+		})
+	}, 5*time.Minute)
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Calendar: []*schedpb.CalendarSpec{{
+				Minute:     "*/17",
+				Hour:       "19",
+				DayOfMonth: "31",
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+		},
+	}, 6)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestPause() {
+	s.setupMocksForWorkflows([]workflowRun{
+		{
+			id:     "myid-2022-06-01T00:03:00Z",
+			start:  time.Date(2022, 6, 1, 0, 3, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 4, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		{
+			id:     "myid-2022-06-01T00:06:00Z",
+			start:  time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 7, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		// paused for a while
+		{
+			id:     "myid-2022-06-01T00:27:00Z",
+			start:  time.Date(2022, 6, 1, 0, 27, 0, 0, time.UTC),
+			end:    time.Date(2022, 6, 1, 0, 28, 0, 0, time.UTC),
+			result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+	})
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+			Pause: "paused",
+		})
+	}, 7*time.Minute)
+	s.env.RegisterDelayedCallback(func() {
+		encoded, err := s.env.QueryWorkflow(QueryNameDescribe)
+		s.NoError(err)
+		var resp schedspb.DescribeResponse
+		s.NoError(encoded.Get(&resp))
+		s.True(resp.Schedule.State.Paused)
+		s.Equal("paused", resp.Schedule.State.Notes)
+	}, 12*time.Minute)
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNamePatch, &schedpb.SchedulePatch{
+			Unpause: "go ahead",
+		})
+	}, 26*time.Minute)
+	s.env.RegisterDelayedCallback(func() {
+		encoded, err := s.env.QueryWorkflow(QueryNameDescribe)
+		s.NoError(err)
+		var resp schedspb.DescribeResponse
+		s.NoError(encoded.Get(&resp))
+		s.False(resp.Schedule.State.Paused)
+		s.Equal("go ahead", resp.Schedule.State.Notes)
+	}, 28*time.Minute)
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(3 * time.Minute),
+			}},
+		},
+		Policies: &schedpb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+	}, 12)
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
@@ -510,14 +728,6 @@ time range stuff, e.g. what if we sleep for 55 min but only get woken up after 2
 early wakeup (by signal). check signal handled and also no other workflows run
 
 schedule compile error
-
-trigger immediately
-
-backfill
-
-pause with message
-
-unpause with message
 
 catchup window
 
