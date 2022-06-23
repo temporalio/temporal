@@ -130,6 +130,7 @@ func (s *workflowSuite) expectWatch(f func(req *schedspb.WatchWorkflowRequest) (
 
 func (s *workflowSuite) TestStart() {
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("mynsid", req.NamespaceId)
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(timestamp.TimeValue(req.StartTime)))
 		s.Nil(req.LastCompletionResult)
@@ -160,16 +161,19 @@ func (s *workflowSuite) TestStart() {
 
 func (s *workflowSuite) TestOverlapSkip() {
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
 	})
 	// next one is skipped
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 2, 5, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{
@@ -181,6 +185,7 @@ func (s *workflowSuite) TestOverlapSkip() {
 	})
 	// now it'll run another
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 2, 5, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T02:05:00Z", req.Request.WorkflowId)
 		s.Equal(`["res1"]`, payloads.ToString(req.LastCompletionResult))
 		return nil, nil
@@ -202,33 +207,39 @@ func (s *workflowSuite) TestOverlapSkip() {
 
 func (s *workflowSuite) TestOverlapBufferOne() {
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
 	})
 	// now will start long poll watcher
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 3, 13, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
 		s.True(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
 	}).After(123 * time.Minute) // from 1:10 -> 3:13 (skipped over 1:10, 2:05, 3:00 starts)
 	// but will also refresh twice (we could improve this)
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 2, 5, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
 	})
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 3, 0, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
 	})
 	// now will start the buffered one
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 3, 13, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T01:10:00Z", req.Request.WorkflowId)
 		// hmm, this is probably wrong
 		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(timestamp.TimeValue(req.StartTime)))
@@ -236,18 +247,21 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 	})
 	// check on the buffered one
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 3, 55, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T01:10:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
 	})
 	// then long-poll on it
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 4, 2, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T01:10:00Z", req.Execution.WorkflowId)
 		s.True(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
 	}).After(7 * time.Minute)
 	// finally can start next one (note three were skipped)
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 4, 2, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T03:55:00Z", req.Request.WorkflowId)
 		return nil, nil
 	})
@@ -268,33 +282,39 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 
 func (s *workflowSuite) TestOverlapBufferAll() {
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
 		return nil, nil
 	})
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
 	})
 	// now will start long poll watcher
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 3, 13, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
 		s.True(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
 	}).After(123 * time.Minute) // from 1:10 -> 3:13 (skipped over 1:10, 2:05, 3:00 starts)
 	// but will also refresh twice (we could improve this)
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 2, 5, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
 	})
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 3, 0, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
 	})
 	// now will start the buffered one
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 3, 13, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T01:10:00Z", req.Request.WorkflowId)
 		// hmm, this is probably wrong
 		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(timestamp.TimeValue(req.StartTime)))
@@ -302,22 +322,26 @@ func (s *workflowSuite) TestOverlapBufferAll() {
 	})
 	// then long-poll on it immediately
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 3, 20, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T01:10:00Z", req.Execution.WorkflowId)
 		s.True(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
 	}).After(7 * time.Minute)
 	// next one
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 3, 20, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T02:05:00Z", req.Request.WorkflowId)
 		return nil, nil
 	})
 	// and long poll immediately
 	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 3, 34, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T02:05:00Z", req.Execution.WorkflowId)
 		s.True(req.LongPoll)
 		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
 	}).After(14 * time.Minute)
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 3, 34, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T03:00:00Z", req.Request.WorkflowId)
 		return nil, nil
 	})
