@@ -32,6 +32,8 @@ import (
 	"os"
 	"time"
 
+	"go.temporal.io/server/common/dynamicconfig"
+
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -69,6 +71,7 @@ type (
 		testRawHistoryNamespaceName string
 		foreignNamespace            string
 		archivalNamespace           string
+		dynamicConfigOverrides      map[dynamicconfig.Key]interface{}
 	}
 )
 
@@ -77,6 +80,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 
 	clusterConfig, err := GetTestClusterConfig(defaultClusterConfigFile)
 	s.Require().NoError(err)
+	clusterConfig.DynamicConfigOverrides = s.dynamicConfigOverrides
 	s.testClusterConfig = clusterConfig
 
 	if clusterConfig.FrontendAddress != "" {

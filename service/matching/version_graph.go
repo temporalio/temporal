@@ -26,6 +26,7 @@ package matching
 
 import (
 	"fmt"
+
 	"github.com/gogo/protobuf/proto"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"

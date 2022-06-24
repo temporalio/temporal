@@ -105,6 +105,7 @@ type (
 		frontendClient                   workflowservice.WorkflowServiceClient
 		operatorClient                   operatorservice.OperatorServiceClient
 		historyClient                    historyservice.HistoryServiceClient
+		dynamicClient                    *dynamicClient
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
 		persistenceConfig                config.Persistence
@@ -158,12 +159,17 @@ type (
 		WorkerConfig                     *WorkerConfig
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
+		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 	}
 )
 
 // NewTemporal returns an instance that hosts full temporal in one process
 func NewTemporal(params *TemporalParams) *temporalImpl {
-	return &temporalImpl{
+	integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
+	for k, v := range params.DynamicConfigOverrides {
+		integrationClient.OverrideValue(k, v)
+	}
+	impl := &temporalImpl{
 		logger:                           params.Logger,
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
 		persistenceConfig:                params.PersistenceConfig,
@@ -183,7 +189,10 @@ func NewTemporal(params *TemporalParams) *temporalImpl {
 		workerConfig:                     params.WorkerConfig,
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
+		dynamicClient:                    integrationClient,
 	}
+	impl.overrideHistoryDynamicConfig(integrationClient)
+	return impl
 }
 
 func (c *temporalImpl) enableWorker() bool {
@@ -428,7 +437,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
+		fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
@@ -471,9 +480,6 @@ func (c *temporalImpl) startHistory(
 	serviceName := common.HistoryServiceName
 	membershipPorts := c.HistoryServiceAddress(2)
 	for i, grpcPort := range c.HistoryServiceAddress(3) {
-		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
-		c.overrideHistoryDynamicConfig(integrationClient)
-
 		persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
@@ -495,7 +501,6 @@ func (c *temporalImpl) startHistory(
 		app := fx.New(
 			fx.Supply(
 				stoppedCh,
-				integrationClient,
 				persistenceConfig,
 			),
 			fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
@@ -523,7 +528,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-			fx.Provide(func() dynamicconfig.Client { return integrationClient }),
+			fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
 			fx.Provide(func() log.Logger { return c.logger }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -601,7 +606,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
+		fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		matching.Module,
 		fx.Populate(&matchingService, &clientBean, &namespaceRegistry),
@@ -693,7 +698,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
+		fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),

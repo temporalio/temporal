@@ -303,8 +303,7 @@ func (m *TaskQueueInfo) GetVersioningData() *VersioningData {
 // Holds all the data related to worker versioning for a task queue.
 // Backwards-incompatible changes cannot be made, as this would make existing stored data unreadable
 type VersioningData struct {
-	// The currently established default versions. There will be one per version type as defined in
-	// the `VersionId` message.
+	// The currently established default worker build id version.
 	CurrentDefault *v12.VersionIdNode `protobuf:"bytes,1,opt,name=current_default,json=currentDefault,proto3" json:"current_default,omitempty"`
 	// Other current latest-compatible versions who are not the overall default. These are the
 	// versions that will be used when generating new tasks by following the graph from the

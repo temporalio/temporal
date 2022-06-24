@@ -73,17 +73,18 @@ type (
 
 	// TestClusterConfig are config for a test cluster
 	TestClusterConfig struct {
-		FrontendAddress string
-		EnableArchival  bool
-		IsMasterCluster bool
-		ClusterNo       int
-		ClusterMetadata cluster.Config
-		Persistence     persistencetests.TestBaseOptions
-		HistoryConfig   *HistoryConfig
-		ESConfig        *esclient.Config
-		WorkerConfig    *WorkerConfig
-		MockAdminClient map[string]adminservice.AdminServiceClient
-		FaultInjection  config.FaultInjection `yaml:"faultinjection"`
+		FrontendAddress        string
+		EnableArchival         bool
+		IsMasterCluster        bool
+		ClusterNo              int
+		ClusterMetadata        cluster.Config
+		Persistence            persistencetests.TestBaseOptions
+		HistoryConfig          *HistoryConfig
+		ESConfig               *esclient.Config
+		WorkerConfig           *WorkerConfig
+		MockAdminClient        map[string]adminservice.AdminServiceClient
+		FaultInjection         config.FaultInjection `yaml:"faultinjection"`
+		DynamicConfigOverrides map[dynamicconfig.Key]interface{}
 	}
 
 	// WorkerConfig is the config for enabling/disabling Temporal worker

@@ -26,8 +26,14 @@ package host
 
 import (
 	"context"
+	"flag"
 	"fmt"
+	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/dynamicconfig"
 
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
@@ -41,7 +47,35 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestBasicVersionUpdate() {
+type versioningIntegSuite struct {
+	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
+	// not merely log an error
+	*require.Assertions
+	IntegrationBase
+}
+
+// This cluster use customized threshold for history config
+func (s *versioningIntegSuite) SetupSuite() {
+	s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
+	s.dynamicConfigOverrides[dynamicconfig.MatchingUpdateAckInterval] = 1 * time.Second
+	s.setupSuite("testdata/integration_test_cluster.yaml")
+}
+
+func (s *versioningIntegSuite) TearDownSuite() {
+	s.tearDownSuite()
+}
+
+func (s *versioningIntegSuite) SetupTest() {
+	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	s.Assertions = require.New(s.T())
+}
+
+func TestVersioningIntegrationSuite(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, new(versioningIntegSuite))
+}
+
+func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 	ctx := NewContext()
 	tq := "integration-versioning-basic"
 	s.prepareQueue(ctx, tq)
@@ -65,7 +99,7 @@ func (s *integrationSuite) TestBasicVersionUpdate() {
 	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
 }
 
-func (s *integrationSuite) TestSeriesOfUpdates() {
+func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 	ctx := NewContext()
 	tq := "integration-versioning-series"
 	s.prepareQueue(ctx, tq)
@@ -102,7 +136,7 @@ func (s *integrationSuite) TestSeriesOfUpdates() {
 	s.Equal("foo-2.1", res2.CompatibleLeaves[0].GetVersion().GetWorkerBuildId())
 }
 
-func (s *integrationSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound() {
+func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound() {
 	ctx := NewContext()
 	tq := "integration-versioning-compat-not-found"
 	s.prepareQueue(ctx, tq)
@@ -118,7 +152,7 @@ func (s *integrationSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-func (s *integrationSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
+func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	ctx := NewContext()
 	tq := "integration-versioning-not-destroyed"
 	s.prepareQueue(ctx, tq)
@@ -138,13 +172,15 @@ func (s *integrationSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		// TODO: This timer is long to ensure the 1-minute lease-renewal on the task queue happens, to verify that
 		//   doesn't blow up data. There must be a faster way to do that.
+		//   -- After I've got updating that config value working, make sure it's actually being re-read properly
+		//    by the lease renewal process
 		if isFirst {
 			isFirst = false
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
 				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
 					TimerId:            "timer-id-1",
-					StartToFireTimeout: timestamp.DurationPtr(70 * time.Second),
+					StartToFireTimeout: timestamp.DurationPtr(3 * time.Second),
 				}},
 			}}, nil
 		}
@@ -177,22 +213,23 @@ func (s *integrationSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
 }
 
-func (s *integrationSuite) prepareQueue(ctx context.Context, tq string) {
+func (s *versioningIntegSuite) prepareQueue(ctx context.Context, tq string) {
 	workflowID := "integration-versioning-queuemaker"
 	wt := "integration-versioning-queuemaker"
 	identity := "worker1"
 
 	// Make sure the task queue exists by starting a workflow on it
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
-		Namespace:           s.namespace,
-		WorkflowId:          workflowID,
-		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
-		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
-		Identity:            identity,
+		RequestId:             uuid.New(),
+		Namespace:             s.namespace,
+		WorkflowId:            workflowID,
+		WorkflowType:          &commonpb.WorkflowType{Name: wt},
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: tq},
+		Input:                 nil,
+		WorkflowRunTimeout:    timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout:   timestamp.DurationPtr(1 * time.Second),
+		Identity:              identity,
+		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
 	}
 
 	// start workflow task, to ensure that the task queue exists

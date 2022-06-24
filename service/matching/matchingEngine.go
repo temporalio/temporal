@@ -736,6 +736,9 @@ func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	tqMgr, err := e.getTaskQueueManager(taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL)
 	if err != nil {
+		if _, ok := err.(*serviceerror.NotFound); ok {
+			return &matchingservice.GetWorkerBuildIdOrderingResponse{}, nil
+		}
 		return nil, err
 	}
 	verDat, err := tqMgr.GetVersioningData(hCtx.Context)
