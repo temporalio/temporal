@@ -147,7 +147,7 @@ func (s *workflowSuite) expectStart(f func(req *schedspb.StartWorkflowRequest) (
 	return s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Once().Return(
 		func(_ context.Context, req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 			resp, err := f(req)
-			if resp == nil { // fill in defaults so callers can be more concise
+			if resp == nil && err == nil { // fill in defaults so callers can be more concise
 				resp = &schedspb.StartWorkflowResponse{
 					RunId:         uuid.NewString(),
 					RealStartTime: timestamp.TimePtr(time.Now()),
@@ -799,6 +799,47 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 	)
 }
 
+func (s *workflowSuite) TestFailedStart() {
+	s.T().Skip("the workflow test framework seems to have bugs around local activities that fail")
+
+	// written using low-level mocks so we can fail a StartWorkflow
+
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 10, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:05:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+	})
+	// failed start, but doesn't do anything else until next scheduled time
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 10, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:10:00Z", req.Request.WorkflowId)
+		return nil, errors.New("failed to start!")
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	// TODO: buffer two or more starts using backfill, then have the first start fail, and
+	// check that the second start is attempted immediately after, without sleeping.
+
+	s.run(&schedpb.Schedule{
+		Spec: &schedpb.ScheduleSpec{
+			Interval: []*schedpb.IntervalSpec{{
+				Interval: timestamp.DurationPtr(5 * time.Minute),
+			}},
+		},
+	}, 4)
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
 func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
 	// written using low-level mocks so we can return results/failures and check fields of
 	// start workflow requests
@@ -1257,17 +1298,3 @@ func min[T constraints.Ordered](a, b T) T {
 	}
 	return b
 }
-
-/*
-
-tests to write:
-
-failed StartWorkflow
-
-test that weird logic used to set scheduletoclosetimeout in startworkflow?
-
-activities:
-
-test long poll watcher more
-
-*/
