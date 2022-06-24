@@ -141,7 +141,7 @@ func (s *workflowSuite) runningWorkflows() []string {
 	return out
 }
 
-// low-level mock helpers:
+// Low-level mock helpers:
 
 func (s *workflowSuite) expectStart(f func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error)) *testsuite.MockCallWrapper {
 	return s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Once().Return(
@@ -180,9 +180,9 @@ func (s *workflowSuite) expectTerminate(f func(req *schedspb.TerminateWorkflowRe
 
 // High-level mock helpers. This is a small meta-test-framework: it runs a schedule across
 // multiple workflow executions with continue-as-new, breaking at a variety of points. To do
-// this it has to reinitialize the workflow test framework each time, since that only supports
-// a single workflow execution. That means we have to reinitialize our activity mocks and
-// delayed executions, which means they have to be supplied to this function as data.
+// this it has to reinitialize the workflow test framework each time, since the framework only
+// supports a single workflow execution. That means we have to reinitialize our activity mocks
+// and delayed executions, which means they have to be supplied to runAcrossContinue as data.
 
 type workflowRun struct {
 	id         string
@@ -253,7 +253,7 @@ func (s *workflowSuite) runAcrossContinue(
 	// fill this in so callers don't need to
 	sched.Action = s.defaultAction("myid")
 
-	for _, every := range []int{2, 3, 5, 7, 11, 1000} {
+	for _, every := range []int{1, 2, 3, 5, 7, 11, 1000} {
 		s.T().Logf("running %s with continue-as-new every %d iterations", s.T().Name(), every)
 
 		startTime := baseStartTime
@@ -295,9 +295,8 @@ func (s *workflowSuite) runAcrossContinue(
 			}
 
 			startTime = s.now()
-			var newStartArgs *schedspb.StartScheduleArgs
-			s.NoError(payloads.Decode(canErr.Input, &newStartArgs))
-			startArgs = newStartArgs
+			startArgs = nil
+			s.NoError(payloads.Decode(canErr.Input, &startArgs))
 		}
 		// check starts that we actually got
 		s.Equal(len(runs), len(gotRuns))
