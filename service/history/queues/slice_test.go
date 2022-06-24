@@ -313,15 +313,15 @@ func (s *sliceSuite) TestShrinkRange() {
 
 	slice.ShrinkRange()
 	s.Len(slice.outstandingExecutables, len(executables)-numAcked)
+	s.validateSliceState(slice)
 
 	newInclusiveMin := r.ExclusiveMax
+	if len(slice.iterators) != 0 {
+		newInclusiveMin = slice.iterators[0].Range().InclusiveMin
+	}
 
-	if firstPendingIdx == len(executables) {
-		if len(slice.iterators) != 0 {
-			newInclusiveMin = slice.iterators[0].Range().InclusiveMin
-		}
-	} else {
-		newInclusiveMin = executables[firstPendingIdx].GetKey()
+	if numAcked != len(executables) {
+		newInclusiveMin = tasks.MinKey(newInclusiveMin, executables[firstPendingIdx].GetKey())
 	}
 
 	s.Equal(NewRange(newInclusiveMin, r.ExclusiveMax), slice.Scope().Range)

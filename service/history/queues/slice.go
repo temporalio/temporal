@@ -342,30 +342,30 @@ func (s *SliceImpl) appendIterator(
 func (s *SliceImpl) ShrinkRange() {
 	s.stateSanityCheck()
 
-	minTaskKey := tasks.MaximumKey
+	minPendingTaskKey := tasks.MaximumKey
 	for key := range s.outstandingExecutables {
 		if s.outstandingExecutables[key].State() == ctasks.TaskStateAcked {
 			delete(s.outstandingExecutables, key)
 			continue
 		}
 
-		minTaskKey = tasks.MinKey(minTaskKey, key)
+		minPendingTaskKey = tasks.MinKey(minPendingTaskKey, key)
 	}
 
-	// still has pending task in memory
-	if minTaskKey != tasks.MaximumKey {
-		s.scope.Range.InclusiveMin = minTaskKey
-		return
-	}
-
-	// no more pending task in memory, but has more tasks to read from persistence
+	minIteratorKey := tasks.MaximumKey
 	if len(s.iterators) != 0 {
-		s.scope.Range.InclusiveMin = s.iterators[0].Range().InclusiveMin
-		return
+		minIteratorKey = s.iterators[0].Range().InclusiveMin
 	}
 
-	// no pending task in memory and persistence
-	s.scope.Range.InclusiveMin = s.scope.Range.ExclusiveMax
+	// pick min key for tasks in memory and in persistence
+	newRangeMin := tasks.MinKey(minPendingTaskKey, minIteratorKey)
+
+	// no pending task in memory and in persistence
+	if newRangeMin == tasks.MaximumKey {
+		newRangeMin = s.scope.Range.ExclusiveMax
+	}
+
+	s.scope.Range.InclusiveMin = newRangeMin
 }
 
 func (s *SliceImpl) SelectTasks(batchSize int) ([]Executable, error) {
