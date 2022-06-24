@@ -339,6 +339,51 @@ func (s *workflowSuite) TestStart() {
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
+func (s *workflowSuite) TestInitialPatch() {
+	// written using low-level mocks so we can test initial patch
+
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:00:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:00:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+	})
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+
+	currentTweakablePolicies.IterationsBeforeContinueAsNew = 2
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
+		Schedule: &schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{
+					Interval: timestamp.DurationPtr(55 * time.Minute),
+				}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedspb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+		InitialPatch: &schedpb.SchedulePatch{
+			TriggerImmediately: &schedpb.TriggerImmediatelyRequest{},
+		},
+	})
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
 func (s *workflowSuite) TestOverlapSkip() {
 	s.runAcrossContinue(
 		[]workflowRun{
@@ -595,6 +640,7 @@ func (s *workflowSuite) TestOverlapTerminate() {
 }
 
 func (s *workflowSuite) TestOverlapAllowAll() {
+	// also contains tests for RunningWorkflows and refresh, since it's convenient to do here
 	s.runAcrossContinue(
 		[]workflowRun{
 			{
@@ -1162,8 +1208,6 @@ func min[T constraints.Ordered](a, b T) T {
 /*
 
 tests to write:
-
-initial patch (trigger immediate)
 
 time range stuff, e.g. what if we sleep for 55 min but only get woken up after 200?
 
