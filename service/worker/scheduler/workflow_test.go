@@ -648,7 +648,6 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 					s.env.SignalWorkflow(SignalNameRefresh, nil)
 				},
 			},
-			/* following runningWorkflows tests are disabled due to a bug
 			{
 				at: time.Date(2022, 6, 1, 0, 16, 31, 0, time.UTC),
 				f: func() {
@@ -663,7 +662,6 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z"}, s.runningWorkflows())
 				},
 			},
-			*/
 			{
 				at: time.Date(2022, 6, 1, 0, 21, 0, 0, time.UTC),
 				f: func() {
@@ -680,7 +678,6 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 					s.env.SignalWorkflow(SignalNameRefresh, nil)
 				},
 			},
-			/* disabled due to bug
 			{
 				at: time.Date(2022, 6, 1, 0, 23, 1, 0, time.UTC),
 				f: func() {
@@ -688,7 +685,6 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 					s.Equal([]string(nil), s.runningWorkflows())
 				},
 			},
-			*/
 		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{

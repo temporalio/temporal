@@ -61,6 +61,8 @@ message InternalState {
 
     // conflict token is implemented as simple sequence number
     int64 conflict_token = 7;
+
+    bool need_refresh = 9;
 }
 
 message StartScheduleArgs {

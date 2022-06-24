@@ -84,9 +84,6 @@ type (
 		// We might have zero or one long-poll watcher activity running. If so, these are set:
 		watchingWorkflowId string
 		watchingFuture     workflow.Future
-
-		// If we've added any starts in this iteration and need to refresh running workflow status.
-		needRefresh bool
 	}
 
 	tweakablePolicies struct {
@@ -475,7 +472,7 @@ func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
 	s.logger.Debug("got refresh signal")
 	// If we're woken up by any signal, we'll pass through processBuffer before sleeping again.
 	// processBuffer will see this flag and refresh everything.
-	s.needRefresh = true
+	s.State.NeedRefresh = true
 }
 
 func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
@@ -650,21 +647,21 @@ func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy en
 	})
 	// we have a new start to process, so we need to make sure that we have up-to-date status
 	// on any workflows that we started.
-	s.needRefresh = true
+	s.State.NeedRefresh = true
 }
 
 // processBuffer should return true if there might be more work to do right now.
 func (s *scheduler) processBuffer() bool {
-	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStarts), "running", len(s.Info.RunningWorkflows), "needRefresh", s.needRefresh)
+	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStarts), "running", len(s.Info.RunningWorkflows), "needRefresh", s.State.NeedRefresh)
 
 	// TODO: consider doing this always and removing needRefresh? we only end up here without
 	// needRefresh in the case of update, or patch without an immediate run, so it's not much
 	// wasted work.
 	// TODO: on the other hand, we don't have to refresh if we have one workflow running and a
 	// long-poll watcher running, because we would have gotten woken up already.
-	if s.needRefresh {
+	if s.State.NeedRefresh {
 		s.refreshWorkflows(slices.Clone(s.Info.RunningWorkflows))
-		s.needRefresh = false
+		s.State.NeedRefresh = false
 	}
 
 	// Make sure we have something to start. If not, we can clear the buffer.
