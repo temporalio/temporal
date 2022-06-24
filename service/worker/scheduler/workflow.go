@@ -660,6 +660,8 @@ func (s *scheduler) processBuffer() bool {
 	// TODO: consider doing this always and removing needRefresh? we only end up here without
 	// needRefresh in the case of update, or patch without an immediate run, so it's not much
 	// wasted work.
+	// TODO: on the other hand, we don't have to refresh if we have one workflow running and a
+	// long-poll watcher running, because we would have gotten woken up already.
 	if s.needRefresh {
 		s.refreshWorkflows(slices.Clone(s.Info.RunningWorkflows))
 		s.needRefresh = false
