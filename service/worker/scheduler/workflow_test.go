@@ -340,7 +340,7 @@ func (s *workflowSuite) TestStart() {
 }
 
 func (s *workflowSuite) TestInitialPatch() {
-	// written using low-level mocks so we can test initial patch
+	// written using low-level mocks so we can set initial patch
 
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC).Equal(s.now()))
@@ -378,6 +378,59 @@ func (s *workflowSuite) TestInitialPatch() {
 		},
 		InitialPatch: &schedpb.SchedulePatch{
 			TriggerImmediately: &schedpb.TriggerImmediatelyRequest{},
+		},
+	})
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestCatchupWindow() {
+	// written using low-level mocks so we can set initial state
+
+	// one catchup
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-05-31T23:17:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 17, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-05-31T23:17:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedspb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+	})
+	// one on time
+	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 17, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:17:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	s.env.RegisterDelayedCallback(func() {
+		s.Equal(int64(5), s.describe().Info.MissedCatchupWindow)
+	}, 18*time.Minute)
+
+	currentTweakablePolicies.IterationsBeforeContinueAsNew = 2
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedspb.StartScheduleArgs{
+		Schedule: &schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Calendar: []*schedpb.CalendarSpec{{
+					Minute: "17",
+					Hour:   "*",
+				}},
+			},
+			Action: s.defaultAction("myid"),
+			Policies: &schedpb.SchedulePolicies{
+				CatchupWindow: timestamp.DurationPtr(1 * time.Hour),
+			},
+		},
+		State: &schedspb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+			// workflow "woke up" after 6 hours
+			LastProcessedTime: timestamp.TimePtr(time.Date(2022, 5, 31, 18, 0, 0, 0, time.UTC)),
 		},
 	})
 	s.True(s.env.IsWorkflowCompleted())
@@ -1208,10 +1261,6 @@ func min[T constraints.Ordered](a, b T) T {
 /*
 
 tests to write:
-
-time range stuff, e.g. what if we sleep for 55 min but only get woken up after 200?
-
-catchup window
 
 failed StartWorkflow
 
