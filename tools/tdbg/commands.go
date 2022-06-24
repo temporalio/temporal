@@ -37,7 +37,6 @@ import (
 	"github.com/temporalio/tctl-kit/pkg/color"
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -47,10 +46,7 @@ import (
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -199,103 +195,7 @@ func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateRes
 
 // AdminDeleteWorkflow delete a workflow execution from Cassandra and visibility document from Elasticsearch.
 func AdminDeleteWorkflow(c *cli.Context) error {
-	resp, err := describeMutableState(c)
-	if err != nil {
-		return err
-	}
-	namespaceID := resp.GetDatabaseMutableState().GetExecutionInfo().GetNamespaceId()
-	runID := resp.GetDatabaseMutableState().GetExecutionState().GetRunId()
-
-	adminDeleteVisibilityDocument(c, namespaceID)
-
-	session, err := connectToCassandra(c)
-	if err != nil {
-		return err
-	}
-
-	shardID := resp.GetShardId()
-	shardIDInt, err := strconv.Atoi(shardID)
-	if err != nil {
-		return fmt.Errorf("Unable to strconv.Atoi(shardID): %s", err)
-	}
-	var branchTokens [][]byte
-	versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
-	// if VersionHistories is set, then all branch infos are stored in VersionHistories
-	for _, historyItem := range versionHistories.GetHistories() {
-		branchTokens = append(branchTokens, historyItem.GetBranchToken())
-	}
-
-	for _, branchToken := range branchTokens {
-		branchInfo, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
-		if err != nil {
-			return fmt.Errorf("Unable to HistoryBranchFromBlob: %s", err)
-		}
-		fmt.Println("Deleting history events for:")
-		prettyPrintJSONObject(branchInfo)
-		execStore := cassandra.NewExecutionStore(session, log.NewNoopLogger())
-		execMgr := persistence.NewExecutionManager(
-			execStore,
-			serialization.NewSerializer(),
-			log.NewNoopLogger(),
-			dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
-		)
-		ctx, cancel := newContext(c)
-		defer cancel()
-
-		err = execMgr.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
-			BranchToken: branchToken,
-			ShardID:     int32(shardIDInt),
-		})
-		if err != nil {
-			if c.Bool(FlagSkipErrorMode) {
-				fmt.Println("Unable to DeleteHistoryBranch:", err)
-			} else {
-				return fmt.Errorf("Unable to DeleteHistoryBranch: %s", err)
-			}
-		}
-	}
-
-	exeStore := cassandra.NewExecutionStore(session, log.NewNoopLogger())
-	req := &persistence.DeleteWorkflowExecutionRequest{
-		ShardID:     int32(shardIDInt),
-		NamespaceID: namespaceID,
-		WorkflowID:  c.String(FlagWorkflowID),
-		RunID:       runID,
-	}
-
-	ctx, cancel := newContext(c)
-	defer cancel()
-	err = exeStore.DeleteWorkflowExecution(ctx, req)
-	if err != nil {
-		if c.Bool(FlagSkipErrorMode) {
-			fmt.Printf("Unable to DeleteWorkflowExecution for RunID=%s: %v\n", runID, err)
-		} else {
-			return fmt.Errorf("Unable to DeleteWorkflowExecution for RunID=%s: %s", runID, err)
-		}
-	} else {
-		fmt.Printf("DeleteWorkflowExecution for RunID=%s executed successfully.\n", runID)
-	}
-
-	deleteCurrentReq := &persistence.DeleteCurrentWorkflowExecutionRequest{
-		ShardID:     int32(shardIDInt),
-		NamespaceID: namespaceID,
-		WorkflowID:  c.String(FlagWorkflowID),
-		RunID:       runID,
-	}
-
-	ctx, cancel = newContext(c)
-	defer cancel()
-	err = exeStore.DeleteCurrentWorkflowExecution(ctx, deleteCurrentReq)
-	if err != nil {
-		if c.Bool(FlagSkipErrorMode) {
-			fmt.Printf("Unable to DeleteCurrentWorkflowExecution for RunID=%s: %v\n", runID, err)
-		} else {
-			return fmt.Errorf("Unable to DeleteCurrentWorkflowExecution for RunID=%s: %s", runID, err)
-		}
-	} else {
-		fmt.Printf("DeleteCurrentWorkflowExecution for RunID=%s executed successfully.\n", runID)
-	}
-	return nil
+	return fmt.Errorf("Not implemented")
 }
 
 func adminDeleteVisibilityDocument(c *cli.Context, namespaceID string) error {

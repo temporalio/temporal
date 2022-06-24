@@ -31,19 +31,19 @@ import (
 var commands = []*cli.Command{
 	{
 		Name:        "workflow",
-		Aliases:     []string{"wf"},
+		Aliases:     []string{"w"},
 		Usage:       "Run admin operation on workflow",
 		Subcommands: newAdminWorkflowCommands(),
 	},
 	{
 		Name:        "shard",
-		Aliases:     []string{"shar"},
+		Aliases:     []string{"s"},
 		Usage:       "Run admin operation on specific shard",
 		Subcommands: newAdminShardManagementCommands(),
 	},
 	{
 		Name:        "history_host",
-		Aliases:     []string{"hist"},
+		Aliases:     []string{"h"},
 		Usage:       "Run admin operation on history host",
 		Subcommands: newAdminHistoryHostCommands(),
 	},
@@ -55,18 +55,18 @@ var commands = []*cli.Command{
 	},
 	{
 		Name:        "membership",
+		Aliases:     []string{"m"},
 		Usage:       "Run admin operation on membership",
 		Subcommands: newAdminMembershipCommands(),
 	},
 	{
 		Name:        "cluster",
-		Aliases:     []string{"cl"},
+		Aliases:     []string{"c"},
 		Usage:       "Run admin operation on cluster",
 		Subcommands: newAdminClusterCommands(),
 	},
 	{
 		Name:        "dlq",
-		Aliases:     []string{"dlq"},
 		Usage:       "Run admin operation on DLQ",
 		Subcommands: newAdminDLQCommands(),
 	},
@@ -80,9 +80,8 @@ var commands = []*cli.Command{
 func newAdminWorkflowCommands() []*cli.Command {
 	return []*cli.Command{
 		{
-			Name:    "show",
-			Aliases: []string{"show"},
-			Usage:   "show workflow history from database",
+			Name:  "show",
+			Usage: "show workflow history from database",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:    FlagWorkflowID,
@@ -121,7 +120,7 @@ func newAdminWorkflowCommands() []*cli.Command {
 		},
 		{
 			Name:    "describe",
-			Aliases: []string{"desc"},
+			Aliases: []string{"d"},
 			Usage:   "Describe internal information of workflow execution",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -257,9 +256,8 @@ func newAdminShardManagementCommands() []*cli.Command {
 			},
 		},
 		{
-			Name:    "close_shard",
-			Aliases: []string{"clsh"},
-			Usage:   "close a shard given a shard id",
+			Name:  "close_shard",
+			Usage: "close a shard given a shard id",
 			Flags: []cli.Flag{
 				&cli.IntFlag{
 					Name:  FlagShardID,
@@ -344,7 +342,7 @@ func newAdminHistoryHostCommands() []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:    "describe",
-			Aliases: []string{"desc"},
+			Aliases: []string{"d"},
 			Usage:   "Describe internal information of history host",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
@@ -370,9 +368,8 @@ func newAdminHistoryHostCommands() []*cli.Command {
 			},
 		},
 		{
-			Name:    "get-shardid",
-			Aliases: []string{"gsh"},
-			Usage:   "Get shardId for a namespaceId and workflowId combination",
+			Name:  "get-shardid",
+			Usage: "Get shardId for a namespaceId and workflowId combination",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:  FlagNamespaceID,
@@ -459,7 +456,7 @@ func newAdminClusterCommands() []*cli.Command {
 		},
 		{
 			Name:    "list",
-			Aliases: []string{"ls"},
+			Aliases: []string{"l"},
 			Usage:   "List clusters information",
 			Flags: []cli.Flag{
 				&cli.IntFlag{
@@ -473,9 +470,8 @@ func newAdminClusterCommands() []*cli.Command {
 			},
 		},
 		{
-			Name:    "upsert-remote-cluster",
-			Aliases: []string{"urc"},
-			Usage:   "Add or update remote cluster information in the current cluster",
+			Name:  "upsert-remote-cluster",
+			Usage: "Add or update remote cluster information in the current cluster",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:     FlagAddress,
@@ -492,9 +488,8 @@ func newAdminClusterCommands() []*cli.Command {
 			},
 		},
 		{
-			Name:    "remove-remote-cluster",
-			Aliases: []string{"rrc"},
-			Usage:   "Remove remote cluster information from the current cluster",
+			Name:  "remove-remote-cluster",
+			Usage: "Remove remote cluster information from the current cluster",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:     FlagCluster,
