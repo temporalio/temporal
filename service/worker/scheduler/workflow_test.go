@@ -132,6 +132,15 @@ func (s *workflowSuite) describe() *schedspb.DescribeResponse {
 	return &resp
 }
 
+func (s *workflowSuite) runningWorkflows() []string {
+	desc := s.describe()
+	var out []string
+	for _, ex := range desc.Info.RunningWorkflows {
+		out = append(out, ex.WorkflowId)
+	}
+	return out
+}
+
 // low-level mock helpers:
 
 func (s *workflowSuite) expectStart(f func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error)) *testsuite.MockCallWrapper {
@@ -299,6 +308,8 @@ func (s *workflowSuite) runAcrossContinue(
 }
 
 func (s *workflowSuite) TestStart() {
+	// written using low-level mocks so we can test all fields in the start request
+
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
 		s.Equal("mynsid", req.NamespaceId)
@@ -350,6 +361,13 @@ func (s *workflowSuite) TestOverlapSkip() {
 				at: time.Date(2022, 6, 1, 0, 11, 0, 0, time.UTC),
 				f: func() {
 					s.Equal(int64(1), s.describe().Info.OverlapSkipped)
+					s.Equal([]string{"myid-2022-06-01T00:05:00Z"}, s.runningWorkflows())
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 16, 0, 0, time.UTC),
+				f: func() {
+					s.Equal([]string{"myid-2022-06-01T00:15:00Z"}, s.runningWorkflows())
 				},
 			},
 		},
@@ -391,7 +409,16 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			},
 		},
-		nil,
+		[]delayedCallback{
+			{
+				at: time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC),
+				f:  func() { s.Equal([]string{"myid-2022-06-01T00:05:00Z"}, s.runningWorkflows()) },
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 31, 0, 0, time.UTC),
+				f:  func() { s.Equal([]string{"myid-2022-06-01T00:30:00Z"}, s.runningWorkflows()) },
+			},
+		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
@@ -444,7 +471,16 @@ func (s *workflowSuite) TestOverlapBufferAll() {
 				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			},
 		},
-		nil,
+		[]delayedCallback{
+			{
+				at: time.Date(2022, 6, 1, 0, 20, 0, 0, time.UTC),
+				f:  func() { s.Equal([]string{"myid-2022-06-01T00:15:00Z"}, s.runningWorkflows()) },
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 22, 30, 0, time.UTC),
+				f:  func() { s.Equal([]string{"myid-2022-06-01T00:20:00Z"}, s.runningWorkflows()) },
+			},
+		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
@@ -460,6 +496,9 @@ func (s *workflowSuite) TestOverlapBufferAll() {
 }
 
 func (s *workflowSuite) TestOverlapCancel() {
+	// written using low-level mocks so we can mock CancelWorkflow without adding support in
+	// the framework
+
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
@@ -505,6 +544,9 @@ func (s *workflowSuite) TestOverlapCancel() {
 }
 
 func (s *workflowSuite) TestOverlapTerminate() {
+	// written using low-level mocks so we can mock TerminateWorkflow without adding support in
+	// the framework
+
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
@@ -580,7 +622,74 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			},
 		},
-		nil,
+		[]delayedCallback{
+			{
+				at: time.Date(2022, 6, 1, 0, 6, 0, 0, time.UTC),
+				f:  func() { s.Equal([]string{"myid-2022-06-01T00:05:00Z"}, s.runningWorkflows()) },
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 11, 0, 0, time.UTC),
+				f: func() {
+					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z"}, s.runningWorkflows())
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 15, 30, 0, time.UTC),
+				f: func() {
+					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z", "myid-2022-06-01T00:15:00Z"}, s.runningWorkflows())
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 16, 30, 0, time.UTC),
+				f: func() {
+					// :15 has ended here, but we won't know until we refresh since we don't have a long-poll watcher
+					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z", "myid-2022-06-01T00:15:00Z"}, s.runningWorkflows())
+					// poke it to refresh
+					s.env.SignalWorkflow(SignalNameRefresh, nil)
+				},
+			},
+			/* following runningWorkflows tests are disabled due to a bug
+			{
+				at: time.Date(2022, 6, 1, 0, 16, 31, 0, time.UTC),
+				f: func() {
+					// now we'll see it end
+					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z"}, s.runningWorkflows())
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 18, 0, 0, time.UTC),
+				f: func() {
+					// :05 has ended, but we won't see it yet
+					s.Equal([]string{"myid-2022-06-01T00:05:00Z", "myid-2022-06-01T00:10:00Z"}, s.runningWorkflows())
+				},
+			},
+			*/
+			{
+				at: time.Date(2022, 6, 1, 0, 21, 0, 0, time.UTC),
+				f: func() {
+					// we'll see :05 ended because :20 started and did an implicit refresh
+					s.Equal([]string{"myid-2022-06-01T00:10:00Z", "myid-2022-06-01T00:20:00Z"}, s.runningWorkflows())
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 23, 0, 0, time.UTC),
+				f: func() {
+					// we won't see these ended yet
+					s.Equal([]string{"myid-2022-06-01T00:10:00Z", "myid-2022-06-01T00:20:00Z"}, s.runningWorkflows())
+					// poke it to refresh
+					s.env.SignalWorkflow(SignalNameRefresh, nil)
+				},
+			},
+			/* disabled due to bug
+			{
+				at: time.Date(2022, 6, 1, 0, 23, 1, 0, time.UTC),
+				f: func() {
+					// now we will
+					s.Equal([]string(nil), s.runningWorkflows())
+				},
+			},
+			*/
+		},
 		&schedpb.Schedule{
 			Spec: &schedpb.ScheduleSpec{
 				Interval: []*schedpb.IntervalSpec{{
@@ -591,11 +700,14 @@ func (s *workflowSuite) TestOverlapAllowAll() {
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			},
 		},
-		5,
+		7,
 	)
 }
 
 func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
+	// written using low-level mocks so we can return results/failures and check fields of
+	// start workflow requests
+
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
 		s.Nil(req.LastCompletionResult)
@@ -666,6 +778,8 @@ func (s *workflowSuite) TestLastCompletionResultAndContinuedFailure() {
 }
 
 func (s *workflowSuite) TestPauseOnFailure() {
+	// written using low-level mocks so we can return failures
+
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 5, 0, 0, time.UTC).Equal(s.now()))
 		s.Equal("myid-2022-06-01T00:05:00Z", req.Request.WorkflowId)
@@ -709,6 +823,8 @@ func (s *workflowSuite) TestPauseOnFailure() {
 }
 
 func (s *workflowSuite) TestCompileError() {
+	// written using low-level mocks since it sleeps forever
+
 	s.env.RegisterDelayedCallback(func() {
 		s.Contains(s.describe().Info.InvalidScheduleError, "invalid syntax")
 	}, 1*time.Minute)
@@ -1056,10 +1172,6 @@ initial patch (trigger immediate)
 time range stuff, e.g. what if we sleep for 55 min but only get woken up after 200?
 
 catchup window
-
-completed workflow is not in info anymore
-
-refresh (maybe let this be done by integration test)
 
 failed StartWorkflow
 
