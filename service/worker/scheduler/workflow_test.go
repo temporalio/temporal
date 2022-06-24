@@ -154,7 +154,6 @@ func (s *workflowSuite) TestStart() {
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("mynsid", req.NamespaceId)
-		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(timestamp.TimeValue(req.StartTime)))
 		s.Nil(req.LastCompletionResult)
 		s.Nil(req.ContinuedFailure)
 		s.Equal("myns", req.Request.Namespace)
@@ -257,8 +256,6 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 3, 13, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T01:10:00Z", req.Request.WorkflowId)
-		// hmm, this is probably wrong
-		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(timestamp.TimeValue(req.StartTime)))
 		return nil, nil
 	})
 	// check on the buffered one
@@ -332,8 +329,6 @@ func (s *workflowSuite) TestOverlapBufferAll() {
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 3, 13, 0, 0, time.UTC).Equal(s.env.Now()))
 		s.Equal("myid-2022-06-01T01:10:00Z", req.Request.WorkflowId)
-		// hmm, this is probably wrong
-		s.True(time.Date(2022, 6, 1, 1, 10, 0, 0, time.UTC).Equal(timestamp.TimeValue(req.StartTime)))
 		return nil, nil
 	})
 	// then long-poll on it immediately
@@ -987,9 +982,5 @@ test stuff across c-a-n
 activities:
 
 test long poll watcher more
-
-bugs to fix:
-
-start time should just be now, if run is buffered behind another then it'll be wrong
 
 */

@@ -765,14 +765,6 @@ func (s *scheduler) startWorkflow(
 	}
 	ctx := workflow.WithLocalActivityOptions(s.ctx, options)
 
-	// this timestamp is the one used to set the deadline for workflow execution timeout
-	startTime := timestamp.TimePtr(s.now())
-	if !start.Manual {
-		// use the scheduled time for workflow execution timeout even if we started late
-		// TODO: is this being too smart? should we just leave it as the current time?
-		startTime = start.ActualTime
-	}
-
 	req := &schedspb.StartWorkflowRequest{
 		NamespaceId: s.State.NamespaceId,
 		Request: &workflowservice.StartWorkflowExecutionRequest{
@@ -792,7 +784,6 @@ func (s *scheduler) startWorkflow(
 			SearchAttributes:         s.addSearchAttributes(newWorkflow.SearchAttributes, nominalTimeSec),
 			Header:                   newWorkflow.Header,
 		},
-		StartTime:            startTime,
 		LastCompletionResult: s.State.LastCompletionResult,
 		ContinuedFailure:     s.State.ContinuedFailure,
 	}
