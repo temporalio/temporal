@@ -152,7 +152,6 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		workflowExecution,
 		weContext,
 		mutableState,
-		task.GetVersion(),
 	)
 }
 

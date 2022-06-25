@@ -572,7 +572,6 @@ func (s *TaskSerializer) transferDeleteExecutionTaskToProto(
 		WorkflowId:     deleteExecutionTask.WorkflowKey.WorkflowID,
 		RunId:          deleteExecutionTask.WorkflowKey.RunID,
 		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
-		Version:        deleteExecutionTask.Version,
 		TaskId:         deleteExecutionTask.TaskID,
 		VisibilityTime: timestamp.TimePtr(deleteExecutionTask.VisibilityTimestamp),
 	}
@@ -589,7 +588,6 @@ func (s *TaskSerializer) transferDeleteExecutionTaskFromProto(
 		),
 		VisibilityTimestamp: *deleteExecutionTask.VisibilityTime,
 		TaskID:              deleteExecutionTask.TaskId,
-		Version:             deleteExecutionTask.Version,
 	}
 }
 
@@ -931,7 +929,6 @@ func (s *TaskSerializer) visibilityDeleteTaskToProto(
 		WorkflowId:     deleteVisibilityTask.WorkflowKey.WorkflowID,
 		RunId:          deleteVisibilityTask.WorkflowKey.RunID,
 		TaskType:       enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
-		Version:        deleteVisibilityTask.Version,
 		TaskId:         deleteVisibilityTask.TaskID,
 		VisibilityTime: &deleteVisibilityTask.VisibilityTimestamp,
 		StartTime:      deleteVisibilityTask.StartTime,
@@ -950,7 +947,6 @@ func (s *TaskSerializer) visibilityDeleteTaskFromProto(
 		),
 		VisibilityTimestamp: *deleteVisibilityTask.VisibilityTime,
 		TaskID:              deleteVisibilityTask.TaskId,
-		Version:             deleteVisibilityTask.Version,
 		StartTime:           deleteVisibilityTask.StartTime,
 		CloseTime:           deleteVisibilityTask.CloseTime,
 	}

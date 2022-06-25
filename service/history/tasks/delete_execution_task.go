@@ -28,6 +28,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -38,7 +39,6 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		Version             int64
 	}
 )
 
@@ -47,11 +47,10 @@ func (a *DeleteExecutionTask) GetKey() Key {
 }
 
 func (a *DeleteExecutionTask) GetVersion() int64 {
-	return a.Version
+	return common.EmptyVersion
 }
 
-func (a *DeleteExecutionTask) SetVersion(version int64) {
-	a.Version = version
+func (a *DeleteExecutionTask) SetVersion(_ int64) {
 }
 
 func (a *DeleteExecutionTask) GetTaskID() int64 {
