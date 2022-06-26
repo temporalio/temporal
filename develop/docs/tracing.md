@@ -60,8 +60,8 @@ otel:
       spec:
         connection:
           endpoint: api.honeycomb.io:443
-          headers:
-            x-honeycomb-team: <a honeycomb API key>
+        headers:
+          x-honeycomb-team: <a honeycomb API key>
 ```
 
 Note that the configuration parser supports defining multiple exporters by
