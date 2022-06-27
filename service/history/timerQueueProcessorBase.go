@@ -229,7 +229,16 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 	))
 	defer rescheduleTimer.Stop()
 
+eventLoop:
 	for {
+		// prioritize shutdown
+		select {
+		case <-t.shutdownCh:
+			break eventLoop
+		default:
+			// noop
+		}
+
 		// Wait until one of four things occurs:
 		// 1. we get notified of a new message
 		// 2. the timer gate fires (message scheduled to be delivered)
@@ -238,8 +247,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 		//
 		select {
 		case <-t.shutdownCh:
-			t.logger.Debug("Timer queue processor pump shutting down.")
-			return nil
+			break eventLoop
 		case <-t.timerQueueAckMgr.getFinishedChan():
 			// timer queue ack manager indicate that all task scanned
 			// are finished and no more tasks
@@ -294,6 +302,8 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 			))
 		}
 	}
+
+	return nil
 }
 
 func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) {
