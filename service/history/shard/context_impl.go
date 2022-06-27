@@ -956,7 +956,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	}()
 
 	s.wLock()
-	defer s.wUnlock()
+	// Explicitly release the lock (not with defer) after 2 of 4 steps.
 
 	if err := s.errorByStateLocked(); err != nil {
 		return err
@@ -1001,6 +1001,8 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	if err != nil {
 		return err
 	}
+
+	s.wUnlock()
 
 	// Step 3. Delete workflow mutable state.
 	delRequest := &persistence.DeleteWorkflowExecutionRequest{
