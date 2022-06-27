@@ -81,6 +81,12 @@ func convertErrors(
 			continue
 		}
 
+		rowType, ok := conflictRecord["type"].(*int)
+		if !ok || rowType == nil {
+			// Scylla will return nil rows to match # of queries in a batch query (#2683)
+			continue
+		}
+
 		conflictRecords = append(conflictRecords, conflictRecord)
 		errors = append(errors, extractErrors(
 			conflictRecord,
