@@ -74,7 +74,14 @@ func convertErrors(
 		requestExecutionCASConditions,
 	)
 
-	conflictRecord = make(map[string]interface{})
+	newConflictRecord := func() map[string]interface{} {
+		typ := new(int)
+		return map[string]interface{}{
+			"type": &typ,
+		}
+	}
+
+	conflictRecord = newConflictRecord()
 	for conflictIter.MapScan(conflictRecord) {
 		if conflictRecord["[applied]"].(bool) {
 			// Should never happen. All records in batch should have [applied]=false.
@@ -84,8 +91,11 @@ func convertErrors(
 		rowType, ok := conflictRecord["type"].(*int)
 		if !ok || rowType == nil {
 			// Scylla will return nil rows to match # of queries in a batch query (#2683)
+			conflictRecord = newConflictRecord()
 			continue
 		}
+		// Dereference rowType for later use
+		conflictRecord["type"] = *rowType
 
 		conflictRecords = append(conflictRecords, conflictRecord)
 		errors = append(errors, extractErrors(
@@ -96,7 +106,7 @@ func convertErrors(
 			requestExecutionCASConditions,
 		)...)
 
-		conflictRecord = make(map[string]interface{})
+		conflictRecord = newConflictRecord()
 	}
 
 	if len(errors) == 0 {
