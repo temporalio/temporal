@@ -129,7 +129,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 			RunID:       tests.RunID,
 		},
 		[]byte{22, 8, 78},
-		int64(1),
 		nil,
 		&closeTime,
 	).Return(nil)
@@ -141,7 +140,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		we,
 		mockWeCtx,
 		mockMutableState,
-		1,
 		false,
 	)
 	s.NoError(err)
@@ -168,7 +166,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 			RunID:       tests.RunID,
 		},
 		[]byte{22, 8, 78},
-		int64(1),
 		nil,
 		&closeTime,
 	).Return(serviceerror.NewInternal("test error"))
@@ -179,7 +176,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		we,
 		mockWeCtx,
 		mockMutableState,
-		1,
 		false,
 	)
 	s.Error(err)
@@ -204,7 +200,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 			RunID:       tests.RunID,
 		},
 		[]byte{22, 8, 78},
-		int64(1),
 		&now,
 		nil,
 	).Return(nil)
@@ -216,7 +211,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		we,
 		mockWeCtx,
 		mockMutableState,
-		1,
 		true,
 	)
 	s.NoError(err)
@@ -414,7 +408,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 			RunID:       tests.RunID,
 		},
 		nil,
-		int64(1),
 		nil,
 		&closeTime,
 	).Return(nil)
@@ -426,7 +419,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 		we,
 		mockWeCtx,
 		mockMutableState,
-		1,
 	)
 	s.NoError(err)
 }
@@ -476,7 +468,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 		we,
 		mockWeCtx,
 		mockMutableState,
-		1,
 	)
 	s.Error(err)
 }
