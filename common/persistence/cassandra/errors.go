@@ -56,6 +56,15 @@ type (
 	}
 )
 
+// All the entries (other than [applied]) can be nullable if running on ScyllaDB, but we only need to check one.
+// Scylla will return nil rows to match # of queries in a batch query (see #2683)
+func newConflictRecord() map[string]interface{} {
+	typ := new(int)
+	return map[string]interface{}{
+		"type": &typ,
+	}
+}
+
 func convertErrors(
 	conflictRecord map[string]interface{},
 	conflictIter gocql.Iter,
@@ -74,28 +83,12 @@ func convertErrors(
 		requestExecutionCASConditions,
 	)
 
-	newConflictRecord := func() map[string]interface{} {
-		typ := new(int)
-		return map[string]interface{}{
-			"type": &typ,
-		}
-	}
-
 	conflictRecord = newConflictRecord()
 	for conflictIter.MapScan(conflictRecord) {
 		if conflictRecord["[applied]"].(bool) {
 			// Should never happen. All records in batch should have [applied]=false.
 			continue
 		}
-
-		rowType, ok := conflictRecord["type"].(*int)
-		if !ok || rowType == nil {
-			// Scylla will return nil rows to match # of queries in a batch query (#2683)
-			conflictRecord = newConflictRecord()
-			continue
-		}
-		// Dereference rowType for later use
-		conflictRecord["type"] = *rowType
 
 		conflictRecords = append(conflictRecords, conflictRecord)
 		errors = append(errors, extractErrors(
@@ -136,6 +129,13 @@ func extractErrors(
 ) []error {
 
 	var errors []error
+
+	rowType, ok := conflictRecord["type"].(*int)
+	if !ok || rowType == nil {
+		return errors
+	}
+	// Dereference rowType for later use
+	conflictRecord["type"] = *rowType
 
 	if err := extractShardOwnershipLostError(
 		conflictRecord,
