@@ -1657,7 +1657,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 	s.Equal(5*time.Second, timestamp.DurationValue(activity1Attributes.HeartbeatTimeout))
 }
 
-func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityLocalDispatch() {
+func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_NotCancelled() {
 	namespaceID := tests.NamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
@@ -1762,6 +1762,88 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityLocalDispatch() {
 	s.Equal(int32(1), activityTask.Attempt)
 	s.Nil(activityTask.HeartbeatDetails)
 	s.Equal(tests.LocalNamespaceEntry.Name().String(), activityTask.WorkflowNamespace)
+}
+
+func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Cancelled() {
+	namespaceID := tests.NamespaceID
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+	tl := "testTaskQueue"
+	tt := &tokenspb.Task{
+		Attempt:          1,
+		NamespaceId:      namespaceID.String(),
+		WorkflowId:       tests.WorkflowID,
+		RunId:            we.GetRunId(),
+		ScheduledEventId: 2,
+	}
+	taskToken, _ := tt.Marshal()
+	identity := "testIdentity"
+	input := payloads.EncodeString("input")
+
+	msBuilder := workflow.TestLocalMutableState(s.mockHistoryEngine.shard, s.eventsCache,
+		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
+	addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, tl, identity)
+
+	scheduleToCloseTimeout := timestamp.DurationPtr(90 * time.Second)
+	scheduleToStartTimeout := timestamp.DurationPtr(10 * time.Second)
+	startToCloseTimeout := timestamp.DurationPtr(50 * time.Second)
+	heartbeatTimeout := timestamp.DurationPtr(5 * time.Second)
+	commands := []*commandpb.Command{
+		{
+			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:             "activity1",
+				ActivityType:           &commonpb.ActivityType{Name: "activity_type1"},
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+				Input:                  input,
+				ScheduleToCloseTimeout: scheduleToCloseTimeout,
+				ScheduleToStartTimeout: scheduleToStartTimeout,
+				StartToCloseTimeout:    startToCloseTimeout,
+				HeartbeatTimeout:       heartbeatTimeout,
+				RequestEagerExecution:  true,
+			}},
+		},
+		{
+			CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
+			Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
+				ScheduledEventId: 5,
+			}},
+		},
+	}
+
+	ms := workflow.TestCloneToProto(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+
+	resp, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			TaskToken:             taskToken,
+			Commands:              commands,
+			Identity:              identity,
+			ReturnNewWorkflowTask: true,
+		},
+	})
+	s.NoError(err)
+	executionBuilder := s.getBuilder(tests.NamespaceID, we)
+	s.Equal(int64(10), executionBuilder.GetNextEventID()) // activity scheduled, request cancel, cancelled, workflow task scheduled, started
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
+	s.True(executionBuilder.HasPendingWorkflowTask())
+
+	_, ok := executionBuilder.GetActivityByActivityID("activity1")
+	s.False(ok)
+
+	s.Len(resp.ActivityTasks, 0)
+	s.NotNil(resp.StartedResponse)
+	s.Equal(int64(10), resp.StartedResponse.NextEventId)
+	s.Equal(int64(3), resp.StartedResponse.PreviousStartedEventId)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTimeout() {

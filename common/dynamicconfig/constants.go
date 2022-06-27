@@ -109,8 +109,8 @@ const (
 	EnableParentClosePolicyWorker = "system.enableParentClosePolicyWorker"
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
 	EnableStickyQuery = "system.enableStickyQuery"
-	// EnableActivityLocalDispatch indicates if acitivty local dispatch is enabled per namespace
-	EnableActivityLocalDispatch = "system.enableActivityLocalDispatch"
+	// EnableActivityEagerExecution indicates if acitivty eager execution is enabled per namespace
+	EnableActivityEagerExecution = "system.enableActivityEagerExecution"
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
 
