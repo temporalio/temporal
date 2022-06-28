@@ -228,8 +228,6 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	return false
 }
 
-// Start reading pump for the given task queue.
-// The pump fills up taskBuffer from persistence.
 func (c *taskQueueManagerImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
@@ -245,7 +243,6 @@ func (c *taskQueueManagerImpl) Start() {
 	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
 }
 
-// Stop pump that fills up taskBuffer from persistence.
 func (c *taskQueueManagerImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,

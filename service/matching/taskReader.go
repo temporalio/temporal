@@ -65,6 +65,8 @@ func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
 	}
 }
 
+// Start reading pump for the given task queue.
+// The pump fills up taskBuffer from persistence.
 func (tr *taskReader) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&tr.status,
@@ -81,6 +83,7 @@ func (tr *taskReader) Start() {
 	// acquires the lease and initializes the read level and max read level.
 }
 
+// Stop pump that fills up taskBuffer from persistence.
 func (tr *taskReader) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&tr.status,
