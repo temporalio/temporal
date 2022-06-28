@@ -719,7 +719,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
 		return nil, err
 	}
 	err = tqMgr.MutateVersioningData(hCtx.Context, func(data *persistencespb.VersioningData) error {
-		return UpdateVersionsGraph(data, req.GetRequest())
+		return UpdateVersionsGraph(data, req.GetRequest(), e.config.MaxVersionGraphSize())
 	})
 	if err != nil {
 		return nil, err
@@ -743,6 +743,9 @@ func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
 	}
 	verDat, err := tqMgr.GetVersioningData(hCtx.Context)
 	if err != nil {
+		if _, ok := err.(*serviceerror.NotFound); ok {
+			return &matchingservice.GetWorkerBuildIdOrderingResponse{}, nil
+		}
 		return nil, err
 	}
 	return &matchingservice.GetWorkerBuildIdOrderingResponse{

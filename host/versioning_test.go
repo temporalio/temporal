@@ -31,11 +31,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/dynamicconfig"
 
-	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -54,7 +54,6 @@ type versioningIntegSuite struct {
 	IntegrationBase
 }
 
-// This cluster use customized threshold for history config
 func (s *versioningIntegSuite) SetupSuite() {
 	s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
 	s.dynamicConfigOverrides[dynamicconfig.MatchingUpdateAckInterval] = 1 * time.Second
@@ -170,10 +169,8 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	isFirst := true
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		// TODO: This timer is long to ensure the 1-minute lease-renewal on the task queue happens, to verify that
-		//   doesn't blow up data. There must be a faster way to do that.
-		//   -- After I've got updating that config value working, make sure it's actually being re-read properly
-		//    by the lease renewal process
+		// This timer exists to ensure the lease-renewal on the task queue happens, to verify that doesn't blow up data.
+		// The renewal interval has been lowered in this suite.
 		if isFirst {
 			isFirst = false
 			return []*commandpb.Command{{

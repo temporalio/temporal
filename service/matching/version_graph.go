@@ -35,11 +35,16 @@ import (
 )
 
 func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdOrderingResponse {
+	return depthLimiter(g, maxDepth, true)
+}
+
+func depthLimiter(g *persistence.VersioningData, maxDepth int, noMutate bool) *workflowservice.GetWorkerBuildIdOrderingResponse {
 	curDefault := g.GetCurrentDefault()
 	compatLeaves := g.GetCompatibleLeaves()
 	if maxDepth > 0 {
-		// Mutating the passed in graph is a no-no.
-		curDefault = proto.Clone(g.GetCurrentDefault()).(*taskqueuepb.VersionIdNode)
+		if noMutate {
+			curDefault = proto.Clone(g.GetCurrentDefault()).(*taskqueuepb.VersionIdNode)
+		}
 		curNode := curDefault
 		curDepth := 1
 		for curDepth < maxDepth {
@@ -55,7 +60,10 @@ func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *wor
 		// Apply to compatible leaves as well
 		newCompatLeaves := make([]*taskqueuepb.VersionIdNode, len(g.GetCompatibleLeaves()))
 		for ix := range compatLeaves {
-			compatLeaf := proto.Clone(compatLeaves[ix]).(*taskqueuepb.VersionIdNode)
+			compatLeaf := compatLeaves[ix]
+			if noMutate {
+				compatLeaf = proto.Clone(compatLeaves[ix]).(*taskqueuepb.VersionIdNode)
+			}
 			curNode = compatLeaf
 			curDepth = 1
 			for curDepth < maxDepth {
@@ -100,14 +108,21 @@ func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *wor
 // 4. Unset a version as a default. It will be dropped and its previous incompatible version becomes default.
 // 5. Unset a version as a compatible. It will be dropped and its previous compatible version will become the new
 //    compatible leaf for that branch.
-func UpdateVersionsGraph(
-	existingData *persistence.VersioningData,
-	req *workflowservice.UpdateWorkerBuildIdOrderingRequest,
-) error {
+func UpdateVersionsGraph(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdOrderingRequest, maxSize int) error {
 	if req.GetVersionId().GetWorkerBuildId() == "" {
 		return serviceerror.NewInvalidArgument(
 			"request to update worker build id ordering is missing a valid version identifier")
 	}
+	err := updateImpl(existingData, req)
+	if err != nil {
+		return err
+	}
+	// Limit graph size if it's grown too large
+	depthLimiter(existingData, maxSize, false)
+	return nil
+}
+
+func updateImpl(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdOrderingRequest) error {
 	// If the version is to become the new default, add it to the list of current defaults, possibly replacing
 	// the currently set one.
 	if req.GetBecomeDefault() {

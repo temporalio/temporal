@@ -60,7 +60,7 @@ func TestNewDefaultGraphUpdate(t *testing.T) {
 		BecomeDefault: true,
 	}
 
-	err := UpdateVersionsGraph(data, req)
+	err := UpdateVersionsGraph(data, req, 0)
 	assert.NoError(t, err)
 
 	assert.True(t, data.CurrentDefault.Version.Equal(req.VersionId))
@@ -82,7 +82,7 @@ func TestNewDefaultGraphUpdateOfEmptyGraph(t *testing.T) {
 		BecomeDefault: true,
 	}
 
-	err := UpdateVersionsGraph(data, req)
+	err := UpdateVersionsGraph(data, req, 0)
 	assert.NoError(t, err)
 
 	assert.True(t, data.CurrentDefault.Version.Equal(req.VersionId))
@@ -105,7 +105,7 @@ func TestNewDefaultGraphUpdateCompatWithCurDefault(t *testing.T) {
 		BecomeDefault:      true,
 	}
 
-	err := UpdateVersionsGraph(data, req)
+	err := UpdateVersionsGraph(data, req, 0)
 	assert.NoError(t, err)
 
 	assert.True(t, data.CurrentDefault.Version.Equal(req.VersionId))
@@ -130,7 +130,7 @@ func TestNewDefaultGraphUpdateCompatWithSomethingElse(t *testing.T) {
 		BecomeDefault:      true,
 	}
 
-	err := UpdateVersionsGraph(data, req)
+	err := UpdateVersionsGraph(data, req, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
@@ -150,7 +150,7 @@ func TestNewCompatibleWithNodeDeepInIncompatChain(t *testing.T) {
 		PreviousCompatible: mkVerId("0"),
 	}
 
-	err := UpdateVersionsGraph(data, req)
+	err := UpdateVersionsGraph(data, req, 0)
 	assert.NoError(t, err)
 
 	assert.Equal(t, "2", data.CurrentDefault.Version.GetWorkerBuildId())
@@ -175,7 +175,7 @@ func TestNewCompatibleWithNonDefaultGraphUpdate(t *testing.T) {
 		VersionId:          mkVerId("0.1"),
 		PreviousCompatible: mkVerId("0"),
 	}
-	err := UpdateVersionsGraph(data, req)
+	err := UpdateVersionsGraph(data, req, 0)
 	assert.NoError(t, err)
 
 	assert.True(t, data.CurrentDefault.Version.Equal(n1.Version))
@@ -188,7 +188,7 @@ func TestNewCompatibleWithNonDefaultGraphUpdate(t *testing.T) {
 		VersionId:          mkVerId("0.2"),
 		PreviousCompatible: mkVerId("0.1"),
 	}
-	err = UpdateVersionsGraph(data, req)
+	err = UpdateVersionsGraph(data, req, 0)
 	assert.NoError(t, err)
 
 	assert.True(t, data.CurrentDefault.Version.Equal(n1.Version))
@@ -202,7 +202,7 @@ func TestNewCompatibleWithNonDefaultGraphUpdate(t *testing.T) {
 		VersionId:          mkVerId("0.3"),
 		PreviousCompatible: mkVerId("0.1"),
 	}
-	err = UpdateVersionsGraph(data, req)
+	err = UpdateVersionsGraph(data, req, 0)
 	assert.NoError(t, err)
 
 	assert.True(t, data.CurrentDefault.Version.Equal(n1.Version))
@@ -221,7 +221,7 @@ func TestAddingNewNodeCompatWithPreviousWhenNoDefaultNotAllowed(t *testing.T) {
 		PreviousCompatible: mkVerId("0"),
 		BecomeDefault:      true,
 	}
-	err := UpdateVersionsGraph(data, req)
+	err := UpdateVersionsGraph(data, req, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
@@ -232,7 +232,7 @@ func TestAddingNewNodeWithNoLinksNotAllowed(t *testing.T) {
 	req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
 		VersionId: mkVerId("0.1"),
 	}
-	err := UpdateVersionsGraph(data, req)
+	err := UpdateVersionsGraph(data, req, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
@@ -247,7 +247,7 @@ func TestUnsetCurrentDefault(t *testing.T) {
 		VersionId: mkVerId("1"),
 	}
 
-	err := UpdateVersionsGraph(data, req)
+	err := UpdateVersionsGraph(data, req, 0)
 	assert.NoError(t, err)
 
 	assert.Nil(t, data.CurrentDefault)
@@ -265,7 +265,7 @@ func TestUnsetCurrentDefaultPreviousIncompatBecomesDefault(t *testing.T) {
 		VersionId: mkVerId("1"),
 	}
 
-	err := UpdateVersionsGraph(data, req)
+	err := UpdateVersionsGraph(data, req, 0)
 	assert.NoError(t, err)
 
 	assert.True(t, data.CurrentDefault.Version.Equal(n0.Version))
@@ -286,7 +286,7 @@ func TestUnsetCurrentDefaultPreviousCompatBecomesDefault(t *testing.T) {
 		VersionId: mkVerId("1.1"),
 	}
 
-	err := UpdateVersionsGraph(data, req)
+	err := UpdateVersionsGraph(data, req, 0)
 	assert.NoError(t, err)
 
 	assert.True(t, data.CurrentDefault.Version.Equal(n1.Version))
@@ -308,7 +308,7 @@ func TestDropCompatibleLeaf(t *testing.T) {
 		VersionId: mkVerId("1.1"),
 	}
 
-	err := UpdateVersionsGraph(data, req)
+	err := UpdateVersionsGraph(data, req, 0)
 	assert.NoError(t, err)
 
 	assert.True(t, data.CurrentDefault.Version.Equal(n1.Version))
@@ -328,9 +328,57 @@ func TestCompatibleTargetsNotFound(t *testing.T) {
 		PreviousCompatible: mkVerId("1"),
 	}
 
-	err := UpdateVersionsGraph(data, req)
+	err := UpdateVersionsGraph(data, req, 0)
 	assert.Error(t, err)
 	assert.IsType(t, &serviceerror.NotFound{}, err)
+}
+
+func TestLimitsMaxSize(t *testing.T) {
+	data := &persistencepb.VersioningData{}
+	maxSize := 1000
+
+	for i := 0; i < 1024; i++ {
+		id := mkVerId(fmt.Sprintf("%d", i))
+		req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+			VersionId:     id,
+			BecomeDefault: true,
+		}
+		err := UpdateVersionsGraph(data, req, maxSize)
+		assert.NoError(t, err)
+	}
+	for i := 0; i < 1024; i++ {
+		id := mkVerId(fmt.Sprintf("50.%d", i))
+		var compatId *taskqueuepb.VersionId
+		if i == 0 {
+			compatId = mkVerId("50")
+		} else {
+			compatId = mkVerId(fmt.Sprintf("50.%d", i-1))
+		}
+		req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+			VersionId:          id,
+			PreviousCompatible: compatId,
+		}
+		err := UpdateVersionsGraph(data, req, maxSize)
+		assert.NoError(t, err)
+	}
+
+	lastNode := data.GetCurrentDefault()
+	for true {
+		if lastNode.GetPreviousIncompatible() == nil {
+			break
+		}
+		lastNode = lastNode.GetPreviousIncompatible()
+	}
+	assert.Equal(t, mkVerId("24"), lastNode.GetVersion())
+	assert.Equal(t, 1, len(data.GetCompatibleLeaves()))
+	lastNode = data.GetCompatibleLeaves()[0]
+	for true {
+		if lastNode.GetPreviousCompatible() == nil {
+			break
+		}
+		lastNode = lastNode.GetPreviousCompatible()
+	}
+	assert.Equal(t, mkVerId("50.24"), lastNode.GetVersion())
 }
 
 func FuzzVersionGraphEnsureNoSameTypeDefaults(f *testing.F) {
@@ -351,7 +399,7 @@ func FuzzVersionGraphEnsureNoSameTypeDefaults(f *testing.F) {
 				req.PreviousCompatible = compatTarget
 			}
 			addedNodes = append(addedNodes, id)
-			err := UpdateVersionsGraph(data, req)
+			err := UpdateVersionsGraph(data, req, 0)
 			assert.NoError(t, err)
 			assert.NotNil(t, ToBuildIdOrderingResponse(data, 0))
 		}
