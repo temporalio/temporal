@@ -176,7 +176,7 @@ func (t *timerQueueAckMgrImpl) getFinishedChan() <-chan struct{} {
 
 func (t *timerQueueAckMgrImpl) readTimerTasks() ([]queues.Executable, *time.Time, bool, error) {
 	if t.maxQueryLevel == t.minQueryLevel {
-		t.maxQueryLevel = t.shard.GetQueueMaxReadLevel(tasks.CategoryTimer, t.clusterName).FireTime
+		t.maxQueryLevel = t.shard.GetQueueExclusiveMaxReadLevel(tasks.CategoryTimer, t.clusterName).FireTime
 		t.maxQueryLevel = common.MaxTime(t.minQueryLevel, t.maxQueryLevel)
 	}
 	minQueryLevel := t.minQueryLevel

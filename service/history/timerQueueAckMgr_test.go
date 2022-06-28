@@ -548,7 +548,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 
 func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(s.clusterName).AnyTimes()
-	level := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryTimer, s.clusterName).FireTime
+	level := s.mockShard.GetQueueExclusiveMaxReadLevel(tasks.CategoryTimer, s.clusterName).FireTime
 
 	s.timerQueueAckMgr.minQueryLevel = level
 	s.timerQueueAckMgr.maxQueryLevel = s.timerQueueAckMgr.minQueryLevel

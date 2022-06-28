@@ -150,7 +150,7 @@ func (s *ackManagerSuite) TestNotifyNewTasks_Initialized() {
 
 func (s *ackManagerSuite) TestTaskIDRange_NotInitialized() {
 	s.replicationAckManager.sanityCheckTime = time.Time{}
-	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID
+	expectMaxTaskID := s.mockShard.GetQueueExclusiveMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID
 	expectMinTaskID := expectMaxTaskID - 100
 	s.replicationAckManager.maxTaskID = convert.Int64Ptr(expectMinTaskID - 100)
 
@@ -165,8 +165,8 @@ func (s *ackManagerSuite) TestTaskIDRange_Initialized_UseHighestReplicationTaskI
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(2 * time.Minute)
 	s.replicationAckManager.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 100
-	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 50
+	expectMinTaskID := s.mockShard.GetQueueExclusiveMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueExclusiveMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 50
 	s.replicationAckManager.maxTaskID = convert.Int64Ptr(expectMaxTaskID)
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
@@ -180,8 +180,8 @@ func (s *ackManagerSuite) TestTaskIDRange_Initialized_NoHighestReplicationTaskID
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(2 * time.Minute)
 	s.replicationAckManager.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 100
-	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID
+	expectMinTaskID := s.mockShard.GetQueueExclusiveMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueExclusiveMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID
 	s.replicationAckManager.maxTaskID = nil
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
@@ -195,9 +195,9 @@ func (s *ackManagerSuite) TestTaskIDRange_Initialized_UseHighestTransferTaskID()
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(-2 * time.Minute)
 	s.replicationAckManager.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 100
-	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID
-	s.replicationAckManager.maxTaskID = convert.Int64Ptr(s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 50)
+	expectMinTaskID := s.mockShard.GetQueueExclusiveMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueExclusiveMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID
+	s.replicationAckManager.maxTaskID = convert.Int64Ptr(s.mockShard.GetQueueExclusiveMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 50)
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
 	s.Equal(expectMinTaskID, minTaskID)

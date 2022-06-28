@@ -501,7 +501,7 @@ func (p *taskProcessorImpl) cleanupReplicationTasks() error {
 		metrics.TargetClusterTag(p.currentCluster),
 	).RecordDistribution(
 		metrics.ReplicationTasksLag,
-		int(p.shard.GetQueueMaxReadLevel(tasks.CategoryReplication, currentCluster).TaskID-*minAckedTaskID),
+		int(p.shard.GetQueueExclusiveMaxReadLevel(tasks.CategoryReplication, currentCluster).Prev().TaskID-*minAckedTaskID),
 	)
 	err := p.shard.GetExecutionManager().RangeCompleteHistoryTasks(
 		context.TODO(),

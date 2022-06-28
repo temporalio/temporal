@@ -174,13 +174,13 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 func (s *contextSuite) TestTimerMaxReadLevelUpdate() {
 	now := time.Now()
 	s.timeSource.Update(now)
-	maxReadLevel := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryTimer, cluster.TestCurrentClusterName)
+	maxReadLevel := s.mockShard.GetQueueExclusiveMaxReadLevel(tasks.CategoryTimer, cluster.TestCurrentClusterName)
 
 	s.timeSource.Update(now.Add(-time.Minute))
-	newMaxReadLevel := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryTimer, cluster.TestCurrentClusterName)
+	newMaxReadLevel := s.mockShard.GetQueueExclusiveMaxReadLevel(tasks.CategoryTimer, cluster.TestCurrentClusterName)
 	s.Equal(maxReadLevel, newMaxReadLevel)
 
 	s.timeSource.Update(now.Add(time.Minute))
-	newMaxReadLevel = s.mockShard.GetQueueMaxReadLevel(tasks.CategoryTimer, cluster.TestCurrentClusterName)
+	newMaxReadLevel = s.mockShard.GetQueueExclusiveMaxReadLevel(tasks.CategoryTimer, cluster.TestCurrentClusterName)
 	s.True(newMaxReadLevel.FireTime.After(maxReadLevel.FireTime))
 }
