@@ -1860,6 +1860,25 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		s.NoError(err)
 		s.NotNil(res)
 	}
+	// Make a long compat-versions chain
+	for i := 0; i < 10; i++ {
+		id := mkVerId(fmt.Sprintf("99.%d", i))
+		prevCompat := mkVerId(fmt.Sprintf("99.%d", i-1))
+		if i == 0 {
+			prevCompat = mkVerId("99")
+		}
+		res, err := s.matchingEngine.UpdateWorkerBuildIdOrdering(s.handlerContext, &matchingservice.UpdateWorkerBuildIdOrderingRequest{
+			NamespaceId: namespaceID.String(),
+			Request: &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+				Namespace:          namespaceID.String(),
+				TaskQueue:          tq,
+				VersionId:          id,
+				PreviousCompatible: prevCompat,
+			},
+		})
+		s.NoError(err)
+		s.NotNil(res)
+	}
 
 	// Ensure they all exist
 	res, err = s.matchingEngine.GetWorkerBuildIdOrdering(s.handlerContext, &matchingservice.GetWorkerBuildIdOrderingRequest{
@@ -1878,6 +1897,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		lastNode = lastNode.GetPreviousIncompatible()
 	}
 	s.Equal(mkVerId("0"), lastNode.GetVersion())
+	s.Equal(mkVerId("99.9"), res.GetResponse().GetCompatibleLeaves()[0].GetVersion())
 
 	// Ensure depth limiting works
 	res, err = s.matchingEngine.GetWorkerBuildIdOrdering(s.handlerContext, &matchingservice.GetWorkerBuildIdOrderingRequest{
@@ -1891,13 +1911,14 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.NoError(err)
 	s.NotNil(res.GetResponse().GetCurrentDefault())
 	s.Nil(res.GetResponse().GetCurrentDefault().GetPreviousIncompatible())
+	s.Nil(res.GetResponse().GetCompatibleLeaves()[0].GetPreviousCompatible())
 
 	res, err = s.matchingEngine.GetWorkerBuildIdOrdering(s.handlerContext, &matchingservice.GetWorkerBuildIdOrderingRequest{
 		NamespaceId: namespaceID.String(),
 		Request: &workflowservice.GetWorkerBuildIdOrderingRequest{
 			Namespace: namespaceID.String(),
 			TaskQueue: tq,
-			MaxDepth:  10,
+			MaxDepth:  5,
 		},
 	})
 	s.NoError(err)
@@ -1909,7 +1930,15 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 		}
 		lastNode = lastNode.GetPreviousIncompatible()
 	}
-	s.Equal(mkVerId("90"), lastNode.GetVersion())
+	s.Equal(mkVerId("95"), lastNode.GetVersion())
+	lastNode = res.GetResponse().GetCompatibleLeaves()[0]
+	for true {
+		if lastNode.GetPreviousCompatible() == nil {
+			break
+		}
+		lastNode = lastNode.GetPreviousCompatible()
+	}
+	s.Equal(mkVerId("99.5"), lastNode.GetVersion())
 }
 
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {

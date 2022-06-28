@@ -34,15 +34,14 @@ import (
 	"go.temporal.io/server/api/persistence/v1"
 )
 
-// TODO: Add validator of requests that can return proper error codes @ frontend
-
 func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdOrderingResponse {
 	curDefault := g.GetCurrentDefault()
-	curDepth := 1
+	compatLeaves := g.GetCompatibleLeaves()
 	if maxDepth > 0 {
 		// Mutating the passed in graph is a no-no.
 		curDefault = proto.Clone(g.GetCurrentDefault()).(*taskqueuepb.VersionIdNode)
 		curNode := curDefault
+		curDepth := 1
 		for curDepth < maxDepth {
 			if curNode.GetPreviousIncompatible() == nil {
 				break
@@ -53,10 +52,29 @@ func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *wor
 		if curNode != nil {
 			curNode.PreviousIncompatible = nil
 		}
+		// Apply to compatible leaves as well
+		newCompatLeaves := make([]*taskqueuepb.VersionIdNode, len(g.GetCompatibleLeaves()))
+		for ix := range compatLeaves {
+			compatLeaf := proto.Clone(compatLeaves[ix]).(*taskqueuepb.VersionIdNode)
+			curNode = compatLeaf
+			curDepth = 1
+			for curDepth < maxDepth {
+				if curNode.GetPreviousCompatible() == nil {
+					break
+				}
+				curNode = curNode.GetPreviousCompatible()
+				curDepth++
+			}
+			if curNode != nil {
+				curNode.PreviousCompatible = nil
+			}
+			newCompatLeaves[ix] = compatLeaf
+		}
+		compatLeaves = newCompatLeaves
 	}
 	return &workflowservice.GetWorkerBuildIdOrderingResponse{
 		CurrentDefault:   curDefault,
-		CompatibleLeaves: g.GetCompatibleLeaves(),
+		CompatibleLeaves: compatLeaves,
 	}
 }
 

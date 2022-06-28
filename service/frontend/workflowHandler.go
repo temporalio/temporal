@@ -3653,6 +3653,10 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, requ
 		return nil, errRequestNotSet
 	}
 
+	if err := wh.validateBuildIdOrderingUpdate(request); err != nil {
+		return nil, err
+	}
+
 	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
 		return nil, err
 	}
@@ -3982,6 +3986,28 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 	}
 
 	enums.SetDefaultTaskQueueKind(&t.Kind)
+	return nil
+}
+
+func (wh *WorkflowHandler) validateBuildIdOrderingUpdate(
+	req *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+) error {
+	if req.GetNamespace() == "" {
+		return serviceerror.NewInvalidArgument(
+			"request to update worker build id ordering requires `namespace` to be set")
+	}
+	if req.GetTaskQueue() == "" {
+		return serviceerror.NewInvalidArgument(
+			"request to update worker build id ordering requires `task_queue` to be set")
+	}
+	if req.GetVersionId().GetWorkerBuildId() == "" {
+		return serviceerror.NewInvalidArgument(
+			"request to update worker build id ordering requires targeting a valid version identifier")
+	}
+	if len(req.GetVersionId().GetWorkerBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"Worker build IDs cannot be longer than %v characters", wh.config.WorkerBuildIdSizeLimit()))
+	}
 	return nil
 }
 
