@@ -133,7 +133,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
-func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Name) (*taskQueueConfig, error) {
+func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Name) *taskQueueConfig {
 	taskQueueName := id.name
 	taskType := id.taskType
 
@@ -198,5 +198,5 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 				return common.MaxInt(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
 			},
 		},
-	}, nil
+	}
 }

@@ -160,10 +160,7 @@ func newTaskQueueManager(
 	}
 	nsName := namespaceEntry.Name()
 
-	taskQueueConfig, err := newTaskQueueConfig(taskQueue, config, nsName)
-	if err != nil {
-		return nil, err
-	}
+	taskQueueConfig := newTaskQueueConfig(taskQueue, config, nsName)
 
 	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue.name, taskQueue.taskType, taskQueueKind, e.logger)
 	logger := log.With(e.logger,
