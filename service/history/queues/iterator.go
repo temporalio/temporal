@@ -43,10 +43,10 @@ type (
 		Remaining() Iterator
 	}
 
-	paginationFnProvider func(Range) collection.PaginationFn[tasks.Task]
+	PaginationFnProvider func(Range) collection.PaginationFn[tasks.Task]
 
 	IteratorImpl struct {
-		paginationFnProvider paginationFnProvider
+		paginationFnProvider PaginationFnProvider
 		remainingRange       Range
 
 		pagingIterator collection.Iterator[tasks.Task]
@@ -54,7 +54,7 @@ type (
 )
 
 func NewIterator(
-	paginationFnProvider paginationFnProvider,
+	paginationFnProvider PaginationFnProvider,
 	r Range,
 ) *IteratorImpl {
 	return &IteratorImpl{
