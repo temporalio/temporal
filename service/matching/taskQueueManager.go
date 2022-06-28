@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/future"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -80,6 +81,7 @@ type (
 	taskQueueManager interface {
 		Start()
 		Stop()
+		WaitUntilInitialized(context.Context) error
 		// AddTask adds a task to the task queue. This method will first attempt a synchronous
 		// match with a poller. When that fails, task will be written to database and later
 		// asynchronously matched with a poller
@@ -133,6 +135,7 @@ type (
 		outstandingPollsMap  map[string]context.CancelFunc
 		signalFatalProblem   func(taskQueueManager)
 		clusterMeta          cluster.Metadata
+		initializedError     *future.FutureImpl[struct{}]
 	}
 )
 
@@ -190,6 +193,7 @@ func newTaskQueueManager(
 		clusterMeta:         clusterMeta,
 		namespace:           nsName,
 		metricScope:         metricsScope,
+		initializedError:    future.NewFuture[struct{}](),
 	}
 
 	tlMgr.liveness = newLiveness(
@@ -251,13 +255,24 @@ func (c *taskQueueManagerImpl) Stop() {
 	) {
 		return
 	}
-	_ = c.db.UpdateState(context.TODO(), c.taskAckManager.getAckLevel())
-	c.taskGC.RunNow(context.TODO(), c.taskAckManager.getAckLevel())
+	// ackLevel in taskAckManager is initialized to -1 and then set to a real value (>= 0) once
+	// we've successfully acquired a lease. If it's still -1, then we don't have current
+	// metadata. UpdateState would fail on the lease check, but don't even bother calling it.
+	ackLevel := c.taskAckManager.getAckLevel()
+	if ackLevel >= 0 {
+		c.db.UpdateState(context.TODO(), ackLevel)
+		c.taskGC.RunNow(context.TODO(), ackLevel)
+	}
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.metricScope.IncCounter(metrics.TaskQueueStoppedCounter)
+}
+
+func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
+	_, err := c.initializedError.Get(ctx)
+	return err
 }
 
 // AddTask adds a task to the task queue. This method will first attempt a synchronous

@@ -199,7 +199,8 @@ func (e *matchingEngineImpl) String() string {
 }
 
 // Returns taskQueueManager for a task queue if it is already loaded.
-func (e *matchingEngineImpl) getTaskQueueManagerIfAlreadyLoaded(taskQueue *taskQueueID) taskQueueManager {
+// May return a taskQueueManager that is still initializing.
+func (e *matchingEngineImpl) getTaskQueueManagerIfAlreadyLoadedUninitialized(taskQueue *taskQueueID) taskQueueManager {
 	e.taskQueuesLock.RLock()
 	defer e.taskQueuesLock.RUnlock()
 	if result, ok := e.taskQueues[*taskQueue]; ok {
@@ -208,10 +209,25 @@ func (e *matchingEngineImpl) getTaskQueueManagerIfAlreadyLoaded(taskQueue *taskQ
 	return nil
 }
 
+// Returns taskQueueManager for a task queue if it is already loaded.
+func (e *matchingEngineImpl) getTaskQueueManagerIfAlreadyLoaded(taskQueue *taskQueueID) (taskQueueManager, error) {
+	mgr := e.getTaskQueueManagerIfAlreadyLoadedUninitialized(taskQueue)
+	if mgr == nil {
+		return nil, nil
+	}
+	err := mgr.WaitUntilInitialized(context.Background())
+	if err != nil {
+		e.unloadTaskQueue(mgr)
+		return nil, err
+	}
+	return mgr, nil
+}
+
 // Returns taskQueueManager for a task queue. If not already cached gets new range from DB and
 // if successful creates one.
-func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQueueKind enumspb.TaskQueueKind) (taskQueueManager, error) {
-	result := e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
+// May return a taskQueueManager that is still initializing.
+func (e *matchingEngineImpl) getTaskQueueManagerUninitialized(taskQueue *taskQueueID, taskQueueKind enumspb.TaskQueueKind) (taskQueueManager, error) {
+	result := e.getTaskQueueManagerIfAlreadyLoadedUninitialized(taskQueue)
 	if result != nil {
 		return result, nil
 	}
@@ -233,6 +249,21 @@ func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQue
 	taskQueueCount := e.taskQueueCount[countKey]
 	e.updateTaskQueueGauge(countKey, taskQueueCount)
 
+	return mgr, nil
+}
+
+// Returns taskQueueManager for a task queue. If not already cached gets new range from DB and
+// if successful creates one.
+func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQueueKind enumspb.TaskQueueKind) (taskQueueManager, error) {
+	mgr, err := e.getTaskQueueManagerUninitialized(taskQueue, taskQueueKind)
+	if err != nil {
+		return nil, err
+	}
+	err = mgr.WaitUntilInitialized(context.Background())
+	if err != nil {
+		e.unloadTaskQueue(mgr)
+		return nil, err
+	}
 	return mgr, nil
 }
 
@@ -259,15 +290,15 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	var tqm taskQueueManager
 	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// do not load sticky task queue if it is not already loaded, which means it has no poller.
-		tqm = e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
+		tqm, err = e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
 		if tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow)) {
 			return false, serviceerrors.NewStickyWorkerUnavailable()
 		}
 	} else {
 		tqm, err = e.getTaskQueueManager(taskQueue, taskQueueKind)
-		if err != nil {
-			return false, err
-		}
+	}
+	if err != nil {
+		return false, err
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
@@ -552,15 +583,15 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	var tqm taskQueueManager
 	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// do not load sticky task queue if it is not already loaded, which means it has no poller.
-		tqm = e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
+		tqm, err = e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
 		if tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow)) {
 			return nil, serviceerrors.NewStickyWorkerUnavailable()
 		}
 	} else {
 		tqm, err = e.getTaskQueueManager(taskQueue, taskQueueKind)
-		if err != nil {
-			return nil, err
-		}
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	taskID := uuid.New()

@@ -133,7 +133,6 @@ func (w *taskWriter) initReadWriteState(ctx context.Context) error {
 	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
 	atomic.StoreInt64(&w.maxReadLevel, w.taskIDBlock.start-1)
 	w.tlMgr.taskAckManager.setAckLevel(state.ackLevel)
-	w.tlMgr.taskReader.Signal()
 	return nil
 }
 
@@ -217,8 +216,8 @@ func (w *taskWriter) appendTasks(
 
 func (w *taskWriter) taskWriterLoop(ctx context.Context) error {
 	err := w.initReadWriteState(ctx)
+	w.tlMgr.initializedError.Set(struct{}{}, err)
 	if err != nil {
-		w.tlMgr.signalIfFatal(err)
 		return err
 	}
 writerLoop:
