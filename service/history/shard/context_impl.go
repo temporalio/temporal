@@ -1724,7 +1724,7 @@ func (s *ContextImpl) getOrUpdateRemoteClusterInfoLocked(clusterName string) *re
 func (s *ContextImpl) acquireShard() {
 	// Retry for 5m, with interval up to 10s (default)
 	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
-	policy.SetExpirationInterval(5 * time.Minute)
+	policy.SetExpirationInterval(8 * time.Second)
 
 	// Remember this value across attempts
 	ownershipChanged := false
