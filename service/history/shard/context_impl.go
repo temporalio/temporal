@@ -973,7 +973,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 						// TaskID is set by addTasksLocked
 						WorkflowKey:         key,
 						VisibilityTimestamp: s.timeSource.Now(),
-
 						StartTime:           startTime,
 						CloseTime:           closeTime,
 					},
