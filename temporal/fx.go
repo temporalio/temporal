@@ -381,7 +381,7 @@ func HistoryServiceProvider(
 		fx.Supply(params.SpanExporters),
 		ServiceTracingModule,
 		resource.DefaultOptions,
-		history.QueueProcessorModule,
+		history.QueueModule,
 		history.Module,
 		replication.Module,
 		fx.NopLogger,

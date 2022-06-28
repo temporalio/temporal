@@ -91,7 +91,8 @@ func newTimerQueueProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
-) queues.Processor {
+) queues.Queue {
+
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
 		shard.GetConfig().TimerProcessorEnableSingleCursor()
 

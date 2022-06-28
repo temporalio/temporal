@@ -93,7 +93,7 @@ type (
 		workflowTaskHandler        workflowTaskHandlerCallbacks
 		clusterMetadata            cluster.Metadata
 		executionManager           persistence.ExecutionManager
-		queueProcessors            map[tasks.Category]queues.Processor
+		queueProcessors            map[tasks.Category]queues.Queue
 		replicationAckMgr          replication.AckManager
 		nDCReplicator              nDCHistoryReplicator
 		nDCActivityReplicator      nDCActivityReplicator
@@ -131,7 +131,7 @@ func NewEngineWithShardContext(
 	newCacheFn workflow.NewCacheFn,
 	archivalClient archiver.Client,
 	eventSerializer serialization.Serializer,
-	queueProcessorFactories []queues.ProcessorFactory,
+	queueProcessorFactories []queues.Factory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
 	tracerProvider trace.TracerProvider,
@@ -172,9 +172,9 @@ func NewEngineWithShardContext(
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 	}
 
-	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Processor)
+	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
 	for _, factory := range queueProcessorFactories {
-		processor := factory.CreateProcessor(shard, historyEngImpl, historyCache)
+		processor := factory.CreateQueue(shard, historyEngImpl, historyCache)
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
