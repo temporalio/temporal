@@ -955,49 +955,54 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		}
 	}()
 
-	s.wLock()
-	defer s.wUnlock()
+	// Wrap step 1 and 2 with function to release the lock with defer after step 2.
+	err = func() error {
+		s.wLock()
+		defer s.wUnlock()
 
-	if err := s.errorByStateLocked(); err != nil {
-		return err
-	}
-
-	// Step 1. Delete visibility.
-	if deleteVisibilityRecord {
-		// TODO: move to existing task generator logic
-		newTasks = map[tasks.Category][]tasks.Task{
-			tasks.CategoryVisibility: {
-				&tasks.DeleteExecutionVisibilityTask{
-					// TaskID is set by addTasksLocked
-					WorkflowKey:         key,
-					VisibilityTimestamp: s.timeSource.Now(),
-					StartTime:           startTime,
-					CloseTime:           closeTime,
-				},
-			},
+		if err := s.errorByStateLocked(); err != nil {
+			return err
 		}
-		addTasksRequest := &persistence.AddHistoryTasksRequest{
+
+		// Step 1. Delete visibility.
+		if deleteVisibilityRecord {
+			// TODO: move to existing task generator logic
+			newTasks = map[tasks.Category][]tasks.Task{
+				tasks.CategoryVisibility: {
+					&tasks.DeleteExecutionVisibilityTask{
+						// TaskID is set by addTasksLocked
+						WorkflowKey:         key,
+						VisibilityTimestamp: s.timeSource.Now(),
+						StartTime:           startTime,
+						CloseTime:           closeTime,
+					},
+				},
+			}
+			addTasksRequest := &persistence.AddHistoryTasksRequest{
+				ShardID:     s.shardID,
+				NamespaceID: key.NamespaceID,
+				WorkflowID:  key.WorkflowID,
+				RunID:       key.RunID,
+
+				Tasks: newTasks,
+			}
+			err = s.addTasksLocked(ctx, addTasksRequest, namespaceEntry)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Step 2. Delete current workflow execution pointer.
+		delCurRequest := &persistence.DeleteCurrentWorkflowExecutionRequest{
 			ShardID:     s.shardID,
 			NamespaceID: key.NamespaceID,
 			WorkflowID:  key.WorkflowID,
 			RunID:       key.RunID,
-
-			Tasks: newTasks,
 		}
-		err = s.addTasksLocked(ctx, addTasksRequest, namespaceEntry)
-		if err != nil {
-			return err
-		}
-	}
+		err = s.GetExecutionManager().DeleteCurrentWorkflowExecution(ctx, delCurRequest)
+		return err
+	}()
 
-	// Step 2. Delete current workflow execution pointer.
-	delCurRequest := &persistence.DeleteCurrentWorkflowExecutionRequest{
-		ShardID:     s.shardID,
-		NamespaceID: key.NamespaceID,
-		WorkflowID:  key.WorkflowID,
-		RunID:       key.RunID,
-	}
-	err = s.GetExecutionManager().DeleteCurrentWorkflowExecution(ctx, delCurRequest)
 	if err != nil {
 		return err
 	}
