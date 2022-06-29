@@ -35,13 +35,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -52,6 +53,7 @@ type versioningIntegSuite struct {
 	// not merely log an error
 	*require.Assertions
 	IntegrationBase
+	sdkClient sdkclient.Client
 }
 
 func (s *versioningIntegSuite) SetupSuite() {
@@ -67,6 +69,23 @@ func (s *versioningIntegSuite) TearDownSuite() {
 func (s *versioningIntegSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+
+	clientAddr := "127.0.0.1:7134"
+	if TestFlags.FrontendAddr != "" {
+		clientAddr = TestFlags.FrontendAddr
+	}
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  clientAddr,
+		Namespace: s.namespace,
+	})
+	if err != nil {
+		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
+	}
+	s.sdkClient = sdkClient
+}
+
+func (s *versioningIntegSuite) TearDownTest() {
+	s.sdkClient.Close()
 }
 
 func TestVersioningIntegrationSuite(t *testing.T) {
@@ -166,40 +185,27 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	s.NoError(err)
 	s.NotNil(res)
 
-	isFirst := true
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		// This timer exists to ensure the lease-renewal on the task queue happens, to verify that doesn't blow up data.
-		// The renewal interval has been lowered in this suite.
-		if isFirst {
-			isFirst = false
-			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_START_TIMER,
-				Attributes: &commandpb.Command_StartTimerCommandAttributes{StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
-					TimerId:            "timer-id-1",
-					StartToFireTimeout: timestamp.DurationPtr(3 * time.Second),
-				}},
-			}}, nil
-		}
-		return []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}}}}, nil
+	sdkWorker := worker.New(s.sdkClient, tq, worker.Options{})
+	if err := sdkWorker.Start(); err != nil {
+		s.Logger.Fatal("Error starting worker", tag.Error(err))
 	}
 
-	poller := &TaskPoller{
-		Engine:              s.engine,
-		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
-		Identity:            "whatever",
-		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: nil,
-		Logger:              s.Logger,
-		T:                   s.T(),
+	wfFunc := func(ctx workflow.Context) error {
+		// This timer exists to ensure the lease-renewal on the task queue happens, to verify that doesn't blow up data.
+		// The renewal interval has been lowered in this suite.
+		_ = workflow.Sleep(ctx, 3*time.Second)
+		return nil
 	}
-	_, errWorkflowTask := poller.PollAndProcessWorkflowTask(true, false)
-	s.NoError(errWorkflowTask)
-	_, errWorkflowTask = poller.PollAndProcessWorkflowTask(true, false)
-	s.NoError(errWorkflowTask)
+	sdkWorker.RegisterWorkflow(wfFunc)
+	id := "integration-test-unhandled-command-new-task"
+	workflowOptions := sdkclient.StartWorkflowOptions{ID: id, TaskQueue: tq}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, wfFunc)
+	s.NoError(err)
+	err = workflowRun.Get(ctx, nil)
+	s.NoError(err)
+	sdkWorker.Stop()
 
 	res2, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
 		Namespace: s.namespace,

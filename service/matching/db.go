@@ -136,6 +136,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		}
 		db.ackLevel = response.TaskQueueInfo.AckLevel
 		db.rangeID = response.RangeID + 1
+		db.versioningData = response.TaskQueueInfo.VersioningData
 		return nil
 
 	case *serviceerror.NotFound:
