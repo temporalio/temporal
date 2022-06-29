@@ -55,7 +55,6 @@ type (
 		notifyChan   chan struct{}
 		shutdownChan chan struct{}
 
-		numInflightTask int64
 		sync.RWMutex
 		priorityToWeight     map[Priority]int
 		weightToTaskChannels map[int]*WeightedChannel
@@ -90,7 +89,6 @@ func NewInterleavedWeightedRoundRobinScheduler(
 		notifyChan:   make(chan struct{}, 1),
 		shutdownChan: make(chan struct{}),
 
-		numInflightTask:      0,
 		priorityToWeight:     option.PriorityToWeight,
 		weightToTaskChannels: make(map[int]*WeightedChannel),
 		iwrrChannels:         iwrrChannels,
@@ -136,7 +134,6 @@ func (s *InterleavedWeightedRoundRobinScheduler) Submit(
 ) {
 	channel := s.getOrCreateTaskChannel(s.priorityToWeight[task.GetPriority()])
 	channel.Chan() <- task
-	atomic.AddInt64(&s.numInflightTask, 1)
 	s.notifyDispatcher()
 }
 
@@ -146,7 +143,6 @@ func (s *InterleavedWeightedRoundRobinScheduler) TrySubmit(
 	channel := s.getOrCreateTaskChannel(s.priorityToWeight[task.GetPriority()])
 	select {
 	case channel.Chan() <- task:
-		atomic.AddInt64(&s.numInflightTask, 1)
 		s.notifyDispatcher()
 		return true
 	default:
@@ -242,12 +238,18 @@ LoopDispatch:
 			continue LoopDispatch
 		}
 	}
-	atomic.AddInt64(&s.numInflightTask, -numTasks)
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler) hasRemainingTasks() bool {
-	numTasks := atomic.LoadInt64(&s.numInflightTask)
-	return numTasks > 0
+	s.RLock()
+	defer s.RUnlock()
+
+	for _, weightedChan := range s.weightToTaskChannels {
+		if weightedChan.Len() > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler) rescheduleTasks() {
@@ -267,7 +269,6 @@ DrainLoop:
 			}
 		}
 	}
-	atomic.AddInt64(&s.numInflightTask, -numTasks)
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler) isStopped() bool {
