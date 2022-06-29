@@ -23,42 +23,29 @@ syntax = "proto3";
 package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
-import "google/protobuf/timestamp.proto";
+import "temporal/server/api/persistence/v1/predicates.proto";
+import "temporal/server/api/persistence/v1/tasks.proto";
 
-import "dependencies/gogoproto/gogo.proto";
-
-import "temporal/api/enums/v1/task_queue.proto";
-
-import "temporal/server/api/clock/v1/message.proto";
-
-// task column
-message AllocatedTaskInfo {
-    TaskInfo data = 1;
-    int64 task_id = 2;
+message QueueAckLevel {
+    int64 ack_level = 1;
+    map<string, int64> cluster_ack_level = 2;
 }
 
-message TaskInfo {
-    string namespace_id = 1;
-    string workflow_id = 2;
-    string run_id = 3;
-    int64 scheduled_event_id = 4;
-    google.protobuf.Timestamp create_time = 5 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
-    temporal.server.api.clock.v1.VectorClock clock = 7;
+message QueueState {
+    map<int32, QueueReaderState> reader_states = 1;
+    TaskKey exclusive_reader_high_watermark = 2;
 }
 
-// task_queue column
-message TaskQueueInfo {
-    string namespace_id = 1;
-    string name = 2;
-    temporal.api.enums.v1.TaskQueueType task_type = 3;
-    temporal.api.enums.v1.TaskQueueKind kind = 4;
-    int64 ack_level = 5;
-    google.protobuf.Timestamp expiry_time = 6 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp last_update_time = 7 [(gogoproto.stdtime) = true];
+message QueueReaderState {
+    repeated QueueSliceScope scopes = 1;
 }
 
-message TaskKey {
-    google.protobuf.Timestamp fire_time = 1 [(gogoproto.stdtime) = true];
-    int64 task_id = 2;
+message QueueSliceScope {
+    QueueSliceRange range = 1;
+    Predicate predicate = 2;
+}
+
+message QueueSliceRange {
+    TaskKey inclusive_min = 1;
+    TaskKey exclusive_max = 2;
 }
