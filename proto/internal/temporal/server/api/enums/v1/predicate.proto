@@ -26,7 +26,7 @@ option go_package = "go.temporal.io/server/api/enums/v1;enums";
 
 enum PredicateType {
     PREDICATE_TYPE_UNSPECIFIED = 0;
-    PREDICATE_TYPE_ALL = 1;
+    PREDICATE_TYPE_UNIVERSAL = 1;
     PREDICATE_TYPE_EMPTY = 2;
     PREDICATE_TYPE_AND = 3;
     PREDICATE_TYPE_OR = 4;

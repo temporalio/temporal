@@ -29,7 +29,7 @@ import "temporal/server/api/enums/v1/task.proto";
 message Predicate {
     temporal.server.api.enums.v1.PredicateType predicate_type = 1;
     oneof attributes {
-        AllPredicateAttributes all_predicate_attributes = 2;
+        UniversalPredicateAttributes universal_predicate_attributes = 2;
         EmptyPredicateAttributes empty_predicate_attributes = 3;
         AndPredicateAttributes and_predicate_attributes = 4;
         OrPredicateAttributes or_predicate_attributes = 5;
@@ -39,7 +39,7 @@ message Predicate {
     }
 }
 
-message AllPredicateAttributes {
+message UniversalPredicateAttributes {
 }
 
 message EmptyPredicateAttributes {
