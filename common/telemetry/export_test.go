@@ -22,34 +22,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package metrics
-
-import "go.temporal.io/server/common/log"
+package telemetry
 
 type (
-	eventsReporter struct {
-		provider MetricProvider
-		handler  MetricHandler
-	}
+	OTLPGRPCSpanExporter   = otlpGrpcSpanExporter
+	OTLPGRPCMetricExporter = otlpGrpcMetricExporter
+	PrivateExportConfig    = exportConfig
 )
-
-var _ Reporter = (*eventsReporter)(nil)
-
-func NewEventsReporter(h MetricHandler) *eventsReporter {
-	return &eventsReporter{
-		provider: NewEventsMetricProvider(h),
-		handler:  h,
-	}
-}
-
-func (e *eventsReporter) MetricProvider() MetricProvider {
-	return e.provider
-}
-
-func (e *eventsReporter) Stop(logger log.Logger) {
-	e.handler.Stop(logger)
-}
-
-func (e *eventsReporter) UserScope() UserScope {
-	return newEventsUserScope(e.provider, nil)
-}

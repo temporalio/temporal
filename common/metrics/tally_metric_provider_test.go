@@ -25,30 +25,30 @@
 package metrics
 
 import (
-	"context"
 	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/uber-go/tally/v4"
-	"golang.org/x/exp/event"
-
-	"go.temporal.io/server/common/log"
 )
 
 func TestTallyScope(t *testing.T) {
-	ctx := context.Background()
 	scope := tally.NewTestScope("test", map[string]string{})
-	mh := NewTallyMetricHandler(log.NewTestLogger(), scope, defaultConfig, defaultConfig.PerUnitHistogramBoundaries)
-	ctx = event.WithExporter(ctx, event.NewExporter(mh, nil))
-	recordTallyMetrics(ctx)
+	mp := NewTallyMetricsHandler(defaultConfig, scope)
+	recordTallyMetrics(mp)
 
 	snap := scope.Snapshot()
 	counters, gauges, timers, histograms := snap.Counters(), snap.Gauges(), snap.Timers(), snap.Histograms()
 
 	assert.EqualValues(t, 8, counters["test.hits+"].Value())
 	assert.EqualValues(t, map[string]string{}, counters["test.hits+"].Tags())
+
+	assert.EqualValues(t, 11, counters["test.hits-tagged+taskqueue=__sticky__"].Value())
+	assert.EqualValues(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
+
+	assert.EqualValues(t, 14, counters["test.hits-tagged-excluded+taskqueue="+tagExcludedValue].Value())
+	assert.EqualValues(t, map[string]string{"taskqueue": tagExcludedValue}, counters["test.hits-tagged-excluded+taskqueue="+tagExcludedValue].Tags())
 
 	assert.EqualValues(t, float64(-100), gauges["test.temp+location=Mare Imbrium"].Value())
 	assert.EqualValues(t, map[string]string{
@@ -70,15 +70,19 @@ func TestTallyScope(t *testing.T) {
 	assert.EqualValues(t, map[string]string{}, histograms["test.transmission+"].Tags())
 }
 
-func recordTallyMetrics(ctx context.Context) {
-	c := event.NewCounter("hits", &event.MetricOptions{Description: "Earth meteorite hits"})
-	g := event.NewFloatGauge("temp", &event.MetricOptions{Description: "moon surface temperature in Kelvin"})
-	d := event.NewDuration("latency", &event.MetricOptions{Description: "Earth-moon comms lag, milliseconds"})
-	h := event.NewIntDistribution("transmission", &event.MetricOptions{Description: "Earth-moon comms sent, bytes", Unit: event.UnitBytes})
+func recordTallyMetrics(mp MetricsHandler) {
+	c := mp.Counter("hits")
+	g := mp.Gauge("temp")
+	d := mp.Timer("latency")
+	h := mp.Histogram("transmission", Bytes)
+	t := mp.Counter("hits-tagged")
+	e := mp.Counter("hits-tagged-excluded")
 
-	c.Record(ctx, 8)
-	g.Record(ctx, -100, event.String("location", "Mare Imbrium"))
-	d.Record(ctx, 1248*time.Millisecond)
-	d.Record(ctx, 1255*time.Millisecond)
-	h.Record(ctx, 1234567)
+	c.Record(8)
+	g.Record(-100, StringTag("location", "Mare Imbrium"))
+	d.Record(1248 * time.Millisecond)
+	d.Record(1255 * time.Millisecond)
+	h.Record(1234567)
+	t.Record(11, TaskQueueTag("__sticky__"))
+	e.Record(14, TaskQueueTag("filtered"))
 }

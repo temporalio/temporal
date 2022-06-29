@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -131,6 +132,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		controller:                    args.ShardController,
 		eventNotifier:                 args.EventNotifier,
 		replicationTaskFetcherFactory: args.ReplicationTaskFetcherFactory,
+		tracer:                        args.TracerProvider.Tracer(consts.LibraryName),
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready

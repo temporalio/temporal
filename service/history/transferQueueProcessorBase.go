@@ -62,7 +62,6 @@ func newTransferQueueProcessorBase(
 	transferQueueShutdown transferQueueShutdown,
 	logger log.Logger,
 ) *transferQueueProcessorBase {
-
 	return &transferQueueProcessorBase{
 		shard:                  shard,
 		options:                options,
@@ -77,7 +76,6 @@ func newTransferQueueProcessorBase(
 func (t *transferQueueProcessorBase) readTasks(
 	readLevel int64,
 ) ([]tasks.Task, bool, error) {
-
 	response, err := t.executionManager.GetHistoryTasks(context.TODO(), &persistence.GetHistoryTasksRequest{
 		ShardID:             t.shard.GetShardID(),
 		TaskCategory:        tasks.CategoryTransfer,
@@ -94,7 +92,6 @@ func (t *transferQueueProcessorBase) readTasks(
 func (t *transferQueueProcessorBase) updateAckLevel(
 	ackLevel int64,
 ) error {
-
 	return t.updateTransferAckLevel(ackLevel)
 }
 
@@ -105,7 +102,7 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 func newTransferTaskScheduler(
 	shard shard.Context,
 	logger log.Logger,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
 	return queues.NewScheduler(

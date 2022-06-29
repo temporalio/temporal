@@ -754,13 +754,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 				tag.WorkflowRunID(runID),
 				tag.QueryID(id),
 				tag.Error(err))
-			failedTerminationState := &workflow.QueryTerminationState{
-				QueryTerminationType: workflow.QueryTerminationTypeFailed,
-				Failure:              err,
+			failedCompletionState := &workflow.QueryCompletionState{
+				Type: workflow.QueryCompletionTypeFailed,
+				Err:  err,
 			}
-			if err := queryRegistry.SetTerminationState(id, failedTerminationState); err != nil {
+			if err := queryRegistry.SetCompletionState(id, failedCompletionState); err != nil {
 				handler.logger.Error(
-					"failed to set query termination state to failed",
+					"failed to set query completion state to failed",
 					tag.WorkflowNamespace(namespaceName.String()),
 					tag.WorkflowID(workflowID),
 					tag.WorkflowRunID(runID),
@@ -769,13 +769,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 			}
 		} else {
-			completedTerminationState := &workflow.QueryTerminationState{
-				QueryTerminationType: workflow.QueryTerminationTypeCompleted,
-				QueryResult:          result,
+			succeededCompletionState := &workflow.QueryCompletionState{
+				Type:   workflow.QueryCompletionTypeSucceeded,
+				Result: result,
 			}
-			if err := queryRegistry.SetTerminationState(id, completedTerminationState); err != nil {
+			if err := queryRegistry.SetCompletionState(id, succeededCompletionState); err != nil {
 				handler.logger.Error(
-					"failed to set query termination state to completed",
+					"failed to set query completion state to succeeded",
 					tag.WorkflowNamespace(namespaceName.String()),
 					tag.WorkflowID(workflowID),
 					tag.WorkflowRunID(runID),
@@ -791,12 +791,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 	if !createNewWorkflowTask {
 		buffered := queryRegistry.GetBufferedIDs()
 		for _, id := range buffered {
-			unblockTerminationState := &workflow.QueryTerminationState{
-				QueryTerminationType: workflow.QueryTerminationTypeUnblocked,
+			unblockCompletionState := &workflow.QueryCompletionState{
+				Type: workflow.QueryCompletionTypeUnblocked,
 			}
-			if err := queryRegistry.SetTerminationState(id, unblockTerminationState); err != nil {
+			if err := queryRegistry.SetCompletionState(id, unblockCompletionState); err != nil {
 				handler.logger.Error(
-					"failed to set query termination state to unblocked",
+					"failed to set query completion state to unblocked",
 					tag.WorkflowNamespace(namespaceName.String()),
 					tag.WorkflowID(workflowID),
 					tag.WorkflowRunID(runID),

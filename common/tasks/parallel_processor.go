@@ -53,7 +53,7 @@ type (
 		status  int32
 		options *ParallelProcessorOptions
 
-		metricsProvider metrics.MetricProvider
+		metricsProvider metrics.MetricsHandler
 		logger          log.Logger
 
 		tasksChan        chan Task
@@ -66,7 +66,7 @@ type (
 // NewParallelProcessor creates a new ParallelProcessor
 func NewParallelProcessor(
 	options *ParallelProcessorOptions,
-	metricsProvider metrics.MetricProvider,
+	metricsProvider metrics.MetricsHandler,
 	logger log.Logger,
 ) *ParallelProcessor {
 	return &ParallelProcessor{
@@ -120,7 +120,6 @@ func (p *ParallelProcessor) Stop() {
 }
 
 func (p *ParallelProcessor) Submit(task Task) {
-
 	p.tasksChan <- task
 	if p.isStopped() {
 		p.drainTasks()

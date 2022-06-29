@@ -70,3 +70,8 @@ message VersioningData {
     // version of the last task out to a leaf.
     repeated temporal.api.taskqueue.v1.VersionIdNode compatible_leaves = 2;
 }
+
+message TaskKey {
+    google.protobuf.Timestamp fire_time = 1 [(gogoproto.stdtime) = true];
+    int64 task_id = 2;
+}

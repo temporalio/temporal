@@ -55,7 +55,7 @@ type (
 		cache              workflow.Cache
 		logger             log.Logger
 		matchingClient     matchingservice.MatchingServiceClient
-		metricProvider     metrics.MetricProvider
+		metricProvider     metrics.MetricsHandler
 		metricsClient      metrics.Client
 		config             *configs.Config
 	}
@@ -67,7 +67,7 @@ func newTimerQueueTaskExecutorBase(
 	deleteManager workflow.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
@@ -88,7 +88,6 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	ctx context.Context,
 	task *tasks.DeleteHistoryEventTask,
 ) (retError error) {
-
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
@@ -153,7 +152,6 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		workflowExecution,
 		weContext,
 		mutableState,
-		task.GetVersion(),
 	)
 }
 
@@ -195,7 +193,6 @@ func getWorkflowExecutionContext(
 func getTaskNamespaceIDAndWorkflowExecution(
 	task tasks.Task,
 ) (namespace.ID, commonpb.WorkflowExecution) {
-
 	return namespace.ID(task.GetNamespaceID()), commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowID(),
 		RunId:      task.GetRunID(),

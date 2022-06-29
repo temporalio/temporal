@@ -59,7 +59,7 @@ type (
 	}
 
 	Executor interface {
-		Execute(context.Context, Executable) (metrics.MetricProvider, error)
+		Execute(context.Context, Executable) (metrics.MetricsHandler, error)
 	}
 
 	// TaskFilter determines if the given task should be executed
@@ -102,7 +102,7 @@ type (
 		loadTime                      time.Time
 		userLatency                   time.Duration
 		logger                        log.Logger
-		metricsProvider               metrics.MetricProvider
+		metricsProvider               metrics.MetricsHandler
 		criticalRetryAttempt          dynamicconfig.IntPropertyFn
 		namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
 		queueType                     QueueType
@@ -138,7 +138,7 @@ func NewExecutable(
 				return tasks.Tags(task)
 			},
 		),
-		metricsProvider:               metrics.NoopMetricProvider,
+		metricsProvider:               metrics.NoopMetricsHandler,
 		queueType:                     queueType,
 		criticalRetryAttempt:          criticalRetryAttempt,
 		filter:                        filter,

@@ -33,20 +33,29 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
 	"go.opentelemetry.io/otel/sdk/metric/metrictest"
 	"go.opentelemetry.io/otel/sdk/metric/number"
-	"golang.org/x/exp/event"
 
 	"go.temporal.io/server/common/log"
 )
 
+type testProvider struct {
+	meter metric.Meter
+}
+
+func (t *testProvider) GetMeter() metric.Meter {
+	return t.meter
+}
+
+func (t *testProvider) Stop(log.Logger) {}
+
 func TestMeter(t *testing.T) {
 	ctx := context.Background()
 	mp, exp := metrictest.NewTestMeterProvider()
-	mh := NewOtelMetricHandler(log.NewTestLogger(), &testProvider{meter: mp.Meter("test")}, defaultConfig)
-	ctx = event.WithExporter(ctx, event.NewExporter(mh, nil))
-	recordMetrics(ctx)
+	p := NewOtelMetricsHandler(log.NewTestLogger(), &testProvider{meter: mp.Meter("test")}, defaultConfig)
+	recordMetrics(p)
 
 	err := exp.Collect(ctx)
 	assert.Nil(t, err)
@@ -59,6 +68,32 @@ func TestMeter(t *testing.T) {
 			InstrumentName:         "hits",
 			Sum:                    number.NewInt64Number(8),
 			Attributes:             nil,
+			InstrumentationLibrary: lib,
+			AggregationKind:        aggregation.SumKind,
+			NumberKind:             number.Int64Kind,
+		},
+		{
+			InstrumentName: "hits-tagged",
+			Sum:            number.NewInt64Number(11),
+			Attributes: []attribute.KeyValue{
+				{
+					Key:   attribute.Key("taskqueue"),
+					Value: attribute.StringValue("__sticky__"),
+				},
+			},
+			InstrumentationLibrary: lib,
+			AggregationKind:        aggregation.SumKind,
+			NumberKind:             number.Int64Kind,
+		},
+		{
+			InstrumentName: "hits-tagged-excluded",
+			Sum:            number.NewInt64Number(14),
+			Attributes: []attribute.KeyValue{
+				{
+					Key:   attribute.Key("taskqueue"),
+					Value: attribute.StringValue(tagExcludedValue),
+				},
+			},
 			InstrumentationLibrary: lib,
 			AggregationKind:        aggregation.SumKind,
 			NumberKind:             number.Int64Kind,
@@ -111,15 +146,19 @@ func valuesEqual(v1, v2 attribute.Value) bool {
 	return v1.AsInterface() == v2.AsInterface()
 }
 
-func recordMetrics(ctx context.Context) {
-	c := event.NewCounter("hits", &event.MetricOptions{Description: "Earth meteorite hits"})
-	g := event.NewFloatGauge("temp", &event.MetricOptions{Description: "moon surface temperature in Kelvin"})
-	d := event.NewDuration("latency", &event.MetricOptions{Description: "Earth-moon comms lag, milliseconds"})
-	h := event.NewIntDistribution("transmission", &event.MetricOptions{Description: "Earth-moon comms sent, bytes", Unit: event.UnitBytes})
+func recordMetrics(mp MetricsHandler) {
+	c := mp.Counter("hits")
+	g := mp.Gauge("temp")
+	d := mp.Timer("latency")
+	h := mp.Histogram("transmission", Bytes)
+	t := mp.Counter("hits-tagged")
+	e := mp.Counter("hits-tagged-excluded")
 
-	c.Record(ctx, 8)
-	g.Record(ctx, -100, event.String("location", "Mare Imbrium"))
-	d.Record(ctx, 1248*time.Millisecond)
-	d.Record(ctx, 1255*time.Millisecond)
-	h.Record(ctx, 1234567)
+	c.Record(8)
+	g.Record(-100, StringTag("location", "Mare Imbrium"))
+	d.Record(1248 * time.Millisecond)
+	d.Record(1255 * time.Millisecond)
+	h.Record(1234567)
+	t.Record(11, TaskQueueTag("__sticky__"))
+	e.Record(14, TaskQueueTag("filtered"))
 }

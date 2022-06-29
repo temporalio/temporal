@@ -39,10 +39,10 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/mocksdk"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -50,7 +50,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkmocks "go.temporal.io/sdk/mocks"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -555,11 +554,11 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 		})
 	}
 
-	mockSdkClient := &sdkmocks.Client{}
+	mockSdkClient := mocksdk.NewMockClient(s.controller)
 	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(mockSdkClient).AnyTimes()
 
 	// Start workflow failed.
-	mockSdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-add-search-attributes-workflow", mock.Anything).Return(nil, errors.New("start failed")).Once()
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-add-search-attributes-workflow", gomock.Any()).Return(nil, errors.New("start failed"))
 	resp, err := handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -570,9 +569,9 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	s.Nil(resp)
 
 	// Workflow failed.
-	mockRun := &sdkmocks.WorkflowRun{}
-	mockRun.On("Get", mock.Anything, nil).Return(errors.New("workflow failed")).Once()
-	mockSdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-add-search-attributes-workflow", mock.Anything).Return(mockRun, nil)
+	mockRun := mocksdk.NewMockWorkflowRun(s.controller)
+	mockRun.EXPECT().Get(gomock.Any(), nil).Return(errors.New("workflow failed"))
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-add-search-attributes-workflow", gomock.Any()).Return(mockRun, nil)
 	resp, err = handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -583,7 +582,8 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	s.Nil(resp)
 
 	// Success case.
-	mockRun.On("Get", mock.Anything, nil).Return(nil)
+	mockRun.EXPECT().Get(gomock.Any(), nil).Return(nil)
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-add-search-attributes-workflow", gomock.Any()).Return(mockRun, nil)
 
 	resp, err = handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
@@ -592,8 +592,6 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-	mockRun.AssertExpectations(s.T())
-	mockSdkClient.AssertExpectations(s.T())
 }
 
 func (s *adminHandlerSuite) Test_GetSearchAttributes() {
@@ -605,12 +603,12 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes() {
 	s.Equal(&serviceerror.InvalidArgument{Message: "Request is nil."}, err)
 	s.Nil(resp)
 
-	mockSdkClient := &sdkmocks.Client{}
+	mockSdkClient := mocksdk.NewMockClient(s.controller)
 	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(mockSdkClient).AnyTimes()
 
 	// Elasticsearch is not configured
-	mockSdkClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
-		&workflowservice.DescribeWorkflowExecutionResponse{}, nil).Once()
+	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
+		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 
@@ -625,24 +623,24 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes() {
 		},
 	}
 
-	mockSdkClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
-		&workflowservice.DescribeWorkflowExecutionResponse{}, nil).Once()
+	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
+		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
 
-	mockSdkClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
-		&workflowservice.DescribeWorkflowExecutionResponse{}, nil).Once()
+	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
+		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "another-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("another-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{IndexName: "another-index-name"})
 	s.NoError(err)
 	s.NotNil(resp)
 
-	mockSdkClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
-		nil, errors.New("random error")).Once()
+	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
+		nil, errors.New("random error"))
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{})

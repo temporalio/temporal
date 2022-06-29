@@ -31,6 +31,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -84,6 +85,7 @@ type (
 		clusterMetadata             cluster.Metadata
 		archivalMetadata            archiver.ArchivalMetadata
 		hostInfoProvider            membership.HostInfoProvider
+		tracer                      trace.Tracer
 	}
 )
 

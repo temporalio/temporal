@@ -448,18 +448,18 @@ func (m *MockReporter) EXPECT() *MockReporterMockRecorder {
 	return m.recorder
 }
 
-// MetricProvider mocks base method.
-func (m *MockReporter) MetricProvider() MetricProvider {
+// MetricsHandler mocks base method.
+func (m *MockReporter) MetricsHandler() MetricsHandler {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MetricProvider")
-	ret0, _ := ret[0].(MetricProvider)
+	ret := m.ctrl.Call(m, "MetricsHandler")
+	ret0, _ := ret[0].(MetricsHandler)
 	return ret0
 }
 
-// MetricProvider indicates an expected call of MetricProvider.
-func (mr *MockReporterMockRecorder) MetricProvider() *gomock.Call {
+// MetricsHandler indicates an expected call of MetricsHandler.
+func (mr *MockReporterMockRecorder) MetricsHandler() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MetricProvider", reflect.TypeOf((*MockReporter)(nil).MetricProvider))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MetricsHandler", reflect.TypeOf((*MockReporter)(nil).MetricsHandler))
 }
 
 // Stop mocks base method.

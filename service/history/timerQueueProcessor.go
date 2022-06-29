@@ -51,9 +51,7 @@ import (
 	"go.temporal.io/server/service/worker/archiver"
 )
 
-var (
-	errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
-)
+var errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
 
 type (
 	timeNow                 func() time.Time
@@ -65,7 +63,7 @@ type (
 		shard                      shard.Context
 		taskAllocator              taskAllocator
 		config                     *configs.Config
-		metricProvider             metrics.MetricProvider
+		metricProvider             metrics.MetricsHandler
 		metricsClient              metrics.Client
 		workflowCache              workflow.Cache
 		scheduler                  queues.Scheduler
@@ -91,10 +89,9 @@ func newTimerQueueProcessor(
 	clientBean client.Bean,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
 ) queues.Processor {
-
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
 		shard.GetConfig().TimerProcessorEnableSingleCursor()
 
@@ -146,7 +143,6 @@ func newTimerQueueProcessor(
 		),
 		standbyTimerProcessors: make(map[string]*timerQueueStandbyProcessorImpl),
 	}
-
 }
 
 func (t *timerQueueProcessorImpl) Start() {
@@ -185,7 +181,6 @@ func (t *timerQueueProcessorImpl) NotifyNewTasks(
 	clusterName string,
 	timerTasks []tasks.Task,
 ) {
-
 	if clusterName == t.currentClusterName || t.singleProcessor {
 		t.activeTimerProcessor.notifyNewTimers(timerTasks)
 		return

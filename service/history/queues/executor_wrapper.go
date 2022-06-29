@@ -62,7 +62,7 @@ func NewExecutorWrapper(
 func (e *executorWrapper) Execute(
 	ctx context.Context,
 	executable Executable,
-) (metrics.MetricProvider, error) {
+) (metrics.MetricsHandler, error) {
 	if e.isActiveTask(executable) {
 		return e.activeExecutor.Execute(ctx, executable)
 	}

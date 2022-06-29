@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pborman/uuid"
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -98,6 +99,7 @@ type (
 		archivalMetadata              archiver.ArchivalMetadata
 		hostInfoProvider              membership.HostInfoProvider
 		controller                    *shard.ControllerImpl
+		tracer                        trace.Tracer
 	}
 
 	NewHandlerArgs struct {
@@ -122,6 +124,7 @@ type (
 		ShardController               *shard.ControllerImpl
 		EventNotifier                 events.Notifier
 		ReplicationTaskFetcherFactory replication.TaskFetcherFactory
+		TracerProvider                trace.TracerProvider
 	}
 )
 

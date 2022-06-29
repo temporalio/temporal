@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -114,6 +115,7 @@ type (
 		workflowDeleteManager      workflow.DeleteManager
 		eventSerializer            serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		tracer                     trace.Tracer
 	}
 )
 
@@ -132,6 +134,7 @@ func NewEngineWithShardContext(
 	queueProcessorFactories []queues.ProcessorFactory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
+	tracerProvider trace.TracerProvider,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -166,6 +169,7 @@ func NewEngineWithShardContext(
 		workflowDeleteManager:      workflowDeleteManager,
 		eventSerializer:            eventSerializer,
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(shard, historyCache),
+		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Processor)
@@ -786,14 +790,14 @@ func (e *historyEngineImpl) QueryWorkflow(
 	weCtx.GetReleaseFn()(nil)
 	select {
 	case <-termCh:
-		state, err := queryReg.GetTerminationState(queryID)
+		completionState, err := queryReg.GetCompletionState(queryID)
 		if err != nil {
 			scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 			return nil, err
 		}
-		switch state.QueryTerminationType {
-		case workflow.QueryTerminationTypeCompleted:
-			result := state.QueryResult
+		switch completionState.Type {
+		case workflow.QueryCompletionTypeSucceeded:
+			result := completionState.Result
 			switch result.GetResultType() {
 			case enumspb.QUERY_RESULT_TYPE_ANSWERED:
 				return &historyservice.QueryWorkflowResponse{
@@ -807,15 +811,15 @@ func (e *historyEngineImpl) QueryWorkflow(
 				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 				return nil, consts.ErrQueryEnteredInvalidState
 			}
-		case workflow.QueryTerminationTypeUnblocked:
+		case workflow.QueryCompletionTypeUnblocked:
 			msResp, err := e.getMutableState(ctx, workflowKey)
 			if err != nil {
 				return nil, err
 			}
 			req.Execution.RunId = msResp.Execution.RunId
 			return e.queryDirectlyThroughMatching(ctx, msResp, request.GetNamespaceId(), req, scope)
-		case workflow.QueryTerminationTypeFailed:
-			return nil, state.Failure
+		case workflow.QueryCompletionTypeFailed:
+			return nil, completionState.Err
 		default:
 			scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 			return nil, consts.ErrQueryEnteredInvalidState

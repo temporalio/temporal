@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"go.uber.org/fx"
+	"google.golang.org/grpc"
 
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -62,6 +63,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 )
 
 type (
@@ -80,7 +82,7 @@ type (
 	RuntimeMetricsReporterParams struct {
 		fx.In
 
-		Provider   metrics.MetricProvider
+		Provider   metrics.MetricsHandler
 		Logger     SnTaggedLogger
 		InstanceID InstanceID `optional:"true"`
 	}
@@ -114,7 +116,7 @@ var Module = fx.Options(
 	membership.HostInfoProviderModule,
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
-	fx.Provide(func(r metrics.Reporter) metrics.MetricProvider { return r.MetricProvider() }),
+	fx.Provide(func(r metrics.Reporter) metrics.MetricsHandler { return r.MetricsHandler() }),
 	fx.Provide(func(r metrics.Reporter) metrics.UserScope { return r.UserScope() }),
 	fx.Provide(MetricsClientProvider),
 )
@@ -363,9 +365,9 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient 
 }
 
 // TODO: rework to depend on...
-func MetricsClientProvider(logger log.Logger, serviceName ServiceName, provider metrics.MetricProvider) metrics.Client {
+func MetricsClientProvider(logger log.Logger, serviceName ServiceName, provider metrics.MetricsHandler) metrics.Client {
 	serviceIdx := metrics.GetMetricsServiceIdx(string(serviceName), logger)
-	return metrics.NewEventsClient(provider, serviceIdx)
+	return metrics.NewClient(provider, serviceIdx)
 }
 
 func PersistenceConfigProvider(persistenceConfig config.Persistence, dc *dynamicconfig.Collection) *config.Persistence {
@@ -388,7 +390,7 @@ func ArchiverProviderProvider(cfg *config.Config) provider.ArchiverProvider {
 	return provider.NewArchiverProvider(cfg.Archival.History.Provider, cfg.Archival.Visibility.Provider)
 }
 
-func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.TLSConfigProvider, provider metrics.MetricProvider) (sdk.ClientFactory, error) {
+func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.TLSConfigProvider, provider metrics.MetricsHandler) (sdk.ClientFactory, error) {
 	tlsFrontendConfig, err := tlsConfigProvider.GetFrontendClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
@@ -397,7 +399,7 @@ func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.T
 	return sdk.NewClientFactory(
 		cfg.PublicClient.HostPort,
 		tlsFrontendConfig,
-		sdk.NewMetricHandler(provider),
+		sdk.NewMetricsHandler(provider),
 	), nil
 }
 
@@ -416,7 +418,18 @@ func RPCFactoryProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
 	clusterMetadata *cluster.Config,
+	traceInterceptor telemetry.ClientTraceInterceptor,
 ) common.RPCFactory {
 	svcCfg := cfg.Services[string(svcName)]
-	return rpc.NewFactory(&svcCfg.RPC, string(svcName), logger, tlsConfigProvider, dc, clusterMetadata)
+	return rpc.NewFactory(
+		&svcCfg.RPC,
+		string(svcName),
+		logger,
+		tlsConfigProvider,
+		dc,
+		clusterMetadata,
+		[]grpc.UnaryClientInterceptor{
+			grpc.UnaryClientInterceptor(traceInterceptor),
+		},
+	)
 }

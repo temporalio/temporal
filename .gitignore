@@ -28,3 +28,5 @@
 # Fossa
 .fossa.yml
 
+# direnv
+.envrc

@@ -62,9 +62,9 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(false, termChans...)
 
 	for i := 0; i < 25; i++ {
-		err := qr.SetTerminationState(ids[i], &QueryTerminationState{
-			QueryTerminationType: QueryTerminationTypeCompleted,
-			QueryResult: &querypb.WorkflowQueryResult{
+		err := qr.SetCompletionState(ids[i], &QueryCompletionState{
+			Type: QueryCompletionTypeSucceeded,
+			Result: &querypb.WorkflowQueryResult{
 				ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
 				Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
 			},
@@ -79,8 +79,8 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(false, termChans[25:]...)
 
 	for i := 25; i < 50; i++ {
-		err := qr.SetTerminationState(ids[i], &QueryTerminationState{
-			QueryTerminationType: QueryTerminationTypeUnblocked,
+		err := qr.SetCompletionState(ids[i], &QueryCompletionState{
+			Type: QueryCompletionTypeUnblocked,
 		})
 		s.NoError(err)
 	}
@@ -93,9 +93,9 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(false, termChans[50:]...)
 
 	for i := 50; i < 75; i++ {
-		err := qr.SetTerminationState(ids[i], &QueryTerminationState{
-			QueryTerminationType: QueryTerminationTypeFailed,
-			Failure:              errors.New("err"),
+		err := qr.SetCompletionState(ids[i], &QueryCompletionState{
+			Type: QueryCompletionTypeFailed,
+			Err:  errors.New("err"),
 		})
 		s.NoError(err)
 	}
@@ -111,18 +111,18 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	for i := 0; i < 75; i++ {
 		switch i % 3 {
 		case 0:
-			s.Equal(errQueryNotExists, qr.SetTerminationState(ids[i], &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeCompleted,
-				QueryResult:          &querypb.WorkflowQueryResult{},
+			s.Equal(errQueryNotExists, qr.SetCompletionState(ids[i], &QueryCompletionState{
+				Type:   QueryCompletionTypeSucceeded,
+				Result: &querypb.WorkflowQueryResult{},
 			}))
 		case 1:
-			s.Equal(errQueryNotExists, qr.SetTerminationState(ids[i], &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeUnblocked,
+			s.Equal(errQueryNotExists, qr.SetCompletionState(ids[i], &QueryCompletionState{
+				Type: QueryCompletionTypeUnblocked,
 			}))
 		case 2:
-			s.Equal(errQueryNotExists, qr.SetTerminationState(ids[i], &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeFailed,
-				Failure:              errors.New("err"),
+			s.Equal(errQueryNotExists, qr.SetCompletionState(ids[i], &QueryCompletionState{
+				Type: QueryCompletionTypeFailed,
+				Err:  errors.New("err"),
 			}))
 		}
 	}
@@ -167,9 +167,9 @@ func (s *QueryRegistrySuite) assertBufferedState(qr QueryRegistry, ids ...string
 		input, err := qr.GetQueryInput(id)
 		s.NoError(err)
 		s.NotNil(input)
-		termState, err := qr.GetTerminationState(id)
-		s.Equal(errQueryNotInTerminalState, err)
-		s.Nil(termState)
+		completionState, err := qr.GetCompletionState(id)
+		s.Equal(errQueryNotInCompletionState, err)
+		s.Nil(completionState)
 	}
 }
 
@@ -181,12 +181,12 @@ func (s *QueryRegistrySuite) assertCompletedState(qr QueryRegistry, ids ...strin
 		input, err := qr.GetQueryInput(id)
 		s.NoError(err)
 		s.NotNil(input)
-		termState, err := qr.GetTerminationState(id)
+		completionState, err := qr.GetCompletionState(id)
 		s.NoError(err)
-		s.NotNil(termState)
-		s.Equal(QueryTerminationTypeCompleted, termState.QueryTerminationType)
-		s.NotNil(termState.QueryResult)
-		s.Nil(termState.Failure)
+		s.NotNil(completionState)
+		s.Equal(QueryCompletionTypeSucceeded, completionState.Type)
+		s.NotNil(completionState.Result)
+		s.Nil(completionState.Err)
 	}
 }
 
@@ -198,12 +198,12 @@ func (s *QueryRegistrySuite) assertUnblockedState(qr QueryRegistry, ids ...strin
 		input, err := qr.GetQueryInput(id)
 		s.NoError(err)
 		s.NotNil(input)
-		termState, err := qr.GetTerminationState(id)
+		completionState, err := qr.GetCompletionState(id)
 		s.NoError(err)
-		s.NotNil(termState)
-		s.Equal(QueryTerminationTypeUnblocked, termState.QueryTerminationType)
-		s.Nil(termState.QueryResult)
-		s.Nil(termState.Failure)
+		s.NotNil(completionState)
+		s.Equal(QueryCompletionTypeUnblocked, completionState.Type)
+		s.Nil(completionState.Result)
+		s.Nil(completionState.Err)
 	}
 }
 
@@ -215,12 +215,12 @@ func (s *QueryRegistrySuite) assertFailedState(qr QueryRegistry, ids ...string) 
 		input, err := qr.GetQueryInput(id)
 		s.NoError(err)
 		s.NotNil(input)
-		termState, err := qr.GetTerminationState(id)
+		completionState, err := qr.GetCompletionState(id)
 		s.NoError(err)
-		s.NotNil(termState)
-		s.Equal(QueryTerminationTypeFailed, termState.QueryTerminationType)
-		s.Nil(termState.QueryResult)
-		s.NotNil(termState.Failure)
+		s.NotNil(completionState)
+		s.Equal(QueryCompletionTypeFailed, completionState.Type)
+		s.Nil(completionState.Result)
+		s.NotNil(completionState.Err)
 	}
 }
 

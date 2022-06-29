@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -71,6 +72,7 @@ import (
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/replicator"
+	"go.temporal.io/server/temporal"
 )
 
 // Temporal hosts all of temporal services in one process
@@ -128,6 +130,7 @@ type (
 		workerConfig                     *WorkerConfig
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
+		spanExporters                    []otelsdktrace.SpanExporter
 	}
 
 	// HistoryConfig contains configs for history service
@@ -159,6 +162,7 @@ type (
 		WorkerConfig                     *WorkerConfig
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
+		SpanExporters                    []otelsdktrace.SpanExporter
 		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 	}
 )
@@ -189,6 +193,7 @@ func NewTemporal(params *TemporalParams) *temporalImpl {
 		workerConfig:                     params.WorkerConfig,
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
+		spanExporters:                    params.SpanExporters,
 		dynamicClient:                    integrationClient,
 	}
 	impl.overrideHistoryDynamicConfig(integrationClient)
@@ -423,7 +428,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 			return sdk.NewClientFactory(
 				c.FrontendGRPCAddress(),
 				nil,
-				sdk.NewMetricHandler(metrics.NewEventsMetricProvider(metrics.NoopMetricHandler)),
+				sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
 			)
 		}),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
@@ -441,6 +446,8 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
+		fx.Supply(c.spanExporters),
+		temporal.ServiceTracingModule,
 		frontend.Module,
 		fx.Populate(&frontendService, &clientBean, &namespaceRegistry),
 		fx.NopLogger,
@@ -518,7 +525,7 @@ func (c *temporalImpl) startHistory(
 				return sdk.NewClientFactory(
 					c.FrontendGRPCAddress(),
 					nil,
-					sdk.NewMetricHandler(metrics.NewEventsMetricProvider(metrics.NoopMetricHandler)),
+					sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
 				)
 			}),
 			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
@@ -533,6 +540,8 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(workflow.NewTaskGeneratorProvider),
+			fx.Supply(c.spanExporters),
+			temporal.ServiceTracingModule,
 			history.QueueProcessorModule,
 			history.Module,
 			replication.Module,
@@ -608,6 +617,8 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
 		fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
+		fx.Supply(c.spanExporters),
+		temporal.ServiceTracingModule,
 		matching.Module,
 		fx.Populate(&matchingService, &clientBean, &namespaceRegistry),
 		fx.NopLogger,
@@ -689,7 +700,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 			return sdk.NewClientFactory(
 				c.FrontendGRPCAddress(),
 				nil,
-				sdk.NewMetricHandler(metrics.NewEventsMetricProvider(metrics.NoopMetricHandler)),
+				sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
 			)
 		}),
 		fx.Provide(func() sdk.WorkerFactory { return sdk.NewWorkerFactory() }),
@@ -702,7 +713,8 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
-
+		fx.Supply(c.spanExporters),
+		temporal.ServiceTracingModule,
 		worker.Module,
 		fx.Populate(&workerService, &clientBean, &namespaceRegistry),
 		fx.NopLogger,

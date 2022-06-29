@@ -78,10 +78,9 @@ func newVisibilityQueueProcessor(
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
 	visibilityMgr manager.VisibilityManager,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
 ) queues.Processor {
-
 	config := shard.GetConfig()
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
 	metricsClient := shard.GetMetricsClient()
@@ -321,7 +320,6 @@ func (t *visibilityQueueProcessorImpl) notifyNewTask() {
 func (t *visibilityQueueProcessorImpl) readTasks(
 	readLevel int64,
 ) ([]tasks.Task, bool, error) {
-
 	response, err := t.executionManager.GetHistoryTasks(context.TODO(), &persistence.GetHistoryTasksRequest{
 		ShardID:             t.shard.GetShardID(),
 		TaskCategory:        tasks.CategoryVisibility,
@@ -329,7 +327,6 @@ func (t *visibilityQueueProcessorImpl) readTasks(
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(t.maxReadAckLevel() + 1),
 		BatchSize:           t.options.BatchSize(),
 	})
-
 	if err != nil {
 		return nil, false, err
 	}
@@ -340,7 +337,6 @@ func (t *visibilityQueueProcessorImpl) readTasks(
 func (t *visibilityQueueProcessorImpl) updateAckLevel(
 	ackLevel int64,
 ) error {
-
 	return t.updateVisibilityAckLevel(ackLevel)
 }
 
@@ -351,7 +347,7 @@ func (t *visibilityQueueProcessorImpl) queueShutdown() error {
 func newVisibilityTaskScheduler(
 	shard shard.Context,
 	logger log.Logger,
-	metricProvider metrics.MetricProvider,
+	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
 	return queues.NewScheduler(

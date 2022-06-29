@@ -26,17 +26,19 @@ package metrics
 
 import (
 	"time"
+
+	"go.temporal.io/server/common/log"
 )
 
 // Mostly cribbed from
 // https://github.com/temporalio/sdk-go/blob/master/internal/common/metrics/handler.go
 // and adapted to depend on golang.org/x/exp/event
 type (
-	// MetricProvider represents the main dependency for instrumentation
-	MetricProvider interface {
+	// MetricsHandler represents the main dependency for instrumentation
+	MetricsHandler interface {
 		// WithTags creates a new MetricProvder with provided []Tag
-		// Tags are merged with registered Tags from the source MetricProvider
-		WithTags(...Tag) MetricProvider
+		// Tags are merged with registered Tags from the source MetricsHandler
+		WithTags(...Tag) MetricsHandler
 
 		// Counter obtains a counter for the given name and MetricOptions.
 		Counter(string) CounterMetric
@@ -49,32 +51,34 @@ type (
 
 		// Histogram obtains a histogram for the given name and MetricOptions.
 		Histogram(string, MetricUnit) HistogramMetric
+
+		Stop(log.Logger)
 	}
 
 	// CounterMetric is an ever-increasing counter.
 	CounterMetric interface {
 		// Record increments the counter value.
-		// Tags provided are merged with the source MetricProvider
+		// Tags provided are merged with the source MetricsHandler
 		Record(int64, ...Tag)
 	}
 	// GaugeMetric can be set to any float and repesents a latest value instrument.
 	GaugeMetric interface {
 		// Record updates the gauge value.
-		// Tags provided are merged with the source MetricProvider
+		// Tags provided are merged with the source MetricsHandler
 		Record(float64, ...Tag)
 	}
 
 	// TimerMetric records time durations.
 	TimerMetric interface {
 		// Record sets the timer value.
-		// Tags provided are merged with the source MetricProvider
+		// Tags provided are merged with the source MetricsHandler
 		Record(time.Duration, ...Tag)
 	}
 
 	// HistogramMetric records a distribution of values.
 	HistogramMetric interface {
 		// Record adds a value to the distribution
-		// Tags provided are merged with the source MetricProvider
+		// Tags provided are merged with the source MetricsHandler
 		Record(int64, ...Tag)
 	}
 

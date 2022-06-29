@@ -286,8 +286,8 @@ func (s *rangeSuite) TestSplit() {
 	splitKey := NewRandomKeyInRange(r)
 
 	left, right := r.Split(splitKey)
-	s.True(left.Equal(NewRange(r.InclusiveMin, splitKey)))
-	s.True(right.Equal(NewRange(splitKey, r.ExclusiveMax)))
+	s.True(left.Equals(NewRange(r.InclusiveMin, splitKey)))
+	s.True(right.Equals(NewRange(splitKey, r.ExclusiveMax)))
 }
 
 func (s *rangeSuite) TestMerge() {
@@ -298,29 +298,29 @@ func (s *rangeSuite) TestMerge() {
 		NewRandomKeyInRange(r),
 	)
 	mergedRange := r.Merge(testRange)
-	s.True(mergedRange.Equal(testRange.Merge(r)))
-	s.True(mergedRange.Equal(NewRange(tasks.MinimumKey, r.ExclusiveMax)))
+	s.True(mergedRange.Equals(testRange.Merge(r)))
+	s.True(mergedRange.Equals(NewRange(tasks.MinimumKey, r.ExclusiveMax)))
 
 	testRange = NewRange(
 		NewRandomKeyInRange(r),
 		tasks.MaximumKey,
 	)
 	mergedRange = r.Merge(testRange)
-	s.True(mergedRange.Equal(testRange.Merge(r)))
-	s.True(mergedRange.Equal(NewRange(r.InclusiveMin, tasks.MaximumKey)))
+	s.True(mergedRange.Equals(testRange.Merge(r)))
+	s.True(mergedRange.Equals(NewRange(r.InclusiveMin, tasks.MaximumKey)))
 
 	testRange = NewRange(tasks.MinimumKey, tasks.MaximumKey)
 	mergedRange = r.Merge(testRange)
-	s.True(mergedRange.Equal(testRange.Merge(r)))
-	s.True(mergedRange.Equal(NewRange(tasks.MinimumKey, tasks.MaximumKey)))
+	s.True(mergedRange.Equals(testRange.Merge(r)))
+	s.True(mergedRange.Equals(NewRange(tasks.MinimumKey, tasks.MaximumKey)))
 
 	testRange = NewRange(tasks.MinimumKey, r.InclusiveMin)
 	mergedRange = r.Merge(testRange)
-	s.True(mergedRange.Equal(testRange.Merge(r)))
-	s.True(mergedRange.Equal(NewRange(tasks.MinimumKey, r.ExclusiveMax)))
+	s.True(mergedRange.Equals(testRange.Merge(r)))
+	s.True(mergedRange.Equals(NewRange(tasks.MinimumKey, r.ExclusiveMax)))
 
 	testRange = NewRange(r.ExclusiveMax, tasks.MaximumKey)
 	mergedRange = r.Merge(testRange)
-	s.True(mergedRange.Equal(testRange.Merge(r)))
-	s.True(mergedRange.Equal(NewRange(r.InclusiveMin, tasks.MaximumKey)))
+	s.True(mergedRange.Equals(testRange.Merge(r)))
+	s.True(mergedRange.Equals(NewRange(r.InclusiveMin, tasks.MaximumKey)))
 }

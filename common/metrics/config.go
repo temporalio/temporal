@@ -32,6 +32,7 @@ import (
 	"github.com/uber-go/tally/v4"
 	"github.com/uber-go/tally/v4/m3"
 	"github.com/uber-go/tally/v4/prometheus"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	statsdreporter "go.temporal.io/server/common/metrics/tally/statsd"
@@ -54,7 +55,7 @@ type (
 		// Tags is the set of key-value pairs to be reported as part of every metric
 		Tags map[string]string `yaml:"tags"`
 		// IgnoreTags is a map from tag name string to tag values string list.
-		// Each value present in keys will have relevant tag value replaced with "__disabled__"
+		// Each value present in keys will have relevant tag value replaced with "_tag_excluded_"
 		// Each value in values list will white-list tag values to be reported as usual.
 		ExcludeTags map[string][]string `yaml:"excludeTags"`
 		// Prefix sets the prefix to all outgoing metrics
@@ -245,13 +246,6 @@ var (
 			16777216,
 		},
 	}
-
-	defaultConfig = ClientConfig{
-		Tags:                       nil,
-		ExcludeTags:                map[string][]string{},
-		Prefix:                     "",
-		PerUnitHistogramBoundaries: map[string][]float64{Dimensionless: {0, 10, 100}, Bytes: {1024, 2048}},
-	}
 )
 
 // NewScope builds a new tally scope for this metrics configuration
@@ -260,7 +254,7 @@ var (
 // only one of them will be used for reporting.
 //
 // Current priority order is:
-// m3 > statsd > prometheus
+// statsd > prometheus
 func NewScope(logger log.Logger, c *Config) tally.Scope {
 	if c.Statsd != nil {
 		return newStatsdScope(logger, c)
@@ -383,4 +377,39 @@ func histogramBoundariesToHistogramObjectives(boundaries []float64) []prometheus
 		)
 	}
 	return result
+}
+
+// MetricsHandlerFromConfig is used at startup to construct a MetricsHandler
+func MetricsHandlerFromConfig(logger log.Logger, c *Config) MetricsHandler {
+	if c == nil {
+		return NoopMetricsHandler
+	}
+
+	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
+
+	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
+		otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
+		if err != nil {
+			logger.Fatal(err.Error())
+		}
+
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
+	}
+
+	return NewTallyMetricsHandler(
+		c.ClientConfig,
+		NewScope(logger, c),
+	)
+}
+
+func configExcludeTags(cfg ClientConfig) map[string]map[string]struct{} {
+	tagsToFilter := make(map[string]map[string]struct{})
+	for key, val := range cfg.ExcludeTags {
+		exclusions := make(map[string]struct{})
+		for _, val := range val {
+			exclusions[val] = struct{}{}
+		}
+		tagsToFilter[key] = exclusions
+	}
+	return tagsToFilter
 }

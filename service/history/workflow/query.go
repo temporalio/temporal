@@ -34,96 +34,96 @@ import (
 )
 
 const (
-	QueryTerminationTypeCompleted QueryTerminationType = iota
-	QueryTerminationTypeUnblocked
-	QueryTerminationTypeFailed
+	QueryCompletionTypeSucceeded QueryCompletionType = iota
+	QueryCompletionTypeUnblocked
+	QueryCompletionTypeFailed
 )
 
 var (
-	errTerminationStateInvalid = serviceerror.NewInternal("query termination state invalid")
-	errAlreadyInTerminalState  = serviceerror.NewInternal("query already in terminal state")
-	errQueryNotInTerminalState = serviceerror.NewInternal("query not in terminal state")
+	errCompletionStateInvalid    = serviceerror.NewInternal("query completion state invalid")
+	errAlreadyInCompletionState  = serviceerror.NewInternal("query is already in completion state")
+	errQueryNotInCompletionState = serviceerror.NewInternal("query is not in completion state")
 )
 
 type (
-	QueryTerminationType int
+	QueryCompletionType int
 
 	query interface {
-		getQueryID() string
-		getQueryTermCh() <-chan struct{}
+		getID() string
+		getCompletionCh() <-chan struct{}
 		getQueryInput() *querypb.WorkflowQuery
-		GetTerminationState() (*QueryTerminationState, error)
-		setTerminationState(*QueryTerminationState) error
+		GetCompletionState() (*QueryCompletionState, error)
+		setCompletionState(*QueryCompletionState) error
 	}
 
 	queryImpl struct {
-		id         string
-		queryInput *querypb.WorkflowQuery
-		termCh     chan struct{}
+		id           string
+		queryInput   *querypb.WorkflowQuery
+		completionCh chan struct{}
 
-		terminationState atomic.Value
+		completionState atomic.Value
 	}
 
-	QueryTerminationState struct {
-		QueryTerminationType QueryTerminationType
-		QueryResult          *querypb.WorkflowQueryResult
-		Failure              error
+	QueryCompletionState struct {
+		Type   QueryCompletionType
+		Result *querypb.WorkflowQueryResult
+		Err    error
 	}
 )
 
 func newQuery(queryInput *querypb.WorkflowQuery) query {
 	return &queryImpl{
-		id:         uuid.New(),
-		queryInput: queryInput,
-		termCh:     make(chan struct{}),
+		id:           uuid.New(),
+		queryInput:   queryInput,
+		completionCh: make(chan struct{}),
 	}
 }
 
-func (q *queryImpl) getQueryID() string {
+func (q *queryImpl) getID() string {
 	return q.id
 }
 
-func (q *queryImpl) getQueryTermCh() <-chan struct{} {
-	return q.termCh
+func (q *queryImpl) getCompletionCh() <-chan struct{} {
+	return q.completionCh
 }
 
 func (q *queryImpl) getQueryInput() *querypb.WorkflowQuery {
 	return q.queryInput
 }
 
-func (q *queryImpl) GetTerminationState() (*QueryTerminationState, error) {
-	ts := q.terminationState.Load()
+func (q *queryImpl) GetCompletionState() (*QueryCompletionState, error) {
+	ts := q.completionState.Load()
 	if ts == nil {
-		return nil, errQueryNotInTerminalState
+		return nil, errQueryNotInCompletionState
 	}
-	return ts.(*QueryTerminationState), nil
+	return ts.(*QueryCompletionState), nil
 }
 
-func (q *queryImpl) setTerminationState(terminationState *QueryTerminationState) error {
-	if err := q.validateTerminationState(terminationState); err != nil {
+func (q *queryImpl) setCompletionState(completionState *QueryCompletionState) error {
+	if err := q.validateCompletionState(completionState); err != nil {
 		return err
 	}
-	currTerminationState, _ := q.GetTerminationState()
-	if currTerminationState != nil {
-		return errAlreadyInTerminalState
+	currCompletionState, _ := q.GetCompletionState()
+	if currCompletionState != nil {
+		return errAlreadyInCompletionState
 	}
-	q.terminationState.Store(terminationState)
-	close(q.termCh)
+	q.completionState.Store(completionState)
+	close(q.completionCh)
 	return nil
 }
 
-func (q *queryImpl) validateTerminationState(
-	terminationState *QueryTerminationState,
+func (q *queryImpl) validateCompletionState(
+	completionState *QueryCompletionState,
 ) error {
-	if terminationState == nil {
-		return errTerminationStateInvalid
+	if completionState == nil {
+		return errCompletionStateInvalid
 	}
-	switch terminationState.QueryTerminationType {
-	case QueryTerminationTypeCompleted:
-		if terminationState.QueryResult == nil || terminationState.Failure != nil {
-			return errTerminationStateInvalid
+	switch completionState.Type {
+	case QueryCompletionTypeSucceeded:
+		if completionState.Result == nil || completionState.Err != nil {
+			return errCompletionStateInvalid
 		}
-		queryResult := terminationState.QueryResult
+		queryResult := completionState.Result
 		validAnswered := queryResult.GetResultType() == enumspb.QUERY_RESULT_TYPE_ANSWERED &&
 			queryResult.Answer != nil &&
 			queryResult.GetErrorMessage() == ""
@@ -131,20 +131,20 @@ func (q *queryImpl) validateTerminationState(
 			queryResult.Answer == nil &&
 			queryResult.GetErrorMessage() != ""
 		if !validAnswered && !validFailed {
-			return errTerminationStateInvalid
+			return errCompletionStateInvalid
 		}
 		return nil
-	case QueryTerminationTypeUnblocked:
-		if terminationState.QueryResult != nil || terminationState.Failure != nil {
-			return errTerminationStateInvalid
+	case QueryCompletionTypeUnblocked:
+		if completionState.Result != nil || completionState.Err != nil {
+			return errCompletionStateInvalid
 		}
 		return nil
-	case QueryTerminationTypeFailed:
-		if terminationState.QueryResult != nil || terminationState.Failure == nil {
-			return errTerminationStateInvalid
+	case QueryCompletionTypeFailed:
+		if completionState.Result != nil || completionState.Err == nil {
+			return errCompletionStateInvalid
 		}
 		return nil
 	default:
-		return errTerminationStateInvalid
+		return errCompletionStateInvalid
 	}
 }
