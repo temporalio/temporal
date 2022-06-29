@@ -45,18 +45,21 @@ var (
 	_ PriorityTask = (*noopTask)(nil)
 )
 
-func BenchmarkInterleavedWeightedRoundRobinScheduler(b *testing.B) {
-	priorityToWeight := map[Priority]int{
+var (
+	benchmarkPriorityToWeight = map[Priority]int{
 		0: 5,
 		1: 3,
 		2: 2,
 		3: 1,
 	}
+)
+
+func BenchmarkInterleavedWeightedRoundRobinScheduler_Sequential(b *testing.B) {
 	logger := log.NewTestLogger()
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions{
-			PriorityToWeight: priorityToWeight,
+			PriorityToWeight: benchmarkPriorityToWeight,
 		},
 		&noopProcessor{},
 		metrics.NoopMetricsHandler,
@@ -74,6 +77,34 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		scheduler.Submit(&noopTask{WaitGroup: waitGroup})
 	}
+	waitGroup.Wait()
+}
+
+func BenchmarkInterleavedWeightedRoundRobinScheduler_Parallel(b *testing.B) {
+	logger := log.NewTestLogger()
+
+	scheduler := NewInterleavedWeightedRoundRobinScheduler(
+		InterleavedWeightedRoundRobinSchedulerOptions{
+			PriorityToWeight: benchmarkPriorityToWeight,
+		},
+		&noopProcessor{},
+		metrics.NoopMetricsHandler,
+		logger,
+	)
+	scheduler.Start()
+	defer scheduler.Stop()
+
+	waitGroup := &sync.WaitGroup{}
+	waitGroup.Add(b.N)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			scheduler.Submit(&noopTask{WaitGroup: waitGroup})
+		}
+	})
 	waitGroup.Wait()
 }
 
