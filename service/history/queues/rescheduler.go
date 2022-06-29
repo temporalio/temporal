@@ -40,15 +40,17 @@ import (
 	"go.temporal.io/server/common/timer"
 )
 
+const (
+	rescheduleFailureBackoff = 3 * time.Second
+)
+
 type (
 	// Rescheduler buffers task executables that are failed to process and
 	// resubmit them to the task scheduler when the Reschedule method is called.
 	Rescheduler interface {
 		common.Daemon
 
-		// Add task executable to the rescheudler.
-		// The backoff duration is just a hint for how long the executable
-		// should be bufferred before rescheduling.
+		// Add task executable to the rescheduler.
 		Add(task Executable, backoff time.Duration)
 
 		// Len returns the total number of task executables waiting to be rescheduled.
@@ -187,12 +189,17 @@ func (r *reschedulerImpl) reschedule() {
 		}
 
 		if !submitted {
+			rescheduled.rescheduleTime.Add(rescheduleFailureBackoff)
 			failToSubmit = append(failToSubmit, rescheduled)
 		}
 	}
 
 	for _, rescheduled := range failToSubmit {
 		r.pq.Add(rescheduled)
+	}
+
+	if !r.pq.IsEmpty() {
+		r.timerGate.Update(r.pq.Peek().rescheduleTime)
 	}
 }
 

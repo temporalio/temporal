@@ -84,10 +84,12 @@ func (s *rescheudulerSuite) TestReschedule_NoRescheduleLimit() {
 
 	numExecutable := 10
 	for i := 0; i != numExecutable/2; i++ {
+		mockTask := NewMockExecutable(s.controller)
 		s.rescheduler.Add(
-			NewMockExecutable(s.controller),
+			mockTask,
 			time.Duration(rand.Int63n(rescheduleInterval.Nanoseconds())),
 		)
+
 		s.rescheduler.Add(
 			NewMockExecutable(s.controller),
 			rescheduleInterval+time.Duration(rand.Int63n(time.Minute.Nanoseconds())),
@@ -109,8 +111,9 @@ func (s *rescheudulerSuite) TestReschedule_SubmissionFailed() {
 
 	numExecutable := 10
 	for i := 0; i != numExecutable; i++ {
+		mockTask := NewMockExecutable(s.controller)
 		s.rescheduler.Add(
-			NewMockExecutable(s.controller),
+			mockTask,
 			time.Duration(rand.Int63n(rescheduleInterval.Nanoseconds())),
 		)
 	}
