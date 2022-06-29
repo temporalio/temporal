@@ -38,35 +38,30 @@ import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
+import "temporal/server/api/persistence/v1/queues.proto";
 
 // shard column
 message ShardInfo {
     int32 shard_id = 1;
     int64 range_id = 2;
     string owner = 3;
-    // int64 replication_ack_level = 4 [deprecated = true];
-    // int64 transfer_ack_level = 5 [deprecated = true];
     reserved 4;
     reserved 5;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "since" is needed here. --)
     int32 stolen_since_renew = 6;
     google.protobuf.Timestamp update_time = 7 [(gogoproto.stdtime) = true];
-    // google.protobuf.Timestamp timer_ack_level_time = 8 [(gogoproto.stdtime) = true, deprecated = true]; 
     reserved 8;
     int64 namespace_notification_version = 9;
-    // map<string, int64> cluster_transfer_ack_level = 10 [deprecated = true]; 
-    // map<string, google.protobuf.Timestamp> cluster_timer_ack_level = 11 [(gogoproto.stdtime) = true, deprecated = true]; 
-    // map<string, int64> cluster_replication_level = 12 [deprecated = true];
     reserved 10;
     reserved 11;
     reserved 12;
     map<string, int64> replication_dlq_ack_level = 13;
-    // int64 visibility_ack_level = 14 [deprecated = true]; 
     reserved 14;
     reserved 15;
     // Map from task category to ack levels of the corresponding queue processor
-    map<int32, QueueAckLevel> queue_ack_levels = 16;  
+    map<int32, QueueAckLevel> queue_ack_levels = 16;
+    map<int32, QueueState> queue_states = 17;  
 }
 
 // execution column
@@ -324,9 +319,4 @@ message Checksum {
     int32 version = 1;
     temporal.server.api.enums.v1.ChecksumFlavor flavor = 2;
     bytes value = 3;
-}
-
-message QueueAckLevel {
-    int64 ack_level = 1;
-    map<string, int64> cluster_ack_level = 2;
 }
