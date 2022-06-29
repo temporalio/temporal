@@ -91,7 +91,7 @@ func NewTestContext(
 		engineFuture:                       future.NewFuture[Engine](),
 		shardInfo:                          shardInfo,
 		taskSequenceNumber:                 1,
-		immediateTaskExclusiveMaxReadLevel: 0,
+		immediateTaskExclusiveMaxReadLevel: 1,
 		maxTaskSequenceNumber:              100000,
 		scheduledTaskMaxReadLevelMap:       make(map[string]time.Time),
 		remoteClusterInfos:                 make(map[string]*remoteClusterInfo),
