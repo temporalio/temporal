@@ -51,7 +51,7 @@ type (
 		common.Daemon
 
 		// Add task executable to the rescheduler.
-		Add(task Executable, backoff time.Duration)
+		Add(task Executable, rescheduleTime time.Time)
 
 		// Len returns the total number of task executables waiting to be rescheduled.
 		Len() int
@@ -130,10 +130,8 @@ func (r *reschedulerImpl) Stop() {
 
 func (r *reschedulerImpl) Add(
 	executable Executable,
-	backoff time.Duration,
+	rescheduleTime time.Time,
 ) {
-	rescheduleTime := r.timeSource.Now().Add(backoff)
-
 	r.Lock()
 	r.pq.Add(rescheduledExecuable{
 		executable:     executable,
@@ -183,9 +181,10 @@ func (r *reschedulerImpl) reschedule() {
 		}
 
 		rescheduled := r.pq.Remove()
-		submitted, err := r.scheduler.TrySubmit(rescheduled.executable)
+		executable := rescheduled.executable
+		submitted, err := r.scheduler.TrySubmit(executable)
 		if err != nil {
-			rescheduled.executable.Logger().Error("Failed to reschedule task", tag.Error(err))
+			executable.Logger().Error("Failed to reschedule task", tag.Error(err))
 		}
 
 		if !submitted {

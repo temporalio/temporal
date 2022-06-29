@@ -59,15 +59,15 @@ func (m *MockRescheduler) EXPECT() *MockReschedulerMockRecorder {
 }
 
 // Add mocks base method.
-func (m *MockRescheduler) Add(task Executable, backoff time.Duration) {
+func (m *MockRescheduler) Add(task Executable, rescheduleTime time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Add", task, backoff)
+	m.ctrl.Call(m, "Add", task, rescheduleTime)
 }
 
 // Add indicates an expected call of Add.
-func (mr *MockReschedulerMockRecorder) Add(task, backoff interface{}) *gomock.Call {
+func (mr *MockReschedulerMockRecorder) Add(task, rescheduleTime interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockRescheduler)(nil).Add), task, backoff)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockRescheduler)(nil).Add), task, rescheduleTime)
 }
 
 // Len mocks base method.
