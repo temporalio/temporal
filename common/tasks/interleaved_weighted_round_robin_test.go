@@ -27,6 +27,7 @@ package tasks
 import (
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -106,6 +107,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success
 	s.scheduler.Submit(mockTask)
 
 	testWaitGroup.Wait()
+	s.Equal(atomic.LoadInt64(&s.scheduler.numInflightTask), int64(0))
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Fail() {
@@ -131,6 +133,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Fail() 
 	s.scheduler.Submit(mockTask)
 
 	testWaitGroup.Wait()
+	s.Equal(atomic.LoadInt64(&s.scheduler.numInflightTask), int64(0))
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
@@ -226,4 +229,5 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule
 	endWaitGroup.Wait()
 
 	testWaitGroup.Wait()
+	s.Equal(atomic.LoadInt64(&s.scheduler.numInflightTask), int64(0))
 }
