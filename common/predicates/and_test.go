@@ -64,7 +64,7 @@ func (s *andSuite) TestAnd_Normal() {
 func (s *andSuite) TestAnd_All() {
 	p := And[int](
 		newTestPredicate(1, 2, 3),
-		All[int](),
+		Universal[int](),
 	)
 
 	for i := 1; i != 4; i++ {
@@ -75,8 +75,8 @@ func (s *andSuite) TestAnd_All() {
 	}
 
 	p = And(
-		All[int](),
-		All[int](),
+		Universal[int](),
+		Universal[int](),
 	)
 	for i := 1; i != 7; i++ {
 		s.True(p.Test(i))
@@ -140,5 +140,5 @@ func (s *andSuite) TestAnd_Equals() {
 	s.False(p.Equals(Or[int](p1, p2)))
 	s.False(p.Equals(Not(p)))
 	s.False(p.Equals(Empty[int]()))
-	s.False(p.Equals(All[int]()))
+	s.False(p.Equals(Universal[int]()))
 }

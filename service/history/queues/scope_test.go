@@ -89,7 +89,7 @@ func (s *scopeSuite) TestContains() {
 
 func (s *scopeSuite) TestCanSplitByRange() {
 	r := NewRandomRange()
-	predicate := predicates.All[tasks.Task]()
+	predicate := predicates.Universal[tasks.Task]()
 	scope := NewScope(r, predicate)
 
 	s.True(scope.CanSplitByRange(r.InclusiveMin))
@@ -108,7 +108,7 @@ func (s *scopeSuite) TestCanSplitByRange() {
 
 func (s *scopeSuite) TestSplitByRange() {
 	r := NewRandomRange()
-	predicate := predicates.All[tasks.Task]()
+	predicate := predicates.Universal[tasks.Task]()
 	scope := NewScope(r, predicate)
 
 	splitKey := NewRandomKeyInRange(r)
@@ -267,7 +267,7 @@ func (s *scopeSuite) TestCanMergeByRange() {
 
 func (s *scopeSuite) TestMergeByRange() {
 	r := NewRandomRange()
-	predicate := predicates.All[tasks.Task]()
+	predicate := predicates.Universal[tasks.Task]()
 	scope := NewScope(r, predicate)
 
 	mergeRange := r
@@ -312,7 +312,7 @@ func (s *scopeSuite) TestCanMergeByPredicate() {
 	s.True(scope.CanMergeByPredicate(NewScope(r, tasks.NewTypePredicate([]enumsspb.TaskType{}))))
 
 	s.False(scope.CanMergeByPredicate(NewScope(NewRandomRange(), predicate)))
-	s.False(scope.CanMergeByPredicate(NewScope(NewRandomRange(), predicates.All[tasks.Task]())))
+	s.False(scope.CanMergeByPredicate(NewScope(NewRandomRange(), predicates.Universal[tasks.Task]())))
 }
 
 func (s *scopeSuite) TestMergeByPredicate_SamePredicateType() {

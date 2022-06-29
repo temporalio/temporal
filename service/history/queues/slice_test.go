@@ -74,7 +74,7 @@ func (s *sliceSuite) TearDownTest() {
 
 func (s *sliceSuite) TestCanSplitByRange() {
 	r := NewRandomRange()
-	scope := NewScope(r, predicates.All[tasks.Task]())
+	scope := NewScope(r, predicates.Universal[tasks.Task]())
 
 	slice := NewSlice(nil, s.executableInitializer, scope)
 	s.Equal(scope, slice.Scope())
@@ -283,7 +283,7 @@ func (s *sliceSuite) TestMergeWithSlice_DifferentMinMaxKey() {
 
 func (s *sliceSuite) TestShrinkRange() {
 	r := NewRandomRange()
-	predicate := predicates.All[tasks.Task]()
+	predicate := predicates.Universal[tasks.Task]()
 
 	slice := NewSlice(nil, s.executableInitializer, NewScope(r, predicate))
 	slice.iterators = s.randomIteratorsInRange(r, rand.Intn(2), nil)
@@ -379,7 +379,7 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 
 func (s *sliceSuite) TestSelectTasks_Error() {
 	r := NewRandomRange()
-	predicate := predicates.All[tasks.Task]()
+	predicate := predicates.Universal[tasks.Task]()
 
 	numTasks := 20
 	loadErr := true
@@ -421,7 +421,7 @@ func (s *sliceSuite) newTestSlice(
 	namespaceIDs []string,
 	taskTypes []enumsspb.TaskType,
 ) *SliceImpl {
-	predicate := predicates.All[tasks.Task]()
+	predicate := predicates.Universal[tasks.Task]()
 	if len(namespaceIDs) != 0 {
 		predicate = predicates.And[tasks.Task](
 			predicate,
