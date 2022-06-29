@@ -120,8 +120,8 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		OutstandingTaskAppendsThreshold: dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingOutstandingTaskAppendsThreshold, 250),
 		MaxTaskBatchSize:                dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMaxTaskBatchSize, 100),
 		ThrottledLogRPS:                 dc.GetIntProperty(dynamicconfig.MatchingThrottledLogRPS, 20),
-		NumTaskqueueWritePartitions:     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueWritePartitions, dynamicconfig.DefaultNumTaskQueuePartitions),
-		NumTaskqueueReadPartitions:      dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueReadPartitions, dynamicconfig.DefaultNumTaskQueuePartitions),
+		NumTaskqueueWritePartitions:     dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueWritePartitions),
+		NumTaskqueueReadPartitions:      dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueReadPartitions),
 		ForwarderMaxOutstandingPolls:    dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxOutstandingPolls, 1),
 		ForwarderMaxOutstandingTasks:    dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 1),
 		ForwarderMaxRatePerSecond:       dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxRatePerSecond, 10),
@@ -136,13 +136,6 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Name) (*taskQueueConfig, error) {
 	taskQueueName := id.name
 	taskType := id.taskType
-
-	writePartition := func() int {
-		return common.MaxInt(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
-	}
-	readPartition := func() int {
-		return common.MaxInt(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
-	}
 
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,
@@ -176,8 +169,12 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 		MaxTaskBatchSize: func() int {
 			return config.MaxTaskBatchSize(namespace.String(), taskQueueName, taskType)
 		},
-		NumWritePartitions: writePartition,
-		NumReadPartitions:  readPartition,
+		NumWritePartitions: func() int {
+			return config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType)
+		},
+		NumReadPartitions: func() int {
+			return config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType)
+		},
 		AdminNamespaceToPartitionDispatchRate: func() float64 {
 			return config.AdminNamespaceToPartitionDispatchRate(namespace.String())
 		},

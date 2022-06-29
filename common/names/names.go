@@ -22,6 +22,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package dynamicconfig
+package names
 
-const DefaultNumTaskQueuePartitions = 4
+const (
+	// Shared workflow and task queue names
+	SchedulerWorkflowType  = "temporal-sys-scheduler-workflow"
+	SchedulerTaskQueueName = "temporal-sys-scheduler-tq"
+)

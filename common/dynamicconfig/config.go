@@ -444,3 +444,16 @@ func (c *Collection) GetBoolPropertyFilteredByTaskQueueInfo(key Key, defaultValu
 		return val
 	}
 }
+
+// Task queue partitions use a dedicated function to handle defaults.
+func (c *Collection) GetTaskQueuePartitionsProperty(key Key) IntPropertyFnWithTaskQueueInfoFilters {
+	fn := c.GetIntPropertyFilteredByTaskQueueInfo(key, -1)
+	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int {
+		if p := fn(namespace, taskQueue, taskType); p > 0 {
+			return p
+		} else if p == 0 {
+			return 1
+		}
+		return defaultNumTaskQueuePartitions(taskQueue)
+	}
+}

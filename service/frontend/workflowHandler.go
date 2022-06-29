@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/names"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -3127,8 +3128,8 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:             request.Namespace,
 		WorkflowId:            request.ScheduleId,
-		WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: scheduler.TaskQueueName},
+		WorkflowType:          &commonpb.WorkflowType{Name: names.SchedulerWorkflowType},
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: names.SchedulerTaskQueueName},
 		Input:                 inputPayload,
 		Identity:              request.Identity,
 		RequestId:             request.RequestId,
@@ -3612,7 +3613,7 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 			EarliestStartTime: minTime,
 			LatestStartTime:   maxTime,
 		},
-		WorkflowTypeName: scheduler.WorkflowType,
+		WorkflowTypeName: names.SchedulerWorkflowType,
 	})
 	if err != nil {
 		return nil, err

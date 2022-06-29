@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	schedspb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/common/names"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -201,7 +202,7 @@ func (s *scheduler) run() error {
 	// Any watcher activities will get cancelled automatically if running.
 
 	s.logger.Info("Schedule doing continue-as-new")
-	return workflow.NewContinueAsNewError(s.ctx, WorkflowType, &s.StartScheduleArgs)
+	return workflow.NewContinueAsNewError(s.ctx, names.SchedulerWorkflowType, &s.StartScheduleArgs)
 }
 
 func (s *scheduler) ensureFields() {

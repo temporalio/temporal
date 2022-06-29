@@ -34,13 +34,9 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/names"
 	"go.temporal.io/server/common/namespace"
 	workercommon "go.temporal.io/server/service/worker/common"
-)
-
-const (
-	WorkflowType  = "temporal-sys-scheduler-workflow"
-	TaskQueueName = "temporal-sys-scheduler-tq"
 )
 
 type (
@@ -86,13 +82,13 @@ func NewResult(
 func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	return &workercommon.PerNSDedicatedWorkerOptions{
 		Enabled:    s.enabledForNs(ns.Name().String()),
-		TaskQueue:  TaskQueueName,
+		TaskQueue:  names.SchedulerTaskQueueName,
 		NumWorkers: s.numWorkers(ns.Name().String()),
 	}
 }
 
 func (s *workerComponent) Register(worker sdkworker.Worker, ns *namespace.Namespace) {
-	worker.RegisterWorkflowWithOptions(SchedulerWorkflow, workflow.RegisterOptions{Name: WorkflowType})
+	worker.RegisterWorkflowWithOptions(SchedulerWorkflow, workflow.RegisterOptions{Name: names.SchedulerWorkflowType})
 	worker.RegisterActivity(s.activities(ns.Name(), ns.ID()))
 }
 
