@@ -927,6 +927,11 @@ BackfillLoop:
 			PrevTransactionID: prevTxnID,
 			TransactionID:     txnID,
 			NodeID:            historyBlob.nodeID,
+			Info: persistence.BuildHistoryGarbageCleanupInfo(
+				namespaceID.String(),
+				workflowID,
+				runID,
+			),
 		})
 		if err != nil {
 			return nil, err
