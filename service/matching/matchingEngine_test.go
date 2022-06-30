@@ -269,7 +269,8 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 		namespace.ID(uuid.New()),
 		"makeToast",
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tqm, err := s.matchingEngine.getTaskQueueManager(
+	tqm, err := s.matchingEngine.getTaskQueueManagerInitialized(
+		context.Background(),
 		queueID,
 		enumspb.TASK_QUEUE_KIND_NORMAL)
 	s.Require().NoError(err)
@@ -286,8 +287,8 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	// try to unload a different tqm instance with the same taskqueue ID
 	s.matchingEngine.unloadTaskQueue(tqm2)
 
-	got, err := s.matchingEngine.getTaskQueueManager(
-		queueID, enumspb.TASK_QUEUE_KIND_NORMAL)
+	got, err := s.matchingEngine.getTaskQueueManagerInitialized(
+		context.Background(), queueID, enumspb.TASK_QUEUE_KIND_NORMAL)
 	s.Require().NoError(err)
 	s.Require().Same(tqm, got,
 		"Unload call with non-matching taskQueueManager should not cause unload")
@@ -295,8 +296,8 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	// this time unload the right tqm
 	s.matchingEngine.unloadTaskQueue(tqm)
 
-	got, err = s.matchingEngine.getTaskQueueManager(
-		queueID, enumspb.TASK_QUEUE_KIND_NORMAL)
+	got, err = s.matchingEngine.getTaskQueueManagerInitialized(
+		context.Background(), queueID, enumspb.TASK_QUEUE_KIND_NORMAL)
 	s.Require().NoError(err)
 	s.Require().NotSame(tqm, got,
 		"Unload call with matching incarnation should have caused unload")
@@ -560,7 +561,7 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
-	tlm, err := s.matchingEngine.getTaskQueueManager(tlID, tlKind)
+	tlm, err := s.matchingEngine.getTaskQueueManagerInitialized(context.Background(), tlID, tlKind)
 	s.Nil(err)
 
 	addRequest := matchingservice.AddActivityTaskRequest{

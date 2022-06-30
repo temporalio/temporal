@@ -200,7 +200,7 @@ func (e *matchingEngineImpl) String() string {
 
 // Returns taskQueueManager for a task queue if it is already loaded.
 // May return a taskQueueManager that is still initializing.
-func (e *matchingEngineImpl) getTaskQueueManagerIfAlreadyLoadedUninitialized(taskQueue *taskQueueID) taskQueueManager {
+func (e *matchingEngineImpl) getTaskQueueManagerIfAlreadyLoaded(taskQueue *taskQueueID) taskQueueManager {
 	e.taskQueuesLock.RLock()
 	defer e.taskQueuesLock.RUnlock()
 	if result, ok := e.taskQueues[*taskQueue]; ok {
@@ -210,12 +210,13 @@ func (e *matchingEngineImpl) getTaskQueueManagerIfAlreadyLoadedUninitialized(tas
 }
 
 // Returns taskQueueManager for a task queue if it is already loaded.
-func (e *matchingEngineImpl) getTaskQueueManagerIfAlreadyLoaded(taskQueue *taskQueueID) (taskQueueManager, error) {
-	mgr := e.getTaskQueueManagerIfAlreadyLoadedUninitialized(taskQueue)
+// The taskQueueManager should be initialized (have acquired a lease and loaded metadata).
+func (e *matchingEngineImpl) getTaskQueueManagerIfAlreadyLoadedInitialized(ctx context.Context, taskQueue *taskQueueID) (taskQueueManager, error) {
+	mgr := e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
 	if mgr == nil {
 		return nil, nil
 	}
-	err := mgr.WaitUntilInitialized(context.Background())
+	err := mgr.WaitUntilInitialized(ctx)
 	if err != nil {
 		e.unloadTaskQueue(mgr)
 		return nil, err
@@ -226,8 +227,8 @@ func (e *matchingEngineImpl) getTaskQueueManagerIfAlreadyLoaded(taskQueue *taskQ
 // Returns taskQueueManager for a task queue. If not already cached gets new range from DB and
 // if successful creates one.
 // May return a taskQueueManager that is still initializing.
-func (e *matchingEngineImpl) getTaskQueueManagerUninitialized(taskQueue *taskQueueID, taskQueueKind enumspb.TaskQueueKind) (taskQueueManager, error) {
-	result := e.getTaskQueueManagerIfAlreadyLoadedUninitialized(taskQueue)
+func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQueueKind enumspb.TaskQueueKind) (taskQueueManager, error) {
+	result := e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
 	if result != nil {
 		return result, nil
 	}
@@ -254,12 +255,13 @@ func (e *matchingEngineImpl) getTaskQueueManagerUninitialized(taskQueue *taskQue
 
 // Returns taskQueueManager for a task queue. If not already cached gets new range from DB and
 // if successful creates one.
-func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQueueKind enumspb.TaskQueueKind) (taskQueueManager, error) {
-	mgr, err := e.getTaskQueueManagerUninitialized(taskQueue, taskQueueKind)
+// The taskQueueManager should be initialized (have acquired a lease and loaded metadata).
+func (e *matchingEngineImpl) getTaskQueueManagerInitialized(ctx context.Context, taskQueue *taskQueueID, taskQueueKind enumspb.TaskQueueKind) (taskQueueManager, error) {
+	mgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return nil, err
 	}
-	err = mgr.WaitUntilInitialized(context.Background())
+	err = mgr.WaitUntilInitialized(ctx)
 	if err != nil {
 		e.unloadTaskQueue(mgr)
 		return nil, err
@@ -290,12 +292,12 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	var tqm taskQueueManager
 	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// do not load sticky task queue if it is not already loaded, which means it has no poller.
-		tqm, err = e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
+		tqm, err = e.getTaskQueueManagerIfAlreadyLoadedInitialized(hCtx, taskQueue)
 		if tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow)) {
 			return false, serviceerrors.NewStickyWorkerUnavailable()
 		}
 	} else {
-		tqm, err = e.getTaskQueueManager(taskQueue, taskQueueKind)
+		tqm, err = e.getTaskQueueManagerInitialized(hCtx, taskQueue, taskQueueKind)
 	}
 	if err != nil {
 		return false, err
@@ -349,7 +351,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		return false, err
 	}
 
-	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
+	tlMgr, err := e.getTaskQueueManagerInitialized(hCtx, taskQueue, taskQueueKind)
 	if err != nil {
 		return false, err
 	}
@@ -583,12 +585,12 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	var tqm taskQueueManager
 	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// do not load sticky task queue if it is not already loaded, which means it has no poller.
-		tqm, err = e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
+		tqm, err = e.getTaskQueueManagerIfAlreadyLoadedInitialized(hCtx, taskQueue)
 		if tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow)) {
 			return nil, serviceerrors.NewStickyWorkerUnavailable()
 		}
 	} else {
-		tqm, err = e.getTaskQueueManager(taskQueue, taskQueueKind)
+		tqm, err = e.getTaskQueueManagerInitialized(hCtx, taskQueue, taskQueueKind)
 	}
 	if err != nil {
 		return nil, err
@@ -663,7 +665,7 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 		return err
 	}
 	taskQueueKind := request.TaskQueue.GetKind()
-	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
+	tlMgr, err := e.getTaskQueueManagerInitialized(hCtx, taskQueue, taskQueueKind)
 	if err != nil {
 		return err
 	}
@@ -684,7 +686,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		return nil, err
 	}
 	taskQueueKind := request.DescRequest.TaskQueue.GetKind()
-	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
+	tlMgr, err := e.getTaskQueueManagerInitialized(hCtx, taskQueue, taskQueueKind)
 	if err != nil {
 		return nil, err
 	}
@@ -781,7 +783,7 @@ func (e *matchingEngineImpl) getTask(
 	maxDispatchPerSecond *float64,
 	taskQueueKind enumspb.TaskQueueKind,
 ) (*internalTask, error) {
-	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
+	tlMgr, err := e.getTaskQueueManagerInitialized(ctx, taskQueue, taskQueueKind)
 	if err != nil {
 		return nil, err
 	}
