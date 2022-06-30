@@ -88,7 +88,7 @@ type (
 		shardID             int32
 		executionManager    persistence.ExecutionManager
 		metricsClient       metrics.Client
-		metricsReporter     metrics.Reporter
+		metricsHandler      metrics.MetricsHandler
 		eventsCache         events.Cache
 		closeCallback       func(*ContextImpl)
 		config              *configs.Config
@@ -1813,7 +1813,7 @@ func newContext(
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
 	metricsClient metrics.Client,
-	metricsReporter metrics.Reporter,
+	metricsHandler metrics.MetricsHandler,
 	payloadSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
@@ -1832,7 +1832,7 @@ func newContext(
 		shardID:                 shardID,
 		executionManager:        persistenceExecutionManager,
 		metricsClient:           metricsClient,
-		metricsReporter:         metricsReporter,
+		metricsHandler:          metricsHandler,
 		closeCallback:           closeCallback,
 		config:                  config,
 		contextTaggedLogger:     log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity)),
@@ -1927,8 +1927,8 @@ func (s *ContextImpl) GetMetricsClient() metrics.Client {
 	return s.metricsClient
 }
 
-func (s *ContextImpl) GetMetricsReporter() metrics.Reporter {
-	return s.metricsReporter
+func (s *ContextImpl) GetMetricsHandler() metrics.MetricsHandler {
+	return s.metricsHandler
 }
 
 func (s *ContextImpl) GetTimeSource() clock.TimeSource {

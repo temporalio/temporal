@@ -33,6 +33,17 @@ import (
 	"github.com/uber-go/tally/v4"
 )
 
+var defaultConfig = ClientConfig{
+	Tags: nil,
+	ExcludeTags: map[string][]string{
+		"taskqueue":    {"__sticky__"},
+		"activityType": {},
+		"workflowType": {},
+	},
+	Prefix:                     "",
+	PerUnitHistogramBoundaries: map[string][]float64{Dimensionless: {0, 10, 100}, Bytes: {1024, 2048}},
+}
+
 func TestTallyScope(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
 	mp := NewTallyMetricsHandler(defaultConfig, scope)

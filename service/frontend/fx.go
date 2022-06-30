@@ -106,7 +106,7 @@ func NewServiceProvider(
 	visibilityMgr manager.VisibilityManager,
 	logger resource.SnTaggedLogger,
 	grpcListener net.Listener,
-	metricsScope metrics.UserScope,
+	metricsHandler metrics.MetricsHandler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 ) *Service {
 	return NewService(
@@ -120,7 +120,7 @@ func NewServiceProvider(
 		visibilityMgr,
 		logger,
 		grpcListener,
-		metricsScope,
+		metricsHandler,
 		faultInjectionDataStoreFactory,
 	)
 }
@@ -147,7 +147,7 @@ func GrpcServerOptionsProvider(
 		MinTime:             serviceConfig.KeepAliveMinTime(),
 		PermitWithoutStream: serviceConfig.KeepAlivePermitWithoutStream(),
 	}
-	var kp = keepalive.ServerParameters{
+	kp := keepalive.ServerParameters{
 		MaxConnectionIdle:     serviceConfig.KeepAliveMaxConnectionIdle(),
 		MaxConnectionAge:      serviceConfig.KeepAliveMaxConnectionAge(),
 		MaxConnectionAgeGrace: serviceConfig.KeepAliveMaxConnectionAgeGrace(),
