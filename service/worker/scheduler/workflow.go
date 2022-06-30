@@ -84,9 +84,6 @@ type (
 		// We might have zero or one long-poll watcher activity running. If so, these are set:
 		watchingWorkflowId string
 		watchingFuture     workflow.Future
-
-		// If we've added any starts in this iteration and need to refresh running workflow status.
-		needRefresh bool
 	}
 
 	tweakablePolicies struct {
@@ -129,7 +126,7 @@ var (
 		FutureActionCountForList:          5,
 		RecentActionCountForList:          5,
 		MaxSearchAttrLen:                  2000, // server default is 2048 but leave a little room
-		IterationsBeforeContinueAsNew:     500,
+		IterationsBeforeContinueAsNew:     501,  // weird number to compensate for historical bug, see pr #3020
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -162,17 +159,15 @@ func (s *scheduler) run() error {
 	if s.State.LastProcessedTime == nil {
 		s.logger.Debug("Initializing internal state")
 		s.State.LastProcessedTime = timestamp.TimePtr(s.now())
-		s.Info = &schedpb.ScheduleInfo{
-			CreateTime: s.State.LastProcessedTime,
-		}
 		s.State.ConflictToken = InitialConflictToken
+		s.Info.CreateTime = s.State.LastProcessedTime
 	}
 
 	// A schedule may be created with an initial Patch, e.g. start one immediately. Handle that now.
 	s.processPatch(s.InitialPatch)
 	s.InitialPatch = nil
 
-	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters >= 0; iters-- {
+	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0; iters-- {
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 		t2 := s.now()
 		if t2.Before(t1) {
@@ -477,7 +472,7 @@ func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
 	s.logger.Debug("got refresh signal")
 	// If we're woken up by any signal, we'll pass through processBuffer before sleeping again.
 	// processBuffer will see this flag and refresh everything.
-	s.needRefresh = true
+	s.State.NeedRefresh = true
 }
 
 func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
@@ -652,19 +647,21 @@ func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy en
 	})
 	// we have a new start to process, so we need to make sure that we have up-to-date status
 	// on any workflows that we started.
-	s.needRefresh = true
+	s.State.NeedRefresh = true
 }
 
 // processBuffer should return true if there might be more work to do right now.
 func (s *scheduler) processBuffer() bool {
-	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStarts), "running", len(s.Info.RunningWorkflows), "needRefresh", s.needRefresh)
+	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStarts), "running", len(s.Info.RunningWorkflows), "needRefresh", s.State.NeedRefresh)
 
 	// TODO: consider doing this always and removing needRefresh? we only end up here without
 	// needRefresh in the case of update, or patch without an immediate run, so it's not much
 	// wasted work.
-	if s.needRefresh {
+	// TODO: on the other hand, we don't have to refresh if we have one workflow running and a
+	// long-poll watcher running, because we would have gotten woken up already.
+	if s.State.NeedRefresh {
 		s.refreshWorkflows(slices.Clone(s.Info.RunningWorkflows))
-		s.needRefresh = false
+		s.State.NeedRefresh = false
 	}
 
 	// Make sure we have something to start. If not, we can clear the buffer.
@@ -767,14 +764,6 @@ func (s *scheduler) startWorkflow(
 	}
 	ctx := workflow.WithLocalActivityOptions(s.ctx, options)
 
-	// this timestamp is the one used to set the deadline for workflow execution timeout
-	startTime := timestamp.TimePtr(s.now())
-	if !start.Manual {
-		// use the scheduled time for workflow execution timeout even if we started late
-		// TODO: is this being too smart? should we just leave it as the current time?
-		startTime = start.ActualTime
-	}
-
 	req := &schedspb.StartWorkflowRequest{
 		NamespaceId: s.State.NamespaceId,
 		Request: &workflowservice.StartWorkflowExecutionRequest{
@@ -794,7 +783,6 @@ func (s *scheduler) startWorkflow(
 			SearchAttributes:         s.addSearchAttributes(newWorkflow.SearchAttributes, nominalTimeSec),
 			Header:                   newWorkflow.Header,
 		},
-		StartTime:            startTime,
 		LastCompletionResult: s.State.LastCompletionResult,
 		ContinuedFailure:     s.State.ContinuedFailure,
 	}
