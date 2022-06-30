@@ -51,7 +51,7 @@ func (*db) IsDupEntryError(err error) bool {
 	return false
 }
 
-func IsTableExistsError(err error) bool {
+func isTableExistsError(err error) bool {
 	var sqlErr *sqlite.Error
 	if errors.As(err, &sqlErr) {
 		return sqlTableExistsRegex.MatchString(sqlErr.Error())
