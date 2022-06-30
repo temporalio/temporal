@@ -25,15 +25,11 @@
 package tdbg
 
 import (
-	"context"
 	"fmt"
-	"math"
-	"net/url"
 	"os"
 	"strconv"
 	"time"
 
-	"github.com/olivere/elastic/v7"
 	"github.com/temporalio/tctl-kit/pkg/color"
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
@@ -43,18 +39,11 @@ import (
 	"go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/codec"
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/searchattribute"
 )
 
 const maxEventID = 9999
@@ -196,162 +185,6 @@ func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateRes
 // AdminDeleteWorkflow delete a workflow execution from Cassandra and visibility document from Elasticsearch.
 func AdminDeleteWorkflow(c *cli.Context) error {
 	return fmt.Errorf("Not implemented")
-}
-
-func adminDeleteVisibilityDocument(c *cli.Context, namespaceID string) error {
-	if !c.IsSet(FlagElasticsearchIndex) {
-		prompt("Elasticsearch index name is not specified. Continue without visibility document deletion?", c.Bool(FlagAutoConfirm))
-	}
-
-	indexName := c.String(FlagElasticsearchIndex)
-	esClient, err := newESClient(c)
-	if err != nil {
-		return err
-	}
-
-	query := elastic.NewBoolQuery().
-		Filter(
-			elastic.NewTermQuery(searchattribute.NamespaceID, namespaceID),
-			elastic.NewTermQuery(searchattribute.WorkflowID, c.String(FlagWorkflowID)))
-	if c.IsSet(FlagRunID) {
-		query = query.Filter(elastic.NewTermQuery(searchattribute.RunID, c.String(FlagRunID)))
-	}
-
-	searchParams := &esclient.SearchParameters{
-		Index:    indexName,
-		Query:    query,
-		PageSize: 10000,
-	}
-	searchResult, err := esClient.Search(context.Background(), searchParams)
-	if err != nil {
-		if c.Bool(FlagSkipErrorMode) {
-			fmt.Println("Unable to search for visibility documents from Elasticsearch:", err)
-		} else {
-			return fmt.Errorf("Unable to search for visibility documents from Elasticsearch: %s", err)
-		}
-	}
-	fmt.Println("Found", len(searchResult.Hits.Hits), "visibility documents.")
-	for _, searchHit := range searchResult.Hits.Hits {
-		err := esClient.Delete(context.Background(), indexName, searchHit.Id, math.MaxInt64)
-		if err != nil {
-			if c.Bool(FlagSkipErrorMode) {
-				fmt.Println("Unable to delete visibility document from Elasticsearch:", err)
-			} else {
-				return fmt.Errorf("Unable to delete visibility document from Elasticsearch: %s", err)
-			}
-		} else {
-			fmt.Println("Visibility document", searchHit.Id, "deleted successfully.")
-		}
-	}
-	return nil
-}
-
-func readOneRow(query gocql.Query) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
-	err := query.MapScan(result)
-	return result, err
-}
-
-func connectToCassandra(c *cli.Context) (gocql.Session, error) {
-	host := c.String(FlagDBAddress)
-	port := c.Int(FlagDBPort)
-
-	cassandraConfig := config.Cassandra{
-		Hosts:    host,
-		Port:     port,
-		User:     c.String(FlagUsername),
-		Password: c.String(FlagPassword),
-		Keyspace: c.String(FlagKeyspace),
-	}
-	if c.Bool(FlagEnableTLS) {
-		cassandraConfig.TLS = &auth.TLS{
-			Enabled:                true,
-			CertFile:               c.String(FlagTLSCertPath),
-			KeyFile:                c.String(FlagTLSKeyPath),
-			CaFile:                 c.String(FlagTLSCaPath),
-			ServerName:             c.String(FlagTLSServerName),
-			EnableHostVerification: !c.Bool(FlagTLSDisableHostVerification),
-		}
-	}
-
-	session, err := gocql.NewSession(cassandraConfig, resolver.NewNoopResolver(), log.NewNoopLogger())
-	if err != nil {
-		return nil, fmt.Errorf("connect to Cassandra failed: %s", err)
-	}
-	return session, nil
-}
-
-func newESClient(c *cli.Context) (esclient.CLIClient, error) {
-	esUrl := c.String(FlagElasticsearchURL)
-	parsedESUrl, err := url.Parse(esUrl)
-	if err != nil {
-		return nil, fmt.Errorf("Unable to parse URL: %s", err)
-	}
-
-	esConfig := &esclient.Config{
-		URL:      *parsedESUrl,
-		Username: c.String(FlagElasticsearchUsername),
-		Password: c.String(FlagElasticsearchPassword),
-	}
-
-	if c.IsSet(FlagVersion) {
-		esConfig.Version = c.String(FlagVersion)
-	}
-
-	client, err := esclient.NewCLIClient(esConfig, log.NewCLILogger())
-	if err != nil {
-		return nil, fmt.Errorf("Unable to create Elasticsearch client: %s", err)
-	}
-
-	return client, nil
-}
-
-// AdminGetNamespaceIDOrName map namespace
-func AdminGetNamespaceIDOrName(c *cli.Context) error {
-	namespaceID := c.String(FlagNamespaceID)
-	namespace := c.String(FlagNamespace)
-	if len(namespaceID) == 0 && len(namespace) == 0 {
-		return fmt.Errorf("Need either namespace or namespaceId")
-	}
-
-	session, err := connectToCassandra(c)
-	if err != nil {
-		return err
-	}
-
-	if len(namespaceID) > 0 {
-		tmpl := "select namespace from namespaces where id = ? "
-		query := session.Query(tmpl, namespaceID)
-		res, err := readOneRow(query)
-		if err != nil {
-			return fmt.Errorf("readOneRow: %s", err)
-		}
-		namespaceName := res["name"].(string)
-		fmt.Printf("namespace for namespaceId %v is %v \n", namespaceID, namespaceName)
-	} else {
-		tmpl := "select namespace from namespaces_by_name where name = ?"
-		tmplV2 := "select namespace from namespaces where namespaces_partition=0 and name = ?"
-
-		query := session.Query(tmpl, namespace)
-		res, err := readOneRow(query)
-		if err != nil {
-			fmt.Printf("v1 return error: %v , trying v2...\n", err)
-
-			query := session.Query(tmplV2, namespace)
-			res, err := readOneRow(query)
-			if err != nil {
-				return fmt.Errorf("readOneRow for v2: %s", err)
-			}
-			namespace := res["namespace"].(map[string]interface{})
-			namespaceID := gocql.UUIDToString(namespace["id"])
-			fmt.Printf("namespaceId for namespace %v is %v \n", namespace, namespaceID)
-		} else {
-			namespace := res["namespace"].(map[string]interface{})
-			namespaceID := gocql.UUIDToString(namespace["id"])
-			fmt.Printf("namespaceId for namespace %v is %v \n", namespace, namespaceID)
-		}
-	}
-	return nil
 }
 
 // AdminGetShardID get shardID
