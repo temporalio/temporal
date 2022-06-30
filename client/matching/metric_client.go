@@ -168,62 +168,6 @@ func (c *metricClient) QueryWorkflow(
 	return c.client.QueryWorkflow(ctx, request, opts...)
 }
 
-func (c *metricClient) RespondQueryTaskCompleted(
-	ctx context.Context,
-	request *matchingservice.RespondQueryTaskCompletedRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.RespondQueryTaskCompletedResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientRespondQueryTaskCompletedScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	return c.client.RespondQueryTaskCompleted(ctx, request, opts...)
-}
-
-func (c *metricClient) CancelOutstandingPoll(
-	ctx context.Context,
-	request *matchingservice.CancelOutstandingPollRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientCancelOutstandingPollScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	return c.client.CancelOutstandingPoll(ctx, request, opts...)
-}
-
-func (c *metricClient) DescribeTaskQueue(
-	ctx context.Context,
-	request *matchingservice.DescribeTaskQueueRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.DescribeTaskQueueResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientDescribeTaskQueueScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	return c.client.DescribeTaskQueue(ctx, request, opts...)
-}
-
-func (c *metricClient) ListTaskQueuePartitions(
-	ctx context.Context,
-	request *matchingservice.ListTaskQueuePartitionsRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.ListTaskQueuePartitionsResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientListTaskQueuePartitionsScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	return c.client.ListTaskQueuePartitions(ctx, request, opts...)
-}
-
 func (c *metricClient) emitForwardedSourceStats(
 	scope metrics.Scope,
 	forwardedFrom string,
