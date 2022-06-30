@@ -46,16 +46,14 @@ import (
 type (
 	// QueueProcessorOptions is options passed to queue processor implementation
 	QueueProcessorOptions struct {
-		BatchSize                           dynamicconfig.IntPropertyFn
-		MaxPollInterval                     dynamicconfig.DurationPropertyFn
-		MaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
-		UpdateAckInterval                   dynamicconfig.DurationPropertyFn
-		UpdateAckIntervalJitterCoefficient  dynamicconfig.FloatPropertyFn
-		RescheduleInterval                  dynamicconfig.DurationPropertyFn
-		RescheduleIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
-		MaxReschdulerSize                   dynamicconfig.IntPropertyFn
-		PollBackoffInterval                 dynamicconfig.DurationPropertyFn
-		MetricScope                         int
+		BatchSize                          dynamicconfig.IntPropertyFn
+		MaxPollInterval                    dynamicconfig.DurationPropertyFn
+		MaxPollIntervalJitterCoefficient   dynamicconfig.FloatPropertyFn
+		UpdateAckInterval                  dynamicconfig.DurationPropertyFn
+		UpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+		MaxReschdulerSize                  dynamicconfig.IntPropertyFn
+		PollBackoffInterval                dynamicconfig.DurationPropertyFn
+		MetricScope                        int
 	}
 
 	queueProcessorBase struct {
@@ -128,6 +126,8 @@ func (p *queueProcessorBase) Start() {
 	p.logger.Info("", tag.LifeCycleStarting, tag.ComponentTransferQueue)
 	defer p.logger.Info("", tag.LifeCycleStarted, tag.ComponentTransferQueue)
 
+	p.rescheduler.Start()
+
 	p.shutdownWG.Add(1)
 	p.notifyNewTask()
 	go p.processorPump()
@@ -140,6 +140,8 @@ func (p *queueProcessorBase) Stop() {
 
 	p.logger.Info("", tag.LifeCycleStopping, tag.ComponentTransferQueue)
 	defer p.logger.Info("", tag.LifeCycleStopped, tag.ComponentTransferQueue)
+
+	p.rescheduler.Stop()
 
 	close(p.shutdownCh)
 
@@ -171,12 +173,6 @@ func (p *queueProcessorBase) processorPump() {
 	))
 	defer updateAckTimer.Stop()
 
-	rescheduleTimer := time.NewTimer(backoff.JitDuration(
-		p.options.RescheduleInterval(),
-		p.options.RescheduleIntervalJitterCoefficient(),
-	))
-	defer rescheduleTimer.Stop()
-
 processorPumpLoop:
 	for {
 		select {
@@ -205,12 +201,6 @@ processorPumpLoop:
 				go p.Stop()
 				break processorPumpLoop
 			}
-		case <-rescheduleTimer.C:
-			p.rescheduler.Reschedule(0) // reschedule all
-			rescheduleTimer.Reset(backoff.JitDuration(
-				p.options.RescheduleInterval(),
-				p.options.RescheduleIntervalJitterCoefficient(),
-			))
 		}
 	}
 
@@ -261,14 +251,7 @@ func (p *queueProcessorBase) processBatch() {
 }
 
 func (p *queueProcessorBase) verifyReschedulerSize() bool {
-	length := p.rescheduler.Len()
-	maxLength := p.options.MaxReschdulerSize()
-	buffer := p.options.BatchSize() * 2
-	if length+buffer > maxLength {
-		p.rescheduler.Reschedule(length + buffer - maxLength)
-	}
-
-	passed := p.rescheduler.Len() < maxLength
+	passed := p.rescheduler.Len() < p.options.MaxReschdulerSize()
 	if passed && p.backoffTimer != nil {
 		p.backoffTimer.Stop()
 		p.backoffTimer = nil

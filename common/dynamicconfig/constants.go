@@ -355,10 +355,6 @@ const (
 	TimerProcessorMaxPollInterval = "history.timerProcessorMaxPollInterval"
 	// TimerProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
 	TimerProcessorMaxPollIntervalJitterCoefficient = "history.timerProcessorMaxPollIntervalJitterCoefficient"
-	// TimerProcessorRescheduleInterval is the redispatch interval for timer processor
-	TimerProcessorRescheduleInterval = "history.timerProcessorRescheduleInterval"
-	// TimerProcessorRescheduleIntervalJitterCoefficient is the redispatch interval jitter coefficient
-	TimerProcessorRescheduleIntervalJitterCoefficient = "history.timerProcessorRescheduleIntervalJitterCoefficient"
 	// TimerProcessorMaxReschedulerSize is the threshold of the number of tasks in the redispatch queue for timer processor
 	TimerProcessorMaxReschedulerSize = "history.timerProcessorMaxReschedulerSize"
 	// TimerProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for timer processor
@@ -408,10 +404,6 @@ const (
 	TransferProcessorUpdateAckIntervalJitterCoefficient = "history.transferProcessorUpdateAckIntervalJitterCoefficient"
 	// TransferProcessorCompleteTransferInterval is complete timer interval for transferQueueProcessor
 	TransferProcessorCompleteTransferInterval = "history.transferProcessorCompleteTransferInterval"
-	// TransferProcessorRescheduleInterval is the redispatch interval for transferQueueProcessor
-	TransferProcessorRescheduleInterval = "history.transferProcessorRescheduleInterval"
-	// TransferProcessorRescheduleIntervalJitterCoefficient is the redispatch interval jitter coefficient
-	TransferProcessorRescheduleIntervalJitterCoefficient = "history.transferProcessorRescheduleIntervalJitterCoefficient"
 	// TransferProcessorMaxReschedulerSize is the threshold of the number of tasks in the redispatch queue for transferQueueProcessor
 	TransferProcessorMaxReschedulerSize = "history.transferProcessorMaxReschedulerSize"
 	// TransferProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for transferQueueProcessor
@@ -453,10 +445,6 @@ const (
 	VisibilityProcessorUpdateAckIntervalJitterCoefficient = "history.visibilityProcessorUpdateAckIntervalJitterCoefficient"
 	// VisibilityProcessorCompleteTaskInterval is complete timer interval for visibilityQueueProcessor
 	VisibilityProcessorCompleteTaskInterval = "history.visibilityProcessorCompleteTaskInterval"
-	// VisibilityProcessorRescheduleInterval is the redispatch interval for visibilityQueueProcessor
-	VisibilityProcessorRescheduleInterval = "history.visibilityProcessorRescheduleInterval"
-	// VisibilityProcessorRescheduleIntervalJitterCoefficient is the redispatch interval jitter coefficient
-	VisibilityProcessorRescheduleIntervalJitterCoefficient = "history.visibilityProcessorRescheduleIntervalJitterCoefficient"
 	// VisibilityProcessorMaxReschedulerSize is the threshold of the number of tasks in the redispatch queue for visibilityQueueProcessor
 	VisibilityProcessorMaxReschedulerSize = "history.visibilityProcessorMaxReschedulerSize"
 	// VisibilityProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for visibilityQueueProcessor
@@ -480,10 +468,6 @@ const (
 	ReplicatorProcessorUpdateAckInterval = "history.replicatorProcessorUpdateAckInterval"
 	// ReplicatorProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
 	ReplicatorProcessorUpdateAckIntervalJitterCoefficient = "history.replicatorProcessorUpdateAckIntervalJitterCoefficient"
-	// ReplicatorProcessorRescheduleInterval is the redispatch interval for ReplicatorProcessor
-	ReplicatorProcessorRescheduleInterval = "history.replicatorProcessorRescheduleInterval"
-	// ReplicatorProcessorRescheduleIntervalJitterCoefficient is the redispatch interval jitter coefficient
-	ReplicatorProcessorRescheduleIntervalJitterCoefficient = "history.replicatorProcessorRescheduleIntervalJitterCoefficient"
 	// ReplicatorProcessorMaxReschedulerSize is the threshold of the number of tasks in the redispatch queue for ReplicatorProcessor
 	ReplicatorProcessorMaxReschedulerSize = "history.replicatorProcessorMaxReschedulerSize"
 	// ReplicatorProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for ReplicatorProcessor

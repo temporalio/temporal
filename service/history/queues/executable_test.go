@@ -195,7 +195,7 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 		return true
 	})
 
-	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Second))
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now()))
 
 	executable.Nack(consts.ErrTaskRetry) // this error won't trigger re-submit
 	s.Equal(ctasks.TaskStatePending, executable.State())

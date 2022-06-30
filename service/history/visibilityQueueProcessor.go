@@ -85,16 +85,14 @@ func newVisibilityQueueProcessor(
 	metricsClient := shard.GetMetricsClient()
 
 	options := &QueueProcessorOptions{
-		BatchSize:                           config.VisibilityTaskBatchSize,
-		MaxPollInterval:                     config.VisibilityProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:    config.VisibilityProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                   config.VisibilityProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient:  config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
-		RescheduleInterval:                  config.VisibilityProcessorRescheduleInterval,
-		RescheduleIntervalJitterCoefficient: config.VisibilityProcessorRescheduleIntervalJitterCoefficient,
-		MaxReschdulerSize:                   config.VisibilityProcessorMaxReschedulerSize,
-		PollBackoffInterval:                 config.VisibilityProcessorPollBackoffInterval,
-		MetricScope:                         metrics.VisibilityQueueProcessorScope,
+		BatchSize:                          config.VisibilityTaskBatchSize,
+		MaxPollInterval:                    config.VisibilityProcessorMaxPollInterval,
+		MaxPollIntervalJitterCoefficient:   config.VisibilityProcessorMaxPollIntervalJitterCoefficient,
+		UpdateAckInterval:                  config.VisibilityProcessorUpdateAckInterval,
+		UpdateAckIntervalJitterCoefficient: config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
+		MaxReschdulerSize:                  config.VisibilityProcessorMaxReschedulerSize,
+		PollBackoffInterval:                config.VisibilityProcessorPollBackoffInterval,
+		MetricScope:                        metrics.VisibilityQueueProcessorScope,
 	}
 	visibilityTaskFilter := func(taskInfo tasks.Task) bool {
 		return true
@@ -149,6 +147,7 @@ func newVisibilityQueueProcessor(
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
+		logger,
 		metricProvider.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
 	)
 

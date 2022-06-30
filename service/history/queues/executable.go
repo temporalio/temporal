@@ -279,8 +279,7 @@ func (e *executableImpl) Ack() {
 
 func (e *executableImpl) Nack(err error) {
 	submitted := false
-	attempt := e.Attempt()
-	if e.shouldResubmitOnNack(attempt, err) {
+	if e.shouldResubmitOnNack(e.Attempt(), err) {
 		// we do not need to know if there any error during submission
 		// as long as it's not submitted, the execuable should be add
 		// to the rescheduler
@@ -288,12 +287,12 @@ func (e *executableImpl) Nack(err error) {
 	}
 
 	if !submitted {
-		e.rescheduler.Add(e, e.rescheduleBackoff(attempt))
+		e.Reschedule()
 	}
 }
 
 func (e *executableImpl) Reschedule() {
-	e.rescheduler.Add(e, e.rescheduleBackoff(e.Attempt()))
+	e.rescheduler.Add(e, e.rescheduleTime(e.Attempt()))
 }
 
 func (e *executableImpl) State() ctasks.State {
@@ -347,11 +346,13 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 		return false
 	}
 
-	return err == consts.ErrWorkflowBusy || common.IsContextDeadlineExceededErr(err) || e.IsRetryableError(err)
+	return err == consts.ErrWorkflowBusy ||
+		common.IsContextDeadlineExceededErr(err) ||
+		e.IsRetryableError(err)
 }
 
-func (e *executableImpl) rescheduleBackoff(attempt int) time.Duration {
+func (e *executableImpl) rescheduleTime(attempt int) time.Time {
 	// elapsedTime (the first parameter) is not relevant here since reschedule policy
 	// has no expiration interval.
-	return reschedulePolicy.ComputeNextDelay(0, attempt)
+	return e.timeSource.Now().Add(reschedulePolicy.ComputeNextDelay(0, attempt))
 }

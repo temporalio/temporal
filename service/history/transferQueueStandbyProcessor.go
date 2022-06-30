@@ -70,16 +70,14 @@ func newTransferQueueStandbyProcessor(
 ) *transferQueueStandbyProcessorImpl {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		BatchSize:                           config.TransferTaskBatchSize,
-		MaxPollInterval:                     config.TransferProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient:  config.TransferProcessorUpdateAckIntervalJitterCoefficient,
-		RescheduleInterval:                  config.TransferProcessorRescheduleInterval,
-		RescheduleIntervalJitterCoefficient: config.TransferProcessorRescheduleIntervalJitterCoefficient,
-		MaxReschdulerSize:                   config.TransferProcessorMaxReschedulerSize,
-		PollBackoffInterval:                 config.TransferProcessorPollBackoffInterval,
-		MetricScope:                         metrics.TransferStandbyQueueProcessorScope,
+		BatchSize:                          config.TransferTaskBatchSize,
+		MaxPollInterval:                    config.TransferProcessorMaxPollInterval,
+		MaxPollIntervalJitterCoefficient:   config.TransferProcessorMaxPollIntervalJitterCoefficient,
+		UpdateAckInterval:                  config.TransferProcessorUpdateAckInterval,
+		UpdateAckIntervalJitterCoefficient: config.TransferProcessorUpdateAckIntervalJitterCoefficient,
+		MaxReschdulerSize:                  config.TransferProcessorMaxReschedulerSize,
+		PollBackoffInterval:                config.TransferProcessorPollBackoffInterval,
+		MetricScope:                        metrics.TransferStandbyQueueProcessorScope,
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
 
@@ -152,6 +150,7 @@ func newTransferQueueStandbyProcessor(
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
+		logger,
 		metricProvider.WithTags(metrics.OperationTag(queues.OperationTransferStandbyQueueProcessor)),
 	)
 
