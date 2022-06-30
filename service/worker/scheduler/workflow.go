@@ -126,7 +126,7 @@ var (
 		FutureActionCountForList:          5,
 		RecentActionCountForList:          5,
 		MaxSearchAttrLen:                  2000, // server default is 2048 but leave a little room
-		IterationsBeforeContinueAsNew:     501,
+		IterationsBeforeContinueAsNew:     501,  // weird number to compensate for historical bug, see pr #3020
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
