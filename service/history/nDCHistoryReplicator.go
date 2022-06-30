@@ -26,16 +26,20 @@ package history
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -831,7 +835,7 @@ func (r *nDCHistoryReplicatorImpl) backfillHistory(
 	lastEventVersion int64,
 	branchToken []byte,
 ) (*time.Time, error) {
-	historyIterator := collection.NewPagingIterator(r.getHistoryPaginationFn(
+	remotehistoryIterator := collection.NewPagingIterator(r.getHistoryFromRemotePaginationFn(
 		ctx,
 		remoteClusterName,
 		namespaceName,
@@ -840,23 +844,85 @@ func (r *nDCHistoryReplicatorImpl) backfillHistory(
 		runID,
 		lastEventID,
 		lastEventVersion))
+	localHistoryIterator := collection.NewPagingIterator(r.getHistoryFromLocalPaginationFn(
+		ctx,
+		branchToken,
+		lastEventID,
+	))
 
 	var lastHistoryBatch *commonpb.DataBlob
 	prevTxnID := common.EmptyVersion
-	for historyIterator.HasNext() {
-		historyBlob, err := historyIterator.Next()
+	historyBranch, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	if err != nil {
+		return nil, err
+	}
+	latestBranchID := historyBranch.GetBranchId()
+	var prevBranchID string
+
+	sortedAncestors := copyAncestors(historyBranch.GetAncestors())
+	sortedAncestorsIdx := 0
+	historyBranch.Ancestors = nil
+
+BackfillLoop:
+	for remotehistoryIterator.HasNext() {
+		historyBlob, err := remotehistoryIterator.Next()
 		if err != nil {
 			return nil, err
 		}
-		lastHistoryBatch = historyBlob.rawHistory
+
+	HistoryExistenceCheckLoop:
+		for localHistoryIterator.HasNext() {
+			localHistoryBatch, err := localHistoryIterator.Next()
+			switch err.(type) {
+			case nil:
+				if events := localHistoryBatch.GetEvents(); events[0].GetEventId() == historyBlob.nodeID {
+					// Check if the history batch already in DB.
+					continue BackfillLoop
+				}
+			case *serviceerror.NotFound:
+				break HistoryExistenceCheckLoop
+			default:
+				return nil, err
+			}
+		}
+
+		if sortedAncestorsIdx < len(sortedAncestors) {
+			currentAncestor := sortedAncestors[sortedAncestorsIdx]
+			if historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
+				// update ancestor
+				historyBranch.Ancestors = append(historyBranch.Ancestors, currentAncestor)
+				sortedAncestorsIdx++
+			}
+			if sortedAncestorsIdx < len(sortedAncestors) {
+				// use ancestor branch id
+				currentAncestor = sortedAncestors[sortedAncestorsIdx]
+				historyBranch.BranchId = currentAncestor.GetBranchId()
+				if historyBlob.nodeID < currentAncestor.GetBeginNodeId() || historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
+					return nil, serviceerror.NewInternal(
+						fmt.Sprintf("The backfill history blob node id %d is not in acestoer range [%d, %d]",
+							historyBlob.nodeID,
+							currentAncestor.GetBeginNodeId(),
+							currentAncestor.GetEndNodeId()),
+					)
+				}
+			} else {
+				// no more ancestor, use the latest branch ID
+				historyBranch.BranchId = latestBranchID
+			}
+		}
+
+		filteredHistoryBranch, err := serialization.HistoryBranchToBlob(historyBranch)
+		if err != nil {
+			return nil, err
+		}
 		txnID, err := r.shard.GenerateTaskID()
 		if err != nil {
 			return nil, err
 		}
 		_, err = r.shard.GetExecutionManager().AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shard.GetShardID(),
-			IsNewBranch:       prevTxnID == common.EmptyVersion,
-			BranchToken:       branchToken,
+			IsNewBranch:       prevBranchID != historyBranch.BranchId,
+			BranchToken:       filteredHistoryBranch.GetData(),
 			History:           historyBlob.rawHistory,
 			PrevTransactionID: prevTxnID,
 			TransactionID:     txnID,
@@ -866,7 +932,10 @@ func (r *nDCHistoryReplicatorImpl) backfillHistory(
 			return nil, err
 		}
 		prevTxnID = txnID
+		prevBranchID = historyBranch.BranchId
+		lastHistoryBatch = historyBlob.rawHistory
 	}
+
 	var lastEventTime *time.Time
 	events, _ := r.historySerializer.DeserializeEvents(lastHistoryBatch)
 	if len(events) > 0 {
@@ -875,7 +944,21 @@ func (r *nDCHistoryReplicatorImpl) backfillHistory(
 	return lastEventTime, nil
 }
 
-func (r *nDCHistoryReplicatorImpl) getHistoryPaginationFn(
+func copyAncestors(input []*persistencespb.HistoryBranchRange) []*persistencespb.HistoryBranchRange {
+	ans := make([]*persistencespb.HistoryBranchRange, len(input))
+	copy(ans, input)
+	if len(ans) > 0 {
+		// sort ans based onf EndNodeID so that we can set BeginNodeID
+		sort.Slice(ans, func(i, j int) bool { return (ans)[i].GetEndNodeId() < (ans)[j].GetEndNodeId() })
+		(ans)[0].BeginNodeId = int64(1)
+		for i := 1; i < len(ans); i++ {
+			(ans)[i].BeginNodeId = (ans)[i-1].GetEndNodeId()
+		}
+	}
+	return ans
+}
+
+func (r *nDCHistoryReplicatorImpl) getHistoryFromRemotePaginationFn(
 	ctx context.Context,
 	remoteClusterName string,
 	namespaceName namespace.Name,
@@ -913,5 +996,32 @@ func (r *nDCHistoryReplicatorImpl) getHistoryPaginationFn(
 			})
 		}
 		return batches, response.NextPageToken, nil
+	}
+}
+
+func (r *nDCHistoryReplicatorImpl) getHistoryFromLocalPaginationFn(
+	ctx context.Context,
+	branchToken []byte,
+	lastEventID int64,
+) collection.PaginationFn[*historypb.History] {
+
+	return func(paginationToken []byte) ([]*historypb.History, []byte, error) {
+		response, err := r.shard.GetExecutionManager().ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
+			ShardID:       r.shard.GetShardID(),
+			BranchToken:   branchToken,
+			MinEventID:    common.FirstEventID,
+			MaxEventID:    lastEventID + 1,
+			PageSize:      100,
+			NextPageToken: paginationToken,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+
+		histories := make([]*historypb.History, 0, len(response.History))
+		for _, history := range response.History {
+			histories = append(histories, history)
+		}
+		return histories, response.NextPageToken, nil
 	}
 }
