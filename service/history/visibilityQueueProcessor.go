@@ -101,7 +101,7 @@ func newVisibilityQueueProcessor(
 		return true
 	}
 	maxReadLevel := func() int64 {
-		return shard.GetQueueExclusiveMaxReadLevel(
+		return shard.GetQueueExclusiveHighReadWatermark(
 			tasks.CategoryVisibility,
 			shard.GetClusterMetadata().GetCurrentClusterName(),
 		).TaskID

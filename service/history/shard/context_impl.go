@@ -264,7 +264,7 @@ func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
 	return result, nil
 }
 
-func (s *ContextImpl) GetQueueExclusiveMaxReadLevel(
+func (s *ContextImpl) GetQueueExclusiveHighReadWatermark(
 	category tasks.Category,
 	cluster string,
 ) tasks.Key {

@@ -96,7 +96,7 @@ func newTransferQueueStandbyProcessor(
 		}
 	}
 	maxReadLevel := func() int64 {
-		return shard.GetQueueExclusiveMaxReadLevel(tasks.CategoryTransfer, clusterName).TaskID
+		return shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTransfer, clusterName).TaskID
 	}
 	updateClusterAckLevel := func(ackLevel int64) error {
 		return shard.UpdateQueueClusterAckLevel(tasks.CategoryTransfer, clusterName, tasks.NewImmediateKey(ackLevel))

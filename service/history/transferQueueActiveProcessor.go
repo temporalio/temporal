@@ -90,7 +90,7 @@ func newTransferQueueActiveProcessor(
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
 
 	maxReadLevel := func() int64 {
-		return shard.GetQueueExclusiveMaxReadLevel(tasks.CategoryTransfer, currentClusterName).TaskID
+		return shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTransfer, currentClusterName).TaskID
 	}
 	updateTransferAckLevel := func(ackLevel int64) error {
 		// in single cursor mode, continue to update cluster ack level
