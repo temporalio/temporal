@@ -136,13 +136,19 @@ func (p *plugin) createDBConnection(
 	// Maps struct names in CamelCase to snake without need for db struct tags.
 	db.MapperFunc(strcase.ToSnake)
 
-	if cfg.ConnectAttributes["mode"] == "memory" || cfg.ConnectAttributes["setup"] == "true" {
+	switch {
+	case cfg.ConnectAttributes["mode"] == "memory":
 		// creates temporary DB overlay in order to configure database and schemas
-		err := p.setupSQLiteDatabase(cfg, db)
-		if err != nil && !IsTableExistsError(err) {
+		if err := p.setupSQLiteDatabase(cfg, db); err != nil {
 			_ = db.Close()
 			return nil, err
 		}
+	case cfg.ConnectAttributes["setup"] == "true": // file mode, optional setting to setup the schema
+		if err := p.setupSQLiteDatabase(cfg, db); err != nil && !isTableExistsError(err) { // benign error indicating tables already exist
+			_ = db.Close()
+			return nil, err
+		}
+
 	}
 
 	return db, nil
@@ -190,7 +196,7 @@ func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 			)
 		}
 
-		if _, ok := queryParameters[key]; ok {
+		if _, isValidQueryParameter := queryParameters[key]; isValidQueryParameter {
 			parameters.Set(key, value)
 			continue
 		}
