@@ -46,6 +46,19 @@ const (
 	PluginName = "sqlite"
 )
 
+// List of non-pragma parameters
+// Taken from https://www.sqlite.org/uri.html
+var queryParameters = map[string]struct{}{
+	"cache":     {},
+	"immutable": {},
+	"mode":      {},
+	"modeof":    {},
+	"nolock":    {},
+	"psow":      {},
+	"setup":     {},
+	"vfs":       {},
+}
+
 type plugin struct {
 	connPool *connPool
 }
@@ -123,14 +136,19 @@ func (p *plugin) createDBConnection(
 	// Maps struct names in CamelCase to snake without need for db struct tags.
 	db.MapperFunc(strcase.ToSnake)
 
-	// only suitable for in memory databases!
-	if cfg.ConnectAttributes["mode"] == "memory" {
+	switch {
+	case cfg.ConnectAttributes["mode"] == "memory":
 		// creates temporary DB overlay in order to configure database and schemas
-		err := p.setupSQLiteDatabase(cfg, db)
-		if err != nil {
+		if err := p.setupSQLiteDatabase(cfg, db); err != nil {
 			_ = db.Close()
 			return nil, err
 		}
+	case cfg.ConnectAttributes["setup"] == "true": // file mode, optional setting to setup the schema
+		if err := p.setupSQLiteDatabase(cfg, db); err != nil && !isTableExistsError(err) { // benign error indicating tables already exist
+			_ = db.Close()
+			return nil, err
+		}
+
 	}
 
 	return db, nil
@@ -177,7 +195,14 @@ func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 				key, value,
 			)
 		}
-		parameters.Set(key, value)
+
+		if _, isValidQueryParameter := queryParameters[key]; isValidQueryParameter {
+			parameters.Set(key, value)
+			continue
+		}
+
+		// assume pragma
+		parameters.Add("_pragma", fmt.Sprintf("%s=%s", key, value))
 	}
 	return parameters, nil
 }
