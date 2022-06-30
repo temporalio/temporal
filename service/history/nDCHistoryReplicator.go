@@ -835,7 +835,28 @@ func (r *nDCHistoryReplicatorImpl) backfillHistory(
 	lastEventVersion int64,
 	branchToken []byte,
 ) (*time.Time, error) {
-	remotehistoryIterator := collection.NewPagingIterator(r.getHistoryFromRemotePaginationFn(
+
+	// Get the last batch node id to check if the history data is already in DB.
+	localHistoryIterator := collection.NewPagingIterator(r.getHistoryFromLocalPaginationFn(
+		ctx,
+		branchToken,
+		lastEventID,
+	))
+	var lastBatchNodeID int64
+	for localHistoryIterator.HasNext() {
+		localHistoryBatch, err := localHistoryIterator.Next()
+		switch err.(type) {
+		case nil:
+			if len(localHistoryBatch.GetEvents()) > 0 {
+				lastBatchNodeID = localHistoryBatch.GetEvents()[0].GetEventId()
+			}
+		case *serviceerror.NotFound:
+		default:
+			return nil, err
+		}
+	}
+
+	remoteHistoryIterator := collection.NewPagingIterator(r.getHistoryFromRemotePaginationFn(
 		ctx,
 		remoteClusterName,
 		namespaceName,
@@ -843,13 +864,8 @@ func (r *nDCHistoryReplicatorImpl) backfillHistory(
 		workflowID,
 		runID,
 		lastEventID,
-		lastEventVersion))
-	localHistoryIterator := collection.NewPagingIterator(r.getHistoryFromLocalPaginationFn(
-		ctx,
-		branchToken,
-		lastEventID,
-	))
-
+		lastEventVersion),
+	)
 	var lastHistoryBatch *commonpb.DataBlob
 	prevTxnID := common.EmptyVersion
 	historyBranch, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
@@ -859,31 +875,20 @@ func (r *nDCHistoryReplicatorImpl) backfillHistory(
 	latestBranchID := historyBranch.GetBranchId()
 	var prevBranchID string
 
-	sortedAncestors := copyAncestors(historyBranch.GetAncestors())
+	sortedAncestors := copyAndSortAncestors(historyBranch.GetAncestors())
 	sortedAncestorsIdx := 0
 	historyBranch.Ancestors = nil
 
 BackfillLoop:
-	for remotehistoryIterator.HasNext() {
-		historyBlob, err := remotehistoryIterator.Next()
+	for remoteHistoryIterator.HasNext() {
+		historyBlob, err := remoteHistoryIterator.Next()
 		if err != nil {
 			return nil, err
 		}
 
-	HistoryExistenceCheckLoop:
-		for localHistoryIterator.HasNext() {
-			localHistoryBatch, err := localHistoryIterator.Next()
-			switch err.(type) {
-			case nil:
-				if events := localHistoryBatch.GetEvents(); events[0].GetEventId() == historyBlob.nodeID {
-					// Check if the history batch already in DB.
-					continue BackfillLoop
-				}
-			case *serviceerror.NotFound:
-				break HistoryExistenceCheckLoop
-			default:
-				return nil, err
-			}
+		if historyBlob.nodeID <= lastBatchNodeID {
+			// The history batch already in DB.
+			continue BackfillLoop
 		}
 
 		if sortedAncestorsIdx < len(sortedAncestors) {
@@ -949,15 +954,15 @@ BackfillLoop:
 	return lastEventTime, nil
 }
 
-func copyAncestors(input []*persistencespb.HistoryBranchRange) []*persistencespb.HistoryBranchRange {
+func copyAndSortAncestors(input []*persistencespb.HistoryBranchRange) []*persistencespb.HistoryBranchRange {
 	ans := make([]*persistencespb.HistoryBranchRange, len(input))
 	copy(ans, input)
 	if len(ans) > 0 {
 		// sort ans based onf EndNodeID so that we can set BeginNodeID
-		sort.Slice(ans, func(i, j int) bool { return (ans)[i].GetEndNodeId() < (ans)[j].GetEndNodeId() })
-		(ans)[0].BeginNodeId = int64(1)
+		sort.Slice(ans, func(i, j int) bool { return ans[i].GetEndNodeId() < ans[j].GetEndNodeId() })
+		ans[0].BeginNodeId = int64(1)
 		for i := 1; i < len(ans); i++ {
-			(ans)[i].BeginNodeId = (ans)[i-1].GetEndNodeId()
+			ans[i].BeginNodeId = ans[i-1].GetEndNodeId()
 		}
 	}
 	return ans
