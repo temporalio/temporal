@@ -434,18 +434,18 @@ func (mr *MockContextMockRecorder) GetMetricsClient() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetricsClient", reflect.TypeOf((*MockContext)(nil).GetMetricsClient))
 }
 
-// GetMetricsReporter mocks base method.
-func (m *MockContext) GetMetricsReporter() metrics.Reporter {
+// GetMetricsHandler mocks base method.
+func (m *MockContext) GetMetricsHandler() metrics.MetricsHandler {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMetricsReporter")
-	ret0, _ := ret[0].(metrics.Reporter)
+	ret := m.ctrl.Call(m, "GetMetricsHandler")
+	ret0, _ := ret[0].(metrics.MetricsHandler)
 	return ret0
 }
 
-// GetMetricsReporter indicates an expected call of GetMetricsReporter.
-func (mr *MockContextMockRecorder) GetMetricsReporter() *gomock.Call {
+// GetMetricsHandler indicates an expected call of GetMetricsHandler.
+func (mr *MockContextMockRecorder) GetMetricsHandler() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetricsReporter", reflect.TypeOf((*MockContext)(nil).GetMetricsReporter))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetricsHandler", reflect.TypeOf((*MockContext)(nil).GetMetricsHandler))
 }
 
 // GetNamespaceNotificationVersion mocks base method.
