@@ -1,9 +1,9 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
 set -e
 
 aws_sdk=$(go list -f '{{.Dir}}' github.com/aws/aws-sdk-go)
-if [[ -z $aws_sdk ]]; then
+if [ -z "$aws_sdk" ]; then
   echo "Can't locate aws-sdk-go source code"
   exit 1
 fi
