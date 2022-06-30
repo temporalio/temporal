@@ -78,35 +78,3 @@ func AdminListClusters(c *cli.Context) error {
 	}
 	return nil
 }
-
-// AdminAddOrUpdateRemoteCluster is used to add or update remote cluster information
-func AdminAddOrUpdateRemoteCluster(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
-	ctx, cancel := newContext(c)
-	defer cancel()
-
-	_, err := adminClient.AddOrUpdateRemoteCluster(ctx, &adminservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:               c.String(FlagFrontendAddress),
-		EnableRemoteClusterConnection: c.Bool(FlagConnectionEnable),
-	})
-	if err != nil {
-		return fmt.Errorf("Operation AddOrUpdateRemoteCluster failed.: %s", err)
-	}
-	return nil
-}
-
-// AdminRemoveRemoteCluster is used to remove remote cluster information from the cluster
-func AdminRemoveRemoteCluster(c *cli.Context) error {
-	adminClient := cFactory.AdminClient(c)
-
-	ctx, cancel := newContext(c)
-	defer cancel()
-	clusterName := c.String(FlagCluster)
-	_, err := adminClient.RemoveRemoteCluster(ctx, &adminservice.RemoveRemoteClusterRequest{
-		ClusterName: clusterName,
-	})
-	if err != nil {
-		return fmt.Errorf("Operation RemoveRemoteCluster failed.: %s", err)
-	}
-	return nil
-}

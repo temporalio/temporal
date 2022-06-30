@@ -469,38 +469,6 @@ func newAdminClusterCommands() []*cli.Command {
 				return AdminListClusters(c)
 			},
 		},
-		{
-			Name:  "upsert-remote-cluster",
-			Usage: "Add or update remote cluster information in the current cluster",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:     FlagAddress,
-					Usage:    "Remote cluster frontend address",
-					Required: true,
-				},
-				&cli.BoolFlag{
-					Name:  FlagConnectionEnable,
-					Usage: "Optional: default ture. Enable remote cluster connection",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminAddOrUpdateRemoteCluster(c)
-			},
-		},
-		{
-			Name:  "remove-remote-cluster",
-			Usage: "Remove remote cluster information from the current cluster",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:     FlagCluster,
-					Usage:    "Remote cluster name",
-					Required: true,
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminRemoveRemoteCluster(c)
-			},
-		},
 	}
 }
 
