@@ -66,7 +66,7 @@ func (s *notSuite) TestNot_Test() {
 		s.False(p.Test(i))
 	}
 
-	p = Not(All[int]())
+	p = Not(Universal[int]())
 	for i := 1; i != 7; i++ {
 		s.False(p.Test(i))
 	}
@@ -96,5 +96,5 @@ func (s *notSuite) TestNot_Equals() {
 		newTestPredicate(4, 5, 6),
 	)))
 	s.False(p.Equals(Empty[int]()))
-	s.False(p.Equals(All[int]()))
+	s.False(p.Equals(Universal[int]()))
 }

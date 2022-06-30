@@ -64,7 +64,7 @@ func (s *orSuite) TestOr_Normal() {
 func (s *orSuite) TestOr_All() {
 	p := Or[int](
 		newTestPredicate(1, 2, 3),
-		All[int](),
+		Universal[int](),
 	)
 
 	for i := 1; i != 7; i++ {
@@ -140,5 +140,5 @@ func (s *orSuite) TestOr_Equals() {
 	s.False(p.Equals(And[int](p1, p2)))
 	s.False(p.Equals(Not(p)))
 	s.False(p.Equals(Empty[int]()))
-	s.False(p.Equals(All[int]()))
+	s.False(p.Equals(Universal[int]()))
 }

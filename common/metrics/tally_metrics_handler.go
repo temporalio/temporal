@@ -36,7 +36,6 @@ type (
 	excludeTags map[string]map[string]struct{}
 
 	tallyMetricsHandler struct {
-		tags           []Tag
 		scope          tally.Scope
 		perUnitBuckets map[MetricUnit]tally.Buckets
 		excludeTags    excludeTags
@@ -67,44 +66,47 @@ func NewTallyMetricsHandler(cfg ClientConfig, scope tally.Scope) *tallyMetricsHa
 // Tags are merged with registered Tags from the source MetricsHandler
 func (tmp *tallyMetricsHandler) WithTags(tags ...Tag) MetricsHandler {
 	return &tallyMetricsHandler{
-		scope:          tmp.scope,
+		scope:          tmp.scope.Tagged(tagsToMap(tags, tmp.excludeTags)),
 		perUnitBuckets: tmp.perUnitBuckets,
-		tags:           append(tmp.tags, tags...),
 	}
 }
 
 // Counter obtains a counter for the given name and MetricOptions.
 func (tmp *tallyMetricsHandler) Counter(counter string) CounterMetric {
 	return CounterMetricFunc(func(i int64, t ...Tag) {
-		tmp.scope.Tagged(tagsToMap(tmp.tags, t, tmp.excludeTags)).Counter(counter).Inc(i)
+		tmp.scope.Tagged(tagsToMap(t, tmp.excludeTags)).Counter(counter).Inc(i)
 	})
 }
 
 // Gauge obtains a gauge for the given name and MetricOptions.
 func (tmp *tallyMetricsHandler) Gauge(gauge string) GaugeMetric {
 	return GaugeMetricFunc(func(f float64, t ...Tag) {
-		tmp.scope.Tagged(tagsToMap(tmp.tags, t, tmp.excludeTags)).Gauge(gauge).Update(f)
+		tmp.scope.Tagged(tagsToMap(t, tmp.excludeTags)).Gauge(gauge).Update(f)
 	})
 }
 
 // Timer obtains a timer for the given name and MetricOptions.
 func (tmp *tallyMetricsHandler) Timer(timer string) TimerMetric {
 	return TimerMetricFunc(func(d time.Duration, tag ...Tag) {
-		tmp.scope.Tagged(tagsToMap(tmp.tags, tag, tmp.excludeTags)).Timer(timer).Record(d)
+		tmp.scope.Tagged(tagsToMap(tag, tmp.excludeTags)).Timer(timer).Record(d)
 	})
 }
 
 // Histogram obtains a histogram for the given name and MetricOptions.
 func (tmp *tallyMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramMetric {
 	return HistogramMetricFunc(func(i int64, t ...Tag) {
-		tmp.scope.Tagged(tagsToMap(tmp.tags, t, tmp.excludeTags)).Histogram(histogram, tmp.perUnitBuckets[unit]).RecordValue(float64(i))
+		tmp.scope.Tagged(tagsToMap(t, tmp.excludeTags)).Histogram(histogram, tmp.perUnitBuckets[unit]).RecordValue(float64(i))
 	})
 }
 
 func (*tallyMetricsHandler) Stop(log.Logger) {}
 
-func tagsToMap(t1 []Tag, t2 []Tag, e excludeTags) map[string]string {
-	m := make(map[string]string, len(t1)+len(t2))
+func tagsToMap(t1 []Tag, e excludeTags) map[string]string {
+	if len(t1) == 0 {
+		return nil
+	}
+
+	m := make(map[string]string, len(t1))
 
 	convert := func(tag Tag) {
 		if vals, ok := e[tag.Key()]; ok {
@@ -119,10 +121,6 @@ func tagsToMap(t1 []Tag, t2 []Tag, e excludeTags) map[string]string {
 
 	for i := range t1 {
 		convert(t1[i])
-	}
-
-	for i := range t2 {
-		convert(t2[i])
 	}
 
 	return m

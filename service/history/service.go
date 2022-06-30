@@ -57,7 +57,7 @@ type (
 		grpcListener                   net.Listener
 		membershipMonitor              membership.Monitor
 		faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
-		userScope                      metrics.UserScope
+		metricsHandler                 metrics.MetricsHandler
 	}
 )
 
@@ -69,7 +69,7 @@ func NewService(
 	logger log.Logger,
 	grpcListener net.Listener,
 	membershipMonitor membership.Monitor,
-	userScope metrics.UserScope,
+	metricsHandler metrics.MetricsHandler,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 ) *Service {
 	return &Service{
@@ -81,7 +81,7 @@ func NewService(
 		logger:                         logger,
 		grpcListener:                   grpcListener,
 		membershipMonitor:              membershipMonitor,
-		userScope:                      userScope,
+		metricsHandler:                 metricsHandler,
 		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
 	}
 }
@@ -95,7 +95,7 @@ func (s *Service) Start() {
 	logger := s.logger
 	logger.Info("history starting")
 
-	s.userScope.AddCounter(metrics.RestartCount, 1)
+	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
 	rand.Seed(time.Now().UnixNano())
 
 	s.handler.Start()

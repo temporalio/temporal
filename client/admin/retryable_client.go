@@ -22,23 +22,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package predicates
+package admin
 
-type (
-	AllImpl[T any] struct{}
+import (
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/backoff"
 )
 
-func All[T any]() Predicate[T] {
-	return &AllImpl[T]{}
+var _ adminservice.AdminServiceClient = (*retryableClient)(nil)
+
+type retryableClient struct {
+	client      adminservice.AdminServiceClient
+	policy      backoff.RetryPolicy
+	isRetryable backoff.IsRetryable
 }
 
-func (a *AllImpl[T]) Test(t T) bool {
-	return true
-}
-
-func (a *AllImpl[T]) Equals(
-	predicate Predicate[T],
-) bool {
-	_, ok := predicate.(*AllImpl[T])
-	return ok
+// NewRetryableClient creates a new instance of adminservice.AdminServiceClient with retry policy
+func NewRetryableClient(client adminservice.AdminServiceClient, policy backoff.RetryPolicy, isRetryable backoff.IsRetryable) adminservice.AdminServiceClient {
+	return &retryableClient{
+		client:      client,
+		policy:      policy,
+		isRetryable: isRetryable,
+	}
 }

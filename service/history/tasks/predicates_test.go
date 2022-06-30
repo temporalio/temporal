@@ -90,7 +90,7 @@ func (s *predicatesSuite) TestNamespacePredicate_Equals() {
 
 	s.False(p.Equals(NewNamespacePredicate([]string{uuid.New(), uuid.New()})))
 	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
-	s.False(p.Equals(predicates.All[Task]()))
+	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
 func (s *predicatesSuite) TestTypePredicate_Test() {
@@ -146,5 +146,5 @@ func (s *predicatesSuite) TestTypePredicate_Equals() {
 		enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
 	})))
 	s.False(p.Equals(NewNamespacePredicate([]string{uuid.New(), uuid.New()})))
-	s.False(p.Equals(predicates.All[Task]()))
+	s.False(p.Equals(predicates.Universal[Task]()))
 }

@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
@@ -50,7 +49,6 @@ type (
 		stoppedCh        chan interface{}
 		logger           log.Logger
 		namespaceLogger  resource.NamespaceLogger
-		serverReporter   metrics.Reporter
 
 		dcCollection *dynamicconfig.Collection
 
@@ -72,7 +70,6 @@ func NewServerFxImpl(
 	namespaceLogger resource.NamespaceLogger,
 	stoppedCh chan interface{},
 	dcCollection *dynamicconfig.Collection,
-	serverReporter metrics.Reporter,
 	servicesGroup ServicesGroupIn,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
@@ -84,7 +81,6 @@ func NewServerFxImpl(
 		stoppedCh:                  stoppedCh,
 		logger:                     logger,
 		namespaceLogger:            namespaceLogger,
-		serverReporter:             serverReporter,
 		dcCollection:               dcCollection,
 		persistenceConfig:          persistenceConfig,
 		clusterMetadata:            clusterMetadata,
@@ -142,8 +138,8 @@ func (s *ServerImpl) Stop() {
 
 	wg.Wait()
 
-	if s.serverReporter != nil {
-		s.serverReporter.Stop(s.logger)
+	if s.so.metricProvider != nil {
+		s.so.metricProvider.Stop(s.logger)
 	}
 }
 

@@ -22,32 +22,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package metrics
+package admin
 
-import "go.temporal.io/server/common/log"
-
-type (
-	metricsReporter struct {
-		provider MetricsHandler
-	}
+import (
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/metrics"
 )
 
-var _ Reporter = (*metricsReporter)(nil)
+var _ adminservice.AdminServiceClient = (*metricClient)(nil)
 
-func NewReporter(mp MetricsHandler) *metricsReporter {
-	return &metricsReporter{
-		provider: mp,
+type metricClient struct {
+	client        adminservice.AdminServiceClient
+	metricsClient metrics.Client
+}
+
+// NewMetricClient creates a new instance of adminservice.AdminServiceClient that emits metrics
+func NewMetricClient(client adminservice.AdminServiceClient, metricsClient metrics.Client) adminservice.AdminServiceClient {
+	return &metricClient{
+		client:        client,
+		metricsClient: metricsClient,
 	}
-}
-
-func (e *metricsReporter) MetricsHandler() MetricsHandler {
-	return e.provider
-}
-
-func (e *metricsReporter) Stop(logger log.Logger) {
-	e.provider.Stop(logger)
-}
-
-func (e *metricsReporter) UserScope() UserScope {
-	return newUserScope(e.provider, nil)
 }

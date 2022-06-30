@@ -27,15 +27,12 @@ package tests
 import (
 	"fmt"
 	"os"
-	"path"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
@@ -396,7 +393,10 @@ func newSQLiteFileConfig() *config.SQL {
 		ConnectAddr:     "",
 		ConnectProtocol: "",
 		ConnectAttributes: map[string]string{
-			"cache": "private",
+			"cache":        "private",
+			"setup":        "true",
+			"journal_mode": "WAL",
+			"synchronous":  "2",
 		},
 		PluginName:   sqlite.PluginName,
 		DatabaseName: testSQLiteDatabaseNamePrefix + shuffle.String(testSQLiteDatabaseNameSuffix),
@@ -412,22 +412,6 @@ func setupSQLiteDatabase(cfg *config.SQL, t *testing.T) {
 	if err != nil {
 		panic(fmt.Sprintf("unable to create SQLite database: %v", err))
 	}
-
-	loadSchema(db, path.Join(testSQLiteSchemaDir, "temporal", "schema.sql"))
-	loadSchema(db, path.Join(testSQLiteSchemaDir, "visibility", "schema.sql"))
-}
-
-func loadSchema(db sqlplugin.AdminDB, schemaFile string) {
-	statements, err := persistence.LoadAndSplitQuery([]string{schemaFile})
-	if err != nil {
-		panic(fmt.Sprintf("LoadSchema %+v", tag.Error(err)))
-	}
-
-	for _, stmt := range statements {
-		if err = db.Exec(stmt); err != nil {
-			panic(fmt.Sprintf("LoadSchema %+v", tag.Error(err)))
-		}
-	}
 }
 
 func TestSQLiteFileNamespaceSuite(t *testing.T) {
@@ -437,10 +421,7 @@ func TestSQLiteFileNamespaceSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newNamespaceSuite(t, store)
 	suite.Run(t, s)
@@ -453,10 +434,7 @@ func TestSQLiteFileQueueMessageSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newQueueMessageSuite(t, store)
 	suite.Run(t, s)
@@ -469,10 +447,7 @@ func TestSQLiteFileQueueMetadataSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newQueueMetadataSuite(t, store)
 	suite.Run(t, s)
@@ -485,10 +460,7 @@ func TestSQLiteFileMatchingTaskSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newMatchingTaskSuite(t, store)
 	suite.Run(t, s)
@@ -501,10 +473,7 @@ func TestSQLiteFileMatchingTaskQueueSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newMatchingTaskQueueSuite(t, store)
 	suite.Run(t, s)
@@ -517,10 +486,7 @@ func TestSQLiteFileHistoryShardSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryShardSuite(t, store)
 	suite.Run(t, s)
@@ -533,10 +499,7 @@ func TestSQLiteFileHistoryNodeSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryNodeSuite(t, store)
 	suite.Run(t, s)
@@ -549,10 +512,7 @@ func TestSQLiteFileHistoryTreeSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryTreeSuite(t, store)
 	suite.Run(t, s)
@@ -565,10 +525,7 @@ func TestSQLiteFileHistoryCurrentExecutionSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryCurrentExecutionSuite(t, store)
 	suite.Run(t, s)
@@ -581,10 +538,7 @@ func TestSQLiteFileHistoryExecutionSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryExecutionSuite(t, store)
 	suite.Run(t, s)
@@ -597,10 +551,7 @@ func TestSQLiteFileHistoryTransferTaskSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryTransferTaskSuite(t, store)
 	suite.Run(t, s)
@@ -613,10 +564,7 @@ func TestSQLiteFileHistoryTimerTaskSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryTimerTaskSuite(t, store)
 	suite.Run(t, s)
@@ -629,10 +577,7 @@ func TestSQLiteFileHistoryReplicationTaskSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryReplicationTaskSuite(t, store)
 	suite.Run(t, s)
@@ -645,10 +590,7 @@ func TestSQLiteFileHistoryVisibilityTaskSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryVisibilityTaskSuite(t, store)
 	suite.Run(t, s)
@@ -661,10 +603,7 @@ func TestSQLiteFileHistoryReplicationDLQTaskSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryReplicationDLQTaskSuite(t, store)
 	suite.Run(t, s)
@@ -677,10 +616,7 @@ func TestSQLiteFileHistoryExecutionBufferSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryExecutionBufferSuite(t, store)
 	suite.Run(t, s)
@@ -693,10 +629,7 @@ func TestSQLiteFileHistoryExecutionActivitySuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryExecutionActivitySuite(t, store)
 	suite.Run(t, s)
@@ -709,10 +642,7 @@ func TestSQLiteFileHistoryExecutionChildWorkflowSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryExecutionChildWorkflowSuite(t, store)
 	suite.Run(t, s)
@@ -725,10 +655,7 @@ func TestSQLiteFileHistoryExecutionTimerSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryExecutionTimerSuite(t, store)
 	suite.Run(t, s)
@@ -741,10 +668,7 @@ func TestSQLiteFileHistoryExecutionRequestCancelSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryExecutionRequestCancelSuite(t, store)
 	suite.Run(t, s)
@@ -757,10 +681,7 @@ func TestSQLiteFileHistoryExecutionSignalSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryExecutionSignalSuite(t, store)
 	suite.Run(t, s)
@@ -773,10 +694,7 @@ func TestSQLiteFileHistoryExecutionSignalRequestSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newHistoryExecutionSignalRequestSuite(t, store)
 	suite.Run(t, s)
@@ -789,11 +707,27 @@ func TestSQLiteFileVisibilitySuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create SQLite DB: %v", err)
 	}
-	defer func() {
-		_ = store.Close()
-		os.Remove(cfg.DatabaseName)
-	}()
+	defer testCleanUp(store, cfg, t)
 
 	s := newVisibilitySuite(t, store)
 	suite.Run(t, s)
+}
+
+func testCleanUp(d sqlplugin.DB, c *config.SQL, t *testing.T) {
+	err := d.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Remove(c.DatabaseName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Remove(c.DatabaseName + "-wal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.Remove(c.DatabaseName + "-shm")
+	if err != nil {
+		t.Fatal(err)
+	}
 }

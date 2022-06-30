@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -412,7 +413,6 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
@@ -431,6 +431,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 				sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
 			)
 		}),
+		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
 		fx.Provide(func() authorization.Authorizer { return nil }),
 		fx.Provide(func() authorization.ClaimMapper { return nil }),
@@ -510,7 +511,7 @@ func (c *temporalImpl) startHistory(
 				stoppedCh,
 				persistenceConfig,
 			),
-			fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
+			fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 			fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() resource.ThrottledLogger { return c.logger }),
@@ -600,7 +601,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
 		fx.Provide(func() common.RPCFactory { return rpcFactory }),
@@ -685,7 +686,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),

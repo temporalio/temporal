@@ -28,30 +28,30 @@ package queues
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/timer"
+)
+
+const (
+	rescheduleFailureBackoff = 3 * time.Second
 )
 
 type (
 	// Rescheduler buffers task executables that are failed to process and
 	// resubmit them to the task scheduler when the Reschedule method is called.
-	// TODO: remove this component when implementing multi-cursor queue processor.
-	// Failed task executables can be tracke by task reader/queue range
 	Rescheduler interface {
-		// Add task executable to the rescheudler.
-		// The backoff duration is just a hint for how long the executable
-		// should be bufferred before rescheduling.
-		Add(task Executable, backoff time.Duration)
+		common.Daemon
 
-		// Reschedule re-submit buffered executables to the scheduler and stops when
-		// targetRescheduleSize number of executables are successfully submitted.
-		// If targetRescheduleSize is 0, then there's no limit for the number of reschduled
-		// executables.
-		Reschedule(targetRescheduleSize int)
+		// Add task executable to the rescheduler.
+		Add(task Executable, rescheduleTime time.Time)
 
 		// Len returns the total number of task executables waiting to be rescheduled.
 		Len() int
@@ -65,7 +65,14 @@ type (
 	reschedulerImpl struct {
 		scheduler      Scheduler
 		timeSource     clock.TimeSource
-		metricProvider metrics.MetricsHandler
+		logger         log.Logger
+		metricsHandler metrics.MetricsHandler
+
+		status     int32
+		shutdownCh chan struct{}
+		shutdownWG sync.WaitGroup
+
+		timerGate timer.Gate
 
 		sync.Mutex
 		pq collection.Queue[rescheduledExecuable]
@@ -75,65 +82,67 @@ type (
 func NewRescheduler(
 	scheduler Scheduler,
 	timeSource clock.TimeSource,
-	metricProvider metrics.MetricsHandler,
+	logger log.Logger,
+	metricsHandler metrics.MetricsHandler,
 ) *reschedulerImpl {
 	return &reschedulerImpl{
 		scheduler:      scheduler,
 		timeSource:     timeSource,
-		metricProvider: metricProvider,
+		logger:         logger,
+		metricsHandler: metricsHandler,
+
+		status:     common.DaemonStatusInitialized,
+		shutdownCh: make(chan struct{}),
+
+		timerGate: timer.NewLocalGate(timeSource),
+
 		pq: collection.NewPriorityQueue((func(this rescheduledExecuable, that rescheduledExecuable) bool {
 			return this.rescheduleTime.Before(that.rescheduleTime)
 		})),
 	}
 }
 
-func (r *reschedulerImpl) Add(
-	executable Executable,
-	backoff time.Duration,
-) {
-	r.Lock()
-	defer r.Unlock()
+func (r *reschedulerImpl) Start() {
+	if !atomic.CompareAndSwapInt32(&r.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+		return
+	}
 
-	r.pq.Add(rescheduledExecuable{
-		executable:     executable,
-		rescheduleTime: r.timeSource.Now().Add(backoff),
-	})
+	r.shutdownWG.Add(1)
+	go r.rescheduleLoop()
+
+	r.logger.Info("Task rescheduler started.", tag.LifeCycleStarted)
 }
 
-func (r *reschedulerImpl) Reschedule(
-	targetRescheduleSize int,
+func (r *reschedulerImpl) Stop() {
+	if !atomic.CompareAndSwapInt32(&r.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
+		return
+	}
+
+	close(r.shutdownCh)
+	r.timerGate.Close()
+
+	if success := common.AwaitWaitGroup(&r.shutdownWG, time.Minute); !success {
+		r.logger.Warn("Task rescheduler timedout on shutdown.", tag.LifeCycleStopTimedout)
+	}
+
+	r.logger.Info("Task rescheduler stopped.", tag.LifeCycleStopped)
+}
+
+func (r *reschedulerImpl) Add(
+	executable Executable,
+	rescheduleTime time.Time,
 ) {
 	r.Lock()
-	defer r.Unlock()
+	r.pq.Add(rescheduledExecuable{
+		executable:     executable,
+		rescheduleTime: rescheduleTime,
+	})
+	r.Unlock()
 
-	r.metricProvider.Histogram(TaskReschedulerPendingTasks, metrics.Dimensionless).Record(int64(r.pq.Len()))
+	r.timerGate.Update(rescheduleTime)
 
-	if targetRescheduleSize == 0 {
-		targetRescheduleSize = r.pq.Len()
-	}
-
-	var failToSubmit []rescheduledExecuable
-	numRescheduled := 0
-	for !r.pq.IsEmpty() && numRescheduled < targetRescheduleSize {
-		if r.timeSource.Now().Before(r.pq.Peek().rescheduleTime) {
-			break
-		}
-
-		rescheduled := r.pq.Remove()
-		submitted, err := r.scheduler.TrySubmit(rescheduled.executable)
-		if err != nil {
-			rescheduled.executable.Logger().Error("Failed to reschedule task", tag.Error(err))
-		}
-
-		if !submitted {
-			failToSubmit = append(failToSubmit, rescheduled)
-		} else {
-			numRescheduled++
-		}
-	}
-
-	for _, rescheduled := range failToSubmit {
-		r.pq.Add(rescheduled)
+	if r.isStopped() {
+		r.drain()
 	}
 }
 
@@ -142,4 +151,66 @@ func (r *reschedulerImpl) Len() int {
 	defer r.Unlock()
 
 	return r.pq.Len()
+}
+
+func (r *reschedulerImpl) rescheduleLoop() {
+	defer r.shutdownWG.Done()
+
+	for {
+		select {
+		case <-r.shutdownCh:
+			r.drain()
+			return
+		case <-r.timerGate.FireChan():
+			r.reschedule()
+		}
+	}
+
+}
+
+func (r *reschedulerImpl) reschedule() {
+	r.Lock()
+	defer r.Unlock()
+
+	r.metricsHandler.Histogram(TaskReschedulerPendingTasks, metrics.Dimensionless).Record(int64(r.pq.Len()))
+
+	var failToSubmit []rescheduledExecuable
+	for !r.pq.IsEmpty() {
+		if r.timeSource.Now().Before(r.pq.Peek().rescheduleTime) {
+			break
+		}
+
+		rescheduled := r.pq.Remove()
+		executable := rescheduled.executable
+		submitted, err := r.scheduler.TrySubmit(executable)
+		if err != nil {
+			executable.Logger().Error("Failed to reschedule task", tag.Error(err))
+		}
+
+		if !submitted {
+			rescheduled.rescheduleTime.Add(rescheduleFailureBackoff)
+			failToSubmit = append(failToSubmit, rescheduled)
+		}
+	}
+
+	for _, rescheduled := range failToSubmit {
+		r.pq.Add(rescheduled)
+	}
+
+	if !r.pq.IsEmpty() {
+		r.timerGate.Update(r.pq.Peek().rescheduleTime)
+	}
+}
+
+func (r *reschedulerImpl) drain() {
+	r.Lock()
+	defer r.Unlock()
+
+	for !r.pq.IsEmpty() {
+		r.pq.Remove()
+	}
+}
+
+func (r *reschedulerImpl) isStopped() bool {
+	return atomic.LoadInt32(&r.status) == common.DaemonStatusStopped
 }

@@ -434,18 +434,18 @@ func (mr *MockContextMockRecorder) GetMetricsClient() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetricsClient", reflect.TypeOf((*MockContext)(nil).GetMetricsClient))
 }
 
-// GetMetricsReporter mocks base method.
-func (m *MockContext) GetMetricsReporter() metrics.Reporter {
+// GetMetricsHandler mocks base method.
+func (m *MockContext) GetMetricsHandler() metrics.MetricsHandler {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMetricsReporter")
-	ret0, _ := ret[0].(metrics.Reporter)
+	ret := m.ctrl.Call(m, "GetMetricsHandler")
+	ret0, _ := ret[0].(metrics.MetricsHandler)
 	return ret0
 }
 
-// GetMetricsReporter indicates an expected call of GetMetricsReporter.
-func (mr *MockContextMockRecorder) GetMetricsReporter() *gomock.Call {
+// GetMetricsHandler indicates an expected call of GetMetricsHandler.
+func (mr *MockContextMockRecorder) GetMetricsHandler() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetricsReporter", reflect.TypeOf((*MockContext)(nil).GetMetricsReporter))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetricsHandler", reflect.TypeOf((*MockContext)(nil).GetMetricsHandler))
 }
 
 // GetNamespaceNotificationVersion mocks base method.
@@ -518,18 +518,18 @@ func (mr *MockContextMockRecorder) GetQueueClusterAckLevel(category, cluster int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueClusterAckLevel", reflect.TypeOf((*MockContext)(nil).GetQueueClusterAckLevel), category, cluster)
 }
 
-// GetQueueMaxReadLevel mocks base method.
-func (m *MockContext) GetQueueMaxReadLevel(category tasks.Category, cluster string) tasks.Key {
+// GetQueueExclusiveHighReadWatermark mocks base method.
+func (m *MockContext) GetQueueExclusiveHighReadWatermark(category tasks.Category, cluster string) tasks.Key {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetQueueMaxReadLevel", category, cluster)
+	ret := m.ctrl.Call(m, "GetQueueExclusiveHighReadWatermark", category, cluster)
 	ret0, _ := ret[0].(tasks.Key)
 	return ret0
 }
 
-// GetQueueMaxReadLevel indicates an expected call of GetQueueMaxReadLevel.
-func (mr *MockContextMockRecorder) GetQueueMaxReadLevel(category, cluster interface{}) *gomock.Call {
+// GetQueueExclusiveHighReadWatermark indicates an expected call of GetQueueExclusiveHighReadWatermark.
+func (mr *MockContextMockRecorder) GetQueueExclusiveHighReadWatermark(category, cluster interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueMaxReadLevel", reflect.TypeOf((*MockContext)(nil).GetQueueMaxReadLevel), category, cluster)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueExclusiveHighReadWatermark", reflect.TypeOf((*MockContext)(nil).GetQueueExclusiveHighReadWatermark), category, cluster)
 }
 
 // GetRemoteAdminClient mocks base method.

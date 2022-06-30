@@ -121,21 +121,6 @@ func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.JW
 	})
 }
 
-// WithCustomMetricsReporter sets custom metric reporter
-// Detailed examples can be found at https://github.com/temporalio/samples-server
-//
-// Sample usage:
-// logger := log.NewCLILogger()
-// Provider, err := NewCustomProviderImplementation(logger)
-// reporter, err2 := metrics.NewEventsReporter(Provider)
-// server := temporal.NewServer(temporal.WithCustomMetricsReporter(repoter))
-// Deprecated use WithCustomMetricsHandler
-func WithCustomMetricsReporter(reporter metrics.Reporter) ServerOption {
-	return newApplyFuncContainer(func(s *serverOptions) {
-		s.metricsReporter = reporter
-	})
-}
-
 // WithPersistenceServiceResolver sets a custom persistence service resolver which will convert service name or address value from config to another address
 func WithPersistenceServiceResolver(r resolver.ServiceResolver) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {

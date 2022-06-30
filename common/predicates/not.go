@@ -36,10 +36,10 @@ func Not[T any](
 	switch p := predicate.(type) {
 	case *NotImpl[T]:
 		return p.Predicate
-	case *AllImpl[T]:
+	case *UniversalImpl[T]:
 		return Empty[T]()
 	case *EmptyImpl[T]:
-		return All[T]()
+		return Universal[T]()
 	default:
 		return &NotImpl[T]{
 			Predicate: predicate,
