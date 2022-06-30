@@ -75,7 +75,7 @@ type (
 		GenerateTaskID() (int64, error)
 		GenerateTaskIDs(number int) ([]int64, error)
 
-		GetQueueMaxReadLevel(category tasks.Category, cluster string) tasks.Key
+		GetQueueExclusiveHighReadWatermark(category tasks.Category, cluster string) tasks.Key
 		GetQueueAckLevel(category tasks.Category) tasks.Key
 		UpdateQueueAckLevel(category tasks.Category, ackLevel tasks.Key) error
 		GetQueueClusterAckLevel(category tasks.Category, cluster string) tasks.Key

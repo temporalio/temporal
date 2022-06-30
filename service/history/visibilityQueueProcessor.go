@@ -55,7 +55,7 @@ type (
 		shard                    shard.Context
 		options                  *QueueProcessorOptions
 		executionManager         persistence.ExecutionManager
-		maxReadAckLevel          maxReadAckLevel
+		maxReadLevel             maxReadLevel
 		updateVisibilityAckLevel updateVisibilityAckLevel
 		visibilityQueueShutdown  visibilityQueueShutdown
 		visibilityTaskFilter     taskFilter
@@ -98,8 +98,8 @@ func newVisibilityQueueProcessor(
 	visibilityTaskFilter := func(taskInfo tasks.Task) bool {
 		return true
 	}
-	maxReadAckLevel := func() int64 {
-		return shard.GetQueueMaxReadLevel(
+	maxReadLevel := func() int64 {
+		return shard.GetQueueExclusiveHighReadWatermark(
 			tasks.CategoryVisibility,
 			shard.GetClusterMetadata().GetCurrentClusterName(),
 		).TaskID
@@ -116,7 +116,7 @@ func newVisibilityQueueProcessor(
 	retProcessor := &visibilityQueueProcessorImpl{
 		shard:                    shard,
 		options:                  options,
-		maxReadAckLevel:          maxReadAckLevel,
+		maxReadLevel:             maxReadLevel,
 		updateVisibilityAckLevel: updateVisibilityAckLevel,
 		visibilityQueueShutdown:  visibilityQueueShutdown,
 		visibilityTaskFilter:     visibilityTaskFilter,
@@ -323,7 +323,7 @@ func (t *visibilityQueueProcessorImpl) readTasks(
 		ShardID:             t.shard.GetShardID(),
 		TaskCategory:        tasks.CategoryVisibility,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(readLevel + 1),
-		ExclusiveMaxTaskKey: tasks.NewImmediateKey(t.maxReadAckLevel() + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(t.maxReadLevel()),
 		BatchSize:           t.options.BatchSize(),
 	})
 	if err != nil {
