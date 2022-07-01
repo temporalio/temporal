@@ -874,8 +874,7 @@ func (r *nDCHistoryReplicatorImpl) backfillHistory(
 	prevTxnID := common.EmptyVersion
 	var lastHistoryBatch *commonpb.DataBlob
 	var prevBranchID string
-	sortAncestors(historyBranch.GetAncestors())
-	sortedAncestors := historyBranch.GetAncestors()
+	sortedAncestors := sortAncestors(historyBranch.GetAncestors())
 	sortedAncestorsIdx := 0
 	var ancestors []*persistencespb.HistoryBranchRange
 
@@ -956,7 +955,7 @@ BackfillLoop:
 	return lastEventTime, nil
 }
 
-func sortAncestors(ans []*persistencespb.HistoryBranchRange) {
+func sortAncestors(ans []*persistencespb.HistoryBranchRange) []*persistencespb.HistoryBranchRange {
 	if len(ans) > 0 {
 		// sort ans based onf EndNodeID so that we can set BeginNodeID
 		sort.Slice(ans, func(i, j int) bool { return ans[i].GetEndNodeId() < ans[j].GetEndNodeId() })
@@ -965,6 +964,7 @@ func sortAncestors(ans []*persistencespb.HistoryBranchRange) {
 			ans[i].BeginNodeId = ans[i-1].GetEndNodeId()
 		}
 	}
+	return ans
 }
 
 func (r *nDCHistoryReplicatorImpl) getHistoryFromRemotePaginationFn(
