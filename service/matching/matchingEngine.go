@@ -231,7 +231,6 @@ func (e *matchingEngineImpl) getTaskQueueManager(ctx context.Context, taskQueue 
 	}
 
 	if err := tqm.WaitUntilInitialized(ctx); err != nil {
-		e.unloadTaskQueue(tqm)
 		return nil, err
 	}
 

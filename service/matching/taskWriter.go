@@ -218,6 +218,8 @@ func (w *taskWriter) taskWriterLoop(ctx context.Context) error {
 	err := w.initReadWriteState(ctx)
 	w.tlMgr.initializedError.Set(struct{}{}, err)
 	if err != nil {
+		// We can't recover from here without starting over, so unload the whole task queue
+		w.tlMgr.signalFatalProblem(w.tlMgr)
 		return err
 	}
 writerLoop:
