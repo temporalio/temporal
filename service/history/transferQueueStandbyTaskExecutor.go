@@ -658,6 +658,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			tag.Error(err))
 	}
 
+	// Return retryable error, so task processing will retry.
 	return consts.ErrTaskRetry
 }
 

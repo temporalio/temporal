@@ -568,7 +568,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		common.EmptyVersion,
 	); err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
-			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retry.
+			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retrying.
 			return err
 		}
 		t.logger.Error("Error re-replicating history from remote.",
@@ -580,7 +580,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			tag.Error(err))
 	}
 
-	// return error so task processing logic will retry
+	// Return retryable error, so task processing will retry.
 	return consts.ErrTaskRetry
 }
 
