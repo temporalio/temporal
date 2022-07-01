@@ -9,7 +9,7 @@ bins: temporal-server temporal-cassandra-tool temporal-sql-tool
 all: update-tools clean proto bins check test
 
 # Used by Buildkite.
-ci-build: bins build-tests update-tools shell-check check proto mocks gomodtidy ensure-no-changes
+ci-build: bins build-tests update-tools shell-check check proto go-generate gomodtidy ensure-no-changes
 
 # Delete all build artefacts.
 clean: clean-bins clean-test-results
@@ -167,7 +167,7 @@ proto-mocks: $(PROTO_OUT)
 	@printf $(COLOR) "Generate proto mocks..."
 	$(foreach PROTO_GRPC_SERVICE,$(PROTO_GRPC_SERVICES),\
 		cd $(PROTO_OUT) && \
-		mockgen -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE)) \
+		mockgen -copyright_file ../LICENSE -package $(call service_name,$(PROTO_GRPC_SERVICE))mock -source $(PROTO_GRPC_SERVICE) -destination $(call mock_file_name,$(PROTO_GRPC_SERVICE)) \
 	$(NEWLINE))
 
 update-go-api:
@@ -447,18 +447,6 @@ start-cdc-standby: temporal-server
 start-cdc-other: temporal-server
 	./temporal-server --env development-other start
 
-##### Mocks #####
-AWS_SDK_VERSION := $(lastword $(shell grep "github.com/aws/aws-sdk-go v1" go.mod))
-external-mocks:
-	@printf $(COLOR) "Generate external libraries mocks..."
-	@mockgen -copyright_file ./LICENSE -package mocks -source $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/s3/s3iface/interface.go | grep -v -e "^// Source: .*" > common/archiver/s3store/mocks/S3API.go
-
-go-generate:
-	@printf $(COLOR) "Process go:generate directives..."
-	@go generate ./...
-
-mocks: go-generate external-mocks
-
 ##### Grafana #####
 update-dashboards:
 	@printf $(COLOR) "Update dashboards submodule from remote..."
@@ -473,6 +461,10 @@ update-dependencies:
 	@printf $(COLOR) "Update dependencies..."
 	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
+
+go-generate:
+	@printf $(COLOR) "Process go:generate directives..."
+	@go generate ./...
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
