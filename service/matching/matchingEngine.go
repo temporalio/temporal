@@ -706,7 +706,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetRequest().GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	tqMgr, err := e.getTaskQueueManager(taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL)
+	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	if err != nil {
 		return nil, err
 	}
@@ -726,7 +726,7 @@ func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetRequest().GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	tqMgr, err := e.getTaskQueueManager(taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL)
+	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			return &matchingservice.GetWorkerBuildIdOrderingResponse{}, nil
