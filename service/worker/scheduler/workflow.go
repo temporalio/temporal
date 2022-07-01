@@ -447,10 +447,10 @@ func (s *scheduler) handleUpdateSignal(ch workflow.ReceiveChannel, _ bool) {
 
 	s.logger.Info("Schedule update", "new-schedule", req.Schedule.String())
 
-	s.Schedule.Spec = req.Schedule.Spec
-	s.Schedule.Action = req.Schedule.Action
-	s.Schedule.Policies = req.Schedule.Policies
-	s.Schedule.State = req.Schedule.State
+	s.Schedule.Spec = req.Schedule.GetSpec()
+	s.Schedule.Action = req.Schedule.GetAction()
+	s.Schedule.Policies = req.Schedule.GetPolicies()
+	s.Schedule.State = req.Schedule.GetState()
 	// don't touch Info
 
 	s.ensureFields()

@@ -1194,6 +1194,14 @@ func (s *workflowSuite) TestUpdate() {
 		},
 		[]delayedCallback{
 			{
+				at: time.Date(2022, 6, 1, 0, 9, 5, 0, time.UTC),
+				f: func() {
+					// shouldn't crash
+					s.env.SignalWorkflow(SignalNameUpdate, nil)
+					s.env.SignalWorkflow(SignalNameUpdate, &schedspb.FullUpdateRequest{})
+				},
+			},
+			{
 				at: time.Date(2022, 6, 1, 0, 9, 7, 0, time.UTC),
 				f: func() {
 					desc := s.describe()
@@ -1234,7 +1242,7 @@ func (s *workflowSuite) TestUpdate() {
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 			},
 		},
-		8,
+		10,
 	)
 }
 
