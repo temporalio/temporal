@@ -55,45 +55,63 @@ func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface
 
 	switch t {
 	case enumspb.INDEXED_VALUE_TYPE_TEXT, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
-		var val string
+		// It tries first to decode to *string. This is to ensure that nil values
+		// are decoded as nil instead of the respective zero value. If the decoded
+		// value is not nil, then return the value instead of the pointer.
+		var val *string
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []string
 			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
-		return val, nil
+		if val == nil {
+			return nil, nil
+		}
+		return *val, nil
 	case enumspb.INDEXED_VALUE_TYPE_INT:
-		var val int64
+		var val *int64
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []int64
 			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
-		return val, nil
+		if val == nil {
+			return nil, nil
+		}
+		return *val, nil
 	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
-		var val float64
+		var val *float64
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []float64
 			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
-		return val, nil
+		if val == nil {
+			return nil, nil
+		}
+		return *val, nil
 	case enumspb.INDEXED_VALUE_TYPE_BOOL:
-		var val bool
+		var val *bool
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []bool
 			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
-		return val, nil
+		if val == nil {
+			return nil, nil
+		}
+		return *val, nil
 	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
-		var val time.Time
+		var val *time.Time
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []time.Time
 			err = payload.Decode(value, &listVal)
 			return listVal, err
 		}
-		return val, nil
+		if val == nil {
+			return nil, nil
+		}
+		return *val, nil
 	default:
 		return nil, fmt.Errorf("%w: %v", ErrInvalidType, t)
 	}
