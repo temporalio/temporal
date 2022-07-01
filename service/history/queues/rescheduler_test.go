@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	ctasks "go.temporal.io/server/common/tasks"
 )
 
 type (
@@ -140,6 +141,7 @@ func (s *rescheudulerSuite) TestReschedule_NoRescheduleLimit() {
 	numExecutable := 10
 	for i := 0; i != numExecutable/2; i++ {
 		mockTask := NewMockExecutable(s.controller)
+		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).Times(1)
 		s.rescheduler.Add(
 			mockTask,
 			now.Add(time.Duration(rand.Int63n(rescheduleInterval.Nanoseconds()))),
@@ -167,6 +169,7 @@ func (s *rescheudulerSuite) TestReschedule_SubmissionFailed() {
 	numExecutable := 10
 	for i := 0; i != numExecutable; i++ {
 		mockTask := NewMockExecutable(s.controller)
+		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).Times(1)
 		s.rescheduler.Add(
 			mockTask,
 			now.Add(time.Duration(rand.Int63n(rescheduleInterval.Nanoseconds()))),
@@ -186,4 +189,23 @@ func (s *rescheudulerSuite) TestReschedule_SubmissionFailed() {
 	s.timeSource.Update(now.Add(rescheduleInterval))
 	s.rescheduler.reschedule()
 	s.Equal(numExecutable-numSubmitted, s.rescheduler.Len())
+}
+
+func (s *rescheudulerSuite) TestReschedule_DropCancelled() {
+	now := time.Now()
+	s.timeSource.Update(now)
+	rescheduleInterval := time.Minute
+
+	for i := 0; i != 10; i++ {
+		mockTask := NewMockExecutable(s.controller)
+		mockTask.EXPECT().State().Return(ctasks.TaskStateCancelled).Times(1)
+		s.rescheduler.Add(
+			mockTask,
+			now.Add(time.Duration(rand.Int63n(rescheduleInterval.Nanoseconds()))),
+		)
+	}
+
+	s.timeSource.Update(now.Add(rescheduleInterval))
+	s.rescheduler.reschedule()
+	s.Equal(0, s.rescheduler.Len())
 }

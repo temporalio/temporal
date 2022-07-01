@@ -201,6 +201,26 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 	s.Equal(ctasks.TaskStatePending, executable.State())
 }
 
+func (s *executableSuite) TestTaskCancellation() {
+	executable := s.newTestExecutable(func(_ tasks.Task) bool {
+		return true
+	})
+
+	executable.Cancel()
+
+	s.NoError(executable.Execute()) // should be no-op and won't invoke executor
+
+	executable.Ack() // should be no-op
+	s.Equal(ctasks.TaskStateCancelled, executable.State())
+
+	executable.Nack(errors.New("some random error")) // should be no-op and won't invoke scheduler or rescheduler
+
+	executable.Reschedule() // should be no-op and won't invoke rescheduler
+
+	// all error should be treated as non-retryable to break retry loop
+	s.False(executable.IsRetryableError(errors.New("some random error")))
+}
+
 func (s *executableSuite) newTestExecutable(
 	filter TaskFilter,
 ) Executable {
