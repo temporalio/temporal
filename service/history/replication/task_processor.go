@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -424,6 +425,32 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 				FirstEventId: firstEvent.GetEventId(),
 				NextEventId:  nextEventID,
 				Version:      firstEvent.GetVersion(),
+			},
+		}, nil
+
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
+		taskAttributes := replicationTask.GetSyncWorkflowStateTaskAttributes()
+		executionInfo := taskAttributes.GetWorkflowState().GetExecutionInfo()
+		executionState := taskAttributes.GetWorkflowState().GetExecutionState()
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
+		if err != nil {
+			return nil, err
+		}
+		lastItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return nil, err
+		}
+
+		return &persistence.PutReplicationTaskToDLQRequest{
+			ShardID:           p.shard.GetShardID(),
+			SourceClusterName: p.sourceCluster,
+			TaskInfo: &persistencespb.ReplicationTaskInfo{
+				NamespaceId: executionInfo.GetNamespaceId(),
+				WorkflowId:  executionInfo.GetWorkflowId(),
+				RunId:       executionState.GetRunId(),
+				TaskId:      replicationTask.GetSourceTaskId(),
+				TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+				Version:     lastItem.GetVersion(),
 			},
 		}, nil
 
