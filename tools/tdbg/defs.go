@@ -33,8 +33,6 @@ import (
 const (
 	localHostPort = "127.0.0.1:7233"
 
-	maxOutputStringLength = 200 // max length for output string
-
 	// regex expression for parsing time durations, shorter, longer notations and numeric value respectively
 	defaultDateTimeRangeShortRE = "^[1-9][0-9]*[smhdwMy]$"                                // eg. 1s, 20m, 300h etc.
 	defaultDateTimeRangeLongRE  = "^[1-9][0-9]*(second|minute|hour|day|week|month|year)$" // eg. 1second, 20minute, 300hour etc.

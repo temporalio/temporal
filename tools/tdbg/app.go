@@ -25,11 +25,9 @@
 package tdbg
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"runtime/debug"
-	"strings"
 
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/headers"
@@ -134,20 +132,4 @@ func handleError(c *cli.Context, err error) {
 	}
 
 	cli.OsExiter(1)
-}
-
-func promptContinueWithoutConfig() {
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		fmt.Print("do you want to continue without reading from tctl config[Yes/No]:")
-		text, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Printf("unable to confirm: %s", err)
-		}
-		if strings.EqualFold(strings.TrimSpace(text), "yes") {
-			break
-		} else {
-			fmt.Println("command is canceled")
-		}
-	}
 }
