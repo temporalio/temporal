@@ -522,8 +522,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 			tag.WorkflowID(taskInfo.GetWorkflowID()),
 			tag.WorkflowRunID(taskInfo.GetRunID()),
-			tag.ClusterName(remoteClusterName),
-			tag.Error(err))
+			tag.ClusterName(remoteClusterName))
 
 		return consts.ErrTaskRetry
 	}
