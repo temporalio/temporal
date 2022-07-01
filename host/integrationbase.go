@@ -34,16 +34,17 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
+	"gopkg.in/yaml.v3"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"gopkg.in/yaml.v3"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
@@ -69,6 +70,7 @@ type (
 		testRawHistoryNamespaceName string
 		foreignNamespace            string
 		archivalNamespace           string
+		dynamicConfigOverrides      map[dynamicconfig.Key]interface{}
 	}
 )
 
@@ -77,6 +79,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 
 	clusterConfig, err := GetTestClusterConfig(defaultClusterConfigFile)
 	s.Require().NoError(err)
+	clusterConfig.DynamicConfigOverrides = s.dynamicConfigOverrides
 	s.testClusterConfig = clusterConfig
 
 	if clusterConfig.FrontendAddress != "" {

@@ -368,6 +368,42 @@ func (h *OperatorHandlerImpl) DeleteWorkflowExecution(ctx context.Context, reque
 	return &operatorservice.DeleteWorkflowExecutionResponse{}, nil
 }
 
+// AddOrUpdateRemoteCluster adds or updates the connection config to a remote cluster.
+func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
+	ctx context.Context,
+	request *operatorservice.AddOrUpdateRemoteClusterRequest,
+) (_ *operatorservice.AddOrUpdateRemoteClusterResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
+func (h *OperatorHandlerImpl) RemoveRemoteCluster(
+	ctx context.Context,
+	request *operatorservice.RemoveRemoteClusterRequest,
+) (_ *operatorservice.RemoveRemoteClusterResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
+func (h *OperatorHandlerImpl) DescribeCluster(
+	ctx context.Context,
+	request *operatorservice.DescribeClusterRequest,
+) (_ *operatorservice.DescribeClusterResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
+func (h *OperatorHandlerImpl) ListClusters(
+	ctx context.Context,
+	request *operatorservice.ListClustersRequest,
+) (_ *operatorservice.ListClustersResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
+func (h *OperatorHandlerImpl) ListClusterMembers(
+	ctx context.Context,
+	request *operatorservice.ListClusterMembersRequest,
+) (_ *operatorservice.ListClusterMembersResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
 // startRequestProfile initiates recording of request metrics
 func (h *OperatorHandlerImpl) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
 	metricsScope := h.metricsClient.Scope(scope)

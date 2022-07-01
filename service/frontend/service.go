@@ -32,12 +32,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+
+	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -76,6 +77,7 @@ type Config struct {
 	MaxNamespaceVisibilityBurstPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
 	GlobalNamespaceRPS                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                       dynamicconfig.IntPropertyFn
+	WorkerBuildIdSizeLimit                 dynamicconfig.IntPropertyFn
 	EnableClientVersionCheck               dynamicconfig.BoolPropertyFn
 	DisallowQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ShutdownDrainDuration                  dynamicconfig.DurationPropertyFn
@@ -169,6 +171,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		MaxNamespaceVisibilityBurstPerInstance: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance, 10),
 		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
 		MaxIDLengthLimit:                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
+		WorkerBuildIdSizeLimit:                 dc.GetIntProperty(dynamicconfig.WorkerBuildIdSizeLimit, 1000),
 		MaxBadBinaries:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, namespace.MaxBadBinaries),
 		DisableListVisibilityByFilter:          dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.DisableListVisibilityByFilter, false),
 		BlobSizeLimitError:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
@@ -215,10 +218,9 @@ type Service struct {
 	visibilityManager manager.VisibilityManager
 	server            *grpc.Server
 
-	serverMetricsReporter          metrics.Reporter
 	logger                         log.Logger
 	grpcListener                   net.Listener
-	userMetricsScope               metrics.UserScope
+	metricsHandler                 metrics.MetricsHandler
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
 }
 
@@ -233,7 +235,7 @@ func NewService(
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
 	grpcListener net.Listener,
-	userMetricsScope metrics.UserScope,
+	metricsHandler metrics.MetricsHandler,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 ) *Service {
 	return &Service{
@@ -248,7 +250,7 @@ func NewService(
 		visibilityManager:              visibilityMgr,
 		logger:                         logger,
 		grpcListener:                   grpcListener,
-		userMetricsScope:               userMetricsScope,
+		metricsHandler:                 metricsHandler,
 		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
 	}
 }
@@ -270,7 +272,7 @@ func (s *Service) Start() {
 	reflection.Register(s.server)
 
 	// must start resource first
-	s.userMetricsScope.AddCounter(metrics.RestartCount, 1)
+	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
 	rand.Seed(time.Now().UnixNano())
 
 	s.versionChecker.Start()
@@ -321,8 +323,8 @@ func (s *Service) Stop() {
 	// TODO: Change this to GracefulStop when integration tests are refactored.
 	s.server.Stop()
 
-	if s.serverMetricsReporter != nil {
-		s.serverMetricsReporter.Stop(logger)
+	if s.metricsHandler != nil {
+		s.metricsHandler.Stop(logger)
 	}
 
 	logger.Info("frontend stopped")
@@ -345,7 +347,6 @@ func namespaceRPS(
 func numFrontendHosts(
 	frontendResolver membership.ServiceResolver,
 ) int {
-
 	defaultHosts := 1
 	if frontendResolver == nil {
 		return defaultHosts

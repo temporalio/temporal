@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -107,6 +108,7 @@ type (
 		frontendClient                   workflowservice.WorkflowServiceClient
 		operatorClient                   operatorservice.OperatorServiceClient
 		historyClient                    historyservice.HistoryServiceClient
+		dynamicClient                    *dynamicClient
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
 		persistenceConfig                config.Persistence
@@ -162,12 +164,17 @@ type (
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 		SpanExporters                    []otelsdktrace.SpanExporter
+		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 	}
 )
 
 // NewTemporal returns an instance that hosts full temporal in one process
 func NewTemporal(params *TemporalParams) *temporalImpl {
-	return &temporalImpl{
+	integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
+	for k, v := range params.DynamicConfigOverrides {
+		integrationClient.OverrideValue(k, v)
+	}
+	impl := &temporalImpl{
 		logger:                           params.Logger,
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
 		persistenceConfig:                params.PersistenceConfig,
@@ -188,7 +195,10 @@ func NewTemporal(params *TemporalParams) *temporalImpl {
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
 		spanExporters:                    params.SpanExporters,
+		dynamicClient:                    integrationClient,
 	}
+	impl.overrideHistoryDynamicConfig(integrationClient)
+	return impl
 }
 
 func (c *temporalImpl) enableWorker() bool {
@@ -403,7 +413,6 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
@@ -422,6 +431,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 				sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
 			)
 		}),
+		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
 		fx.Provide(func() authorization.Authorizer { return nil }),
 		fx.Provide(func() authorization.ClaimMapper { return nil }),
@@ -433,7 +443,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
+		fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
@@ -478,9 +488,6 @@ func (c *temporalImpl) startHistory(
 	serviceName := common.HistoryServiceName
 	membershipPorts := c.HistoryServiceAddress(2)
 	for i, grpcPort := range c.HistoryServiceAddress(3) {
-		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
-		c.overrideHistoryDynamicConfig(integrationClient)
-
 		persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
@@ -502,10 +509,9 @@ func (c *temporalImpl) startHistory(
 		app := fx.New(
 			fx.Supply(
 				stoppedCh,
-				integrationClient,
 				persistenceConfig,
 			),
-			fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
+			fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 			fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() resource.ThrottledLogger { return c.logger }),
@@ -530,7 +536,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-			fx.Provide(func() dynamicconfig.Client { return integrationClient }),
+			fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
 			fx.Provide(func() log.Logger { return c.logger }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -595,7 +601,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
 		fx.Provide(func() common.RPCFactory { return rpcFactory }),
@@ -610,7 +616,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
+		fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
@@ -680,7 +686,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
@@ -704,7 +710,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
+		fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),

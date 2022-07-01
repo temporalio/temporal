@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -348,6 +349,46 @@ func (h *Handler) ListTaskQueuePartitions(
 	)
 
 	response, err := h.engine.ListTaskQueuePartitions(hCtx, request)
+	return response, err
+}
+
+// UpdateWorkerBuildIdOrdering allows changing the worker versioning graph for a task queue
+func (h *Handler) UpdateWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *matchingservice.UpdateWorkerBuildIdOrderingRequest,
+) (_ *matchingservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	hCtx := h.newHandlerContext(
+		ctx,
+		namespace.ID(request.GetNamespaceId()),
+		&taskqueuepb.TaskQueue{
+			Name: request.Request.GetTaskQueue(),
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		metrics.MatchingUpdateWorkerBuildIdOrderingScope,
+	)
+
+	response, err := h.engine.UpdateWorkerBuildIdOrdering(hCtx, request)
+	return response, err
+}
+
+// UpdateWorkerBuildIdOrdering allows changing the worker versioning graph for a task queue
+func (h *Handler) GetWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *matchingservice.GetWorkerBuildIdOrderingRequest,
+) (_ *matchingservice.GetWorkerBuildIdOrderingResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	hCtx := h.newHandlerContext(
+		ctx,
+		namespace.ID(request.GetNamespaceId()),
+		&taskqueuepb.TaskQueue{
+			Name: request.Request.GetTaskQueue(),
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		metrics.MatchingGetWorkerBuildIdOrderingScope,
+	)
+
+	response, err := h.engine.GetWorkerBuildIdOrdering(hCtx, request)
 	return response, err
 }
 

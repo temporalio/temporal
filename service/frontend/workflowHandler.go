@@ -3638,6 +3638,82 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 	}, nil
 }
 
+func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, request *workflowservice.UpdateWorkerBuildIdOrderingRequest) (_ *workflowservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, err
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := wh.validateBuildIdOrderingUpdate(request); err != nil {
+		return nil, err
+	}
+
+	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	matchingResponse, err := wh.matchingClient.UpdateWorkerBuildIdOrdering(ctx, &matchingservice.UpdateWorkerBuildIdOrderingRequest{
+		NamespaceId: namespaceID.String(),
+		Request:     request,
+	})
+
+	if matchingResponse == nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateWorkerBuildIdOrderingResponse{}, err
+}
+
+func (wh *WorkflowHandler) GetWorkerBuildIdOrdering(ctx context.Context, request *workflowservice.GetWorkerBuildIdOrderingRequest) (_ *workflowservice.GetWorkerBuildIdOrderingResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, err
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := wh.validateTaskQueue(&taskqueuepb.TaskQueue{Name: request.GetTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL}); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	matchingResponse, err := wh.matchingClient.GetWorkerBuildIdOrdering(ctx, &matchingservice.GetWorkerBuildIdOrderingRequest{
+		NamespaceId: namespaceID.String(),
+		Request:     request,
+	})
+
+	if matchingResponse == nil {
+		return nil, err
+	}
+
+	return matchingResponse.Response, err
+}
+
 func (wh *WorkflowHandler) getRawHistory(
 	ctx context.Context,
 	scope metrics.Scope,
@@ -3910,6 +3986,33 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 	}
 
 	enums.SetDefaultTaskQueueKind(&t.Kind)
+	return nil
+}
+
+func (wh *WorkflowHandler) validateBuildIdOrderingUpdate(
+	req *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+) error {
+	errstr := "request to update worker build id ordering requires:"
+	hadErr := false
+	if req.GetNamespace() == "" {
+		errstr += " `namespace` to be set"
+		hadErr = true
+	}
+	if req.GetTaskQueue() == "" {
+		errstr += " `task_queue` to be set"
+		hadErr = true
+	}
+	if req.GetVersionId().GetWorkerBuildId() == "" {
+		errstr += " targeting a valid version identifier"
+		hadErr = true
+	}
+	if len(req.GetVersionId().GetWorkerBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
+		errstr += fmt.Sprintf(" Worker build IDs to be no larger than %v characters", wh.config.WorkerBuildIdSizeLimit())
+		hadErr = true
+	}
+	if hadErr {
+		return serviceerror.NewInvalidArgument(errstr)
+	}
 	return nil
 }
 

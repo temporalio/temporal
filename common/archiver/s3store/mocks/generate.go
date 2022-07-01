@@ -22,32 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package metrics
+//go:generate ./generate.sh
 
-import "go.temporal.io/server/common/log"
-
-type (
-	metricsReporter struct {
-		provider MetricsHandler
-	}
-)
-
-var _ Reporter = (*metricsReporter)(nil)
-
-func NewReporter(mp MetricsHandler) *metricsReporter {
-	return &metricsReporter{
-		provider: mp,
-	}
-}
-
-func (e *metricsReporter) MetricsHandler() MetricsHandler {
-	return e.provider
-}
-
-func (e *metricsReporter) Stop(logger log.Logger) {
-	e.provider.Stop(logger)
-}
-
-func (e *metricsReporter) UserScope() UserScope {
-	return newUserScope(e.provider, nil)
-}
+package mocks

@@ -28,7 +28,7 @@ require (
 	github.com/olivere/elastic v6.2.37+incompatible
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pborman/uuid v1.2.1
-	github.com/prometheus/client_golang v1.12.2
+	github.com/prometheus/client_golang v1.12.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.7.4
 	github.com/temporalio/ringpop-go v0.0.0-20211012191444-6f91b5915e95
@@ -45,8 +45,8 @@ require (
 	go.opentelemetry.io/otel/metric v0.30.0
 	go.opentelemetry.io/otel/sdk v1.7.0
 	go.opentelemetry.io/otel/sdk/metric v0.30.0
-	go.temporal.io/api v1.8.1-0.20220603192404-e65836719706
-	go.temporal.io/sdk v1.15.0
+	go.temporal.io/api v1.9.0
+	go.temporal.io/sdk v1.15.1-0.20220616213014-706af9738b9c
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.9.0
 	go.uber.org/fx v1.17.1
@@ -145,6 +145,6 @@ require (
 	modernc.org/mathutil v1.4.1 // indirect
 	modernc.org/memory v1.1.1 // indirect
 	modernc.org/opt v0.1.3 // indirect
-	modernc.org/strutil v1.1.2 // indirect
+	modernc.org/strutil v1.1.1 // indirect
 	modernc.org/token v1.0.0 // indirect
 )

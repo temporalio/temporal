@@ -63,6 +63,20 @@ func (c *metricClient) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *metricClient) GetWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *matchingservice.GetWorkerBuildIdOrderingRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.GetWorkerBuildIdOrderingResponse, retError error) {
+
+	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientGetWorkerBuildIdOrderingScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	return c.client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+}
+
 func (c *metricClient) ListTaskQueuePartitions(
 	ctx context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
@@ -89,4 +103,18 @@ func (c *metricClient) RespondQueryTaskCompleted(
 	}()
 
 	return c.client.RespondQueryTaskCompleted(ctx, request, opts...)
+}
+
+func (c *metricClient) UpdateWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *matchingservice.UpdateWorkerBuildIdOrderingRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
+
+	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientUpdateWorkerBuildIdOrderingScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	return c.client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
 }

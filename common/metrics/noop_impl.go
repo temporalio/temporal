@@ -31,58 +31,18 @@ import (
 )
 
 var (
-	NoopReporter       Reporter       = newNoopReporter()
 	NoopClient         Client         = newNoopClient()
 	NoopScope          Scope          = newNoopScope()
-	NoopUserScope      UserScope      = newNoopUserScope()
 	NoopStopwatch      Stopwatch      = newNoopStopwatch()
 	NoopMetricsHandler MetricsHandler = newNoopMetricsHandler()
 )
 
 type (
-	noopReporterImpl     struct{}
-	noopClientImpl       struct{}
-	noopMetricsUserScope struct{}
-	noopStopwatchImpl    struct{}
-	noopScopeImpl        struct{}
-	noopMetricsHandler   struct{}
+	noopClientImpl     struct{}
+	noopStopwatchImpl  struct{}
+	noopScopeImpl      struct{}
+	noopMetricsHandler struct{}
 )
-
-func newNoopReporter() *noopReporterImpl {
-	return &noopReporterImpl{}
-}
-
-func (*noopReporterImpl) MetricsHandler() MetricsHandler {
-	return NoopMetricsHandler
-}
-
-func (*noopReporterImpl) Stop(logger log.Logger) {}
-
-func (*noopReporterImpl) UserScope() UserScope {
-	return NoopUserScope
-}
-
-func newNoopUserScope() *noopMetricsUserScope {
-	return &noopMetricsUserScope{}
-}
-
-func (n *noopMetricsUserScope) IncCounter(counter string) {}
-
-func (n *noopMetricsUserScope) AddCounter(counter string, delta int64) {}
-
-func (n *noopMetricsUserScope) StartTimer(timer string) Stopwatch {
-	return NoopStopwatch
-}
-
-func (n *noopMetricsUserScope) RecordTimer(timer string, d time.Duration) {}
-
-func (n *noopMetricsUserScope) RecordDistribution(id string, unit MetricUnit, d int) {}
-
-func (n *noopMetricsUserScope) UpdateGauge(gauge string, value float64) {}
-
-func (n *noopMetricsUserScope) Tagged(tags map[string]string) UserScope {
-	return n
-}
 
 func newNoopClient() *noopClientImpl {
 	return &noopClientImpl{}

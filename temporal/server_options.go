@@ -60,7 +60,6 @@ type (
 		tlsConfigProvider          encryption.TLSConfigProvider
 		claimMapper                authorization.ClaimMapper
 		audienceGetter             authorization.JWTAudienceMapper
-		metricsReporter            metrics.Reporter
 		persistenceServiceResolver resolver.ServiceResolver
 		elasticsearchHttpClient    *http.Client
 		dynamicConfigClient        dynamicconfig.Client

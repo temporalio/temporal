@@ -1570,6 +1570,70 @@ func (handler *DCRedirectionHandlerImpl) ListSchedules(
 	return resp, err
 }
 
+// UpdateWorkerBuildIdOrdering API call
+func (handler *DCRedirectionHandlerImpl) UpdateWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+) (resp *workflowservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
+	const apiName = "UpdateWorkerBuildIdOrdering"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateWorkerBuildIdOrderingScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+
+		if targetDC == handler.currentClusterName {
+			resp, err = handler.frontendHandler.UpdateWorkerBuildIdOrdering(ctx, request)
+		} else {
+			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			if err != nil {
+				return err
+			}
+			resp, err = remoteClient.UpdateWorkerBuildIdOrdering(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
+// GetWorkerBuildIdOrdering API call
+func (handler *DCRedirectionHandlerImpl) GetWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *workflowservice.GetWorkerBuildIdOrderingRequest,
+) (resp *workflowservice.GetWorkerBuildIdOrderingResponse, retError error) {
+	var apiName = "GetWorkerBuildIdOrdering"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkerBuildIdOrderingScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.GetWorkerBuildIdOrdering(ctx, request)
+		default:
+			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			if err != nil {
+				return err
+			}
+			resp, err = remoteClient.GetWorkerBuildIdOrdering(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
 func (handler *DCRedirectionHandlerImpl) beforeCall(
 	scope int,
 ) (metrics.Scope, time.Time) {

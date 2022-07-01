@@ -182,6 +182,17 @@ func (p *ackMgrImpl) GetTask(
 			FirstEventID:        taskInfo.FirstEventId,
 			NextEventID:         taskInfo.NextEventId,
 		})
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
+		return p.taskInfoToTask(ctx, &tasks.SyncWorkflowStateTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				taskInfo.GetNamespaceId(),
+				taskInfo.GetWorkflowId(),
+				taskInfo.GetRunId(),
+			),
+			VisibilityTimestamp: time.Unix(0, 0),
+			TaskID:              taskInfo.TaskId,
+			Version:             taskInfo.Version,
+		})
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", taskInfo.TaskType))
 	}
