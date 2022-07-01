@@ -447,11 +447,6 @@ start-cdc-standby: temporal-server
 start-cdc-other: temporal-server
 	./temporal-server --env development-other start
 
-##### Generate #####
-go-generate:
-	@printf $(COLOR) "Process go:generate directives..."
-	@go generate ./...
-
 ##### Grafana #####
 update-dashboards:
 	@printf $(COLOR) "Update dashboards submodule from remote..."
@@ -466,6 +461,10 @@ update-dependencies:
 	@printf $(COLOR) "Update dependencies..."
 	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
+
+go-generate:
+	@printf $(COLOR) "Process go:generate directives..."
+	@go generate ./...
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
