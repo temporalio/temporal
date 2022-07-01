@@ -814,7 +814,9 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to decode search attributes: %v", err))
 	}
 	for saName, saValue := range searchAttributes {
-		doc[saName] = saValue
+		if saValue != nil {
+			doc[saName] = saValue
+		}
 	}
 
 	return doc, nil
