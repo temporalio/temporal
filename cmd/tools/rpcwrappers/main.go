@@ -33,9 +33,10 @@ import (
 	"strings"
 	"text/template"
 
-	"go.temporal.io/api/workflowservice/v1"
 	"golang.org/x/exp/slices"
 
+	"go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -120,22 +121,27 @@ func writeTemplatedCode(w io.Writer, service service, text string) {
 }
 
 func pathToField(t reflect.Type, name string, path string, maxDepth int) string {
+	p, _ := findNestedField(t, name, path, maxDepth)
+	return p
+}
+
+func findNestedField(t reflect.Type, name string, path string, maxDepth int) (string, *reflect.StructField) {
 	if t.Kind() != reflect.Struct || maxDepth <= 0 {
-		return ""
+		return "", nil
 	}
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		if f.Name == name {
-			return path + ".Get" + name + "()"
+			return path + ".Get" + name + "()", &f
 		}
 		ft := f.Type
 		if ft.Kind() == reflect.Pointer {
-			if try := pathToField(ft.Elem(), name, path+".Get"+f.Name+"()", maxDepth-1); try != "" {
-				return try
+			if path, try := findNestedField(ft.Elem(), name, path+".Get"+f.Name+"()", maxDepth-1); try != nil {
+				return path, try
 			}
 		}
 	}
-	return ""
+	return "", nil
 }
 
 func makeGetHistoryClient(reqType reflect.Type) string {
@@ -169,8 +175,13 @@ func makeGetHistoryClient(reqType reflect.Type) string {
 func makeGetMatchingClient(reqType reflect.Type) string {
 	// this magically figures out how to get a MatchingServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
-	if path := pathToField(t, "TaskQueue", "request", 2); path != "" {
-		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s.GetName())", path)
+	if path, tqField := findNestedField(t, "TaskQueue", "request", 2); path != "" {
+		// Some task queue fields are full messages, some are just strings
+		isTaskQueueMessage := tqField.Type == reflect.TypeOf((*taskqueue.TaskQueue)(nil))
+		if isTaskQueueMessage {
+			path += ".GetName()"
+		}
+		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s)", path)
 	}
 	panic("I don't know how to get a client from a " + t.String())
 }

@@ -233,6 +233,24 @@ func (c *metricClient) GetSystemInfo(
 	return resp, err
 }
 
+func (c *metricClient) GetWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *workflowservice.GetWorkerBuildIdOrderingRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkerBuildIdOrderingResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientGetWorkerBuildIdOrderingScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetWorkerBuildIdOrderingScope, metrics.ClientLatency)
+	resp, err := c.client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientGetWorkerBuildIdOrderingScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *workflowservice.GetWorkflowExecutionHistoryRequest,
@@ -877,6 +895,24 @@ func (c *metricClient) UpdateSchedule(
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.FrontendClientUpdateScheduleScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) UpdateWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerBuildIdOrderingResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientUpdateWorkerBuildIdOrderingScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientUpdateWorkerBuildIdOrderingScope, metrics.ClientLatency)
+	resp, err := c.client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientUpdateWorkerBuildIdOrderingScope, metrics.ClientFailures)
 	}
 	return resp, err
 }

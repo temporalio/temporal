@@ -187,6 +187,20 @@ func (c *clientImpl) GetSystemInfo(
 	return client.GetSystemInfo(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *workflowservice.GetWorkerBuildIdOrderingRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkerBuildIdOrderingResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *workflowservice.GetWorkflowExecutionHistoryRequest,
@@ -689,4 +703,18 @@ func (c *clientImpl) UpdateSchedule(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.UpdateSchedule(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerBuildIdOrderingResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
 }
