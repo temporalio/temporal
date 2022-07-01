@@ -282,7 +282,13 @@ func (db *taskQueueDB) GetVersioningData(
 ) (*persistencespb.VersioningData, error) {
 	db.Lock()
 	defer db.Unlock()
+	return db.getVersioningDataLocked(ctx)
+}
 
+// db.Lock() must be held before calling
+func (db *taskQueueDB) getVersioningDataLocked(
+	ctx context.Context,
+) (*persistencespb.VersioningData, error) {
 	if db.versioningData != nil {
 		return db.versioningData, nil
 	}
@@ -303,13 +309,13 @@ func (db *taskQueueDB) GetVersioningData(
 // MutateVersioningData allows callers to update versioning data for this task queue. The pointer passed to the
 // mutating function is guaranteed to be non-nil.
 func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
-	verDat, err := db.GetVersioningData(ctx)
+	db.Lock()
+	defer db.Unlock()
+
+	verDat, err := db.getVersioningDataLocked(ctx)
 	if err != nil {
 		return err
 	}
-
-	db.Lock()
-	defer db.Unlock()
 
 	if verDat == nil {
 		verDat = &persistencespb.VersioningData{}

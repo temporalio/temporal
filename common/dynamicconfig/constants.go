@@ -140,7 +140,7 @@ const (
 	WorkerBuildIdSizeLimit = "limit.workerBuildIdSize"
 	// VersionGraphNodeLimit is the max number of nodes allowed in the version graph for a task queue. Update requests
 	// which would cause the graph size to exceed this number will result in the oldest versions being dropped.
-	VersionGraphNodeLimit = "limit.workerBuildIdSize"
+	VersionGraphNodeLimit = "limit.versionGraphNodeSize"
 
 	// key for frontend
 

@@ -3992,21 +3992,26 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 func (wh *WorkflowHandler) validateBuildIdOrderingUpdate(
 	req *workflowservice.UpdateWorkerBuildIdOrderingRequest,
 ) error {
+	errstr := "request to update worker build id ordering requires:"
+	hadErr := false
 	if req.GetNamespace() == "" {
-		return serviceerror.NewInvalidArgument(
-			"request to update worker build id ordering requires `namespace` to be set")
+		errstr += " `namespace` to be set"
+		hadErr = true
 	}
 	if req.GetTaskQueue() == "" {
-		return serviceerror.NewInvalidArgument(
-			"request to update worker build id ordering requires `task_queue` to be set")
+		errstr += " `task_queue` to be set"
+		hadErr = true
 	}
 	if req.GetVersionId().GetWorkerBuildId() == "" {
-		return serviceerror.NewInvalidArgument(
-			"request to update worker build id ordering requires targeting a valid version identifier")
+		errstr += " targeting a valid version identifier"
+		hadErr = true
 	}
 	if len(req.GetVersionId().GetWorkerBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf(
-			"Worker build IDs cannot be longer than %v characters", wh.config.WorkerBuildIdSizeLimit()))
+		errstr += fmt.Sprintf(" Worker build IDs to be no larger than %v characters", wh.config.WorkerBuildIdSizeLimit())
+		hadErr = true
+	}
+	if hadErr {
+		return serviceerror.NewInvalidArgument(errstr)
 	}
 	return nil
 }

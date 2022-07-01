@@ -152,6 +152,7 @@ func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 	s.Equal("foo-9", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
 	s.Equal(1, len(res2.CompatibleLeaves))
 	s.Equal("foo-2.1", res2.CompatibleLeaves[0].GetVersion().GetWorkerBuildId())
+	s.Equal("foo-2", res2.CompatibleLeaves[0].GetPreviousCompatible().GetVersion().GetWorkerBuildId())
 }
 
 func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound() {
@@ -170,6 +171,8 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
+// This test verifies that the lease renewal of a task queue does not destroy the versioning data - as it updates the
+// task queue info. We need to make sure that update preserves the versioning data.
 func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	ctx := NewContext()
 	tq := "integration-versioning-not-destroyed"

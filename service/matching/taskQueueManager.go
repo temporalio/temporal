@@ -402,13 +402,14 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 	return c.matcher.OfferQuery(ctx, task)
 }
 
-// TODO: Use signalIfFatal
 func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error) {
 	return c.db.GetVersioningData(ctx)
 }
 
 func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
-	return c.db.MutateVersioningData(ctx, mutator)
+	err := c.db.MutateVersioningData(ctx, mutator)
+	c.signalIfFatal(err)
+	return err
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes

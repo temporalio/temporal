@@ -1575,7 +1575,7 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkerBuildIdOrdering(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerBuildIdOrderingRequest,
 ) (resp *workflowservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
-	var apiName = "UpdateWorkerBuildIdOrdering"
+	const apiName = "UpdateWorkerBuildIdOrdering"
 	var err error
 	var cluster string
 
@@ -1586,10 +1586,10 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkerBuildIdOrdering(
 
 	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
-		switch {
-		case targetDC == handler.currentClusterName:
+
+		if targetDC == handler.currentClusterName {
 			resp, err = handler.frontendHandler.UpdateWorkerBuildIdOrdering(ctx, request)
-		default:
+		} else {
 			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
 			if err != nil {
 				return err
