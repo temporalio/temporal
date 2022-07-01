@@ -74,7 +74,7 @@ var (
 	FlagTLSDisableHostVerification = "tls-disable-host-verification"
 	FlagTLSServerName              = "tls-server-name"
 	FlagLastMessageID              = "last-message-id"
-	FlagAutoConfirm                = "auto-confirm"
+	FlagYes                        = "yes"
 	FlagVersion                    = "version"
 	FlagMore                       = "more"
 	FlagElasticsearchURL           = "url"

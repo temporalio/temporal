@@ -25,7 +25,6 @@
 package tdbg
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 
@@ -129,7 +128,7 @@ func AdminPurgeDLQMessages(c *cli.Context) error {
 	if c.IsSet(FlagLastMessageID) {
 		lastMessageID = c.Int64(FlagLastMessageID)
 	} else {
-		confirmOrExit("Are you sure to purge all DLQ messages without a upper boundary?")
+		prompt("Are you sure to purge all DLQ messages without a upper boundary?", c.Bool(FlagYes))
 	}
 
 	adminClient := cFactory.AdminClient(c)
@@ -162,7 +161,7 @@ func AdminMergeDLQMessages(c *cli.Context) error {
 	if c.IsSet(FlagLastMessageID) {
 		lastMessageID = c.Int64(FlagLastMessageID)
 	} else {
-		confirmOrExit("Are you sure to merge all DLQ messages without a upper boundary?")
+		prompt("Are you sure to merge all DLQ messages without a upper boundary?", c.Bool(FlagYes))
 	}
 
 	adminClient := cFactory.AdminClient(c)
@@ -202,18 +201,6 @@ func toQueueType(dlqType string) (enumsspb.DeadLetterQueueType, error) {
 		return enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION, nil
 	default:
 		return enumsspb.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED, fmt.Errorf("queue type %v is not supported", dlqType)
-	}
-}
-
-func confirmOrExit(message string) {
-	fmt.Println(message + " (Y/n)")
-	reader := bufio.NewReader(os.Stdin)
-	confirm, err := reader.ReadByte()
-	if err != nil {
-		panic(err)
-	}
-	if confirm != 'Y' {
-		os.Exit(0)
 	}
 }
 
