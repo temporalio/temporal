@@ -30,15 +30,17 @@ import (
 
 var (
 	APIToPriority = map[string]int{
-		"AddActivityTask":           0,
-		"AddWorkflowTask":           0,
-		"CancelOutstandingPoll":     0,
-		"DescribeTaskQueue":         0,
-		"ListTaskQueuePartitions":   0,
-		"PollActivityTaskQueue":     0,
-		"PollWorkflowTaskQueue":     0,
-		"QueryWorkflow":             0,
-		"RespondQueryTaskCompleted": 0,
+		"AddActivityTask":             0,
+		"AddWorkflowTask":             0,
+		"CancelOutstandingPoll":       0,
+		"DescribeTaskQueue":           0,
+		"ListTaskQueuePartitions":     0,
+		"PollActivityTaskQueue":       0,
+		"PollWorkflowTaskQueue":       0,
+		"QueryWorkflow":               0,
+		"RespondQueryTaskCompleted":   0,
+		"GetWorkerBuildIdOrdering":    0,
+		"UpdateWorkerBuildIdOrdering": 0,
 	}
 
 	APIPriorities = map[int]struct{}{

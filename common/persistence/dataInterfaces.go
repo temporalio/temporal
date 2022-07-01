@@ -1073,7 +1073,7 @@ type (
 		GetAllHistoryTreeBranches(ctx context.Context, request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error)
 	}
 
-	// TaskManager is used to manage tasks
+	// TaskManager is used to manage tasks and task queues
 	TaskManager interface {
 		Closeable
 		GetName() string

@@ -1829,6 +1829,118 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 	}
 }
 
+func (s *matchingEngineSuite) TestGetVersioningData() {
+	namespaceID := namespace.ID(uuid.New())
+	tq := "tupac"
+
+	// Ensure we can fetch without first needing to set anything
+	res, err := s.matchingEngine.GetWorkerBuildIdOrdering(s.handlerContext, &matchingservice.GetWorkerBuildIdOrderingRequest{
+		NamespaceId: namespaceID.String(),
+		Request: &workflowservice.GetWorkerBuildIdOrderingRequest{
+			Namespace: namespaceID.String(),
+			TaskQueue: tq,
+			MaxDepth:  0,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(res)
+
+	// Set a long list of versions
+	for i := 0; i < 100; i++ {
+		id := mkVerId(fmt.Sprintf("%d", i))
+		res, err := s.matchingEngine.UpdateWorkerBuildIdOrdering(s.handlerContext, &matchingservice.UpdateWorkerBuildIdOrderingRequest{
+			NamespaceId: namespaceID.String(),
+			Request: &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+				Namespace:     namespaceID.String(),
+				TaskQueue:     tq,
+				VersionId:     id,
+				BecomeDefault: true,
+			},
+		})
+		s.NoError(err)
+		s.NotNil(res)
+	}
+	// Make a long compat-versions chain
+	for i := 0; i < 10; i++ {
+		id := mkVerId(fmt.Sprintf("99.%d", i))
+		prevCompat := mkVerId(fmt.Sprintf("99.%d", i-1))
+		if i == 0 {
+			prevCompat = mkVerId("99")
+		}
+		res, err := s.matchingEngine.UpdateWorkerBuildIdOrdering(s.handlerContext, &matchingservice.UpdateWorkerBuildIdOrderingRequest{
+			NamespaceId: namespaceID.String(),
+			Request: &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+				Namespace:          namespaceID.String(),
+				TaskQueue:          tq,
+				VersionId:          id,
+				PreviousCompatible: prevCompat,
+			},
+		})
+		s.NoError(err)
+		s.NotNil(res)
+	}
+
+	// Ensure they all exist
+	res, err = s.matchingEngine.GetWorkerBuildIdOrdering(s.handlerContext, &matchingservice.GetWorkerBuildIdOrderingRequest{
+		NamespaceId: namespaceID.String(),
+		Request: &workflowservice.GetWorkerBuildIdOrderingRequest{
+			Namespace: namespaceID.String(),
+			TaskQueue: tq,
+			MaxDepth:  0,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(res.GetResponse().GetCurrentDefault())
+	lastNode := res.GetResponse().GetCurrentDefault()
+	s.Equal(mkVerId("99"), lastNode.GetVersion())
+	for lastNode.GetPreviousIncompatible() != nil {
+		lastNode = lastNode.GetPreviousIncompatible()
+	}
+	s.Equal(mkVerId("0"), lastNode.GetVersion())
+	s.Equal(mkVerId("99.9"), res.GetResponse().GetCompatibleLeaves()[0].GetVersion())
+
+	// Ensure depth limiting works
+	res, err = s.matchingEngine.GetWorkerBuildIdOrdering(s.handlerContext, &matchingservice.GetWorkerBuildIdOrderingRequest{
+		NamespaceId: namespaceID.String(),
+		Request: &workflowservice.GetWorkerBuildIdOrderingRequest{
+			Namespace: namespaceID.String(),
+			TaskQueue: tq,
+			MaxDepth:  1,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(res.GetResponse().GetCurrentDefault())
+	s.Nil(res.GetResponse().GetCurrentDefault().GetPreviousIncompatible())
+	s.Nil(res.GetResponse().GetCompatibleLeaves()[0].GetPreviousCompatible())
+
+	res, err = s.matchingEngine.GetWorkerBuildIdOrdering(s.handlerContext, &matchingservice.GetWorkerBuildIdOrderingRequest{
+		NamespaceId: namespaceID.String(),
+		Request: &workflowservice.GetWorkerBuildIdOrderingRequest{
+			Namespace: namespaceID.String(),
+			TaskQueue: tq,
+			MaxDepth:  5,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(res.GetResponse().GetCurrentDefault())
+	lastNode = res.GetResponse().GetCurrentDefault()
+	for true {
+		if lastNode.GetPreviousIncompatible() == nil {
+			break
+		}
+		lastNode = lastNode.GetPreviousIncompatible()
+	}
+	s.Equal(mkVerId("95"), lastNode.GetVersion())
+	lastNode = res.GetResponse().GetCompatibleLeaves()[0]
+	for true {
+		if lastNode.GetPreviousCompatible() == nil {
+			break
+		}
+		lastNode = lastNode.GetPreviousCompatible()
+	}
+	s.Equal(mkVerId("99.5"), lastNode.GetVersion())
+}
+
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
 	activityTypeName := "activity1"
 	activityID := "activityId1"

@@ -94,6 +94,10 @@ type (
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
+		// GetVersioningData returns the versioning data for this task queue
+		GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error)
+		// MutateVersioningData allows callers to update versioning data for this task queue
+		MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
@@ -396,6 +400,16 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	task := newInternalQueryTask(taskID, request)
 	return c.matcher.OfferQuery(ctx, task)
+}
+
+func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error) {
+	return c.db.GetVersioningData(ctx)
+}
+
+func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
+	err := c.db.MutateVersioningData(ctx, mutator)
+	c.signalIfFatal(err)
+	return err
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes

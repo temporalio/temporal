@@ -239,6 +239,21 @@ func (mr *MockHandlerMockRecorder) GetSystemInfo(arg0, arg1 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSystemInfo", reflect.TypeOf((*MockHandler)(nil).GetSystemInfo), arg0, arg1)
 }
 
+// GetWorkerBuildIdOrdering mocks base method.
+func (m *MockHandler) GetWorkerBuildIdOrdering(arg0 context.Context, arg1 *v10.GetWorkerBuildIdOrderingRequest) (*v10.GetWorkerBuildIdOrderingResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkerBuildIdOrdering", arg0, arg1)
+	ret0, _ := ret[0].(*v10.GetWorkerBuildIdOrderingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkerBuildIdOrdering indicates an expected call of GetWorkerBuildIdOrdering.
+func (mr *MockHandlerMockRecorder) GetWorkerBuildIdOrdering(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdOrdering", reflect.TypeOf((*MockHandler)(nil).GetWorkerBuildIdOrdering), arg0, arg1)
+}
+
 // GetWorkflowExecutionHistory mocks base method.
 func (m *MockHandler) GetWorkflowExecutionHistory(arg0 context.Context, arg1 *v10.GetWorkflowExecutionHistoryRequest) (*v10.GetWorkflowExecutionHistoryResponse, error) {
 	m.ctrl.T.Helper()
@@ -803,6 +818,21 @@ func (mr *MockHandlerMockRecorder) UpdateSchedule(arg0, arg1 interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSchedule", reflect.TypeOf((*MockHandler)(nil).UpdateSchedule), arg0, arg1)
 }
 
+// UpdateWorkerBuildIdOrdering mocks base method.
+func (m *MockHandler) UpdateWorkerBuildIdOrdering(arg0 context.Context, arg1 *v10.UpdateWorkerBuildIdOrderingRequest) (*v10.UpdateWorkerBuildIdOrderingResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkerBuildIdOrdering", arg0, arg1)
+	ret0, _ := ret[0].(*v10.UpdateWorkerBuildIdOrderingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkerBuildIdOrdering indicates an expected call of UpdateWorkerBuildIdOrdering.
+func (mr *MockHandlerMockRecorder) UpdateWorkerBuildIdOrdering(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdOrdering", reflect.TypeOf((*MockHandler)(nil).UpdateWorkerBuildIdOrdering), arg0, arg1)
+}
+
 // MockOperatorHandler is a mock of OperatorHandler interface.
 type MockOperatorHandler struct {
 	ctrl     *gomock.Controller
@@ -824,6 +854,21 @@ func NewMockOperatorHandler(ctrl *gomock.Controller) *MockOperatorHandler {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockOperatorHandler) EXPECT() *MockOperatorHandlerMockRecorder {
 	return m.recorder
+}
+
+// AddOrUpdateRemoteCluster mocks base method.
+func (m *MockOperatorHandler) AddOrUpdateRemoteCluster(arg0 context.Context, arg1 *v1.AddOrUpdateRemoteClusterRequest) (*v1.AddOrUpdateRemoteClusterResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddOrUpdateRemoteCluster", arg0, arg1)
+	ret0, _ := ret[0].(*v1.AddOrUpdateRemoteClusterResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddOrUpdateRemoteCluster indicates an expected call of AddOrUpdateRemoteCluster.
+func (mr *MockOperatorHandlerMockRecorder) AddOrUpdateRemoteCluster(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddOrUpdateRemoteCluster", reflect.TypeOf((*MockOperatorHandler)(nil).AddOrUpdateRemoteCluster), arg0, arg1)
 }
 
 // AddSearchAttributes mocks base method.
@@ -871,6 +916,51 @@ func (mr *MockOperatorHandlerMockRecorder) DeleteWorkflowExecution(arg0, arg1 in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockOperatorHandler)(nil).DeleteWorkflowExecution), arg0, arg1)
 }
 
+// DescribeCluster mocks base method.
+func (m *MockOperatorHandler) DescribeCluster(arg0 context.Context, arg1 *v1.DescribeClusterRequest) (*v1.DescribeClusterResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeCluster", arg0, arg1)
+	ret0, _ := ret[0].(*v1.DescribeClusterResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeCluster indicates an expected call of DescribeCluster.
+func (mr *MockOperatorHandlerMockRecorder) DescribeCluster(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeCluster", reflect.TypeOf((*MockOperatorHandler)(nil).DescribeCluster), arg0, arg1)
+}
+
+// ListClusterMembers mocks base method.
+func (m *MockOperatorHandler) ListClusterMembers(arg0 context.Context, arg1 *v1.ListClusterMembersRequest) (*v1.ListClusterMembersResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListClusterMembers", arg0, arg1)
+	ret0, _ := ret[0].(*v1.ListClusterMembersResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListClusterMembers indicates an expected call of ListClusterMembers.
+func (mr *MockOperatorHandlerMockRecorder) ListClusterMembers(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMembers", reflect.TypeOf((*MockOperatorHandler)(nil).ListClusterMembers), arg0, arg1)
+}
+
+// ListClusters mocks base method.
+func (m *MockOperatorHandler) ListClusters(arg0 context.Context, arg1 *v1.ListClustersRequest) (*v1.ListClustersResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListClusters", arg0, arg1)
+	ret0, _ := ret[0].(*v1.ListClustersResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListClusters indicates an expected call of ListClusters.
+func (mr *MockOperatorHandlerMockRecorder) ListClusters(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusters", reflect.TypeOf((*MockOperatorHandler)(nil).ListClusters), arg0, arg1)
+}
+
 // ListSearchAttributes mocks base method.
 func (m *MockOperatorHandler) ListSearchAttributes(arg0 context.Context, arg1 *v1.ListSearchAttributesRequest) (*v1.ListSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
@@ -884,6 +974,21 @@ func (m *MockOperatorHandler) ListSearchAttributes(arg0 context.Context, arg1 *v
 func (mr *MockOperatorHandlerMockRecorder) ListSearchAttributes(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSearchAttributes", reflect.TypeOf((*MockOperatorHandler)(nil).ListSearchAttributes), arg0, arg1)
+}
+
+// RemoveRemoteCluster mocks base method.
+func (m *MockOperatorHandler) RemoveRemoteCluster(arg0 context.Context, arg1 *v1.RemoveRemoteClusterRequest) (*v1.RemoveRemoteClusterResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveRemoteCluster", arg0, arg1)
+	ret0, _ := ret[0].(*v1.RemoveRemoteClusterResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RemoveRemoteCluster indicates an expected call of RemoveRemoteCluster.
+func (mr *MockOperatorHandlerMockRecorder) RemoveRemoteCluster(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveRemoteCluster", reflect.TypeOf((*MockOperatorHandler)(nil).RemoveRemoteCluster), arg0, arg1)
 }
 
 // RemoveSearchAttributes mocks base method.

@@ -135,6 +135,12 @@ const (
 	// MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskQueue, WorkflowID, ActivityID, TimerID,
 	// WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID
 	MaxIDLengthLimit = "limit.maxIDLength"
+	// WorkerBuildIdSizeLimit is the byte length limit for a worker build id as used in the rpc methods for updating
+	// the version graph for a task queue
+	WorkerBuildIdSizeLimit = "limit.workerBuildIdSize"
+	// VersionGraphNodeLimit is the max number of nodes allowed in the version graph for a task queue. Update requests
+	// which would cause the graph size to exceed this number will result in the oldest versions being dropped.
+	VersionGraphNodeLimit = "limit.versionGraphNodeSize"
 
 	// key for frontend
 
