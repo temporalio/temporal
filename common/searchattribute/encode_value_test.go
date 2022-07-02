@@ -65,6 +65,13 @@ func Test_DecodeValue_FromMetadata_Success(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal([]string{"val1", "val2"}, decodedSlice)
 
+	payloadEmptySlice, err := payload.Encode([]string{})
+	assert.NoError(err)
+	payloadEmptySlice.Metadata["type"] = []byte("Keyword")
+	decodedEmptySlice, err := DecodeValue(payloadEmptySlice, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
+	assert.NoError(err)
+	assert.Equal([]string{}, decodedEmptySlice)
+
 	var expectedEncodedRepresentation = "2022-03-07T21:27:35.986848-05:00"
 	timeValue, err := time.Parse(time.RFC3339, expectedEncodedRepresentation)
 	payloadDatetime, err := payload.Encode(timeValue)
@@ -100,6 +107,12 @@ func Test_DecodeValue_FromParameter_Success(t *testing.T) {
 	decodedSlice, err := DecodeValue(payloadSlice, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	assert.NoError(err)
 	assert.Equal([]string{"val1", "val2"}, decodedSlice)
+
+	payloadEmptySlice, err := payload.Encode([]string{})
+	assert.NoError(err)
+	decodedEmptySlice, err := DecodeValue(payloadEmptySlice, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	assert.NoError(err)
+	assert.Equal([]string{}, decodedEmptySlice)
 
 	var expectedEncodedRepresentation = "2022-03-07T21:27:35.986848-05:00"
 	timeValue, err := time.Parse(time.RFC3339, expectedEncodedRepresentation)
@@ -178,6 +191,12 @@ func Test_EncodeValue(t *testing.T) {
 	encodedPayload, err = EncodeValue([]string{"val1", "val2"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	assert.NoError(err)
 	assert.Equal(`["val1","val2"]`, string(encodedPayload.GetData()))
+	assert.Equal("Keyword", string(encodedPayload.Metadata["type"]))
+	assert.Equal("json/plain", string(encodedPayload.Metadata["encoding"]))
+
+	encodedPayload, err = EncodeValue([]string{}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	assert.NoError(err)
+	assert.Equal("[]", string(encodedPayload.GetData()))
 	assert.Equal("Keyword", string(encodedPayload.Metadata["type"]))
 	assert.Equal("json/plain", string(encodedPayload.Metadata["encoding"]))
 
