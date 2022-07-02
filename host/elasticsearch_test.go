@@ -1129,17 +1129,24 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	commandCount := 0
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+	wtHandler := func(
+		execution *commonpb.WorkflowExecution,
+		wt *commonpb.WorkflowType,
+		previousStartedEventID,
+		startedEventID int64,
+		history *historypb.History,
+	) ([]*commandpb.Command, error) {
 
 		upsertCommand := &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
-			Attributes:  &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{}}}
+			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{
+				UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{},
+			},
+		}
 
 		// handle first upsert
 		if commandCount == 0 {
 			commandCount++
-
 			attrValPayload, _ := payload.Encode(s.testSearchAttributeVal)
 			upsertSearchAttr := &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
@@ -1149,6 +1156,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = upsertSearchAttr
 			return []*commandpb.Command{upsertCommand}, nil
 		}
+
 		// handle second upsert, which update existing field and add new field
 		if commandCount == 1 {
 			commandCount++
@@ -1156,11 +1164,28 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 			return []*commandpb.Command{upsertCommand}, nil
 		}
 
+		// handle third upsert, which update existing field to nil and empty list
+		if commandCount == 2 {
+			commandCount++
+			nilPayload, _ := payload.Encode(nil)
+			emptySlicePayload, _ := payload.Encode([]int{})
+			upsertSearchAttr := &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					"CustomTextField": nilPayload,
+					"CustomIntField":  emptySlicePayload,
+				},
+			}
+			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = upsertSearchAttr
+			return []*commandpb.Command{upsertCommand}, nil
+		}
+
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-				Result: payloads.EncodeString("Done"),
-			}},
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
+				},
+			},
 		}}, nil
 	}
 
@@ -1248,6 +1273,51 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 
 	// verify upsert data is on ES
 	s.testListResultForUpsertSearchAttributes(listRequest)
+
+	// process 3rd workflow task and assert workflow task is handled correctly.
+	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
+		false,
+		false,
+		true,
+		true,
+		0,
+		1,
+		true,
+		nil)
+	s.NoError(err)
+	s.NotNil(newTask)
+	s.NotNil(newTask.WorkflowTask)
+	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, newTask.WorkflowTask.History.Events[1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
+
+	time.Sleep(waitForESToSettle)
+
+	// verify upsert data is on ES
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  int32(2),
+		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
+	}
+	verified = false
+	for i := 0; i < numOfRetry; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		if len(resp.GetExecutions()) == 1 {
+			execution := resp.GetExecutions()[0]
+			retrievedSearchAttr := execution.SearchAttributes
+			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) > 0 {
+				s.NotContains(retrievedSearchAttr.GetIndexedFields(), "CustomTextField")
+				s.NotContains(retrievedSearchAttr.GetIndexedFields(), "CustomIntField")
+				verified = true
+				break
+			}
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.True(verified)
 }
 
 func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(listRequest *workflowservice.ListWorkflowExecutionsRequest) {
