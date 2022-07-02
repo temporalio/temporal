@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -57,6 +58,10 @@ type (
 		clusterName        string
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
+)
+
+var (
+	errVerificationFailed = errors.New("failed to verify target workflow state")
 )
 
 func newTransferQueueStandbyTaskExecutor(
@@ -289,12 +294,21 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				Clock:                  executionInfo.ParentClock,
 			})
 			switch err.(type) {
-			case nil, *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
+			case nil, *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 				return nil, nil
 			case *serviceerror.WorkflowNotReady:
 				return verifyChildCompletionRecordedInfo, nil
 			default:
-				return nil, err
+				t.logger.Error("Failed to verify child execution completion recoreded",
+					tag.WorkflowNamespaceID(transferTask.GetNamespaceID()),
+					tag.WorkflowID(transferTask.GetWorkflowID()),
+					tag.WorkflowRunID(transferTask.GetRunID()),
+					tag.Error(err),
+				)
+
+				// NOTE: we do not return the error here which will cause the mutable state to be cleared and reloaded upon retry
+				// it's unnecessary as the error is in the target workflow, not this workflow.
+				return nil, errVerificationFailed
 			}
 		}
 		return nil, nil
@@ -434,12 +448,21 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			Clock: childWorkflowInfo.Clock,
 		})
 		switch err.(type) {
-		case nil, *serviceerror.NamespaceNotFound:
+		case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 			return nil, nil
 		case *serviceerror.WorkflowNotReady:
 			return &startChildExecutionPostActionInfo{}, nil
 		default:
-			return nil, err
+			t.logger.Error("Failed to verify first workflow task scheduled",
+				tag.WorkflowNamespaceID(transferTask.GetNamespaceID()),
+				tag.WorkflowID(transferTask.GetWorkflowID()),
+				tag.WorkflowRunID(transferTask.GetRunID()),
+				tag.Error(err),
+			)
+
+			// NOTE: we do not return the error here which will cause the mutable state to be cleared and reloaded upon retry
+			// it's unnecessary as the error is in the target workflow, not this workflow.
+			return nil, errVerificationFailed
 		}
 	}
 
@@ -474,7 +497,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return err
 	}
 	defer func() {
-		if retError == consts.ErrTaskRetry {
+		if retError == consts.ErrTaskRetry || retError == errVerificationFailed {
 			release(nil)
 		} else {
 			release(retError)
