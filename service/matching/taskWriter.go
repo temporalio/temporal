@@ -105,7 +105,8 @@ func (w *taskWriter) Start() {
 	) {
 		return
 	}
-	w.writeLoop = goro.Go(context.Background(), w.taskWriterLoop)
+	w.writeLoop = goro.NewHandle(context.Background())
+	w.writeLoop.Go(w.taskWriterLoop)
 }
 
 // Stop stops the taskWriter
