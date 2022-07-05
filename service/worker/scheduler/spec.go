@@ -31,6 +31,7 @@ import (
 	"github.com/dgryski/go-farm"
 
 	schedpb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -103,9 +104,12 @@ func (cs *compiledSpec) getNextTime(after time.Time) (nominal, next time.Time, h
 		after = nominal
 	}
 
+	maxJitter := timestamp.DurationValue(cs.spec.Jitter)
 	// Ensure that jitter doesn't push this time past the _next_ nominal start time
-	following := cs.rawNextTime(nominal)
-	next = cs.addJitter(nominal, following.Sub(nominal))
+	if following := cs.rawNextTime(nominal); !following.IsZero() {
+		maxJitter = common.MinDuration(maxJitter, following.Sub(nominal))
+	}
+	next = cs.addJitter(nominal, maxJitter)
 
 	has = true
 	return
@@ -161,15 +165,10 @@ func (cs *compiledSpec) excluded(nominal time.Time) bool {
 	return false
 }
 
-// Adds jitter to a nominal time, deterministically (by hashing the given time). The range
-// of the jitter is zero to the min of the schedule spec's jitter and the given limit value.
-func (cs *compiledSpec) addJitter(nominal time.Time, limit time.Duration) time.Time {
-	maxJitter := timestamp.DurationValue(cs.spec.Jitter)
+// Adds jitter to a nominal time, deterministically (by hashing the given time).
+func (cs *compiledSpec) addJitter(nominal time.Time, maxJitter time.Duration) time.Time {
 	if maxJitter < 0 {
 		maxJitter = 0
-	}
-	if maxJitter > limit {
-		maxJitter = limit
 	}
 
 	bin, err := nominal.MarshalBinary()
