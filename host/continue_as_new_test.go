@@ -351,7 +351,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		// Only PollForWorkflowTask if the last event is WorkflowTaskScheduled and we have at least 2 seconds left
 		// (to account for potential delay from queueing and matching task forwarding).
 		expiration := firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionExpirationTime()
-		timeLeft := expiration.Sub(time.Now())
+		timeLeft := time.Until(*expiration)
 		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED && timeLeft > 2*time.Second {
 			s.Logger.Info(fmt.Sprintf("Execution not timed out yet. PollForWorkflowTask.  Last event is %v", lastEvent))
 			_, err := poller.PollAndProcessWorkflowTaskWithoutRetry(false, false)

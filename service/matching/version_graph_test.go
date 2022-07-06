@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -363,7 +364,7 @@ func TestLimitsMaxSize(t *testing.T) {
 	}
 
 	lastNode := data.GetCurrentDefault()
-	for true {
+	for {
 		if lastNode.GetPreviousIncompatible() == nil {
 			break
 		}
@@ -372,7 +373,7 @@ func TestLimitsMaxSize(t *testing.T) {
 	assert.Equal(t, mkVerId("24"), lastNode.GetVersion())
 	assert.Equal(t, 1, len(data.GetCompatibleLeaves()))
 	lastNode = data.GetCompatibleLeaves()[0]
-	for true {
+	for {
 		if lastNode.GetPreviousCompatible() == nil {
 			break
 		}

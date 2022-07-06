@@ -31,8 +31,8 @@ import (
 )
 
 var (
-	reUnitless = regexp.MustCompile("^(\\d+(\\.\\d*)?|(\\.\\d+))$")
-	reDays     = regexp.MustCompile("(\\d+(\\.\\d*)?|(\\.\\d+))d")
+	reUnitless = regexp.MustCompile(`^(\d+(\.\d*)?|(\.\d+))$`)
+	reDays     = regexp.MustCompile(`(\d+(\.\d*)?|(\.\d+))d`)
 )
 
 // ParseDuration is like time.ParseDuration, but supports unit "d" for days

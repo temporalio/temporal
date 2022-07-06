@@ -111,8 +111,8 @@ var (
 	historyServiceOperationRetryPolicy = common.CreateHistoryServiceRetryPolicy()
 
 	// ErrNoTasks is exported temporarily for integration test
-	ErrNoTasks    = errors.New("No tasks")
-	errPumpClosed = errors.New("Task queue pump closed its channel")
+	ErrNoTasks    = errors.New("no tasks")
+	errPumpClosed = errors.New("task queue pump closed its channel")
 
 	pollerIDKey pollerIDCtxKey = "pollerID"
 	identityKey identityCtxKey = "identity"
@@ -700,6 +700,9 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetRequest().GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
 	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	if err != nil {
 		return nil, err
@@ -720,6 +723,9 @@ func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	taskQueueName := req.GetRequest().GetTaskQueue()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
 	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
@@ -758,6 +764,9 @@ func (e *matchingEngineImpl) getAllPartitions(
 		return partitionKeys, err
 	}
 	taskQueueID, err := newTaskQueueID(namespaceID, taskQueue.GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return partitionKeys, err
+	}
 	rootPartition := taskQueueID.GetRoot()
 
 	partitionKeys = append(partitionKeys, rootPartition)

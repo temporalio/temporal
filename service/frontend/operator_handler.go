@@ -60,7 +60,6 @@ type (
 	OperatorHandlerImpl struct {
 		status int32
 
-		healthStatus      int32
 		logger            log.Logger
 		config            *Config
 		esConfig          *esclient.Config

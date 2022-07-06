@@ -222,7 +222,7 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 	pageSize int,
 	pageToken []byte,
 ) ([]*persistence.QueueMessage, []byte, error) {
-	if pageToken != nil && len(pageToken) != 0 {
+	if len(pageToken) != 0 {
 		lastReadMessageID, err := deserializePageToken(pageToken)
 		if err != nil {
 			return nil, nil, serviceerror.NewInternal(fmt.Sprintf("invalid next page token %v", pageToken))

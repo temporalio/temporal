@@ -3349,6 +3349,9 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		input.ConflictToken = int64(binary.BigEndian.Uint64(request.ConflictToken))
 	}
 	inputPayloads, err := payloads.Encode(input)
+	if err != nil {
+		return nil, err
+	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
@@ -3419,6 +3422,9 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 	}
 
 	inputPayloads, err := payloads.Encode(request.Patch)
+	if err != nil {
+		return nil, err
+	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
@@ -4172,10 +4178,6 @@ func (wh *WorkflowHandler) verifyHistoryIsComplete(
 		isFirstPage,
 		isLastPage,
 		pageSize))
-}
-
-func (wh *WorkflowHandler) isFailoverRequest(updateRequest *workflowservice.UpdateNamespaceRequest) bool {
-	return updateRequest.ReplicationConfig != nil && updateRequest.ReplicationConfig.GetActiveClusterName() != ""
 }
 
 func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest, namespaceID namespace.ID) bool {

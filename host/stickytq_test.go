@@ -143,6 +143,7 @@ func (s *integrationSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 		Identity:          identity,
 		RequestId:         uuid.New(),
 	})
+	s.NoError(err)
 
 	// Wait for workflow task timeout
 	stickyTimeout := false
@@ -194,6 +195,7 @@ WaitForStickyTimeoutLoop:
 
 	// Complete workflow execution
 	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, 3)
+	s.NoError(err)
 
 	// Assert for single workflow task failed and workflow completion
 	failedWorkflowTasks := 0
@@ -301,12 +303,14 @@ func (s *integrationSuite) TestStickyTaskqueueResetThenTimeout() {
 		Identity:          identity,
 		RequestId:         uuid.New(),
 	})
+	s.NoError(err)
 
 	// Reset sticky taskqueue before sticky workflow task starts
-	s.engine.ResetStickyTaskQueue(NewContext(), &workflowservice.ResetStickyTaskQueueRequest{
+	_, err = s.engine.ResetStickyTaskQueue(NewContext(), &workflowservice.ResetStickyTaskQueueRequest{
 		Namespace: s.namespace,
 		Execution: workflowExecution,
 	})
+	s.NoError(err)
 
 	// Wait for workflow task timeout
 	stickyTimeout := false
@@ -358,6 +362,7 @@ WaitForStickyTimeoutLoop:
 
 	// Complete workflow execution
 	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, true, 3)
+	s.NoError(err)
 
 	// Assert for single workflow task failed and workflow completion
 	failedWorkflowTasks := 0

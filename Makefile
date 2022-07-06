@@ -228,7 +228,7 @@ goimports:
 
 staticcheck:
 	@printf $(COLOR) "Run staticcheck..."
-	@staticcheck -fail none ./...
+	@staticcheck ./...
 
 errcheck:
 	@printf $(COLOR) "Run errcheck..."

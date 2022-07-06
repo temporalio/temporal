@@ -123,9 +123,9 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 ) error {
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 		timerSequence := t.getTimerSequence(mutableState)
-
-	Loop:
-		for _, timerSequenceID := range timerSequence.LoadAndSortUserTimers() {
+		timerSequenceIDs := timerSequence.LoadAndSortUserTimers()
+		if len(timerSequenceIDs) > 0 {
+			timerSequenceID := timerSequenceIDs[0]
 			_, ok := mutableState.GetUserTimerInfoByEventID(timerSequenceID.EventID)
 			if !ok {
 				errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.EventID)
@@ -139,11 +139,10 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 			); isExpired {
 				return getHistoryResendInfo(mutableState)
 			}
-			// since the user timer are already sorted, so if there is one timer which will not expired
-			// all user timer after this timer will not expired
-			break Loop //nolint:staticcheck
+			// Since the user timers are already sorted, then if there is one timer which is not expired,
+			// all user timers after that timer are not expired.
 		}
-		// if there is no user timer expired, then we are good
+		// If there is no user timer expired, then we are good.
 		return nil, nil
 	}
 
@@ -181,9 +180,9 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 		timerSequence := t.getTimerSequence(mutableState)
 		updateMutableState := false
-
-	Loop:
-		for _, timerSequenceID := range timerSequence.LoadAndSortActivityTimers() {
+		timerSequenceIDs := timerSequence.LoadAndSortActivityTimers()
+		if len(timerSequenceIDs) > 0 {
+			timerSequenceID := timerSequenceIDs[0]
 			_, ok := mutableState.GetActivityInfo(timerSequenceID.EventID)
 			if !ok {
 				errString := fmt.Sprintf("failed to find in memory activity timer: %v", timerSequenceID.EventID)
@@ -197,9 +196,8 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			); isExpired {
 				return getHistoryResendInfo(mutableState)
 			}
-			// since the activity timer are already sorted, so if there is one timer which will not expired
-			// all activity timer after this timer will not expire
-			break Loop //nolint:staticcheck
+			// Since the activity timers are already sorted, then if there is one timer which is not expired,
+			// all activity timers after that timer are not expired.
 		}
 
 		// for reason to update mutable state & generate a new activity task,

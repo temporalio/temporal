@@ -214,16 +214,16 @@ func (ti *TelemetryInterceptor) metricsScopeLogTags(
 
 	// if the method name is not defined, will default to
 	// unknown scope, which carries value 0
-	scopeDef, _ := ti.scopes[methodName]
+	scopeDef := ti.scopes[methodName]
 	scopeDef = ti.overrideScope(scopeDef, req)
 
-	namespace := GetNamespace(ti.namespaceRegistry, req)
-	if namespace == "" {
+	nsName := GetNamespace(ti.namespaceRegistry, req)
+	if nsName == "" {
 		return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceUnknownTag()), []tag.Tag{tag.Operation(methodName)}
 	}
-	return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceTag(namespace.String())), []tag.Tag{
+	return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceTag(nsName.String())), []tag.Tag{
 		tag.Operation(methodName),
-		tag.WorkflowNamespace(namespace.String()),
+		tag.WorkflowNamespace(nsName.String()),
 	}
 }
 

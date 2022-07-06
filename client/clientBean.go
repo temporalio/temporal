@@ -42,8 +42,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 )
 
-const clientBeanCallbackID = "clientBean"
-
 type (
 	// Bean is a collection of clients
 	Bean interface {
@@ -125,14 +123,10 @@ func (h *clientBeanImpl) registerClientEviction() {
 					continue
 				}
 				h.remoteAdminClientsLock.Lock()
-				if _, ok := h.remoteAdminClients[clusterName]; ok {
-					delete(h.remoteAdminClients, clusterName)
-				}
+				delete(h.remoteAdminClients, clusterName)
 				h.remoteAdminClientsLock.Unlock()
 				h.remoteFrontendClientsLock.Lock()
-				if _, ok := h.remoteFrontendClients[clusterName]; ok {
-					delete(h.remoteFrontendClients, clusterName)
-				}
+				delete(h.remoteFrontendClients, clusterName)
 				h.remoteFrontendClientsLock.Unlock()
 			}
 		})

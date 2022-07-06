@@ -232,19 +232,22 @@ func (q *namespaceReplicationQueueImpl) updateAckLevel(
 	clusterName string,
 	isDLQ bool,
 ) error {
-	var err error
+	var ackLevelErr error
 	var internalMetadata *InternalQueueMetadata
 	if isDLQ {
-		internalMetadata, err = q.queue.GetDLQAckLevels(ctx)
+		internalMetadata, ackLevelErr = q.queue.GetDLQAckLevels(ctx)
 	} else {
-		internalMetadata, err = q.queue.GetAckLevels(ctx)
+		internalMetadata, ackLevelErr = q.queue.GetAckLevels(ctx)
 	}
 
-	if err != nil {
-		return err
+	if ackLevelErr != nil {
+		return ackLevelErr
 	}
 
 	ackLevels, err := q.ackLevelsFromBlob(internalMetadata.Blob)
+	if err != nil {
+		return err
+	}
 
 	// Ignore possibly delayed message
 	if ack, ok := ackLevels[clusterName]; ok && ack > lastProcessedMessageID {

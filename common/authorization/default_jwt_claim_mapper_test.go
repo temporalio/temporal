@@ -306,10 +306,6 @@ func (tg *tokenGenerator) generateRSAToken(subject string, permissions []string,
 	return tg.generateToken(RSA, subject, permissions, options)
 }
 
-func (tg *tokenGenerator) generateECDSAToken(subject string, permissions []string, options errorTestOptions) (string, error) {
-	return tg.generateToken(ECDSA, subject, permissions, options)
-}
-
 func (tg *tokenGenerator) generateToken(alg keyAlgorithm, subject string, permissions []string, options errorTestOptions) (string, error) {
 	claims := CustomClaims{
 		permissions,

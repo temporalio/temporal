@@ -331,7 +331,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 	resp, err := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceUUID,
 		PageSize:    2,
-		Query:       fmt.Sprintf(`WorkflowType = "visibility-workflow-1"`),
+		Query:       `WorkflowType = "visibility-workflow-1"`,
 	})
 	s.Nil(err)
 	s.Equal(1, len(resp.Executions))
@@ -359,7 +359,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 	resp, err = s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceUUID,
 		PageSize:    2,
-		Query:       fmt.Sprintf(`WorkflowType = "visibility-workflow-2"`),
+		Query:       `WorkflowType = "visibility-workflow-2"`,
 	})
 	s.Nil(err)
 	s.Equal(1, len(resp.Executions))
@@ -393,7 +393,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	resp, err := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceUUID,
 		PageSize:    2,
-		Query:       fmt.Sprintf(`WorkflowId = "visibility-filtering-test1"`),
+		Query:       `WorkflowId = "visibility-filtering-test1"`,
 	})
 	s.Nil(err)
 	s.Equal(1, len(resp.Executions))
@@ -421,7 +421,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	resp, err = s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceUUID,
 		PageSize:    2,
-		Query:       fmt.Sprintf(`WorkflowId = "visibility-filtering-test2"`),
+		Query:       `WorkflowId = "visibility-filtering-test2"`,
 	})
 	s.Nil(err)
 	s.Equal(1, len(resp.Executions))

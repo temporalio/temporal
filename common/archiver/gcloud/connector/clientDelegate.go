@@ -102,19 +102,7 @@ type (
 	ObjectIteratorWrapper interface {
 		Next() (*storage.ObjectAttrs, error)
 	}
-
-	objectIteratorDelegate struct {
-		iterator *storage.ObjectIterator
-	}
 )
-
-func newClientDelegate() (*clientDelegate, error) {
-	ctx := context.Background()
-	if credentialsPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); credentialsPath != "" {
-		return newClientDelegateWithCredentials(ctx, credentialsPath)
-	}
-	return newDefaultClientDelegate(ctx)
-}
 
 func newDefaultClientDelegate(ctx context.Context) (*clientDelegate, error) {
 	nativeClient, err := storage.NewClient(ctx)
@@ -167,17 +155,6 @@ func (b *bucketDelegate) Objects(ctx context.Context, q *storage.Query) ObjectIt
 // Attrs returns the metadata for the bucket.
 func (b *bucketDelegate) Attrs(ctx context.Context) (*storage.BucketAttrs, error) {
 	return b.bucket.Attrs(ctx)
-}
-
-// Next returns the next result. Its second return value is iterator.Done if
-// there are no more results. Once Next returns iterator.Done, all subsequent
-// calls will return iterator.Done.
-//
-// If Query.Delimiter is non-empty, some of the ObjectAttrs returned by Next will
-// have a non-empty Prefix field, and a zero value for all other fields. These
-// represent prefixes.
-func (o *objectIteratorDelegate) Next() (*storage.ObjectAttrs, error) {
-	return o.iterator.Next()
 }
 
 // NewWriter returns a storage Writer that writes to the GCS object

@@ -217,6 +217,7 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 		taskInfo:  &persistencespb.TaskInfo{},
 		source:    enumsspb.TASK_SOURCE_HISTORY,
 	})
+	require.NoError(t, err)
 	require.False(t, sync)
 }
 

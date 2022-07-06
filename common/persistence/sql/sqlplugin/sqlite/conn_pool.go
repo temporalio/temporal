@@ -99,11 +99,11 @@ func (cp *connPool) Close(cfg *config.SQL) {
 	}
 
 	e.refCount--
-	if e.refCount == 0 {
-		// todo: at the moment pool will persist a single connection to the DB for the whole duration of application
-		// temporal will start and stop DB connections multiple times, which will cause the loss of the cache
-		// and "db is closed" error
-		// e.db.Close()
-		// delete(cp.pool, dsn)
-	}
+	// todo: at the moment pool will persist a single connection to the DB for the whole duration of application
+	// temporal will start and stop DB connections multiple times, which will cause the loss of the cache
+	// and "db is closed" error
+	// if e.refCount == 0 {
+	// 	e.db.Close()
+	// 	delete(cp.pool, dsn)
+	// }
 }

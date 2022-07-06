@@ -201,11 +201,6 @@ func (t *timerQueueStandbyProcessorImpl) getAckLevel() tasks.Key {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getAckLevel()
 }
 
-//nolint:unused
-func (t *timerQueueStandbyProcessorImpl) getReadLevel() tasks.Key {
-	return t.timerQueueProcessorBase.timerQueueAckMgr.getReadLevel()
-}
-
 // NotifyNewTimers - Notify the processor about the new standby timer events arrival.
 // This should be called each time new timer events arrives, otherwise timers maybe fired unexpected.
 func (t *timerQueueStandbyProcessorImpl) notifyNewTimers(

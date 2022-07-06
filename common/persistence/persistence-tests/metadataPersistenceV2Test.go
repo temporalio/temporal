@@ -1177,9 +1177,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 		resp, err := m.ListNamespaces(2, token)
 		m.NoError(err)
 		token = resp.NextPageToken
-		for _, namespace := range resp.Namespaces {
-			listNamespacesPageSize2 = append(listNamespacesPageSize2, namespace)
-		}
+		listNamespacesPageSize2 = append(listNamespacesPageSize2, resp.Namespaces...)
 		pageCount++
 		if len(token) == 0 {
 			break
@@ -1199,9 +1197,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 		resp, err := m.ListNamespaces(1, token)
 		m.NoError(err)
 		token = resp.NextPageToken
-		for _, namespace := range resp.Namespaces {
-			listNamespacesPageSize1 = append(listNamespacesPageSize1, namespace)
-		}
+		listNamespacesPageSize1 = append(listNamespacesPageSize1, resp.Namespaces...)
 		pageCount++
 		if len(token) == 0 {
 			break

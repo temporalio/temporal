@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -113,7 +112,7 @@ func (s *engine3Suite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&p.ShardInfoWithFailover{ShardInfo: &persistencespb.ShardInfo{
+		&persistence.ShardInfoWithFailover{ShardInfo: &persistencespb.ShardInfo{
 			ShardId: 1,
 			RangeId: 1,
 		}},
@@ -190,7 +189,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 
 	ms := workflow.TestCloneToProto(msBuilder)
 
-	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
@@ -312,8 +311,8 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
 	_ = addWorkflowTaskScheduledEvent(msBuilder)
 	ms := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
-	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)

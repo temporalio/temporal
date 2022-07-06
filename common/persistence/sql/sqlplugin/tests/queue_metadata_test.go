@@ -86,6 +86,7 @@ func (s *queueMetadataSuite) TestInsert_Success() {
 	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 }
 
@@ -96,6 +97,7 @@ func (s *queueMetadataSuite) TestInsert_Fail_Duplicate() {
 	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	queueMetadata = s.newRandomQueueMetadataRow(queueType)
@@ -110,6 +112,7 @@ func (s *queueMetadataSuite) TestInsertSelect() {
 	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	filter := sqlplugin.QueueMetadataFilter{
@@ -128,12 +131,14 @@ func (s *queueMetadataSuite) TestInsertUpdate_Success() {
 	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	queueMetadata = s.newRandomQueueMetadataRow(queueType)
 	result, err = s.store.UpdateQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
+	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 }
 
@@ -144,6 +149,7 @@ func (s *queueMetadataSuite) TestUpdate_Fail() {
 	result, err := s.store.UpdateQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 }
 
@@ -154,12 +160,14 @@ func (s *queueMetadataSuite) TestInsertUpdateSelect() {
 	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	queueMetadata = s.newRandomQueueMetadataRow(queueType)
 	result, err = s.store.UpdateQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
+	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	filter := sqlplugin.QueueMetadataFilter{
@@ -179,6 +187,7 @@ func (s *queueMetadataSuite) TestSelectReadLock() {
 	result, err := s.store.InsertIntoQueueMetadata(newExecutionContext(), &queueMetadata)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	// NOTE: lock without transaction is equivalent to select

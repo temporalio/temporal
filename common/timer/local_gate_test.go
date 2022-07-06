@@ -145,9 +145,8 @@ func (s *localGateSuite) TestTimerFireAfterUpdate_NotActive_Updated() {
 	deadline := now.Add(3 * time.Second)
 
 	s.localTimerGate.Update(newTimer)
-	select { // this is to drain existing signal
-	case <-s.localTimerGate.FireChan():
-	}
+	// this is to drain existing signal
+	<-s.localTimerGate.FireChan()
 	// test setup up complete
 
 	s.True(s.localTimerGate.Update(updatedNewTimer))
@@ -165,9 +164,8 @@ func (s *localGateSuite) TestTimerFireAfterUpdate_NotActive_NotUpdated() {
 	deadline := now.Add(1 * time.Second)
 
 	s.localTimerGate.Update(newTimer)
-	select { // this is to drain existing signal
-	case <-s.localTimerGate.FireChan():
-	}
+	// this is to drain existing signal
+	<-s.localTimerGate.FireChan()
 	// test setup up complete
 
 	s.True(s.localTimerGate.Update(updatedNewTimer))

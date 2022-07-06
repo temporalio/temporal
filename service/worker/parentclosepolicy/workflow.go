@@ -49,7 +49,6 @@ import (
 )
 
 const (
-	processorContextKey = "processorContext"
 	// processorTaskQueueName is the taskqueue name
 	processorTaskQueueName = "temporal-sys-processor-parent-close-policy"
 	// processorWFTypeName is the workflow type
@@ -77,9 +76,13 @@ type (
 		ParentExecution commonpb.WorkflowExecution
 		Executions      []RequestDetail
 	}
+
+	processorContextKeyType struct{}
 )
 
 var (
+	processorContextKey = processorContextKeyType{}
+
 	retryPolicy = temporal.RetryPolicy{
 		InitialInterval:    10 * time.Second,
 		BackoffCoefficient: 1.7,

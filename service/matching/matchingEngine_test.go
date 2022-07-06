@@ -1927,7 +1927,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.NoError(err)
 	s.NotNil(res.GetResponse().GetCurrentDefault())
 	lastNode = res.GetResponse().GetCurrentDefault()
-	for true {
+	for {
 		if lastNode.GetPreviousIncompatible() == nil {
 			break
 		}
@@ -1935,7 +1935,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	}
 	s.Equal(mkVerId("95"), lastNode.GetVersion())
 	lastNode = res.GetResponse().GetCompatibleLeaves()[0]
-	for true {
+	for {
 		if lastNode.GetPreviousCompatible() == nil {
 			break
 		}
@@ -2031,7 +2031,6 @@ func (m *testTaskManager) GetName() string {
 }
 
 func (m *testTaskManager) Close() {
-	return
 }
 
 func (m *testTaskManager) getTaskQueueManager(id *taskQueueID) *testTaskQueueManager {

@@ -44,7 +44,6 @@ func UpdateWorkflowWithNew(
 	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
 ) (retError error) {
 
-UpdateHistoryLoop:
 	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 		// conduct caller action
 		postActions, err := action(workflowContext)
@@ -59,7 +58,7 @@ UpdateHistoryLoop:
 						return err
 					}
 				}
-				continue UpdateHistoryLoop
+				continue
 			}
 
 			// Returned error back to the caller
@@ -81,10 +80,9 @@ UpdateHistoryLoop:
 			}
 		}
 
+		var updateErr error
 		if newWorkflowFn != nil {
-			var newContext workflow.Context
-			var newMutableState workflow.MutableState
-			newContext, newMutableState, err = newWorkflowFn()
+			newContext, newMutableState, err := newWorkflowFn()
 			if err != nil {
 				return err
 			}
@@ -96,29 +94,29 @@ UpdateHistoryLoop:
 				return err
 			}
 
-			err = workflowContext.GetContext().UpdateWorkflowExecutionWithNewAsActive(
+			updateErr = workflowContext.GetContext().UpdateWorkflowExecutionWithNewAsActive(
 				ctx,
 				shard.GetTimeSource().Now(),
 				newContext,
 				newMutableState,
 			)
 		} else {
-			err = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
+			updateErr = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
 				ctx,
 				shard.GetTimeSource().Now(),
 			)
 		}
 
-		if err == consts.ErrConflict {
+		if updateErr == consts.ErrConflict {
 			if attempt != conditionalRetryCount {
 				_, err = workflowContext.ReloadMutableState(ctx)
 				if err != nil {
 					return err
 				}
 			}
-			continue UpdateHistoryLoop
+			continue
 		}
-		return err
+		return updateErr
 	}
 	return consts.ErrMaxAttemptsExceeded
 }

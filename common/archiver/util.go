@@ -33,15 +33,15 @@ import (
 )
 
 var (
-	errEmptyNamespaceID      = errors.New("NamespaceId is empty")
-	errEmptyNamespace        = errors.New("Namespace is empty")
-	errEmptyWorkflowID       = errors.New("WorkflowId is empty")
-	errEmptyRunID            = errors.New("RunId is empty")
-	errInvalidPageSize       = errors.New("PageSize should be greater than 0")
-	errEmptyWorkflowTypeName = errors.New("WorkflowTypeName is empty")
-	errEmptyStartTime        = errors.New("StartTime is empty")
-	errEmptyCloseTime        = errors.New("CloseTime is empty")
-	errEmptyQuery            = errors.New("Query string is empty")
+	errEmptyNamespaceID      = errors.New("field NamespaceId is empty")
+	errEmptyNamespace        = errors.New("field Namespace is empty")
+	errEmptyWorkflowID       = errors.New("field WorkflowId is empty")
+	errEmptyRunID            = errors.New("field RunId is empty")
+	errInvalidPageSize       = errors.New("field PageSize should be greater than 0")
+	errEmptyWorkflowTypeName = errors.New("field WorkflowTypeName is empty")
+	errEmptyStartTime        = errors.New("field StartTime is empty")
+	errEmptyCloseTime        = errors.New("field CloseTime is empty")
+	errEmptyQuery            = errors.New("field Query is empty")
 )
 
 // TagLoggerWithArchiveHistoryRequestAndURI tags logger with fields in the archive history request and the URI

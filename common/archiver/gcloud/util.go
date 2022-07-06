@@ -50,11 +50,6 @@ func encode(message proto.Message) ([]byte, error) {
 	return encoder.Encode(message)
 }
 
-func constructHistoryFilename(namespaceID, workflowID, runID string, version int64) string {
-	combinedHash := constructHistoryFilenamePrefix(namespaceID, workflowID, runID)
-	return fmt.Sprintf("%s_%v.history", combinedHash, version)
-}
-
 func constructHistoryFilenameMultipart(namespaceID, workflowID, runID string, version int64, partNumber int) string {
 	combinedHash := constructHistoryFilenamePrefix(namespaceID, workflowID, runID)
 	return fmt.Sprintf("%s_%v_%v.history", combinedHash, version, partNumber)

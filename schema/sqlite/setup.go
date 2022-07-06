@@ -121,7 +121,7 @@ func CreateNamespaces(cfg *config.SQL, namespaces ...*NamespaceConfig) error {
 
 	for _, ns := range namespaces {
 		if err := createNamespaceIfNotExists(db, ns); err != nil {
-			return fmt.Errorf("error creating namespace %q: %w", ns, err)
+			return fmt.Errorf("error creating namespace %q: %w", ns.Detail.Info.Name, err)
 		}
 	}
 

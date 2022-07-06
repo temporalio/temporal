@@ -36,32 +36,6 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-type nullStatsReporter struct{}
-
-func (r nullStatsReporter) Capabilities() tally.Capabilities {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) Flush() {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) AllocateCounter(name string, tags map[string]string) tally.CachedCount {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) AllocateGauge(name string, tags map[string]string) tally.CachedGauge {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) AllocateTimer(name string, tags map[string]string) tally.CachedTimer {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) AllocateHistogram(name string, tags map[string]string, buckets tally.Buckets) tally.CachedHistogram {
-	panic("implement me")
-}
-
 type MetricsSuite struct {
 	*require.Assertions
 	suite.Suite
