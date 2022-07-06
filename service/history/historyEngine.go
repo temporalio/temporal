@@ -318,8 +318,19 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 		namespaceFailoverNotificationVersion := nextNamespace.FailoverNotificationVersion()
 		namespaceActiveCluster := nextNamespace.ActiveClusterName()
 
+		// +1 in the following check as the version in shard is max notification version +1
+		// run action() when namespaceFailoverNotificationVersion+1 == shardNotificationVersion
+		// as we don't know if the failover queue execution for that notification version is
+		// completed or not.
+		// NOTE: theoretically we need to get rid of the check on shardNotificationVersion, as
+		// we have no idea if the failover queue for any notification version below that is completed
+		// or not. However, removing that will cause more load upon shard reload.
+		// So here assume failover queue processor for notification version < X-1 is completed if
+		// shard notification version is X.
+
 		if nextNamespace.IsGlobalNamespace() &&
-			namespaceFailoverNotificationVersion >= shardNotificationVersion &&
+			nextNamespace.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
+			namespaceFailoverNotificationVersion+1 >= shardNotificationVersion &&
 			namespaceActiveCluster == e.currentClusterName {
 			action()
 		}
