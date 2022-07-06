@@ -241,7 +241,13 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 			continue
 		}
 
-		ackLevel := r.shard.GetQueueClusterAckLevel(tasks.CategoryReplication, clusterName).TaskID
+		var ackLevel int64
+		if clusterName == currentCluster {
+			ackLevel = r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, clusterName).TaskID
+		} else {
+			ackLevel = r.shard.GetQueueClusterAckLevel(tasks.CategoryReplication, clusterName).TaskID
+		}
+
 		if minAckedTaskID == nil || ackLevel < *minAckedTaskID {
 			minAckedTaskID = &ackLevel
 		}
