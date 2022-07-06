@@ -559,25 +559,46 @@ func (r *registry) publishCacheUpdate(
 	updateCache func() (Namespaces, Namespaces),
 ) {
 	now := r.clock.Now()
-	r.callbackLock.Lock()
-	defer r.callbackLock.Unlock()
-	r.triggerNamespaceChangePrepareCallbackLocked()
+
+	prepareCallbacks, callbacks := r.getNamespaceChangeCallbacks()
+
+	r.triggerNamespaceChangePrepareCallback(prepareCallbacks)
 	oldEntries, newEntries := updateCache()
-	r.triggerNamespaceChangeCallbackLocked(oldEntries, newEntries)
+	r.triggerNamespaceChangeCallback(callbacks, oldEntries, newEntries)
 	r.lastRefreshTime.Store(now)
 }
 
-func (r *registry) triggerNamespaceChangePrepareCallbackLocked() {
+func (r *registry) getNamespaceChangeCallbacks() ([]PrepareCallbackFn, []CallbackFn) {
+	r.callbackLock.Lock()
+	defer r.callbackLock.Unlock()
+
+	prepareCallbacks := make([]PrepareCallbackFn, 0, len(r.prepareCallbacks))
+	for _, prepareCallback := range r.prepareCallbacks {
+		prepareCallbacks = append(prepareCallbacks, prepareCallback)
+	}
+
+	callbacks := make([]CallbackFn, 0, len(r.callbacks))
+	for _, callback := range r.callbacks {
+		callbacks = append(callbacks, callback)
+	}
+
+	return prepareCallbacks, callbacks
+}
+
+func (r *registry) triggerNamespaceChangePrepareCallback(
+	prepareCallbacks []PrepareCallbackFn,
+) {
 	sw := r.metricsClient.StartTimer(
 		metrics.NamespaceCacheScope, metrics.NamespaceCachePrepareCallbacksLatency)
 	defer sw.Stop()
 
-	for _, prepareCallback := range r.prepareCallbacks {
+	for _, prepareCallback := range prepareCallbacks {
 		prepareCallback()
 	}
 }
 
-func (r *registry) triggerNamespaceChangeCallbackLocked(
+func (r *registry) triggerNamespaceChangeCallback(
+	callbacks []CallbackFn,
 	oldNamespaces []*Namespace,
 	newNamespaces []*Namespace,
 ) {
@@ -586,17 +607,9 @@ func (r *registry) triggerNamespaceChangeCallbackLocked(
 		metrics.NamespaceCacheScope, metrics.NamespaceCacheCallbacksLatency)
 	defer sw.Stop()
 
-	for _, callback := range r.callbacks {
+	for _, callback := range callbacks {
 		callback(oldNamespaces, newNamespaces)
 	}
-}
-
-func byName(name Name) *persistence.GetNamespaceRequest {
-	return &persistence.GetNamespaceRequest{Name: name.String()}
-}
-
-func byID(id ID) *persistence.GetNamespaceRequest {
-	return &persistence.GetNamespaceRequest{ID: id.String()}
 }
 
 // This is https://pkg.go.dev/golang.org/x/exp/maps#Values except that it works
