@@ -430,36 +430,6 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 	s.Equal(request, dlqTask)
 }
 
-func (s *taskProcessorSuite) TestCleanupReplicationTask_Noop() {
-	ackedTaskID := int64(12345)
-	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
-	err := s.mockShard.UpdateQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName, tasks.NewImmediateKey(ackedTaskID))
-	s.NoError(err)
-
-	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID
-	err = s.replicationTaskProcessor.cleanupReplicationTasks()
-	s.NoError(err)
-}
-
-func (s *taskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
-	ackedTaskID := int64(12345)
-	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
-	err := s.mockShard.UpdateQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName, tasks.NewImmediateKey(ackedTaskID))
-	s.NoError(err)
-
-	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID - 1
-	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(
-		gomock.Any(),
-		&persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:             s.shardID,
-			TaskCategory:        tasks.CategoryReplication,
-			ExclusiveMaxTaskKey: tasks.NewImmediateKey(ackedTaskID + 1),
-		},
-	).Return(nil)
-	err = s.replicationTaskProcessor.cleanupReplicationTasks()
-	s.NoError(err)
-}
-
 func (s *taskProcessorSuite) TestPaginationFn_Success_More() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()

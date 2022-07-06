@@ -237,6 +237,7 @@ func NewEngineWithShardContext(
 		eventSerializer,
 		replicationTaskFetcherFactory,
 		replicationTaskExecutorProvider,
+
 	)
 	return historyEngImpl
 }
