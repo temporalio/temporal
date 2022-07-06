@@ -318,10 +318,11 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 		namespaceFailoverNotificationVersion := nextNamespace.FailoverNotificationVersion()
 		namespaceActiveCluster := nextNamespace.ActiveClusterName()
 
-		// +1 in the following check as the version in shard is max notification version +1
-		// run action() when namespaceFailoverNotificationVersion+1 == shardNotificationVersion
+		// +1 in the following check as the version in shard is max notification version +1.
+		// Need to run action() when namespaceFailoverNotificationVersion+1 == shardNotificationVersion
 		// as we don't know if the failover queue execution for that notification version is
 		// completed or not.
+		//
 		// NOTE: theoretically we need to get rid of the check on shardNotificationVersion, as
 		// we have no idea if the failover queue for any notification version below that is completed
 		// or not. However, removing that will cause more load upon shard reload.
@@ -367,10 +368,10 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			// since we don't know if the previous failover queue processing has finished or not
 			// 2. We can return when newNotificationVersion < shardNotificationVersion. But the check
 			// is basically the same as the check in failover predicate. Because
-			// failover notification version <= NotificationVersion,
-			// there's no notification version that can make
+			// failoverNotificationVersion + 1 <= NotificationVersion + 1 = newNotificationVersion,
+			// there's no notification version can make
 			// newNotificationVersion < shardNotificationVersion and
-			// failoverNotificationVersion >= shardNotificationVersion are true at the same time
+			// failoverNotificationVersion + 1 >= shardNotificationVersion are true at the same time
 			// Meaning if the check decides to return, no namespace will pass the failover predicate.
 
 			failoverNamespaceIDs := map[string]struct{}{}
