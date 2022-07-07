@@ -321,7 +321,7 @@ func (s *TestBase) Publish(
 	retryPolicy.SetBackoffCoefficient(1.5)
 	retryPolicy.SetMaximumAttempts(5)
 
-	return backoff.Retry(
+	return backoff.ThrottleRetry(
 		func() error {
 			return s.NamespaceReplicationQueue.Publish(ctx, message)
 		},
@@ -370,7 +370,7 @@ func (s *TestBase) PublishToNamespaceDLQ(
 	retryPolicy.SetBackoffCoefficient(1.5)
 	retryPolicy.SetMaximumAttempts(5)
 
-	return backoff.RetryContext(
+	return backoff.ThrottleRetryContext(
 		ctx,
 		func(ctx context.Context) error {
 			return s.NamespaceReplicationQueue.PublishToDLQ(ctx, message)

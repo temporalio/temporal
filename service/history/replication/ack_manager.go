@@ -307,13 +307,13 @@ func (p *ackMgrImpl) taskInfoToTask(
 	task tasks.Task,
 ) (*replicationspb.ReplicationTask, error) {
 	var replicationTask *replicationspb.ReplicationTask
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		replicationTask, err = p.toReplicationTask(ctx, task)
 		return err
 	}
 
-	if err := backoff.Retry(op, p.retryPolicy, common.IsPersistenceTransientError); err != nil {
+	if err := backoff.ThrottleRetryContext(ctx, op, p.retryPolicy, common.IsPersistenceTransientError); err != nil {
 		return nil, err
 	}
 	return replicationTask, nil

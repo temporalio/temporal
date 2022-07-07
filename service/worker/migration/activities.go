@@ -254,7 +254,7 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, wKey d
 		return err
 	}
 
-	err := backoff.RetryContext(ctx, op, historyServiceRetryPolicy, common.IsServiceTransientError)
+	err := backoff.ThrottleRetryContext(ctx, op, historyServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			// ignore NotFound error

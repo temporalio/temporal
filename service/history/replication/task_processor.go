@@ -341,7 +341,7 @@ func (p *taskProcessorImpl) handleReplicationTask(
 		p.emitTaskMetrics(scope, err)
 		return err
 	}
-	return backoff.Retry(operation, p.taskRetryPolicy, p.isRetryableError)
+	return backoff.ThrottleRetry(operation, p.taskRetryPolicy, p.isRetryableError)
 }
 
 func (p *taskProcessorImpl) handleReplicationDLQTask(
@@ -366,7 +366,7 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 		float64(request.TaskInfo.GetTaskId()),
 	)
 	// The following is guaranteed to success or retry forever until processor is shutdown.
-	return backoff.Retry(func() error {
+	return backoff.ThrottleRetry(func() error {
 		err := p.shard.GetExecutionManager().PutReplicationTaskToDLQ(context.TODO(), request)
 		if err != nil {
 			p.logger.Error("failed to enqueue replication task to DLQ", tag.Error(err))

@@ -172,7 +172,7 @@ func (s *Scanner) startWorkflowWithRetry(
 	policy := backoff.NewExponentialRetryPolicy(time.Second)
 	policy.SetMaximumInterval(time.Minute)
 	policy.SetExpirationInterval(backoff.NoInterval)
-	err := backoff.Retry(func() error {
+	err := backoff.ThrottleRetry(func() error {
 		return s.startWorkflow(s.context.sdkSystemClient, options, workflowType, workflowArgs...)
 	}, policy, func(err error) bool {
 		return true

@@ -903,12 +903,12 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		PollRequest:       pollReq,
 	}
 	var resp *historyservice.RecordWorkflowTaskStartedResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = e.historyService.RecordWorkflowTaskStarted(ctx, request)
 		return err
 	}
-	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
+	err := backoff.ThrottleRetryContext(ctx, op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
 		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerrors.TaskAlreadyStarted:
 			return false
@@ -933,12 +933,12 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		PollRequest:       pollReq,
 	}
 	var resp *historyservice.RecordActivityTaskStartedResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = e.historyService.RecordActivityTaskStarted(ctx, request)
 		return err
 	}
-	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
+	err := backoff.ThrottleRetryContext(ctx, op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
 		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerrors.TaskAlreadyStarted:
 			return false

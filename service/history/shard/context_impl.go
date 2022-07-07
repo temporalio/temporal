@@ -1780,7 +1780,7 @@ func (s *ContextImpl) acquireShard() {
 		return nil
 	}
 
-	err := backoff.Retry(op, policy, common.IsPersistenceTransientError)
+	err := backoff.ThrottleRetry(op, policy, common.IsPersistenceTransientError)
 	if err == errStoppingContext {
 		// State changed since this goroutine started, exit silently.
 		return

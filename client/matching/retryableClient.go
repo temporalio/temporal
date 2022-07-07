@@ -56,13 +56,13 @@ func (c *retryableClient) AddActivityTask(
 	opts ...grpc.CallOption) (*matchingservice.AddActivityTaskResponse, error) {
 
 	var resp *matchingservice.AddActivityTaskResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.AddActivityTask(ctx, addRequest, opts...)
 		return err
 	}
 
-	err := backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
 
@@ -72,13 +72,13 @@ func (c *retryableClient) AddWorkflowTask(
 	opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
 
 	var resp *matchingservice.AddWorkflowTaskResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.AddWorkflowTask(ctx, addRequest, opts...)
 		return err
 	}
 
-	err := backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
 
@@ -88,13 +88,13 @@ func (c *retryableClient) PollActivityTaskQueue(
 	opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
 
 	var resp *matchingservice.PollActivityTaskQueueResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.PollActivityTaskQueue(ctx, pollRequest, opts...)
 		return err
 	}
 
-	err := backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
 
@@ -104,13 +104,13 @@ func (c *retryableClient) PollWorkflowTaskQueue(
 	opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 
 	var resp *matchingservice.PollWorkflowTaskQueueResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.PollWorkflowTaskQueue(ctx, pollRequest, opts...)
 		return err
 	}
 
-	err := backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
 
@@ -120,13 +120,13 @@ func (c *retryableClient) QueryWorkflow(
 	opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
 
 	var resp *matchingservice.QueryWorkflowResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.QueryWorkflow(ctx, queryRequest, opts...)
 		return err
 	}
 
-	err := backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
 
@@ -136,13 +136,13 @@ func (c *retryableClient) RespondQueryTaskCompleted(
 	opts ...grpc.CallOption) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
 
 	var resp *matchingservice.RespondQueryTaskCompletedResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.RespondQueryTaskCompleted(ctx, request, opts...)
 		return err
 	}
 
-	err := backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
 
@@ -152,13 +152,13 @@ func (c *retryableClient) CancelOutstandingPoll(
 	opts ...grpc.CallOption) (*matchingservice.CancelOutstandingPollResponse, error) {
 
 	var resp *matchingservice.CancelOutstandingPollResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.CancelOutstandingPoll(ctx, request, opts...)
 		return err
 	}
 
-	err := backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
 
@@ -168,13 +168,13 @@ func (c *retryableClient) DescribeTaskQueue(
 	opts ...grpc.CallOption) (*matchingservice.DescribeTaskQueueResponse, error) {
 
 	var resp *matchingservice.DescribeTaskQueueResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.DescribeTaskQueue(ctx, request, opts...)
 		return err
 	}
 
-	err := backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
 
@@ -184,12 +184,12 @@ func (c *retryableClient) ListTaskQueuePartitions(
 	opts ...grpc.CallOption) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 
 	var resp *matchingservice.ListTaskQueuePartitionsResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.ListTaskQueuePartitions(ctx, request, opts...)
 		return err
 	}
 
-	err := backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
