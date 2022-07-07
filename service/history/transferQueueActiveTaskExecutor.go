@@ -1237,7 +1237,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 		return err
 	}
 
-	err := backoff.RetryContext(
+	err := backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		workflow.PersistenceOperationRetryPolicy,
@@ -1281,7 +1281,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 		return err
 	}
 
-	return backoff.RetryContext(
+	return backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		workflow.PersistenceOperationRetryPolicy,
@@ -1339,7 +1339,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 		return err
 	}
 
-	if err = backoff.RetryContext(
+	if err = backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		workflow.PersistenceOperationRetryPolicy,

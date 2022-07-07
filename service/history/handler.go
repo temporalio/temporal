@@ -1101,7 +1101,7 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 	}
 
 	var resp *historyservice.QueryWorkflowResponse
-	err2 := backoff.RetryContext(ctx, func(ctx context.Context) error {
+	err2 := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
 		var err error
 		resp, err = engine.QueryWorkflow(ctx, request)
 		return err

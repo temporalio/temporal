@@ -131,7 +131,7 @@ func (a *queueAckMgrImpl) readQueueTasks() ([]queues.Executable, bool, error) {
 		return err
 	}
 
-	err := backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	err := backoff.ThrottleRetry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		return nil, false, err
 	}

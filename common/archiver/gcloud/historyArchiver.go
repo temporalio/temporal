@@ -315,7 +315,7 @@ func (h *historyArchiver) validateURI(URI archiver.URI) (err error) {
 
 func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIterator) (*archiverspb.HistoryBlob, error) {
 	historyBlob, err := historyIterator.Next()
-	op := func() error {
+	op := func(_ context.Context) error {
 		historyBlob, err = historyIterator.Next()
 		return err
 	}
@@ -326,7 +326,7 @@ func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIte
 		if contextExpired(ctx) {
 			return nil, archiver.ErrContextTimeout
 		}
-		err = backoff.Retry(op, common.CreatePersistenceRetryPolicy(), common.IsPersistenceTransientError)
+		err = backoff.ThrottleRetryContext(ctx, op, common.CreatePersistenceRetryPolicy(), common.IsPersistenceTransientError)
 	}
 	return historyBlob, nil
 }

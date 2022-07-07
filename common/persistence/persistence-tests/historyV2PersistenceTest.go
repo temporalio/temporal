@@ -726,7 +726,7 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 		return err
 	}
 
-	return backoff.Retry(op, historyTestRetryPolicy, isConditionFail)
+	return backoff.ThrottleRetry(op, historyTestRetryPolicy, isConditionFail)
 }
 
 // persistence helper
@@ -822,7 +822,7 @@ func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*historypb.Hi
 		return err
 	}
 
-	err := backoff.Retry(op, historyTestRetryPolicy, isConditionFail)
+	err := backoff.ThrottleRetry(op, historyTestRetryPolicy, isConditionFail)
 	if err != nil {
 		return err
 	}
@@ -850,6 +850,6 @@ func (s *HistoryV2PersistenceSuite) fork(forkBranch []byte, forkNodeID int64) ([
 		return err
 	}
 
-	err := backoff.Retry(op, historyTestRetryPolicy, isConditionFail)
+	err := backoff.ThrottleRetry(op, historyTestRetryPolicy, isConditionFail)
 	return bi, err
 }

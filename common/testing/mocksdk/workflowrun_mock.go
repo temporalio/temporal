@@ -33,7 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	client "go.temporal.io/sdk/client"
+	internal "go.temporal.io/sdk/internal"
 )
 
 // MockWorkflowRun is a mock of WorkflowRun interface.
@@ -102,7 +102,7 @@ func (mr *MockWorkflowRunMockRecorder) GetRunID() *gomock.Call {
 }
 
 // GetWithOptions mocks base method.
-func (m *MockWorkflowRun) GetWithOptions(arg0 context.Context, arg1 interface{}, arg2 client.WorkflowRunGetOptions) error {
+func (m *MockWorkflowRun) GetWithOptions(arg0 context.Context, arg1 interface{}, arg2 internal.WorkflowRunGetOptions) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWithOptions", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)

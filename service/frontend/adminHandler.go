@@ -1219,7 +1219,7 @@ func (adh *AdminHandler) GetDLQMessages(
 
 	var tasks []*replicationspb.ReplicationTask
 	var token []byte
-	var op func() error
+	var op func(ctx context.Context) error
 	switch request.GetType() {
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.historyClient.GetDLQMessages(ctx, &historyservice.GetDLQMessagesRequest{
@@ -1241,7 +1241,7 @@ func (adh *AdminHandler) GetDLQMessages(
 			NextPageToken:    resp.GetNextPageToken(),
 		}, err
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
-		op = func() error {
+		op = func(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -1258,7 +1258,7 @@ func (adh *AdminHandler) GetDLQMessages(
 	default:
 		return nil, adh.error(errDLQTypeIsNotSupported, scope)
 	}
-	retErr = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	retErr = backoff.ThrottleRetryContext(ctx, op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if retErr != nil {
 		return nil, adh.error(retErr, scope)
 	}
@@ -1287,7 +1287,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 		request.InclusiveEndMessageId = common.EndMessageID
 	}
 
-	var op func() error
+	var op func(ctx context.Context) error
 	switch request.GetType() {
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.historyClient.PurgeDLQMessages(ctx, &historyservice.PurgeDLQMessagesRequest{
@@ -1303,7 +1303,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 
 		return &adminservice.PurgeDLQMessagesResponse{}, err
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
-		op = func() error {
+		op = func(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -1314,7 +1314,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 	default:
 		return nil, adh.error(errDLQTypeIsNotSupported, scope)
 	}
-	err = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	err = backoff.ThrottleRetryContext(ctx, op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
@@ -1341,7 +1341,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	}
 
 	var token []byte
-	var op func() error
+	var op func(ctx context.Context) error
 	switch request.GetType() {
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.historyClient.MergeDLQMessages(ctx, &historyservice.MergeDLQMessagesRequest{
@@ -1360,8 +1360,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 			NextPageToken: request.GetNextPageToken(),
 		}, nil
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
-
-		op = func() error {
+		op = func(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -1379,7 +1378,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	default:
 		return nil, adh.error(errDLQTypeIsNotSupported, scope)
 	}
-	err = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	err = backoff.ThrottleRetryContext(ctx, op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
