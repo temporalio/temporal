@@ -160,14 +160,14 @@ func RetryContext(
 	return ctx.Err()
 }
 
-// ThrottleRetry is a resource awawe version of Retry.
+// ThrottleRetry is a resource aware version of Retry.
 // Resource exhausted error will be retried using a different throttle retry policy, instead of the specified one.
 func ThrottleRetry(operation Operation, policy RetryPolicy, isRetryable IsRetryable) error {
 	ctxOp := func(context.Context) error { return operation() }
 	return ThrottleRetryContext(context.Background(), ctxOp, policy, isRetryable)
 }
 
-// ThrottleRetryContext is a context and resource awawe version of Retry.
+// ThrottleRetryContext is a context and resource aware version of Retry.
 // Context timeout/cancellation errors are never retried, regardless of IsRetryable.
 // Resource exhausted error will be retried using a different throttle retry policy, instead of the specified one.
 // TODO: allow customizing throttle retry policy and what kind of error are categorized as throttle error.
