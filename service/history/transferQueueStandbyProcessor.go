@@ -86,9 +86,13 @@ func newTransferQueueStandbyProcessor(
 		case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 			// no reset needed for standby
 			return false
-		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
-			enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION:
+		case enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION:
 			return true
+		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
+			if shard.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival() {
+				return true
+			}
+			fallthrough
 		default:
 			return taskAllocator.verifyStandbyTask(clusterName, namespace.ID(task.GetNamespaceID()), task)
 		}
