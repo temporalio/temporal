@@ -95,8 +95,8 @@ func NewAckManager(
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 
-	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	retryPolicy.SetMaximumAttempts(10)
+	retryPolicy := backoff.NewExponentialRetryPolicy(200 * time.Millisecond)
+	retryPolicy.SetMaximumAttempts(5)
 	retryPolicy.SetBackoffCoefficient(1)
 
 	return &ackMgrImpl{
