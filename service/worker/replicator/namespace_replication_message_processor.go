@@ -163,7 +163,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 
 	for taskIndex := range response.Messages.ReplicationTasks {
 		task := response.Messages.ReplicationTasks[taskIndex]
-		err := backoff.Retry(func() error {
+		err := backoff.ThrottleRetry(func() error {
 			return p.handleNamespaceReplicationTask(task)
 		}, p.retryPolicy, isTransientRetryableError)
 
@@ -171,7 +171,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 			p.metricsClient.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorFailures)
 			p.logger.Error("Failed to apply namespace replication tasks", tag.Error(err))
 
-			dlqErr := backoff.Retry(func() error {
+			dlqErr := backoff.ThrottleRetry(func() error {
 				return p.putNamespaceReplicationTaskToDLQ(task)
 			}, p.retryPolicy, isTransientRetryableError)
 			if dlqErr != nil {

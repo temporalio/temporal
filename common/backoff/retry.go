@@ -28,6 +28,18 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
+)
+
+const (
+	throttleRetryInitialInterval    = time.Second
+	throttleRetryMaxInterval        = 10 * time.Second
+	throttleRetryExpirationInterval = NoInterval
+)
+
+var (
+	throttleRetryPolicy = createThrottleRetryPolicy()
 )
 
 type (
@@ -100,6 +112,7 @@ func NewConcurrentRetrier(retryPolicy RetryPolicy) *ConcurrentRetrier {
 // Retry function can be used to wrap any call with retry logic using the passed
 // in policy. A `nil` IsRetryable predicate will retry all errors. There is a
 // context-aware version of this function: RetryContext.
+// Deprecated: Use ThrottleRetry
 func Retry(operation Operation, policy RetryPolicy, isRetryable IsRetryable) error {
 	ctxOp := func(context.Context) error { return operation() }
 	return RetryContext(context.Background(), ctxOp, policy, isRetryable)
@@ -107,6 +120,7 @@ func Retry(operation Operation, policy RetryPolicy, isRetryable IsRetryable) err
 
 // RetryContext is a context-aware version of Retry. Context
 // timeout/cancellation errors are never retried, regardless of IsRetryable.
+// Deprecated: use ThrottleRetryContext,
 func RetryContext(
 	ctx context.Context,
 	operation OperationCtx,
@@ -141,9 +155,65 @@ func RetryContext(
 		case <-t.C:
 		case <-ctx.Done():
 			t.Stop()
-			break
 		}
 	}
+	return ctx.Err()
+}
+
+// ThrottleRetry is a resource aware version of Retry.
+// Resource exhausted error will be retried using a different throttle retry policy, instead of the specified one.
+func ThrottleRetry(operation Operation, policy RetryPolicy, isRetryable IsRetryable) error {
+	ctxOp := func(context.Context) error { return operation() }
+	return ThrottleRetryContext(context.Background(), ctxOp, policy, isRetryable)
+}
+
+// ThrottleRetryContext is a context and resource aware version of Retry.
+// Context timeout/cancellation errors are never retried, regardless of IsRetryable.
+// Resource exhausted error will be retried using a different throttle retry policy, instead of the specified one.
+// TODO: allow customizing throttle retry policy and what kind of error are categorized as throttle error.
+func ThrottleRetryContext(
+	ctx context.Context,
+	operation OperationCtx,
+	policy RetryPolicy,
+	isRetryable IsRetryable,
+) error {
+	var err error
+	var next time.Duration
+
+	if isRetryable == nil {
+		isRetryable = func(error) bool { return true }
+	}
+
+	r := NewRetrier(policy, SystemClock)
+	t := NewRetrier(throttleRetryPolicy, SystemClock)
+	for ctx.Err() == nil {
+		if err = operation(ctx); err == nil {
+			return nil
+		}
+
+		if next = r.NextBackOff(); next == done {
+			return err
+		}
+
+		if err == ctx.Err() || !isRetryable(err) {
+			return err
+		}
+
+		if _, ok := err.(*serviceerror.ResourceExhausted); ok {
+			throttleBackoff := t.NextBackOff()
+			if throttleBackoff > next {
+				next = throttleBackoff
+			}
+		}
+
+		timer := time.NewTimer(next)
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			timer.Stop()
+		}
+	}
+
 	return ctx.Err()
 }
 
@@ -158,4 +228,12 @@ func IgnoreErrors(errorsToExclude []error) func(error) bool {
 
 		return true
 	}
+}
+
+func createThrottleRetryPolicy() RetryPolicy {
+	policy := NewExponentialRetryPolicy(throttleRetryInitialInterval)
+	policy.SetMaximumInterval(throttleRetryMaxInterval)
+	policy.SetExpirationInterval(throttleRetryExpirationInterval)
+
+	return policy
 }

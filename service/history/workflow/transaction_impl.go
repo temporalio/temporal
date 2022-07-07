@@ -332,7 +332,7 @@ func appendHistoryV2EventsWithRetry(
 		return err
 	}
 
-	err := backoff.RetryContext(
+	err := backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
@@ -354,7 +354,7 @@ func createWorkflowExecutionWithRetry(
 		return err
 	}
 
-	err := backoff.RetryContext(
+	err := backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
@@ -404,7 +404,7 @@ func conflictResolveWorkflowExecutionWithRetry(
 		return err
 	}
 
-	err := backoff.RetryContext(
+	err := backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
@@ -464,7 +464,7 @@ func getWorkflowExecutionWithRetry(
 		return err
 	}
 
-	err := backoff.RetryContext(
+	err := backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
@@ -511,7 +511,7 @@ func updateWorkflowExecutionWithRetry(
 		return err
 	}
 
-	err = backoff.RetryContext(
+	err = backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
@@ -570,7 +570,7 @@ func setWorkflowExecutionWithRetry(
 		return err
 	}
 
-	err = backoff.RetryContext(
+	err = backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
