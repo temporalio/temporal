@@ -117,10 +117,6 @@ type (
 	}
 )
 
-const (
-	defaultScheduleToStartTimeout = 111
-)
-
 // NewTestBaseWithCassandra returns a persistence test base backed by cassandra datastore
 func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
@@ -232,9 +228,8 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.ReadLevel = 0
 	s.ReplicationReadLevel = 0
 	s.ShardInfo = &persistencespb.ShardInfo{
-		ShardId:        shardID,
-		RangeId:        0,
-		QueueAckLevels: make(map[int32]*persistencespb.QueueAckLevel), // TODO: is this needed?
+		ShardId: shardID,
+		RangeId: 0,
 	}
 
 	s.TaskIDGenerator = &TestTransferTaskIDGenerator{}
@@ -453,8 +448,5 @@ func GenerateRandomDBName(n int) string {
 
 func timeComparator(t1, t2 time.Time, timeTolerance time.Duration) bool {
 	diff := t2.Sub(t1)
-	if diff.Nanoseconds() <= timeTolerance.Nanoseconds() {
-		return true
-	}
-	return false
+	return diff.Nanoseconds() <= timeTolerance.Nanoseconds()
 }

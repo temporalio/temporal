@@ -28,11 +28,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
+	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 
 	"github.com/golang/mock/gomock"
@@ -151,31 +153,8 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 	numShards := int32(8)
 	s.config.NumberOfShards = numShards
 
-	replicationAck := int64(201)
-	currentClusterTransferAck := int64(210)
-	alternativeClusterTransferAck := int64(320)
-	currentClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-100)
-	alternativeClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-200)
-	queueAckLevels := map[int32]*persistencespb.QueueAckLevel{
-		tasks.CategoryTransfer.ID(): {
-			AckLevel: currentClusterTransferAck,
-			ClusterAckLevel: map[string]int64{
-				cluster.TestCurrentClusterName:     currentClusterTransferAck,
-				cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
-			},
-		},
-		tasks.CategoryTimer.ID(): {
-			AckLevel: currentClusterTimerAck.UnixNano(),
-			ClusterAckLevel: map[string]int64{
-				cluster.TestCurrentClusterName:     currentClusterTimerAck.UnixNano(),
-				cluster.TestAlternativeClusterName: alternativeClusterTimerAck.UnixNano(),
-			},
-		},
-		tasks.CategoryReplication.ID(): {
-			AckLevel:        replicationAck,
-			ClusterAckLevel: map[string]int64{},
-		},
-	}
+	queueAckLevels := s.queueAckLevels()
+	queueStates := s.queueStates()
 
 	var myShards []int32
 	for shardID := int32(1); shardID <= numShards; shardID++ {
@@ -193,6 +172,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 						RangeId:                5,
 						ReplicationDlqAckLevel: map[string]int64{},
 						QueueAckLevels:         queueAckLevels,
+						QueueStates:            queueStates,
 					},
 				}, nil)
 			s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), &persistence.UpdateShardRequest{
@@ -203,6 +183,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 					StolenSinceRenew:       1,
 					ReplicationDlqAckLevel: map[string]int64{},
 					QueueAckLevels:         queueAckLevels,
+					QueueStates:            queueStates,
 				},
 				PreviousRangeID: 5,
 			}).Return(nil)
@@ -236,31 +217,8 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 		return 10
 	}
 
-	replicationAck := int64(201)
-	currentClusterTransferAck := int64(210)
-	alternativeClusterTransferAck := int64(320)
-	currentClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-100)
-	alternativeClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-200)
-	queueAckLevels := map[int32]*persistencespb.QueueAckLevel{
-		tasks.CategoryTransfer.ID(): {
-			AckLevel: currentClusterTransferAck,
-			ClusterAckLevel: map[string]int64{
-				cluster.TestCurrentClusterName:     currentClusterTransferAck,
-				cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
-			},
-		},
-		tasks.CategoryTimer.ID(): {
-			AckLevel: currentClusterTimerAck.UnixNano(),
-			ClusterAckLevel: map[string]int64{
-				cluster.TestCurrentClusterName:     currentClusterTimerAck.UnixNano(),
-				cluster.TestAlternativeClusterName: alternativeClusterTimerAck.UnixNano(),
-			},
-		},
-		tasks.CategoryReplication.ID(): {
-			AckLevel:        replicationAck,
-			ClusterAckLevel: map[string]int64{},
-		},
-	}
+	queueAckLevels := s.queueAckLevels()
+	queueStates := s.queueStates()
 
 	var myShards []int32
 	for shardID := int32(1); shardID <= numShards; shardID++ {
@@ -278,6 +236,7 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 						RangeId:                5,
 						ReplicationDlqAckLevel: map[string]int64{},
 						QueueAckLevels:         queueAckLevels,
+						QueueStates:            queueStates,
 					},
 				}, nil)
 			s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), &persistence.UpdateShardRequest{
@@ -288,6 +247,7 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 					StolenSinceRenew:       1,
 					ReplicationDlqAckLevel: map[string]int64{},
 					QueueAckLevels:         queueAckLevels,
+					QueueStates:            queueStates,
 				},
 				PreviousRangeID: 5,
 			}).Return(nil)
@@ -334,31 +294,8 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 	numShards := int32(2)
 	s.config.NumberOfShards = numShards
 
-	replicationAck := int64(201)
-	currentClusterTransferAck := int64(210)
-	alternativeClusterTransferAck := int64(320)
-	currentClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-100)
-	alternativeClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-200)
-	queueAckLevels := map[int32]*persistencespb.QueueAckLevel{
-		tasks.CategoryTransfer.ID(): {
-			AckLevel: currentClusterTransferAck,
-			ClusterAckLevel: map[string]int64{
-				cluster.TestCurrentClusterName:     currentClusterTransferAck,
-				cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
-			},
-		},
-		tasks.CategoryTimer.ID(): {
-			AckLevel: currentClusterTimerAck.UnixNano(),
-			ClusterAckLevel: map[string]int64{
-				cluster.TestCurrentClusterName:     currentClusterTimerAck.UnixNano(),
-				cluster.TestAlternativeClusterName: alternativeClusterTimerAck.UnixNano(),
-			},
-		},
-		tasks.CategoryReplication.ID(): {
-			AckLevel:        replicationAck,
-			ClusterAckLevel: map[string]int64{},
-		},
-	}
+	queueAckLevels := s.queueAckLevels()
+	queueStates := s.queueStates()
 
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		s.mockHistoryEngine.EXPECT().Start().Return()
@@ -372,6 +309,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 					RangeId:                5,
 					ReplicationDlqAckLevel: map[string]int64{},
 					QueueAckLevels:         queueAckLevels,
+					QueueStates:            queueStates,
 				},
 			}, nil)
 		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), &persistence.UpdateShardRequest{
@@ -382,6 +320,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 				StolenSinceRenew:       1,
 				ReplicationDlqAckLevel: map[string]int64{},
 				QueueAckLevels:         queueAckLevels,
+				QueueStates:            queueStates,
 			},
 			PreviousRangeID: 5,
 		}).Return(nil)
@@ -408,31 +347,8 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 	numShards := int32(2)
 	s.config.NumberOfShards = numShards
 
-	replicationAck := int64(201)
-	currentClusterTransferAck := int64(210)
-	alternativeClusterTransferAck := int64(320)
-	currentClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-100)
-	alternativeClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-200)
-	queueAckLevels := map[int32]*persistencespb.QueueAckLevel{
-		tasks.CategoryTransfer.ID(): {
-			AckLevel: currentClusterTransferAck,
-			ClusterAckLevel: map[string]int64{
-				cluster.TestCurrentClusterName:     currentClusterTransferAck,
-				cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
-			},
-		},
-		tasks.CategoryTimer.ID(): {
-			AckLevel: currentClusterTimerAck.UnixNano(),
-			ClusterAckLevel: map[string]int64{
-				cluster.TestCurrentClusterName:     currentClusterTimerAck.UnixNano(),
-				cluster.TestAlternativeClusterName: alternativeClusterTimerAck.UnixNano(),
-			},
-		},
-		tasks.CategoryReplication.ID(): {
-			AckLevel:        replicationAck,
-			ClusterAckLevel: map[string]int64{},
-		},
-	}
+	queueAckLevels := s.queueAckLevels()
+	queueStates := s.queueStates()
 
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		s.mockHistoryEngine.EXPECT().Start().Return()
@@ -446,6 +362,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 					RangeId:                5,
 					ReplicationDlqAckLevel: map[string]int64{},
 					QueueAckLevels:         queueAckLevels,
+					QueueStates:            queueStates,
 				},
 			}, nil)
 		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), &persistence.UpdateShardRequest{
@@ -456,6 +373,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 				StolenSinceRenew:       1,
 				ReplicationDlqAckLevel: map[string]int64{},
 				QueueAckLevels:         queueAckLevels,
+				QueueStates:            queueStates,
 			},
 			PreviousRangeID: 5,
 		}).Return(nil)
@@ -661,12 +579,50 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 	required bool,
 ) {
 
+	queueAckLevels := s.queueAckLevels()
+	queueStates := s.queueStates()
+
+	minTimes := 0
+	if required {
+		minTimes = 1
+	}
+
+	// s.mockResource.ExecutionMgr.On("Close").Return()
+	mockEngine.EXPECT().Start().MinTimes(minTimes)
+	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2).MinTimes(minTimes)
+	s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).Return(mockEngine).MinTimes(minTimes)
+	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
+		&persistence.GetOrCreateShardResponse{
+			ShardInfo: &persistencespb.ShardInfo{
+				ShardId:                shardID,
+				Owner:                  s.hostInfo.Identity(),
+				RangeId:                currentRangeID,
+				ReplicationDlqAckLevel: map[string]int64{},
+				QueueAckLevels:         queueAckLevels,
+				QueueStates:            queueStates,
+			},
+		}, nil).MinTimes(minTimes)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), &persistence.UpdateShardRequest{
+		ShardInfo: &persistencespb.ShardInfo{
+			ShardId:                shardID,
+			Owner:                  s.hostInfo.Identity(),
+			RangeId:                newRangeID,
+			StolenSinceRenew:       1,
+			ReplicationDlqAckLevel: map[string]int64{},
+			QueueAckLevels:         queueAckLevels,
+			QueueStates:            queueStates,
+		},
+		PreviousRangeID: currentRangeID,
+	}).Return(nil).MinTimes(minTimes)
+}
+
+func (s *controllerSuite) queueAckLevels() map[int32]*persistencespb.QueueAckLevel {
 	replicationAck := int64(201)
 	currentClusterTransferAck := int64(210)
 	alternativeClusterTransferAck := int64(320)
 	currentClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-100)
 	alternativeClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-200)
-	queueAckLevels := map[int32]*persistencespb.QueueAckLevel{
+	return map[int32]*persistencespb.QueueAckLevel{
 		tasks.CategoryTransfer.ID(): {
 			AckLevel: currentClusterTransferAck,
 			ClusterAckLevel: map[string]int64{
@@ -686,37 +642,56 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 			ClusterAckLevel: map[string]int64{},
 		},
 	}
+}
 
-	minTimes := 0
-	if required {
-		minTimes = 1
-	}
-
-	// s.mockResource.ExecutionMgr.On("Close").Return()
-	mockEngine.EXPECT().Start().MinTimes(minTimes)
-	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2).MinTimes(minTimes)
-	s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).Return(mockEngine).MinTimes(minTimes)
-	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
-		&persistence.GetOrCreateShardResponse{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:                shardID,
-				Owner:                  s.hostInfo.Identity(),
-				RangeId:                currentRangeID,
-				ReplicationDlqAckLevel: map[string]int64{},
-				QueueAckLevels:         queueAckLevels,
+func (s *controllerSuite) queueStates() map[int32]*persistencespb.QueueState {
+	return map[int32]*persistencespb.QueueState{
+		tasks.CategoryTransfer.ID(): {
+			ReaderStates: nil,
+			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+				FireTime: &tasks.DefaultFireTime,
+				TaskId:   rand.Int63(),
 			},
-		}, nil).MinTimes(minTimes)
-	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), &persistence.UpdateShardRequest{
-		ShardInfo: &persistencespb.ShardInfo{
-			ShardId:                shardID,
-			Owner:                  s.hostInfo.Identity(),
-			RangeId:                newRangeID,
-			StolenSinceRenew:       1,
-			ReplicationDlqAckLevel: map[string]int64{},
-			QueueAckLevels:         queueAckLevels,
 		},
-		PreviousRangeID: currentRangeID,
-	}).Return(nil).MinTimes(minTimes)
+		tasks.CategoryTimer.ID(): {
+			ReaderStates: make(map[int32]*persistencespb.QueueReaderState),
+			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+				FireTime: timestamp.TimeNowPtrUtc(),
+				TaskId:   rand.Int63(),
+			},
+		},
+		tasks.CategoryReplication.ID(): {
+			ReaderStates: map[int32]*persistencespb.QueueReaderState{
+				0: {
+					Scopes: []*persistencespb.QueueSliceScope{
+						{
+							Range: &persistencespb.QueueSliceRange{
+								InclusiveMin: &persistencespb.TaskKey{
+									FireTime: &tasks.DefaultFireTime,
+									TaskId:   1000,
+								},
+								ExclusiveMax: &persistencespb.TaskKey{
+									FireTime: &tasks.DefaultFireTime,
+									TaskId:   2000,
+								},
+							},
+							Predicate: &persistencespb.Predicate{
+								PredicateType: enums.PREDICATE_TYPE_UNIVERSAL,
+								Attributes: &persistencespb.Predicate_UniversalPredicateAttributes{
+									UniversalPredicateAttributes: &persistencespb.UniversalPredicateAttributes{},
+								},
+							},
+						},
+					},
+				},
+				1: nil,
+			},
+			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+				FireTime: &tasks.DefaultFireTime,
+				TaskId:   3000,
+			},
+		},
+	}
 }
 
 // This is needed to avoid race conditions when using this matcher, since
