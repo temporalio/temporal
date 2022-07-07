@@ -35,7 +35,8 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	enums "go.temporal.io/api/enums/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
-	internal "go.temporal.io/sdk/internal"
+	client "go.temporal.io/sdk/client"
+	converter "go.temporal.io/sdk/converter"
 )
 
 // MockClient is a mock of Client interface.
@@ -76,10 +77,10 @@ func (mr *MockClientMockRecorder) CancelWorkflow(arg0, arg1, arg2 interface{}) *
 }
 
 // CheckHealth mocks base method.
-func (m *MockClient) CheckHealth(arg0 context.Context, arg1 *internal.CheckHealthRequest) (*internal.CheckHealthResponse, error) {
+func (m *MockClient) CheckHealth(arg0 context.Context, arg1 *client.CheckHealthRequest) (*client.CheckHealthResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckHealth", arg0, arg1)
-	ret0, _ := ret[0].(*internal.CheckHealthResponse)
+	ret0, _ := ret[0].(*client.CheckHealthResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -176,14 +177,14 @@ func (mr *MockClientMockRecorder) DescribeWorkflowExecution(arg0, arg1, arg2 int
 }
 
 // ExecuteWorkflow mocks base method.
-func (m *MockClient) ExecuteWorkflow(arg0 context.Context, arg1 internal.StartWorkflowOptions, arg2 interface{}, arg3 ...interface{}) (internal.WorkflowRun, error) {
+func (m *MockClient) ExecuteWorkflow(arg0 context.Context, arg1 client.StartWorkflowOptions, arg2 interface{}, arg3 ...interface{}) (client.WorkflowRun, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2}
 	for _, a := range arg3 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ExecuteWorkflow", varargs...)
-	ret0, _ := ret[0].(internal.WorkflowRun)
+	ret0, _ := ret[0].(client.WorkflowRun)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -211,10 +212,10 @@ func (mr *MockClientMockRecorder) GetSearchAttributes(arg0 interface{}) *gomock.
 }
 
 // GetWorkflow mocks base method.
-func (m *MockClient) GetWorkflow(arg0 context.Context, arg1, arg2 string) internal.WorkflowRun {
+func (m *MockClient) GetWorkflow(arg0 context.Context, arg1, arg2 string) client.WorkflowRun {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkflow", arg0, arg1, arg2)
-	ret0, _ := ret[0].(internal.WorkflowRun)
+	ret0, _ := ret[0].(client.WorkflowRun)
 	return ret0
 }
 
@@ -225,10 +226,10 @@ func (mr *MockClientMockRecorder) GetWorkflow(arg0, arg1, arg2 interface{}) *gom
 }
 
 // GetWorkflowHistory mocks base method.
-func (m *MockClient) GetWorkflowHistory(arg0 context.Context, arg1, arg2 string, arg3 bool, arg4 enums.HistoryEventFilterType) internal.HistoryEventIterator {
+func (m *MockClient) GetWorkflowHistory(arg0 context.Context, arg1, arg2 string, arg3 bool, arg4 enums.HistoryEventFilterType) client.HistoryEventIterator {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkflowHistory", arg0, arg1, arg2, arg3, arg4)
-	ret0, _ := ret[0].(internal.HistoryEventIterator)
+	ret0, _ := ret[0].(client.HistoryEventIterator)
 	return ret0
 }
 
@@ -319,10 +320,10 @@ func (mr *MockClientMockRecorder) QueryWorkflow(arg0, arg1, arg2, arg3 interface
 }
 
 // QueryWorkflowWithOptions mocks base method.
-func (m *MockClient) QueryWorkflowWithOptions(arg0 context.Context, arg1 *internal.QueryWorkflowWithOptionsRequest) (*internal.QueryWorkflowWithOptionsResponse, error) {
+func (m *MockClient) QueryWorkflowWithOptions(arg0 context.Context, arg1 *client.QueryWorkflowWithOptionsRequest) (*client.QueryWorkflowWithOptionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryWorkflowWithOptions", arg0, arg1)
-	ret0, _ := ret[0].(*internal.QueryWorkflowWithOptionsResponse)
+	ret0, _ := ret[0].(*client.QueryWorkflowWithOptionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -402,14 +403,14 @@ func (mr *MockClientMockRecorder) ScanWorkflow(arg0, arg1 interface{}) *gomock.C
 }
 
 // SignalWithStartWorkflow mocks base method.
-func (m *MockClient) SignalWithStartWorkflow(arg0 context.Context, arg1, arg2 string, arg3 interface{}, arg4 internal.StartWorkflowOptions, arg5 interface{}, arg6 ...interface{}) (internal.WorkflowRun, error) {
+func (m *MockClient) SignalWithStartWorkflow(arg0 context.Context, arg1, arg2 string, arg3 interface{}, arg4 client.StartWorkflowOptions, arg5 interface{}, arg6 ...interface{}) (client.WorkflowRun, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1, arg2, arg3, arg4, arg5}
 	for _, a := range arg6 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "SignalWithStartWorkflow", varargs...)
-	ret0, _ := ret[0].(internal.WorkflowRun)
+	ret0, _ := ret[0].(client.WorkflowRun)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
