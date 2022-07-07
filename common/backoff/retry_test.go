@@ -251,8 +251,8 @@ func (s *RetrySuite) TestThrottleRetryContext() {
 	s.Equal(&someError{}, err)
 	s.GreaterOrEqual(
 		time.Since(start),
-		throttleInitialInterval,
-		"Resource exhausted error should have a longer initial interval",
+		throttleInitialInterval/2, // due to jitter
+		"Resource exhausted error should use throttle retry policy",
 	)
 
 	// test if context timeout is respected
