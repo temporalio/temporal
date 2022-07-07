@@ -232,7 +232,7 @@ func (s *executableSuite) newTestExecutable(
 				tests.RunID,
 			),
 			tasks.CategoryTransfer,
-			time.Now(),
+			s.timeSource.Now(),
 		),
 		filter,
 		s.mockExecutor,

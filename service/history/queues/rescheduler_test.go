@@ -97,8 +97,10 @@ func (s *rescheudulerSuite) TestStartStop() {
 	}).Times(numTasks)
 
 	for i := 0; i != numTasks; i++ {
+		mockExecutable := NewMockExecutable(s.controller)
+		mockExecutable.EXPECT().State().Return(ctasks.TaskStatePending).Times(1)
 		rescheduler.Add(
-			NewMockExecutable(s.controller),
+			mockExecutable,
 			timeSource.Now().Add(time.Duration(rand.Int63n(300))*time.Millisecond),
 		)
 	}
