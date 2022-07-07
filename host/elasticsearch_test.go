@@ -1295,7 +1295,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 
 	time.Sleep(waitForESToSettle)
 
-	// verify upsert data is on ES
+	// verify search attributes are unset
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  int32(2),
@@ -1314,6 +1314,24 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 				verified = true
 				break
 			}
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.True(verified)
+
+	// verify query by unset search attribute
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  int32(2),
+		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running' and CustomTextField is null and CustomIntField is null`, wt),
+	}
+	verified = false
+	for i := 0; i < numOfRetry; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		if len(resp.GetExecutions()) == 1 {
+			verified = true
+			break
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}

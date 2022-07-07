@@ -64,6 +64,10 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap
 			continue
 		}
 
+		if saValue == nil {
+			continue
+		}
+
 		switch saTypedValue := saValue.(type) {
 		case string:
 			result[saName] = saTypedValue

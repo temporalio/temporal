@@ -53,15 +53,26 @@ func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface
 		t = enumspb.IndexedValueType(enumspb.IndexedValueType_value[string(value.Metadata[MetadataType])])
 	}
 
+	// Here are similar code sections for all types.
+	// At first, it tries to decode to pointer of actual type (i.e. `*string` for `string`).
+	// This is to ensure that `nil` values are decoded back as `nil` using `NilPayloadConverter`.
+	// If value is not `nil` but some value of expected type the cCode relies on the fact that
+	// search attributes are always encoded with `JsonPayloadConverter` which uses standard
+	// `json.Marshal`/`json.Unmarshal` which work fine with pointer types when decoding values.
+	// If decode to pointer fails, it tries to decode to array of the same type because
+	// search attributes support polymorphism: field of specific type may also have an array of that type.
+	// If resulting slice has zero length, it gets substitute with `nil` to treat nils and empty slices equally.
+	// If search attribute value is `nil`, it means that search attribute needs to be removed from the document.
+
 	switch t {
 	case enumspb.INDEXED_VALUE_TYPE_TEXT, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
-		// It tries first to decode to *string. This is to ensure that nil values
-		// are decoded as nil instead of the respective zero value. If the decoded
-		// value is not nil, then return the value instead of the pointer.
 		var val *string
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []string
 			err = payload.Decode(value, &listVal)
+			if len(listVal) == 0 {
+				return nil, err
+			}
 			return listVal, err
 		}
 		if val == nil {
@@ -73,6 +84,9 @@ func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []int64
 			err = payload.Decode(value, &listVal)
+			if len(listVal) == 0 {
+				return nil, err
+			}
 			return listVal, err
 		}
 		if val == nil {
@@ -84,6 +98,9 @@ func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []float64
 			err = payload.Decode(value, &listVal)
+			if len(listVal) == 0 {
+				return nil, err
+			}
 			return listVal, err
 		}
 		if val == nil {
@@ -95,6 +112,9 @@ func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []bool
 			err = payload.Decode(value, &listVal)
+			if len(listVal) == 0 {
+				return nil, err
+			}
 			return listVal, err
 		}
 		if val == nil {
@@ -106,6 +126,9 @@ func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []time.Time
 			err = payload.Decode(value, &listVal)
+			if len(listVal) == 0 {
+				return nil, err
+			}
 			return listVal, err
 		}
 		if val == nil {

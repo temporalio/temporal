@@ -145,7 +145,7 @@ func Test_Decode_Success(t *testing.T) {
 	assert.Equal(true, vals["key3"])
 	assert.Nil(vals["key4"])
 	assert.Equal([]string{"val2", "val3"}, vals["key5"])
-	assert.Equal([]string{}, vals["key6"])
+	assert.Nil(vals["key6"])
 
 	delete(sa.IndexedFields["key1"].Metadata, "type")
 	delete(sa.IndexedFields["key2"].Metadata, "type")
@@ -162,7 +162,7 @@ func Test_Decode_Success(t *testing.T) {
 	assert.Equal(true, vals["key3"])
 	assert.Nil(vals["key4"])
 	assert.Equal([]string{"val2", "val3"}, vals["key5"])
-	assert.Equal([]string{}, vals["key6"])
+	assert.Nil(vals["key6"])
 }
 
 func Test_Decode_NilMap(t *testing.T) {
@@ -193,7 +193,7 @@ func Test_Decode_NilMap(t *testing.T) {
 	assert.Equal(true, vals["key3"])
 	assert.Nil(vals["key4"])
 	assert.Equal([]string{"val2", "val3"}, vals["key5"])
-	assert.Equal([]string{}, vals["key6"])
+	assert.Nil(vals["key6"])
 }
 
 func Test_Decode_Error(t *testing.T) {
