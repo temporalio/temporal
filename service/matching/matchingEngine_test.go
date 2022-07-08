@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -1633,7 +1634,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	// wait until all tasks are read by the task pump and enqeued into the in-memory buffer
 	// at the end of this step, ackManager readLevel will also be equal to the buffer size
-	expectedBufSize := common.MinInt(cap(tlMgr.taskReader.taskBuffer), taskCount)
+	expectedBufSize := util.Min(cap(tlMgr.taskReader.taskBuffer), taskCount)
 	s.True(s.awaitCondition(func() bool { return len(tlMgr.taskReader.taskBuffer) == expectedBufSize }, time.Second))
 
 	// stop all goroutines that read / write tasks in the background
