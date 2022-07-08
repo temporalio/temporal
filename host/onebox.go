@@ -543,7 +543,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(workflow.NewTaskGeneratorProvider),
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
-			history.QueueProcessorModule,
+			history.QueueModule,
 			history.Module,
 			replication.Module,
 			fx.Populate(&historyService, &clientBean, &namespaceRegistry),

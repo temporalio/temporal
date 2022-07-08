@@ -47,22 +47,22 @@ import (
 	"go.temporal.io/server/service/worker/archiver"
 )
 
-var QueueProcessorModule = fx.Options(
+var QueueModule = fx.Options(
 	fx.Provide(
 		fx.Annotated{
-			Group:  queues.ProcessorFactoryFxGroup,
-			Target: NewTransferQueueProcessorFactory,
+			Group:  queues.FactoryFxGroup,
+			Target: NewTransferQueueFactory,
 		},
 		fx.Annotated{
-			Group:  queues.ProcessorFactoryFxGroup,
-			Target: NewTimerQueueProcessorFactory,
+			Group:  queues.FactoryFxGroup,
+			Target: NewTimerQueueFactory,
 		},
 		fx.Annotated{
-			Group:  queues.ProcessorFactoryFxGroup,
-			Target: NewVisibilityQueueProcessorFactory,
+			Group:  queues.FactoryFxGroup,
+			Target: NewVisibilityQueueFactory,
 		},
 	),
-	fx.Invoke(QueueProcessorFactoryLifetimeHooks),
+	fx.Invoke(QueueFactoryLifetimeHooks),
 )
 
 type (
@@ -76,7 +76,7 @@ type (
 		Logger            resource.SnTaggedLogger
 	}
 
-	transferQueueProcessorFactoryParams struct {
+	transferQueueFactoryParams struct {
 		fx.In
 
 		SchedulerParams
@@ -89,7 +89,7 @@ type (
 		MetricsHandler   metrics.MetricsHandler
 	}
 
-	timerQueueProcessorFactoryParams struct {
+	timerQueueFactoryParams struct {
 		fx.In
 
 		SchedulerParams
@@ -100,7 +100,7 @@ type (
 		MetricsHandler metrics.MetricsHandler
 	}
 
-	visibilityQueueProcessorFactoryParams struct {
+	visibilityQueueFactoryParams struct {
 		fx.In
 
 		SchedulerParams
@@ -109,36 +109,36 @@ type (
 		MetricsHandler metrics.MetricsHandler
 	}
 
-	queueProcessorFactoryBase struct {
+	queueFactoryBase struct {
 		scheduler       queues.Scheduler
 		hostRateLimiter quotas.RateLimiter
 	}
 
-	transferQueueProcessorFactory struct {
-		transferQueueProcessorFactoryParams
-		queueProcessorFactoryBase
+	transferQueueFactory struct {
+		transferQueueFactoryParams
+		queueFactoryBase
 	}
 
-	timerQueueProcessorFactory struct {
-		timerQueueProcessorFactoryParams
-		queueProcessorFactoryBase
+	timerQueueFactory struct {
+		timerQueueFactoryParams
+		queueFactoryBase
 	}
 
-	visibilityQueueProcessorFactory struct {
-		visibilityQueueProcessorFactoryParams
-		queueProcessorFactoryBase
+	visibilityQueueFactory struct {
+		visibilityQueueFactoryParams
+		queueFactoryBase
 	}
 
-	QueueProcessorFactoriesLifetimeHookParams struct {
+	QueueFactoriesLifetimeHookParams struct {
 		fx.In
 
 		Lifecycle fx.Lifecycle
-		Factories []queues.ProcessorFactory `group:"queueProcessorFactory"`
+		Factories []queues.Factory `group:"queueFactory"`
 	}
 )
 
-func QueueProcessorFactoryLifetimeHooks(
-	params QueueProcessorFactoriesLifetimeHookParams,
+func QueueFactoryLifetimeHooks(
+	params QueueFactoriesLifetimeHookParams,
 ) {
 	params.Lifecycle.Append(
 		fx.Hook{
@@ -158,9 +158,9 @@ func QueueProcessorFactoryLifetimeHooks(
 	)
 }
 
-func NewTransferQueueProcessorFactory(
-	params transferQueueProcessorFactoryParams,
-) queues.ProcessorFactory {
+func NewTransferQueueFactory(
+	params transferQueueFactoryParams,
+) queues.Factory {
 	var scheduler queues.Scheduler
 	if params.Config.TransferProcessorEnablePriorityTaskScheduler() {
 		scheduler = queues.NewScheduler(
@@ -186,11 +186,11 @@ func NewTransferQueueProcessorFactory(
 			params.Logger,
 		)
 	}
-	return &transferQueueProcessorFactory{
-		transferQueueProcessorFactoryParams: params,
-		queueProcessorFactoryBase: queueProcessorFactoryBase{
+	return &transferQueueFactory{
+		transferQueueFactoryParams: params,
+		queueFactoryBase: queueFactoryBase{
 			scheduler: scheduler,
-			hostRateLimiter: newQueueProcessorHostRateLimiter(
+			hostRateLimiter: newQueueHostRateLimiter(
 				params.Config.TransferProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
 			),
@@ -198,11 +198,11 @@ func NewTransferQueueProcessorFactory(
 	}
 }
 
-func (f *transferQueueProcessorFactory) CreateProcessor(
+func (f *transferQueueFactory) CreateQueue(
 	shard shard.Context,
 	engine shard.Engine,
 	workflowCache workflow.Cache,
-) queues.Processor {
+) queues.Queue {
 	return newTransferQueueProcessor(
 		shard,
 		workflowCache,
@@ -217,9 +217,9 @@ func (f *transferQueueProcessorFactory) CreateProcessor(
 	)
 }
 
-func NewTimerQueueProcessorFactory(
-	params timerQueueProcessorFactoryParams,
-) queues.ProcessorFactory {
+func NewTimerQueueFactory(
+	params timerQueueFactoryParams,
+) queues.Factory {
 	var scheduler queues.Scheduler
 	if params.Config.TimerProcessorEnablePriorityTaskScheduler() {
 		scheduler = queues.NewScheduler(
@@ -245,11 +245,11 @@ func NewTimerQueueProcessorFactory(
 			params.Logger,
 		)
 	}
-	return &timerQueueProcessorFactory{
-		timerQueueProcessorFactoryParams: params,
-		queueProcessorFactoryBase: queueProcessorFactoryBase{
+	return &timerQueueFactory{
+		timerQueueFactoryParams: params,
+		queueFactoryBase: queueFactoryBase{
 			scheduler: scheduler,
-			hostRateLimiter: newQueueProcessorHostRateLimiter(
+			hostRateLimiter: newQueueHostRateLimiter(
 				params.Config.TimerProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
 			),
@@ -257,11 +257,11 @@ func NewTimerQueueProcessorFactory(
 	}
 }
 
-func (f *timerQueueProcessorFactory) CreateProcessor(
+func (f *timerQueueFactory) CreateQueue(
 	shard shard.Context,
 	engine shard.Engine,
 	workflowCache workflow.Cache,
-) queues.Processor {
+) queues.Queue {
 	return newTimerQueueProcessor(
 		shard,
 		workflowCache,
@@ -274,9 +274,9 @@ func (f *timerQueueProcessorFactory) CreateProcessor(
 	)
 }
 
-func NewVisibilityQueueProcessorFactory(
-	params visibilityQueueProcessorFactoryParams,
-) queues.ProcessorFactory {
+func NewVisibilityQueueFactory(
+	params visibilityQueueFactoryParams,
+) queues.Factory {
 	var scheduler queues.Scheduler
 	if params.Config.VisibilityProcessorEnablePriorityTaskScheduler() {
 		scheduler = queues.NewScheduler(
@@ -302,11 +302,11 @@ func NewVisibilityQueueProcessorFactory(
 			params.Logger,
 		)
 	}
-	return &visibilityQueueProcessorFactory{
-		visibilityQueueProcessorFactoryParams: params,
-		queueProcessorFactoryBase: queueProcessorFactoryBase{
+	return &visibilityQueueFactory{
+		visibilityQueueFactoryParams: params,
+		queueFactoryBase: queueFactoryBase{
 			scheduler: scheduler,
-			hostRateLimiter: newQueueProcessorHostRateLimiter(
+			hostRateLimiter: newQueueHostRateLimiter(
 				params.Config.VisibilityProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
 			),
@@ -314,11 +314,11 @@ func NewVisibilityQueueProcessorFactory(
 	}
 }
 
-func (f *visibilityQueueProcessorFactory) CreateProcessor(
+func (f *visibilityQueueFactory) CreateQueue(
 	shard shard.Context,
 	engine shard.Engine,
 	workflowCache workflow.Cache,
-) queues.Processor {
+) queues.Queue {
 	return newVisibilityQueueProcessor(
 		shard,
 		workflowCache,
@@ -329,19 +329,19 @@ func (f *visibilityQueueProcessorFactory) CreateProcessor(
 	)
 }
 
-func (f *queueProcessorFactoryBase) Start() {
+func (f *queueFactoryBase) Start() {
 	if f.scheduler != nil {
 		f.scheduler.Start()
 	}
 }
 
-func (f *queueProcessorFactoryBase) Stop() {
+func (f *queueFactoryBase) Stop() {
 	if f.scheduler != nil {
 		f.scheduler.Stop()
 	}
 }
 
-func newQueueProcessorHostRateLimiter(
+func newQueueHostRateLimiter(
 	hostRPS dynamicconfig.IntPropertyFn,
 	fallBackRPS dynamicconfig.IntPropertyFn,
 ) quotas.RateLimiter {

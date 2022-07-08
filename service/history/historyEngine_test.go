@@ -87,9 +87,9 @@ type (
 
 		controller              *gomock.Controller
 		mockShard               *shard.ContextTest
-		mockTxProcessor         *queues.MockProcessor
-		mockTimerProcessor      *queues.MockProcessor
-		mockVisibilityProcessor *queues.MockProcessor
+		mockTxProcessor         *queues.MockQueue
+		mockTimerProcessor      *queues.MockQueue
+		mockVisibilityProcessor *queues.MockQueue
 		mockNamespaceCache      *namespace.MockRegistry
 		mockMatchingClient      *matchingservicemock.MockMatchingServiceClient
 		mockHistoryClient       *historyservicemock.MockHistoryServiceClient
@@ -125,9 +125,9 @@ func (s *engineSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockEventsReapplier = NewMocknDCEventsReapplier(s.controller)
 	s.mockWorkflowResetter = NewMockworkflowResetter(s.controller)
-	s.mockTxProcessor = queues.NewMockProcessor(s.controller)
-	s.mockTimerProcessor = queues.NewMockProcessor(s.controller)
-	s.mockVisibilityProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTxProcessor = queues.NewMockQueue(s.controller)
+	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
+	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
@@ -192,7 +192,7 @@ func (s *engineSuite) SetupTest() {
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		eventNotifier:      eventNotifier,
 		config:             s.config,
-		queueProcessors: map[tasks.Category]queues.Processor{
+		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():         s.mockTxProcessor,
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
