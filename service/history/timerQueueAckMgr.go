@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"golang.org/x/exp/maps"
 )
 
 var (
@@ -298,10 +299,7 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() error {
 
 	// Timer Sequence IDs can have holes in the middle. So we sort the map to get the order to
 	// check. TODO: we can maintain a sorted slice as well.
-	var sequenceIDs tasks.Keys
-	for k := range t.outstandingExecutables {
-		sequenceIDs = append(sequenceIDs, k)
-	}
+	sequenceIDs := tasks.Keys(maps.Keys(t.outstandingExecutables))
 	sort.Sort(sequenceIDs)
 
 	pendingTasks := len(sequenceIDs)

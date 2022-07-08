@@ -630,3 +630,8 @@ func OverrideWorkflowTaskTimeout(
 
 	return util.Min(taskStartToCloseTimeout, workflowRunTimeout)
 }
+
+// CloneProto is a generic typed version of proto.Clone from gogoproto.
+func CloneProto[T proto.Message](v T) T {
+	return proto.Clone(v).(T)
+}

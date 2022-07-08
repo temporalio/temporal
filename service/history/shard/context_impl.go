@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -498,9 +499,7 @@ func (s *ContextImpl) GetAllFailoverLevels(category tasks.Category) map[string]p
 
 	ret := map[string]persistence.FailoverLevel{}
 	if levels, ok := s.shardInfo.FailoverLevels[category]; ok {
-		for k, v := range levels {
-			ret[k] = v
-		}
+		maps.Copy(ret, levels)
 	}
 
 	return ret
@@ -1872,27 +1871,14 @@ func newContext(
 func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.ShardInfoWithFailover {
 	failoverLevels := make(map[tasks.Category]map[string]persistence.FailoverLevel)
 	for category, levels := range shardInfo.FailoverLevels {
-		failoverLevels[category] = make(map[string]persistence.FailoverLevel)
-		for k, v := range levels {
-			failoverLevels[category][k] = v
-		}
+		failoverLevels[category] = maps.Clone(levels)
 	}
 
-	clusterReplicationDLQLevel := make(map[string]int64)
-	for k, v := range shardInfo.ReplicationDlqAckLevel {
-		clusterReplicationDLQLevel[k] = v
-	}
+	clusterReplicationDLQLevel := maps.Clone(shardInfo.ReplicationDlqAckLevel)
 
 	queueAckLevels := make(map[int32]*persistencespb.QueueAckLevel)
 	for category, ackLevels := range shardInfo.QueueAckLevels {
-		copiedLevel := &persistencespb.QueueAckLevel{
-			AckLevel:        ackLevels.AckLevel,
-			ClusterAckLevel: make(map[string]int64),
-		}
-		for k, v := range ackLevels.ClusterAckLevel {
-			copiedLevel.ClusterAckLevel[k] = v
-		}
-		queueAckLevels[category] = copiedLevel
+		queueAckLevels[category] = common.CloneProto(ackLevels)
 	}
 
 	shardInfoCopy := &persistence.ShardInfoWithFailover{

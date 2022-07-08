@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
+	"golang.org/x/exp/maps"
 )
 
 type (
@@ -286,16 +287,11 @@ func FromPersistenceNotPredicate(
 func ToPersistenceNamespaceIDPredicate(
 	namespaceIDPredicate *tasks.NamespacePredicate,
 ) *persistencespb.Predicate {
-	namespaceIDs := make([]string, 0, len(namespaceIDPredicate.NamespaceIDs))
-	for namespaceID := range namespaceIDPredicate.NamespaceIDs {
-		namespaceIDs = append(namespaceIDs, namespaceID)
-	}
-
 	return &persistencespb.Predicate{
 		PredicateType: enumsspb.PREDICATE_TYPE_NAMESPACE_ID,
 		Attributes: &persistencespb.Predicate_NamespaceIdPredicateAttributes{
 			NamespaceIdPredicateAttributes: &persistencespb.NamespaceIdPredicateAttributes{
-				NamespaceIds: namespaceIDs,
+				NamespaceIds: maps.Keys(namespaceIDPredicate.NamespaceIDs),
 			},
 		},
 	}
@@ -310,16 +306,11 @@ func FromPersistenceNamespaceIDPredicate(
 func ToPersistenceTaskTypePredicate(
 	taskTypePredicate *tasks.TypePredicate,
 ) *persistencespb.Predicate {
-	taskTypes := make([]enumsspb.TaskType, 0, len(taskTypePredicate.Types))
-	for taskType := range taskTypePredicate.Types {
-		taskTypes = append(taskTypes, taskType)
-	}
-
 	return &persistencespb.Predicate{
 		PredicateType: enumsspb.PREDICATE_TYPE_TASK_TYPE,
 		Attributes: &persistencespb.Predicate_TaskTypePredicateAttributes{
 			TaskTypePredicateAttributes: &persistencespb.TaskTypePredicateAttributes{
-				TaskTypes: taskTypes,
+				TaskTypes: maps.Keys(taskTypePredicate.Types),
 			},
 		},
 	}
