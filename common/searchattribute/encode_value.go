@@ -56,10 +56,10 @@ func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface
 	// Here are similar code sections for all types.
 	// At first, it tries to decode to pointer of actual type (i.e. `*string` for `string`).
 	// This is to ensure that `nil` values are decoded back as `nil` using `NilPayloadConverter`.
-	// If value is not `nil` but some value of expected type the cCode relies on the fact that
-	// search attributes are always encoded with `JsonPayloadConverter` which uses standard
-	// `json.Marshal`/`json.Unmarshal` which work fine with pointer types when decoding values.
-	// If decode to pointer fails, it tries to decode to array of the same type because
+	// If value is not `nil` but some value of expected type, the code relies on the fact that
+	// search attributes are always encoded with `JsonPayloadConverter`, which uses standard
+	// `json.Unmarshal` function, which works fine with pointer types when decoding values.
+	// If decoding to pointer type fails, it tries to decode to array of the same type because
 	// search attributes support polymorphism: field of specific type may also have an array of that type.
 	// If resulting slice has zero length, it gets substitute with `nil` to treat nils and empty slices equally.
 	// If search attribute value is `nil`, it means that search attribute needs to be removed from the document.
