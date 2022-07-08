@@ -65,10 +65,10 @@ func MaxTime(a, b time.Time) time.Time {
 	return b
 }
 
-// SortInt64Slice sorts the given int64 slice.
+// SortSlice sorts the given slice of an ordered type.
 // Sort is not guaranteed to be stable.
-func SortInt64Slice(slice []int64) {
-	sort.Slice(slice, func(i int, j int) bool {
+func SortSlice[S ~[]E, E constraints.Ordered](slice S) {
+	sort.Slice(slice, func(i, j int) bool {
 		return slice[i] < slice[j]
 	})
 }

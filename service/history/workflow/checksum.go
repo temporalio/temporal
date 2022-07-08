@@ -82,23 +82,23 @@ func newMutableStateChecksumPayload(ms MutableState) *checksumspb.MutableStateCh
 	for _, ti := range ms.GetPendingTimerInfos() {
 		pendingTimerIDs = append(pendingTimerIDs, ti.GetStartedEventId())
 	}
-	util.SortInt64Slice(pendingTimerIDs)
+	util.SortSlice(pendingTimerIDs)
 	payload.PendingTimerStartedEventIds = pendingTimerIDs
 
 	pendingActivityIDs := maps.Keys(ms.GetPendingActivityInfos())
-	util.SortInt64Slice(pendingActivityIDs)
+	util.SortSlice(pendingActivityIDs)
 	payload.PendingActivityScheduledEventIds = pendingActivityIDs
 
 	pendingChildIDs := maps.Keys(ms.GetPendingChildExecutionInfos())
-	util.SortInt64Slice(pendingChildIDs)
+	util.SortSlice(pendingChildIDs)
 	payload.PendingChildInitiatedEventIds = pendingChildIDs
 
 	signalIDs := maps.Keys(ms.GetPendingSignalExternalInfos())
-	util.SortInt64Slice(signalIDs)
+	util.SortSlice(signalIDs)
 	payload.PendingSignalInitiatedEventIds = signalIDs
 
 	requestCancelIDs := maps.Keys(ms.GetPendingRequestCancelExternalInfos())
-	util.SortInt64Slice(requestCancelIDs)
+	util.SortSlice(requestCancelIDs)
 	payload.PendingReqCancelInitiatedEventIds = requestCancelIDs
 	return payload
 }

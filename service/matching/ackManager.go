@@ -124,7 +124,7 @@ func (m *ackManager) completeTask(taskID int64) (ackLevel int64) {
 	//  this is only a temporarily solution
 
 	taskIDs := maps.Keys(m.outstandingTasks)
-	util.SortInt64Slice(taskIDs)
+	util.SortSlice(taskIDs)
 
 	// Update ackLevel
 	for _, taskID := range taskIDs {

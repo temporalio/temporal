@@ -195,7 +195,7 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() error {
 	// task ID is not sequential, meaning there are a ton of missing chunks,
 	// so to optimize the performance, a sort is required
 	taskIDs := maps.Keys(a.outstandingExecutables)
-	util.SortInt64Slice(taskIDs)
+	util.SortSlice(taskIDs)
 
 	pendingTasks := len(taskIDs)
 	if pendingTasks > warnPendingTasks {

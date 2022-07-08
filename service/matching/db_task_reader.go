@@ -111,7 +111,7 @@ func (t *dbTaskReaderImpl) moveAckedTaskID() int64 {
 	defer t.Unlock()
 
 	taskIDs := maps.Keys(t.tasks)
-	util.SortInt64Slice(taskIDs)
+	util.SortSlice(taskIDs)
 
 	for _, taskID := range taskIDs {
 		if !t.tasks[taskID] {
