@@ -31,13 +31,13 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -177,7 +177,7 @@ func (t *timerQueueAckMgrImpl) getFinishedChan() <-chan struct{} {
 func (t *timerQueueAckMgrImpl) readTimerTasks() ([]queues.Executable, *time.Time, bool, error) {
 	if t.maxQueryLevel == t.minQueryLevel {
 		t.maxQueryLevel = t.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, t.clusterName).FireTime
-		t.maxQueryLevel = common.MaxTime(t.minQueryLevel, t.maxQueryLevel)
+		t.maxQueryLevel = util.MaxTime(t.minQueryLevel, t.maxQueryLevel)
 	}
 	minQueryLevel := t.minQueryLevel
 	maxQueryLevel := t.maxQueryLevel

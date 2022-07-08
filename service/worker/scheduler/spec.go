@@ -31,8 +31,8 @@ import (
 	"github.com/dgryski/go-farm"
 
 	schedpb "go.temporal.io/api/schedule/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -107,7 +107,7 @@ func (cs *compiledSpec) getNextTime(after time.Time) (nominal, next time.Time, h
 	maxJitter := timestamp.DurationValue(cs.spec.Jitter)
 	// Ensure that jitter doesn't push this time past the _next_ nominal start time
 	if following := cs.rawNextTime(nominal); !following.IsZero() {
-		maxJitter = common.MinDuration(maxJitter, following.Sub(nominal))
+		maxJitter = util.Min(maxJitter, following.Sub(nominal))
 	}
 	next = cs.addJitter(nominal, maxJitter)
 

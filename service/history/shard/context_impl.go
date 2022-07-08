@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -309,7 +310,7 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(cluster string) tasks.Key 
 	}
 
 	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
-	s.scheduledTaskMaxReadLevelMap[cluster] = common.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
+	s.scheduledTaskMaxReadLevelMap[cluster] = util.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
 	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
 }
 
@@ -1646,13 +1647,13 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 
 			if queueAckLevels.AckLevel != 0 {
 				currentTime := timestamp.UnixOrZeroTime(queueAckLevels.AckLevel)
-				maxReadTime = common.MaxTime(maxReadTime, currentTime)
+				maxReadTime = util.MaxTime(maxReadTime, currentTime)
 			}
 
 			if queueAckLevels.ClusterAckLevel != nil {
 				if ackLevel, ok := queueAckLevels.ClusterAckLevel[clusterName]; ok {
 					currentTime := timestamp.UnixOrZeroTime(ackLevel)
-					maxReadTime = common.MaxTime(maxReadTime, currentTime)
+					maxReadTime = util.MaxTime(maxReadTime, currentTime)
 				}
 			}
 		}

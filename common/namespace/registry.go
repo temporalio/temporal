@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
@@ -271,10 +272,7 @@ func (r *registry) RegisterNamespaceChangeCallback(
 	r.callbackLock.Unlock()
 
 	// this section is trying to make the shard catch up with namespace changes
-	namespaces := Namespaces{}
-	for _, namespace := range r.getAllNamespace() {
-		namespaces = append(namespaces, namespace)
-	}
+	namespaces := Namespaces(maps.Values(r.getAllNamespace()))
 	// we mush notify the change in a ordered fashion
 	// since history shard have to update the shard info
 	// with namespace change version.
@@ -571,18 +569,7 @@ func (r *registry) publishCacheUpdate(
 func (r *registry) getNamespaceChangeCallbacks() ([]PrepareCallbackFn, []CallbackFn) {
 	r.callbackLock.Lock()
 	defer r.callbackLock.Unlock()
-
-	prepareCallbacks := make([]PrepareCallbackFn, 0, len(r.prepareCallbacks))
-	for _, prepareCallback := range r.prepareCallbacks {
-		prepareCallbacks = append(prepareCallbacks, prepareCallback)
-	}
-
-	callbacks := make([]CallbackFn, 0, len(r.callbacks))
-	for _, callback := range r.callbacks {
-		callbacks = append(callbacks, callback)
-	}
-
-	return prepareCallbacks, callbacks
+	return mapAnyValues(r.prepareCallbacks), mapAnyValues(r.callbacks)
 }
 
 func (r *registry) triggerNamespaceChangePrepareCallback(
