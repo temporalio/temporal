@@ -25,7 +25,6 @@
 package sql
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -36,7 +35,6 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	SQLAuth "go.temporal.io/server/common/persistence/sql/sqlplugin/auth"
 	"go.temporal.io/server/tools/common/schema"
 )
 
@@ -157,9 +155,6 @@ func parseConnectConfig(cli *cli.Context) (*config.SQL, error) {
 	cfg.Password = cli.GlobalString(schema.CLIOptPassword)
 	cfg.DatabaseName = cli.GlobalString(schema.CLIOptDatabase)
 	cfg.PluginName = cli.GlobalString(schema.CLIOptPluginName)
-	cfg.AuthPlugin = &config.SQLAuthPlugin{
-		Plugin: cli.GlobalString(schema.CLIOptAuthPluginName),
-	}
 
 	if cfg.ConnectAttributes == nil {
 		cfg.ConnectAttributes = map[string]string{}
@@ -208,12 +203,6 @@ func ValidateConnectConfig(cfg *config.SQL) error {
 	}
 	if cfg.DatabaseName == "" {
 		return schema.NewConfigError("missing " + flag(schema.CLIOptDatabase) + " argument")
-	}
-	if cfg.AuthPlugin != nil && cfg.AuthPlugin.Plugin != "" {
-		_, err := SQLAuth.LookupPlugin(cfg.AuthPlugin.Plugin)
-		if errors.Is(err, SQLAuth.ErrInvalidAuthPluginName) {
-			return schema.NewConfigError("invalid option for " + flag(schema.CLIOptAuthPluginName) + ": " + cfg.AuthPlugin.Plugin)
-		}
 	}
 
 	return nil
