@@ -98,12 +98,6 @@ func BuildCLIOptions() *cli.App {
 			Usage:  "name of the sql plugin",
 			EnvVar: "SQL_PLUGIN",
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagAuthPluginName,
-			Value:  "",
-			Usage:  "authentication plugin for sql database (supported: ['rds-iam-auth'])",
-			EnvVar: "SQL_AUTH_PLUGIN",
-		},
 		cli.BoolFlag{
 			Name:  schema.CLIFlagQuiet,
 			Usage: "Don't set exit status to 1 on error",
