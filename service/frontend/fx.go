@@ -165,9 +165,9 @@ func GrpcServerOptionsProvider(
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		telemetryInterceptor.Intercept,
 		namespaceValidatorInterceptor.Intercept,
-		rateLimitInterceptor.Intercept,
-		namespaceRateLimiterInterceptor.Intercept,
 		namespaceCountLimiterInterceptor.Intercept,
+		namespaceRateLimiterInterceptor.Intercept,
+		rateLimitInterceptor.Intercept,
 		authorization.NewAuthorizationInterceptor(
 			claimMapper,
 			authorizer,
