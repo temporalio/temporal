@@ -53,6 +53,8 @@ import "temporal/server/api/adminservice/v1/request_response.proto";
 
 message StartWorkflowExecutionRequest {
     string namespace_id = 1;
+    // TODO: move into start_request
+    string namespace_division = 10;
     temporal.api.workflowservice.v1.StartWorkflowExecutionRequest start_request = 2;
     temporal.server.api.workflow.v1.ParentExecutionInfo parent_execution_info = 3;
     int32 attempt = 4;
