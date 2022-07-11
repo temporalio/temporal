@@ -38,6 +38,7 @@ import (
 	v10 "go.temporal.io/server/api/adminservice/v1"
 	v11 "go.temporal.io/server/api/clock/v1"
 	v12 "go.temporal.io/server/api/historyservice/v1"
+	v13 "go.temporal.io/server/api/persistence/v1"
 	archiver "go.temporal.io/server/common/archiver"
 	clock "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
@@ -532,6 +533,21 @@ func (mr *MockContextMockRecorder) GetQueueExclusiveHighReadWatermark(category, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueExclusiveHighReadWatermark", reflect.TypeOf((*MockContext)(nil).GetQueueExclusiveHighReadWatermark), category, cluster)
 }
 
+// GetQueueState mocks base method.
+func (m *MockContext) GetQueueState(category tasks.Category) (*v13.QueueState, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetQueueState", category)
+	ret0, _ := ret[0].(*v13.QueueState)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// GetQueueState indicates an expected call of GetQueueState.
+func (mr *MockContextMockRecorder) GetQueueState(category interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueState", reflect.TypeOf((*MockContext)(nil).GetQueueState), category)
+}
+
 // GetRemoteAdminClient mocks base method.
 func (m *MockContext) GetRemoteAdminClient(cluster string) (v10.AdminServiceClient, error) {
 	m.ctrl.T.Helper()
@@ -782,6 +798,20 @@ func (m *MockContext) UpdateQueueClusterAckLevel(category tasks.Category, cluste
 func (mr *MockContextMockRecorder) UpdateQueueClusterAckLevel(category, cluster, ackLevel interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateQueueClusterAckLevel", reflect.TypeOf((*MockContext)(nil).UpdateQueueClusterAckLevel), category, cluster, ackLevel)
+}
+
+// UpdateQueueState mocks base method.
+func (m *MockContext) UpdateQueueState(category tasks.Category, state *v13.QueueState) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateQueueState", category, state)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateQueueState indicates an expected call of UpdateQueueState.
+func (mr *MockContextMockRecorder) UpdateQueueState(category, state interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateQueueState", reflect.TypeOf((*MockContext)(nil).UpdateQueueState), category, state)
 }
 
 // UpdateRemoteClusterInfo mocks base method.
