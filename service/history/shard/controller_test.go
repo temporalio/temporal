@@ -330,11 +330,13 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards()
+	time.Sleep(100 * time.Millisecond) // TODO: fix this properly
 
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil)
 	}
 	s.shardController.acquireShards()
+	time.Sleep(100 * time.Millisecond) // TODO: fix this properly
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -383,11 +385,13 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards()
+	time.Sleep(100 * time.Millisecond) // TODO: fix this properly
 
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(nil, errors.New("ring failure"))
 	}
 	s.shardController.acquireShards()
+	time.Sleep(100 * time.Millisecond) // TODO: fix this properly
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -490,6 +494,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).AnyTimes()
 	}
 	s.shardController.Stop()
+	time.Sleep(100 * time.Millisecond) // TODO: fix this properly
 }
 
 func (s *controllerSuite) TestShardControllerClosed() {
@@ -517,6 +522,7 @@ func (s *controllerSuite) TestShardControllerClosed() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.Start()
+	time.Sleep(100 * time.Millisecond) // TODO: fix this properly
 
 	var workerWG sync.WaitGroup
 	for w := 0; w < 10; w++ {

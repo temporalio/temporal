@@ -47,35 +47,3 @@ func UUIDHashCode(input interface{}) uint32 {
 	}
 	return binary.BigEndian.Uint32(b)
 }
-
-// MinInt returns the min of given two integers
-func MinInt(a, b int) int {
-	if a > b {
-		return b
-	}
-	return a
-}
-
-// MaxInt returns the max of given two integers
-func MaxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-// MinInt64 returns the min of given two integers
-func MinInt64(a, b int64) int64 {
-	if a > b {
-		return b
-	}
-	return a
-}
-
-// MaxInt64 returns the max of given two integers
-func MaxInt64(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}

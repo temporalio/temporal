@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -57,6 +58,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -307,7 +309,7 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(cluster string) tasks.Key 
 	}
 
 	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
-	s.scheduledTaskMaxReadLevelMap[cluster] = common.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
+	s.scheduledTaskMaxReadLevelMap[cluster] = util.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
 	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
 }
 
@@ -556,9 +558,7 @@ func (s *ContextImpl) GetAllFailoverLevels(category tasks.Category) map[string]p
 
 	ret := map[string]persistence.FailoverLevel{}
 	if levels, ok := s.shardInfo.FailoverLevels[category]; ok {
-		for k, v := range levels {
-			ret[k] = v
-		}
+		maps.Copy(ret, levels)
 	}
 
 	return ret
@@ -1705,13 +1705,13 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 
 			if queueAckLevels.AckLevel != 0 {
 				currentTime := timestamp.UnixOrZeroTime(queueAckLevels.AckLevel)
-				maxReadTime = common.MaxTime(maxReadTime, currentTime)
+				maxReadTime = util.MaxTime(maxReadTime, currentTime)
 			}
 
 			if queueAckLevels.ClusterAckLevel != nil {
 				if ackLevel, ok := queueAckLevels.ClusterAckLevel[clusterName]; ok {
 					currentTime := timestamp.UnixOrZeroTime(ackLevel)
-					maxReadTime = common.MaxTime(maxReadTime, currentTime)
+					maxReadTime = util.MaxTime(maxReadTime, currentTime)
 				}
 			}
 		}
@@ -1940,37 +1940,25 @@ func newContext(
 func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.ShardInfoWithFailover {
 	failoverLevels := make(map[tasks.Category]map[string]persistence.FailoverLevel)
 	for category, levels := range shardInfo.FailoverLevels {
-		failoverLevels[category] = make(map[string]persistence.FailoverLevel)
-		for k, v := range levels {
-			failoverLevels[category][k] = v
-		}
-	}
-
-	clusterReplicationDLQLevel := make(map[string]int64)
-	for k, v := range shardInfo.ReplicationDlqAckLevel {
-		clusterReplicationDLQLevel[k] = v
+		failoverLevels[category] = maps.Clone(levels)
 	}
 
 	queueAckLevels := make(map[int32]*persistencespb.QueueAckLevel)
 	for category, ackLevels := range shardInfo.QueueAckLevels {
-		copiedLevel := &persistencespb.QueueAckLevel{
+		queueAckLevels[category] = &persistencespb.QueueAckLevel{
 			AckLevel:        ackLevels.AckLevel,
-			ClusterAckLevel: make(map[string]int64),
+			ClusterAckLevel: maps.Clone(ackLevels.ClusterAckLevel),
 		}
-		for k, v := range ackLevels.ClusterAckLevel {
-			copiedLevel.ClusterAckLevel[k] = v
-		}
-		queueAckLevels[category] = copiedLevel
 	}
 
 	shardInfoCopy := &persistence.ShardInfoWithFailover{
 		ShardInfo: &persistencespb.ShardInfo{
-			ShardId:                      shardInfo.GetShardId(),
+			ShardId:                      shardInfo.ShardId,
 			Owner:                        shardInfo.Owner,
-			RangeId:                      shardInfo.GetRangeId(),
+			RangeId:                      shardInfo.RangeId,
 			StolenSinceRenew:             shardInfo.StolenSinceRenew,
 			NamespaceNotificationVersion: shardInfo.NamespaceNotificationVersion,
-			ReplicationDlqAckLevel:       clusterReplicationDLQLevel,
+			ReplicationDlqAckLevel:       maps.Clone(shardInfo.ReplicationDlqAckLevel),
 			UpdateTime:                   shardInfo.UpdateTime,
 			QueueAckLevels:               queueAckLevels,
 			QueueStates:                  shardInfo.QueueStates,

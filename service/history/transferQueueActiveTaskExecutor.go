@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -1582,7 +1581,7 @@ func copyChildWorkflowInfos(
 	}
 
 	for k, v := range input {
-		result[k] = proto.Clone(v).(*persistencespb.ChildExecutionInfo)
+		result[k] = common.CloneProto(v)
 	}
 	return result
 }

@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -553,7 +554,7 @@ func (s *scheduler) getListInfo(shrink int) *schedpb.ScheduleListInfo {
 		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
 		Notes:             notes,
 		Paused:            s.Schedule.State.Paused,
-		RecentActions:     sliceTail(s.Info.RecentActions, recentActionCount),
+		RecentActions:     util.SliceTail(s.Info.RecentActions, recentActionCount),
 		FutureActionTimes: s.getFutureActionTimes(futureActionCount),
 	}
 }
@@ -730,7 +731,7 @@ func (s *scheduler) processBuffer() bool {
 
 func (s *scheduler) recordAction(result *schedpb.ScheduleActionResult) {
 	s.Info.ActionCount++
-	s.Info.RecentActions = sliceTail(append(s.Info.RecentActions, result), s.tweakables.RecentActionCount)
+	s.Info.RecentActions = util.SliceTail(append(s.Info.RecentActions, result), s.tweakables.RecentActionCount)
 	if result.StartWorkflowResult != nil {
 		s.Info.RunningWorkflows = append(s.Info.RunningWorkflows, result.StartWorkflowResult)
 	}
@@ -907,11 +908,4 @@ func (s *scheduler) newUUIDString() string {
 		return uuid.NewString()
 	}).Get(&str)
 	return str
-}
-
-func sliceTail[S ~[]E, E any](s S, n int) S {
-	if extra := len(s) - n; extra > 0 {
-		return s[extra:]
-	}
-	return s
 }

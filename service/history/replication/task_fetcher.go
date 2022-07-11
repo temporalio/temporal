@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/service/history/configs"
+	"golang.org/x/exp/maps"
 )
 
 const (
@@ -435,10 +436,7 @@ func (f *replicationTaskFetcherWorker) getMessages() error {
 		return err
 	}
 
-	shardReplicationTasks := make(map[int32]*replicationspb.ReplicationMessages, len(response.GetShardMessages()))
-	for shardID, resp := range response.GetShardMessages() {
-		shardReplicationTasks[shardID] = resp
-	}
+	shardReplicationTasks := maps.Clone(response.GetShardMessages())
 	for shardID, req := range requestByShard {
 		if resp, ok := shardReplicationTasks[shardID]; ok {
 			req.respChan <- resp

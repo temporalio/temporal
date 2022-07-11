@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/util"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -579,7 +580,7 @@ func (c *taskQueueManagerImpl) newChildContext(
 	}
 	remaining := deadline.Sub(time.Now().UTC()) - tailroom
 	if remaining < timeout {
-		timeout = time.Duration(common.MaxInt64(0, int64(remaining)))
+		timeout = time.Duration(util.Max(0, int64(remaining)))
 	}
 	return context.WithTimeout(parent, timeout)
 }

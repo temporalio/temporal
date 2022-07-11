@@ -30,6 +30,8 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -200,10 +202,7 @@ func ThrottleRetryContext(
 		}
 
 		if _, ok := err.(*serviceerror.ResourceExhausted); ok {
-			throttleBackoff := t.NextBackOff()
-			if throttleBackoff > next {
-				next = throttleBackoff
-			}
+			next = util.Max(next, t.NextBackOff())
 		}
 
 		timer := time.NewTimer(next)

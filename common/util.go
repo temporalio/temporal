@@ -29,7 +29,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -53,6 +52,7 @@ import (
 	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -375,86 +375,6 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 	return matchingResp
 }
 
-// MinInt64 returns the smaller of two given int64
-func MinInt64(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// MinTime returns the smaller of two given time.Time
-func MinTime(a, b time.Time) time.Time {
-	if a.Before(b) {
-		return a
-	}
-	return b
-}
-
-// MaxInt64 returns the greater of two given int64
-func MaxInt64(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-// MinTime returns the smaller of two given time.Time
-func MaxTime(a, b time.Time) time.Time {
-	if a.After(b) {
-		return a
-	}
-	return b
-}
-
-// MinInt32 return smaller one of two inputs int32
-func MinInt32(a, b int32) int32 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// MinInt returns the smaller of two given integers
-func MinInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// MaxInt returns the greater one of two given integers
-func MaxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-// MinDuration returns the smaller of two given time duration
-func MinDuration(a, b time.Duration) time.Duration {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// MaxDuration returns the greater of two given time durations
-func MaxDuration(a, b time.Duration) time.Duration {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-// SortInt64Slice sorts the given int64 slice.
-// Sort is not guaranteed to be stable.
-func SortInt64Slice(slice []int64) {
-	sort.Slice(slice, func(i int, j int) bool {
-		return slice[i] < slice[j]
-	})
-}
-
 // EnsureRetryPolicyDefaults ensures the policy subfields, if not explicitly set, are set to the specified defaults
 func EnsureRetryPolicyDefaults(originalPolicy *commonpb.RetryPolicy, defaultSettings DefaultRetrySettings) {
 	if originalPolicy.GetMaximumAttempts() == 0 {
@@ -687,7 +607,7 @@ func OverrideWorkflowRunTimeout(
 	} else if workflowRunTimeout == 0 {
 		return workflowExecutionTimeout
 	}
-	return timestamp.MinDuration(workflowRunTimeout, workflowExecutionTimeout)
+	return util.Min(workflowRunTimeout, workflowExecutionTimeout)
 }
 
 // OverrideWorkflowTaskTimeout override the workflow task timeout according to default timeout or max timeout
@@ -702,11 +622,16 @@ func OverrideWorkflowTaskTimeout(
 		taskStartToCloseTimeout = getDefaultTimeoutFunc(namespace)
 	}
 
-	taskStartToCloseTimeout = timestamp.MinDuration(taskStartToCloseTimeout, MaxWorkflowTaskStartToCloseTimeout)
+	taskStartToCloseTimeout = util.Min(taskStartToCloseTimeout, MaxWorkflowTaskStartToCloseTimeout)
 
 	if workflowRunTimeout == 0 {
 		return taskStartToCloseTimeout
 	}
 
-	return timestamp.MinDuration(taskStartToCloseTimeout, workflowRunTimeout)
+	return util.Min(taskStartToCloseTimeout, workflowRunTimeout)
+}
+
+// CloneProto is a generic typed version of proto.Clone from gogoproto.
+func CloneProto[T proto.Message](v T) T {
+	return proto.Clone(v).(T)
 }
