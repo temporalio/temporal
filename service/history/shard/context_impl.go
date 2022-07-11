@@ -1874,21 +1874,22 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 		failoverLevels[category] = maps.Clone(levels)
 	}
 
-	clusterReplicationDLQLevel := maps.Clone(shardInfo.ReplicationDlqAckLevel)
-
 	queueAckLevels := make(map[int32]*persistencespb.QueueAckLevel)
 	for category, ackLevels := range shardInfo.QueueAckLevels {
-		queueAckLevels[category] = common.CloneProto(ackLevels)
+		queueAckLevels[category] = &persistencespb.QueueAckLevel{
+			AckLevel:        ackLevels.AckLevel,
+			ClusterAckLevel: maps.Clone(ackLevels.ClusterAckLevel),
+		}
 	}
 
 	shardInfoCopy := &persistence.ShardInfoWithFailover{
 		ShardInfo: &persistencespb.ShardInfo{
-			ShardId:                      shardInfo.GetShardId(),
+			ShardId:                      shardInfo.ShardId,
 			Owner:                        shardInfo.Owner,
-			RangeId:                      shardInfo.GetRangeId(),
+			RangeId:                      shardInfo.RangeId,
 			StolenSinceRenew:             shardInfo.StolenSinceRenew,
 			NamespaceNotificationVersion: shardInfo.NamespaceNotificationVersion,
-			ReplicationDlqAckLevel:       clusterReplicationDLQLevel,
+			ReplicationDlqAckLevel:       maps.Clone(shardInfo.ReplicationDlqAckLevel),
 			UpdateTime:                   shardInfo.UpdateTime,
 			QueueAckLevels:               queueAckLevels,
 		},
