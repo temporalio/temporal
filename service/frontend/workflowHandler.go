@@ -3136,7 +3136,9 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		Memo:                  request.Memo,
 		SearchAttributes:      request.SearchAttributes,
 	}
-	_, err = wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC()))
+	historyReq := common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC())
+	historyReq.NamespaceDivision = scheduler.NamespaceDivision
+	_, err = wh.historyClient.StartWorkflowExecution(ctx, historyReq)
 
 	if err != nil {
 		return nil, err
@@ -3607,6 +3609,7 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{
 			NamespaceID:       namespaceID,
 			Namespace:         namespaceName,
+			NamespaceDivision: scheduler.NamespaceDivision,
 			PageSize:          int(request.GetMaximumPageSize()),
 			NextPageToken:     request.NextPageToken,
 			EarliestStartTime: minTime,

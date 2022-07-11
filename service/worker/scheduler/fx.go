@@ -41,6 +41,8 @@ import (
 const (
 	WorkflowType  = "temporal-sys-scheduler-workflow"
 	TaskQueueName = "temporal-sys-scheduler-tq"
+
+	NamespaceDivision = "TemporalScheduler"
 )
 
 type (
