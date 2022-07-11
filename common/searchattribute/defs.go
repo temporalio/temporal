@@ -32,6 +32,7 @@ import (
 
 const (
 	NamespaceID          = "NamespaceId"
+	NamespaceDivision    = "TemporalNamespaceDivision"
 	WorkflowID           = "WorkflowId"
 	RunID                = "RunId"
 	WorkflowType         = "WorkflowType"
@@ -97,6 +98,7 @@ var (
 	// reserved are internal field names that can't be used as search attribute names.
 	reserved = map[string]struct{}{
 		NamespaceID:       {},
+		NamespaceDivision: {},
 		MemoEncoding:      {},
 		Memo:              {},
 		VisibilityTaskKey: {},

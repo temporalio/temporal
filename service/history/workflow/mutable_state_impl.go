@@ -1554,6 +1554,8 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 		execution,
 		startRequest.StartRequest.GetRequestId(),
 		event,
+		// TODO: namespaceDivision should be in the start event instead of passed directly here
+		startRequest.NamespaceDivision,
 	); err != nil {
 		return nil, err
 	}
@@ -1579,6 +1581,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	execution commonpb.WorkflowExecution,
 	requestID string,
 	startEvent *historypb.HistoryEvent,
+	namespaceDivision string,
 ) error {
 
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
@@ -1592,6 +1595,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.WorkflowRunTimeout = event.GetWorkflowRunTimeout()
 	e.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
 	e.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
+	e.executionInfo.NamespaceDivision = namespaceDivision
 
 	if err := e.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,

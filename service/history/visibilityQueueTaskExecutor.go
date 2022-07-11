@@ -141,6 +141,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	executionStatus := executionState.GetStatus()
 	taskQueue := executionInfo.TaskQueue
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
+	namespaceDivision := executionInfo.NamespaceDivision
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
@@ -150,6 +151,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	return t.recordStartExecution(
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
+		namespaceDivision,
 		task.GetWorkflowID(),
 		task.GetRunID(),
 		wfTypeName,
@@ -222,6 +224,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 func (t *visibilityQueueTaskExecutor) recordStartExecution(
 	ctx context.Context,
 	namespaceID namespace.ID,
+	namespaceDivision string,
 	workflowID string,
 	runID string,
 	workflowTypeName string,
@@ -241,8 +244,9 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 
 	request := &manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
-			NamespaceID: namespaceID,
-			Namespace:   namespaceEntry.Name(),
+			NamespaceID:       namespaceID,
+			Namespace:         namespaceEntry.Name(),
+			NamespaceDivision: namespaceDivision,
 			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,

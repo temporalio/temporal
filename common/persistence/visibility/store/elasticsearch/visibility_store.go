@@ -587,7 +587,7 @@ func (s *visibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
-	boolQuery, _, err := s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
+	boolQuery, _, err := s.convertQuery(request.Namespace, request.NamespaceID, request.NamespaceDivision, request.Query)
 	if err != nil {
 		return nil, err
 	}
@@ -613,6 +613,12 @@ func (s *visibilityStore) buildSearchParameters(
 	}
 
 	boolQuery.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String()))
+
+	if request.NamespaceDivision == "" {
+		boolQuery.MustNot(elastic.NewExistsQuery(searchattribute.NamespaceDivision))
+	} else {
+		boolQuery.Filter(elastic.NewTermQuery(searchattribute.NamespaceDivision, request.NamespaceDivision))
+	}
 
 	if !request.EarliestStartTime.IsZero() || !request.LatestStartTime.IsZero() {
 		var rangeQuery *elastic.RangeQuery
@@ -650,7 +656,7 @@ func (s *visibilityStore) buildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*client.SearchParameters, error) {
 
-	boolQuery, fieldSorts, err := s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
+	boolQuery, fieldSorts, err := s.convertQuery(request.Namespace, request.NamespaceID, request.NamespaceDivision, request.Query)
 	if err != nil {
 		return nil, err
 	}
@@ -664,7 +670,13 @@ func (s *visibilityStore) buildSearchParametersV2(
 
 	return params, nil
 }
-func (s *visibilityStore) convertQuery(namespace namespace.Name, namespaceID namespace.ID, requestQueryStr string) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
+
+func (s *visibilityStore) convertQuery(
+	namespace namespace.Name,
+	namespaceID namespace.ID,
+	namespaceDivision string,
+	requestQueryStr string,
+) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
@@ -685,6 +697,13 @@ func (s *visibilityStore) convertQuery(namespace namespace.Name, namespaceID nam
 
 	// Create new bool query because request query might have only "should" (="or") queries.
 	namespaceFilterQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.NamespaceID, namespaceID.String()))
+
+	if namespaceDivision == "" {
+		namespaceFilterQuery.MustNot(elastic.NewExistsQuery(searchattribute.NamespaceDivision))
+	} else {
+		namespaceFilterQuery.Filter(elastic.NewTermQuery(searchattribute.NamespaceDivision, namespaceDivision))
+	}
+
 	if requestQuery != nil {
 		namespaceFilterQuery.Filter(requestQuery)
 	}
@@ -795,6 +814,11 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 		searchattribute.ExecutionTime:     request.ExecutionTime,
 		searchattribute.ExecutionStatus:   request.Status.String(),
 		searchattribute.TaskQueue:         request.TaskQueue,
+	}
+
+	// For default (empty string) namespace division, leave out field
+	if request.NamespaceDivision != "" {
+		doc[searchattribute.NamespaceDivision] = request.NamespaceDivision
 	}
 
 	if len(request.Memo.GetData()) > 0 {

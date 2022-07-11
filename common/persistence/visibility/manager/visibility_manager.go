@@ -67,6 +67,7 @@ type (
 	VisibilityRequestBase struct {
 		NamespaceID          namespace.ID
 		Namespace            namespace.Name // namespace.Name is not persisted.
+		NamespaceDivision    string
 		Execution            commonpb.WorkflowExecution
 		WorkflowTypeName     string
 		StartTime            time.Time
@@ -101,6 +102,7 @@ type (
 	ListWorkflowExecutionsRequest struct {
 		NamespaceID       namespace.ID
 		Namespace         namespace.Name // namespace.Name is not persisted.
+		NamespaceDivision string
 		EarliestStartTime time.Time
 		LatestStartTime   time.Time
 		// Maximum number of workflow executions per page
@@ -112,9 +114,10 @@ type (
 
 	// ListWorkflowExecutionsRequestV2 is used to list executions in a namespace
 	ListWorkflowExecutionsRequestV2 struct {
-		NamespaceID namespace.ID
-		Namespace   namespace.Name // namespace.Name is not persisted.
-		PageSize    int            // Maximum number of workflow executions per page
+		NamespaceID       namespace.ID
+		Namespace         namespace.Name // namespace.Name is not persisted.
+		NamespaceDivision string
+		PageSize          int // Maximum number of workflow executions per page
 		// Token to continue reading next page of workflow executions.
 		// Pass in empty slice for first page.
 		NextPageToken []byte
@@ -131,9 +134,10 @@ type (
 
 	// CountWorkflowExecutionsRequest is request from CountWorkflowExecutions
 	CountWorkflowExecutionsRequest struct {
-		NamespaceID namespace.ID
-		Namespace   namespace.Name // namespace.Name is not persisted.
-		Query       string
+		NamespaceID       namespace.ID
+		Namespace         namespace.Name // namespace.Name is not persisted.
+		NamespaceDivision string
+		Query             string
 	}
 
 	// CountWorkflowExecutionsResponse is response to CountWorkflowExecutions
