@@ -329,8 +329,8 @@ type (
 	CustomDatastoreConfig struct {
 		// Name of the custom datastore
 		Name string `yaml:"name"`
-		// Options is a set of key-value attributes that can be used by AbstractDatastoreFactory implementation
-		Options map[string]string `yaml:"options"`
+		// Options to be used by AbstractDatastoreFactory implementation
+		Options map[string]any `yaml:"options"`
 	}
 
 	// Replicator describes the configuration of replicator
