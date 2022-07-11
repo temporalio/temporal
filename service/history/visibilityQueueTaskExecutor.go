@@ -198,6 +198,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	executionStatus := executionState.GetStatus()
 	taskQueue := executionInfo.TaskQueue
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
+	namespaceDivision := executionInfo.NamespaceDivision
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
@@ -207,6 +208,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	return t.upsertExecution(
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
+		namespaceDivision,
 		task.GetWorkflowID(),
 		task.GetRunID(),
 		wfTypeName,
@@ -268,6 +270,7 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 func (t *visibilityQueueTaskExecutor) upsertExecution(
 	ctx context.Context,
 	namespaceID namespace.ID,
+	namespaceDivision string,
 	workflowID string,
 	runID string,
 	workflowTypeName string,
@@ -287,8 +290,9 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 
 	request := &manager.UpsertWorkflowExecutionRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
-			NamespaceID: namespaceID,
-			Namespace:   namespaceEntry.Name(),
+			NamespaceID:       namespaceID,
+			Namespace:         namespaceEntry.Name(),
+			NamespaceDivision: namespaceDivision,
 			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -353,6 +357,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	taskQueue := executionInfo.TaskQueue
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
+	namespaceDivision := executionInfo.NamespaceDivision
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
@@ -361,6 +366,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	return t.recordCloseExecution(
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
+		namespaceDivision,
 		task.GetWorkflowID(),
 		task.GetRunID(),
 		workflowTypeName,
@@ -380,6 +386,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	ctx context.Context,
 	namespaceID namespace.ID,
+	namespaceDivision string,
 	workflowID string,
 	runID string,
 	workflowTypeName string,
@@ -401,8 +408,9 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 
 	return t.visibilityMgr.RecordWorkflowExecutionClosed(ctx, &manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
-			NamespaceID: namespaceID,
-			Namespace:   namespaceEntry.Name(),
+			NamespaceID:       namespaceID,
+			Namespace:         namespaceEntry.Name(),
+			NamespaceDivision: namespaceDivision,
 			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
