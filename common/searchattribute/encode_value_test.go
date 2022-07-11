@@ -68,9 +68,9 @@ func Test_DecodeValue_FromMetadata_Success(t *testing.T) {
 	payloadEmptySlice, err := payload.Encode([]string{})
 	assert.NoError(err)
 	payloadEmptySlice.Metadata["type"] = []byte("Keyword")
-	decodedEmptySlice, err := DecodeValue(payloadEmptySlice, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
+	decodedNil, err = DecodeValue(payloadEmptySlice, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
 	assert.NoError(err)
-	assert.Equal([]string{}, decodedEmptySlice)
+	assert.Nil(decodedNil)
 
 	var expectedEncodedRepresentation = "2022-03-07T21:27:35.986848-05:00"
 	timeValue, err := time.Parse(time.RFC3339, expectedEncodedRepresentation)
@@ -110,9 +110,9 @@ func Test_DecodeValue_FromParameter_Success(t *testing.T) {
 
 	payloadEmptySlice, err := payload.Encode([]string{})
 	assert.NoError(err)
-	decodedEmptySlice, err := DecodeValue(payloadEmptySlice, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	decodedNil, err = DecodeValue(payloadEmptySlice, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 	assert.NoError(err)
-	assert.Equal([]string{}, decodedEmptySlice)
+	assert.Nil(decodedNil)
 
 	var expectedEncodedRepresentation = "2022-03-07T21:27:35.986848-05:00"
 	timeValue, err := time.Parse(time.RFC3339, expectedEncodedRepresentation)

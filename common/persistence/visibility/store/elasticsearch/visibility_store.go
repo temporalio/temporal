@@ -32,7 +32,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -815,9 +814,9 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to decode search attributes: %v", err))
 	}
 	for saName, saValue := range searchAttributes {
-		if saValue == nil || (reflect.TypeOf(saValue).Kind() == reflect.Slice && reflect.ValueOf(saValue).Len() == 0) {
-			// Fields with null value or empty list are not indexed by ES,
-			// so don't add them to the document.
+		if saValue == nil {
+			// If search attribute value is `nil`, it means that it shouldn't be added to the document.
+			// Empty slices are converted to `nil` while decoding.
 			continue
 		}
 		doc[saName] = saValue
