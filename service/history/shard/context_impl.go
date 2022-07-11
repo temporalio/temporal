@@ -1722,7 +1722,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 				continue
 			}
 
-			maxReadTime = common.MaxTime(maxReadTime, timestamp.TimeValue(queueState.ExclusiveReaderHighWatermark.FireTime))
+			maxReadTime = util.MaxTime(maxReadTime, timestamp.TimeValue(queueState.ExclusiveReaderHighWatermark.FireTime))
 		}
 
 		scheduledTaskMaxReadLevelMap[clusterName] = maxReadTime.Truncate(time.Millisecond)
