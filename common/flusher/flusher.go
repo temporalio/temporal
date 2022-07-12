@@ -112,7 +112,7 @@ func NewFlusher[T any](
 	}
 }
 
-func NewNoopItemWriter[T any](logger log.Logger) *noopItemWriterImpl[T] {
+func NewNoopItemWriter[T any](logger log.Logger) ItemWriter[T] {
 	return &noopItemWriterImpl[T]{
 		logger: logger,
 	}

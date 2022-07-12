@@ -46,7 +46,7 @@ type (
 
 		capacity int
 		sync.Mutex
-		flusher *Flusher[int]
+		flusher Flusher[int]
 	}
 )
 
