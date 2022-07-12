@@ -22,24 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//Type Generic Flush Buffer that is size bound and time bound.
-//The Flush Buffer will flush after a configurable amount of time as well as once the buffer reaches a configurable capacity.
-//The number of flush buffers can also be configured.
-//Starts with x free buffers, once a free buffer reaches capacity or if the timer is up, the free buffer will get switched to a full buffer.
-//A full buffer will get flushed in the background and switched back to a free buffer.
-//When a free buffer switches to a full buffer, another free buffer will take its place if there are any available at the moment.
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination flusher_mock.go
 
 package flusher
 
 import (
 	"fmt"
-	"go.temporal.io/server/common"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
@@ -50,6 +45,12 @@ type (
 	Flusher[T any] interface {
 		AddItemToBeFlushed(item T) *future.FutureImpl[struct{}]
 	}
+	//Type Generic Flush Buffer that is size bound and time bound.
+	//The Flush Buffer will flush after a configurable amount of time as well as once the buffer reaches a configurable capacity.
+	//The number of flush buffers can also be configured.
+	//Starts with x free buffers, once a free buffer reaches capacity or if the timer is up, the free buffer will get switched to a full buffer.
+	//A full buffer will get flushed in the background and switched back to a free buffer.
+	//When a free buffer switches to a full buffer, another free buffer will take its place if there are any available at the moment.
 	flusherImpl[T any] struct {
 		status                 int32
 		flushDuration          int
@@ -59,7 +60,7 @@ type (
 		flushNotifierChan      chan struct{}
 		logger                 log.Logger
 		shutdownChan           channel.ShutdownOnce
-		writer                 *ItemWriter[T]
+		writer                 ItemWriter[T]
 
 		sync.Mutex
 		flushTimer       *time.Timer
@@ -74,13 +75,13 @@ type (
 	ItemWriter[T any] interface {
 		Write(flushItem ...FlushItem[T]) error
 	}
-	itemWriterImpl[T any] struct {
+	noopItemWriterImpl[T any] struct {
 		logger log.Logger
 		sync.Mutex
 	}
 )
 
-var _ ItemWriter = (*itemWriterImpl)(nil)
+var _ ItemWriter = (*noopItemWriterImpl)(nil)
 var _ Flusher = (*flusherImpl)(nil)
 
 const (
@@ -91,9 +92,9 @@ func NewFlusher[T any](
 	bufferCount int,
 	bufferItemCapacity int,
 	flushDuration int,
-	writer *ItemWriter[T],
+	writer ItemWriter[T],
 	logger log.Logger,
-) *flusherImpl[T] {
+) Flusher[T] {
 	return &flusherImpl[T]{
 		status:                 common.DaemonStatusInitialized,
 		flushDuration:          flushDuration,                                               // time waited after first item insertion before flushing the buffer
@@ -111,13 +112,13 @@ func NewFlusher[T any](
 	}
 }
 
-func NewItemWriter[T any](logger log.Logger) *itemWriterImpl[T] {
-	return &itemWriterImpl[T]{
+func NewNoopItemWriter[T any](logger log.Logger) *noopItemWriterImpl[T] {
+	return &noopItemWriterImpl[T]{
 		logger: logger,
 	}
 }
 
-func (iwi *itemWriterImpl[T]) Write(flushItem ...FlushItem[T]) error {
+func (iwi *noopItemWriterImpl[T]) Write(flushItem ...FlushItem[T]) error {
 	return nil
 }
 
@@ -147,10 +148,11 @@ func (f *flusherImpl[T]) Stop() {
 		return
 	}
 
+	f.shutdownChan.Shutdown()
+
 	for _, flushItem := range f.flushItemsBuffer {
 		flushItem.fut.Set(struct{}{}, serviceerror.NewCanceled("Unable to write item due to Stop invocation"))
 	}
-	f.shutdownChan.Shutdown()
 }
 
 func (f *flusherImpl[T]) initFreeBuffers(bufferCount int, bufferCapacity int) {
@@ -229,7 +231,7 @@ func (f *flusherImpl[T]) AddItemToBeFlushed(item T) *future.FutureImpl[struct{}]
 
 func (f *flusherImpl[T]) addItemToBeFlushedLocked(item T) *future.FutureImpl[struct{}] {
 	flushItem := FlushItem[T]{item, future.NewFuture[struct{}]()}
-	if f.status == common.DaemonStatusStopped {
+	if f.shutdownChan.IsShutdown() {
 		flushItem.fut.Set(struct{}{}, serviceerror.NewUnavailable("Unable to process item since service is stopping"))
 		return flushItem.fut
 	}

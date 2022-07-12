@@ -26,13 +26,15 @@ package flusher
 
 import (
 	"context"
+	"sync"
+	"testing"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
-	"sync"
-	"testing"
 )
 
 type (
@@ -65,7 +67,7 @@ func (fs *flusherSuite) SetupTest() {
 	fs.controller = gomock.NewController(fs.T())
 	fs.ctx = context.Background()
 	logger := log.NewTestLogger()
-	writer := NewItemWriter[int](logger)
+	writer := NewNoopItemWriter[int](logger)
 	fs.capacity = 200
 	bufferCount := 2
 	flushDuration := 100
@@ -77,8 +79,6 @@ func (fs *flusherSuite) SetupTest() {
 func (fs *flusherSuite) TearDownTest() {
 	fs.controller.Finish()
 }
-
-//=============================================================================
 
 func (fs *flusherSuite) TestFlushTimer() {
 	var futArr [200]*future.FutureImpl[struct{}]
