@@ -528,6 +528,32 @@ func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
 
+func (v *commandAttrValidator) validateModifyWorkflowProperties(
+	namespace namespace.Name,
+	attributes *commandpb.ModifyWorkflowPropertiesCommandAttributes,
+) (enumspb.WorkflowTaskFailedCause, error) {
+	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES
+	if attributes == nil {
+		return failedCause, serviceerror.NewInvalidArgument(
+			"ModifyWorkflowPropertiesCommandAttributes is not set on command.",
+		)
+	}
+
+	// check at least one attribute is not nil
+	if attributes.UpsertedMemo == nil {
+		return failedCause, serviceerror.NewInvalidArgument(
+			"ModifyWorkflowPropertiesCommandAttributes attributes are all nil.",
+		)
+	}
+
+	// check if UpsertedMemo is not nil, then it's not an empty map
+	if attributes.UpsertedMemo != nil && len(attributes.GetUpsertedMemo().GetFields()) == 0 {
+		return failedCause, serviceerror.NewInvalidArgument("UpsertedMemo.Fields is empty on command.")
+	}
+
+	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
+}
+
 func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	namespace namespace.Name,
 	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
@@ -807,7 +833,8 @@ func (v *commandAttrValidator) validateCommandSequence(
 			enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
 			enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 			enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
-			enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+			enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+			enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES:
 			// noop
 		case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 			enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,

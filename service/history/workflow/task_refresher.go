@@ -518,7 +518,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 	taskGenerator TaskGenerator,
 ) error {
 
-	return taskGenerator.GenerateWorkflowSearchAttrTasks(
+	return taskGenerator.GenerateUpsertVisibilityTask(
 		now,
 	)
 }
