@@ -76,8 +76,6 @@ const (
 // disregarded.
 // #nosec
 const (
-	// SystemGlobalNamespace is global namespace name for temporal system workflows running globally
-	SystemGlobalNamespace = "temporal-system-global"
 	// SystemLocalNamespace is namespace name for temporal system workflows running in local cluster
 	SystemLocalNamespace = "temporal-system"
 	// SystemNamespaceID is namespace id for all temporal system workflows
