@@ -409,7 +409,7 @@ install-schema-cdc: temporal-cassandra-tool
 DOCKER_COMPOSE_FILES     := -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml
 DOCKER_COMPOSE_CDC_FILES := -f ./develop/docker-compose/docker-compose.cdc.yml -f ./develop/docker-compose/docker-compose.cdc.$(GOOS).yml
 start-dependencies:
-	docker-compose $(DOCKER_COMPOSE_FILES) up
+	docker-compose $(DOCKER_COMPOSE_FILES) up -d
 
 stop-dependencies:
 	docker-compose $(DOCKER_COMPOSE_FILES) down
