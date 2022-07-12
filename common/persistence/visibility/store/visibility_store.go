@@ -65,7 +65,6 @@ type (
 
 	// InternalWorkflowExecutionInfo is visibility info for internal response
 	InternalWorkflowExecutionInfo struct {
-		// TODO: maybe expose NamespaceDivision here later
 		WorkflowID           string
 		RunID                string
 		TypeName             string

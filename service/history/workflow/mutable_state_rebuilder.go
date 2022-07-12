@@ -144,7 +144,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				execution,
 				requestID,
 				event,
-				"", // TODO: need to get from start event after moving field there
 			); err != nil {
 				return nil, err
 			}

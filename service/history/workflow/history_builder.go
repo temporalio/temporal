@@ -179,6 +179,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 		OriginalExecutionRunId:          originalRunID,
 		Memo:                            req.Memo,
 		SearchAttributes:                req.SearchAttributes,
+		NamespaceDivision:               req.NamespaceDivision,
 	}
 	parentInfo := request.ParentExecutionInfo
 	if parentInfo != nil {

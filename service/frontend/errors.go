@@ -72,6 +72,7 @@ var (
 	errStatusFilterMustBeNotRunning                       = serviceerror.NewInvalidArgument("StatusFilter must be specified and must be not Running.")
 	errCronNotAllowed                                     = serviceerror.NewInvalidArgument("Scheduled workflow must not contain CronSchedule")
 	errIDReusePolicyNotAllowed                            = serviceerror.NewInvalidArgument("Scheduled workflow must not contain WorkflowIDReusePolicy")
+	errNamespaceDivisionNotAllowed                        = serviceerror.NewInvalidArgument("NamespaceDivision must not be set on external request")
 	errShuttingDown                                       = serviceerror.NewUnavailable("Shutting down")
 
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."

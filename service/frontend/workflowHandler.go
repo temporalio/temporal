@@ -399,6 +399,10 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errRequestIDTooLong
 	}
 
+	if request.NamespaceDivision != "" {
+		return nil, errNamespaceDivisionNotAllowed
+	}
+
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
 
 	wh.logger.Debug("Start workflow execution request namespace.", tag.WorkflowNamespace(namespaceName.String()))
@@ -2092,6 +2096,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errRequestIDTooLong
 	}
 
+	if request.NamespaceDivision != "" {
+		return nil, errNamespaceDivisionNotAllowed
+	}
+
 	if err := wh.validateSignalWithStartWorkflowTimeouts(request); err != nil {
 		return nil, err
 	}
@@ -3126,6 +3134,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	// Create StartWorkflowExecutionRequest
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:             request.Namespace,
+		NamespaceDivision:     scheduler.NamespaceDivision,
 		WorkflowId:            request.ScheduleId,
 		WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
 		TaskQueue:             &taskqueuepb.TaskQueue{Name: scheduler.TaskQueueName},
@@ -3136,9 +3145,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		Memo:                  request.Memo,
 		SearchAttributes:      request.SearchAttributes,
 	}
-	historyReq := common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC())
-	historyReq.NamespaceDivision = scheduler.NamespaceDivision
-	_, err = wh.historyClient.StartWorkflowExecution(ctx, historyReq)
+	_, err = wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC()))
 
 	if err != nil {
 		return nil, err
