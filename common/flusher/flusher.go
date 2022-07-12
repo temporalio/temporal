@@ -43,6 +43,8 @@ import (
 
 type (
 	Flusher[T any] interface {
+		Start()
+		Stop()
 		AddItemToBeFlushed(item T) *future.FutureImpl[struct{}]
 	}
 	//Type Generic Flush Buffer that is size bound and time bound.
@@ -80,9 +82,6 @@ type (
 		sync.Mutex
 	}
 )
-
-var _ ItemWriter = (*noopItemWriterImpl)(nil)
-var _ Flusher = (*flusherImpl)(nil)
 
 const (
 	bufferCapacityGapPercent = 0.9
