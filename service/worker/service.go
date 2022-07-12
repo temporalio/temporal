@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/archiver"
-	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 	"go.temporal.io/server/service/worker/replicator"
 	"go.temporal.io/server/service/worker/scanner"
@@ -103,11 +102,9 @@ type (
 		ArchiverConfig                *archiver.Config
 		ScannerCfg                    *scanner.Config
 		ParentCloseCfg                *parentclosepolicy.Config
-		BatcherCfg                    *batcher.Config
 		ThrottledLogRPS               dynamicconfig.IntPropertyFn
 		PersistenceMaxQPS             dynamicconfig.IntPropertyFn
 		PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
-		EnableBatcher                 dynamicconfig.BoolPropertyFn
 		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
 
 		StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
@@ -212,24 +209,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				archiver.MaxArchivalIterationTimeout(),
 			),
 		},
-		BatcherCfg: &batcher.Config{
-			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
-				dynamicconfig.WorkerBatcherMaxConcurrentActivityExecutionSize,
-				1000,
-			),
-			MaxConcurrentWorkflowTaskExecutionSize: dc.GetIntProperty(
-				dynamicconfig.WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize,
-				1000,
-			),
-			MaxConcurrentActivityTaskPollers: dc.GetIntProperty(
-				dynamicconfig.WorkerBatcherMaxConcurrentActivityTaskPollers,
-				4,
-			),
-			MaxConcurrentWorkflowTaskPollers: dc.GetIntProperty(
-				dynamicconfig.WorkerBatcherMaxConcurrentWorkflowTaskPollers,
-				4,
-			),
-		},
+
 		ParentCloseCfg: &parentclosepolicy.Config{
 			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
 				dynamicconfig.WorkerParentCloseMaxConcurrentActivityExecutionSize,
@@ -288,10 +268,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				false,
 			),
 		},
-		EnableBatcher: dc.GetBoolProperty(
-			dynamicconfig.EnableBatcher,
-			true,
-		),
+		//EnableBatcher: dc.GetBoolProperty(
+		//	dynamicconfig.EnableBatcher,
+		//	true,
+		//),
 		EnableParentClosePolicyWorker: dc.GetBoolProperty(
 			dynamicconfig.EnableParentClosePolicyWorker,
 			true,
@@ -362,9 +342,6 @@ func (s *Service) Start() {
 	if s.archivalMetadata.GetHistoryConfig().ClusterConfiguredForArchival() {
 		s.startArchiver()
 	}
-	if s.config.EnableBatcher() {
-		s.startBatcher()
-	}
 	if s.config.EnableParentClosePolicyWorker() {
 		s.startParentClosePolicyProcessor()
 	}
@@ -424,19 +401,6 @@ func (s *Service) startParentClosePolicyProcessor() {
 	if err := processor.Start(); err != nil {
 		s.logger.Fatal(
 			"error starting parentclosepolicy processor",
-			tag.Error(err),
-		)
-	}
-}
-
-func (s *Service) startBatcher() {
-	if err := batcher.New(
-		s.config.BatcherCfg,
-		s.metricsClient,
-		s.logger,
-		s.sdkClientFactory).Start(); err != nil {
-		s.logger.Fatal(
-			"error starting batcher",
 			tag.Error(err),
 		)
 	}

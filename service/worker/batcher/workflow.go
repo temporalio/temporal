@@ -31,7 +31,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -45,11 +44,6 @@ import (
 )
 
 const (
-	batcherContextKey = "batcherContext"
-	// BatcherTaskQueueName is the taskqueue name
-	BatcherTaskQueueName = "temporal-sys-batcher-taskqueue"
-	// BatchWFTypeName is the workflow type
-	BatchWFTypeName   = "temporal-sys-batch-workflow"
 	batchActivityName = "temporal-sys-batch-activity"
 	// InfiniteDuration is a long duration(20 yrs) we used for infinite workflow running
 	InfiniteDuration = 20 * 365 * 24 * time.Hour
@@ -177,7 +171,8 @@ func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDeta
 	batchActivityOptions.HeartbeatTimeout = batchParams.ActivityHeartBeatTimeout
 	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
 	var result HeartBeatDetails
-	err = workflow.ExecuteActivity(opt, batchActivityName, batchParams).Get(ctx, &result)
+	var ac *activities
+	err = workflow.ExecuteActivity(opt, ac.BatchActivity, batchParams).Get(ctx, &result)
 	return result, err
 }
 
@@ -226,102 +221,6 @@ func setDefaultParams(params BatchParams) BatchParams {
 	return params
 }
 
-// BatchActivity is activity for processing batch operation
-func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
-	batcher := ctx.Value(batcherContextKey).(*Batcher)
-	logger := getActivityLogger(ctx)
-	hbd := HeartBeatDetails{}
-
-	sdkClient, err := batcher.sdkClientFactory.NewClient(batchParams.Namespace, logger)
-	if err != nil {
-		logger.Error("Unable to create SDK client for namespace.", tag.Error(err), tag.WorkflowNamespace(batchParams.Namespace))
-		return hbd, err
-	}
-
-	startOver := true
-	if activity.HasHeartbeatDetails(ctx) {
-		if err := activity.GetHeartbeatDetails(ctx, &hbd); err == nil {
-			startOver = false
-		} else {
-			batcher := ctx.Value(batcherContextKey).(*Batcher)
-			batcher.metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
-			logger.Error("Failed to recover from last heartbeat, start over from beginning", tag.Error(err))
-		}
-	}
-
-	if startOver {
-		resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-			Query: batchParams.Query,
-		})
-		if err != nil {
-			return HeartBeatDetails{}, err
-		}
-		hbd.TotalEstimate = resp.GetCount()
-	}
-	rateLimiter := rate.NewLimiter(rate.Limit(batchParams.RPS), batchParams.RPS)
-	taskCh := make(chan taskDetail, pageSize)
-	respCh := make(chan error, pageSize)
-	for i := 0; i < batchParams.Concurrency; i++ {
-		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, logger)
-	}
-
-	for {
-		resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			PageSize:      int32(pageSize),
-			NextPageToken: hbd.PageToken,
-			Query:         batchParams.Query,
-		})
-		if err != nil {
-			return HeartBeatDetails{}, err
-		}
-		batchCount := len(resp.Executions)
-		if batchCount <= 0 {
-			break
-		}
-
-		// send all tasks
-		for _, wf := range resp.Executions {
-			taskCh <- taskDetail{
-				execution: *wf.Execution,
-				attempts:  1,
-				hbd:       hbd,
-			}
-		}
-
-		succCount := 0
-		errCount := 0
-		// wait for counters indicate this batch is done
-	Loop:
-		for {
-			select {
-			case err := <-respCh:
-				if err == nil {
-					succCount++
-				} else {
-					errCount++
-				}
-				if succCount+errCount == batchCount {
-					break Loop
-				}
-			case <-ctx.Done():
-				return HeartBeatDetails{}, ctx.Err()
-			}
-		}
-
-		hbd.CurrentPage++
-		hbd.PageToken = resp.NextPageToken
-		hbd.SuccessCount += succCount
-		hbd.ErrorCount += errCount
-		activity.RecordHeartbeat(ctx, hbd)
-
-		if len(hbd.PageToken) == 0 {
-			break
-		}
-	}
-
-	return hbd, nil
-}
-
 func startTaskProcessor(
 	ctx context.Context,
 	batchParams BatchParams,
@@ -329,9 +228,9 @@ func startTaskProcessor(
 	respCh chan error,
 	limiter *rate.Limiter,
 	sdkClient sdkclient.Client,
+	metricsClient metrics.Client,
 	logger log.Logger,
 ) {
-	batcher := ctx.Value(batcherContextKey).(*Batcher)
 	for {
 		select {
 		case <-ctx.Done():
@@ -362,7 +261,7 @@ func startTaskProcessor(
 					})
 			}
 			if err != nil {
-				batcher.metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
+				metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
 
 				_, ok := batchParams._nonRetryableErrors[err.Error()]
@@ -374,7 +273,7 @@ func startTaskProcessor(
 					taskCh <- task
 				}
 			} else {
-				batcher.metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorSuccess)
+				metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorSuccess)
 				respCh <- nil
 			}
 		}
@@ -440,15 +339,4 @@ func isDone(ctx context.Context) bool {
 	default:
 		return false
 	}
-}
-
-func getActivityLogger(ctx context.Context) log.Logger {
-	batcher := ctx.Value(batcherContextKey).(*Batcher)
-	wfInfo := activity.GetInfo(ctx)
-	return log.With(
-		batcher.logger,
-		tag.WorkflowID(wfInfo.WorkflowExecution.ID),
-		tag.WorkflowRunID(wfInfo.WorkflowExecution.RunID),
-		tag.WorkflowNamespace(wfInfo.WorkflowNamespace),
-	)
 }

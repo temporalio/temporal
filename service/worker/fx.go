@@ -26,6 +26,7 @@ package worker
 
 import (
 	"context"
+	"go.temporal.io/server/service/worker/batcher"
 
 	"go.uber.org/fx"
 
@@ -54,6 +55,7 @@ var Module = fx.Options(
 	resource.Module,
 	deletenamespace.Module,
 	scheduler.Module,
+	batcher.Module,
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
