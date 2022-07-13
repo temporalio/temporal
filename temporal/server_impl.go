@@ -107,11 +107,17 @@ func (s *ServerImpl) Start() error {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
 
+	var wg sync.WaitGroup
 	for _, svcMeta := range s.servicesMetadata {
-		timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
-		svcMeta.App.Start(timeoutCtx)
-		cancelFunc()
+		wg.Add(1)
+		go func(svcMeta *ServicesMetadata) {
+			timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
+			defer cancelFunc()
+			svcMeta.App.Start(timeoutCtx)
+			wg.Done()
+		}(svcMeta)
 	}
+	wg.Wait()
 
 	if s.so.blockingStart {
 		// If s.so.interruptCh is nil this will wait forever.
