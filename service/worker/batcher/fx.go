@@ -41,11 +41,16 @@ const (
 	BatcherTaskQueueName = "temporal-sys-batcher-taskqueue"
 	// BatchWFTypeName is the workflow type
 	BatchWFTypeName = "temporal-sys-batch-workflow"
+	// DefaultRPS is the default RPS
+	DefaultRPS = 50
+	// DefaultConcurrency is the default concurrency
+	DefaultConcurrency = 5
 )
 
 type (
 	workerComponent struct {
 		activityDeps                 activityDeps
+		dc                           *dynamicconfig.Collection
 		enabled                      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		numWorkers                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		maxActivityExecutionSize     dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -78,8 +83,9 @@ func NewResult(
 	return fxResult{
 		Component: &workerComponent{
 			activityDeps:                 params,
+			dc:                           dc,
 			enabled:                      dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcher, true),
-			numWorkers:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerSchedulerNumWorkers, 1),
+			numWorkers:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherNumWorkers, 1),
 			maxActivityExecutionSize:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherMaxConcurrentActivityExecutionSize, 1000),
 			maxWorkflowTaskExecutionSize: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize, 1000),
 			maxActivityPollers:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherMaxConcurrentActivityTaskPollers, 2),
@@ -113,5 +119,7 @@ func (s *workerComponent) activities(name namespace.Name, id namespace.ID) *acti
 		activityDeps: s.activityDeps,
 		namespace:    name,
 		namespaceID:  id,
+		rps:          s.dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherRPS, DefaultRPS),
+		concurrency:  s.dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherConcurrency, DefaultConcurrency),
 	}
 }

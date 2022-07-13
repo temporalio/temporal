@@ -617,6 +617,12 @@ const (
 	WorkerBatcherMaxConcurrentWorkflowTaskPollers = "worker.BatcherMaxConcurrentWorkflowTaskPollers"
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher = "worker.enableBatcher"
+	// WorkerBatcherNumWorkers controls number of batcher workers to run per namespace
+	WorkerBatcherNumWorkers = "worker.batcherNumWorkers"
+	// BatcherRPS controls number the rps of batch operations
+	BatcherRPS = "worker.batcherRPS"
+	// BatcherRPS controls the concurrency of batch operations
+	BatcherConcurrency = "worker.batcherConcurrency"
 	// WorkerParentCloseMaxConcurrentActivityExecutionSize indicates worker parent close worker max concurrent activity execution size
 	WorkerParentCloseMaxConcurrentActivityExecutionSize = "worker.ParentCloseMaxConcurrentActivityExecutionSize"
 	// WorkerParentCloseMaxConcurrentWorkflowTaskExecutionSize indicates worker parent close worker max concurrent workflow execution size

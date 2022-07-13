@@ -2,8 +2,13 @@ package batcher
 
 import (
 	"context"
+	"errors"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -11,16 +16,34 @@ import (
 	"golang.org/x/time/rate"
 )
 
+var (
+	errNamespaceMismatch = errors.New("namespace mismatch")
+)
+
 type activities struct {
 	activityDeps
 	namespace   namespace.Name
 	namespaceID namespace.ID
+	rps         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
-// BatchActivity is activity for processing batch operation
-func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
+func (a *activities) checkNamespace(namespace string) error {
+	// Ignore system namespace for backward compatibility.
+	// TODO: Remove the system namespace special handling after 1.19+
+	if namespace != a.namespace.String() && a.namespace.String() != common.SystemLocalNamespace {
+		return errNamespaceMismatch
+	}
+	return nil
+}
+
+// batchActivity is activity for processing batch operation
+func (a *activities) batchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
+	if err := a.checkNamespace(batchParams.Namespace); err != nil {
+		return hbd, err
+	}
 
 	sdkClient, err := a.ClientFactory.NewClient(batchParams.Namespace, logger)
 	if err != nil {
@@ -47,10 +70,11 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		}
 		hbd.TotalEstimate = resp.GetCount()
 	}
-	rateLimiter := rate.NewLimiter(rate.Limit(batchParams.RPS), batchParams.RPS)
+	rps := a.getOperationRPS(batchParams.RPS)
+	rateLimiter := rate.NewLimiter(rate.Limit(rps), rps)
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
-	for i := 0; i < batchParams.Concurrency; i++ {
+	for i := 0; i < a.getOperationConcurrency(batchParams.Concurrency); i++ {
 		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.MetricsClient, logger)
 	}
 
@@ -119,4 +143,108 @@ func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
 		tag.WorkflowRunID(wfInfo.WorkflowExecution.RunID),
 		tag.WorkflowNamespace(wfInfo.WorkflowNamespace),
 	)
+}
+
+func (a *activities) getOperationRPS(rps int) int {
+	if rps <= 0 {
+		return a.rps(a.namespace.String())
+	}
+	return rps
+}
+
+func (a *activities) getOperationConcurrency(concurrency int) int {
+	if concurrency <= 0 {
+		return a.concurrency(a.namespace.String())
+	}
+	return concurrency
+}
+
+func startTaskProcessor(
+	ctx context.Context,
+	batchParams BatchParams,
+	taskCh chan taskDetail,
+	respCh chan error,
+	limiter *rate.Limiter,
+	sdkClient sdkclient.Client,
+	metricsClient metrics.Client,
+	logger log.Logger,
+) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case task := <-taskCh:
+			if isDone(ctx) {
+				return
+			}
+			var err error
+
+			switch batchParams.BatchType {
+			case BatchTypeTerminate:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						return sdkClient.TerminateWorkflow(ctx, workflowID, runID, batchParams.Reason)
+					})
+			case BatchTypeCancel:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						return sdkClient.CancelWorkflow(ctx, workflowID, runID)
+					})
+			case BatchTypeSignal:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						return sdkClient.SignalWorkflow(ctx, workflowID, runID, batchParams.SignalParams.SignalName, batchParams.SignalParams.Input)
+					})
+			}
+			if err != nil {
+				metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
+				logger.Error("Failed to process batch operation task", tag.Error(err))
+
+				_, ok := batchParams._nonRetryableErrors[err.Error()]
+				if ok || task.attempts > batchParams.AttemptsOnRetryableError {
+					respCh <- err
+				} else {
+					// put back to the channel if less than attemptsOnError
+					task.attempts++
+					taskCh <- task
+				}
+			} else {
+				metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorSuccess)
+				respCh <- nil
+			}
+		}
+	}
+}
+
+func processTask(
+	ctx context.Context,
+	limiter *rate.Limiter,
+	task taskDetail,
+	procFn func(string, string) error,
+) error {
+
+	err := limiter.Wait(ctx)
+	if err != nil {
+		return err
+	}
+	activity.RecordHeartbeat(ctx, task.hbd)
+
+	err = procFn(task.execution.GetWorkflowId(), task.execution.GetRunId())
+	if err != nil {
+		// NotFound means wf is not running or deleted
+		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func isDone(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
 }
