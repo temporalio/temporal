@@ -186,7 +186,7 @@ func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 }
 
 func (s *ContextImpl) GetEngine() (Engine, error) {
-	return s.engineFuture.Get(context.Background())
+	return s.engineFuture.Get(s.lifecycleCtx)
 }
 
 func (s *ContextImpl) GetEngineWithContext(
@@ -1165,7 +1165,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 		updatedShardInfo.StolenSinceRenew++
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), shardIOTimeout)
+	ctx, cancel := context.WithTimeout(s.lifecycleCtx, shardIOTimeout)
 	defer cancel()
 	err := s.persistenceShardManager.UpdateShard(ctx, &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
@@ -1218,7 +1218,7 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	updatedShardInfo := copyShardInfo(s.shardInfo)
 	s.emitShardInfoMetricsLogsLocked()
 
-	ctx, cancel := context.WithTimeout(context.Background(), shardIOTimeout)
+	ctx, cancel := context.WithTimeout(s.lifecycleCtx, shardIOTimeout)
 	defer cancel()
 	err = s.persistenceShardManager.UpdateShard(ctx, &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
@@ -1668,7 +1668,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	s.rUnlock()
 
 	// We don't have any shardInfo yet, load it (outside of context rwlock)
-	ctx, cancel := context.WithTimeout(context.Background(), shardIOTimeout)
+	ctx, cancel := context.WithTimeout(s.lifecycleCtx, shardIOTimeout)
 	defer cancel()
 	resp, err := s.persistenceShardManager.GetOrCreateShard(ctx, &persistence.GetOrCreateShardRequest{
 		ShardID:          s.shardID,
@@ -2025,7 +2025,7 @@ func (s *ContextImpl) ensureMinContextTimeout(
 		return ctx, func() {}, nil
 	}
 
-	newContext, cancel := context.WithTimeout(context.Background(), minContextTimeout)
+	newContext, cancel := context.WithTimeout(s.lifecycleCtx, minContextTimeout)
 	return newContext, cancel, nil
 }
 
