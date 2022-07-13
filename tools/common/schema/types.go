@@ -87,6 +87,8 @@ const (
 	CLIOptKeyspace = "keyspace"
 	// CLIOptDatabase is the cli option for database
 	CLIOptDatabase = "database"
+	// CLIOptDefaultDb is the cli option used as defaultdb to connect to
+	CLIOptDefaultDb = "defaultdb"
 	// CLIOptPluginName is the cli option for plugin name
 	CLIOptPluginName = "plugin"
 	// CLIOptConnectAttributes is the cli option for connect attributes (key/values via a url query string)
