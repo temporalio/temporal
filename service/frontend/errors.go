@@ -73,6 +73,7 @@ var (
 	errCronNotAllowed                                     = serviceerror.NewInvalidArgument("Scheduled workflow must not contain CronSchedule")
 	errIDReusePolicyNotAllowed                            = serviceerror.NewInvalidArgument("Scheduled workflow must not contain WorkflowIDReusePolicy")
 	errShuttingDown                                       = serviceerror.NewUnavailable("Shutting down")
+	errUnableDeleteSystemNamespace                        = serviceerror.NewInvalidArgument("Unable to delete system namespace.")
 
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
 

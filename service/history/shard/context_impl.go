@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -57,14 +58,13 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 )
-
-var persistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
 
 const (
 	// See transitionLocked for overview of state transitions.
@@ -309,7 +309,7 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(cluster string) tasks.Key 
 	}
 
 	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
-	s.scheduledTaskMaxReadLevelMap[cluster] = common.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
+	s.scheduledTaskMaxReadLevelMap[cluster] = util.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
 	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
 }
 
@@ -340,24 +340,30 @@ func (s *ContextImpl) UpdateQueueAckLevel(
 	// the ack level is already the min ack level across all types of
 	// queue processors: active, passive, failover
 
-	if _, ok := s.shardInfo.QueueAckLevels[category.ID()]; !ok {
-		s.shardInfo.QueueAckLevels[category.ID()] = &persistencespb.QueueAckLevel{
+	categoryID := category.ID()
+	if _, ok := s.shardInfo.QueueAckLevels[categoryID]; !ok {
+		s.shardInfo.QueueAckLevels[categoryID] = &persistencespb.QueueAckLevel{
 			ClusterAckLevel: make(map[string]int64),
 		}
 	}
 	persistenceAckLevel := convertTaskKeyToPersistenceAckLevel(category.Type(), ackLevel)
-	s.shardInfo.QueueAckLevels[category.ID()].AckLevel = persistenceAckLevel
+	s.shardInfo.QueueAckLevels[categoryID].AckLevel = persistenceAckLevel
 
 	// if cluster ack level is less than the overall ack level, update cluster ack level
 	// as well to prevent loading too many tombstones if the cluster ack level is used later
 	// this may happen when adding back a removed cluster or rolling back the change for using
 	// single queue in timer/transfer queue processor
-	clusterAckLevel := s.shardInfo.QueueAckLevels[category.ID()].ClusterAckLevel
+	clusterAckLevel := s.shardInfo.QueueAckLevels[categoryID].ClusterAckLevel
 	for clusterName, persistenceClusterAckLevel := range clusterAckLevel {
 		if persistenceClusterAckLevel < persistenceAckLevel {
 			clusterAckLevel[clusterName] = persistenceAckLevel
 		}
 	}
+
+	// when this method is called, it means multi-cursor is disabled.
+	// clear processor state field, so that next time multi-cursor is enabled,
+	// it won't start from an very old state
+	delete(s.shardInfo.QueueStates, categoryID)
 
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
@@ -408,6 +414,61 @@ func (s *ContextImpl) UpdateQueueClusterAckLevel(
 		}
 	}
 	s.shardInfo.QueueAckLevels[category.ID()].ClusterAckLevel[cluster] = convertTaskKeyToPersistenceAckLevel(category.Type(), ackLevel)
+
+	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
+}
+
+func (s *ContextImpl) GetQueueState(
+	category tasks.Category,
+) (*persistencespb.QueueState, bool) {
+	s.rLock()
+	defer s.rUnlock()
+
+	queueState, ok := s.shardInfo.QueueStates[category.ID()]
+	return queueState, ok
+}
+
+func (s *ContextImpl) UpdateQueueState(
+	category tasks.Category,
+	state *persistencespb.QueueState,
+) error {
+	s.wLock()
+	defer s.wUnlock()
+
+	categoryID := category.ID()
+	s.shardInfo.QueueStates[categoryID] = state
+
+	// for compatability, update ack level and cluster ack level as well
+	// so after rollback or disabling the feature, we won't load too many tombstones
+	minAckLevel := tasks.MaximumKey
+	for _, readerState := range state.ReaderStates {
+		if len(readerState.Scopes) != 0 {
+			minAckLevel = tasks.MinKey(
+				minAckLevel,
+				convertFromPersistenceTaskKey(readerState.Scopes[0].Range.InclusiveMin),
+			)
+		}
+	}
+
+	if category.Type() == tasks.CategoryTypeImmediate && minAckLevel.TaskID > 0 {
+		// for immediate task type, the ack level is inclusive
+		// for scheduled task type, the ack level is exclusive
+		minAckLevel = minAckLevel.Prev()
+	}
+	persistenceAckLevel := convertTaskKeyToPersistenceAckLevel(category.Type(), minAckLevel)
+
+	if _, ok := s.shardInfo.QueueAckLevels[categoryID]; !ok {
+		s.shardInfo.QueueAckLevels[categoryID] = &persistencespb.QueueAckLevel{
+			ClusterAckLevel: make(map[string]int64),
+		}
+	}
+	s.shardInfo.QueueAckLevels[categoryID].AckLevel = persistenceAckLevel
+
+	clusterAckLevel := s.shardInfo.QueueAckLevels[categoryID].ClusterAckLevel
+	for clusterName := range clusterAckLevel {
+		clusterAckLevel[clusterName] = persistenceAckLevel
+	}
 
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
@@ -497,9 +558,7 @@ func (s *ContextImpl) GetAllFailoverLevels(category tasks.Category) map[string]p
 
 	ret := map[string]persistence.FailoverLevel{}
 	if levels, ok := s.shardInfo.FailoverLevels[category]; ok {
-		for k, v := range levels {
-			ret[k] = v
-		}
+		maps.Copy(ret, levels)
 	}
 
 	return ret
@@ -1646,15 +1705,24 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 
 			if queueAckLevels.AckLevel != 0 {
 				currentTime := timestamp.UnixOrZeroTime(queueAckLevels.AckLevel)
-				maxReadTime = common.MaxTime(maxReadTime, currentTime)
+				maxReadTime = util.MaxTime(maxReadTime, currentTime)
 			}
 
 			if queueAckLevels.ClusterAckLevel != nil {
 				if ackLevel, ok := queueAckLevels.ClusterAckLevel[clusterName]; ok {
 					currentTime := timestamp.UnixOrZeroTime(ackLevel)
-					maxReadTime = common.MaxTime(maxReadTime, currentTime)
+					maxReadTime = util.MaxTime(maxReadTime, currentTime)
 				}
 			}
+		}
+
+		for categoryID, queueState := range shardInfo.QueueStates {
+			category, ok := taskCategories[categoryID]
+			if !ok || category.Type() != tasks.CategoryTypeScheduled {
+				continue
+			}
+
+			maxReadTime = util.MaxTime(maxReadTime, timestamp.TimeValue(queueState.ExclusiveReaderHighWatermark.FireTime))
 		}
 
 		scheduledTaskMaxReadLevelMap[clusterName] = maxReadTime.Truncate(time.Millisecond)
@@ -1782,7 +1850,7 @@ func (s *ContextImpl) acquireShard() {
 		return nil
 	}
 
-	err := backoff.Retry(op, policy, common.IsPersistenceTransientError)
+	err := backoff.ThrottleRetry(op, policy, common.IsPersistenceTransientError)
 	if err == errStoppingContext {
 		// State changed since this goroutine started, exit silently.
 		return
@@ -1868,42 +1936,32 @@ func newContext(
 	return shardContext, nil
 }
 
+// TODO: why do we need a deep copy here?
 func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.ShardInfoWithFailover {
 	failoverLevels := make(map[tasks.Category]map[string]persistence.FailoverLevel)
 	for category, levels := range shardInfo.FailoverLevels {
-		failoverLevels[category] = make(map[string]persistence.FailoverLevel)
-		for k, v := range levels {
-			failoverLevels[category][k] = v
-		}
-	}
-
-	clusterReplicationDLQLevel := make(map[string]int64)
-	for k, v := range shardInfo.ReplicationDlqAckLevel {
-		clusterReplicationDLQLevel[k] = v
+		failoverLevels[category] = maps.Clone(levels)
 	}
 
 	queueAckLevels := make(map[int32]*persistencespb.QueueAckLevel)
 	for category, ackLevels := range shardInfo.QueueAckLevels {
-		copiedLevel := &persistencespb.QueueAckLevel{
+		queueAckLevels[category] = &persistencespb.QueueAckLevel{
 			AckLevel:        ackLevels.AckLevel,
-			ClusterAckLevel: make(map[string]int64),
+			ClusterAckLevel: maps.Clone(ackLevels.ClusterAckLevel),
 		}
-		for k, v := range ackLevels.ClusterAckLevel {
-			copiedLevel.ClusterAckLevel[k] = v
-		}
-		queueAckLevels[category] = copiedLevel
 	}
 
 	shardInfoCopy := &persistence.ShardInfoWithFailover{
 		ShardInfo: &persistencespb.ShardInfo{
-			ShardId:                      shardInfo.GetShardId(),
+			ShardId:                      shardInfo.ShardId,
 			Owner:                        shardInfo.Owner,
-			RangeId:                      shardInfo.GetRangeId(),
+			RangeId:                      shardInfo.RangeId,
 			StolenSinceRenew:             shardInfo.StolenSinceRenew,
 			NamespaceNotificationVersion: shardInfo.NamespaceNotificationVersion,
-			ReplicationDlqAckLevel:       clusterReplicationDLQLevel,
+			ReplicationDlqAckLevel:       maps.Clone(shardInfo.ReplicationDlqAckLevel),
 			UpdateTime:                   shardInfo.UpdateTime,
 			QueueAckLevels:               queueAckLevels,
+			QueueStates:                  shardInfo.QueueStates,
 		},
 		FailoverLevels: failoverLevels,
 	}
@@ -2011,4 +2069,13 @@ func convertTaskKeyToPersistenceAckLevel(
 		return taskKey.TaskID
 	}
 	return taskKey.FireTime.UnixNano()
+}
+
+func convertFromPersistenceTaskKey(
+	key *persistencespb.TaskKey,
+) tasks.Key {
+	return tasks.NewKey(
+		timestamp.TimeValue(key.FireTime),
+		key.TaskId,
+	)
 }

@@ -299,7 +299,7 @@ func (w *taskWriter) renewLeaseWithRetry(
 		return
 	}
 	w.tlMgr.metricScope.IncCounter(metrics.LeaseRequestPerTaskQueueCounter)
-	err := backoff.RetryContext(ctx, op, retryPolicy, retryErrors)
+	err := backoff.ThrottleRetryContext(ctx, op, retryPolicy, retryErrors)
 	if err != nil {
 		w.tlMgr.metricScope.IncCounter(metrics.LeaseFailurePerTaskQueueCounter)
 		return newState, err

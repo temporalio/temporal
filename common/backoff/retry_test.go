@@ -32,6 +32,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/api/serviceerror"
 )
 
 type (
@@ -222,6 +223,62 @@ func (s *RetrySuite) TestContextErrorFromSomeOtherContext() {
 		NewExponentialRetryPolicy(1*time.Millisecond),
 		retryEverything)
 	s.NoError(err)
+}
+
+func (s *RetrySuite) TestThrottleRetryContext() {
+	throttleInitialInterval := 100 * time.Millisecond
+	testThrottleRetryPolicy := NewExponentialRetryPolicy(throttleInitialInterval)
+	testThrottleRetryPolicy.SetMaximumInterval(throttleRetryMaxInterval)
+	testThrottleRetryPolicy.SetExpirationInterval(throttleRetryExpirationInterval)
+	throttleRetryPolicy = testThrottleRetryPolicy
+
+	policy := NewExponentialRetryPolicy(10 * time.Millisecond)
+	policy.SetMaximumAttempts(1)
+
+	// test if throttle retry policy is used on resource exhausted error
+	attempt := 1
+	op := func(_ context.Context) error {
+		if attempt == 1 {
+			attempt++
+			return &serviceerror.ResourceExhausted{}
+		}
+
+		return &someError{}
+	}
+
+	start := SystemClock.Now()
+	err := ThrottleRetryContext(context.Background(), op, policy, retryEverything)
+	s.Equal(&someError{}, err)
+	s.GreaterOrEqual(
+		time.Since(start),
+		throttleInitialInterval/2, // due to jitter
+		"Resource exhausted error should use throttle retry policy",
+	)
+
+	// test if context timeout is respected
+	start = SystemClock.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	err = ThrottleRetryContext(ctx, func(_ context.Context) error { return &serviceerror.ResourceExhausted{} }, policy, retryEverything)
+	s.Equal(ctx.Err(), err)
+	s.LessOrEqual(
+		time.Since(start),
+		throttleInitialInterval,
+		"Context timeout should be respected",
+	)
+	cancel()
+
+	// test if retry will stop if there's no more retry indicated by the retry policy
+	attempt = 0
+	op = func(_ context.Context) error {
+		attempt++
+		return &serviceerror.ResourceExhausted{}
+	}
+	err = ThrottleRetryContext(context.Background(), op, policy, retryEverything)
+	s.Equal(&serviceerror.ResourceExhausted{}, err)
+	s.Equal(2, attempt)
+
+	// set the default global throttle retry policy back to its original value
+	throttleRetryPolicy = createThrottleRetryPolicy()
 }
 
 var retryEverything IsRetryable = nil

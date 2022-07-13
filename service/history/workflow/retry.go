@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
@@ -122,9 +123,9 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
 		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
 			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-			return !matchNonRetryableTypes(
-				common.TimeoutFailureTypePrefix+timeoutType.String(),
+			return !slices.Contains(
 				nonRetryableTypes,
+				common.TimeoutFailureTypePrefix+timeoutType.String(),
 			)
 		}
 
@@ -140,24 +141,12 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 			return false
 		}
 
-		return !matchNonRetryableTypes(
-			failure.GetApplicationFailureInfo().GetType(),
+		return !slices.Contains(
 			nonRetryableTypes,
+			failure.GetApplicationFailureInfo().GetType(),
 		)
 	}
 	return true
-}
-
-func matchNonRetryableTypes(
-	failureType string,
-	nonRetryableTypes []string,
-) bool {
-	for _, nrt := range nonRetryableTypes {
-		if nrt == failureType {
-			return true
-		}
-	}
-	return false
 }
 
 // Helpers for creating new retry/cron workflows:

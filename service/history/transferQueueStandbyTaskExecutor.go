@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -57,6 +58,10 @@ type (
 		clusterName        string
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
+)
+
+var (
+	errVerificationFailed = errors.New("failed to verify target workflow state")
 )
 
 func newTransferQueueStandbyTaskExecutor(
@@ -289,12 +294,23 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				Clock:                  executionInfo.ParentClock,
 			})
 			switch err.(type) {
-			case nil, *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
+			case nil, *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
+				// NOTE: NotFound is only returned when workflow already completed
+				// If workflow can't be found at all, WorkflowNotReady error will be returned.
 				return nil, nil
 			case *serviceerror.WorkflowNotReady:
 				return verifyChildCompletionRecordedInfo, nil
 			default:
-				return nil, err
+				t.logger.Error("Failed to verify child execution completion recoreded",
+					tag.WorkflowNamespaceID(transferTask.GetNamespaceID()),
+					tag.WorkflowID(transferTask.GetWorkflowID()),
+					tag.WorkflowRunID(transferTask.GetRunID()),
+					tag.Error(err),
+				)
+
+				// NOTE: we do not return the error here which will cause the mutable state to be cleared and reloaded upon retry
+				// it's unnecessary as the error is in the target workflow, not this workflow.
+				return nil, errVerificationFailed
 			}
 		}
 		return nil, nil
@@ -434,12 +450,23 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			Clock: childWorkflowInfo.Clock,
 		})
 		switch err.(type) {
-		case nil, *serviceerror.NamespaceNotFound:
+		case nil, *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
+			// NOTE: NotFound is only returned when workflow already completed
+			// If workflow can't be found at all, WorkflowNotReady error will be returned.
 			return nil, nil
 		case *serviceerror.WorkflowNotReady:
 			return &startChildExecutionPostActionInfo{}, nil
 		default:
-			return nil, err
+			t.logger.Error("Failed to verify first workflow task scheduled",
+				tag.WorkflowNamespaceID(transferTask.GetNamespaceID()),
+				tag.WorkflowID(transferTask.GetWorkflowID()),
+				tag.WorkflowRunID(transferTask.GetRunID()),
+				tag.Error(err),
+			)
+
+			// NOTE: we do not return the error here which will cause the mutable state to be cleared and reloaded upon retry
+			// it's unnecessary as the error is in the target workflow, not this workflow.
+			return nil, errVerificationFailed
 		}
 	}
 
@@ -474,7 +501,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return err
 	}
 	defer func() {
-		if retError == consts.ErrTaskRetry {
+		if retError == consts.ErrTaskRetry || retError == errVerificationFailed {
 			release(nil)
 		} else {
 			release(retError)
@@ -596,51 +623,57 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return err
 	}
 	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
-		err = serviceerror.NewInternal("transferQueueStandbyProcessor encountered empty historyResendInfo")
-	} else {
-		ns, err := t.registry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
-		if err != nil {
-			return err
-		}
+		t.logger.Error("Error re-replicating history from remote: transferQueueStandbyProcessor encountered empty historyResendInfo.",
+			tag.ShardID(t.shard.GetShardID()),
+			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
+			tag.WorkflowID(taskInfo.GetWorkflowID()),
+			tag.WorkflowRunID(taskInfo.GetRunID()),
+			tag.SourceCluster(remoteClusterName))
 
-		if err := refreshTasks(
-			ctx,
-			adminClient,
-			ns.Name(),
-			namespace.ID(taskInfo.GetNamespaceID()),
-			taskInfo.GetWorkflowID(),
-			taskInfo.GetRunID(),
-		); err != nil {
-			if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
-				// Don't log NamespaceNotFound error because it is valid case, and return error to stop retry.
-				return err
-			}
-			t.logger.Error("Error refresh tasks from remote.",
-				tag.ShardID(t.shard.GetShardID()),
-				tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
-				tag.WorkflowID(taskInfo.GetWorkflowID()),
-				tag.WorkflowRunID(taskInfo.GetRunID()),
-				tag.ClusterName(remoteClusterName),
-				tag.Error(err))
-		}
-
-		// NOTE: history resend may take long time and its timeout is currently
-		// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
-		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			remoteClusterName,
-			namespace.ID(taskInfo.GetNamespaceID()),
-			taskInfo.GetWorkflowID(),
-			taskInfo.GetRunID(),
-			resendInfo.lastEventID,
-			resendInfo.lastEventVersion,
-			0,
-			0,
-		)
+		return consts.ErrTaskRetry
 	}
 
+	ns, err := t.registry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
 	if err != nil {
+		// This is most likely a NamespaceNotFound error. Don't log it and return error to stop retrying.
+		return err
+	}
+
+	if err = refreshTasks(
+		ctx,
+		adminClient,
+		ns.Name(),
+		namespace.ID(taskInfo.GetNamespaceID()),
+		taskInfo.GetWorkflowID(),
+		taskInfo.GetRunID(),
+	); err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
-			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retry.
+			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retrying.
+			return err
+		}
+		t.logger.Error("Error refresh tasks from remote.",
+			tag.ShardID(t.shard.GetShardID()),
+			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
+			tag.WorkflowID(taskInfo.GetWorkflowID()),
+			tag.WorkflowRunID(taskInfo.GetRunID()),
+			tag.ClusterName(remoteClusterName),
+			tag.Error(err))
+	}
+
+	// NOTE: history resend may take long time and its timeout is currently
+	// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
+	if err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+		remoteClusterName,
+		namespace.ID(taskInfo.GetNamespaceID()),
+		taskInfo.GetWorkflowID(),
+		taskInfo.GetRunID(),
+		resendInfo.lastEventID,
+		resendInfo.lastEventVersion,
+		0,
+		0,
+	); err != nil {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
+			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retrying.
 			return err
 		}
 		t.logger.Error("Error re-replicating history from remote.",
@@ -652,7 +685,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			tag.Error(err))
 	}
 
-	// return error so task processing logic will retry
+	// Return retryable error, so task processing will retry.
 	return consts.ErrTaskRetry
 }
 

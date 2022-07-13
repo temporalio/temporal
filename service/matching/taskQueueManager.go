@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/util"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -283,7 +284,7 @@ func (c *taskQueueManagerImpl) AddTask(
 	}
 
 	var syncMatch bool
-	err := executeWithRetry(func() error {
+	err := executeWithRetry(ctx, func(_ context.Context) error {
 		taskInfo := params.taskInfo
 
 		namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceId()))
@@ -493,7 +494,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 		// again the underlying reason for failing to start will be resolved.
 		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
 		// re-written to persistence frequently.
-		err = executeWithRetry(func() error {
+		err = executeWithRetry(context.Background(), func(_ context.Context) error {
 			wf := &commonpb.WorkflowExecution{WorkflowId: task.Data.GetWorkflowId(), RunId: task.Data.GetRunId()}
 			_, err := c.taskWriter.appendTask(wf, task.Data)
 			return err
@@ -527,9 +528,10 @@ func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
 
 // Retry operation on transient error.
 func executeWithRetry(
-	operation func() error,
+	ctx context.Context,
+	operation func(context.Context) error,
 ) error {
-	err := backoff.Retry(operation, persistenceOperationRetryPolicy, func(err error) bool {
+	err := backoff.ThrottleRetryContext(ctx, operation, persistenceOperationRetryPolicy, func(err error) bool {
 		if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 			return false
 		}
@@ -578,7 +580,7 @@ func (c *taskQueueManagerImpl) newChildContext(
 	}
 	remaining := deadline.Sub(time.Now().UTC()) - tailroom
 	if remaining < timeout {
-		timeout = time.Duration(common.MaxInt64(0, int64(remaining)))
+		timeout = time.Duration(util.Max(0, int64(remaining)))
 	}
 	return context.WithTimeout(parent, timeout)
 }

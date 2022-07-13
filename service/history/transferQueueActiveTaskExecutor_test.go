@@ -89,8 +89,8 @@ type (
 
 		controller                   *gomock.Controller
 		mockShard                    *shard.ContextTest
-		mockTxProcessor              *queues.MockProcessor
-		mockTimerProcessor           *queues.MockProcessor
+		mockTxProcessor              *queues.MockQueue
+		mockTimerProcessor           *queues.MockQueue
 		mockNamespaceCache           *namespace.MockRegistry
 		mockMatchingClient           *matchingservicemock.MockMatchingServiceClient
 		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
@@ -149,8 +149,8 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockTxProcessor = queues.NewMockProcessor(s.controller)
-	s.mockTimerProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTxProcessor = queues.NewMockQueue(s.controller)
+	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
@@ -217,7 +217,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		metricsClient:      s.mockShard.GetMetricsClient(),
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopClient, func(namespace.ID, string) int32 { return 1 }),
-		queueProcessors: map[tasks.Category]queues.Processor{
+		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():    s.mockTxProcessor,
 			s.mockTimerProcessor.Category(): s.mockTimerProcessor,
 		},

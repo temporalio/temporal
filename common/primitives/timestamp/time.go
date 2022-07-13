@@ -28,6 +28,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
+
+	"go.temporal.io/server/common/util"
 )
 
 var (
@@ -188,15 +190,8 @@ func DurationValue(d *time.Duration) time.Duration {
 }
 
 func MinDurationPtr(d1 *time.Duration, d2 *time.Duration) *time.Duration {
-	res := MinDuration(DurationValue(d1), DurationValue(d2))
+	res := util.Min(DurationValue(d1), DurationValue(d2))
 	return &res
-}
-
-func MinDuration(d1 time.Duration, d2 time.Duration) time.Duration {
-	if d1 > d2 {
-		return d2
-	}
-	return d1
 }
 
 func RoundUp(d time.Duration) time.Duration {

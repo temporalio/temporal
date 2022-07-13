@@ -87,10 +87,10 @@ const (
 	CLIOptKeyspace = "keyspace"
 	// CLIOptDatabase is the cli option for database
 	CLIOptDatabase = "database"
+	// CLIOptDefaultDb is the cli option used as defaultdb to connect to
+	CLIOptDefaultDb = "defaultdb"
 	// CLIOptPluginName is the cli option for plugin name
 	CLIOptPluginName = "plugin"
-	// CLIOptAuthPluginName is the cli option for auth plugin name
-	CLIOptAuthPluginName = "sql-auth-plugin"
 	// CLIOptConnectAttributes is the cli option for connect attributes (key/values via a url query string)
 	CLIOptConnectAttributes = "connect-attributes"
 	// CLIOptVersion is the cli option for version
@@ -132,8 +132,6 @@ const (
 	CLIFlagDatabase = CLIOptDatabase + ", db"
 	// CLIFlagPluginName is the cli flag for plugin name
 	CLIFlagPluginName = CLIOptPluginName + ", pl"
-	// CLIFlagPluginName is the cli flag for sql auth plugin name
-	CLIFlagAuthPluginName = CLIOptAuthPluginName + ", ap"
 	// CLIFlagConnectAttributes allows arbitrary connect attributes
 	CLIFlagConnectAttributes = CLIOptConnectAttributes + ", ca"
 	// CLIFlagVersion is the cli flag for version

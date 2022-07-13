@@ -65,8 +65,8 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
-		mockTxProcessor     *queues.MockProcessor
-		mockTimerProcessor  *queues.MockProcessor
+		mockTxProcessor     *queues.MockQueue
+		mockTimerProcessor  *queues.MockQueue
 		mockNamespaceCache  *namespace.MockRegistry
 		mockClusterMetadata *cluster.MockMetadata
 		mockMutableState    *workflow.MockMutableState
@@ -98,8 +98,8 @@ func (s *activityReplicatorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockMutableState = workflow.NewMockMutableState(s.controller)
-	s.mockTxProcessor = queues.NewMockProcessor(s.controller)
-	s.mockTimerProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTxProcessor = queues.NewMockQueue(s.controller)
+	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
@@ -138,7 +138,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 			metrics.NoopClient,
 			func(namespace.ID, string) int32 { return 1 },
 		),
-		queueProcessors: map[tasks.Category]queues.Processor{
+		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():    s.mockTxProcessor,
 			s.mockTimerProcessor.Category(): s.mockTimerProcessor,
 		},

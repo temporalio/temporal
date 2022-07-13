@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/util"
 )
 
 // Config represents configuration for frontend service
@@ -302,8 +303,8 @@ func (s *Service) Stop() {
 	// 4. Wait for a second
 	// 5. Stop everything forcefully and return
 
-	requestDrainTime := common.MinDuration(time.Second, s.config.ShutdownDrainDuration())
-	failureDetectionTime := common.MaxDuration(0, s.config.ShutdownDrainDuration()-requestDrainTime)
+	requestDrainTime := util.Min(time.Second, s.config.ShutdownDrainDuration())
+	failureDetectionTime := util.Max(0, s.config.ShutdownDrainDuration()-requestDrainTime)
 
 	logger.Info("ShutdownHandler: Updating gRPC health status to ShuttingDown")
 	s.healthServer.Shutdown()

@@ -307,12 +307,6 @@ func (e *matchingEngineImpl) AddActivityTask(
 	taskQueueName := addRequest.TaskQueue.GetName()
 	taskQueueKind := addRequest.TaskQueue.GetKind()
 
-	e.logger.Debug(
-		fmt.Sprintf("Received AddActivityTask for taskQueue=%v WorkflowId=%v, RunId=%v",
-			taskQueueName,
-			addRequest.Execution.WorkflowId,
-			addRequest.Execution.RunId))
-
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	if err != nil {
 		return false, err
@@ -949,12 +943,12 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		PollRequest:       pollReq,
 	}
 	var resp *historyservice.RecordWorkflowTaskStartedResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = e.historyService.RecordWorkflowTaskStarted(ctx, request)
 		return err
 	}
-	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
+	err := backoff.ThrottleRetryContext(ctx, op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
 		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerrors.TaskAlreadyStarted:
 			return false
@@ -979,12 +973,12 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		PollRequest:       pollReq,
 	}
 	var resp *historyservice.RecordActivityTaskStartedResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = e.historyService.RecordActivityTaskStarted(ctx, request)
 		return err
 	}
-	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
+	err := backoff.ThrottleRetryContext(ctx, op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
 		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerrors.TaskAlreadyStarted:
 			return false
