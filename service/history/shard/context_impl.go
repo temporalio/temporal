@@ -1792,8 +1792,21 @@ func (s *ContextImpl) getOrUpdateRemoteClusterInfoLocked(clusterName string) *re
 }
 
 func (s *ContextImpl) acquireShard() {
-	// Retry for 5m, with interval up to 10s (default)
-	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
+	// This is called in two contexts: initially acquiring the rangeid lock, and trying to
+	// re-acquire it after a persistence error. In both cases, we retry the acquire operation
+	// (renewRangeLocked) for 5 minutes. Each individual attempt uses shardIOTimeout (10s) as
+	// the timeout. This lets us handle a few minutes of persistence unavailability without
+	// dropping and reloading the whole shard context, which is relatively expensive (includes
+	// caches that would have to be refilled, etc.).
+	//
+	// We stop retrying on any of:
+	// 1. We succeed in acquiring the rangeid lock.
+	// 2. We get any error other than transient errors.
+	// 3. The state changes to Stopping or Stopped
+	//
+	// If the shard controller sees that servce resolver has assigned ownership to someone
+	// else, it will call finishStop, which will trigger case 3 above.
+	policy := backoff.NewExponentialRetryPolicy(1 * time.Second)
 	policy.SetExpirationInterval(5 * time.Minute)
 
 	// Remember this value across attempts
