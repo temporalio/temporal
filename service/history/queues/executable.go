@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -131,7 +132,7 @@ func NewExecutable(
 		scheduler:   scheduler,
 		rescheduler: rescheduler,
 		timeSource:  timeSource,
-		loadTime:    common.MaxTime(timeSource.Now(), task.GetKey().FireTime),
+		loadTime:    util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
 		logger: log.NewLazyLogger(
 			logger,
 			func() []tag.Tag {
