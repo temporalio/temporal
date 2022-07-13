@@ -34,6 +34,8 @@ type State int
 const (
 	// TaskStatePending is the state for a task when it's waiting to be processed or currently being processed
 	TaskStatePending State = iota + 1
+	// TaskStateCancelled is the state for a task when its execution has request to be cancelled
+	TaskStateCancelled
 	// TaskStateAcked is the state for a task if it has been successfully completed
 	TaskStateAcked
 	// TaskStateNacked is the state for a task if it can not be processed
@@ -52,6 +54,8 @@ type (
 		IsRetryableError(err error) bool
 		// RetryPolicy returns the retry policy for task processing
 		RetryPolicy() backoff.RetryPolicy
+		// Cancel requests cancellation for processing the task
+		Cancel()
 		// Ack marks the task as successful completed
 		Ack()
 		// Nack marks the task as unsuccessful completed

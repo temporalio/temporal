@@ -70,6 +70,18 @@ func (mr *MockTaskMockRecorder) Ack() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ack", reflect.TypeOf((*MockTask)(nil).Ack))
 }
 
+// Cancel mocks base method.
+func (m *MockTask) Cancel() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Cancel")
+}
+
+// Cancel indicates an expected call of Cancel.
+func (mr *MockTaskMockRecorder) Cancel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cancel", reflect.TypeOf((*MockTask)(nil).Cancel))
+}
+
 // Execute mocks base method.
 func (m *MockTask) Execute() error {
 	m.ctrl.T.Helper()
@@ -197,6 +209,18 @@ func (m *MockPriorityTask) Ack() {
 func (mr *MockPriorityTaskMockRecorder) Ack() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ack", reflect.TypeOf((*MockPriorityTask)(nil).Ack))
+}
+
+// Cancel mocks base method.
+func (m *MockPriorityTask) Cancel() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Cancel")
+}
+
+// Cancel indicates an expected call of Cancel.
+func (mr *MockPriorityTaskMockRecorder) Cancel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cancel", reflect.TypeOf((*MockPriorityTask)(nil).Cancel))
 }
 
 // Execute mocks base method.
