@@ -621,7 +621,7 @@ const (
 	WorkerBatcherNumWorkers = "worker.batcherNumWorkers"
 	// BatcherRPS controls number the rps of batch operations
 	BatcherRPS = "worker.batcherRPS"
-	// BatcherRPS controls the concurrency of batch operations
+	// BatcherConcurrency controls the concurrency of batch operations
 	BatcherConcurrency = "worker.batcherConcurrency"
 	// WorkerParentCloseMaxConcurrentActivityExecutionSize indicates worker parent close worker max concurrent activity execution size
 	WorkerParentCloseMaxConcurrentActivityExecutionSize = "worker.ParentCloseMaxConcurrentActivityExecutionSize"

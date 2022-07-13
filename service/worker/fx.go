@@ -26,6 +26,7 @@ package worker
 
 import (
 	"context"
+
 	"go.temporal.io/server/service/worker/batcher"
 
 	"go.uber.org/fx"
