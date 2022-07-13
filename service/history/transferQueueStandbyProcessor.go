@@ -126,7 +126,7 @@ func newTransferQueueStandbyProcessor(
 			shard.GetNamespaceRegistry(),
 			clientBean,
 			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				engine, err := shard.GetEngine()
+				engine, err := shard.GetEngine(ctx)
 				if err != nil {
 					return err
 				}

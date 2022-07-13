@@ -353,7 +353,7 @@ func (c *ControllerImpl) acquireShards() {
 		// After 1s we will move on but the shard will continue trying in the background.
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
-		_, _ = shard.GetEngineWithContext(ctx)
+		_, _ = shard.GetEngine(ctx)
 	}
 
 	concurrency := util.Max(c.config.AcquireShardConcurrency(), 1)

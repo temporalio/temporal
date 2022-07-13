@@ -367,7 +367,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	}
 	c.SetHistorySize(int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff))
 
-	engine, err := c.shard.GetEngine()
+	engine, err := c.shard.GetEngine(ctx)
 	if err != nil {
 		return err
 	}
@@ -826,7 +826,7 @@ func (c *ContextImpl) ReapplyEvents(
 
 	activeCluster := namespaceEntry.ActiveClusterName()
 	if activeCluster == c.shard.GetClusterMetadata().GetCurrentClusterName() {
-		engine, err := c.shard.GetEngine()
+		engine, err := c.shard.GetEngine(ctx)
 		if err != nil {
 			return err
 		}
