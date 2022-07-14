@@ -1835,6 +1835,34 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 	return &historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil
 }
 
+func (h *Handler) UpdateWorkflow(
+	ctx context.Context,
+	request *historyservice.UpdateWorkflowRequest,
+) (_ *historyservice.UpdateWorkflowResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		ctx,
+		namespace.ID(request.GetNamespaceId()),
+		request.GetRequest().GetWorkflowExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngineWithContext(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.UpdateWorkflow(ctx, request)
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.

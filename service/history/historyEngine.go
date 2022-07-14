@@ -1962,6 +1962,13 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}, nil
 }
 
+func (h *historyEngineImpl) UpdateWorkflow(
+	ctx context.Context,
+	request *historyservice.UpdateWorkflowRequest,
+) (*historyservice.UpdateWorkflowResponse, error) {
+	return nil, serviceerror.NewUnimplemented("UpdateWorkflow is not supported on this server")
+}
+
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
 func (e *historyEngineImpl) RemoveSignalMutableState(
 	ctx context.Context,

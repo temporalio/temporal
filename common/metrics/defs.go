@@ -1,4 +1,5 @@
 // The MIT License
+
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
@@ -375,6 +376,8 @@ const (
 	HistoryClientRemoveSignalMutableStateScope
 	// HistoryClientTerminateWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientTerminateWorkflowExecutionScope
+	// HistoryClientUpdateWorkflowScope tracks RPC calls to history service
+	HistoryClientUpdateWorkflowScope
 	// HistoryClientDeleteWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientDeleteWorkflowExecutionScope
 	// HistoryClientResetWorkflowExecutionScope tracks RPC calls to history service
@@ -555,6 +558,8 @@ const (
 	FrontendClientListSchedulesScope
 	// FrontendClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to frontend service
 	FrontendClientUpdateWorkerBuildIdOrderingScope
+	// FrontendClientUpdateWorkflowScope tracks RPC calls to frontend service
+	FrontendClientUpdateWorkflowScope
 	// FrontendClientGetWorkerBuildIdOrderingScope tracks RPC calls to frontend service
 	FrontendClientGetWorkerBuildIdOrderingScope
 	// AdminClientAddSearchAttributesScope tracks RPC calls to admin service
@@ -711,6 +716,8 @@ const (
 	DCRedirectionUpdateWorkerBuildIdOrderingScope
 	// DCRedirectionGetWorkerBuildIdOrderingScope tracks RPC calls for dc redirection
 	DCRedirectionGetWorkerBuildIdOrderingScope
+	// DCRedirectionUpdateWorkflowScope tracks RPC calls for dc redirection
+	DCRedirectionUpdateWorkflowScope
 
 	// MessagingClientPublishScope tracks Publish calls made by service to messaging layer
 	MessagingClientPublishScope
@@ -978,6 +985,8 @@ const (
 	FrontendUpdateWorkerBuildIdOrderingScope
 	// FrontendGetWorkerBuildIdOrderingScope is the metric scope for frontend.GetWorkerBuildIdOrderingScope
 	FrontendGetWorkerBuildIdOrderingScope
+	// FrontendUpdateWorkflowScope is the metric scope for frontend.UpdateWorkflow
+	FrontendUpdateWorkflowScope
 
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope
@@ -1077,6 +1086,8 @@ const (
 	HistoryDescribeHistoryHost
 	// HistoryDeleteWorkflowVisibilityRecordScope is the scope used by delete workflow visibility record API
 	HistoryDeleteWorkflowVisibilityRecordScope
+	// HistoryUpdateWorkflowScope is the scope used by update workflow API
+	HistoryUpdateWorkflowScope
 	// TaskPriorityAssignerScope is the scope used by all metric emitted by task priority assigner
 	TaskPriorityAssignerScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -1439,6 +1450,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientSignalWithStartWorkflowExecutionScope:       {operation: "HistoryClientSignalWithStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRemoveSignalMutableStateScope:               {operation: "HistoryClientRemoveSignalMutableStateScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientTerminateWorkflowExecutionScope:             {operation: "HistoryClientTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientUpdateWorkflowScope:                         {operation: "HistoryClientUpdateWorkflow", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientDeleteWorkflowExecutionScope:                {operation: "HistoryClientDeleteWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientResetWorkflowExecutionScope:                 {operation: "HistoryClientResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientScheduleWorkflowTaskScope:                   {operation: "HistoryClientScheduleWorkflowTask", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
@@ -1532,6 +1544,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientListSchedulesScope:                      {operation: "FrontendClientListSchedules", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientUpdateWorkerBuildIdOrderingScope:        {operation: "FrontendClientUpdateWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetWorkerBuildIdOrderingScope:           {operation: "FrontendClientGetWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientUpdateWorkflowScope:                     {operation: "FrontendClientUpdateWorkflow", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 
 		AdminClientAddSearchAttributesScope:              {operation: "AdminClientAddSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientRemoveSearchAttributesScope:           {operation: "AdminClientRemoveSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1611,6 +1624,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionListSchedulesScope:                      {operation: "DCRedirectionListSchedules", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionUpdateWorkerBuildIdOrderingScope:        {operation: "DCRedirectionUpdateWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionGetWorkerBuildIdOrderingScope:           {operation: "DCRedirectionGetWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionUpdateWorkflowScope:                     {operation: "DCRedirectionUpdateWorkflow", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 
 		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
 		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},
@@ -1730,6 +1744,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendGetWorkerBuildIdOrderingScope:           {operation: "GetWorkerBuildIdOrdering"},
 		VersionCheckScope:                               {operation: "VersionCheck"},
 		AuthorizationScope:                              {operation: "Authorization"},
+		FrontendUpdateWorkflowScope:                     {operation: "UpdateWorkflow"},
 	},
 	// History Scope Names
 	History: {
@@ -1781,6 +1796,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryReapplyEvents:                               {operation: "ReapplyEvents"},
 		HistoryDescribeHistoryHost:                         {operation: "DescribeHistoryHost"},
 		HistoryDeleteWorkflowVisibilityRecordScope:         {operation: "DeleteWorkflowVisibilityRecord"},
+		HistoryUpdateWorkflowScope:                         {operation: "UpdateWorkflow"},
 
 		TaskPriorityAssignerScope:                   {operation: "TaskPriorityAssigner"},
 		TransferQueueProcessorScope:                 {operation: "TransferQueueProcessor"},

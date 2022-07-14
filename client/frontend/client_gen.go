@@ -718,3 +718,17 @@ func (c *clientImpl) UpdateWorkerBuildIdOrdering(
 	defer cancel()
 	return client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
 }
+
+func (c *clientImpl) UpdateWorkflow(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkflowResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.UpdateWorkflow(ctx, request, opts...)
+}
