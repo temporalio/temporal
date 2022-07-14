@@ -94,7 +94,8 @@ func newTransferQueueProcessor(
 	historyClient historyservice.HistoryServiceClient,
 	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
-) queues.Processor {
+) queues.Queue {
+
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
 		shard.GetConfig().TransferProcessorEnableSingleCursor()
 

@@ -28,6 +28,8 @@ import (
 	"strings"
 	"sync"
 
+	"golang.org/x/exp/slices"
+
 	"go.temporal.io/server/common/log"
 )
 
@@ -116,7 +118,7 @@ func (c *MutableEphemeralClient) Update(mutations ...Mutation) {
 	current := c.values.Load().(configValueMap)
 	newvals := make(configValueMap, len(current))
 	for k, v := range current {
-		newvals[k] = append([]*constrainedValue(nil), v...)
+		newvals[k] = slices.Clone(v)
 	}
 	for _, mutate := range mutations {
 		mutate(newvals)

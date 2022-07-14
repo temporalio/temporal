@@ -83,9 +83,9 @@ type (
 
 		controller              *gomock.Controller
 		mockShard               *shard.ContextTest
-		mockTxProcessor         *queues.MockProcessor
-		mockTimerProcessor      *queues.MockProcessor
-		mockVisibilityProcessor *queues.MockProcessor
+		mockTxProcessor         *queues.MockQueue
+		mockTimerProcessor      *queues.MockQueue
+		mockVisibilityProcessor *queues.MockQueue
 		mockEventsCache         *events.MockCache
 		mockNamespaceCache      *namespace.MockRegistry
 		mockClusterMetadata     *cluster.MockMetadata
@@ -116,9 +116,9 @@ func (s *engine2Suite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	s.mockTxProcessor = queues.NewMockProcessor(s.controller)
-	s.mockTimerProcessor = queues.NewMockProcessor(s.controller)
-	s.mockVisibilityProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTxProcessor = queues.NewMockQueue(s.controller)
+	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
+	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
@@ -167,7 +167,7 @@ func (s *engine2Suite) SetupTest() {
 		config:             s.config,
 		timeSource:         s.mockShard.GetTimeSource(),
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopClient, func(namespace.ID, string) int32 { return 1 }),
-		queueProcessors: map[tasks.Category]queues.Processor{
+		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():         s.mockTxProcessor,
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,

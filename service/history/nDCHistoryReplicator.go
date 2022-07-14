@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -1026,11 +1027,6 @@ func (r *nDCHistoryReplicatorImpl) getHistoryFromLocalPaginationFn(
 		if err != nil {
 			return nil, nil, err
 		}
-
-		histories := make([]*historypb.History, 0, len(response.History))
-		for _, history := range response.History {
-			histories = append(histories, history)
-		}
-		return histories, response.NextPageToken, nil
+		return slices.Clone(response.History), response.NextPageToken, nil
 	}
 }

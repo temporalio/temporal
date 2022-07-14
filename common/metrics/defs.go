@@ -2368,6 +2368,7 @@ const (
 	RenameNamespaceFailuresCount
 	ReadNamespaceFailuresCount
 	ListExecutionsFailuresCount
+	CountExecutionsFailuresCount
 	DeleteExecutionFailuresCount
 	DeleteExecutionNotFoundCount
 	RateLimiterFailuresCount
@@ -2840,6 +2841,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		RenameNamespaceFailuresCount: NewCounterDef("rename_namespace_failures"),
 		ReadNamespaceFailuresCount:   NewCounterDef("read_namespace_failures"),
 		ListExecutionsFailuresCount:  NewCounterDef("list_executions_failures"),
+		CountExecutionsFailuresCount: NewCounterDef("count_executions_failures"),
 		DeleteExecutionFailuresCount: NewCounterDef("delete_execution_failures"),
 		DeleteExecutionNotFoundCount: NewCounterDef("delete_execution_not_found"),
 		RateLimiterFailuresCount:     NewCounterDef("rate_limiter_failures"),

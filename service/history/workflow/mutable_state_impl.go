@@ -30,7 +30,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -41,6 +40,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"golang.org/x/exp/maps"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -389,7 +389,7 @@ func (e *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
 		Checksum:            e.checksum,
 	}
 
-	return proto.Clone(ms).(*persistencespb.WorkflowMutableState)
+	return common.CloneProto(ms)
 }
 
 func (e *MutableStateImpl) GetWorkflowKey() definition.WorkflowKey {
@@ -2823,9 +2823,7 @@ func mergeMapOfPayload(
 	if current == nil {
 		current = make(map[string]*commonpb.Payload)
 	}
-	for k, v := range upsert {
-		current[k] = v
-	}
+	maps.Copy(current, upsert)
 	return current
 }
 

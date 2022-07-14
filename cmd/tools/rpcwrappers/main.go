@@ -426,12 +426,12 @@ func (c *retryableClient) {{.Method}}(
 	opts ...grpc.CallOption,
 ) ({{.ResponseType}}, error) {
 	var resp {{.ResponseType}}
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.{{.Method}}(ctx, request, opts...)
 		return err
 	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
 `)

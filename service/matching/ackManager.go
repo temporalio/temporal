@@ -25,13 +25,14 @@
 package matching
 
 import (
-	"sort"
 	"sync"
 
 	"go.uber.org/atomic"
+	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/util"
 )
 
 // Used to convert out of order acks into ackLevel movement.
@@ -122,11 +123,8 @@ func (m *ackManager) completeTask(taskID int64) (ackLevel int64) {
 	// TODO the ack level management shuld be done by a dedicated coroutine
 	//  this is only a temporarily solution
 
-	taskIDs := make(taskIDs, 0, len(m.outstandingTasks))
-	for taskID := range m.outstandingTasks {
-		taskIDs = append(taskIDs, taskID)
-	}
-	sort.Sort(taskIDs)
+	taskIDs := maps.Keys(m.outstandingTasks)
+	util.SortSlice(taskIDs)
 
 	// Update ackLevel
 	for _, taskID := range taskIDs {

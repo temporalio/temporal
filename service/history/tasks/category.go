@@ -29,6 +29,8 @@ import (
 	"strconv"
 	"sync"
 
+	"golang.org/x/exp/maps"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
@@ -130,16 +132,9 @@ func NewCategory(
 
 // GetCategories returns a deep copy of all registered Categories
 func GetCategories() map[int32]Category {
-	categoriesCopy := make(map[int32]Category)
-
 	categories.RLock()
 	defer categories.RUnlock()
-
-	for k, v := range categories.m {
-		categoriesCopy[k] = v
-	}
-
-	return categoriesCopy
+	return maps.Clone(categories.m)
 }
 
 // GetCategoryByID returns a registered Category with the same ID

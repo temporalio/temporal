@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 )
 
@@ -324,7 +325,7 @@ func (c *ControllerImpl) acquireShards() {
 	sw := c.metricsScope.StartTimer(metrics.AcquireShardsLatency)
 	defer sw.Stop()
 
-	concurrency := common.MaxInt(c.config.AcquireShardConcurrency(), 1)
+	concurrency := util.Max(c.config.AcquireShardConcurrency(), 1)
 	shardActionCh := make(chan int32, c.config.NumberOfShards)
 	var wg sync.WaitGroup
 	wg.Add(concurrency)

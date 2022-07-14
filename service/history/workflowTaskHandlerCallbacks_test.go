@@ -37,6 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	"golang.org/x/exp/maps"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -288,9 +289,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_QueryTooLar
 	bufferedIDs := queryRegistry.GetBufferedIDs()
 	queryResults := s.constructQueryResults(bufferedIDs[0:5], 10)
 	largeQueryResults := s.constructQueryResults(bufferedIDs[5:10], 10*1024*1024)
-	for k, v := range largeQueryResults {
-		queryResults[k] = v
-	}
+	maps.Copy(queryResults, largeQueryResults)
 	s.workflowTaskHandlerCallback.handleBufferedQueries(mockMutableState, queryResults, false, tests.GlobalNamespaceEntry, false)
 	s.assertQueryCounts(queryRegistry, 0, 5, 0, 5)
 }

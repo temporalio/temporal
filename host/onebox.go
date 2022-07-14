@@ -34,6 +34,7 @@ import (
 
 	"github.com/uber/tchannel-go"
 	"go.uber.org/fx"
+	"golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/api/operatorservice/v1"
@@ -451,7 +452,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		temporal.ServiceTracingModule,
 		frontend.Module,
 		fx.Populate(&frontendService, &clientBean, &namespaceRegistry),
-		fx.NopLogger,
+		temporal.FxLogAdapter,
 	)
 	err = feApp.Err()
 	if err != nil {
@@ -543,11 +544,12 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(workflow.NewTaskGeneratorProvider),
 			fx.Supply(c.spanExporters),
 			temporal.ServiceTracingModule,
-			history.QueueProcessorModule,
+			history.QueueModule,
 			history.Module,
 			replication.Module,
 			fx.Populate(&historyService, &clientBean, &namespaceRegistry),
-			fx.NopLogger)
+			temporal.FxLogAdapter,
+		)
 		err = app.Err()
 		if err != nil {
 			c.logger.Fatal("unable to construct history service", tag.Error(err))
@@ -622,7 +624,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		temporal.ServiceTracingModule,
 		matching.Module,
 		fx.Populate(&matchingService, &clientBean, &namespaceRegistry),
-		fx.NopLogger,
+		temporal.FxLogAdapter,
 	)
 	err = app.Err()
 	if err != nil {
@@ -667,10 +669,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		FailoverVersionIncrement: c.clusterMetadataConfig.FailoverVersionIncrement,
 		MasterClusterName:        c.clusterMetadataConfig.MasterClusterName,
 		CurrentClusterName:       c.clusterMetadataConfig.CurrentClusterName,
-		ClusterInformation:       make(map[string]cluster.ClusterInformation),
-	}
-	for k, v := range c.clusterMetadataConfig.ClusterInformation {
-		clusterConfigCopy.ClusterInformation[k] = v
+		ClusterInformation:       maps.Clone(c.clusterMetadataConfig.ClusterInformation),
 	}
 	if c.workerConfig.EnableReplicator {
 		clusterConfigCopy.EnableGlobalNamespace = true
@@ -718,7 +717,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		temporal.ServiceTracingModule,
 		worker.Module,
 		fx.Populate(&workerService, &clientBean, &namespaceRegistry),
-		fx.NopLogger,
+		temporal.FxLogAdapter,
 	)
 	err = app.Err()
 	if err != nil {

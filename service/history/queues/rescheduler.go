@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/timer"
 )
 
@@ -182,6 +183,10 @@ func (r *reschedulerImpl) reschedule() {
 
 		rescheduled := r.pq.Remove()
 		executable := rescheduled.executable
+		if executable.State() == ctasks.TaskStateCancelled {
+			continue
+		}
+
 		submitted, err := r.scheduler.TrySubmit(executable)
 		if err != nil {
 			executable.Logger().Error("Failed to reschedule task", tag.Error(err))

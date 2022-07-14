@@ -390,14 +390,19 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 		Expected error
 	}
 	// request validation tests
-	testCases1 := []test{
+	testCases := []test{
 		{
 			Name:     "nil request",
 			Request:  nil,
 			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
 		},
+		{
+			Name:     "system namespace",
+			Request:  &operatorservice.DeleteNamespaceRequest{Namespace: "temporal-system"},
+			Expected: &serviceerror.InvalidArgument{Message: "Unable to delete system namespace."},
+		},
 	}
-	for _, testCase := range testCases1 {
+	for _, testCase := range testCases {
 		s.T().Run(testCase.Name, func(t *testing.T) {
 			resp, err := handler.DeleteNamespace(ctx, testCase.Request)
 			s.Equal(testCase.Expected, err)

@@ -41,13 +41,13 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
-	"golang.org/x/exp/constraints"
 
 	schedspb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -275,7 +275,7 @@ func (s *workflowSuite) runAcrossContinue(
 			s.setupMocksForWorkflows(runs, gotRuns)
 			s.setupDelayedCallbacks(startTime, cbs)
 
-			currentTweakablePolicies.IterationsBeforeContinueAsNew = min(iterations, every)
+			currentTweakablePolicies.IterationsBeforeContinueAsNew = util.Min(iterations, every)
 
 			s.T().Logf("starting workflow for %d iterations out of %d remaining, %d total, start time %s",
 				currentTweakablePolicies.IterationsBeforeContinueAsNew, iterations, maxIterations, startTime)
@@ -1194,6 +1194,14 @@ func (s *workflowSuite) TestUpdate() {
 		},
 		[]delayedCallback{
 			{
+				at: time.Date(2022, 6, 1, 0, 9, 5, 0, time.UTC),
+				f: func() {
+					// shouldn't crash
+					s.env.SignalWorkflow(SignalNameUpdate, nil)
+					s.env.SignalWorkflow(SignalNameUpdate, &schedspb.FullUpdateRequest{})
+				},
+			},
+			{
 				at: time.Date(2022, 6, 1, 0, 9, 7, 0, time.UTC),
 				f: func() {
 					desc := s.describe()
@@ -1234,7 +1242,7 @@ func (s *workflowSuite) TestUpdate() {
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 			},
 		},
-		8,
+		10,
 	)
 }
 
@@ -1289,11 +1297,4 @@ func (s *workflowSuite) TestLimitedActions() {
 		},
 		6,
 	)
-}
-
-func min[T constraints.Ordered](a, b T) T {
-	if a < b {
-		return a
-	}
-	return b
 }

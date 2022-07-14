@@ -40,7 +40,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -50,6 +49,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -245,7 +245,7 @@ func (s *visibilityStore) addBulkRequestAndWait(
 
 	ackTimeout := s.processorAckTimeout()
 	if deadline, ok := ctx.Deadline(); ok {
-		ackTimeout = common.MinDuration(ackTimeout, time.Until(deadline))
+		ackTimeout = util.Min(ackTimeout, time.Until(deadline))
 	}
 	subCtx, subCtxCancelFn := context.WithTimeout(context.Background(), ackTimeout)
 	defer subCtxCancelFn()
@@ -814,6 +814,11 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to decode search attributes: %v", err))
 	}
 	for saName, saValue := range searchAttributes {
+		if saValue == nil {
+			// If search attribute value is `nil`, it means that it shouldn't be added to the document.
+			// Empty slices are converted to `nil` while decoding.
+			continue
+		}
 		doc[saName] = saValue
 	}
 

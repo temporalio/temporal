@@ -230,14 +230,14 @@ func (c *CacheImpl) getCurrentExecutionWithRetry(
 ) (*persistence.GetCurrentExecutionResponse, error) {
 
 	var response *persistence.GetCurrentExecutionResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		response, err = c.shard.GetCurrentExecution(ctx, request)
 
 		return err
 	}
 
-	err := backoff.Retry(op, PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	err := backoff.ThrottleRetryContext(ctx, op, PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		return nil, err
 	}
