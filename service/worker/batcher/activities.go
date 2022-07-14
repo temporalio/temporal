@@ -63,8 +63,8 @@ func (a *activities) checkNamespace(namespace string) error {
 	return nil
 }
 
-// batchActivity is activity for processing batch operation
-func (a *activities) batchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
+// BatchActivity is activity for processing batch operation
+func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
 	if err := a.checkNamespace(batchParams.Namespace); err != nil {

@@ -152,7 +152,7 @@ func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDeta
 	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
 	var result HeartBeatDetails
 	var ac *activities
-	err = workflow.ExecuteActivity(opt, ac.batchActivity, batchParams).Get(ctx, &result)
+	err = workflow.ExecuteActivity(opt, ac.BatchActivity, batchParams).Get(ctx, &result)
 	return result, err
 }
 
