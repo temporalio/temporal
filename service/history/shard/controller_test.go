@@ -578,6 +578,47 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 	s.False(shard.isValid())
 }
 
+func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
+	s.config.NumberOfShards = 1
+
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
+	mockEngine := NewMockEngine(s.controller)
+	mockEngine.EXPECT().Stop().AnyTimes()
+
+	shardID := int32(0)
+	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil)
+
+	ready := make(chan struct{})
+	wasCanceled := make(chan bool)
+	// GetOrCreateShard blocks for 5s or until canceled
+	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).DoAndReturn(
+		func(ctx context.Context, req *persistence.GetOrCreateShardRequest) (*persistence.GetOrCreateShardResponse, error) {
+			ready <- struct{}{}
+			select {
+			case <-time.After(5 * time.Second):
+				wasCanceled <- false
+				return nil, errors.New("timed out")
+			case <-ctx.Done():
+				wasCanceled <- true
+				return nil, ctx.Err()
+			}
+		})
+
+	// get shard, will start initializing in background
+	shard, err := s.shardController.getOrCreateShardContext(0)
+	s.NoError(err)
+
+	<-ready
+	// now shard is blocked on GetOrCreateShard
+	s.False(shard.engineFuture.Ready())
+
+	start := time.Now()
+	shard.Unload() // this cancels the context so GetOrCreateShard returns immediately
+	s.True(<-wasCanceled)
+	s.Less(time.Since(start), 500*time.Millisecond)
+}
+
 func (s *controllerSuite) setupMocksForAcquireShard(
 	shardID int32,
 	mockEngine *MockEngine,
