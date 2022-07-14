@@ -137,15 +137,15 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 			a.logger.Info("Wait catchup not ready",
 				tag.NewInt32("ShardId", shard.ShardId),
 				tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
-				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),                                                // 80740351
-				tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),                            //77606175
-				tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),                                    //300
-				tag.NewDurationTag("ActualLagging", shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime)), // 	2703.087403686
-				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),                                    //80740365
-				tag.NewTimeTag("ShardLocalTime", *shard.ShardLocalTime),                                             //"2022-07-11T22:25:26.896Z"
-				tag.NewTimeTag("AckedTaskVisibilityTime", *clusterInfo.AckedTaskVisibilityTime),                     //"2022-07-11T21:40:23.809Z"
-				tag.NewInt64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),                                //1
-				tag.NewInt64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),              //14
+				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
+				tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
+				tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
+				tag.NewDurationTag("ActualLagging", shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
+				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
+				tag.NewTimeTag("ShardLocalTime", *shard.ShardLocalTime),
+				tag.NewTimeTag("AckedTaskVisibilityTime", *clusterInfo.AckedTaskVisibilityTime),
+				tag.NewInt64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
+				tag.NewInt64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
 			)
 		}
 	}

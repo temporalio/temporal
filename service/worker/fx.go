@@ -27,8 +27,6 @@ package worker
 import (
 	"context"
 
-	"go.temporal.io/server/service/worker/batcher"
-
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
@@ -45,6 +43,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/addsearchattributes"
+	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scheduler"

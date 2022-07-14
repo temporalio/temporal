@@ -268,10 +268,6 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				false,
 			),
 		},
-		//EnableBatcher: dc.GetBoolProperty(
-		//	dynamicconfig.EnableBatcher,
-		//	true,
-		//),
 		EnableParentClosePolicyWorker: dc.GetBoolProperty(
 			dynamicconfig.EnableParentClosePolicyWorker,
 			true,
