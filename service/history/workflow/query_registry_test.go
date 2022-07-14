@@ -52,14 +52,14 @@ func (s *QueryRegistrySuite) SetupTest() {
 func (s *QueryRegistrySuite) TestQueryRegistry() {
 	qr := NewQueryRegistry()
 	ids := make([]string, 100, 100)
-	termChans := make([]<-chan struct{}, 100, 100)
+	completionChs := make([]<-chan struct{}, 100, 100)
 	for i := 0; i < 100; i++ {
-		ids[i], termChans[i] = qr.BufferQuery(&querypb.WorkflowQuery{})
+		ids[i], completionChs[i] = qr.BufferQuery(&querypb.WorkflowQuery{})
 	}
 	s.assertBufferedState(qr, ids...)
 	s.assertHasQueries(qr, true, false, false, false)
 	s.assertQuerySizes(qr, 100, 0, 0, 0)
-	s.assertChanState(false, termChans...)
+	s.assertChanState(false, completionChs...)
 
 	for i := 0; i < 25; i++ {
 		err := qr.SetCompletionState(ids[i], &QueryCompletionState{
@@ -75,8 +75,8 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertBufferedState(qr, ids[25:]...)
 	s.assertHasQueries(qr, true, true, false, false)
 	s.assertQuerySizes(qr, 75, 25, 0, 0)
-	s.assertChanState(true, termChans[0:25]...)
-	s.assertChanState(false, termChans[25:]...)
+	s.assertChanState(true, completionChs[0:25]...)
+	s.assertChanState(false, completionChs[25:]...)
 
 	for i := 25; i < 50; i++ {
 		err := qr.SetCompletionState(ids[i], &QueryCompletionState{
@@ -89,8 +89,8 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertBufferedState(qr, ids[50:]...)
 	s.assertHasQueries(qr, true, true, true, false)
 	s.assertQuerySizes(qr, 50, 25, 25, 0)
-	s.assertChanState(true, termChans[0:50]...)
-	s.assertChanState(false, termChans[50:]...)
+	s.assertChanState(true, completionChs[0:50]...)
+	s.assertChanState(false, completionChs[50:]...)
 
 	for i := 50; i < 75; i++ {
 		err := qr.SetCompletionState(ids[i], &QueryCompletionState{
@@ -105,8 +105,8 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertBufferedState(qr, ids[75:]...)
 	s.assertHasQueries(qr, true, true, true, true)
 	s.assertQuerySizes(qr, 25, 25, 25, 25)
-	s.assertChanState(true, termChans[0:75]...)
-	s.assertChanState(false, termChans[75:]...)
+	s.assertChanState(true, completionChs[0:75]...)
+	s.assertChanState(false, completionChs[75:]...)
 
 	for i := 0; i < 75; i++ {
 		switch i % 3 {
@@ -132,8 +132,8 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertBufferedState(qr, ids[75:]...)
 	s.assertHasQueries(qr, true, true, true, true)
 	s.assertQuerySizes(qr, 25, 25, 25, 25)
-	s.assertChanState(true, termChans[0:75]...)
-	s.assertChanState(false, termChans[75:]...)
+	s.assertChanState(true, completionChs[0:75]...)
+	s.assertChanState(false, completionChs[75:]...)
 
 	for i := 0; i < 25; i++ {
 		qr.RemoveQuery(ids[i])
@@ -155,15 +155,15 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 		s.assertHasQueries(qr, i < 99, false, false, false)
 		s.assertQuerySizes(qr, 100-i-1, 0, 0, 0)
 	}
-	s.assertChanState(true, termChans[0:75]...)
-	s.assertChanState(false, termChans[75:]...)
+	s.assertChanState(true, completionChs[0:75]...)
+	s.assertChanState(false, completionChs[75:]...)
 }
 
 func (s *QueryRegistrySuite) assertBufferedState(qr QueryRegistry, ids ...string) {
 	for _, id := range ids {
-		termCh, err := qr.GetQueryTermCh(id)
+		completionCh, err := qr.GetQueryCompletionCh(id)
 		s.NoError(err)
-		s.False(closed(termCh))
+		s.False(closed(completionCh))
 		input, err := qr.GetQueryInput(id)
 		s.NoError(err)
 		s.NotNil(input)
@@ -175,9 +175,9 @@ func (s *QueryRegistrySuite) assertBufferedState(qr QueryRegistry, ids ...string
 
 func (s *QueryRegistrySuite) assertCompletedState(qr QueryRegistry, ids ...string) {
 	for _, id := range ids {
-		termCh, err := qr.GetQueryTermCh(id)
+		completionCh, err := qr.GetQueryCompletionCh(id)
 		s.NoError(err)
-		s.True(closed(termCh))
+		s.True(closed(completionCh))
 		input, err := qr.GetQueryInput(id)
 		s.NoError(err)
 		s.NotNil(input)
@@ -192,9 +192,9 @@ func (s *QueryRegistrySuite) assertCompletedState(qr QueryRegistry, ids ...strin
 
 func (s *QueryRegistrySuite) assertUnblockedState(qr QueryRegistry, ids ...string) {
 	for _, id := range ids {
-		termCh, err := qr.GetQueryTermCh(id)
+		completionCh, err := qr.GetQueryCompletionCh(id)
 		s.NoError(err)
-		s.True(closed(termCh))
+		s.True(closed(completionCh))
 		input, err := qr.GetQueryInput(id)
 		s.NoError(err)
 		s.NotNil(input)
@@ -209,9 +209,9 @@ func (s *QueryRegistrySuite) assertUnblockedState(qr QueryRegistry, ids ...strin
 
 func (s *QueryRegistrySuite) assertFailedState(qr QueryRegistry, ids ...string) {
 	for _, id := range ids {
-		termCh, err := qr.GetQueryTermCh(id)
+		completionCh, err := qr.GetQueryCompletionCh(id)
 		s.NoError(err)
-		s.True(closed(termCh))
+		s.True(closed(completionCh))
 		input, err := qr.GetQueryInput(id)
 		s.NoError(err)
 		s.NotNil(input)
