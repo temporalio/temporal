@@ -1802,9 +1802,9 @@ func (s *ContextImpl) acquireShard() {
 	// We stop retrying on any of:
 	// 1. We succeed in acquiring the rangeid lock.
 	// 2. We get any error other than transient errors.
-	// 3. The state changes to Stopping or Stopped
+	// 3. The state changes to Stopping or Stopped.
 	//
-	// If the shard controller sees that servce resolver has assigned ownership to someone
+	// If the shard controller sees that service resolver has assigned ownership to someone
 	// else, it will call finishStop, which will trigger case 3 above.
 	policy := backoff.NewExponentialRetryPolicy(1 * time.Second)
 	policy.SetExpirationInterval(5 * time.Minute)
