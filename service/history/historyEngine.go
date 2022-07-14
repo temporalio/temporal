@@ -797,11 +797,11 @@ func (e *historyEngineImpl) QueryWorkflow(
 		scope.IncCounter(metrics.QueryBufferExceededCount)
 		return nil, consts.ErrConsistentQueryBufferExceeded
 	}
-	queryID, termCh := queryReg.BufferQuery(req.GetQuery())
+	queryID, completionCh := queryReg.BufferQuery(req.GetQuery())
 	defer queryReg.RemoveQuery(queryID)
 	weCtx.GetReleaseFn()(nil)
 	select {
-	case <-termCh:
+	case <-completionCh:
 		completionState, err := queryReg.GetCompletionState(queryID)
 		if err != nil {
 			scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
