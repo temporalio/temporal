@@ -233,7 +233,7 @@ func (m *metadataImpl) Start() {
 	if err != nil {
 		m.logger.Fatal("Unable to initialize cluster metadata cache", tag.Error(err))
 	}
-	m.refresher = goro.Go(ctx, m.refreshLoop)
+	m.refresher = goro.NewHandle(context.Background()).Go(m.refreshLoop)
 }
 
 func (m *metadataImpl) Stop() {

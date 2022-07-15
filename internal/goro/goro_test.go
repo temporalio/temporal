@@ -49,14 +49,14 @@ func blockOnCtxReturnNil(ctx context.Context) error {
 func TestGoroParentTimeout(t *testing.T) {
 	pctx, pcancel := context.WithTimeout(context.TODO(), 5*time.Microsecond)
 	defer pcancel()
-	g := goro.Go(pctx, blockOnCtxReturnErr)
+	g := goro.NewHandle(pctx).Go(blockOnCtxReturnErr)
 	<-g.Done()
 	require.Equal(t, pctx.Err(), g.Err())
 }
 
 func TestGoroCancelParentCtx(t *testing.T) {
 	pctx, pcancel := context.WithCancel(context.TODO())
-	g := goro.Go(pctx, blockOnCtxReturnErr)
+	g := goro.NewHandle(pctx).Go(blockOnCtxReturnErr)
 	pcancel()
 	<-g.Done()
 	require.Equal(t, pctx.Err(), g.Err())
@@ -64,7 +64,7 @@ func TestGoroCancelParentCtx(t *testing.T) {
 
 func TestGoroCancel(t *testing.T) {
 	pctx := context.Background()
-	g := goro.Go(pctx, blockOnCtxReturnErr)
+	g := goro.NewHandle(pctx).Go(blockOnCtxReturnErr)
 	g.Cancel()
 	<-g.Done()
 	require.ErrorIs(t, context.Canceled, g.Err())
@@ -72,7 +72,7 @@ func TestGoroCancel(t *testing.T) {
 }
 
 func TestGoroMultiCancel(t *testing.T) {
-	g := goro.Go(context.TODO(), blockOnCtxReturnErr)
+	g := goro.NewHandle(context.TODO()).Go(blockOnCtxReturnErr)
 	g.Cancel()
 	require.NotPanics(t, g.Cancel)
 	require.NotPanics(t, g.Cancel)
@@ -84,21 +84,21 @@ func TestGoroMultiCancel(t *testing.T) {
 }
 
 func TestGoroDoneNoErr(t *testing.T) {
-	g := goro.Go(context.TODO(), blockOnCtxReturnNil)
+	g := goro.NewHandle(context.TODO()).Go(blockOnCtxReturnNil)
 	g.Cancel()
 	<-g.Done()
 	require.NoError(t, g.Err())
 }
 
 func TestGoroSimpleReturn(t *testing.T) {
-	g := goro.Go(context.TODO(), func(context.Context) error {
+	g := goro.NewHandle(context.TODO()).Go(func(context.Context) error {
 		return nil
 	})
 	<-g.Done()
 }
 
 func TestGoroGoexit(t *testing.T) {
-	g := goro.Go(context.TODO(), func(context.Context) error {
+	g := goro.NewHandle(context.TODO()).Go(func(context.Context) error {
 		runtime.Goexit()
 		return nil
 	})
@@ -106,7 +106,7 @@ func TestGoroGoexit(t *testing.T) {
 }
 
 func ExampleHandle() {
-	h := goro.Go(context.Background(), func(ctx context.Context) error {
+	h := goro.NewHandle(context.Background()).Go(func(ctx context.Context) error {
 		<-ctx.Done()
 		fmt.Println("shutting down")
 		return ctx.Err()

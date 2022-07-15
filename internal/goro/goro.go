@@ -40,15 +40,23 @@ type (
 	}
 )
 
-// Go launches the supplied function in its own goroutine and returns back a
-// *Handle that serves as a handle to the goroutine itself.
-func Go(ctx context.Context, f func(context.Context) error) *Handle {
+// NewHandle creates a *Handle that serves as a handle to a goroutine. The
+// caller should call Go exactly once on the returned value. NewHandle and Go
+// are separate function so that the *Handle can be stored into a field before
+// the goroutine starts, which makes it possible for the goroutine to call
+// Done() on itself (maybe indirectly) without a race condition.
+func NewHandle(ctx context.Context) *Handle {
 	ctx, cancel := context.WithCancel(ctx)
-	h := &Handle{
+	return &Handle{
 		context: ctx,
 		cancel:  cancel,
 		done:    make(chan struct{}),
 	}
+}
+
+// Go launches the supplied function in its own goroutine. Go should be called
+// exactly once on each *Handle.
+func (h *Handle) Go(f func(context.Context) error) *Handle {
 	go func() {
 		// use defer here so that the channel is closed even if the func calls
 		// runtime.Goexit()
