@@ -273,4 +273,9 @@ service HistoryService {
     // visibility manager doesn't support write operations
     rpc DeleteWorkflowVisibilityRecord (DeleteWorkflowVisibilityRecordRequest) returns (DeleteWorkflowVisibilityRecordResponse) {
     }
+
+    // (-- api-linter: core::0134=disabled
+    //     aip.dev/not-precedent: This service does not follow the update method AIP --)
+    rpc UpdateWorkflow(UpdateWorkflowRequest) returns (UpdateWorkflowResponse) {
+    }
 }

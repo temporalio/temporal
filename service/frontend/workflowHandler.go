@@ -3684,6 +3684,37 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, requ
 	return &workflowservice.UpdateWorkerBuildIdOrderingResponse{}, err
 }
 
+func (wh *WorkflowHandler) UpdateWorkflow(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkflowRequest,
+) (_ *workflowservice.UpdateWorkflowResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, err
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	histResp, err := wh.historyClient.UpdateWorkflow(ctx, &historyservice.UpdateWorkflowRequest{
+		NamespaceId: nsID.String(),
+		Request:     request,
+	})
+
+	return histResp.GetResponse(), err
+}
+
 func (wh *WorkflowHandler) GetWorkerBuildIdOrdering(ctx context.Context, request *workflowservice.GetWorkerBuildIdOrderingRequest) (_ *workflowservice.GetWorkerBuildIdOrderingResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 

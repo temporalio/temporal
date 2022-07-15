@@ -665,6 +665,21 @@ func (c *retryableClient) TerminateWorkflowExecution(
 	return resp, err
 }
 
+func (c *retryableClient) UpdateWorkflow(
+	ctx context.Context,
+	request *historyservice.UpdateWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.UpdateWorkflowResponse, error) {
+	var resp *historyservice.UpdateWorkflowResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateWorkflow(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
