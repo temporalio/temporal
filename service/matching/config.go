@@ -27,9 +27,9 @@ package matching
 import (
 	"time"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -135,15 +135,15 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
-func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Name) (*taskQueueConfig, error) {
+func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Name) *taskQueueConfig {
 	taskQueueName := id.name
 	taskType := id.taskType
 
 	writePartition := func() int {
-		return common.MaxInt(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
+		return util.Max(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
 	}
 	readPartition := func() int {
-		return common.MaxInt(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
+		return util.Max(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
 	}
 
 	return &taskQueueConfig{
@@ -197,8 +197,8 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 				return config.ForwarderMaxRatePerSecond(namespace.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxChildrenPerNode: func() int {
-				return common.MaxInt(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
+				return util.Max(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
 			},
 		},
-	}, nil
+	}
 }

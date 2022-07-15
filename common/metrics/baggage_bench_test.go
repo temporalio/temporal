@@ -98,7 +98,7 @@ func (b *baggageMutexMap) Add(k string, v int64) {
 	b.Lock()
 	defer b.Unlock()
 
-	value, _ := b.data[k]
+	value := b.data[k]
 	value += v
 	b.data[k] = value
 }
@@ -110,9 +110,9 @@ func (b *baggageMutexMap) Get(k string) int64 {
 }
 
 // roughly 1.7s/7.5s for mutex/sync
-//baggageCount := 1000
-//threadCount := 20
-//updatesPerThread := 1000
+// baggageCount := 1000
+// threadCount := 20
+// updatesPerThread := 1000
 func testMapBaggage(createTestObj func() testBaggage) {
 	baggageCount := 10
 	threadCount := 10

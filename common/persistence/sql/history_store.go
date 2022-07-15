@@ -131,7 +131,7 @@ func (m *sqlExecutionStore) DeleteHistoryNodes(
 
 	if nodeID < p.GetBeginNodeID(branchInfo) {
 		return &p.InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
+			Msg: "cannot append to ancestors' nodes",
 		}
 	}
 
@@ -268,7 +268,7 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 //           \
 //            8[8]
 //
-//Now we want to fork a new branch B3 from B2.
+// Now we want to fork a new branch B3 from B2.
 // The only valid forking nodeIDs are 3,6 or 8.
 // 1 is not valid because we can't fork from first node.
 // 2/4/5 is NOT valid either because they are inside a batch.

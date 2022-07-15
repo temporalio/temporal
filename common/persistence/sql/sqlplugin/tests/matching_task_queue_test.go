@@ -147,6 +147,7 @@ func (s *matchingTaskQueueSuite) TestInsertUpdate_Success() {
 	result, err = s.store.UpdateTaskQueues(newExecutionContext(), &taskQueue)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
+	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 }
 
@@ -158,6 +159,7 @@ func (s *matchingTaskQueueSuite) TestUpdate_Fail() {
 	result, err := s.store.UpdateTaskQueues(newExecutionContext(), &taskQueue)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 }
 
@@ -177,6 +179,7 @@ func (s *matchingTaskQueueSuite) TestInsertUpdateSelect() {
 	result, err = s.store.UpdateTaskQueues(newExecutionContext(), &taskQueue)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
+	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	filter := sqlplugin.TaskQueuesFilter{
@@ -200,6 +203,7 @@ func (s *matchingTaskQueueSuite) TestDeleteSelect() {
 	result, err := s.store.DeleteFromTaskQueues(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
 	filter = sqlplugin.TaskQueuesFilter{
@@ -230,6 +234,7 @@ func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Success() {
 	result, err = s.store.DeleteFromTaskQueues(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
+	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	filter = sqlplugin.TaskQueuesFilter{
@@ -260,6 +265,7 @@ func (s *matchingTaskQueueSuite) TestInsertDeleteSelect_Fail() {
 	result, err = s.store.DeleteFromTaskQueues(newExecutionContext(), filter)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
+	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 
 	filter = sqlplugin.TaskQueuesFilter{

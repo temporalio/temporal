@@ -228,7 +228,7 @@ goimports:
 
 staticcheck:
 	@printf $(COLOR) "Run staticcheck..."
-	@staticcheck -fail none ./...
+	@staticcheck ./...
 
 errcheck:
 	@printf $(COLOR) "Run errcheck..."
@@ -351,23 +351,23 @@ install-schema: temporal-cassandra-tool
 
 install-schema-mysql: temporal-sql-tool
 	@printf $(COLOR) "Install MySQL schema..."
-	./temporal-sql-tool -u temporal --pw temporal drop --db $(TEMPORAL_DB) -f
-	./temporal-sql-tool -u temporal --pw temporal create --db $(TEMPORAL_DB)
+	./temporal-sql-tool -u temporal --pw temporal --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u temporal --pw temporal --db $(TEMPORAL_DB) create
 	./temporal-sql-tool -u temporal --pw temporal --db $(TEMPORAL_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u temporal --pw temporal --db $(TEMPORAL_DB) update-schema -d ./schema/mysql/v57/temporal/versioned
-	./temporal-sql-tool -u temporal --pw temporal drop --db $(VISIBILITY_DB) -f
-	./temporal-sql-tool -u temporal --pw temporal create --db $(VISIBILITY_DB)
+	./temporal-sql-tool -u temporal --pw temporal --db $(VISIBILITY_DB) drop  -f
+	./temporal-sql-tool -u temporal --pw temporal --db $(VISIBILITY_DB) create
 	./temporal-sql-tool -u temporal --pw temporal --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u temporal --pw temporal --db $(VISIBILITY_DB) update-schema -d ./schema/mysql/v57/visibility/versioned
 
 install-schema-postgresql: temporal-sql-tool
 	@printf $(COLOR) "Install Postgres schema..."
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres drop --db $(TEMPORAL_DB) -f
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres create --db $(TEMPORAL_DB)
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(TEMPORAL_DB) create
 	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(TEMPORAL_DB) setup -v 0.0
 	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(TEMPORAL_DB) update-schema -d ./schema/postgresql/v96/temporal/versioned
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres drop --db $(VISIBILITY_DB) -f
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres create --db $(VISIBILITY_DB)
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(VISIBILITY_DB) drop -f
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(VISIBILITY_DB) create
 	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v96/visibility/versioned
 

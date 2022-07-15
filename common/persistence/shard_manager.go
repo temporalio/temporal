@@ -63,8 +63,7 @@ func (m *shardManagerImpl) GetOrCreateShard(
 	ctx context.Context,
 	request *GetOrCreateShardRequest,
 ) (*GetOrCreateShardResponse, error) {
-	var createShardInfo func() (int64, *commonpb.DataBlob, error)
-	createShardInfo = func() (int64, *commonpb.DataBlob, error) {
+	createShardInfo := func() (int64, *commonpb.DataBlob, error) {
 		shardInfo := request.InitialShardInfo
 		if shardInfo == nil {
 			shardInfo = &persistencespb.ShardInfo{}

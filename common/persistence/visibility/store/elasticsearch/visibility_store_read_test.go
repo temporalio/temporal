@@ -73,7 +73,6 @@ var (
 	testLatestTime   = time.Unix(0, 2547596872371000000).UTC()
 	testWorkflowType = "test-wf-type"
 	testWorkflowID   = "test-wid"
-	testRunID        = "1601da05-4db9-4eeb-89e4-da99481bdfc9"
 	testStatus       = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 
 	testSearchResult = &elastic.SearchResult{
@@ -85,7 +84,6 @@ var (
 	filterClose             = fmt.Sprintf("must_not:map[term:map[ExecutionStatus:%s]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String())
 	filterByType            = fmt.Sprintf("map[term:map[WorkflowType:%s]", testWorkflowType)
 	filterByWID             = fmt.Sprintf("map[term:map[WorkflowId:%s]", testWorkflowID)
-	filterByRunID           = fmt.Sprintf("map[term:map[RunId:%s]", testRunID)
 	filterByExecutionStatus = fmt.Sprintf("map[term:map[ExecutionStatus:%s]", testStatus.String())
 )
 
@@ -531,7 +529,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 	s.Equal(`[{"StartTime":{"order":"desc"}},{"CloseTime":{"order":"asc"}}]`, s.sorterToJSON(srt))
 
 	query = `order by CustomTextField desc`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal(err.(*serviceerror.InvalidArgument).Error(), "invalid query: unable to convert 'order by' column name: unable to sort by field of Text type, use field of type Keyword")
@@ -581,14 +579,14 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 	s.Nil(srt)
 
 	query = `CustomKeywordField = 'pid'`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "mapper error")
 
 	query = `AliasForUnknownField = 'pid'`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "invalid query: unable to convert filter expression: unable to convert left part of comparison expression: invalid search attribute: AliasForUnknownField")
@@ -606,13 +604,13 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 	s.Equal(`[{"CustomKeywordField":{"order":"asc"}}]`, s.sorterToJSON(srt))
 
 	query = `order by CustomKeywordField asc`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "mapper error")
 
 	query = `order by AliasForUnknownField asc`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "invalid query: unable to convert 'order by' column name: invalid search attribute: AliasForUnknownField")
@@ -634,7 +632,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper_Error() {
 	s.Nil(srt)
 
 	query = `ProductId = 'pid'`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgumentErr)
@@ -647,7 +645,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper_Error() {
 	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(srt))
 
 	query = `order by CustomIntField asc`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "mapper error")

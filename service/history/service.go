@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 )
 
@@ -146,7 +147,7 @@ func (s *Service) Stop() {
 	remainingTime = s.sleep(shardOwnershipTransferDelay, remainingTime)
 
 	logger.Info("ShutdownHandler: No longer taking rpc requests")
-	remainingTime = s.sleep(gracePeriod, remainingTime)
+	_ = s.sleep(gracePeriod, remainingTime)
 
 	// TODO: Change this to GracefulStop when integration tests are refactored.
 	s.server.Stop()
@@ -160,7 +161,7 @@ func (s *Service) Stop() {
 // sleep sleeps for the minimum of desired and available duration
 // returns the remaining available time duration
 func (s *Service) sleep(desired time.Duration, available time.Duration) time.Duration {
-	d := common.MinDuration(desired, available)
+	d := util.Min(desired, available)
 	if d > 0 {
 		time.Sleep(d)
 	}

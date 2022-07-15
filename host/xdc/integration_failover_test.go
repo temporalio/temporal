@@ -1972,14 +1972,15 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.Equal(2, lastAttemptCount)
 }
 
-func (s *integrationClustersTestSuite) printHistory(frontendClient workflowservice.WorkflowServiceClient, namespace, workflowID, runID string) {
-	events := s.getHistory(frontendClient, namespace, &commonpb.WorkflowExecution{
-		WorkflowId: workflowID,
-		RunId:      runID,
-	})
-	history := &historypb.History{Events: events}
-	common.PrettyPrintHistory(history, s.logger)
-}
+// Uncomment if you need to debug history.
+// func (s *integrationClustersTestSuite) printHistory(frontendClient workflowservice.WorkflowServiceClient, namespace, workflowID, runID string) {
+// 	events := s.getHistory(frontendClient, namespace, &commonpb.WorkflowExecution{
+// 		WorkflowId: workflowID,
+// 		RunId:      runID,
+// 	})
+// 	history := &historypb.History{Events: events}
+// 	common.PrettyPrintHistory(history, s.logger)
+// }
 
 func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -2237,6 +2238,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: "temporal-system",
 	})
+	s.NoError(err)
 	workflowID4 := "force-replication-wf-4"
 	run4, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 workflowID4,
@@ -2353,6 +2355,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: "temporal-system",
 	})
+	s.NoError(err)
 	forceReplicationWorkflowID := "force-replication-wf"
 	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 forceReplicationWorkflowID,
@@ -2491,6 +2494,7 @@ func (s *integrationClustersTestSuite) TestForceMigration_ResetWorkflow() {
 		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: "temporal-system",
 	})
+	s.NoError(err)
 	forceReplicationWorkflowID := "force-replication-wf"
 	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 forceReplicationWorkflowID,

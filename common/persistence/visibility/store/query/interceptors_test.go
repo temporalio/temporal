@@ -83,7 +83,7 @@ func TestNameInterceptor(t *testing.T) {
 	actualSorterJson, _ := json.Marshal(actualSorterMaps)
 	assert.Equal(t, `[{"StartTime1":{"order":"asc"}}]`, string(actualSorterJson))
 
-	query, sorters, err = c.ConvertWhereOrderBy("error='Running' order by StartTime")
+	_, _, err = c.ConvertWhereOrderBy("error='Running' order by StartTime")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "interceptor error")
 }
@@ -108,7 +108,7 @@ func TestValuesInterceptor(t *testing.T) {
 	actualQueryJson, _ = json.Marshal(actualQueryMap)
 	assert.Equal(t, `{"bool":{"filter":{"range":{"ExecutionStatus":{"from":"Status5","include_lower":true,"include_upper":true,"to":"Status7"}}}}}`, string(actualQueryJson))
 
-	query, _, err = c.ConvertWhereOrderBy("error='Running'")
+	_, _, err = c.ConvertWhereOrderBy("error='Running'")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "interceptor error")
 }

@@ -146,7 +146,7 @@ func (h *HistoryStore) DeleteHistoryNodes(
 
 	if nodeID < p.GetBeginNodeID(branchInfo) {
 		return &p.InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf("cannot delete from ancestors' nodes"),
+			Msg: "cannot delete from ancestors' nodes",
 		}
 	}
 

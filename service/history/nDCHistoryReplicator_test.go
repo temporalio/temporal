@@ -30,6 +30,7 @@ import (
 	"time"
 
 	historypb "go.temporal.io/api/history/v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/events"
 
@@ -40,6 +41,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -70,10 +72,9 @@ type (
 		mockExecutionManager  *persistence.MockExecutionManager
 		logger                log.Logger
 
-		namespaceID namespace.ID
-		workflowID  string
-		runID       string
-		now         time.Time
+		workflowID string
+		runID      string
+		now        time.Time
 
 		historyReplicator *nDCHistoryReplicatorImpl
 	}
@@ -88,7 +89,7 @@ func (s *nDCHistoryReplicatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	//s.mockTaskRefresher = workflow.NewMockTaskRefresher(s.controller)
+	// s.mockTaskRefresher = workflow.NewMockTaskRefresher(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,

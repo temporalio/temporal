@@ -310,7 +310,7 @@ func (ws *workerSet) refreshComponent(
 		}
 	}
 	policy := backoff.NewExponentialRetryPolicy(ws.wm.initialRetry)
-	backoff.Retry(op, policy, nil)
+	backoff.ThrottleRetry(op, policy, nil)
 }
 
 func (ws *workerSet) startWorker(

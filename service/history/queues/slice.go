@@ -29,6 +29,7 @@ import (
 
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/tasks"
+	"golang.org/x/exp/maps"
 )
 
 type (
@@ -285,11 +286,7 @@ func (s *SliceImpl) mergeExecutables(incomingSlice *SliceImpl) map[tasks.Key]Exe
 	if len(thisExecutables) < len(thatExecutables) {
 		thisExecutables, thatExecutables = thatExecutables, thisExecutables
 	}
-
-	for key, executable := range thatExecutables {
-		thisExecutables[key] = executable
-	}
-
+	maps.Copy(thisExecutables, thatExecutables)
 	return thisExecutables
 }
 

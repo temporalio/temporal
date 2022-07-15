@@ -34,6 +34,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -62,9 +63,10 @@ const (
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
 // e.g. to use dns resolver, a "dns:///" prefix should be applied to the target.
 func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptors ...grpc.UnaryClientInterceptor) (*grpc.ClientConn, error) {
-	// Default to insecure
-	grpcSecureOpt := grpc.WithInsecure()
-	if tlsConfig != nil {
+	var grpcSecureOpt grpc.DialOption
+	if tlsConfig == nil {
+		grpcSecureOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
+	} else {
 		grpcSecureOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
 

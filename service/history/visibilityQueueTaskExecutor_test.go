@@ -347,7 +347,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 	startEvent *historypb.HistoryEvent,
 	task *tasks.StartExecutionVisibilityTask,
 	mutableState workflow.MutableState,
-	backoffSeconds time.Duration,
+	backoff time.Duration,
 	taskQueueName string,
 ) *manager.RecordWorkflowExecutionStartedRequest {
 	execution := &commonpb.WorkflowExecution{
@@ -355,7 +355,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 		RunId:      task.RunID,
 	}
 	executionInfo := mutableState.GetExecutionInfo()
-	executionTimestamp := timestamp.TimeValue(startEvent.GetEventTime()).Add(backoffSeconds)
+	executionTimestamp := timestamp.TimeValue(startEvent.GetEventTime()).Add(backoff)
 
 	return &manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{

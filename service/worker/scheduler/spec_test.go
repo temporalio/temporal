@@ -254,3 +254,25 @@ func (s *specSuite) TestSpecBoundedJitter() {
 		time.Date(2022, 3, 23, 15, 8, 3, 724000000, time.UTC),
 	)
 }
+
+func (s *specSuite) TestSpecJitterSingleRun() {
+	s.checkSequenceFull(
+		&schedpb.ScheduleSpec{
+			Calendar: []*schedpb.CalendarSpec{
+				{Hour: "13", Minute: "55", DayOfMonth: "7", Month: "4", Year: "2022"},
+			},
+		},
+		time.Date(2022, 3, 23, 11, 00, 0, 0, time.UTC),
+		time.Date(2022, 4, 7, 13, 55, 0, 0, time.UTC),
+	)
+	s.checkSequenceFull(
+		&schedpb.ScheduleSpec{
+			Calendar: []*schedpb.CalendarSpec{
+				{Hour: "13", Minute: "55", DayOfMonth: "7", Month: "4", Year: "2022"},
+			},
+			Jitter: timestamp.DurationPtr(1 * time.Hour),
+		},
+		time.Date(2022, 3, 23, 11, 00, 0, 0, time.UTC),
+		time.Date(2022, 4, 7, 13, 57, 26, 927000000, time.UTC),
+	)
+}

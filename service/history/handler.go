@@ -143,7 +143,6 @@ var (
 	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
 	errShardIDNotSet           = serviceerror.NewInvalidArgument("ShardId not set on request.")
 	errTimestampNotSet         = serviceerror.NewInvalidArgument("Timestamp not set on request.")
-	errInvalidTaskType         = serviceerror.NewInvalidArgument("Invalid task type")
 
 	errDeserializeTaskTokenMessage = "Error to deserialize task token. Error: %v."
 
@@ -1101,7 +1100,7 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 	}
 
 	var resp *historyservice.QueryWorkflowResponse
-	err2 := backoff.RetryContext(ctx, func(ctx context.Context) error {
+	err2 := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
 		var err error
 		resp, err = engine.QueryWorkflow(ctx, request)
 		return err

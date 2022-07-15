@@ -898,7 +898,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 
 	pollerID := uuid.New()
 	var matchingResp *matchingservice.PollWorkflowTaskQueueResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		if contextNearDeadline(ctx, longPollTailRoom) {
 			return errContextNearDeadline
 		}
@@ -911,7 +911,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return err
 	}
 
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	err = backoff.ThrottleRetryContext(ctx, op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		if err == errContextNearDeadline {
 			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
@@ -1143,7 +1143,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 
 	pollerID := uuid.New()
 	var matchingResponse *matchingservice.PollActivityTaskQueueResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		if contextNearDeadline(ctx, longPollTailRoom) {
 			return errContextNearDeadline
 		}
@@ -1157,7 +1157,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return err
 	}
 
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	err = backoff.ThrottleRetryContext(ctx, op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		if err == errContextNearDeadline {
 			return &workflowservice.PollActivityTaskQueueResponse{}, nil
@@ -3305,7 +3305,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 
 	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
 	isWaitErr := func(e error) bool { return e == errWaitForRefresh }
-	err = backoff.RetryContext(ctx, op, policy, isWaitErr)
+	err = backoff.ThrottleRetryContext(ctx, op, policy, isWaitErr)
 	if err != nil {
 		return nil, err
 	}
@@ -3349,6 +3349,9 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		input.ConflictToken = int64(binary.BigEndian.Uint64(request.ConflictToken))
 	}
 	inputPayloads, err := payloads.Encode(input)
+	if err != nil {
+		return nil, err
+	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
@@ -3419,6 +3422,9 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 	}
 
 	inputPayloads, err := payloads.Encode(request.Patch)
+	if err != nil {
+		return nil, err
+	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
@@ -4172,10 +4178,6 @@ func (wh *WorkflowHandler) verifyHistoryIsComplete(
 		isFirstPage,
 		isLastPage,
 		pageSize))
-}
-
-func (wh *WorkflowHandler) isFailoverRequest(updateRequest *workflowservice.UpdateNamespaceRequest) bool {
-	return updateRequest.ReplicationConfig != nil && updateRequest.ReplicationConfig.GetActiveClusterName() != ""
 }
 
 func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest, namespaceID namespace.ID) bool {

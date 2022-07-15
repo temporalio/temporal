@@ -44,11 +44,6 @@ type TestDynamicTLSConfigProvider struct {
 
 	FrontendPerHostCertProviderMap PerHostCertProviderMap
 
-	internodeServerConfig *tls.Config
-	internodeClientConfig *tls.Config
-	frontendServerConfig  *tls.Config
-	frontendClientConfig  *tls.Config
-
 	logger log.Logger
 }
 
@@ -73,7 +68,6 @@ func (t *TestDynamicTLSConfigProvider) GetExpiringCerts(timeWindow time.Duration
 }
 
 func (t *TestDynamicTLSConfigProvider) GetRemoteClusterClientConfig(hostName string) (*tls.Config, error) {
-	//TODO implement me
 	panic("implement me")
 }
 

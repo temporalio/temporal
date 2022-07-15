@@ -186,8 +186,6 @@ var (
 		ReplacementCharacter: tally.DefaultReplacementCharacter,
 	}
 
-	defaultQuantiles = []float64{50, 75, 90, 95, 99}
-
 	defaultPerUnitHistogramBoundaries = map[string][]float64{
 		Dimensionless: {
 			1,
@@ -318,7 +316,12 @@ func newStatsdScope(logger log.Logger, c *Config) tally.Scope {
 	if len(config.HostPort) == 0 {
 		return tally.NoopScope
 	}
-	statter, err := statsd.NewBufferedClient(config.HostPort, config.Prefix, config.FlushInterval, config.FlushBytes)
+	statter, err := statsd.NewClientWithConfig(&statsd.ClientConfig{
+		Address:       config.HostPort,
+		Prefix:        config.Prefix,
+		FlushInterval: config.FlushInterval,
+		FlushBytes:    config.FlushBytes,
+	})
 	if err != nil {
 		logger.Fatal("error creating statsd client", tag.Error(err))
 	}

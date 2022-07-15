@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -131,7 +132,7 @@ func NewExecutable(
 		scheduler:   scheduler,
 		rescheduler: rescheduler,
 		timeSource:  timeSource,
-		loadTime:    timeSource.Now(),
+		loadTime:    util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
 		logger: log.NewLazyLogger(
 			logger,
 			func() []tag.Tag {
@@ -147,6 +148,10 @@ func NewExecutable(
 }
 
 func (e *executableImpl) Execute() error {
+	if e.State() == ctasks.TaskStateCancelled {
+		return nil
+	}
+
 	// this filter should also contain the logic for overriding
 	// results from task allocator (force executing some standby task types)
 	e.shouldProcess = e.filter(e.Task)
@@ -235,6 +240,10 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 func (e *executableImpl) IsRetryableError(err error) bool {
 	// this determines if the executable should be retried within one submission to scheduler
 
+	if e.State() == ctasks.TaskStateCancelled {
+		return false
+	}
+
 	if shard.IsShardOwnershipLostError(err) {
 		return false
 	}
@@ -257,9 +266,22 @@ func (e *executableImpl) RetryPolicy() backoff.RetryPolicy {
 	return schedulerRetryPolicy
 }
 
+func (e *executableImpl) Cancel() {
+	e.Lock()
+	defer e.Unlock()
+
+	if e.state == ctasks.TaskStatePending {
+		e.state = ctasks.TaskStateCancelled
+	}
+}
+
 func (e *executableImpl) Ack() {
 	e.Lock()
 	defer e.Unlock()
+
+	if e.state == ctasks.TaskStateCancelled {
+		return
+	}
 
 	e.state = ctasks.TaskStateAcked
 
@@ -276,6 +298,10 @@ func (e *executableImpl) Ack() {
 }
 
 func (e *executableImpl) Nack(err error) {
+	if e.State() == ctasks.TaskStateCancelled {
+		return
+	}
+
 	submitted := false
 	if e.shouldResubmitOnNack(e.Attempt(), err) {
 		// we do not need to know if there any error during submission
@@ -285,11 +311,15 @@ func (e *executableImpl) Nack(err error) {
 	}
 
 	if !submitted {
-		e.Reschedule()
+		e.rescheduler.Add(e, e.rescheduleTime(e.Attempt()))
 	}
 }
 
 func (e *executableImpl) Reschedule() {
+	if e.State() == ctasks.TaskStateCancelled {
+		return
+	}
+
 	e.rescheduler.Add(e, e.rescheduleTime(e.Attempt()))
 }
 

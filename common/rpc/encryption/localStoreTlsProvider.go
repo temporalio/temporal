@@ -426,7 +426,7 @@ func (s *localStoreTlsProvider) timerCallback() {
 	for {
 		select {
 		case <-s.stop:
-			break
+			return
 		case <-s.ticker.C:
 		}
 

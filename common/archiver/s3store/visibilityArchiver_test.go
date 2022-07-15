@@ -62,7 +62,6 @@ type visibilityArchiverSuite struct {
 	s3cli *mocks.MockS3API
 
 	container         *archiver.VisibilityBootstrapContainer
-	logger            log.Logger
 	visibilityRecords []*archiverspb.VisibilityRecord
 
 	controller      *gomock.Controller

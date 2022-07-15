@@ -105,10 +105,8 @@ func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 		s.notifier.NotifyNewHistoryEvent(historyEvent)
 	}()
 
-	select {
-	case msg := <-channel:
-		s.Equal(historyEvent, msg)
-	}
+	msg := <-channel
+	s.Equal(historyEvent, msg)
 
 	err = s.notifier.UnwatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
 	s.Nil(err)

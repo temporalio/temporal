@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
+	"golang.org/x/exp/slices"
 
 	"go.temporal.io/api/serviceerror"
 )
@@ -151,12 +152,7 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 func (vc *versionChecker) ClientSupportsFeature(ctx context.Context, feature string) bool {
 	headers := GetValues(ctx, SupportedFeaturesHeaderName)
 	clientFeatures := strings.Split(headers[0], SupportedFeaturesHeaderDelim)
-	for _, clientFeature := range clientFeatures {
-		if clientFeature == feature {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(clientFeatures, feature)
 }
 
 func mustParseRanges(ranges map[string]string) map[string]semver.Range {

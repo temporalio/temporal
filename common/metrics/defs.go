@@ -24,10 +24,6 @@
 
 package metrics
 
-import (
-	"github.com/uber-go/tally/v4"
-)
-
 // types used/defined by the package
 type (
 	// MetricName is the name of the metric
@@ -40,11 +36,9 @@ type (
 
 	// metricDefinition contains the definition for a metric
 	metricDefinition struct {
-		// nolint
-		metricType       MetricType    // metric type
-		metricName       MetricName    // metric name
-		metricRollupName MetricName    // optional. if non-empty, this name must be used for rolled-up version of this metric
-		buckets          tally.Buckets // buckets if we are emitting histograms
+		metricType       MetricType // metric type
+		metricName       MetricName // metric name
+		metricRollupName MetricName // optional. if non-empty, this name must be used for rolled-up version of this metric
 		unit             MetricUnit
 	}
 
@@ -2368,6 +2362,7 @@ const (
 	RenameNamespaceFailuresCount
 	ReadNamespaceFailuresCount
 	ListExecutionsFailuresCount
+	CountExecutionsFailuresCount
 	DeleteExecutionFailuresCount
 	DeleteExecutionNotFoundCount
 	RateLimiterFailuresCount
@@ -2840,6 +2835,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		RenameNamespaceFailuresCount: NewCounterDef("rename_namespace_failures"),
 		ReadNamespaceFailuresCount:   NewCounterDef("read_namespace_failures"),
 		ListExecutionsFailuresCount:  NewCounterDef("list_executions_failures"),
+		CountExecutionsFailuresCount: NewCounterDef("count_executions_failures"),
 		DeleteExecutionFailuresCount: NewCounterDef("delete_execution_failures"),
 		DeleteExecutionNotFoundCount: NewCounterDef("delete_execution_not_found"),
 		RateLimiterFailuresCount:     NewCounterDef("rate_limiter_failures"),

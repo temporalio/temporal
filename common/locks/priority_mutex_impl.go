@@ -173,7 +173,5 @@ func (c *PriorityMutexImpl) notify() {
 		c.highCV.Signal()
 	} else if c.lowWait > 0 {
 		c.lowCV.Signal()
-	} else {
-		// noop
 	}
 }

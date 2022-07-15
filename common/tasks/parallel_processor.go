@@ -214,7 +214,7 @@ func (p *ParallelProcessor) executeTask(
 		return !p.isStopped() && task.IsRetryableError(err)
 	}
 
-	if err := backoff.Retry(operation, task.RetryPolicy(), isRetryable); err != nil {
+	if err := backoff.ThrottleRetry(operation, task.RetryPolicy(), isRetryable); err != nil {
 		if p.isStopped() {
 			task.Reschedule()
 			return
