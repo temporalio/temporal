@@ -592,6 +592,7 @@ func ApplyClusterMetadataConfigProvider(
 		customDataStoreFactory,
 		logger,
 		nil,
+		otel.GetTracerProvider(),
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
