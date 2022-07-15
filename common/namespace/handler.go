@@ -828,6 +828,10 @@ func (d *HandlerImpl) maybeUpdateFailoverHistory(
 		tag.NewAnyTag("updateReplConfig", updateReplicationConfig),
 		tag.NewAnyTag("namespaceDetail", namespaceDetail),
 	)
+	if updateReplicationConfig == nil {
+		d.logger.Debug("updateReplicationConfig was nil")
+		return failoverHistory
+	}
 	desiredReplicationState := updateReplicationConfig.State
 	if desiredReplicationState == enumspb.REPLICATION_STATE_UNSPECIFIED {
 		desiredReplicationState = namespaceDetail.ReplicationConfig.State
