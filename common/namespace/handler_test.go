@@ -26,9 +26,12 @@ package namespace
 
 import (
 	"context"
-	"go.temporal.io/server/common/log"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/common/log"
+
+	"strings"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/mock/gomock"
@@ -42,7 +45,6 @@ import (
 	persistence2 "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log/tag"
-	"strings"
 
 	"go.temporal.io/server/common/config"
 
