@@ -604,7 +604,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			newRunID := newWorkflow.RunID
 
 			if namespaceID != newNamespaceID {
-				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
+				return serviceerror.NewInternal("UpdateWorkflowExecution: cannot continue as new to another namespace")
 			}
 
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,

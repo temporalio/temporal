@@ -72,8 +72,6 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
-	"go.temporal.io/server/service/worker/archiver"
-	"go.temporal.io/server/service/worker/replicator"
 	"go.temporal.io/server/temporal"
 )
 
@@ -122,8 +120,6 @@ type (
 		shutdownCh                       chan struct{}
 		shutdownWG                       sync.WaitGroup
 		clusterNo                        int // cluster number
-		replicator                       *replicator.Replicator
-		clientWorker                     archiver.ClientWorker
 		archiverMetadata                 carchiver.ArchivalMetadata
 		archiverProvider                 provider.ArchiverProvider
 		historyConfig                    *HistoryConfig
@@ -806,7 +802,6 @@ type rpcFactoryImpl struct {
 	sync.RWMutex
 	listener       net.Listener
 	ringpopChannel *tchannel.Channel
-	serverCfg      config.GroupTLS
 }
 
 func (c *rpcFactoryImpl) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {

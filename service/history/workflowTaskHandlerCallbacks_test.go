@@ -312,7 +312,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) constructQueryResults(ids []string, r
 	for _, id := range ids {
 		results[id] = &querypb.WorkflowQueryResult{
 			ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
-			Answer:     payloads.EncodeBytes(make([]byte, resultSize, resultSize)),
+			Answer:     payloads.EncodeBytes(make([]byte, resultSize)),
 		}
 	}
 	return results

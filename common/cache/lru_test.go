@@ -141,11 +141,9 @@ func TestLRUCacheConcurrentAccess(t *testing.T) {
 			<-start
 
 			for j := 0; j < 50; j++ {
-				var result []Entry
 				it := cache.Iterator()
 				for it.HasNext() {
-					entry := it.Next()
-					result = append(result, entry) //nolint:staticcheck
+					_ = it.Next()
 				}
 				it.Close()
 			}

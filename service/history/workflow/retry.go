@@ -98,7 +98,7 @@ func getBackoffInterval(
 		interval = *maxInterval
 	} else if maxInterval == nil && interval <= 0 {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
-	} else {
+		// } else {
 		// maxInterval != nil && (0 < interval && interval <= *maxInterval)
 		// or
 		// maxInterval == nil && interval > 0

@@ -283,7 +283,7 @@ func (d *MatchingTaskStore) ListTaskQueue(
 	_ context.Context,
 	_ *p.ListTaskQueueRequest,
 ) (*p.InternalListTaskQueueResponse, error) {
-	return nil, serviceerror.NewUnavailable(fmt.Sprintf("unsupported operation"))
+	return nil, serviceerror.NewUnavailable("unsupported operation")
 }
 
 func (d *MatchingTaskStore) DeleteTaskQueue(

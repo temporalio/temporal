@@ -289,8 +289,8 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 	for {
 		select {
 		case <-t.shutdownChan:
-			// before shutdown, make sure the ack level is up to date
-			t.completeTimers() //nolint:errcheck
+			// before shutdown, make sure the ack level is up-to-date
+			_ = t.completeTimers()
 			return
 		case <-timer.C:
 		CompleteLoop:

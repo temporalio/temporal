@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
@@ -56,9 +55,7 @@ type (
 		controller                        *gomock.Controller
 		mockShard                         *shard.MockContext
 		mockEngine                        *shard.MockEngine
-		mockNamespaceCache                *namespace.MockRegistry
 		mockClientBean                    *client.MockBean
-		mockAdminClient                   *adminservicemock.MockAdminServiceClient
 		mockClusterMetadata               *cluster.MockMetadata
 		mockHistoryClient                 *historyservicemock.MockHistoryServiceClient
 		mockReplicationTaskExecutor       *MockTaskExecutor

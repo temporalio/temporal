@@ -106,7 +106,7 @@ func TestNewCassandraCluster(t *testing.T) {
 					CertFile: "/a/b/c",
 				},
 			},
-			err: errors.New("Cannot specify both certData and certFile properties"),
+			err: errors.New("only one of certData or certFile properties should be specified"),
 		},
 		"clientCert_duplicate_key": {
 			cfg: config.Cassandra{
@@ -116,7 +116,7 @@ func TestNewCassandraCluster(t *testing.T) {
 					KeyFile: "/a/b/c",
 				},
 			},
-			err: errors.New("Cannot specify both keyData and keyFile properties"),
+			err: errors.New("only one of keyData or keyFile properties should be specified"),
 		},
 		"clientCert_duplicate_ca": {
 			cfg: config.Cassandra{
@@ -126,7 +126,7 @@ func TestNewCassandraCluster(t *testing.T) {
 					CaFile:  "/a/b/c",
 				},
 			},
-			err: errors.New("Cannot specify both caData and caFile properties"),
+			err: errors.New("only one of caData or caFile properties should be specified"),
 		},
 	}
 

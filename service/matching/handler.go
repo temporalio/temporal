@@ -48,14 +48,13 @@ import (
 type (
 	// Handler - gRPC handler interface for matchingservice
 	Handler struct {
-		engine                  Engine
-		config                  *Config
-		metricsClient           metrics.Client
-		logger                  log.Logger
-		startWG                 sync.WaitGroup
-		throttledLogger         log.Logger
-		matchingServiceResolver membership.ServiceResolver
-		namespaceRegistry       namespace.Registry
+		engine            Engine
+		config            *Config
+		metricsClient     metrics.Client
+		logger            log.Logger
+		startWG           sync.WaitGroup
+		throttledLogger   log.Logger
+		namespaceRegistry namespace.Registry
 	}
 )
 

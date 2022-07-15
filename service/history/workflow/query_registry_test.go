@@ -51,8 +51,8 @@ func (s *QueryRegistrySuite) SetupTest() {
 
 func (s *QueryRegistrySuite) TestQueryRegistry() {
 	qr := NewQueryRegistry()
-	ids := make([]string, 100, 100)
-	completionChs := make([]<-chan struct{}, 100, 100)
+	ids := make([]string, 100)
+	completionChs := make([]<-chan struct{}, 100)
 	for i := 0; i < 100; i++ {
 		ids[i], completionChs[i] = qr.BufferQuery(&querypb.WorkflowQuery{})
 	}

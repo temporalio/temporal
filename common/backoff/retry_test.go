@@ -204,7 +204,7 @@ func (s *RetrySuite) TestRetryContextTimeout() {
 	start := time.Now()
 	err := RetryContext(ctx, func(ctx context.Context) error { return &someError{} },
 		NewExponentialRetryPolicy(1*time.Second), retryEverything)
-	elapsed := time.Now().Sub(start)
+	elapsed := time.Since(start)
 	s.ErrorIs(err, context.DeadlineExceeded)
 	s.GreaterOrEqual(elapsed, timeout,
 		"Call to retry should take at least as long as the context timeout")

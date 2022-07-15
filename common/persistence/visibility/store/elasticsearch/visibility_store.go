@@ -58,8 +58,6 @@ const (
 	delimiter                    = "~"
 	pointInTimeKeepAliveInterval = "1m"
 	scrollKeepAliveInterval      = "1m"
-
-	readTimeout = 16 * time.Second
 )
 
 // Default sort by uses the sorting order defined in the index template, so no

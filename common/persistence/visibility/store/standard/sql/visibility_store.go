@@ -43,10 +43,6 @@ import (
 	"go.temporal.io/server/common/resolver"
 )
 
-const (
-	visibilityTimeout = 16 * time.Second
-)
-
 type (
 	visibilityStore struct {
 		sqlStore persistencesql.SqlStore

@@ -233,7 +233,7 @@ func startAndFinishArchiverWorkflow(ctx workflow.Context, concurrency int, numRe
 	requestCh := workflow.NewBufferedChannel(ctx, numRequests)
 	handler := NewHandler(ctx, handlerTestLogger, handlerTestMetrics, concurrency, requestCh)
 	handler.Start()
-	sentHashes := make([]uint64, numRequests, numRequests)
+	sentHashes := make([]uint64, numRequests)
 	workflow.Go(ctx, func(ctx workflow.Context) {
 		for i := 0; i < numRequests; i++ {
 			ar, hash := randomArchiveRequest()

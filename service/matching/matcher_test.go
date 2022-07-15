@@ -475,16 +475,6 @@ func (t *MatcherTestSuite) TestRemotePollForQuery() {
 	t.True(task.isStarted())
 }
 
-func (t *MatcherTestSuite) newNamespaceCache() namespace.Registry {
-	entry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: "test-namespace"},
-		&persistencespb.NamespaceConfig{},
-		"")
-	dc := namespace.NewMockRegistry(t.controller)
-	dc.EXPECT().GetNamespaceByID(gomock.Any()).Return(entry, nil).AnyTimes()
-	return dc
-}
-
 func randomTaskInfo() *persistencespb.AllocatedTaskInfo {
 	rt1 := time.Date(rand.Intn(9999), time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)
 	rt2 := time.Date(rand.Intn(5000)+3000, time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)

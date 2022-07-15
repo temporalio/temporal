@@ -74,6 +74,7 @@ func Test_DecodeValue_FromMetadata_Success(t *testing.T) {
 
 	var expectedEncodedRepresentation = "2022-03-07T21:27:35.986848-05:00"
 	timeValue, err := time.Parse(time.RFC3339, expectedEncodedRepresentation)
+	assert.NoError(err)
 	payloadDatetime, err := payload.Encode(timeValue)
 	assert.NoError(err)
 	payloadDatetime.Metadata["type"] = []byte("Datetime")
@@ -116,6 +117,7 @@ func Test_DecodeValue_FromParameter_Success(t *testing.T) {
 
 	var expectedEncodedRepresentation = "2022-03-07T21:27:35.986848-05:00"
 	timeValue, err := time.Parse(time.RFC3339, expectedEncodedRepresentation)
+	assert.NoError(err)
 	payloadDatetime, err := payload.Encode(timeValue)
 	assert.NoError(err)
 	decodedDatetime, err := DecodeValue(payloadDatetime, enumspb.INDEXED_VALUE_TYPE_DATETIME)

@@ -32,14 +32,6 @@ import (
 	"go.temporal.io/server/common/util"
 )
 
-var (
-	// This is the maximal time value we support
-	maxValidTimeGo    = time.Unix(0, MaxValidTimeNanoseconds).UTC()
-	maxValidTimestamp = TimestampFromTimePtr(&maxValidTimeGo)
-)
-
-const MaxValidTimeNanoseconds = (2 ^ (64 - 1)) - 1
-
 // Timestamp provides easy conversions and utility comparison functions
 // making go to proto time comparison straightforward
 type Timestamp struct {

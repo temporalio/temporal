@@ -398,8 +398,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				e.NotifyNewTasks(e.currentClusterName, fakeTasks)
 			}
 
-			// nolint:errcheck
-			e.shard.UpdateNamespaceNotificationVersion(newNotificationVersion)
+			_ = e.shard.UpdateNamespaceNotificationVersion(newNotificationVersion)
 		},
 	)
 }
@@ -651,7 +650,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		if err != nil {
 			return nil, err
 		}
-		defer e.eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID) // nolint:errcheck
+		defer func() { _ = e.eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID) }()
 		// check again in case the next event ID is updated
 		response, err = e.getMutableState(ctx, workflowKey)
 		if err != nil {

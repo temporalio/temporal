@@ -115,15 +115,15 @@ func (p *queryParser) convertWhereExpr(expr sqlparser.Expr, parsedQuery *parsedQ
 		return errors.New("where expression is nil")
 	}
 
-	switch expr.(type) {
+	switch expr := expr.(type) {
 	case *sqlparser.ComparisonExpr:
-		return p.convertComparisonExpr(expr.(*sqlparser.ComparisonExpr), parsedQuery)
+		return p.convertComparisonExpr(expr, parsedQuery)
 	case *sqlparser.AndExpr:
-		return p.convertAndExpr(expr.(*sqlparser.AndExpr), parsedQuery)
+		return p.convertAndExpr(expr, parsedQuery)
 	case *sqlparser.ParenExpr:
-		return p.convertParenExpr(expr.(*sqlparser.ParenExpr), parsedQuery)
+		return p.convertParenExpr(expr, parsedQuery)
 	default:
-		return errors.New("only comparsion and \"and\" expression is supported")
+		return errors.New("only comparison and \"and\" expression is supported")
 	}
 }
 

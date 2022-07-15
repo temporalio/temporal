@@ -143,7 +143,6 @@ var (
 	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
 	errShardIDNotSet           = serviceerror.NewInvalidArgument("ShardId not set on request.")
 	errTimestampNotSet         = serviceerror.NewInvalidArgument("Timestamp not set on request.")
-	errInvalidTaskType         = serviceerror.NewInvalidArgument("Invalid task type")
 
 	errDeserializeTaskTokenMessage = "Error to deserialize task token. Error: %v."
 

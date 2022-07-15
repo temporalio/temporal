@@ -90,7 +90,7 @@ var (
 	}
 )
 
-func startHelloWorldServer(s suite.Suite, factory *TestFactory) (*grpc.Server, string) {
+func startHelloWorldServer(s *suite.Suite, factory *TestFactory) (*grpc.Server, string) {
 	var opts []grpc.ServerOption
 	var err error
 	if factory.serverUsage == Internode {
@@ -109,13 +109,13 @@ func startHelloWorldServer(s suite.Suite, factory *TestFactory) (*grpc.Server, s
 	port := strings.Split(listener.Addr().String(), ":")[1]
 	s.NoError(err)
 	go func() {
-		err := server.Serve(listener)
-		s.NoError(err)
+		err = server.Serve(listener)
 	}()
+	s.NoError(err)
 	return server, port
 }
 
-func runHelloWorldTest(s suite.Suite, host string, serverFactory *TestFactory, clientFactory *TestFactory, isValid bool) {
+func runHelloWorldTest(s *suite.Suite, host string, serverFactory *TestFactory, clientFactory *TestFactory, isValid bool) {
 	server, port := startHelloWorldServer(s, serverFactory)
 	defer server.Stop()
 	err := dialHello(s, host+":"+port, clientFactory, serverFactory.serverUsage)
@@ -128,7 +128,7 @@ func runHelloWorldTest(s suite.Suite, host string, serverFactory *TestFactory, c
 }
 
 func runHelloWorldMultipleDials(
-	s suite.Suite,
+	s *suite.Suite,
 	host string,
 	serverFactory *TestFactory,
 	clientFactory *TestFactory,
@@ -145,28 +145,13 @@ func runHelloWorldMultipleDials(
 	}
 }
 
-func runHelloWorldWithRefresh(
-	s suite.Suite,
-	host string,
-	serverFactory *TestFactory,
-	clientFactory *TestFactory,
-	validator func(*credentials.TLSInfo, error),
-) {
-
-	server, port := startHelloWorldServer(s, serverFactory)
-	defer server.Stop()
-
-	tlsInfo, err := dialHelloAndGetTLSInfo(s, host+":"+port, clientFactory, serverFactory.serverUsage)
-	validator(tlsInfo, err)
-}
-
-func dialHello(s suite.Suite, hostport string, clientFactory *TestFactory, serverType ServerUsageType) error {
+func dialHello(s *suite.Suite, hostport string, clientFactory *TestFactory, serverType ServerUsageType) error {
 	_, err := dialHelloAndGetTLSInfo(s, hostport, clientFactory, serverType)
 	return err
 }
 
 func dialHelloAndGetTLSInfo(
-	s suite.Suite,
+	s *suite.Suite,
 	hostport string,
 	clientFactory *TestFactory,
 	serverType ServerUsageType,
@@ -178,14 +163,16 @@ func dialHelloAndGetTLSInfo(
 	switch serverType {
 	case Internode:
 		cfg, err = clientFactory.GetInternodeClientTlsConfig()
+		s.NoError(err)
 	case Frontend:
 		cfg, err = clientFactory.GetFrontendClientTlsConfig()
+		s.NoError(err)
 	case RemoteCluster:
 		host, _, err := net.SplitHostPort(hostport)
 		s.NoError(err)
 		cfg, err = clientFactory.GetRemoteClusterClientConfig(host)
+		s.NoError(err)
 	}
-	s.NoError(err)
 
 	clientConn, err := rpc.Dial(hostport, cfg, logger)
 	s.NoError(err)

@@ -253,14 +253,14 @@ func (m *dbTaskQueueOwnershipImpl) generatedTaskIDsLocked(
 		}
 	}
 	if m.ownershipState.maxTaskIDInclusive-m.ownershipState.lastAllocatedTaskID < int64(numTasks) {
-		panic(fmt.Sprintf("dbTaskQueueOwnershipImpl generatedTaskIDsLocked unable to allocate task IDs"))
+		panic("dbTaskQueueOwnershipImpl generatedTaskIDsLocked unable to allocate task IDs")
 	}
 
 	allocatedTaskIDs := make([]int64, numTasks)
 	for i := 0; i < numTasks; i++ {
 		m.ownershipState.lastAllocatedTaskID++
 		if m.ownershipState.lastAllocatedTaskID > m.ownershipState.maxTaskIDInclusive {
-			panic(fmt.Sprintf("dbTaskQueueOwnershipImpl generatedTaskIDsLocked encountered task ID overflow"))
+			panic("dbTaskQueueOwnershipImpl generatedTaskIDsLocked encountered task ID overflow")
 		}
 		allocatedTaskIDs[i] = m.ownershipState.lastAllocatedTaskID
 	}
@@ -305,9 +305,9 @@ func (m *dbTaskQueueOwnershipImpl) updateStateLocked(
 		}
 	} else {
 		if rangeID < m.ownershipState.rangeID {
-			panic(fmt.Sprintf("dbTaskQueueOwnershipImpl updateStateLocked encountered smaller range ID"))
+			panic("dbTaskQueueOwnershipImpl updateStateLocked encountered smaller range ID")
 		} else if ackedTaskID < m.ownershipState.ackedTaskID {
-			panic(fmt.Sprintf("dbTaskQueueOwnershipImpl updateStateLocked encountered acked task ID"))
+			panic("dbTaskQueueOwnershipImpl updateStateLocked encountered acked task ID")
 		}
 		m.ownershipState.rangeID = rangeID
 		m.ownershipState.ackedTaskID = ackedTaskID
