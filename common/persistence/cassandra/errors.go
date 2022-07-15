@@ -56,12 +56,15 @@ type (
 	}
 )
 
-// All the entries (other than [applied]) can be nullable if running on ScyllaDB, but we only need to check one.
-// Scylla will return nil rows to match # of queries in a batch query (see #2683)
+// ScyllaDB will return rows with null values to match # of queries in a batch query (see #2683).
+// To support null values, fields type should be a pointer to pointer of underlying type (i.e. **int).
+// Resulting value will be converted to a pointer of underlying type (i.e. *int) and stored in the map.
+// We do it only for "type" field which is checked for `nil` value.
+// All other fields are created automatically by gocql with non-pointer types (i.e. int).
 func newConflictRecord() map[string]interface{} {
-	typ := new(int)
+	t := new(int)
 	return map[string]interface{}{
-		"type": &typ,
+		"type": &t,
 	}
 }
 
@@ -129,14 +132,6 @@ func extractErrors(
 ) []error {
 
 	var errors []error
-
-	rowType, ok := conflictRecord["type"].(*int)
-	if !ok || rowType == nil {
-		return errors
-	}
-	// Dereference rowType for later use
-	conflictRecord["type"] = *rowType
-
 	if err := extractShardOwnershipLostError(
 		conflictRecord,
 		requestShardID,
@@ -188,12 +183,12 @@ func extractShardOwnershipLostError(
 	requestShardID int32,
 	requestRangeID int64,
 ) error {
-	rowType, ok := conflictRecord["type"].(int)
-	if !ok {
-		// this case should not happen, maybe panic?
+	rowType, ok := conflictRecord["type"].(*int)
+	if !ok || rowType == nil {
+		// This can happen on ScyllaDB.
 		return nil
 	}
-	if rowType != rowTypeShard {
+	if *rowType != rowTypeShard {
 		return nil
 	}
 
@@ -214,12 +209,12 @@ func extractCurrentWorkflowConflictError(
 	conflictRecord map[string]interface{},
 	requestCurrentRunID string,
 ) error {
-	rowType, ok := conflictRecord["type"].(int)
-	if !ok {
-		// this case should not happen, maybe panic?
+	rowType, ok := conflictRecord["type"].(*int)
+	if !ok || rowType == nil {
+		// This can happen on ScyllaDB.
 		return nil
 	}
-	if rowType != rowTypeExecution {
+	if *rowType != rowTypeExecution {
 		return nil
 	}
 	if runID := gocql.UUIDToString(conflictRecord["run_id"]); runID != permanentRunID {
@@ -264,12 +259,12 @@ func extractWorkflowConflictError(
 	requestDBVersion int64,
 	requestNextEventID int64, // TODO deprecate this variable once DB version comparison is the default
 ) error {
-	rowType, ok := conflictRecord["type"].(int)
-	if !ok {
-		// this case should not happen, maybe panic?
+	rowType, ok := conflictRecord["type"].(*int)
+	if !ok || rowType == nil {
+		// This can happen on ScyllaDB.
 		return nil
 	}
-	if rowType != rowTypeExecution {
+	if *rowType != rowTypeExecution {
 		return nil
 	}
 	if runID := gocql.UUIDToString(conflictRecord["run_id"]); runID != requestRunID {
