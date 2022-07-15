@@ -617,6 +617,8 @@ const (
 	WorkerBatcherMaxConcurrentWorkflowTaskPollers = "worker.BatcherMaxConcurrentWorkflowTaskPollers"
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher = "worker.enableBatcher"
+	// EnableBatcherPerNamespaceWorker decides whether start batcher worker per namespace
+	EnableBatcherPerNamespaceWorker = "worker.enableBatcherPerNamespaceWorker"
 	// WorkerBatcherNumWorkers controls number of batcher workers to run per namespace
 	WorkerBatcherNumWorkers = "worker.batcherNumWorkers"
 	// BatcherRPS controls number the rps of batch operations

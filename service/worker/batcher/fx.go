@@ -27,6 +27,7 @@ package batcher
 import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -52,7 +53,8 @@ type (
 	workerComponent struct {
 		activityDeps                 activityDeps
 		dc                           *dynamicconfig.Collection
-		enabled                      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enabledFeature               dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enabledPerNSWorker           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		numWorkers                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		maxActivityExecutionSize     dynamicconfig.IntPropertyFnWithNamespaceFilter
 		maxWorkflowTaskExecutionSize dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -85,7 +87,8 @@ func NewResult(
 		Component: &workerComponent{
 			activityDeps:                 params,
 			dc:                           dc,
-			enabled:                      dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcher, true),
+			enabledFeature:               dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcher, true),
+			enabledPerNSWorker:           dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcherPerNamespaceWorker, false),
 			numWorkers:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherNumWorkers, 1),
 			maxActivityExecutionSize:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherMaxConcurrentActivityExecutionSize, 1000),
 			maxWorkflowTaskExecutionSize: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize, 1000),
@@ -97,8 +100,10 @@ func NewResult(
 
 func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	namespaceName := ns.Name().String()
+	enableFeature := s.enabledFeature(namespaceName)
+	enablePerNSWorker := s.enabledPerNSWorker(namespaceName) || ns.Name().String() == common.SystemLocalNamespace
 	return &workercommon.PerNSDedicatedWorkerOptions{
-		Enabled:    s.enabled(namespaceName),
+		Enabled:    enableFeature && enablePerNSWorker,
 		TaskQueue:  BatcherTaskQueueName,
 		NumWorkers: s.numWorkers(namespaceName),
 		Options: sdkworker.Options{
