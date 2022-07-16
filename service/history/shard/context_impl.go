@@ -1540,10 +1540,9 @@ func (s *ContextImpl) transition(request contextRequest) error {
 	to controller, which will remove us from the map and call finishStop(), which will transition to Stopped and
 	stop the engine. If it's triggered externally, we'll skip over Stopping and go straight to Stopped.
 
-	If we want to stop, and the acquireShard goroutine is still running, we can't kill it, but we need a
-	mechanism to make sure it doesn't make any persistence calls or state transitions. We make acquireShard
-	check the state each time it acquires the lock, and do nothing if the state has changed to Stopping (or
-	Stopped).
+	If we transition externally to Stopped, and the acquireShard goroutine is still running, we can't kill it,
+	but we should make sure that it can't do anything: the context it uses for persistence ops will be
+	canceled, and if it tries to transition states, it will fail.
 
 	Invariants:
 	- Once state is Stopping, it can only go to Stopped.
@@ -1553,7 +1552,7 @@ func (s *ContextImpl) transition(request contextRequest) error {
 	  controller set it to Stopped.
 	- If state is Acquiring, acquireShard should be running in the background.
 	- Only acquireShard can use contextRequestAcquired (i.e. transition from Acquiring to Acquired).
-	- Once state has reached Acquired at least once, and not reached Stopped, engine must be non-nil.
+	- Once state has reached Acquired at least once, and not reached Stopped, engineFuture must be set.
 	- Only the controller may call start() and finishStop().
 	- The controller must call finishStop() for every ContextImpl it creates.
 
