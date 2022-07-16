@@ -26,6 +26,7 @@ package shard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -146,7 +147,7 @@ type (
 	contextRequest interface{}
 
 	contextRequestAcquire    struct{}
-	contextRequestAcquired   struct{}
+	contextRequestAcquired   struct{ engine Engine }
 	contextRequestLost       struct{}
 	contextRequestStop       struct{}
 	contextRequestFinishStop struct{}
@@ -161,6 +162,9 @@ var (
 	// ErrShardStatusUnknown means we're not sure if we have the shard lock or not. This may be returned
 	// during short windows at initialization and if we've lost the connection to the database.
 	ErrShardStatusUnknown = serviceerror.NewUnavailable("shard status unknown")
+
+	// errInvalidTransition is an internal error used for acquireShard and transition
+	errInvalidTransition = errors.New("invalid state transition request")
 )
 
 const (
@@ -1459,10 +1463,8 @@ func (s *ContextImpl) Unload() {
 
 // finishStop should only be called by the controller.
 func (s *ContextImpl) finishStop() {
-	// Do this again in case we skipped the stopping state, which could happen
-	// when calling CloseShardByID or the controller is shutting down.
-	s.lifecycleCancel()
-
+	// After this returns, engineFuture.Set may not be called anymore, so if we don't get see
+	// an Engine here, we won't ever have one.
 	s.transition(contextRequestFinishStop{})
 
 	// use a context that we know is cancelled so that this doesn't block
@@ -1508,7 +1510,7 @@ func (s *ContextImpl) rUnlock() {
 	s.rwLock.RUnlock()
 }
 
-func (s *ContextImpl) transition(request contextRequest) {
+func (s *ContextImpl) transition(request contextRequest) error {
 	/* State transitions:
 
 	The normal pattern:
@@ -1575,6 +1577,9 @@ func (s *ContextImpl) transition(request contextRequest) {
 
 	setStateStopped := func() {
 		s.state = contextStateStopped
+		// Do this again in case we skipped the stopping state, which could happen
+		// when calling CloseShardByID or the controller is shutting down.
+		s.lifecycleCancel()
 	}
 
 	switch s.state {
@@ -1582,58 +1587,65 @@ func (s *ContextImpl) transition(request contextRequest) {
 		switch request.(type) {
 		case contextRequestAcquire:
 			setStateAcquiring()
-			return
+			return nil
 		case contextRequestStop:
 			setStateStopping()
-			return
+			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
-			return
+			return nil
 		}
 	case contextStateAcquiring:
-		switch request.(type) {
+		switch request := request.(type) {
 		case contextRequestAcquire:
-			return // nothing to do, already acquiring
+			return nil // nothing to do, already acquiring
 		case contextRequestAcquired:
 			s.state = contextStateAcquired
-			return
+			if request.engine != nil {
+				// engineFuture.Set should only be called inside stateLock when state is
+				// Acquiring, so that other code (i.e. finishStop) can know that after a state
+				// transition to Stopping/Stopped, engineFuture cannot be Set.
+				s.engineFuture.Set(request.engine, nil)
+			}
+			return nil
 		case contextRequestLost:
-			return // nothing to do, already acquiring
+			return nil // nothing to do, already acquiring
 		case contextRequestStop:
 			setStateStopping()
-			return
+			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
-			return
+			return nil
 		}
 	case contextStateAcquired:
 		switch request.(type) {
 		case contextRequestAcquire:
-			return // nothing to to do, already acquired
+			return nil // nothing to to do, already acquired
 		case contextRequestLost:
 			setStateAcquiring()
-			return
+			return nil
 		case contextRequestStop:
 			setStateStopping()
-			return
+			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
-			return
+			return nil
 		}
 	case contextStateStopping:
 		switch request.(type) {
 		case contextRequestStop:
 			// nothing to do, already stopping
-			return
+			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
-			return
+			return nil
 		}
 	}
 	s.contextTaggedLogger.Warn("invalid state transition request",
 		tag.ShardContextState(int(s.state)),
 		tag.ShardContextStateRequest(fmt.Sprintf("%T", request)),
 	)
+	return errInvalidTransition
 }
 
 func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
@@ -1817,13 +1829,20 @@ func (s *ContextImpl) acquireShard() {
 		s.contextTaggedLogger.Info("Acquired shard")
 
 		// The first time we get the shard, we have to create the engine
+		var engine Engine
 		if !s.engineFuture.Ready() {
 			s.maybeRecordShardAcquisitionLatency(ownershipChanged)
-			engine := s.createEngine()
-			s.engineFuture.Set(engine, nil)
+			engine = s.createEngine()
 		}
 
-		s.transition(contextRequestAcquired{})
+		err = s.transition(contextRequestAcquired{engine: engine})
+
+		if err != nil && engine != nil {
+			// We tried to set the engine but the context was already stopped
+			engine.Stop()
+			return err
+		}
+
 		return nil
 	}
 
