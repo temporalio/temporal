@@ -1605,6 +1605,10 @@ func (s *ContextImpl) transition(request contextRequest) error {
 				// engineFuture.Set should only be called inside stateLock when state is
 				// Acquiring, so that other code (i.e. finishStop) can know that after a state
 				// transition to Stopping/Stopped, engineFuture cannot be Set.
+				if s.engineFuture.Ready() {
+					// defensive check, this should never happen
+					return errInvalidTransition
+				}
 				s.engineFuture.Set(request.engine, nil)
 			}
 			return nil
