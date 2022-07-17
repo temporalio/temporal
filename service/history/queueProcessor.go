@@ -216,11 +216,6 @@ eventLoop:
 }
 
 func (p *queueProcessorBase) processBatch() {
-
-	if !p.verifyReschedulerSize() {
-		return
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), loadQueueTaskThrottleRetryDelay)
 	if err := p.rateLimiter.Wait(ctx); err != nil {
 		cancel()
@@ -228,6 +223,10 @@ func (p *queueProcessorBase) processBatch() {
 		return
 	}
 	cancel()
+
+	if !p.verifyReschedulerSize() {
+		return
+	}
 
 	p.lastPollTime = p.timeSource.Now()
 	tasks, more, err := p.ackMgr.readQueueTasks()

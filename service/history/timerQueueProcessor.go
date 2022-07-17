@@ -414,12 +414,14 @@ func newQueueProcessorRateLimiter(
 ) quotas.RateLimiter {
 	return quotas.NewMultiRateLimiter(
 		[]quotas.RateLimiter{
+			// consume from host rate limiter as it's usually the one throttles the traffic
+			// and avoid unnecessary consume and cancel on shard level rate limiter
+			hostRateLimiter,
 			quotas.NewDefaultOutgoingRateLimiter(
 				func() float64 {
 					return float64(shardMaxPollRPS())
 				},
 			),
-			hostRateLimiter,
 		},
 	)
 }

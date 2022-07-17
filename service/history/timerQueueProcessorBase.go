@@ -299,10 +299,6 @@ eventLoop:
 }
 
 func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) {
-	if !t.verifyReschedulerSize() {
-		return nil, nil
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), loadTimerTaskThrottleRetryDelay)
 	if err := t.rateLimiter.Wait(ctx); err != nil {
 		cancel()
@@ -310,6 +306,10 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) 
 		return nil, nil
 	}
 	cancel()
+
+	if !t.verifyReschedulerSize() {
+		return nil, nil
+	}
 
 	t.lastPollTime = t.timeSource.Now()
 	timerTasks, nextFireTime, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
