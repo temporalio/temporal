@@ -690,6 +690,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		response.WorkflowTaskInfo = &historyspb.TransientWorkflowTaskInfo{}
 		response.WorkflowTaskInfo.ScheduledEvent = scheduledEvent
 		response.WorkflowTaskInfo.StartedEvent = startedEvent
+		response.WorkflowTaskInfo.HistorySuffix = []*historypb.HistoryEvent{scheduledEvent, startedEvent}
 	}
 	currentBranchToken, err := msBuilder.GetCurrentBranchToken()
 	if err != nil {

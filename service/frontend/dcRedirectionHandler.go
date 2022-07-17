@@ -1662,6 +1662,7 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkflow(
 				return err
 			}
 			resp, err = remoteClient.UpdateWorkflow(ctx, request)
+			return err
 		}
 		return err
 	})
