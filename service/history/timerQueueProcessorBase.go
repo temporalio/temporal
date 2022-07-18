@@ -301,8 +301,9 @@ eventLoop:
 func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), loadTimerTaskThrottleRetryDelay)
 	if err := t.rateLimiter.Wait(ctx); err != nil {
+		deadline, _ := ctx.Deadline()
+		t.notifyNewTimer(deadline) // re-enqueue the event
 		cancel()
-		t.notifyNewTimer(time.Time{}) // re-enqueue the event
 		return nil, nil
 	}
 	cancel()
