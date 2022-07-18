@@ -1656,14 +1656,15 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkflow(
 		switch {
 		case targetDC == handler.currentClusterName:
 			resp, err = handler.frontendHandler.UpdateWorkflow(ctx, request)
+			return err
 		default:
 			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
 			if err != nil {
 				return err
 			}
 			resp, err = remoteClient.UpdateWorkflow(ctx, request)
+			return err
 		}
-		return err
 	})
 
 	return resp, err
