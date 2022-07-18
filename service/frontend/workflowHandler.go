@@ -3793,6 +3793,7 @@ func (wh *WorkflowHandler) getRawHistory(
 				tag.WorkflowID(execution.GetWorkflowId()),
 				tag.WorkflowRunID(execution.GetRunId()),
 				tag.Error(err))
+			return nil, nil, err
 		}
 
 		suffix := extractHistorySuffix(transientWorkflowTaskInfo)
@@ -3999,11 +4000,12 @@ func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
 	for i, event := range suffix {
 		expectedEventID := eventIDOffset + int64(i)
 		if event.GetEventId() != expectedEventID {
-			return fmt.Errorf(
-				"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
-				i,
-				expectedEventID,
-				event.GetEventId())
+			return serviceerror.NewInternal(
+				fmt.Sprintf(
+					"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
+					i,
+					expectedEventID,
+					event.GetEventId()))
 		}
 	}
 
