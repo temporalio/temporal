@@ -211,7 +211,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 		return nil, err
 	}
 
-	taskExecutor, err := r.getOrCreateTaskExecutor(sourceCluster)
+	taskExecutor, err := r.getOrCreateTaskExecutor(ctx, sourceCluster)
 	if err != nil {
 		return nil, err
 	}
@@ -329,13 +329,13 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	return dlqResponse.ReplicationTasks, ackLevel, pageToken, nil
 }
 
-func (r *dlqHandlerImpl) getOrCreateTaskExecutor(clusterName string) (TaskExecutor, error) {
+func (r *dlqHandlerImpl) getOrCreateTaskExecutor(ctx context.Context, clusterName string) (TaskExecutor, error) {
 	r.taskExecutorsLock.Lock()
 	defer r.taskExecutorsLock.Unlock()
 	if executor, ok := r.taskExecutors[clusterName]; ok {
 		return executor, nil
 	}
-	engine, err := r.shard.GetEngine()
+	engine, err := r.shard.GetEngine(ctx)
 	if err != nil {
 		return nil, err
 	}

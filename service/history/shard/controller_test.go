@@ -203,7 +203,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 	for _, shardID := range myShards {
 		shard, err := s.shardController.GetShardByID(shardID)
 		s.NoError(err)
-		_, err = shard.GetEngineWithContext(ctx)
+		_, err = shard.GetEngine(ctx)
 		s.NoError(err)
 		count++
 	}
@@ -267,7 +267,7 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 	for _, shardID := range myShards {
 		shard, err := s.shardController.GetShardByID(shardID)
 		s.NoError(err)
-		_, err = shard.GetEngineWithContext(ctx)
+		_, err = shard.GetEngine(ctx)
 		s.NoError(err)
 		count++
 	}
@@ -342,7 +342,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 		shard, err := s.shardController.GetShardByID(shardID)
 		s.NoError(err)
 		s.NotNil(shard)
-		engine, err := shard.GetEngineWithContext(ctx)
+		engine, err := shard.GetEngine(ctx)
 		s.NoError(err)
 		s.NotNil(engine)
 	}
@@ -400,7 +400,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 		shard, err := s.shardController.GetShardByID(shardID)
 		s.NoError(err)
 		s.NotNil(shard)
-		engine, err := shard.GetEngineWithContext(ctx)
+		engine, err := shard.GetEngine(ctx)
 		s.NoError(err)
 		s.NotNil(engine)
 	}
@@ -440,7 +440,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 					shard, err := s.shardController.GetShardByID(shardID)
 					s.NoError(err)
 					s.NotNil(shard)
-					engine, err := shard.GetEngineWithContext(ctx)
+					engine, err := shard.GetEngine(ctx)
 					s.NoError(err)
 					s.NotNil(engine)
 				}
@@ -467,7 +467,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 					shard, err := s.shardController.GetShardByID(shardID)
 					s.NoError(err)
 					s.NotNil(shard)
-					engine, err := shard.GetEngineWithContext(ctx)
+					engine, err := shard.GetEngine(ctx)
 					s.NoError(err)
 					s.NotNil(engine)
 					time.Sleep(20 * time.Millisecond)

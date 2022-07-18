@@ -234,7 +234,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -263,7 +263,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -299,7 +299,7 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		h.logger.Error("RecordWorkflowTaskStarted failed.",
 			tag.Error(err),
@@ -347,7 +347,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -386,7 +386,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -425,7 +425,7 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -470,7 +470,7 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -515,7 +515,7 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -544,7 +544,7 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -666,7 +666,7 @@ func (h *Handler) RebuildMutableState(ctx context.Context, request *historyservi
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -700,7 +700,7 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -732,7 +732,7 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -764,7 +764,7 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -796,7 +796,7 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -834,7 +834,7 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -868,7 +868,7 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -905,7 +905,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -962,7 +962,7 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -996,7 +996,7 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1028,7 +1028,7 @@ func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historys
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1062,7 +1062,7 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1094,7 +1094,7 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1142,7 +1142,7 @@ func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyserv
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1181,7 +1181,7 @@ func (h *Handler) VerifyFirstWorkflowTaskScheduled(
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1219,7 +1219,7 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1256,7 +1256,7 @@ func (h *Handler) VerifyChildExecutionCompletionRecorded(
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1292,7 +1292,7 @@ func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyserv
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1329,7 +1329,7 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1367,7 +1367,7 @@ func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.S
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1411,7 +1411,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1449,7 +1449,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 				h.logger.Warn("History engine not found for shard", tag.Error(err))
 				return
 			}
-			engine, err := shardContext.GetEngineWithContext(ctx)
+			engine, err := shardContext.GetEngine(ctx)
 			if err != nil {
 				h.logger.Warn("History engine not found for shard", tag.Error(err))
 				return
@@ -1527,7 +1527,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 			h.logger.Warn("History engine not found for workflow ID.", tag.Error(err))
 			return
 		}
-		engine, err := shardContext.GetEngineWithContext(ctx)
+		engine, err := shardContext.GetEngine(ctx)
 		if err != nil {
 			h.logger.Warn("History engine not found for workflow ID.", tag.Error(err))
 			return
@@ -1577,7 +1577,7 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1616,7 +1616,7 @@ func (h *Handler) GetDLQMessages(ctx context.Context, request *historyservice.Ge
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1642,7 +1642,7 @@ func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1667,7 +1667,7 @@ func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1696,7 +1696,7 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1735,7 +1735,7 @@ func (h *Handler) GenerateLastHistoryReplicationTasks(
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1770,7 +1770,7 @@ func (h *Handler) GetReplicationStatus(
 		if err != nil {
 			return nil, h.convertError(err)
 		}
-		engine, err := shardContext.GetEngineWithContext(ctx)
+		engine, err := shardContext.GetEngine(ctx)
 		if err != nil {
 			return nil, h.convertError(err)
 		}
@@ -1845,7 +1845,6 @@ func (h *Handler) UpdateWorkflow(
 	}
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
-		ctx,
 		namespace.ID(request.GetNamespaceId()),
 		request.GetRequest().GetWorkflowExecution().GetWorkflowId(),
 	)
@@ -1853,7 +1852,7 @@ func (h *Handler) UpdateWorkflow(
 		return nil, h.convertError(err)
 	}
 
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
