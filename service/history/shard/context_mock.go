@@ -308,33 +308,18 @@ func (mr *MockContextMockRecorder) GetCurrentTime(cluster interface{}) *gomock.C
 }
 
 // GetEngine mocks base method.
-func (m *MockContext) GetEngine() (Engine, error) {
+func (m *MockContext) GetEngine(ctx context.Context) (Engine, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEngine")
+	ret := m.ctrl.Call(m, "GetEngine", ctx)
 	ret0, _ := ret[0].(Engine)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetEngine indicates an expected call of GetEngine.
-func (mr *MockContextMockRecorder) GetEngine() *gomock.Call {
+func (mr *MockContextMockRecorder) GetEngine(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEngine", reflect.TypeOf((*MockContext)(nil).GetEngine))
-}
-
-// GetEngineWithContext mocks base method.
-func (m *MockContext) GetEngineWithContext(ctx context.Context) (Engine, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEngineWithContext", ctx)
-	ret0, _ := ret[0].(Engine)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetEngineWithContext indicates an expected call of GetEngineWithContext.
-func (mr *MockContextMockRecorder) GetEngineWithContext(ctx interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEngineWithContext", reflect.TypeOf((*MockContext)(nil).GetEngineWithContext), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEngine", reflect.TypeOf((*MockContext)(nil).GetEngine), ctx)
 }
 
 // GetEventsCache mocks base method.

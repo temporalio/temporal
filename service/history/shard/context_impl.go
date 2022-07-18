@@ -189,11 +189,7 @@ func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
 }
 
-func (s *ContextImpl) GetEngine() (Engine, error) {
-	return s.engineFuture.Get(s.lifecycleCtx)
-}
-
-func (s *ContextImpl) GetEngineWithContext(
+func (s *ContextImpl) GetEngine(
 	ctx context.Context,
 ) (Engine, error) {
 	return s.engineFuture.Get(ctx)
@@ -635,7 +631,7 @@ func (s *ContextImpl) AddTasks(
 		return err
 	}
 
-	engine, err := s.GetEngineWithContext(ctx)
+	engine, err := s.GetEngine(ctx)
 	if err != nil {
 		return err
 	}
@@ -993,7 +989,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	}
 	defer cancel()
 
-	engine, err := s.GetEngineWithContext(ctx)
+	engine, err := s.GetEngine(ctx)
 	if err != nil {
 		return err
 	}
