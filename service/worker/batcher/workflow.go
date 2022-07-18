@@ -34,7 +34,6 @@ import (
 )
 
 const (
-	batchActivityName = "temporal-sys-batch-activity"
 	// InfiniteDuration is a long duration(20 yrs) we used for infinite workflow running
 	InfiniteDuration = 20 * 365 * 24 * time.Hour
 	pageSize         = 1000
@@ -122,13 +121,9 @@ type (
 		// passing along the current heartbeat details to make heartbeat within a task so that it won't timeout
 		hbd HeartBeatDetails
 	}
-
-	batcherContextKeyType struct{}
 )
 
 var (
-	batcherContextKey = batcherContextKeyType{}
-
 	batchActivityRetryPolicy = temporal.RetryPolicy{
 		InitialInterval:    10 * time.Second,
 		BackoffCoefficient: 1.7,
