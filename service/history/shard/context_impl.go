@@ -1823,11 +1823,10 @@ func (s *ContextImpl) acquireShard() {
 		//   This will do nothing, since state is already Acquiring.
 		s.wLock()
 		err = s.renewRangeLocked(true)
+		s.wUnlock()
 		if err != nil {
-			s.wUnlock()
 			return err
 		}
-		s.wUnlock()
 
 		s.contextTaggedLogger.Info("Acquired shard")
 
