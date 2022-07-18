@@ -682,13 +682,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		// This workflowTask is retried from mutable state
 		// Also return schedule and started which are not written to history yet
 		scheduledEvent, startedEvent := msBuilder.CreateTransientWorkflowTaskEvents(workflowTask, identity)
-		response.WorkflowTaskInfo = &historyspb.TransientWorkflowTaskInfo{}
+		response.TransientWorkflowTask = &historyspb.TransientWorkflowTaskInfo{}
 
 		// TODO (mmcshane): remove population of ScheduledEvent and StartedEvent
 		// after v1.18 is released
-		response.WorkflowTaskInfo.ScheduledEvent = scheduledEvent
-		response.WorkflowTaskInfo.StartedEvent = startedEvent
-		response.WorkflowTaskInfo.HistorySuffix = []*historypb.HistoryEvent{scheduledEvent, startedEvent}
+		response.TransientWorkflowTask.ScheduledEvent = scheduledEvent
+		response.TransientWorkflowTask.StartedEvent = startedEvent
+		response.TransientWorkflowTask.HistorySuffix = []*historypb.HistoryEvent{scheduledEvent, startedEvent}
 	}
 	currentBranchToken, err := msBuilder.GetCurrentBranchToken()
 	if err != nil {

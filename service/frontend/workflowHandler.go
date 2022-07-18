@@ -4012,12 +4012,12 @@ func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
 	return nil
 }
 
-func extractHistorySuffix(transientTasks *historyspb.TransientWorkflowTaskInfo) []*historypb.HistoryEvent {
+func extractHistorySuffix(transientWorkflowTask *historyspb.TransientWorkflowTaskInfo) []*historypb.HistoryEvent {
 	// TODO (mmcshane): remove this function after v1.18 is release as we will
-	// be able to just use transientTasks.HistorySuffix directly and the other
+	// be able to just use transientWorkflowTask.HistorySuffix directly and the other
 	// fields will be removed.
 
-	suffix := transientTasks.HistorySuffix
+	suffix := transientWorkflowTask.HistorySuffix
 	if len(suffix) == 0 {
 		// HistorySuffix is a new field - we may still need to handle
 		// instances that carry the separate ScheduledEvent and StartedEvent
@@ -4025,7 +4025,7 @@ func extractHistorySuffix(transientTasks *historyspb.TransientWorkflowTaskInfo) 
 
 		// One might be tempted to check for nil here but the old code did not
 		// make that check and we aim to preserve compatiblity
-		suffix = append(suffix, transientTasks.ScheduledEvent, transientTasks.StartedEvent)
+		suffix = append(suffix, transientWorkflowTask.ScheduledEvent, transientWorkflowTask.StartedEvent)
 	}
 	return suffix
 }
@@ -4129,7 +4129,7 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 			nextEventID,
 			int32(wh.config.HistoryMaxPageSize(namespaceEntry.Name().String())),
 			nil,
-			matchingResp.GetWorkflowTaskInfo(),
+			matchingResp.GetTransientWorkflowTask(),
 			branchToken,
 		)
 		if err != nil {
@@ -4142,7 +4142,7 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 				FirstEventId:          firstEventID,
 				NextEventId:           nextEventID,
 				PersistenceToken:      persistenceToken,
-				TransientWorkflowTask: matchingResp.GetWorkflowTaskInfo(),
+				TransientWorkflowTask: matchingResp.GetTransientWorkflowTask(),
 				BranchToken:           branchToken,
 			})
 			if err != nil {
