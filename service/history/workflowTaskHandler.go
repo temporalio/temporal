@@ -365,7 +365,7 @@ func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.NamespaceTag(string(handler.mutableState.GetNamespaceEntry().Name())),
 		metrics.TaskQueueTag(ai.TaskQueue),
-	).IncCounter(metrics.EagerStartActivityCounter)
+	).IncCounter(metrics.ActivityEagerExecutionCounter)
 
 	return func(resp *historyservice.RespondWorkflowTaskCompletedResponse) error {
 		resp.ActivityTasks = append(resp.ActivityTasks, activityTask)

@@ -2121,7 +2121,7 @@ const (
 	CommandTypeContinueAsNewCounter
 	CommandTypeSignalExternalWorkflowCounter
 	CommandTypeUpsertWorkflowSearchAttributesCounter
-	EagerStartActivityCounter
+	ActivityEagerExecutionCounter
 	EmptyCompletionCommandsCounter
 	MultipleCompletionCommandsCounter
 	FailedWorkflowTasksCounter
@@ -2605,7 +2605,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CommandTypeSignalExternalWorkflowCounter:          NewCounterDef("signal_external_workflow_command"),
 		CommandTypeUpsertWorkflowSearchAttributesCounter:  NewCounterDef("upsert_workflow_search_attributes_command"),
 		CommandTypeChildWorkflowCounter:                   NewCounterDef("child_workflow_command"),
-		EagerStartActivityCounter:                         NewCounterDef("eager_start_activity"),
+		ActivityEagerExecutionCounter:                     NewCounterDef("activity_eager_execution"),
 		EmptyCompletionCommandsCounter:                    NewCounterDef("empty_completion_commands"),
 		MultipleCompletionCommandsCounter:                 NewCounterDef("multiple_completion_commands"),
 		FailedWorkflowTasksCounter:                        NewCounterDef("failed_workflow_tasks"),
