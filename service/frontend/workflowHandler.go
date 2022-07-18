@@ -4014,6 +4014,10 @@ func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
 }
 
 func extractHistorySuffix(transientTasks *historyspb.TransientWorkflowTaskInfo) []*historypb.HistoryEvent {
+	// TODO (mmcshane): remove this function after v1.18 is release as we will
+	// be able to just use transientTasks.HistorySuffix directly and the other
+	// fields will be removed.
+
 	suffix := transientTasks.HistorySuffix
 	if len(suffix) == 0 {
 		// HistorySuffix is a new field - we may still need to handle

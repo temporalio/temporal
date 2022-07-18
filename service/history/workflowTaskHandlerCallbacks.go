@@ -688,6 +688,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		// Also return schedule and started which are not written to history yet
 		scheduledEvent, startedEvent := msBuilder.CreateTransientWorkflowTaskEvents(workflowTask, identity)
 		response.WorkflowTaskInfo = &historyspb.TransientWorkflowTaskInfo{}
+
+		// TODO (mmcshane): remove population of ScheduledEvent and StartedEvent
+		// after v1.18 is released
 		response.WorkflowTaskInfo.ScheduledEvent = scheduledEvent
 		response.WorkflowTaskInfo.StartedEvent = startedEvent
 		response.WorkflowTaskInfo.HistorySuffix = []*historypb.HistoryEvent{scheduledEvent, startedEvent}
