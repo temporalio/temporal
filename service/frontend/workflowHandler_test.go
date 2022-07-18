@@ -317,7 +317,7 @@ func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 						WorkflowId: "wfid:" + s.T().Name(),
 						RunId:      "1",
 					},
-					WorkflowTaskInfo: &tc.taskInfo,
+					TransientWorkflowTask: &tc.taskInfo,
 				},
 				nil,
 			)

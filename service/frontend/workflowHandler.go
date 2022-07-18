@@ -4012,12 +4012,12 @@ func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
 	return nil
 }
 
-func extractHistorySuffix(transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo) []*historypb.HistoryEvent {
+func extractHistorySuffix(transientWorkflowTask *historyspb.TransientWorkflowTaskInfo) []*historypb.HistoryEvent {
 	// TODO (mmcshane): remove this function after v1.18 is release as we will
-	// be able to just use transientWorkflowTaskInfo.HistorySuffix directly and the other
+	// be able to just use transientWorkflowTask.HistorySuffix directly and the other
 	// fields will be removed.
 
-	suffix := transientWorkflowTaskInfo.HistorySuffix
+	suffix := transientWorkflowTask.HistorySuffix
 	if len(suffix) == 0 {
 		// HistorySuffix is a new field - we may still need to handle
 		// instances that carry the separate ScheduledEvent and StartedEvent
@@ -4025,7 +4025,7 @@ func extractHistorySuffix(transientWorkflowTaskInfo *historyspb.TransientWorkflo
 
 		// One might be tempted to check for nil here but the old code did not
 		// make that check and we aim to preserve compatiblity
-		suffix = append(suffix, transientWorkflowTaskInfo.ScheduledEvent, transientWorkflowTaskInfo.StartedEvent)
+		suffix = append(suffix, transientWorkflowTask.ScheduledEvent, transientWorkflowTask.StartedEvent)
 	}
 	return suffix
 }
