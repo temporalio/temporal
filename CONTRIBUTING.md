@@ -11,7 +11,7 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
   - Install on Ubuntu with `sudo apt install golang`.
 * [Protocol buffers compiler](https://github.com/protocolbuffers/protobuf/) (only if you are going to change `proto` files):
   - Install on macOS with `brew install protobuf`.
-  - Install on Ubuntu with `sudo apt install protobuf-compiler`.
+  - Download all other versions from [protoc release page](https://github.com/protocolbuffers/protobuf/releases).
 * [Temporal CLI tctl](https://github.com/temporalio/tctl)
   - Homebrew `brew install tctl`
   - Go install `make update-tctl`
