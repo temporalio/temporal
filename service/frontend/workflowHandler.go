@@ -3876,9 +3876,6 @@ func (wh *WorkflowHandler) getHistory(
 				tag.WorkflowID(execution.GetWorkflowId()),
 				tag.WorkflowRunID(execution.GetRunId()),
 				tag.Error(err))
-
-			// REVIEW: I expected this line to be here but it isn't. Should it be?
-			// return nil, nil, err
 		}
 		// Append the transient workflow task events once we are done enumerating everything from the events table
 		historyEvents = append(historyEvents, extractHistorySuffix(transientWorkflowTaskInfo)...)
