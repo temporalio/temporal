@@ -42,7 +42,7 @@ var commands = []*cli.Command{
 		Subcommands: newAdminShardManagementCommands(),
 	},
 	{
-		Name:        "history_host",
+		Name:        "history-host",
 		Aliases:     []string{"h"},
 		Usage:       "Run admin operation on history host",
 		Subcommands: newAdminHistoryHostCommands(),
