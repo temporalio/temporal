@@ -60,12 +60,6 @@ var commands = []*cli.Command{
 		Subcommands: newAdminMembershipCommands(),
 	},
 	{
-		Name:        "cluster",
-		Aliases:     []string{"c"},
-		Usage:       "Run admin operation on cluster",
-		Subcommands: newAdminClusterCommands(),
-	},
-	{
 		Name:        "dlq",
 		Usage:       "Run admin operation on DLQ",
 		Subcommands: newAdminDLQCommands(),
@@ -432,41 +426,6 @@ func newAdminTaskQueueCommands() []*cli.Command {
 			},
 			Action: func(c *cli.Context) error {
 				return AdminListTaskQueueTasks(c)
-			},
-		},
-	}
-}
-
-func newAdminClusterCommands() []*cli.Command {
-	return []*cli.Command{
-		{
-			Name:    "describe",
-			Aliases: []string{"d"},
-			Usage:   "Describe cluster information",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:  FlagCluster,
-					Value: "",
-					Usage: "Remote cluster name (optional, default to return current cluster information)",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminDescribeCluster(c)
-			},
-		},
-		{
-			Name:    "list",
-			Aliases: []string{"l"},
-			Usage:   "List clusters information",
-			Flags: []cli.Flag{
-				&cli.IntFlag{
-					Name:  FlagPageSize,
-					Value: 100,
-					Usage: "Page size",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				return AdminListClusters(c)
 			},
 		},
 	}
