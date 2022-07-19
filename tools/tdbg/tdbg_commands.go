@@ -133,7 +133,7 @@ func newAdminWorkflowCommands() []*cli.Command {
 			},
 		},
 		{
-			Name:    "refresh_tasks",
+			Name:    "refresh-tasks",
 			Aliases: []string{"rt"},
 			Usage:   "Refreshes all the tasks of a workflow",
 			Flags: []cli.Flag{
