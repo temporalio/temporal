@@ -250,7 +250,7 @@ func newAdminShardManagementCommands() []*cli.Command {
 			},
 		},
 		{
-			Name:  "close_shard",
+			Name:  "close-shard",
 			Usage: "close a shard given a shard id",
 			Flags: []cli.Flag{
 				&cli.IntFlag{
