@@ -33,6 +33,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/gogo/protobuf/jsonpb"
+	"go.temporal.io/server/common/clock"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -141,6 +143,7 @@ func NewWorkflowHandler(
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
+	timeSource clock.TimeSource,
 ) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
@@ -157,6 +160,7 @@ func NewWorkflowHandler(
 			archivalMetadata,
 			archiverProvider,
 			config.EnableSchedules,
+			timeSource,
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMrg:                   visibilityMrg,

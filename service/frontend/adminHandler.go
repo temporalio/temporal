@@ -33,6 +33,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/clock"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -147,6 +149,7 @@ type (
 		ArchivalMetadata                    archiver.ArchivalMetadata
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
+		TimeSource                          clock.TimeSource
 	}
 )
 
@@ -181,6 +184,7 @@ func NewAdminHandler(
 			args.ArchivalMetadata,
 			args.ArchiverProvider,
 			args.Config.EnableSchedules,
+			args.TimeSource,
 		),
 		namespaceDLQHandler: namespace.NewDLQMessageHandler(
 			namespaceReplicationTaskExecutor,
