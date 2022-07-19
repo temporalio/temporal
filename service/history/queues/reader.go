@@ -70,7 +70,6 @@ type (
 	ReaderImpl struct {
 		sync.Mutex
 
-		readerID       int32
 		options        *ReaderOptions
 		scheduler      Scheduler
 		rescheduler    Rescheduler
