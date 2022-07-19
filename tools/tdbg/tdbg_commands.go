@@ -263,7 +263,7 @@ func newAdminShardManagementCommands() []*cli.Command {
 			},
 		},
 		{
-			Name:    "remove_task",
+			Name:    "remove-task",
 			Aliases: []string{"rmtk"},
 			Usage:   "remove a task based on shardId, task type, taskId, and task visibility timestamp",
 			Flags: []cli.Flag{
