@@ -29,6 +29,8 @@ import (
 	"math/rand"
 	"time"
 
+	"golang.org/x/exp/slices"
+
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -80,4 +82,24 @@ func NewRandomKeyInRange(
 	}
 
 	return tasks.NewKey(fireTime, rand.Int63())
+}
+
+func NewRandomOrderedRangesInRange(
+	r Range,
+	numRanges int,
+) []Range {
+	ranges := []Range{r}
+	for len(ranges) < numRanges {
+		r := ranges[0]
+		left, right := r.Split(NewRandomKeyInRange(r))
+		left.ExclusiveMax.FireTime.Add(-time.Nanosecond)
+		right.InclusiveMin.FireTime.Add(time.Nanosecond)
+		ranges = append(ranges[1:], left, right)
+	}
+
+	slices.SortFunc(ranges, func(a, b Range) bool {
+		return a.InclusiveMin.CompareTo(b.InclusiveMin) < 0
+	})
+
+	return ranges
 }

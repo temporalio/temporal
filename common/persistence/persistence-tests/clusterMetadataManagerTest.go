@@ -458,6 +458,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	// Case 10 - Get, data persisted
 	// Fetch the persisted values
 	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(s.ctx, &p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
+	s.NoError(err)
 	s.Equal("2.0", getResp.ClusterMetadata.VersionInfo.Current.Version)
 
 	// Case 11 - List

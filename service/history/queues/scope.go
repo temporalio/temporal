@@ -108,7 +108,7 @@ func (s *Scope) MergeByRange(
 func (s *Scope) CanMergeByPredicate(
 	incomingScope Scope,
 ) bool {
-	return s.Range.Equal(incomingScope.Range)
+	return s.Range.Equals(incomingScope.Range)
 }
 
 func (s *Scope) MergeByPredicate(
@@ -120,4 +120,21 @@ func (s *Scope) MergeByPredicate(
 
 	// TODO: special check if the predicates are the same type
 	return NewScope(s.Range, predicates.Or(s.Predicate, incomingScope.Predicate))
+}
+
+func (s *Scope) IsEmpty() bool {
+	if s.Range.IsEmpty() {
+		return true
+	}
+
+	if _, ok := s.Predicate.(*predicates.EmptyImpl[tasks.Task]); ok {
+		return true
+	}
+
+	return false
+}
+
+func (s *Scope) Equals(scope Scope) bool {
+	return s.Range.Equals(scope.Range) &&
+		s.Predicate.Equals(scope.Predicate)
 }

@@ -30,7 +30,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -41,6 +40,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"golang.org/x/exp/maps"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -389,7 +389,7 @@ func (e *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
 		Checksum:            e.checksum,
 	}
 
-	return proto.Clone(ms).(*persistencespb.WorkflowMutableState)
+	return common.CloneProto(ms)
 }
 
 func (e *MutableStateImpl) GetWorkflowKey() definition.WorkflowKey {
@@ -645,6 +645,9 @@ func (e *MutableStateImpl) GetActivityInfoWithTimerHeartbeat(
 	scheduledEventID int64,
 ) (*persistencespb.ActivityInfo, time.Time, bool) {
 	ai, ok := e.pendingActivityInfoIDs[scheduledEventID]
+	if !ok {
+		return nil, time.Time{}, false
+	}
 	timerVis, ok := e.pendingActivityTimerHeartbeats[scheduledEventID]
 
 	return ai, timerVis, ok
@@ -1207,32 +1210,6 @@ func (e *MutableStateImpl) DeleteUserTimer(
 	delete(e.updateTimerInfos, timerID)
 	e.deleteTimerInfos[timerID] = struct{}{}
 	return nil
-}
-
-// nolint:unused
-func (e *MutableStateImpl) getWorkflowTaskInfo() *WorkflowTaskInfo {
-
-	taskQueue := &taskqueuepb.TaskQueue{}
-	if e.IsStickyTaskQueueEnabled() {
-		taskQueue.Name = e.executionInfo.StickyTaskQueue
-		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
-	} else {
-		taskQueue.Name = e.executionInfo.TaskQueue
-		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_NORMAL
-	}
-
-	return &WorkflowTaskInfo{
-		Version:               e.executionInfo.WorkflowTaskVersion,
-		ScheduledEventID:      e.executionInfo.WorkflowTaskScheduledEventId,
-		StartedEventID:        e.executionInfo.WorkflowTaskStartedEventId,
-		RequestID:             e.executionInfo.WorkflowTaskRequestId,
-		WorkflowTaskTimeout:   e.executionInfo.WorkflowTaskTimeout,
-		Attempt:               e.executionInfo.WorkflowTaskAttempt,
-		StartedTime:           e.executionInfo.WorkflowTaskStartedTime,
-		ScheduledTime:         e.executionInfo.WorkflowTaskScheduledTime,
-		TaskQueue:             taskQueue,
-		OriginalScheduledTime: e.executionInfo.WorkflowTaskOriginalScheduledTime,
-	}
 }
 
 // GetWorkflowTaskInfo returns details about the in-progress workflow task
@@ -1832,13 +1809,13 @@ func (e *MutableStateImpl) addBinaryCheckSumIfNotExists(
 // CheckResettable check if workflow can be reset
 func (e *MutableStateImpl) CheckResettable() error {
 	if len(e.GetPendingChildExecutionInfos()) > 0 {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("it is not allowed resetting to a point that workflow has pending child workflow."))
+		return serviceerror.NewInvalidArgument("it is not allowed resetting to a point that workflow has pending child workflow.")
 	}
 	if len(e.GetPendingRequestCancelExternalInfos()) > 0 {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("it is not allowed resetting to a point that workflow has pending request cancel."))
+		return serviceerror.NewInvalidArgument("it is not allowed resetting to a point that workflow has pending request cancel.")
 	}
 	if len(e.GetPendingSignalExternalInfos()) > 0 {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("it is not allowed resetting to a point that workflow has pending signals to send."))
+		return serviceerror.NewInvalidArgument("it is not allowed resetting to a point that workflow has pending signals to send.")
 	}
 	return nil
 }
@@ -2823,9 +2800,7 @@ func mergeMapOfPayload(
 	if current == nil {
 		current = make(map[string]*commonpb.Payload)
 	}
-	for k, v := range upsert {
-		current[k] = v
-	}
+	maps.Copy(current, upsert)
 	return current
 }
 
@@ -4464,7 +4439,7 @@ func (e *MutableStateImpl) closeTransactionHandleWorkflowReset(
 		e.GetExecutionInfo().AutoResetPoints,
 	); pt != nil {
 		if err := e.taskGenerator.GenerateWorkflowResetTasks(
-			e.unixNanoToTime(now.UnixNano()),
+			now,
 		); err != nil {
 			return err
 		}
@@ -4491,13 +4466,13 @@ func (e *MutableStateImpl) closeTransactionHandleActivityUserTimerTasks(
 	}
 
 	if err := e.taskGenerator.GenerateActivityTimerTasks(
-		e.unixNanoToTime(now.UnixNano()),
+		now,
 	); err != nil {
 		return err
 	}
 
 	return e.taskGenerator.GenerateUserTimerTasks(
-		e.unixNanoToTime(now.UnixNano()),
+		now,
 	)
 }
 
@@ -4566,13 +4541,6 @@ func (e *MutableStateImpl) createCallerError(
 ) error {
 	msg := fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field().String, details)
 	return serviceerror.NewInvalidArgument(msg)
-}
-
-func (_ *MutableStateImpl) unixNanoToTime(
-	timestampNanos int64,
-) time.Time {
-
-	return time.Unix(0, timestampNanos).UTC()
 }
 
 func (e *MutableStateImpl) logInfo(msg string, tags ...tag.Tag) {

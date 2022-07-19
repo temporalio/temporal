@@ -91,16 +91,18 @@ func (s *integrationSuite) TestRateLimitBufferedEvents() {
 			// Buffered Signals
 			for i := 0; i < 100; i++ {
 				buf := new(bytes.Buffer)
-				binary.Write(buf, binary.LittleEndian, i)
+				err := binary.Write(buf, binary.LittleEndian, byte(i))
+				s.NoError(err)
 				s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
 			}
 
 			buf := new(bytes.Buffer)
-			binary.Write(buf, binary.LittleEndian, 101)
+			err := binary.Write(buf, binary.LittleEndian, byte(101))
+			s.NoError(err)
 			signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity)
-			s.Nil(signalErr)
+			s.NoError(signalErr)
 
-			// this command will be ignored as he workflow task is already failed
+			// this command will be ignored as workflow task has already failed
 			return []*commandpb.Command{}, nil
 		}
 

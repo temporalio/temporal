@@ -65,6 +65,8 @@ func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
 	}
 }
 
+// Start reading pump for the given task queue.
+// The pump fills up taskBuffer from persistence.
 func (tr *taskReader) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&tr.status,
@@ -76,11 +78,9 @@ func (tr *taskReader) Start() {
 
 	tr.gorogrp.Go(tr.dispatchBufferedTasks)
 	tr.gorogrp.Go(tr.getTasksPump)
-
-	// Do not signal getTasksPump to start here, let it wait until taskWriter
-	// acquires the lease and initializes the read level and max read level.
 }
 
+// Stop pump that fills up taskBuffer from persistence.
 func (tr *taskReader) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&tr.status,
@@ -133,17 +133,14 @@ dispatchLoop:
 }
 
 func (tr *taskReader) getTasksPump(ctx context.Context) error {
-	// Wait for one notification from taskWriter
-	select {
-	case <-ctx.Done():
-		return nil
-	case <-tr.notifyC:
-		tr.Signal()
+	if err := tr.tlMgr.WaitUntilInitialized(ctx); err != nil {
+		return err
 	}
 
 	updateAckTimer := time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
 	defer updateAckTimer.Stop()
 
+	tr.Signal() // prime pump
 Loop:
 	for {
 		// Prioritize exiting over other processing
@@ -198,8 +195,8 @@ Loop:
 func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistencespb.AllocatedTaskInfo, error) {
 	var response *persistence.GetTasksResponse
 	var err error
-	err = executeWithRetry(func() error {
-		response, err = tr.tlMgr.db.GetTasks(context.TODO(), readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
+	err = executeWithRetry(context.TODO(), func(ctx context.Context) error {
+		response, err = tr.tlMgr.db.GetTasks(ctx, readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
 		return err
 	})
 	if err != nil {

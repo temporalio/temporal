@@ -89,7 +89,7 @@ func ServiceProvider(
 	logger resource.SnTaggedLogger,
 	grpcListener net.Listener,
 	membershipMonitor membership.Monitor,
-	userScope metrics.UserScope,
+	metricsHandler metrics.MetricsHandler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 ) *Service {
 	return NewService(
@@ -100,7 +100,7 @@ func ServiceProvider(
 		logger,
 		grpcListener,
 		membershipMonitor,
-		userScope,
+		metricsHandler,
 		faultInjectionDataStoreFactory,
 	)
 }

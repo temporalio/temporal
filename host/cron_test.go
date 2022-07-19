@@ -506,7 +506,6 @@ func (s *clientIntegrationSuite) TestCronWorkflowCompletionStates() {
 	// wait for fifth run
 	s.Equal(<-wfCh, 5)
 	s.DurationNear(time.Since(ts), targetBackoffDuration, tolerance)
-	ts = time.Now()
 
 	// let fifth run finish and sixth get scheduled
 	time.Sleep(500 * time.Millisecond)

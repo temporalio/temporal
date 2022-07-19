@@ -40,10 +40,10 @@ const (
 type (
 	Config struct {
 		Version                      string                    `yaml:"version"`
-		URL                          url.URL                   `yaml:"url"` //nolint:govet
+		URL                          url.URL                   `yaml:"url"`
 		Username                     string                    `yaml:"username"`
 		Password                     string                    `yaml:"password"`
-		Indices                      map[string]string         `yaml:"indices"` //nolint:govet
+		Indices                      map[string]string         `yaml:"indices"`
 		LogLevel                     string                    `yaml:"logLevel"`
 		AWSRequestSigning            ESAWSRequestSigningConfig `yaml:"aws-request-signing"`
 		CloseIdleConnectionsInterval time.Duration             `yaml:"closeIdleConnectionsInterval"`

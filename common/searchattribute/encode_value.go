@@ -53,47 +53,88 @@ func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface
 		t = enumspb.IndexedValueType(enumspb.IndexedValueType_value[string(value.Metadata[MetadataType])])
 	}
 
+	// Here are similar code sections for all types.
+	// At first, it tries to decode to pointer of actual type (i.e. `*string` for `string`).
+	// This is to ensure that `nil` values are decoded back as `nil` using `NilPayloadConverter`.
+	// If value is not `nil` but some value of expected type, the code relies on the fact that
+	// search attributes are always encoded with `JsonPayloadConverter`, which uses standard
+	// `json.Unmarshal` function, which works fine with pointer types when decoding values.
+	// If decoding to pointer type fails, it tries to decode to array of the same type because
+	// search attributes support polymorphism: field of specific type may also have an array of that type.
+	// If resulting slice has zero length, it gets substitute with `nil` to treat nils and empty slices equally.
+	// If search attribute value is `nil`, it means that search attribute needs to be removed from the document.
+
 	switch t {
 	case enumspb.INDEXED_VALUE_TYPE_TEXT, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
-		var val string
+		var val *string
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []string
 			err = payload.Decode(value, &listVal)
+			if len(listVal) == 0 {
+				return nil, err
+			}
 			return listVal, err
 		}
-		return val, nil
+		if val == nil {
+			return nil, nil
+		}
+		return *val, nil
 	case enumspb.INDEXED_VALUE_TYPE_INT:
-		var val int64
+		var val *int64
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []int64
 			err = payload.Decode(value, &listVal)
+			if len(listVal) == 0 {
+				return nil, err
+			}
 			return listVal, err
 		}
-		return val, nil
+		if val == nil {
+			return nil, nil
+		}
+		return *val, nil
 	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
-		var val float64
+		var val *float64
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []float64
 			err = payload.Decode(value, &listVal)
+			if len(listVal) == 0 {
+				return nil, err
+			}
 			return listVal, err
 		}
-		return val, nil
+		if val == nil {
+			return nil, nil
+		}
+		return *val, nil
 	case enumspb.INDEXED_VALUE_TYPE_BOOL:
-		var val bool
+		var val *bool
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []bool
 			err = payload.Decode(value, &listVal)
+			if len(listVal) == 0 {
+				return nil, err
+			}
 			return listVal, err
 		}
-		return val, nil
+		if val == nil {
+			return nil, nil
+		}
+		return *val, nil
 	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
-		var val time.Time
+		var val *time.Time
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []time.Time
 			err = payload.Decode(value, &listVal)
+			if len(listVal) == 0 {
+				return nil, err
+			}
 			return listVal, err
 		}
-		return val, nil
+		if val == nil {
+			return nil, nil
+		}
+		return *val, nil
 	default:
 		return nil, fmt.Errorf("%w: %v", ErrInvalidType, t)
 	}

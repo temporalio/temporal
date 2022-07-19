@@ -85,7 +85,7 @@ func (s *Scavenger) listTaskQueue(pageSize int, pageToken []byte) (*p.ListTaskQu
 
 func (s *Scavenger) deleteTaskQueue(key *p.TaskQueueKey, rangeID int64) error {
 	// retry only on service busy errors
-	return backoff.Retry(func() error {
+	return backoff.ThrottleRetry(func() error {
 		return s.db.DeleteTaskQueue(context.TODO(), &p.DeleteTaskQueueRequest{
 			TaskQueue: &p.TaskQueueKey{
 				NamespaceID:   key.NamespaceID,
@@ -101,7 +101,7 @@ func (s *Scavenger) deleteTaskQueue(key *p.TaskQueueKey, rangeID int64) error {
 }
 
 func (s *Scavenger) retryForever(op func() error) error {
-	return backoff.Retry(op, retryForeverPolicy, s.isRetryable)
+	return backoff.ThrottleRetry(op, retryForeverPolicy, s.isRetryable)
 }
 
 func newRetryForeverPolicy() backoff.RetryPolicy {

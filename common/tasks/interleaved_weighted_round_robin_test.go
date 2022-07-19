@@ -27,6 +27,7 @@ package tasks
 import (
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -106,6 +107,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success
 	s.scheduler.Submit(mockTask)
 
 	testWaitGroup.Wait()
+	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Fail() {
@@ -131,15 +133,27 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Fail() 
 	s.scheduler.Submit(mockTask)
 
 	testWaitGroup.Wait()
+	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
+	// need to manually set the number of pending task to 1
+	// so schedule by task priority logic will execute
+	numTasks := atomic.AddInt64(&s.scheduler.numInflightTask, 1)
+	s.Equal(int64(1), numTasks)
+	numPendingTasks := 0
+	defer func() {
+		numTasks := atomic.AddInt64(&s.scheduler.numInflightTask, -1)
+		s.Equal(int64(numPendingTasks), numTasks)
+	}()
+
 	var channelWeights []int
 
 	channelWeights = nil
 	mockTask0 := NewMockPriorityTask(s.controller)
 	mockTask0.EXPECT().GetPriority().Return(Priority(0)).AnyTimes()
 	s.scheduler.Submit(mockTask0)
+	numPendingTasks++
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
@@ -149,6 +163,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	mockTask1 := NewMockPriorityTask(s.controller)
 	mockTask1.EXPECT().GetPriority().Return(Priority(1)).AnyTimes()
 	s.scheduler.Submit(mockTask1)
+	numPendingTasks++
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
@@ -158,6 +173,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	mockTask2 := NewMockPriorityTask(s.controller)
 	mockTask2.EXPECT().GetPriority().Return(Priority(2)).AnyTimes()
 	s.scheduler.Submit(mockTask2)
+	numPendingTasks++
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
@@ -167,6 +183,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	mockTask3 := NewMockPriorityTask(s.controller)
 	mockTask3.EXPECT().GetPriority().Return(Priority(3)).AnyTimes()
 	s.scheduler.Submit(mockTask3)
+	numPendingTasks++
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
@@ -177,6 +194,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 	s.scheduler.Submit(mockTask1)
 	s.scheduler.Submit(mockTask2)
 	s.scheduler.Submit(mockTask3)
+	numPendingTasks += 4
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
@@ -226,4 +244,5 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule
 	endWaitGroup.Wait()
 
 	testWaitGroup.Wait()
+	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }

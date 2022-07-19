@@ -123,9 +123,9 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 ) error {
 	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 		timerSequence := t.getTimerSequence(mutableState)
-
-	Loop:
-		for _, timerSequenceID := range timerSequence.LoadAndSortUserTimers() {
+		timerSequenceIDs := timerSequence.LoadAndSortUserTimers()
+		if len(timerSequenceIDs) > 0 {
+			timerSequenceID := timerSequenceIDs[0]
 			_, ok := mutableState.GetUserTimerInfoByEventID(timerSequenceID.EventID)
 			if !ok {
 				errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.EventID)
@@ -139,11 +139,10 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 			); isExpired {
 				return getHistoryResendInfo(mutableState)
 			}
-			// since the user timer are already sorted, so if there is one timer which will not expired
-			// all user timer after this timer will not expired
-			break Loop //nolint:staticcheck
+			// Since the user timers are already sorted, then if there is one timer which is not expired,
+			// all user timers after that timer are not expired.
 		}
-		// if there is no user timer expired, then we are good
+		// If there is no user timer expired, then we are good.
 		return nil, nil
 	}
 
@@ -181,9 +180,9 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 		timerSequence := t.getTimerSequence(mutableState)
 		updateMutableState := false
-
-	Loop:
-		for _, timerSequenceID := range timerSequence.LoadAndSortActivityTimers() {
+		timerSequenceIDs := timerSequence.LoadAndSortActivityTimers()
+		if len(timerSequenceIDs) > 0 {
+			timerSequenceID := timerSequenceIDs[0]
 			_, ok := mutableState.GetActivityInfo(timerSequenceID.EventID)
 			if !ok {
 				errString := fmt.Sprintf("failed to find in memory activity timer: %v", timerSequenceID.EventID)
@@ -197,9 +196,8 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			); isExpired {
 				return getHistoryResendInfo(mutableState)
 			}
-			// since the activity timer are already sorted, so if there is one timer which will not expired
-			// all activity timer after this timer will not expire
-			break Loop //nolint:staticcheck
+			// Since the activity timers are already sorted, then if there is one timer which is not expired,
+			// all activity timers after that timer are not expired.
 		}
 
 		// for reason to update mutable state & generate a new activity task,
@@ -517,52 +515,58 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return err
 	}
 	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
-		err = serviceerror.NewInternal("timerQueueStandbyProcessor encountered empty historyResendInfo")
-	} else {
-		ns, err := t.registry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
-		if err != nil {
+		t.logger.Error("Error re-replicating history from remote: timerQueueStandbyProcessor encountered empty historyResendInfo.",
+			tag.ShardID(t.shard.GetShardID()),
+			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
+			tag.WorkflowID(taskInfo.GetWorkflowID()),
+			tag.WorkflowRunID(taskInfo.GetRunID()),
+			tag.ClusterName(remoteClusterName))
+
+		return consts.ErrTaskRetry
+	}
+
+	ns, err := t.registry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
+	if err != nil {
+		// This is most likely a NamespaceNotFound error. Don't log it and return error to stop retrying.
+		return err
+	}
+
+	if err = refreshTasks(
+		ctx,
+		adminClient,
+		ns.Name(),
+		namespace.ID(taskInfo.GetNamespaceID()),
+		taskInfo.GetWorkflowID(),
+		taskInfo.GetRunID(),
+	); err != nil {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
+			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retrying.
 			return err
 		}
 
-		if err := refreshTasks(
-			ctx,
-			adminClient,
-			ns.Name(),
-			namespace.ID(taskInfo.GetNamespaceID()),
-			taskInfo.GetWorkflowID(),
-			taskInfo.GetRunID(),
-		); err != nil {
-			if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
-				// Don't log NamespaceNotFound error because it is valid case, and return error to stop retry.
-				return err
-			}
-
-			t.logger.Error("Error refresh tasks from remote.",
-				tag.ShardID(t.shard.GetShardID()),
-				tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
-				tag.WorkflowID(taskInfo.GetWorkflowID()),
-				tag.WorkflowRunID(taskInfo.GetRunID()),
-				tag.ClusterName(remoteClusterName),
-				tag.Error(err))
-		}
-
-		// NOTE: history resend may take long time and its timeout is currently
-		// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
-		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			remoteClusterName,
-			namespace.ID(taskInfo.GetNamespaceID()),
-			taskInfo.GetWorkflowID(),
-			taskInfo.GetRunID(),
-			resendInfo.lastEventID,
-			resendInfo.lastEventVersion,
-			common.EmptyEventID,
-			common.EmptyVersion,
-		)
+		t.logger.Error("Error refresh tasks from remote.",
+			tag.ShardID(t.shard.GetShardID()),
+			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
+			tag.WorkflowID(taskInfo.GetWorkflowID()),
+			tag.WorkflowRunID(taskInfo.GetRunID()),
+			tag.ClusterName(remoteClusterName),
+			tag.Error(err))
 	}
 
-	if err != nil {
+	// NOTE: history resend may take long time and its timeout is currently
+	// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
+	if err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+		remoteClusterName,
+		namespace.ID(taskInfo.GetNamespaceID()),
+		taskInfo.GetWorkflowID(),
+		taskInfo.GetRunID(),
+		resendInfo.lastEventID,
+		resendInfo.lastEventVersion,
+		common.EmptyEventID,
+		common.EmptyVersion,
+	); err != nil {
 		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
-			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retry.
+			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retrying.
 			return err
 		}
 		t.logger.Error("Error re-replicating history from remote.",
@@ -574,7 +578,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			tag.Error(err))
 	}
 
-	// return error so task processing logic will retry
+	// Return retryable error, so task processing will retry.
 	return consts.ErrTaskRetry
 }
 

@@ -22,6 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// Generates all three generated files in this package:
+//go:generate go run ../../cmd/tools/rpcwrappers -service matching
+
 package matching
 
 import (
@@ -52,7 +55,7 @@ type clientImpl struct {
 	loadBalancer    LoadBalancer
 }
 
-// NewClient creates a new history service TChannel client
+// NewClient creates a new history service gRPC client
 func NewClient(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
@@ -162,46 +165,6 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.QueryWorkflow(ctx, request, opts...)
-}
-
-func (c *clientImpl) RespondQueryTaskCompleted(ctx context.Context, request *matchingservice.RespondQueryTaskCompletedRequest, opts ...grpc.CallOption) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
-	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.RespondQueryTaskCompleted(ctx, request, opts...)
-}
-
-func (c *clientImpl) CancelOutstandingPoll(ctx context.Context, request *matchingservice.CancelOutstandingPollRequest, opts ...grpc.CallOption) (*matchingservice.CancelOutstandingPollResponse, error) {
-	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.CancelOutstandingPoll(ctx, request, opts...)
-}
-
-func (c *clientImpl) DescribeTaskQueue(ctx context.Context, request *matchingservice.DescribeTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.DescribeTaskQueueResponse, error) {
-	client, err := c.getClientForTaskqueue(request.DescRequest.TaskQueue.GetName())
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.DescribeTaskQueue(ctx, request, opts...)
-}
-
-func (c *clientImpl) ListTaskQueuePartitions(ctx context.Context, request *matchingservice.ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
-	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

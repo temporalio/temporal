@@ -394,7 +394,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			newRunID := primitives.MustParseUUID(newWorkflow.ExecutionState.RunId)
 
 			if !bytes.Equal(namespaceID, newNamespaceID) {
-				return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
+				return serviceerror.NewUnavailable("UpdateWorkflowExecution: cannot continue as new to another namespace")
 			}
 
 			if err := assertRunIDAndUpdateCurrentExecution(ctx,

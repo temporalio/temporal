@@ -28,6 +28,8 @@ import (
 	"context"
 	"testing"
 
+	"go.temporal.io/server/common/clock"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -126,6 +128,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
+		clock.NewRealTimeSource(),
 	)
 
 	s.mockFrontendHandler = workflowservicemock.NewMockWorkflowServiceServer(s.controller)

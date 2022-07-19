@@ -106,7 +106,7 @@ func NewServiceProvider(
 	visibilityMgr manager.VisibilityManager,
 	logger resource.SnTaggedLogger,
 	grpcListener net.Listener,
-	metricsScope metrics.UserScope,
+	metricsHandler metrics.MetricsHandler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 ) *Service {
 	return NewService(
@@ -120,7 +120,7 @@ func NewServiceProvider(
 		visibilityMgr,
 		logger,
 		grpcListener,
-		metricsScope,
+		metricsHandler,
 		faultInjectionDataStoreFactory,
 	)
 }
@@ -147,7 +147,7 @@ func GrpcServerOptionsProvider(
 		MinTime:             serviceConfig.KeepAliveMinTime(),
 		PermitWithoutStream: serviceConfig.KeepAlivePermitWithoutStream(),
 	}
-	var kp = keepalive.ServerParameters{
+	kp := keepalive.ServerParameters{
 		MaxConnectionIdle:     serviceConfig.KeepAliveMaxConnectionIdle(),
 		MaxConnectionAge:      serviceConfig.KeepAliveMaxConnectionAge(),
 		MaxConnectionAgeGrace: serviceConfig.KeepAliveMaxConnectionAgeGrace(),
@@ -165,9 +165,9 @@ func GrpcServerOptionsProvider(
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		telemetryInterceptor.Intercept,
 		namespaceValidatorInterceptor.Intercept,
-		rateLimitInterceptor.Intercept,
-		namespaceRateLimiterInterceptor.Intercept,
 		namespaceCountLimiterInterceptor.Intercept,
+		namespaceRateLimiterInterceptor.Intercept,
+		rateLimitInterceptor.Intercept,
 		authorization.NewAuthorizationInterceptor(
 			claimMapper,
 			authorizer,
@@ -388,6 +388,7 @@ func AdminHandlerProvider(
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
 	eventSerializer serialization.Serializer,
+	timeSource clock.TimeSource,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -416,6 +417,7 @@ func AdminHandlerProvider(
 		archivalMetadata,
 		healthServer,
 		eventSerializer,
+		timeSource,
 	}
 	return NewAdminHandler(args)
 }
@@ -493,6 +495,7 @@ func HandlerProvider(
 		clusterMetadata,
 		archivalMetadata,
 		healthServer,
+		timeSource,
 	)
 	handler := NewDCRedirectionHandler(wfHandler, dcRedirectionPolicy, logger, clientBean, metricsClient, timeSource, namespaceRegistry, clusterMetadata)
 	return handler

@@ -2175,6 +2175,8 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:             true,
 		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:         true,
 		enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:                    true,
+		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_ACCEPTED:                             true,
+		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED:                            true,
 	}
 
 	// other events will not be assign event ID immediately
@@ -2213,7 +2215,7 @@ OtherEventsLoop:
 	s.Equal(
 		len(commandTypes),
 		len(commandEvents),
-		"This assertion will be broken a new command is added and no corresponding logic added to shouldBufferEvent()",
+		"This assertion will be broken a new command is added and no corresponding logic added to HistoryBuilder.bufferEvent",
 	)
 }
 

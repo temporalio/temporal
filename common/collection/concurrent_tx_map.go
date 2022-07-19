@@ -27,6 +27,8 @@ package collection
 import (
 	"sync"
 	"sync/atomic"
+
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -78,7 +80,7 @@ type (
 func NewShardedConcurrentTxMap(initialCap int, hashfn HashFunc) ConcurrentTxMap {
 	cmap := new(ShardedConcurrentTxMap)
 	cmap.hashfn = hashfn
-	cmap.initialCap = MaxInt(nShards, initialCap/nShards)
+	cmap.initialCap = util.Max(nShards, initialCap/nShards)
 	return cmap
 }
 

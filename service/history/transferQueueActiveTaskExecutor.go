@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -1237,7 +1236,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 		return err
 	}
 
-	err := backoff.RetryContext(
+	err := backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		workflow.PersistenceOperationRetryPolicy,
@@ -1281,7 +1280,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 		return err
 	}
 
-	return backoff.RetryContext(
+	return backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		workflow.PersistenceOperationRetryPolicy,
@@ -1339,7 +1338,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 		return err
 	}
 
-	if err = backoff.RetryContext(
+	if err = backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		workflow.PersistenceOperationRetryPolicy,
@@ -1582,7 +1581,7 @@ func copyChildWorkflowInfos(
 	}
 
 	for k, v := range input {
-		result[k] = proto.Clone(v).(*persistencespb.ChildExecutionInfo)
+		result[k] = common.CloneProto(v)
 	}
 	return result
 }

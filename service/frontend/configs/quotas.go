@@ -45,6 +45,7 @@ var (
 		"RequestCancelWorkflowExecution":   0,
 		"TerminateWorkflowExecution":       0,
 		"GetWorkflowExecutionHistory":      0,
+		"UpdateWorkflow":                   0,
 
 		// priority 1
 		"RecordActivityTaskHeartbeat":      1,
@@ -66,6 +67,8 @@ var (
 		"PollWorkflowTaskQueue":              2,
 		"PollActivityTaskQueue":              2,
 		"GetWorkflowExecutionHistoryReverse": 2,
+		"GetWorkerBuildIdOrdering":           2,
+		"UpdateWorkerBuildIdOrdering":        2,
 
 		// priority 3
 		"ResetStickyTaskQueue":    3,

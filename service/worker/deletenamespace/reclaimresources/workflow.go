@@ -152,6 +152,18 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 		return result, fmt.Errorf("%w: IsAdvancedVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
+	if isAdvancedVisibility {
+		ctx4 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+		var executionsCount int64
+		err = workflow.ExecuteLocalActivity(ctx4, a.CountExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsCount)
+		if err != nil {
+			return result, fmt.Errorf("%w: CountExecutionsAdvVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		}
+		if executionsCount == 0 {
+			return result, nil
+		}
+	}
+
 	ctx2 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
 	ctx2 = workflow.WithWorkflowID(ctx2, fmt.Sprintf("%s/%s", deleteexecutions.WorkflowName, params.Namespace))
 	var der deleteexecutions.DeleteExecutionsResult

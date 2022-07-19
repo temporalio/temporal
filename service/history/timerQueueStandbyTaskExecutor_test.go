@@ -75,8 +75,8 @@ type (
 		controller             *gomock.Controller
 		mockExecutionMgr       *persistence.MockExecutionManager
 		mockShard              *shard.ContextTest
-		mockTxProcessor        *queues.MockProcessor
-		mockTimerProcessor     *queues.MockProcessor
+		mockTxProcessor        *queues.MockQueue
+		mockTimerProcessor     *queues.MockQueue
 		mockNamespaceCache     *namespace.MockRegistry
 		mockClusterMetadata    *cluster.MockMetadata
 		mockAdminClient        *adminservicemock.MockAdminServiceClient
@@ -123,8 +123,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockNDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
-	s.mockTxProcessor = queues.NewMockProcessor(s.controller)
-	s.mockTimerProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTxProcessor = queues.NewMockQueue(s.controller)
+	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
@@ -178,7 +178,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		metricsClient:      s.mockShard.GetMetricsClient(),
 		eventNotifier:      events.NewNotifier(s.timeSource, metrics.NoopClient, func(namespace.ID, string) int32 { return 1 }),
-		queueProcessors: map[tasks.Category]queues.Processor{
+		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():    s.mockTxProcessor,
 			s.mockTimerProcessor.Category(): s.mockTimerProcessor,
 		},

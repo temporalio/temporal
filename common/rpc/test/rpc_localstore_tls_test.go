@@ -55,7 +55,7 @@ var noExtraInterceptors = []grpc.UnaryClientInterceptor{}
 
 type localStoreRPCSuite struct {
 	*require.Assertions
-	suite.Suite
+	*suite.Suite
 
 	controller *gomock.Controller
 
@@ -117,7 +117,9 @@ type localStoreRPCSuite struct {
 }
 
 func TestLocalStoreTLSSuite(t *testing.T) {
-	suite.Run(t, &localStoreRPCSuite{})
+	suite.Run(t, &localStoreRPCSuite{
+		Suite: &suite.Suite{},
+	})
 }
 
 func (s *localStoreRPCSuite) TearDownSuite() {
@@ -368,6 +370,7 @@ func (s *localStoreRPCSuite) setupFrontend() {
 		s.frontendRollingCerts,
 		s.dynamicCACertPool,
 		s.wrongCACertPool)
+	s.NoError(err)
 	dynamicServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, s.dynamicConfigProvider, dynamicconfig.NewNoopCollection(), clusterMetadata, noExtraInterceptors)
 	s.frontendDynamicTLSFactory = f(dynamicServerTLSFactory)
 	s.internodeDynamicTLSFactory = i(dynamicServerTLSFactory)
@@ -560,10 +563,9 @@ func (s *localStoreRPCSuite) TestCertExpiration() {
 
 func (s *localStoreRPCSuite) testCertExpiration(factory *TestFactory, timeWindow time.Duration, nExpiring int) {
 	expiring, expired, err := factory.GetTLSConfigProvider().GetExpiringCerts(timeWindow)
-	if len(expired) > 0 {
-	}
 	s.NotNil(expiring)
-	s.Nil(err)
+	s.Empty(expired)
+	s.NoError(err)
 	s.Equal(nExpiring, len(expiring))
 }
 

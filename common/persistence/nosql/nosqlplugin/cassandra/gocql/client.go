@@ -68,15 +68,15 @@ func NewCassandraCluster(
 	}
 	if cfg.TLS != nil && cfg.TLS.Enabled {
 		if cfg.TLS.CertData != "" && cfg.TLS.CertFile != "" {
-			return nil, errors.New("Cannot specify both certData and certFile properties")
+			return nil, errors.New("only one of certData or certFile properties should be specified")
 		}
 
 		if cfg.TLS.KeyData != "" && cfg.TLS.KeyFile != "" {
-			return nil, errors.New("Cannot specify both keyData and keyFile properties")
+			return nil, errors.New("only one of keyData or keyFile properties should be specified")
 		}
 
 		if cfg.TLS.CaData != "" && cfg.TLS.CaFile != "" {
-			return nil, errors.New("Cannot specify both caData and caFile properties")
+			return nil, errors.New("only one of caData or caFile properties should be specified")
 		}
 
 		cluster.SslOpts = &gocql.SslOptions{
@@ -159,17 +159,6 @@ func NewCassandraCluster(
 
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
 	return cluster, nil
-}
-
-// regionHostFilter returns a gocql host filter for the given region name
-func regionHostFilter(region string) gocql.HostFilter {
-	return gocql.HostFilterFunc(func(host *gocql.HostInfo) bool {
-		applicationRegion := region
-		if len(host.DataCenter()) < 3 {
-			return false
-		}
-		return host.DataCenter()[:3] == applicationRegion
-	})
 }
 
 // parseHosts returns parses a list of hosts separated by comma

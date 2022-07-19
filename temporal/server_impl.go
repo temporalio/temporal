@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
@@ -50,7 +49,6 @@ type (
 		stoppedCh        chan interface{}
 		logger           log.Logger
 		namespaceLogger  resource.NamespaceLogger
-		serverReporter   metrics.Reporter
 
 		dcCollection *dynamicconfig.Collection
 
@@ -72,7 +70,6 @@ func NewServerFxImpl(
 	namespaceLogger resource.NamespaceLogger,
 	stoppedCh chan interface{},
 	dcCollection *dynamicconfig.Collection,
-	serverReporter metrics.Reporter,
 	servicesGroup ServicesGroupIn,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
@@ -84,7 +81,6 @@ func NewServerFxImpl(
 		stoppedCh:                  stoppedCh,
 		logger:                     logger,
 		namespaceLogger:            namespaceLogger,
-		serverReporter:             serverReporter,
 		dcCollection:               dcCollection,
 		persistenceConfig:          persistenceConfig,
 		clusterMetadata:            clusterMetadata,
@@ -111,11 +107,17 @@ func (s *ServerImpl) Start() error {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
 
+	var wg sync.WaitGroup
 	for _, svcMeta := range s.servicesMetadata {
-		timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
-		svcMeta.App.Start(timeoutCtx)
-		cancelFunc()
+		wg.Add(1)
+		go func(svcMeta *ServicesMetadata) {
+			timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
+			defer cancelFunc()
+			svcMeta.App.Start(timeoutCtx)
+			wg.Done()
+		}(svcMeta)
 	}
+	wg.Wait()
 
 	if s.so.blockingStart {
 		// If s.so.interruptCh is nil this will wait forever.
@@ -142,8 +144,8 @@ func (s *ServerImpl) Stop() {
 
 	wg.Wait()
 
-	if s.serverReporter != nil {
-		s.serverReporter.Stop(s.logger)
+	if s.so.metricProvider != nil {
+		s.so.metricProvider.Stop(s.logger)
 	}
 }
 

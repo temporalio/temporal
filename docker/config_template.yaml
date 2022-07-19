@@ -73,8 +73,6 @@ persistence:
                 maxConns: {{ default .Env.SQL_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_MAX_IDLE_CONNS "20" }}
                 maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
-                authPlugin: 
-                    plugin: {{ default .Env.SQL_AUTH_PLUGIN "" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
                     caFile: {{ default .Env.SQL_CA "" }}
@@ -105,8 +103,6 @@ persistence:
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
-                authPlugin: 
-                    plugin: {{ default .Env.SQL_VIS_AUTH_PLUGIN "" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
                     caFile: {{ default .Env.SQL_CA "" }}
@@ -126,8 +122,6 @@ persistence:
                 maxConns: {{ default .Env.SQL_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_MAX_IDLE_CONNS "20" }}
                 maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
-                authPlugin: 
-                    plugin: {{ default .Env.SQL_AUTH_PLUGIN "" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
                     caFile: {{ default .Env.SQL_CA "" }}
@@ -154,8 +148,6 @@ persistence:
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
-                authPlugin: 
-                    plugin: {{ default .Env.SQL_VIS_AUTH_PLUGIN "" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
                     caFile: {{ default .Env.SQL_CA "" }}

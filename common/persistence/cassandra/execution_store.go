@@ -40,10 +40,7 @@ import (
 // R represents row type in executions table, valid values are:
 // R = {Shard = 1, Execution = 2, Transfer = 3, Timer = 4, Replication = 5}
 const (
-	// Special Namespaces related constants
-	emptyNamespaceID = "10000000-0000-f000-f000-000000000000"
 	// Special Run IDs
-	emptyRunID     = "30000000-0000-f000-f000-000000000000"
 	permanentRunID = "30000000-0000-f000-f000-000000000001"
 	// Row Constants for Shard Row
 	rowTypeShardNamespaceID = "10000000-1000-f000-f000-000000000000"
@@ -75,7 +72,6 @@ const (
 	// Special TaskId constants
 	rowTypeExecutionTaskID = int64(-10)
 	rowTypeShardTaskID     = int64(-11)
-	emptyInitiatedID       = int64(-7)
 )
 
 const (

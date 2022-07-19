@@ -126,6 +126,9 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 	}
 
 	resetBranchToken, err := r.getResetBranchToken(ctx, baseBranchToken, baseLastEventID)
+	if err != nil {
+		return nil, err
+	}
 
 	requestID := uuid.New()
 	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.rebuild(

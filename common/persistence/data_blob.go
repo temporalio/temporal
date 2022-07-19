@@ -40,7 +40,7 @@ func NewDataBlob(data []byte, encodingTypeStr string) *commonpb.DataBlob {
 	encodingType, ok := enumspb.EncodingType_value[encodingTypeStr]
 	if !ok || (enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_PROTO3 &&
 		enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_JSON) {
-		panic(fmt.Sprintf("Invalid encoding: \"%v\"", encodingTypeStr))
+		panic(fmt.Sprintf("Invalid encoding: %v", encodingTypeStr))
 	}
 
 	return &commonpb.DataBlob{

@@ -453,7 +453,7 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 		request.RangeID,
 	)
 
-	conflictRecord := make(map[string]interface{})
+	conflictRecord := newConflictRecord()
 	applied, conflictIter, err := d.Session.MapExecuteBatchCAS(batch, conflictRecord)
 	if err != nil {
 		return nil, gocql.ConvertError("CreateWorkflowExecution", err)
@@ -604,7 +604,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			newRunID := newWorkflow.RunID
 
 			if namespaceID != newNamespaceID {
-				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
+				return serviceerror.NewInternal("UpdateWorkflowExecution: cannot continue as new to another namespace")
 			}
 
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
@@ -677,7 +677,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 		request.RangeID,
 	)
 
-	conflictRecord := make(map[string]interface{})
+	conflictRecord := newConflictRecord()
 	applied, conflictIter, err := d.Session.MapExecuteBatchCAS(batch, conflictRecord)
 	if err != nil {
 		return gocql.ConvertError("UpdateWorkflowExecution", err)
@@ -828,7 +828,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 		request.RangeID,
 	)
 
-	conflictRecord := make(map[string]interface{})
+	conflictRecord := newConflictRecord()
 	applied, conflictIter, err := d.Session.MapExecuteBatchCAS(batch, conflictRecord)
 	if err != nil {
 		return gocql.ConvertError("ConflictResolveWorkflowExecution", err)
@@ -998,7 +998,7 @@ func (d *MutableStateStore) SetWorkflowExecution(
 		request.RangeID,
 	)
 
-	conflictRecord := make(map[string]interface{})
+	conflictRecord := newConflictRecord()
 	applied, conflictIter, err := d.Session.MapExecuteBatchCAS(batch, conflictRecord)
 	if err != nil {
 		return gocql.ConvertError("SetWorkflowExecution", err)

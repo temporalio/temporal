@@ -103,6 +103,7 @@ func (s *UpdateSchemaTestSuite) TestDryrun() {
 // TestVisibilityDryrun test
 func (s *UpdateSchemaTestSuite) TestVisibilityDryrun() {
 	conn, err := newTestConn(s.DBName, s.host, s.port, s.pluginName)
+	s.NoError(err)
 	defer conn.Close()
 	dir, err := filepath.Abs(s.visibilitySchemaVersionDir)
 	s.NoError(err)

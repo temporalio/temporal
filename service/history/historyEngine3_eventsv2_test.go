@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
-	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -69,9 +68,9 @@ type (
 
 		controller              *gomock.Controller
 		mockShard               *shard.ContextTest
-		mockTxProcessor         *queues.MockProcessor
-		mockTimerProcessor      *queues.MockProcessor
-		mockVisibilityProcessor *queues.MockProcessor
+		mockTxProcessor         *queues.MockQueue
+		mockTimerProcessor      *queues.MockQueue
+		mockVisibilityProcessor *queues.MockQueue
 		mockEventsCache         *events.MockCache
 		mockNamespaceCache      *namespace.MockRegistry
 		mockClusterMetadata     *cluster.MockMetadata
@@ -101,9 +100,9 @@ func (s *engine3Suite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	s.mockTxProcessor = queues.NewMockProcessor(s.controller)
-	s.mockTimerProcessor = queues.NewMockProcessor(s.controller)
-	s.mockVisibilityProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTxProcessor = queues.NewMockQueue(s.controller)
+	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
+	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
@@ -113,7 +112,7 @@ func (s *engine3Suite) SetupTest() {
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
-		&p.ShardInfoWithFailover{ShardInfo: &persistencespb.ShardInfo{
+		&persistence.ShardInfoWithFailover{ShardInfo: &persistencespb.ShardInfo{
 			ShardId: 1,
 			RangeId: 1,
 		}},
@@ -145,7 +144,7 @@ func (s *engine3Suite) SetupTest() {
 		config:             s.config,
 		timeSource:         s.mockShard.GetTimeSource(),
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopClient, func(namespace.ID, string) int32 { return 1 }),
-		queueProcessors: map[tasks.Category]queues.Processor{
+		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():         s.mockTxProcessor,
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
@@ -190,7 +189,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 
 	ms := workflow.TestCloneToProto(msBuilder)
 
-	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
@@ -312,8 +311,8 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
 	_ = addWorkflowTaskScheduledEvent(msBuilder)
 	ms := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
-	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)

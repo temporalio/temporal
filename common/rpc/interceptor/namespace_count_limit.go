@@ -81,17 +81,17 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 ) (interface{}, error) {
 	_, methodName := splitMethodName(info.FullMethod)
 	// token will default to 0
-	token, _ := ni.tokens[methodName]
+	token := ni.tokens[methodName]
 	if token != 0 {
-		namespace := GetNamespace(ni.namespaceRegistry, req)
-		counter := ni.counter(namespace)
+		nsName := GetNamespace(ni.namespaceRegistry, req)
+		counter := ni.counter(nsName)
 		count := atomic.AddInt32(counter, int32(token))
 		defer atomic.AddInt32(counter, -int32(token))
 
 		scope := MetricsScope(ctx, ni.logger)
 		scope.UpdateGauge(metrics.ServicePendingRequests, float64(count))
 
-		if int(count) > ni.countFn(namespace.String()) {
+		if int(count) > ni.countFn(nsName.String()) {
 			return nil, ErrNamespaceCountLimitServerBusy
 		}
 	}

@@ -78,4 +78,12 @@ service MatchingService {
     // ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
     rpc  ListTaskQueuePartitions(ListTaskQueuePartitionsRequest) returns (ListTaskQueuePartitionsResponse){
     }
+
+    // (-- api-linter: core::0134::response-message-name=disabled
+    //     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::method-signature=disabled
+    //     aip.dev/not-precedent: UpdateWorkerBuildIdOrdering RPC doesn't follow Google API format. --)
+    rpc UpdateWorkerBuildIdOrdering (UpdateWorkerBuildIdOrderingRequest) returns (UpdateWorkerBuildIdOrderingResponse) {}
+    // This could / maybe should just be part of `DescribeTaskQueue`, but is broken out here to show easily.
+    rpc GetWorkerBuildIdOrdering (GetWorkerBuildIdOrderingRequest) returns (GetWorkerBuildIdOrderingResponse) {}
 }

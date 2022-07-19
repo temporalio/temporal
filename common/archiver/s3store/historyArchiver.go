@@ -75,7 +75,6 @@ type (
 		s3cli     s3iface.S3API
 		// only set in test code
 		historyIterator archiver.HistoryIterator
-		config          *config.S3Archiver
 	}
 
 	getHistoryToken struct {
@@ -362,7 +361,7 @@ func (h *historyArchiver) ValidateURI(URI archiver.URI) error {
 
 func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIterator) (*archiverspb.HistoryBlob, error) {
 	historyBlob, err := historyIterator.Next()
-	op := func() error {
+	op := func(_ context.Context) error {
 		historyBlob, err = historyIterator.Next()
 		return err
 	}
@@ -373,7 +372,7 @@ func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIte
 		if contextExpired(ctx) {
 			return nil, archiver.ErrContextTimeout
 		}
-		err = backoff.Retry(op, common.CreatePersistenceRetryPolicy(), common.IsPersistenceTransientError)
+		err = backoff.ThrottleRetryContext(ctx, op, common.CreatePersistenceRetryPolicy(), common.IsPersistenceTransientError)
 	}
 	return historyBlob, nil
 }

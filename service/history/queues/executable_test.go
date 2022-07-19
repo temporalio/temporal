@@ -195,10 +195,30 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 		return true
 	})
 
-	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Second))
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now()))
 
 	executable.Nack(consts.ErrTaskRetry) // this error won't trigger re-submit
 	s.Equal(ctasks.TaskStatePending, executable.State())
+}
+
+func (s *executableSuite) TestTaskCancellation() {
+	executable := s.newTestExecutable(func(_ tasks.Task) bool {
+		return true
+	})
+
+	executable.Cancel()
+
+	s.NoError(executable.Execute()) // should be no-op and won't invoke executor
+
+	executable.Ack() // should be no-op
+	s.Equal(ctasks.TaskStateCancelled, executable.State())
+
+	executable.Nack(errors.New("some random error")) // should be no-op and won't invoke scheduler or rescheduler
+
+	executable.Reschedule() // should be no-op and won't invoke rescheduler
+
+	// all error should be treated as non-retryable to break retry loop
+	s.False(executable.IsRetryableError(errors.New("some random error")))
 }
 
 func (s *executableSuite) newTestExecutable(
@@ -212,7 +232,7 @@ func (s *executableSuite) newTestExecutable(
 				tests.RunID,
 			),
 			tasks.CategoryTransfer,
-			time.Now(),
+			s.timeSource.Now(),
 		),
 		filter,
 		s.mockExecutor,

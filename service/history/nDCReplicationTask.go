@@ -29,6 +29,7 @@ import (
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/util"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -130,14 +131,10 @@ func newNDCReplicationTask(
 
 	eventTime := time.Time{}
 	for _, event := range events {
-		if timestamp.TimeValue(event.GetEventTime()).After(eventTime) {
-			eventTime = timestamp.TimeValue(event.GetEventTime())
-		}
+		eventTime = util.MaxTime(eventTime, timestamp.TimeValue(event.GetEventTime()))
 	}
 	for _, event := range newEvents {
-		if timestamp.TimeValue(event.GetEventTime()).After(eventTime) {
-			eventTime = timestamp.TimeValue(event.GetEventTime())
-		}
+		eventTime = util.MaxTime(eventTime, timestamp.TimeValue(event.GetEventTime()))
 	}
 
 	logger = log.With(
@@ -255,9 +252,7 @@ func (t *nDCReplicationTaskImpl) splitTask(
 
 	newEventTime := time.Time{}
 	for _, event := range newHistoryEvents {
-		if timestamp.TimeValue(event.GetEventTime()).After(newEventTime) {
-			newEventTime = timestamp.TimeValue(event.GetEventTime())
-		}
+		newEventTime = util.MaxTime(newEventTime, timestamp.TimeValue(event.GetEventTime()))
 	}
 
 	newVersionHistory := &historyspb.VersionHistory{
@@ -351,10 +346,7 @@ func validateReplicateEventsRequest(
 }
 
 func validateUUID(input string) bool {
-	if uuid.Parse(input) == nil {
-		return false
-	}
-	return true
+	return uuid.Parse(input) != nil
 }
 
 func validateEvents(events []*historypb.HistoryEvent) (int64, error) {

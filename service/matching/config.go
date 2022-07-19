@@ -27,9 +27,9 @@ package matching
 import (
 	"time"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -54,6 +54,7 @@ type (
 		ForwarderMaxOutstandingTasks dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		ForwarderMaxRatePerSecond    dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		ForwarderMaxChildrenPerNode  dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		MaxVersionGraphSize          dynamicconfig.IntPropertyFn
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -127,21 +128,22 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		ForwarderMaxRatePerSecond:       dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxRatePerSecond, 10),
 		ForwarderMaxChildrenPerNode:     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
 		ShutdownDrainDuration:           dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0),
+		MaxVersionGraphSize:             dc.GetIntProperty(dynamicconfig.VersionGraphNodeLimit, 1000),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1000),
 	}
 }
 
-func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Name) (*taskQueueConfig, error) {
+func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Name) *taskQueueConfig {
 	taskQueueName := id.name
 	taskType := id.taskType
 
 	writePartition := func() int {
-		return common.MaxInt(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
+		return util.Max(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
 	}
 	readPartition := func() int {
-		return common.MaxInt(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
+		return util.Max(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
 	}
 
 	return &taskQueueConfig{
@@ -195,8 +197,8 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 				return config.ForwarderMaxRatePerSecond(namespace.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxChildrenPerNode: func() int {
-				return common.MaxInt(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
+				return util.Max(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
 			},
 		},
-	}, nil
+	}
 }

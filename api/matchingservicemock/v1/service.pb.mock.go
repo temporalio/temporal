@@ -140,6 +140,26 @@ func (mr *MockMatchingServiceClientMockRecorder) DescribeTaskQueue(ctx, in inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueue", reflect.TypeOf((*MockMatchingServiceClient)(nil).DescribeTaskQueue), varargs...)
 }
 
+// GetWorkerBuildIdOrdering mocks base method.
+func (m *MockMatchingServiceClient) GetWorkerBuildIdOrdering(ctx context.Context, in *matchingservice.GetWorkerBuildIdOrderingRequest, opts ...grpc.CallOption) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetWorkerBuildIdOrdering", varargs...)
+	ret0, _ := ret[0].(*matchingservice.GetWorkerBuildIdOrderingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkerBuildIdOrdering indicates an expected call of GetWorkerBuildIdOrdering.
+func (mr *MockMatchingServiceClientMockRecorder) GetWorkerBuildIdOrdering(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdOrdering", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetWorkerBuildIdOrdering), varargs...)
+}
+
 // ListTaskQueuePartitions mocks base method.
 func (m *MockMatchingServiceClient) ListTaskQueuePartitions(ctx context.Context, in *matchingservice.ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 	m.ctrl.T.Helper()
@@ -240,6 +260,26 @@ func (mr *MockMatchingServiceClientMockRecorder) RespondQueryTaskCompleted(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondQueryTaskCompleted", reflect.TypeOf((*MockMatchingServiceClient)(nil).RespondQueryTaskCompleted), varargs...)
 }
 
+// UpdateWorkerBuildIdOrdering mocks base method.
+func (m *MockMatchingServiceClient) UpdateWorkerBuildIdOrdering(ctx context.Context, in *matchingservice.UpdateWorkerBuildIdOrderingRequest, opts ...grpc.CallOption) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateWorkerBuildIdOrdering", varargs...)
+	ret0, _ := ret[0].(*matchingservice.UpdateWorkerBuildIdOrderingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkerBuildIdOrdering indicates an expected call of UpdateWorkerBuildIdOrdering.
+func (mr *MockMatchingServiceClientMockRecorder) UpdateWorkerBuildIdOrdering(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdOrdering", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateWorkerBuildIdOrdering), varargs...)
+}
+
 // MockMatchingServiceServer is a mock of MatchingServiceServer interface.
 type MockMatchingServiceServer struct {
 	ctrl     *gomock.Controller
@@ -323,6 +363,21 @@ func (mr *MockMatchingServiceServerMockRecorder) DescribeTaskQueue(arg0, arg1 in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueue", reflect.TypeOf((*MockMatchingServiceServer)(nil).DescribeTaskQueue), arg0, arg1)
 }
 
+// GetWorkerBuildIdOrdering mocks base method.
+func (m *MockMatchingServiceServer) GetWorkerBuildIdOrdering(arg0 context.Context, arg1 *matchingservice.GetWorkerBuildIdOrderingRequest) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkerBuildIdOrdering", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.GetWorkerBuildIdOrderingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkerBuildIdOrdering indicates an expected call of GetWorkerBuildIdOrdering.
+func (mr *MockMatchingServiceServerMockRecorder) GetWorkerBuildIdOrdering(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdOrdering", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetWorkerBuildIdOrdering), arg0, arg1)
+}
+
 // ListTaskQueuePartitions mocks base method.
 func (m *MockMatchingServiceServer) ListTaskQueuePartitions(arg0 context.Context, arg1 *matchingservice.ListTaskQueuePartitionsRequest) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 	m.ctrl.T.Helper()
@@ -396,4 +451,19 @@ func (m *MockMatchingServiceServer) RespondQueryTaskCompleted(arg0 context.Conte
 func (mr *MockMatchingServiceServerMockRecorder) RespondQueryTaskCompleted(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RespondQueryTaskCompleted", reflect.TypeOf((*MockMatchingServiceServer)(nil).RespondQueryTaskCompleted), arg0, arg1)
+}
+
+// UpdateWorkerBuildIdOrdering mocks base method.
+func (m *MockMatchingServiceServer) UpdateWorkerBuildIdOrdering(arg0 context.Context, arg1 *matchingservice.UpdateWorkerBuildIdOrderingRequest) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkerBuildIdOrdering", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.UpdateWorkerBuildIdOrderingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkerBuildIdOrdering indicates an expected call of UpdateWorkerBuildIdOrdering.
+func (mr *MockMatchingServiceServerMockRecorder) UpdateWorkerBuildIdOrdering(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdOrdering", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateWorkerBuildIdOrdering), arg0, arg1)
 }

@@ -323,23 +323,14 @@ type (
 		TaskScanPartitions int `yaml:"taskScanPartitions"`
 		// TLS is the configuration for TLS connections
 		TLS *auth.TLS `yaml:"tls"`
-		// AuthPlugin is the configuration for a SQL authentication plugin
-		// - currently drivers 'mysql' and 'postgres' support 'rds-iam-auth'
-		AuthPlugin *SQLAuthPlugin `yaml:"authPlugin"`
-	}
-
-	// SQLAuthPlugin determines which sql auth plugin is invoked for each new SQL session
-	SQLAuthPlugin struct {
-		Plugin  string        `yaml:"plugin"`
-		Timeout time.Duration `yaml:"timeout"`
 	}
 
 	// CustomDatastoreConfig is the configuration for connecting to a custom datastore that is not supported by temporal core
 	CustomDatastoreConfig struct {
 		// Name of the custom datastore
 		Name string `yaml:"name"`
-		// Options is a set of key-value attributes that can be used by AbstractDatastoreFactory implementation
-		Options map[string]string `yaml:"options"`
+		// Options to be used by AbstractDatastoreFactory implementation
+		Options map[string]any `yaml:"options"`
 	}
 
 	// Replicator describes the configuration of replicator

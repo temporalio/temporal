@@ -263,6 +263,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	ctx := context.Background()
 
 	_, _, err = s.nDCBranchMgr.flushBufferedEvents(ctx, incomingVersionHistory)
+	s.NoError(err)
 }
 
 func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchAppendable_NoMissingEventInBetween() {

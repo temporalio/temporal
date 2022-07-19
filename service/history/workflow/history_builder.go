@@ -25,7 +25,6 @@
 package workflow
 
 import (
-	"fmt"
 	"time"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -44,9 +43,9 @@ import (
 )
 
 const (
-	HistoryBuilderStateMutable   HistoryBuilderState = 0
-	HistoryBuilderStateImmutable                     = 1
-	HistoryBuilderStateSealed                        = 2
+	HistoryBuilderStateMutable HistoryBuilderState = iota
+	HistoryBuilderStateImmutable
+	HistoryBuilderStateSealed
 )
 
 // TODO should the reorderFunc functionality be ported?
@@ -1172,13 +1171,13 @@ func (b *HistoryBuilder) assignTaskIDs(
 
 func (b *HistoryBuilder) assertMutable() {
 	if b.state != HistoryBuilderStateMutable {
-		panic(fmt.Sprintf("history builder is mutated while not in mutable state"))
+		panic("history builder is mutated while not in mutable state")
 	}
 }
 
 func (b *HistoryBuilder) assertNotSealed() {
 	if b.state == HistoryBuilderStateSealed {
-		panic(fmt.Sprintf("history builder is in sealed state"))
+		panic("history builder is in sealed state")
 	}
 }
 
@@ -1189,7 +1188,7 @@ func (b *HistoryBuilder) createNewHistoryEvent(
 	b.assertMutable()
 
 	if b.workflowFinished {
-		panic(fmt.Sprintf("history builder unable to create new event after workflow finish"))
+		panic("history builder unable to create new event after workflow finish")
 	}
 	if b.finishEvent(eventType) {
 		b.workflowFinished = true
@@ -1252,7 +1251,9 @@ func (b *HistoryBuilder) bufferEvent(
 		enumspb.EVENT_TYPE_MARKER_RECORDED,
 		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
 		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
-		enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+		enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
+		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_ACCEPTED,
+		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED:
 		// do not buffer event if event is directly generated from a corresponding command
 		return false
 
