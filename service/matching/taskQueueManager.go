@@ -29,6 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/api/workflowservice/v1"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -132,6 +133,7 @@ type (
 		matcher           *TaskMatcher // for matching a task producer with a poller
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
+		matchingClient    matchingservice.MatchingServiceClient
 		metricsClient     metrics.Client
 		namespace         namespace.Name
 		metricScope       metrics.Scope // namespace/taskqueue tagged metric scope
@@ -147,6 +149,9 @@ type (
 		signalFatalProblem   func(taskQueueManager)
 		clusterMeta          cluster.Metadata
 		initializedError     *future.FutureImpl[struct{}]
+		// fetchVersioningDatFut is fulfilled once versioning data is fetched from the root partition. If this TQ is
+		// the root partition, it is fulfilled as soon as it is fetched from db.
+		fetchVersioningDatFut *future.FutureImpl[struct{}]
 	}
 )
 
@@ -188,23 +193,25 @@ func newTaskQueueManager(
 		taskQueueKind,
 	).Tagged(metrics.TaskQueueTypeTag(taskQueue.taskType))
 	tlMgr := &taskQueueManagerImpl{
-		status:              common.DaemonStatusInitialized,
-		namespaceRegistry:   e.namespaceRegistry,
-		metricsClient:       e.metricsClient,
-		taskQueueID:         taskQueue,
-		taskQueueKind:       taskQueueKind,
-		logger:              logger,
-		db:                  db,
-		taskAckManager:      newAckManager(e.logger),
-		taskGC:              newTaskGC(db, taskQueueConfig),
-		config:              taskQueueConfig,
-		pollerHistory:       newPollerHistory(),
-		outstandingPollsMap: make(map[string]context.CancelFunc),
-		signalFatalProblem:  e.unloadTaskQueue,
-		clusterMeta:         clusterMeta,
-		namespace:           nsName,
-		metricScope:         metricsScope,
-		initializedError:    future.NewFuture[struct{}](),
+		status:                common.DaemonStatusInitialized,
+		namespaceRegistry:     e.namespaceRegistry,
+		matchingClient:        e.matchingClient,
+		metricsClient:         e.metricsClient,
+		taskQueueID:           taskQueue,
+		taskQueueKind:         taskQueueKind,
+		logger:                logger,
+		db:                    db,
+		taskAckManager:        newAckManager(e.logger),
+		taskGC:                newTaskGC(db, taskQueueConfig),
+		config:                taskQueueConfig,
+		pollerHistory:         newPollerHistory(),
+		outstandingPollsMap:   make(map[string]context.CancelFunc),
+		signalFatalProblem:    e.unloadTaskQueue,
+		clusterMeta:           clusterMeta,
+		namespace:             nsName,
+		metricScope:           metricsScope,
+		initializedError:      future.NewFuture[struct{}](),
+		fetchVersioningDatFut: future.NewFuture[struct{}](),
 	}
 
 	tlMgr.liveness = newLiveness(
@@ -254,6 +261,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
+	// TODO: Could kick off fetching here?
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
 }
@@ -286,7 +294,22 @@ func (c *taskQueueManagerImpl) Stop() {
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	_, err := c.initializedError.Get(ctx)
-	return err
+	if err != nil {
+		return err
+	}
+	// The root partition owns the versioning data, so it's immediately ready once we've already initialized.
+	if c.taskQueueID.IsRoot() {
+		if !c.fetchVersioningDatFut.Ready() {
+			c.fetchVersioningDatFut.Set(struct{}{}, nil)
+		}
+	} else {
+		fetchErr := c.fetchVersioningDataFromRootPartition(ctx)
+		if fetchErr != nil {
+			return fetchErr
+		}
+	}
+	_, verErr := c.fetchVersioningDatFut.Get(ctx)
+	return verErr
 }
 
 // AddTask adds a task to the task queue. This method will first attempt a synchronous
@@ -629,4 +652,26 @@ func newIOContext() (context.Context, context.CancelFunc) {
 	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
 
 	return ctx, cancel
+}
+
+func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartition(ctx context.Context) error {
+	if c.db.versioningData != nil {
+		return nil
+	}
+
+	rootTqName := c.taskQueueID.GetRoot()
+	res, err := c.matchingClient.GetWorkerBuildIdOrdering(ctx, &matchingservice.GetWorkerBuildIdOrderingRequest{
+		NamespaceId: c.taskQueueID.namespaceID.String(),
+		Request: &workflowservice.GetWorkerBuildIdOrderingRequest{
+			Namespace: c.namespace.String(), TaskQueue: rootTqName,
+		},
+	})
+	println(res)
+	c.db.versioningData = &persistencespb.VersioningData{
+		CurrentDefault:   res.Response.CurrentDefault,
+		CompatibleLeaves: res.Response.CompatibleLeaves,
+	}
+	// TODO: Currently future is pointless. Do we need it?
+	c.fetchVersioningDatFut.Set(struct{}{}, err)
+	return err
 }

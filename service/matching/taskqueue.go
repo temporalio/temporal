@@ -83,6 +83,15 @@ func newTaskQueueName(name string) (qualifiedTaskQueueName, error) {
 	return tn, nil
 }
 
+// newTaskQueueNameWithPartition can be used to create root and non-root taskqueue names easily without needing to
+// manually craft the correct string. See newTaskQueueName for more details.
+func newTaskQueueNameWithPartition(baseName string, partition int) (qualifiedTaskQueueName, error) {
+	if partition == 0 {
+		return newTaskQueueName(baseName)
+	}
+	return newTaskQueueName(fmt.Sprintf("%v%v/%v", taskQueuePartitionPrefix, baseName, partition))
+}
+
 // IsRoot returns true if this task queue is a root partition
 func (tn *qualifiedTaskQueueName) IsRoot() bool {
 	return tn.partition == 0
@@ -134,7 +143,13 @@ func (tn *qualifiedTaskQueueName) init() error {
 
 // newTaskQueueID returns taskQueueID which uniquely identfies as task queue
 func newTaskQueueID(namespaceID namespace.ID, taskQueueName string, taskType enumspb.TaskQueueType) (*taskQueueID, error) {
-	name, err := newTaskQueueName(taskQueueName)
+	return newTaskQueueIDWithPartition(namespaceID, taskQueueName, taskType, 0)
+}
+
+func newTaskQueueIDWithPartition(
+	namespaceID namespace.ID, taskQueueName string, taskType enumspb.TaskQueueType, partition int,
+) (*taskQueueID, error) {
+	name, err := newTaskQueueNameWithPartition(taskQueueName, partition)
 	if err != nil {
 		return nil, err
 	}

@@ -27,6 +27,8 @@ package matching
 import (
 	"context"
 	"errors"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	"math"
 	"sync/atomic"
 	"testing"
@@ -51,6 +53,9 @@ import (
 )
 
 var rpsInf = math.Inf(1)
+
+const defaultNamespaceId = namespace.ID("deadbeef-0000-4567-890a-bcdef0123456")
+const defaultRootTqID = "tq"
 
 func TestDeliverBufferTasks(t *testing.T) {
 	controller := gomock.NewController(t)
@@ -285,23 +290,28 @@ func runOneShotPoller(ctx context.Context, tqm taskQueueManager) (*goro.Handle, 
 	return handle, out
 }
 
+func defaultTqId() *taskQueueID {
+	return newTestTaskQueueID(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+}
+
 func mustCreateTestTaskQueueManager(
 	t *testing.T,
 	controller *gomock.Controller,
 	opts ...taskQueueManagerOpt,
 ) *taskQueueManagerImpl {
 	t.Helper()
-	return mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), opts...)
+	return mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), defaultTqId(), opts...)
 }
 
 func mustCreateTestTaskQueueManagerWithConfig(
 	t *testing.T,
 	controller *gomock.Controller,
 	cfg *Config,
+	tqId *taskQueueID,
 	opts ...taskQueueManagerOpt,
 ) *taskQueueManagerImpl {
 	t.Helper()
-	tqm, err := createTestTaskQueueManagerWithConfig(controller, cfg, opts...)
+	tqm, err := createTestTaskQueueManagerWithConfig(controller, cfg, tqId, opts...)
 	require.NoError(t, err)
 	return tqm
 }
@@ -309,6 +319,7 @@ func mustCreateTestTaskQueueManagerWithConfig(
 func createTestTaskQueueManagerWithConfig(
 	controller *gomock.Controller,
 	cfg *Config,
+	tqId *taskQueueID,
 	opts ...taskQueueManagerOpt,
 ) (*taskQueueManagerImpl, error) {
 	logger := log.NewTestLogger()
@@ -317,15 +328,12 @@ func createTestTaskQueueManagerWithConfig(
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
 	me := newMatchingEngine(cfg, tm, nil, logger, mockNamespaceCache)
-	tl := "tq"
-	dID := namespace.ID("deadbeef-0000-4567-890a-bcdef0123456")
-	tlID := newTestTaskQueueID(dID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
-	tlMgr, err := newTaskQueueManager(me, tlID, tlKind, cfg, cmeta, opts...)
+	tlMgr, err := newTaskQueueManager(me, tqId, tlKind, cfg, cmeta, opts...)
 	if err != nil {
 		return nil, err
 	}
-	me.taskQueues[*tlID] = tlMgr
+	me.taskQueues[*tqId] = tlMgr
 	return tlMgr.(*taskQueueManagerImpl), nil
 }
 
@@ -405,13 +413,13 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	cfg.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
 
 	// Idle
-	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg)
+	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg, defaultTqId())
 	tlm.Start()
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 
 	// Active poll-er
-	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg)
+	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg, defaultTqId())
 	tlm.Start()
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity("test-poll"), nil)
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
@@ -421,7 +429,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
 
 	// Active adding task
-	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg)
+	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg, defaultTqId())
 	tlm.Start()
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
 	tlm.taskReader.Signal()
@@ -439,6 +447,7 @@ func TestAddTaskStandby(t *testing.T) {
 		t,
 		controller,
 		NewConfig(dynamicconfig.NewNoopCollection()),
+		defaultTqId(),
 		func(tqm *taskQueueManagerImpl) {
 			// we need to override the mockNamespaceCache to return a passive namespace
 			mockNamespaceCache := namespace.NewMockRegistry(controller)
@@ -474,4 +483,36 @@ func TestAddTaskStandby(t *testing.T) {
 	syncMatch, err = tlm.AddTask(context.Background(), addTaskParam)
 	require.Equal(t, errRemoteSyncMatchFailed, err) // should not persist the task
 	require.False(t, syncMatch)
+}
+
+func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartition(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+
+	n0 := mkVerIdNode("0")
+	n1 := mkVerIdNode("1")
+	n1.PreviousIncompatible = n0
+	data := &persistencespb.VersioningData{
+		CurrentDefault: n1,
+	}
+	asResp := &matchingservice.GetWorkerBuildIdOrderingResponse{
+		Response: ToBuildIdOrderingResponse(data, 0),
+	}
+
+	rootTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), defaultTqId())
+	rootTq.Start()
+	require.NoError(t, rootTq.WaitUntilInitialized(ctx))
+
+	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	require.NoError(t, err)
+	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), subTqId,
+		func(tqm *taskQueueManagerImpl) {
+			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+			mockMatchingClient.EXPECT().GetWorkerBuildIdOrdering(gomock.Any(), gomock.Any()).
+				Return(asResp, nil).AnyTimes()
+			tqm.matchingClient = mockMatchingClient
+		})
+	subTq.Start()
+	require.NoError(t, subTq.WaitUntilInitialized(ctx))
 }
