@@ -641,19 +641,27 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	var countCloseWg sync.WaitGroup
 
 	for shardID := int32(1); shardID <= s.config.NumberOfShards; shardID++ {
-		mockEngine := NewMockEngine(s.controller)
-
 		queueAckLevels := s.queueAckLevels()
 		queueStates := s.queueStates()
 
-		mockEngine.EXPECT().Start().Do(func() {
-			atomic.AddInt64(&engineStarts, 1)
-		}).AnyTimes()
-		mockEngine.EXPECT().Stop().Do(func() {
-			atomic.AddInt64(&engineStops, 1)
-		}).AnyTimes()
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).AnyTimes()
-		s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).Return(mockEngine).AnyTimes()
+		s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).DoAndReturn(func(shard Context) Engine {
+			mockEngine := NewMockEngine(s.controller)
+			status := new(int32)
+			mockEngine.EXPECT().Start().Do(func() {
+				if !atomic.CompareAndSwapInt32(status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+					return
+				}
+				atomic.AddInt64(&engineStarts, 1)
+			}).AnyTimes()
+			mockEngine.EXPECT().Stop().Do(func() {
+				if !atomic.CompareAndSwapInt32(status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
+					return
+				}
+				atomic.AddInt64(&engineStops, 1)
+			}).AnyTimes()
+			return mockEngine
+		}).AnyTimes()
 		s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).DoAndReturn(
 			func(ctx context.Context, req *persistence.GetOrCreateShardRequest) (*persistence.GetOrCreateShardResponse, error) {
 				atomic.AddInt64(&getShards, 1)
