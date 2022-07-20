@@ -31,6 +31,7 @@ import (
 	"math/rand"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -52,6 +53,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/internal/goro"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -624,6 +626,94 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 	shard.Unload() // this cancels the context so GetOrCreateShard returns immediately
 	s.True(<-wasCanceled)
 	s.Less(time.Since(start), 500*time.Millisecond)
+}
+
+func (s *controllerSuite) TestShardControllerFuzz() {
+	s.config.NumberOfShards = 10
+
+	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName, gomock.Any()).Return(nil).AnyTimes()
+	s.mockServiceResolver.EXPECT().RemoveListener(shardControllerMembershipUpdateListenerName).Return(nil).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
+
+	var engineStarts, engineStops int64
+	var getShards, closeContexts int64
+	var countCloseWg sync.WaitGroup
+
+	for shardID := int32(1); shardID <= s.config.NumberOfShards; shardID++ {
+		mockEngine := NewMockEngine(s.controller)
+
+		queueAckLevels := s.queueAckLevels()
+		queueStates := s.queueStates()
+
+		mockEngine.EXPECT().Start().Do(func() {
+			atomic.AddInt64(&engineStarts, 1)
+		}).AnyTimes()
+		mockEngine.EXPECT().Stop().Do(func() {
+			atomic.AddInt64(&engineStops, 1)
+		}).AnyTimes()
+		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).AnyTimes()
+		s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).Return(mockEngine).AnyTimes()
+		s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).DoAndReturn(
+			func(ctx context.Context, req *persistence.GetOrCreateShardRequest) (*persistence.GetOrCreateShardResponse, error) {
+				atomic.AddInt64(&getShards, 1)
+				countCloseWg.Add(1)
+				go func(ctx context.Context) {
+					<-ctx.Done()
+					atomic.AddInt64(&closeContexts, 1)
+					countCloseWg.Done()
+				}(req.LifecycleContext)
+				return &persistence.GetOrCreateShardResponse{
+					ShardInfo: &persistencespb.ShardInfo{
+						ShardId:                shardID,
+						Owner:                  s.hostInfo.Identity(),
+						RangeId:                5,
+						ReplicationDlqAckLevel: map[string]int64{},
+						QueueAckLevels:         queueAckLevels,
+						QueueStates:            queueStates,
+					},
+				}, nil
+			}).AnyTimes()
+		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	}
+
+	worker := func(ctx context.Context) error {
+		for ctx.Err() == nil {
+			shardID := int32(rand.Intn(int(s.config.NumberOfShards))) + 1
+			switch rand.Intn(4) {
+			case 0:
+				s.shardController.GetShardByID(shardID)
+			case 1:
+				if shard, err := s.shardController.GetShardByID(shardID); err == nil {
+					_, _ = shard.GetEngine(ctx)
+				}
+			case 2:
+				s.shardController.CloseShardByID(shardID)
+			case 3:
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		return ctx.Err()
+	}
+
+	s.shardController.Start()
+
+	var workers goro.Group
+	for i := 0; i < 30; i++ {
+		workers.Go(worker)
+	}
+
+	time.Sleep(5 * time.Second)
+
+	workers.Cancel()
+	workers.Wait()
+	s.shardController.Stop()
+
+	s.Assert().True(common.AwaitWaitGroup(&countCloseWg, 500*time.Millisecond))
+
+	// check that things are good
+	s.Assert().Equal(atomic.LoadInt64(&getShards), atomic.LoadInt64(&closeContexts))
+	s.Assert().Equal(atomic.LoadInt64(&engineStarts), atomic.LoadInt64(&engineStops))
 }
 
 func (s *controllerSuite) setupMocksForAcquireShard(
