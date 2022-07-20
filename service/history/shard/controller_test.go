@@ -680,7 +680,7 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	worker := func(ctx context.Context) error {
 		for ctx.Err() == nil {
 			shardID := int32(rand.Intn(int(s.config.NumberOfShards))) + 1
-			switch rand.Intn(4) {
+			switch rand.Intn(5) {
 			case 0:
 				s.shardController.GetShardByID(shardID)
 			case 1:
@@ -688,8 +688,12 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 					_, _ = shard.GetEngine(ctx)
 				}
 			case 2:
-				s.shardController.CloseShardByID(shardID)
+				if shard, err := s.shardController.GetShardByID(shardID); err == nil {
+					shard.Unload()
+				}
 			case 3:
+				s.shardController.CloseShardByID(shardID)
+			case 4:
 				time.Sleep(10 * time.Millisecond)
 			}
 		}
@@ -699,21 +703,21 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	s.shardController.Start()
 
 	var workers goro.Group
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 10; i++ {
 		workers.Go(worker)
 	}
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	workers.Cancel()
 	workers.Wait()
 	s.shardController.Stop()
 
-	s.Assert().True(common.AwaitWaitGroup(&countCloseWg, 500*time.Millisecond))
+	s.Assert().True(common.AwaitWaitGroup(&countCloseWg, 500*time.Millisecond), "all contexts did not close")
 
 	// check that things are good
-	s.Assert().Equal(atomic.LoadInt64(&getShards), atomic.LoadInt64(&closeContexts))
-	s.Assert().Equal(atomic.LoadInt64(&engineStarts), atomic.LoadInt64(&engineStops))
+	s.Assert().Equal(atomic.LoadInt64(&getShards), atomic.LoadInt64(&closeContexts), "getorcreate/close context")
+	s.Assert().Equal(atomic.LoadInt64(&engineStarts), atomic.LoadInt64(&engineStops), "engine start/stop")
 }
 
 func (s *controllerSuite) setupMocksForAcquireShard(
