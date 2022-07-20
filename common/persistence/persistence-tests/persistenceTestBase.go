@@ -308,17 +308,14 @@ func (g *TestTransferTaskIDGenerator) GenerateTransferTaskID() (int64, error) {
 }
 
 // Publish is a utility method to add messages to the queue
-func (s *TestBase) Publish(
-	ctx context.Context,
-	message interface{},
-) error {
+func (s *TestBase) Publish(ctx context.Context, task *replicationspb.ReplicationTask) error {
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	retryPolicy.SetBackoffCoefficient(1.5)
 	retryPolicy.SetMaximumAttempts(5)
 
 	return backoff.ThrottleRetry(
 		func() error {
-			return s.NamespaceReplicationQueue.Publish(ctx, message)
+			return s.NamespaceReplicationQueue.Publish(ctx, task)
 		},
 		retryPolicy,
 		func(e error) bool {
@@ -357,10 +354,7 @@ func (s *TestBase) GetAckLevels(
 }
 
 // PublishToNamespaceDLQ is a utility method to add messages to the namespace DLQ
-func (s *TestBase) PublishToNamespaceDLQ(
-	ctx context.Context,
-	message interface{},
-) error {
+func (s *TestBase) PublishToNamespaceDLQ(ctx context.Context, task *replicationspb.ReplicationTask) error {
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	retryPolicy.SetBackoffCoefficient(1.5)
 	retryPolicy.SetMaximumAttempts(5)
@@ -368,7 +362,7 @@ func (s *TestBase) PublishToNamespaceDLQ(
 	return backoff.ThrottleRetryContext(
 		ctx,
 		func(ctx context.Context) error {
-			return s.NamespaceReplicationQueue.PublishToDLQ(ctx, message)
+			return s.NamespaceReplicationQueue.PublishToDLQ(ctx, task)
 		},
 		retryPolicy,
 		func(e error) bool {
