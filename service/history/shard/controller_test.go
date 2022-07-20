@@ -685,6 +685,22 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	}
 
+	randomLoadedShard := func() (int32, Context) {
+		s.shardController.Lock()
+		defer s.shardController.Unlock()
+		if len(s.shardController.historyShards) == 0 {
+			return -1, nil
+		}
+		n := rand.Intn(len(s.shardController.historyShards))
+		for id, shard := range s.shardController.historyShards {
+			if n == 0 {
+				return id, shard
+			}
+			n--
+		}
+		return -1, nil
+	}
+
 	worker := func(ctx context.Context) error {
 		for ctx.Err() == nil {
 			shardID := int32(rand.Intn(int(s.config.NumberOfShards))) + 1
@@ -696,11 +712,13 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 					_, _ = shard.GetEngine(ctx)
 				}
 			case 2:
-				if shard, err := s.shardController.GetShardByID(shardID); err == nil {
+				if _, shard := randomLoadedShard(); shard != nil {
 					shard.Unload()
 				}
 			case 3:
-				s.shardController.CloseShardByID(shardID)
+				if id, _ := randomLoadedShard(); id >= 0 {
+					s.shardController.CloseShardByID(id)
+				}
 			case 4:
 				time.Sleep(10 * time.Millisecond)
 			}
