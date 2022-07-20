@@ -42,7 +42,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
@@ -61,7 +60,6 @@ type HttpGetter interface {
 // ClientFactory is used to construct rpc clients
 type ClientFactory interface {
 	AdminClient(c *cli.Context) adminservice.AdminServiceClient
-	HealthClient(c *cli.Context) healthpb.HealthClient
 }
 
 type clientFactory struct {
@@ -82,13 +80,6 @@ func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceCli
 	connection, _ := b.createGRPCConnection(c)
 
 	return adminservice.NewAdminServiceClient(connection)
-}
-
-// HealthClient builds a health client.
-func (b *clientFactory) HealthClient(c *cli.Context) healthpb.HealthClient {
-	connection, _ := b.createGRPCConnection(c)
-
-	return healthpb.NewHealthClient(connection)
 }
 
 func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, error) {
