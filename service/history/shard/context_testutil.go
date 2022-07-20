@@ -76,6 +76,9 @@ func NewTestContext(
 	if shardInfo.QueueAckLevels == nil {
 		shardInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
 	}
+	if shardInfo.QueueStates == nil {
+		shardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
+	}
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
 		executionManager:    resourceTest.ExecutionMgr,
@@ -87,15 +90,15 @@ func NewTestContext(
 		lifecycleCtx:        lifecycleCtx,
 		lifecycleCancel:     lifecycleCancel,
 
-		state:                        contextStateAcquired,
-		engineFuture:                 future.NewFuture[Engine](),
-		shardInfo:                    shardInfo,
-		taskSequenceNumber:           1,
-		immediateTaskMaxReadLevel:    0,
-		maxTaskSequenceNumber:        100000,
-		scheduledTaskMaxReadLevelMap: make(map[string]time.Time),
-		remoteClusterInfos:           make(map[string]*remoteClusterInfo),
-		handoverNamespaces:           make(map[string]*namespaceHandOverInfo),
+		state:                              contextStateAcquired,
+		engineFuture:                       future.NewFuture[Engine](),
+		shardInfo:                          shardInfo,
+		taskSequenceNumber:                 shardInfo.RangeId << int64(config.RangeSizeBits),
+		immediateTaskExclusiveMaxReadLevel: shardInfo.RangeId << int64(config.RangeSizeBits),
+		maxTaskSequenceNumber:              (shardInfo.RangeId + 1) << int64(config.RangeSizeBits),
+		scheduledTaskMaxReadLevelMap:       make(map[string]time.Time),
+		remoteClusterInfos:                 make(map[string]*remoteClusterInfo),
+		handoverNamespaces:                 make(map[string]*namespaceHandOverInfo),
 
 		clusterMetadata:         resourceTest.ClusterMetadata,
 		timeSource:              resourceTest.TimeSource,

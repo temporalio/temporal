@@ -28,15 +28,9 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/types"
-)
 
-var (
-	// This is the maximal time value we support
-	maxValidTimeGo    = time.Unix(0, MaxValidTimeNanoseconds).UTC()
-	maxValidTimestamp = TimestampFromTimePtr(&maxValidTimeGo)
+	"go.temporal.io/server/common/util"
 )
-
-const MaxValidTimeNanoseconds = (2 ^ (64 - 1)) - 1
 
 // Timestamp provides easy conversions and utility comparison functions
 // making go to proto time comparison straightforward
@@ -188,15 +182,8 @@ func DurationValue(d *time.Duration) time.Duration {
 }
 
 func MinDurationPtr(d1 *time.Duration, d2 *time.Duration) *time.Duration {
-	res := MinDuration(DurationValue(d1), DurationValue(d2))
+	res := util.Min(DurationValue(d1), DurationValue(d2))
 	return &res
-}
-
-func MinDuration(d1 time.Duration, d2 time.Duration) time.Duration {
-	if d1 > d2 {
-		return d2
-	}
-	return d1
 }
 
 func RoundUp(d time.Duration) time.Duration {

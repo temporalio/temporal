@@ -125,22 +125,6 @@ func (s *tlsConfigTest) testGroupTLS(f func(*config.RootTLS, *config.GroupTLS)) 
 	f(cfg, &cfg.Frontend)
 }
 
-func (s *tlsConfigTest) testClientTLS(f func(*config.RootTLS, *config.ClientTLS)) {
-
-	cfg := &config.RootTLS{Internode: config.GroupTLS{}}
-	f(cfg, &cfg.Internode.Client)
-	cfg = &config.RootTLS{Frontend: config.GroupTLS{}}
-	f(cfg, &cfg.Frontend.Client)
-}
-
-func (s *tlsConfigTest) testServerTLS(f func(*config.RootTLS, *config.ServerTLS)) {
-
-	cfg := &config.RootTLS{Internode: config.GroupTLS{}}
-	f(cfg, &cfg.Internode.Server)
-	cfg = &config.RootTLS{Frontend: config.GroupTLS{}}
-	f(cfg, &cfg.Frontend.Server)
-}
-
 func (s *tlsConfigTest) testCertFileAndData(cfg *config.RootTLS, group *config.GroupTLS) {
 
 	group.Server = config.ServerTLS{}

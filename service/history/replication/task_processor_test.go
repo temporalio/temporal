@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
@@ -266,6 +267,28 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncActivity() {
 	s.NoError(err)
 }
 
+func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncWorkflowState() {
+	namespaceID := uuid.NewRandom().String()
+	workflowID := uuid.New()
+	runID := uuid.NewRandom().String()
+
+	request := &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           s.shardID,
+		SourceClusterName: cluster.TestAlternativeClusterName,
+		TaskInfo: &persistencespb.ReplicationTaskInfo{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+			Version:     1,
+		},
+	}
+
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil)
+	err := s.replicationTaskProcessor.handleReplicationDLQTask(request)
+	s.NoError(err)
+}
+
 func (s *taskProcessorSuite) TestHandleReplicationDLQTask_History() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
@@ -311,6 +334,44 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncActivity() {
 			WorkflowId:  workflowID,
 			RunId:       runID,
 			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+		},
+	}
+
+	dlqTask, err := s.replicationTaskProcessor.convertTaskToDLQTask(task)
+	s.NoError(err)
+	s.Equal(request, dlqTask)
+}
+
+func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncWorkflowState() {
+	namespaceID := uuid.NewRandom().String()
+	workflowID := uuid.New()
+	runID := uuid.NewRandom().String()
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
+			WorkflowState: &persistencespb.WorkflowMutableState{
+				ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+					NamespaceId: namespaceID,
+					WorkflowId:  workflowID,
+					VersionHistories: versionhistory.NewVersionHistories(
+						versionhistory.NewVersionHistory(nil, []*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(1, 1)}),
+					),
+				},
+				ExecutionState: &persistencespb.WorkflowExecutionState{
+					RunId: runID,
+				},
+			},
+		}},
+	}
+	request := &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           s.shardID,
+		SourceClusterName: cluster.TestAlternativeClusterName,
+		TaskInfo: &persistencespb.ReplicationTaskInfo{
+			NamespaceId: namespaceID,
+			WorkflowId:  workflowID,
+			RunId:       runID,
+			TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+			Version:     1,
 		},
 	}
 
@@ -367,36 +428,6 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 	dlqTask, err := s.replicationTaskProcessor.convertTaskToDLQTask(task)
 	s.NoError(err)
 	s.Equal(request, dlqTask)
-}
-
-func (s *taskProcessorSuite) TestCleanupReplicationTask_Noop() {
-	ackedTaskID := int64(12345)
-	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
-	err := s.mockShard.UpdateQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName, tasks.NewImmediateKey(ackedTaskID))
-	s.NoError(err)
-
-	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID
-	err = s.replicationTaskProcessor.cleanupReplicationTasks()
-	s.NoError(err)
-}
-
-func (s *taskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
-	ackedTaskID := int64(12345)
-	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
-	err := s.mockShard.UpdateQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName, tasks.NewImmediateKey(ackedTaskID))
-	s.NoError(err)
-
-	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID - 1
-	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(
-		gomock.Any(),
-		&persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:             s.shardID,
-			TaskCategory:        tasks.CategoryReplication,
-			ExclusiveMaxTaskKey: tasks.NewImmediateKey(ackedTaskID + 1),
-		},
-	).Return(nil)
-	err = s.replicationTaskProcessor.cleanupReplicationTasks()
-	s.NoError(err)
 }
 
 func (s *taskProcessorSuite) TestPaginationFn_Success_More() {

@@ -42,7 +42,7 @@ var commands = []*cli.Command{
 		Subcommands: newAdminShardManagementCommands(),
 	},
 	{
-		Name:        "history_host",
+		Name:        "history-host",
 		Aliases:     []string{"h"},
 		Usage:       "Run admin operation on history host",
 		Subcommands: newAdminHistoryHostCommands(),
@@ -133,7 +133,7 @@ func newAdminWorkflowCommands() []*cli.Command {
 			},
 		},
 		{
-			Name:    "refresh_tasks",
+			Name:    "refresh-tasks",
 			Aliases: []string{"rt"},
 			Usage:   "Refreshes all the tasks of a workflow",
 			Flags: []cli.Flag{
@@ -250,7 +250,7 @@ func newAdminShardManagementCommands() []*cli.Command {
 			},
 		},
 		{
-			Name:  "close_shard",
+			Name:  "close-shard",
 			Usage: "close a shard given a shard id",
 			Flags: []cli.Flag{
 				&cli.IntFlag{
@@ -263,7 +263,7 @@ func newAdminShardManagementCommands() []*cli.Command {
 			},
 		},
 		{
-			Name:    "remove_task",
+			Name:    "remove-task",
 			Aliases: []string{"rmtk"},
 			Usage:   "remove a task based on shardId, task type, taskId, and task visibility timestamp",
 			Flags: []cli.Flag{

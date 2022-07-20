@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
+	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -59,7 +60,6 @@ type (
 	OperatorHandlerImpl struct {
 		status int32
 
-		healthStatus      int32
 		logger            log.Logger
 		config            *Config
 		esConfig          *esclient.Config
@@ -226,10 +226,7 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(ctx context.Context, reques
 		return nil, h.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err)), scope, endpointName)
 	}
 
-	newCustomSearchAttributes := map[string]enumspb.IndexedValueType{}
-	for saName, saType := range currentSearchAttributes.Custom() {
-		newCustomSearchAttributes[saName] = saType
-	}
+	newCustomSearchAttributes := maps.Clone(currentSearchAttributes.Custom())
 
 	for _, saName := range request.GetSearchAttributes() {
 		if !currentSearchAttributes.IsDefined(saName) {
@@ -301,6 +298,10 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 		return nil, h.error(errRequestNotSet, scope, endpointName)
 	}
 
+	if request.GetNamespace() == common.SystemLocalNamespace {
+		return nil, h.error(errUnableDeleteSystemNamespace, scope, endpointName)
+	}
+
 	// Execute workflow.
 	wfParams := deletenamespace.DeleteNamespaceWorkflowParams{
 		Namespace: namespace.Name(request.GetNamespace()),
@@ -366,6 +367,42 @@ func (h *OperatorHandlerImpl) DeleteWorkflowExecution(ctx context.Context, reque
 	}
 
 	return &operatorservice.DeleteWorkflowExecutionResponse{}, nil
+}
+
+// AddOrUpdateRemoteCluster adds or updates the connection config to a remote cluster.
+func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
+	ctx context.Context,
+	request *operatorservice.AddOrUpdateRemoteClusterRequest,
+) (_ *operatorservice.AddOrUpdateRemoteClusterResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
+func (h *OperatorHandlerImpl) RemoveRemoteCluster(
+	ctx context.Context,
+	request *operatorservice.RemoveRemoteClusterRequest,
+) (_ *operatorservice.RemoveRemoteClusterResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
+func (h *OperatorHandlerImpl) DescribeCluster(
+	ctx context.Context,
+	request *operatorservice.DescribeClusterRequest,
+) (_ *operatorservice.DescribeClusterResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
+func (h *OperatorHandlerImpl) ListClusters(
+	ctx context.Context,
+	request *operatorservice.ListClustersRequest,
+) (_ *operatorservice.ListClustersResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
+func (h *OperatorHandlerImpl) ListClusterMembers(
+	ctx context.Context,
+	request *operatorservice.ListClusterMembersRequest,
+) (_ *operatorservice.ListClusterMembersResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
 }
 
 // startRequestProfile initiates recording of request metrics

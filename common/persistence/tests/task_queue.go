@@ -142,10 +142,10 @@ func (s *TaskQueueSuite) TestCreate_Sticky_Dup() {
 
 func (s *TaskQueueSuite) TestUpdate_Normal() {
 	prevRangeID := rand.Int63()
-	taskQueue := s.createTaskQueue(prevRangeID, enumspb.TASK_QUEUE_KIND_NORMAL)
+	_ = s.createTaskQueue(prevRangeID, enumspb.TASK_QUEUE_KIND_NORMAL)
 
 	rangID := rand.Int63()
-	taskQueue = s.randomTaskQueueInfo(enumspb.TASK_QUEUE_KIND_NORMAL)
+	taskQueue := s.randomTaskQueueInfo(enumspb.TASK_QUEUE_KIND_NORMAL)
 	_, err := s.taskManager.UpdateTaskQueue(s.ctx, &p.UpdateTaskQueueRequest{
 		RangeID:       rangID,
 		TaskQueueInfo: taskQueue,
@@ -175,10 +175,10 @@ func (s *TaskQueueSuite) TestUpdate_Normal_Conflict() {
 
 func (s *TaskQueueSuite) TestUpdate_Sticky() {
 	prevRangeID := rand.Int63()
-	taskQueue := s.createTaskQueue(prevRangeID, enumspb.TASK_QUEUE_KIND_STICKY)
+	_ = s.createTaskQueue(prevRangeID, enumspb.TASK_QUEUE_KIND_STICKY)
 
 	rangID := rand.Int63()
-	taskQueue = s.randomTaskQueueInfo(enumspb.TASK_QUEUE_KIND_STICKY)
+	taskQueue := s.randomTaskQueueInfo(enumspb.TASK_QUEUE_KIND_STICKY)
 	_, err := s.taskManager.UpdateTaskQueue(s.ctx, &p.UpdateTaskQueueRequest{
 		RangeID:       rangID,
 		TaskQueueInfo: taskQueue,

@@ -74,6 +74,7 @@ var (
 		"GenerateLastHistoryReplicationTasks":    0,
 		"GetReplicationStatus":                   0,
 		"DeleteWorkflowVisibilityRecord":         0,
+		"UpdateWorkflow":                         0,
 	}
 
 	APIPriorities = map[int]struct{}{

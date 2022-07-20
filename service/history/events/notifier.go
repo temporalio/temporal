@@ -199,7 +199,7 @@ func (notifier *NotifierImpl) dispatchHistoryEventNotification(event *Notificati
 
 	timer := notifier.metrics.StartTimer(metrics.HistoryEventNotificationScope, metrics.HistoryEventNotificationFanoutLatency)
 	defer timer.Stop()
-	notifier.eventsPubsubs.GetAndDo(identifier, func(key interface{}, value interface{}) error { //nolint:errcheck
+	_, _, _ = notifier.eventsPubsubs.GetAndDo(identifier, func(key interface{}, value interface{}) error {
 		subscribers := value.(map[string]chan *Notification)
 
 		for _, channel := range subscribers {

@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/service/history/consts"
 
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -588,6 +589,9 @@ func (s *integrationSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	s.True(err == nil || err == matching.ErrNoTasks)
 
 	err = poller.PollAndProcessActivityTask(false)
+	// Not s.ErrorIs() because error goes through RPC.
+	s.IsType(consts.ErrActivityTaskNotFound, err)
+	s.Equal(consts.ErrActivityTaskNotFound.Error(), err.Error())
 
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
 

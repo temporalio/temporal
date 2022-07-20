@@ -34,7 +34,7 @@ import (
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination queue_mock.go
 
 type (
-	Processor interface {
+	Queue interface {
 		common.Daemon
 		Category() tasks.Category
 		NotifyNewTasks(clusterName string, tasks []tasks.Task)
@@ -43,24 +43,24 @@ type (
 		UnlockTaskProcessing()
 	}
 
-	ProcessorFactory interface {
+	Factory interface {
 		common.Daemon
 
 		// TODO: remove the cache parameter after workflow cache become a host level component
-		// and it can be provided as a parameter when creating a ProcessorFactory instance.
+		// and it can be provided as a parameter when creating a QueueFactory instance.
 		// Currently, workflow cache is shard level, but we can't get it from shard or engine interface,
 		// as that will lead to a cycle dependency issue between shard and workflow package.
-		CreateProcessor(shard shard.Context, engine shard.Engine, cache workflow.Cache) Processor
+		CreateQueue(shard shard.Context, engine shard.Engine, cache workflow.Cache) Queue
 	}
 )
 
 const (
-	ProcessorFactoryFxGroup = "queueProcessorFactory"
+	FactoryFxGroup = "queueFactory"
 )
 
 // TODO: remove QueueType after merging active and standby
 // transfer/timer queue. Use tasks.Category instead
-// Currently need queue processor active/standby information
+// Currently need queue active/standby information
 // for assigning priority
 type (
 	QueueType int

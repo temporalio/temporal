@@ -220,13 +220,10 @@ func (r *TaskGeneratorImpl) GenerateDeleteExecutionTask(
 	now time.Time,
 ) (*tasks.DeleteExecutionTask, error) {
 
-	currentVersion := r.mutableState.GetCurrentVersion()
-
 	return &tasks.DeleteExecutionTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
-		Version:             currentVersion,
 	}, nil
 }
 

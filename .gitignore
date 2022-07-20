@@ -20,6 +20,9 @@
 /tctl*
 /tdbg
 
+# Build info
+/build
+
 # Buf proto image
 /proto/image.bin
 

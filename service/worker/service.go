@@ -86,7 +86,7 @@ type (
 
 		membershipMonitor membership.Monitor
 
-		userMetricsScope metrics.UserScope
+		metricsHandler metrics.MetricsHandler
 
 		status           int32
 		stopC            chan struct{}
@@ -135,7 +135,7 @@ func NewService(
 	persistenceBean persistenceClient.Bean,
 	membershipMonitor membership.Monitor,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-	metricsScope metrics.UserScope,
+	metricsHandler metrics.MetricsHandler,
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
@@ -167,7 +167,7 @@ func NewService(
 		membershipMonitor:         membershipMonitor,
 		archiverProvider:          archiverProvider,
 		namespaceReplicationQueue: namespaceReplicationQueue,
-		userMetricsScope:          metricsScope,
+		metricsHandler:            metricsHandler,
 		metadataManager:           metadataManager,
 		taskManager:               taskManager,
 		historyClient:             historyClient,
@@ -334,8 +334,7 @@ func (s *Service) Start() {
 		tag.ComponentWorker,
 	)
 
-	// todo: introduce proper counter (same in resource.go)
-	s.userMetricsScope.AddCounter(metrics.RestartCount, 1)
+	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
 
 	s.clusterMetadata.Start()
 	s.membershipMonitor.Start()

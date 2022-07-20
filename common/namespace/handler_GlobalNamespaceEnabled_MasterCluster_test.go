@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/clock"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
@@ -109,6 +111,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) SetupTest() {
 		s.archivalMetadata,
 		s.mockArchiverProvider,
 		dc.GetBoolPropertyFnFilteredByNamespace(false),
+		clock.NewRealTimeSource(),
 	)
 }
 

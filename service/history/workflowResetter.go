@@ -288,7 +288,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	}
 
 	if len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Can only reset workflow with pending child workflows"))
+		return nil, serviceerror.NewInvalidArgument("Can only reset workflow with pending child workflows")
 	}
 
 	if err := r.failWorkflowTask(

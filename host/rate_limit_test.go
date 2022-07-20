@@ -123,7 +123,8 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 
 	// Send one signal to create a new workflow task
 	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, 0)
+	err = binary.Write(buf, binary.LittleEndian, byte(0))
+	s.NoError(err)
 	s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
 
 	// Drop workflow task to cause all events to be buffered from now on
@@ -134,15 +135,17 @@ func (s *integrationSuite) TestTaskProcessingProtectionForRateLimitError() {
 	// Buffered 100 Signals
 	for i := 1; i < 101; i++ {
 		buf := new(bytes.Buffer)
-		binary.Write(buf, binary.LittleEndian, i)
+		err := binary.Write(buf, binary.LittleEndian, byte(i))
+		s.NoError(err)
 		s.Nil(s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity))
 	}
 
 	// 101 signal, which will fail the workflow task
 	buf = new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, 101)
+	err = binary.Write(buf, binary.LittleEndian, byte(101))
+	s.NoError(err)
 	signalErr := s.sendSignal(s.namespace, workflowExecution, "SignalName", payloads.EncodeBytes(buf.Bytes()), identity)
-	s.Nil(signalErr)
+	s.NoError(signalErr)
 
 	// Process signal in workflow
 	_, err = poller.PollAndProcessWorkflowTaskWithAttempt(true, false, false, false, 1)

@@ -40,11 +40,11 @@ const (
 // Validate validates the archival config
 func (a *Archival) Validate(namespaceDefaults *ArchivalNamespaceDefaults) error {
 	if !isArchivalConfigValid(a.History.State, a.History.EnableRead, namespaceDefaults.History.State, namespaceDefaults.History.URI, a.History.Provider != nil) {
-		return errors.New("Invalid history archival config")
+		return errors.New("invalid history archival config")
 	}
 
 	if !isArchivalConfigValid(a.Visibility.State, a.Visibility.EnableRead, namespaceDefaults.Visibility.State, namespaceDefaults.Visibility.URI, a.Visibility.Provider != nil) {
-		return errors.New("Invalid visibility archival config")
+		return errors.New("invalid visibility archival config")
 	}
 
 	return nil

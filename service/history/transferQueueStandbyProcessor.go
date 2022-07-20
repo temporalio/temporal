@@ -70,16 +70,14 @@ func newTransferQueueStandbyProcessor(
 ) *transferQueueStandbyProcessorImpl {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
-		BatchSize:                           config.TransferTaskBatchSize,
-		MaxPollInterval:                     config.TransferProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient:  config.TransferProcessorUpdateAckIntervalJitterCoefficient,
-		RescheduleInterval:                  config.TransferProcessorRescheduleInterval,
-		RescheduleIntervalJitterCoefficient: config.TransferProcessorRescheduleIntervalJitterCoefficient,
-		MaxReschdulerSize:                   config.TransferProcessorMaxReschedulerSize,
-		PollBackoffInterval:                 config.TransferProcessorPollBackoffInterval,
-		MetricScope:                         metrics.TransferStandbyQueueProcessorScope,
+		BatchSize:                          config.TransferTaskBatchSize,
+		MaxPollInterval:                    config.TransferProcessorMaxPollInterval,
+		MaxPollIntervalJitterCoefficient:   config.TransferProcessorMaxPollIntervalJitterCoefficient,
+		UpdateAckInterval:                  config.TransferProcessorUpdateAckInterval,
+		UpdateAckIntervalJitterCoefficient: config.TransferProcessorUpdateAckIntervalJitterCoefficient,
+		MaxReschdulerSize:                  config.TransferProcessorMaxReschedulerSize,
+		PollBackoffInterval:                config.TransferProcessorPollBackoffInterval,
+		MetricScope:                        metrics.TransferStandbyQueueProcessorScope,
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
 
@@ -88,15 +86,19 @@ func newTransferQueueStandbyProcessor(
 		case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 			// no reset needed for standby
 			return false
-		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
-			enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION:
+		case enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION:
 			return true
+		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
+			if shard.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival() {
+				return true
+			}
+			fallthrough
 		default:
 			return taskAllocator.verifyStandbyTask(clusterName, namespace.ID(task.GetNamespaceID()), task)
 		}
 	}
-	maxReadAckLevel := func() int64 {
-		return shard.GetQueueMaxReadLevel(tasks.CategoryTransfer, clusterName).TaskID
+	maxReadLevel := func() int64 {
+		return shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTransfer, clusterName).TaskID
 	}
 	updateClusterAckLevel := func(ackLevel int64) error {
 		return shard.UpdateQueueClusterAckLevel(tasks.CategoryTransfer, clusterName, tasks.NewImmediateKey(ackLevel))
@@ -109,7 +111,7 @@ func newTransferQueueStandbyProcessor(
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
 			shard,
 			options,
-			maxReadAckLevel,
+			maxReadLevel,
 			updateClusterAckLevel,
 			transferQueueShutdown,
 			logger,
@@ -124,7 +126,7 @@ func newTransferQueueStandbyProcessor(
 			shard.GetNamespaceRegistry(),
 			clientBean,
 			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				engine, err := shard.GetEngine()
+				engine, err := shard.GetEngine(ctx)
 				if err != nil {
 					return err
 				}
@@ -148,6 +150,7 @@ func newTransferQueueStandbyProcessor(
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
+		logger,
 		metricProvider.WithTags(metrics.OperationTag(queues.OperationTransferStandbyQueueProcessor)),
 	)
 

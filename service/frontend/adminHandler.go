@@ -33,6 +33,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/clock"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -40,6 +42,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -146,6 +149,7 @@ type (
 		ArchivalMetadata                    archiver.ArchivalMetadata
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
+		TimeSource                          clock.TimeSource
 	}
 )
 
@@ -180,6 +184,7 @@ func NewAdminHandler(
 			args.ArchivalMetadata,
 			args.ArchiverProvider,
 			args.Config.EnableSchedules,
+			args.TimeSource,
 		),
 		namespaceDLQHandler: namespace.NewDLQMessageHandler(
 			namespaceReplicationTaskExecutor,
@@ -334,10 +339,7 @@ func (adh *AdminHandler) RemoveSearchAttributes(ctx context.Context, request *ad
 		return nil, adh.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err)), scope)
 	}
 
-	newCustomSearchAttributes := map[string]enumspb.IndexedValueType{}
-	for saName, saType := range currentSearchAttributes.Custom() {
-		newCustomSearchAttributes[saName] = saType
-	}
+	newCustomSearchAttributes := maps.Clone(currentSearchAttributes.Custom())
 
 	for _, saName := range request.GetSearchAttributes() {
 		if !currentSearchAttributes.IsDefined(saName) {
@@ -1219,7 +1221,7 @@ func (adh *AdminHandler) GetDLQMessages(
 
 	var tasks []*replicationspb.ReplicationTask
 	var token []byte
-	var op func() error
+	var op func(ctx context.Context) error
 	switch request.GetType() {
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.historyClient.GetDLQMessages(ctx, &historyservice.GetDLQMessagesRequest{
@@ -1241,7 +1243,7 @@ func (adh *AdminHandler) GetDLQMessages(
 			NextPageToken:    resp.GetNextPageToken(),
 		}, err
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
-		op = func() error {
+		op = func(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -1258,7 +1260,7 @@ func (adh *AdminHandler) GetDLQMessages(
 	default:
 		return nil, adh.error(errDLQTypeIsNotSupported, scope)
 	}
-	retErr = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	retErr = backoff.ThrottleRetryContext(ctx, op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if retErr != nil {
 		return nil, adh.error(retErr, scope)
 	}
@@ -1287,7 +1289,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 		request.InclusiveEndMessageId = common.EndMessageID
 	}
 
-	var op func() error
+	var op func(ctx context.Context) error
 	switch request.GetType() {
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.historyClient.PurgeDLQMessages(ctx, &historyservice.PurgeDLQMessagesRequest{
@@ -1303,7 +1305,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 
 		return &adminservice.PurgeDLQMessagesResponse{}, err
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
-		op = func() error {
+		op = func(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -1314,7 +1316,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 	default:
 		return nil, adh.error(errDLQTypeIsNotSupported, scope)
 	}
-	err = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	err = backoff.ThrottleRetryContext(ctx, op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
@@ -1341,7 +1343,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	}
 
 	var token []byte
-	var op func() error
+	var op func(ctx context.Context) error
 	switch request.GetType() {
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.historyClient.MergeDLQMessages(ctx, &historyservice.MergeDLQMessagesRequest{
@@ -1360,8 +1362,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 			NextPageToken: request.GetNextPageToken(),
 		}, nil
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
-
-		op = func() error {
+		op = func(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -1379,7 +1380,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	default:
 		return nil, adh.error(errDLQTypeIsNotSupported, scope)
 	}
-	err = backoff.Retry(op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	err = backoff.ThrottleRetryContext(ctx, op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}

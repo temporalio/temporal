@@ -47,7 +47,7 @@ func Or[T any](
 		switch p := p.(type) {
 		case *OrImpl[T]:
 			flattened = appendPredicates(flattened, p.Predicates...)
-		case *AllImpl[T]:
+		case *UniversalImpl[T]:
 			return p
 		case *EmptyImpl[T]:
 			continue

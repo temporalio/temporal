@@ -28,7 +28,6 @@ package workflow
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -635,6 +634,11 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				return nil, err
 			}
 
+		case enumspb.EVENT_TYPE_WORKFLOW_UPDATE_ACCEPTED,
+			enumspb.EVENT_TYPE_WORKFLOW_UPDATE_REQUESTED,
+			enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED:
+			return nil, serviceerror.NewUnimplemented("Workflow Update rebuild not implemented")
+
 		default:
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))
 		}
@@ -657,11 +661,4 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	b.mutableState.SetHistoryBuilder(NewImmutableHistoryBuilder(history))
 
 	return newRunMutableStateBuilder, nil
-}
-
-func (b *MutableStateRebuilderImpl) unixNanoToTime(
-	unixNano int64,
-) time.Time {
-
-	return time.Unix(0, unixNano).UTC()
 }

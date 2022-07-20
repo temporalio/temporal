@@ -28,7 +28,6 @@ package history
 
 import (
 	"context"
-	"fmt"
 	"math"
 
 	"go.temporal.io/api/serviceerror"
@@ -36,7 +35,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
@@ -183,25 +181,4 @@ func (r *workflowRebuilderImpl) persistToDB(
 		return err
 	}
 	return nil
-}
-
-func (r *workflowRebuilderImpl) getMutableState(
-	ctx context.Context,
-	workflowKey definition.WorkflowKey,
-) (*persistencespb.WorkflowMutableState, int64, error) {
-	record, err := r.shard.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
-		ShardID:     r.shard.GetShardID(),
-		NamespaceID: workflowKey.NamespaceID,
-		WorkflowID:  workflowKey.WorkflowID,
-		RunID:       workflowKey.RunID,
-	})
-	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
-		return nil, 0, err
-	}
-	// only check whether the execution is nil, do as much as we can
-	if record == nil {
-		return nil, 0, serviceerror.NewUnavailable(fmt.Sprintf("workflowRebuilder encountered error when loading execution record: %v", err))
-	}
-
-	return record.State, record.DBRecordVersion, nil
 }

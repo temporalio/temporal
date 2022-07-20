@@ -93,7 +93,7 @@ type (
 		workflowTaskHandler        workflowTaskHandlerCallbacks
 		clusterMetadata            cluster.Metadata
 		executionManager           persistence.ExecutionManager
-		queueProcessors            map[tasks.Category]queues.Processor
+		queueProcessors            map[tasks.Category]queues.Queue
 		replicationAckMgr          replication.AckManager
 		nDCReplicator              nDCHistoryReplicator
 		nDCActivityReplicator      nDCActivityReplicator
@@ -131,7 +131,7 @@ func NewEngineWithShardContext(
 	newCacheFn workflow.NewCacheFn,
 	archivalClient archiver.Client,
 	eventSerializer serialization.Serializer,
-	queueProcessorFactories []queues.ProcessorFactory,
+	queueProcessorFactories []queues.Factory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
 	tracerProvider trace.TracerProvider,
@@ -172,9 +172,9 @@ func NewEngineWithShardContext(
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 	}
 
-	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Processor)
+	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
 	for _, factory := range queueProcessorFactories {
-		processor := factory.CreateProcessor(shard, historyEngImpl, historyCache)
+		processor := factory.CreateQueue(shard, historyEngImpl, historyCache)
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
@@ -318,8 +318,20 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 		namespaceFailoverNotificationVersion := nextNamespace.FailoverNotificationVersion()
 		namespaceActiveCluster := nextNamespace.ActiveClusterName()
 
+		// +1 in the following check as the version in shard is max notification version +1.
+		// Need to run action() when namespaceFailoverNotificationVersion+1 == shardNotificationVersion
+		// as we don't know if the failover queue execution for that notification version is
+		// completed or not.
+		//
+		// NOTE: theoretically we need to get rid of the check on shardNotificationVersion, as
+		// we have no idea if the failover queue for any notification version below that is completed
+		// or not. However, removing that will cause more load upon shard reload.
+		// So here assume failover queue processor for notification version < X-1 is completed if
+		// shard notification version is X.
+
 		if nextNamespace.IsGlobalNamespace() &&
-			namespaceFailoverNotificationVersion >= shardNotificationVersion &&
+			nextNamespace.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
+			namespaceFailoverNotificationVersion+1 >= shardNotificationVersion &&
 			namespaceActiveCluster == e.currentClusterName {
 			action()
 		}
@@ -356,10 +368,10 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			// since we don't know if the previous failover queue processing has finished or not
 			// 2. We can return when newNotificationVersion < shardNotificationVersion. But the check
 			// is basically the same as the check in failover predicate. Because
-			// failover notification version <= NotificationVersion,
-			// there's no notification version that can make
+			// failoverNotificationVersion + 1 <= NotificationVersion + 1 = newNotificationVersion,
+			// there's no notification version can make
 			// newNotificationVersion < shardNotificationVersion and
-			// failoverNotificationVersion >= shardNotificationVersion are true at the same time
+			// failoverNotificationVersion + 1 >= shardNotificationVersion are true at the same time
 			// Meaning if the check decides to return, no namespace will pass the failover predicate.
 
 			failoverNamespaceIDs := map[string]struct{}{}
@@ -386,8 +398,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				e.NotifyNewTasks(e.currentClusterName, fakeTasks)
 			}
 
-			// nolint:errcheck
-			e.shard.UpdateNamespaceNotificationVersion(newNotificationVersion)
+			_ = e.shard.UpdateNamespaceNotificationVersion(newNotificationVersion)
 		},
 	)
 }
@@ -639,7 +650,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		if err != nil {
 			return nil, err
 		}
-		defer e.eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID) // nolint:errcheck
+		defer func() { _ = e.eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID) }()
 		// check again in case the next event ID is updated
 		response, err = e.getMutableState(ctx, workflowKey)
 		if err != nil {
@@ -785,11 +796,11 @@ func (e *historyEngineImpl) QueryWorkflow(
 		scope.IncCounter(metrics.QueryBufferExceededCount)
 		return nil, consts.ErrConsistentQueryBufferExceeded
 	}
-	queryID, termCh := queryReg.BufferQuery(req.GetQuery())
+	queryID, completionCh := queryReg.BufferQuery(req.GetQuery())
 	defer queryReg.RemoveQuery(queryID)
 	weCtx.GetReleaseFn()(nil)
 	select {
-	case <-termCh:
+	case <-completionCh:
 		completionState, err := queryReg.GetCompletionState(queryID)
 		if err != nil {
 			scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
@@ -1950,6 +1961,13 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}, nil
 }
 
+func (h *historyEngineImpl) UpdateWorkflow(
+	ctx context.Context,
+	request *historyservice.UpdateWorkflowRequest,
+) (*historyservice.UpdateWorkflowResponse, error) {
+	return nil, serviceerror.NewUnimplemented("UpdateWorkflow is not supported on this server")
+}
+
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
 func (e *historyEngineImpl) RemoveSignalMutableState(
 	ctx context.Context,
@@ -2240,12 +2258,6 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 		),
 	)
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			// workflow not found error, verification logic need to keep waiting in this case
-			// if we return NotFound directly, caller can't tell if it's workflow not found or child not found
-			// standby logic will continue verification
-			return consts.ErrWorkflowNotReady
-		}
 		return err
 	}
 	defer func() { workflowContext.GetReleaseFn()(retError) }()
@@ -2253,9 +2265,8 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	mutableState := workflowContext.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() &&
 		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		// standby logic will stop verification as the parent has already completed
-		// and can't be blocked after failover.
-		return consts.ErrWorkflowCompleted
+		// parent has already completed and can't be blocked after failover.
+		return nil
 	}
 
 	onCurrentBranch, err := historyEventOnCurrentBranch(mutableState, request.ParentInitiatedId, request.ParentInitiatedVersion)

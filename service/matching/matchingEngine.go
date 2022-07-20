@@ -111,8 +111,8 @@ var (
 	historyServiceOperationRetryPolicy = common.CreateHistoryServiceRetryPolicy()
 
 	// ErrNoTasks is exported temporarily for integration test
-	ErrNoTasks    = errors.New("No tasks")
-	errPumpClosed = errors.New("Task queue pump closed its channel")
+	ErrNoTasks    = errors.New("no tasks")
+	errPumpClosed = errors.New("task queue pump closed its channel")
 
 	pollerIDKey pollerIDCtxKey = "pollerID"
 	identityKey identityCtxKey = "identity"
@@ -198,42 +198,43 @@ func (e *matchingEngineImpl) String() string {
 	return buf.String()
 }
 
-// Returns taskQueueManager for a task queue if it is already loaded.
-func (e *matchingEngineImpl) getTaskQueueManagerIfAlreadyLoaded(taskQueue *taskQueueID) taskQueueManager {
+// Returns taskQueueManager for a task queue. If not already cached, and create is true, tries
+// to get new range from DB and create one. This blocks (up to the context deadline) for the
+// task queue to be initialized.
+func (e *matchingEngineImpl) getTaskQueueManager(ctx context.Context, taskQueue *taskQueueID, taskQueueKind enumspb.TaskQueueKind, create bool) (taskQueueManager, error) {
 	e.taskQueuesLock.RLock()
-	defer e.taskQueuesLock.RUnlock()
-	if result, ok := e.taskQueues[*taskQueue]; ok {
-		return result
-	}
-	return nil
-}
+	tqm, ok := e.taskQueues[*taskQueue]
+	e.taskQueuesLock.RUnlock()
 
-// Returns taskQueueManager for a task queue. If not already cached gets new range from DB and
-// if successful creates one.
-func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQueueKind enumspb.TaskQueueKind) (taskQueueManager, error) {
-	result := e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
-	if result != nil {
-		return result, nil
+	if !ok {
+		if !create {
+			return nil, nil
+		}
+
+		// If it gets here, write lock and check again in case a task queue is created between the two locks
+		e.taskQueuesLock.Lock()
+		if tqm, ok = e.taskQueues[*taskQueue]; !ok {
+			var err error
+			tqm, err = newTaskQueueManager(e, taskQueue, taskQueueKind, e.config, e.clusterMeta)
+			if err != nil {
+				e.taskQueuesLock.Unlock()
+				return nil, err
+			}
+			tqm.Start()
+			e.taskQueues[*taskQueue] = tqm
+			countKey := taskQueueCounterKey{namespaceID: taskQueue.namespaceID, taskType: taskQueue.taskType, queueType: taskQueueKind}
+			e.taskQueueCount[countKey]++
+			taskQueueCount := e.taskQueueCount[countKey]
+			e.updateTaskQueueGauge(countKey, taskQueueCount)
+		}
+		e.taskQueuesLock.Unlock()
 	}
 
-	// If it gets here, write lock and check again in case a task queue is created between the two locks
-	e.taskQueuesLock.Lock()
-	defer e.taskQueuesLock.Unlock()
-	if result, ok := e.taskQueues[*taskQueue]; ok {
-		return result, nil
-	}
-	mgr, err := newTaskQueueManager(e, taskQueue, taskQueueKind, e.config, e.clusterMeta)
-	if err != nil {
+	if err := tqm.WaitUntilInitialized(ctx); err != nil {
 		return nil, err
 	}
-	mgr.Start()
-	e.taskQueues[*taskQueue] = mgr
-	countKey := taskQueueCounterKey{namespaceID: taskQueue.namespaceID, taskType: taskQueue.taskType, queueType: taskQueueKind}
-	e.taskQueueCount[countKey]++
-	taskQueueCount := e.taskQueueCount[countKey]
-	e.updateTaskQueueGauge(countKey, taskQueueCount)
 
-	return mgr, nil
+	return tqm, nil
 }
 
 // For use in tests
@@ -256,18 +257,14 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	if err != nil {
 		return false, err
 	}
-	var tqm taskQueueManager
-	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
-		// do not load sticky task queue if it is not already loaded, which means it has no poller.
-		tqm = e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
-		if tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow)) {
-			return false, serviceerrors.NewStickyWorkerUnavailable()
-		}
-	} else {
-		tqm, err = e.getTaskQueueManager(taskQueue, taskQueueKind)
-		if err != nil {
-			return false, err
-		}
+
+	sticky := taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY
+	// do not load sticky task queue if it is not already loaded, which means it has no poller.
+	tqm, err := e.getTaskQueueManager(hCtx, taskQueue, taskQueueKind, !sticky)
+	if err != nil {
+		return false, err
+	} else if sticky && (tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
+		return false, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
@@ -307,18 +304,12 @@ func (e *matchingEngineImpl) AddActivityTask(
 	taskQueueName := addRequest.TaskQueue.GetName()
 	taskQueueKind := addRequest.TaskQueue.GetKind()
 
-	e.logger.Debug(
-		fmt.Sprintf("Received AddActivityTask for taskQueue=%v WorkflowId=%v, RunId=%v",
-			taskQueueName,
-			addRequest.Execution.WorkflowId,
-			addRequest.Execution.RunId))
-
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	if err != nil {
 		return false, err
 	}
 
-	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
+	tlMgr, err := e.getTaskQueueManager(hCtx, taskQueue, taskQueueKind, true)
 	if err != nil {
 		return false, err
 	}
@@ -549,18 +540,13 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
-	var tqm taskQueueManager
-	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
-		// do not load sticky task queue if it is not already loaded, which means it has no poller.
-		tqm = e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
-		if tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow)) {
-			return nil, serviceerrors.NewStickyWorkerUnavailable()
-		}
-	} else {
-		tqm, err = e.getTaskQueueManager(taskQueue, taskQueueKind)
-		if err != nil {
-			return nil, err
-		}
+	sticky := taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY
+	// do not load sticky task queue if it is not already loaded, which means it has no poller.
+	tqm, err := e.getTaskQueueManager(hCtx, taskQueue, taskQueueKind, !sticky)
+	if err != nil {
+		return nil, err
+	} else if sticky && (tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow))) {
+		return nil, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
 	taskID := uuid.New()
@@ -632,7 +618,7 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 		return err
 	}
 	taskQueueKind := request.TaskQueue.GetKind()
-	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
+	tlMgr, err := e.getTaskQueueManager(hCtx, taskQueue, taskQueueKind, true)
 	if err != nil {
 		return err
 	}
@@ -653,7 +639,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		return nil, err
 	}
 	taskQueueKind := request.DescRequest.TaskQueue.GetKind()
-	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
+	tlMgr, err := e.getTaskQueueManager(hCtx, taskQueue, taskQueueKind, true)
 	if err != nil {
 		return nil, err
 	}
@@ -707,6 +693,58 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 	return partitionHostInfo, nil
 }
 
+func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
+	hCtx *handlerContext,
+	req *matchingservice.UpdateWorkerBuildIdOrderingRequest,
+) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueueName := req.GetRequest().GetTaskQueue()
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	if err != nil {
+		return nil, err
+	}
+	err = tqMgr.MutateVersioningData(hCtx.Context, func(data *persistencespb.VersioningData) error {
+		return UpdateVersionsGraph(data, req.GetRequest(), e.config.MaxVersionGraphSize())
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.UpdateWorkerBuildIdOrderingResponse{}, nil
+}
+
+func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
+	hCtx *handlerContext,
+	req *matchingservice.GetWorkerBuildIdOrderingRequest,
+) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueueName := req.GetRequest().GetTaskQueue()
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	if err != nil {
+		if _, ok := err.(*serviceerror.NotFound); ok {
+			return &matchingservice.GetWorkerBuildIdOrderingResponse{}, nil
+		}
+		return nil, err
+	}
+	verDat, err := tqMgr.GetVersioningData(hCtx.Context)
+	if err != nil {
+		if _, ok := err.(*serviceerror.NotFound); ok {
+			return &matchingservice.GetWorkerBuildIdOrderingResponse{}, nil
+		}
+		return nil, err
+	}
+	return &matchingservice.GetWorkerBuildIdOrderingResponse{
+		Response: ToBuildIdOrderingResponse(verDat, int(req.GetRequest().GetMaxDepth())),
+	}, nil
+}
+
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 	host, err := e.keyResolver.Lookup(partitionKey)
 	if err != nil {
@@ -726,6 +764,9 @@ func (e *matchingEngineImpl) getAllPartitions(
 		return partitionKeys, err
 	}
 	taskQueueID, err := newTaskQueueID(namespaceID, taskQueue.GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return partitionKeys, err
+	}
 	rootPartition := taskQueueID.GetRoot()
 
 	partitionKeys = append(partitionKeys, rootPartition)
@@ -750,7 +791,7 @@ func (e *matchingEngineImpl) getTask(
 	maxDispatchPerSecond *float64,
 	taskQueueKind enumspb.TaskQueueKind,
 ) (*internalTask, error) {
-	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
+	tlMgr, err := e.getTaskQueueManager(ctx, taskQueue, taskQueueKind, true)
 	if err != nil {
 		return nil, err
 	}
@@ -903,12 +944,12 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		PollRequest:       pollReq,
 	}
 	var resp *historyservice.RecordWorkflowTaskStartedResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = e.historyService.RecordWorkflowTaskStarted(ctx, request)
 		return err
 	}
-	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
+	err := backoff.ThrottleRetryContext(ctx, op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
 		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerrors.TaskAlreadyStarted:
 			return false
@@ -933,12 +974,12 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		PollRequest:       pollReq,
 	}
 	var resp *historyservice.RecordActivityTaskStartedResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = e.historyService.RecordActivityTaskStarted(ctx, request)
 		return err
 	}
-	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
+	err := backoff.ThrottleRetryContext(ctx, op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
 		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerrors.TaskAlreadyStarted:
 			return false

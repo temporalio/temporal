@@ -25,6 +25,7 @@
 package authorization
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -102,62 +103,62 @@ func (s *defaultAuthorizerSuite) TearDownTest() {
 }
 
 func (s *defaultAuthorizerSuite) TestSystemAdminAuthZ() {
-	result, err := s.authorizer.Authorize(nil, &claimsSystemAdmin, &targetFooBar)
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestSystemWriterAuthZ() {
-	result, err := s.authorizer.Authorize(nil, &claimsSystemWriter, &targetFooBar)
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemWriter, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestSystemReaderAuthZ() {
-	result, err := s.authorizer.Authorize(nil, &claimsSystemReader, &targetFooBar)
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemReader, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestSystemReaderBarUndefinedAuthZ() {
-	result, err := s.authorizer.Authorize(nil, &claimsSystemReaderNamespaceUndefined, &targetFooBar)
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemReaderNamespaceUndefined, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceReaderAuthZ() {
-	result, err := s.authorizer.Authorize(nil, &claimsSystemUndefinedNamespaceReader, &targetFooBar)
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemUndefinedNamespaceReader, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceCaseMismatch() {
-	result, err := s.authorizer.Authorize(nil, &claimsSystemUndefinedNamespaceReader, &targetFooBAR)
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemUndefinedNamespaceReader, &targetFooBAR)
 	s.NoError(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceReaderListNamespaces() {
-	result, err := s.authorizer.Authorize(nil, &claimsSystemUndefinedNamespaceReader, &targetListNamespaces)
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemUndefinedNamespaceReader, &targetListNamespaces)
 	s.NoError(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceReaderDescribeNamespace() {
-	result, err := s.authorizer.Authorize(nil, &claimsSystemUndefinedNamespaceReader, &targetDescribeNamespace)
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemUndefinedNamespaceReader, &targetDescribeNamespace)
 	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestSystemWriterDescribeNamespace() {
-	result, err := s.authorizer.Authorize(nil, &claimsSystemWriter, &targetDescribeNamespace)
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemWriter, &targetDescribeNamespace)
 	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestSystemWriterListNamespaces() {
-	result, err := s.authorizer.Authorize(nil, &claimsSystemWriter, &targetListNamespaces)
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemWriter, &targetListNamespaces)
 	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestSystemAdminDescribeNamespace() {
-	result, err := s.authorizer.Authorize(nil, &claimsSystemAdmin, &targetDescribeNamespace)
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetDescribeNamespace)
 	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestSystemAdminListNamespaces() {
-	result, err := s.authorizer.Authorize(nil, &claimsSystemAdmin, &targetListNamespaces)
+	result, err := s.authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetListNamespaces)
 	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
 }

@@ -264,9 +264,9 @@ CREATE TABLE cluster_membership
     rpc_address          VARCHAR(128) NOT NULL,
     rpc_port             SMALLINT NOT NULL,
     role                 SMALLINT NOT NULL,
-    session_start        TIMESTAMP DEFAULT '1970-01-01 00:00:01',
-    last_heartbeat       TIMESTAMP DEFAULT '1970-01-01 00:00:01',
-    record_expiry        TIMESTAMP DEFAULT '1970-01-01 00:00:01',
+    session_start        TIMESTAMP DEFAULT '1970-01-01 00:00:01+00:00',
+    last_heartbeat       TIMESTAMP DEFAULT '1970-01-01 00:00:01+00:00',
+    record_expiry        TIMESTAMP DEFAULT '1970-01-01 00:00:01+00:00',
     PRIMARY KEY (membership_partition, host_id)
 );
 

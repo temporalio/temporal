@@ -143,7 +143,6 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 		we,
 		mockWeCtx,
 		mockMutableState,
-		int64(123),
 	).Return(nil)
 
 	err := s.timerQueueTaskExecutorBase.executeDeleteHistoryEventTask(
@@ -187,7 +186,6 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 		we,
 		mockWeCtx,
 		mockMutableState,
-		int64(123),
 	).Return(serviceerror.NewInternal("test error"))
 
 	err := s.timerQueueTaskExecutorBase.executeDeleteHistoryEventTask(

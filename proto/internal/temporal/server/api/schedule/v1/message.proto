@@ -61,6 +61,8 @@ message InternalState {
 
     // conflict token is implemented as simple sequence number
     int64 conflict_token = 7;
+
+    bool need_refresh = 9;
 }
 
 message StartScheduleArgs {
@@ -102,7 +104,7 @@ message WatchWorkflowResponse {
 message StartWorkflowRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.StartWorkflowExecutionRequest request = 2;
-    google.protobuf.Timestamp start_time = 3 [(gogoproto.stdtime) = true];
+    reserved 3;
     temporal.api.common.v1.Payloads last_completion_result = 4;
     temporal.api.failure.v1.Failure continued_failure = 5;
 }

@@ -33,7 +33,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -87,9 +86,9 @@ type (
 
 		controller              *gomock.Controller
 		mockShard               *shard.ContextTest
-		mockTxProcessor         *queues.MockProcessor
-		mockTimerProcessor      *queues.MockProcessor
-		mockVisibilityProcessor *queues.MockProcessor
+		mockTxProcessor         *queues.MockQueue
+		mockTimerProcessor      *queues.MockQueue
+		mockVisibilityProcessor *queues.MockQueue
 		mockNamespaceCache      *namespace.MockRegistry
 		mockMatchingClient      *matchingservicemock.MockMatchingServiceClient
 		mockHistoryClient       *historyservicemock.MockHistoryServiceClient
@@ -125,9 +124,9 @@ func (s *engineSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockEventsReapplier = NewMocknDCEventsReapplier(s.controller)
 	s.mockWorkflowResetter = NewMockworkflowResetter(s.controller)
-	s.mockTxProcessor = queues.NewMockProcessor(s.controller)
-	s.mockTimerProcessor = queues.NewMockProcessor(s.controller)
-	s.mockVisibilityProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTxProcessor = queues.NewMockQueue(s.controller)
+	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
+	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
 	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
@@ -192,7 +191,7 @@ func (s *engineSuite) SetupTest() {
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		eventNotifier:      eventNotifier,
 		config:             s.config,
-		queueProcessors: map[tasks.Category]queues.Processor{
+		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():         s.mockTxProcessor,
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
@@ -1202,7 +1201,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
 
-	ms2 := proto.Clone(ms1).(*persistencespb.WorkflowMutableState)
+	ms2 := common.CloneProto(ms1)
 	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse2, nil)
 
@@ -1287,7 +1286,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
 
-	ms2 := proto.Clone(ms1).(*persistencespb.WorkflowMutableState)
+	ms2 := common.CloneProto(ms1)
 	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse2, nil)
 
@@ -1657,7 +1656,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 	s.Equal(5*time.Second, timestamp.DurationValue(activity1Attributes.HeartbeatTimeout))
 }
 
-func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityLocalDispatch() {
+func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_NotCancelled() {
 	namespaceID := tests.NamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
@@ -1762,6 +1761,88 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityLocalDispatch() {
 	s.Equal(int32(1), activityTask.Attempt)
 	s.Nil(activityTask.HeartbeatDetails)
 	s.Equal(tests.LocalNamespaceEntry.Name().String(), activityTask.WorkflowNamespace)
+}
+
+func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityEagerExecution_Cancelled() {
+	namespaceID := tests.NamespaceID
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+	tl := "testTaskQueue"
+	tt := &tokenspb.Task{
+		Attempt:          1,
+		NamespaceId:      namespaceID.String(),
+		WorkflowId:       tests.WorkflowID,
+		RunId:            we.GetRunId(),
+		ScheduledEventId: 2,
+	}
+	taskToken, _ := tt.Marshal()
+	identity := "testIdentity"
+	input := payloads.EncodeString("input")
+
+	msBuilder := workflow.TestLocalMutableState(s.mockHistoryEngine.shard, s.eventsCache,
+		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
+	wt := addWorkflowTaskScheduledEvent(msBuilder)
+	addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, tl, identity)
+
+	scheduleToCloseTimeout := timestamp.DurationPtr(90 * time.Second)
+	scheduleToStartTimeout := timestamp.DurationPtr(10 * time.Second)
+	startToCloseTimeout := timestamp.DurationPtr(50 * time.Second)
+	heartbeatTimeout := timestamp.DurationPtr(5 * time.Second)
+	commands := []*commandpb.Command{
+		{
+			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:             "activity1",
+				ActivityType:           &commonpb.ActivityType{Name: "activity_type1"},
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+				Input:                  input,
+				ScheduleToCloseTimeout: scheduleToCloseTimeout,
+				ScheduleToStartTimeout: scheduleToStartTimeout,
+				StartToCloseTimeout:    startToCloseTimeout,
+				HeartbeatTimeout:       heartbeatTimeout,
+				RequestEagerExecution:  true,
+			}},
+		},
+		{
+			CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
+			Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
+				ScheduledEventId: 5,
+			}},
+		},
+	}
+
+	ms := workflow.TestCloneToProto(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+
+	resp, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			TaskToken:             taskToken,
+			Commands:              commands,
+			Identity:              identity,
+			ReturnNewWorkflowTask: true,
+		},
+	})
+	s.NoError(err)
+	executionBuilder := s.getBuilder(tests.NamespaceID, we)
+	s.Equal(int64(10), executionBuilder.GetNextEventID()) // activity scheduled, request cancel, cancelled, workflow task scheduled, started
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartedEventId)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
+	s.True(executionBuilder.HasPendingWorkflowTask())
+
+	_, ok := executionBuilder.GetActivityByActivityID("activity1")
+	s.False(ok)
+
+	s.Len(resp.ActivityTasks, 0)
+	s.NotNil(resp.StartedResponse)
+	s.Equal(int64(10), resp.StartedResponse.NextEventId)
+	s.Equal(int64(3), resp.StartedResponse.PreviousStartedEventId)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTimeout() {
@@ -5259,7 +5340,7 @@ func addWorkflowTaskCompletedEvent(builder workflow.MutableState, scheduledEvent
 		Identity: identity,
 	}, configs.DefaultHistoryMaxAutoResetPoints)
 
-	builder.FlushBufferedEvents() // nolint:errcheck
+	builder.FlushBufferedEvents()
 
 	return event
 }

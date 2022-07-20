@@ -38,7 +38,7 @@ import (
 )
 
 type (
-	maxReadAckLevel func() int64
+	maxReadLevel func() int64
 
 	updateTransferAckLevel func(ackLevel int64) error
 	transferQueueShutdown  func() error
@@ -47,7 +47,7 @@ type (
 		shard                  shard.Context
 		options                *QueueProcessorOptions
 		executionManager       persistence.ExecutionManager
-		maxReadAckLevel        maxReadAckLevel
+		maxReadLevel           maxReadLevel
 		updateTransferAckLevel updateTransferAckLevel
 		transferQueueShutdown  transferQueueShutdown
 		logger                 log.Logger
@@ -57,7 +57,7 @@ type (
 func newTransferQueueProcessorBase(
 	shard shard.Context,
 	options *QueueProcessorOptions,
-	maxReadAckLevel maxReadAckLevel,
+	maxReadLevel maxReadLevel,
 	updateTransferAckLevel updateTransferAckLevel,
 	transferQueueShutdown transferQueueShutdown,
 	logger log.Logger,
@@ -66,7 +66,7 @@ func newTransferQueueProcessorBase(
 		shard:                  shard,
 		options:                options,
 		executionManager:       shard.GetExecutionManager(),
-		maxReadAckLevel:        maxReadAckLevel,
+		maxReadLevel:           maxReadLevel,
 		updateTransferAckLevel: updateTransferAckLevel,
 		transferQueueShutdown:  transferQueueShutdown,
 		logger:                 logger,
@@ -80,7 +80,7 @@ func (t *transferQueueProcessorBase) readTasks(
 		ShardID:             t.shard.GetShardID(),
 		TaskCategory:        tasks.CategoryTransfer,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(readLevel + 1),
-		ExclusiveMaxTaskKey: tasks.NewImmediateKey(t.maxReadAckLevel() + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(t.maxReadLevel()),
 		BatchSize:           t.options.BatchSize(),
 	})
 	if err != nil {

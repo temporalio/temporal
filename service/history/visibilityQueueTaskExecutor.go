@@ -28,12 +28,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -455,7 +454,7 @@ func copyMemo(
 
 	result := make(map[string]*commonpb.Payload)
 	for k, v := range memoFields {
-		result[k] = proto.Clone(v).(*commonpb.Payload)
+		result[k] = common.CloneProto(v)
 	}
 	return result
 }
@@ -478,7 +477,7 @@ func copySearchAttributes(
 
 	result := make(map[string]*commonpb.Payload)
 	for k, v := range input {
-		result[k] = proto.Clone(v).(*commonpb.Payload)
+		result[k] = common.CloneProto(v)
 	}
 	return result
 }
