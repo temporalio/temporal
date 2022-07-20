@@ -48,7 +48,7 @@ func AdminDecodeProto(c *cli.Context) error {
 	if binaryFile != "" {
 		protoData, err = os.ReadFile(binaryFile)
 		if err != nil {
-			return fmt.Errorf("Unable to read binary file %s: %s", binaryFile, err)
+			return fmt.Errorf("unable to read binary file %s: %s", binaryFile, err)
 		}
 	}
 
@@ -58,7 +58,7 @@ func AdminDecodeProto(c *cli.Context) error {
 		if hexData == "" && hexFile != "" {
 			hexBytes, err := os.ReadFile(hexFile)
 			if err != nil {
-				return fmt.Errorf("Unable to read hex file %s: %s", hexFile, err)
+				return fmt.Errorf("unable to read hex file %s: %s", hexFile, err)
 			}
 			hexData = string(hexBytes)
 		}
@@ -76,29 +76,29 @@ func AdminDecodeProto(c *cli.Context) error {
 					cutLen = len(hexData)
 					dots = ""
 				}
-				return fmt.Errorf("Unable to decode hex data %s%s: %s", hexData[:cutLen], dots, err)
+				return fmt.Errorf("unable to decode hex data %s%s: %s", hexData[:cutLen], dots, err)
 			}
 		}
 	}
 
 	if protoData == nil {
-		return fmt.Errorf("No data flag is specified")
+		return fmt.Errorf("missing required parameter data flag")
 	}
 
 	messageType := proto.MessageType(protoType)
 	if messageType == nil {
-		return fmt.Errorf("Unable to find %s type", protoType)
+		return fmt.Errorf("unable to find %s type", protoType)
 	}
 	message := reflect.New(messageType.Elem()).Interface().(proto.Message)
 	err = proto.Unmarshal(protoData, message)
 	if err != nil {
-		return fmt.Errorf("Unable to unmarshal to %s", protoType)
+		return fmt.Errorf("unable to unmarshal to %s", protoType)
 	}
 
 	encoder := codec.NewJSONPBIndentEncoder(" ")
 	json, err := encoder.Encode(message)
 	if err != nil {
-		return fmt.Errorf("Unable to encode to JSON: %s", err)
+		return fmt.Errorf("unable to encode to JSON: %s", err)
 	}
 	fmt.Println()
 	fmt.Println(string(json))
@@ -111,13 +111,13 @@ func AdminDecodeBase64(c *cli.Context) error {
 	if base64Data == "" && base64File != "" {
 		base64Bytes, err := os.ReadFile(base64File)
 		if err != nil {
-			return fmt.Errorf("Unable to read base64 file %s: %s", base64File, err)
+			return fmt.Errorf("unable to read base64 file %s: %s", base64File, err)
 		}
 		base64Data = string(base64Bytes)
 	}
 
 	if base64Data == "" {
-		return fmt.Errorf("No data flag is specified")
+		return fmt.Errorf("no data flag is specified")
 	}
 
 	data, err := base64.StdEncoding.DecodeString(base64Data)

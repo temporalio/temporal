@@ -80,11 +80,11 @@ func AdminListTaskQueueTasks(c *cli.Context) error {
 	tqName := c.String(FlagTaskQueue)
 	tlTypeInt, err := stringToEnum(c.String(FlagTaskQueueType), enumspb.TaskQueueType_value)
 	if err != nil {
-		return fmt.Errorf("Failed to parse TaskQueue Type: %s", err)
+		return fmt.Errorf("invalid task queue type: %v", err)
 	}
 	tqType := enumspb.TaskQueueType(tlTypeInt)
 	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-		return fmt.Errorf("TaskQueue type Unspecified is currently not supported")
+		return fmt.Errorf("missing Task Queue type")
 	}
 	minTaskID := c.Int64(FlagMinTaskID)
 	maxTaskID := c.Int64(FlagMaxTaskID)
@@ -140,7 +140,7 @@ func AdminListTaskQueueTasks(c *cli.Context) error {
 	}
 
 	if err := paginate(c, paginationFunc, pageSize); err != nil {
-		return fmt.Errorf("Failed to list task queue tasks: %s", err)
+		return fmt.Errorf("unable to list Task Queue Tasks: %v", err)
 	}
 	return nil
 }

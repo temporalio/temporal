@@ -142,7 +142,7 @@ func AdminPurgeDLQMessages(c *cli.Context) error {
 		ShardId:               int32(shardID),
 		InclusiveEndMessageId: lastMessageID,
 	}); err != nil {
-		return fmt.Errorf("Failed to purge dlq")
+		return fmt.Errorf("failed to purge DLQ")
 	}
 	fmt.Println("Successfully purged DLQ Messages.")
 	return nil
@@ -183,7 +183,7 @@ func AdminMergeDLQMessages(c *cli.Context) error {
 	for response == nil || len(response.GetNextPageToken()) > 0 {
 		response, err = adminClient.MergeDLQMessages(ctx, request)
 		if err != nil {
-			return fmt.Errorf("Failed to merge DLQ message: %s", err)
+			return fmt.Errorf("failed to merge DLQ message: %s", err)
 		}
 
 		request.NextPageToken = response.NextPageToken
@@ -200,7 +200,7 @@ func toQueueType(dlqType string) (enumsspb.DeadLetterQueueType, error) {
 	case "history":
 		return enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION, nil
 	default:
-		return enumsspb.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED, fmt.Errorf("queue type %v is not supported", dlqType)
+		return enumsspb.DEAD_LETTER_QUEUE_TYPE_UNSPECIFIED, fmt.Errorf("unsupported Tueue type %v", dlqType)
 	}
 }
 

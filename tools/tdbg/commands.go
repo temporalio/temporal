@@ -46,8 +46,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-const maxEventID = 9999
-
 // AdminShowWorkflow shows history
 func AdminShowWorkflow(c *cli.Context) error {
 	namespace, err := getRequiredGlobalOption(c, FlagNamespace)
@@ -84,7 +82,7 @@ func AdminShowWorkflow(c *cli.Context) error {
 		NextPageToken:     nil,
 	})
 	if err != nil {
-		return fmt.Errorf("ReadHistoryBranch err: %s", err)
+		return fmt.Errorf("unable to read History Branch: %s", err)
 	}
 
 	allEvents := &historypb.History{}
@@ -94,13 +92,13 @@ func AdminShowWorkflow(c *cli.Context) error {
 		fmt.Printf("======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
 		historyBatch, err := serializer.DeserializeEvents(b)
 		if err != nil {
-			return fmt.Errorf("DeserializeEvents err: %s", err)
+			return fmt.Errorf("unable to deserialize Events: %s", err)
 		}
 		allEvents.Events = append(allEvents.Events, historyBatch...)
 		encoder := codec.NewJSONPBEncoder()
 		data, err := encoder.EncodeHistoryEvents(historyBatch)
 		if err != nil {
-			return fmt.Errorf("EncodeHistoryEvents err: %s", err)
+			return fmt.Errorf("unable to encode History Events: %s", err)
 		}
 		fmt.Println(string(data))
 	}
@@ -110,10 +108,10 @@ func AdminShowWorkflow(c *cli.Context) error {
 		encoder := codec.NewJSONPBEncoder()
 		data, err := encoder.EncodeHistoryEvents(allEvents.Events)
 		if err != nil {
-			return fmt.Errorf("Failed to serialize history data: %s", err)
+			return fmt.Errorf("unable to serialize History data: %s", err)
 		}
 		if err := os.WriteFile(outputFileName, data, 0666); err != nil {
-			return fmt.Errorf("Failed to export history data file: %s", err)
+			return fmt.Errorf("unable to export History data file: %s", err)
 		}
 	}
 	return nil
@@ -177,14 +175,14 @@ func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateRes
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("Get workflow mutableState failed: %s", err)
+		return nil, fmt.Errorf("unable to get Workflow Mutable State: %s", err)
 	}
 	return resp, nil
 }
 
 // AdminDeleteWorkflow delete a workflow execution from Cassandra and visibility document from Elasticsearch.
 func AdminDeleteWorkflow(c *cli.Context) error {
-	return fmt.Errorf("Not implemented")
+	return fmt.Errorf("not implemented")
 }
 
 // AdminGetShardID get shardID
@@ -194,7 +192,7 @@ func AdminGetShardID(c *cli.Context) error {
 	numberOfShards := int32(c.Int(FlagNumberOfShards))
 
 	if numberOfShards <= 0 {
-		return fmt.Errorf("numberOfShards is required")
+		return fmt.Errorf("missing required parameter number of Shards")
 	}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, wid, numberOfShards)
 	fmt.Printf("ShardId for namespace, workflowId: %v, %v is %v \n", namespaceID, wid, shardID)
@@ -209,13 +207,13 @@ func AdminListShardTasks(c *cli.Context) error {
 	if err != nil {
 		categoryInt, err := strconv.Atoi(categoryStr)
 		if err != nil {
-			return fmt.Errorf("Failed to parse task type: %s", err)
+			return fmt.Errorf("unable to parse Task type: %s", err)
 		}
 		categoryValue = int32(categoryInt)
 	}
 	category := enumsspb.TaskCategory(categoryValue)
 	if category == enumsspb.TASK_CATEGORY_UNSPECIFIED {
-		return fmt.Errorf("Task type is unspecified: %s", err)
+		return fmt.Errorf("missing required parameter Task type: %s", err)
 	}
 
 	client := cFactory.AdminClient(c)
@@ -265,7 +263,7 @@ func AdminListShardTasks(c *cli.Context) error {
 		return items, token, nil
 	}
 	if err := paginate(c, paginationFunc, pageSize); err != nil {
-		return fmt.Errorf("Failed to list history tasks: %s", err)
+		return fmt.Errorf("unable to list History tasks: %s", err)
 	}
 	return nil
 }
@@ -277,11 +275,11 @@ func AdminRemoveTask(c *cli.Context) error {
 	taskID := c.Int64(FlagTaskID)
 	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
 	if err != nil {
-		return fmt.Errorf("Failed to parse Task Type: %s", err)
+		return fmt.Errorf("unable to parse Task Type: %s", err)
 	}
 	category := enumsspb.TaskCategory(categoryInt)
 	if category == enumsspb.TASK_CATEGORY_UNSPECIFIED {
-		return fmt.Errorf("Task type %s is currently not supported", category)
+		return fmt.Errorf("task type %s is currently not supported", category)
 	}
 	var visibilityTimestamp int64
 	if category == enumsspb.TASK_CATEGORY_TIMER {
@@ -300,7 +298,7 @@ func AdminRemoveTask(c *cli.Context) error {
 
 	_, err = adminClient.RemoveTask(ctx, req)
 	if err != nil {
-		return fmt.Errorf("Remove task has failed: %s", err)
+		return fmt.Errorf("unable to remove Task: %s", err)
 	}
 	return nil
 }
@@ -314,7 +312,7 @@ func AdminDescribeShard(c *cli.Context) error {
 	response, err := adminClient.GetShard(ctx, &adminservice.GetShardRequest{ShardId: int32(sid)})
 
 	if err != nil {
-		return fmt.Errorf("Failed to initialize shard manager: %s", err)
+		return fmt.Errorf("unable to initialize Shard Manager: %s", err)
 	}
 
 	prettyPrintJSONObject(response.ShardInfo)
@@ -334,7 +332,7 @@ func AdminShardManagement(c *cli.Context) error {
 
 	_, err := adminClient.CloseShard(ctx, req)
 	if err != nil {
-		return fmt.Errorf("Close shard task has failed: %s", err)
+		return fmt.Errorf("unable to close Shard Task: %s", err)
 	}
 	return nil
 }
@@ -348,7 +346,7 @@ func AdminListGossipMembers(c *cli.Context) error {
 	defer cancel()
 	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
 	if err != nil {
-		return fmt.Errorf("Operation DescribeCluster failed: %s", err)
+		return fmt.Errorf("unable to describe Cluster: %s", err)
 	}
 
 	members := response.MembershipInfo.Rings
@@ -373,7 +371,7 @@ func AdminListClusterMembers(c *cli.Context) error {
 	// TODO: refactor this: parseTime shouldn't be used for duration.
 	heartbeatFlag, err := parseTime(c.String(FlagFrom), time.Time{}, time.Now().UTC())
 	if err != nil {
-		return fmt.Errorf("Unable to parse heartbeat time: %s", err)
+		return fmt.Errorf("unable to parse Heartbeat time: %s", err)
 	}
 	heartbeat := time.Duration(heartbeatFlag.UnixNano())
 
@@ -388,7 +386,7 @@ func AdminListClusterMembers(c *cli.Context) error {
 
 	resp, err := adminClient.ListClusterMembers(ctx, req)
 	if err != nil {
-		return fmt.Errorf("unable to list cluster members: %s", err)
+		return fmt.Errorf("unable to list Cluster Members: %s", err)
 	}
 
 	members := resp.ActiveMembers
@@ -418,7 +416,7 @@ func AdminDescribeHistoryHost(c *cli.Context) error {
 		flagsCount++
 	}
 	if flagsCount != 1 {
-		return fmt.Errorf("must provide one and only one: shard id or namespace & workflow id or host address")
+		return fmt.Errorf("missing required parameter either Shard Id, Namespace, Workflow Id or Host address")
 	}
 
 	ctx, cancel := newContext(c)
@@ -436,7 +434,7 @@ func AdminDescribeHistoryHost(c *cli.Context) error {
 
 	resp, err := adminClient.DescribeHistoryHost(ctx, req)
 	if err != nil {
-		return fmt.Errorf("Describe history host failed: %s", err)
+		return fmt.Errorf("unable to describe History host: %s", err)
 	}
 
 	if !printFully {
@@ -468,7 +466,7 @@ func AdminRefreshWorkflowTasks(c *cli.Context) error {
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("Refresh workflow task failed: %s", err)
+		return fmt.Errorf("unable to refresh Workflow Task: %s", err)
 	} else {
 		fmt.Println("Refresh workflow task succeeded.")
 	}
