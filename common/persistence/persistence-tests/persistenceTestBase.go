@@ -354,7 +354,7 @@ func (s *TestBase) GetAckLevels(
 }
 
 // PublishToNamespaceDLQ is a utility method to add messages to the namespace DLQ
-func (s *TestBase) PublishToNamespaceDLQ(ctx context.Context, task *replicationspb.ReplicationTask,) error {
+func (s *TestBase) PublishToNamespaceDLQ(ctx context.Context, task *replicationspb.ReplicationTask) error {
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	retryPolicy.SetBackoffCoefficient(1.5)
 	retryPolicy.SetMaximumAttempts(5)
