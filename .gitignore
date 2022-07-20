@@ -18,6 +18,7 @@
 # Executables produced by temporal repo
 /temporal-*
 /tctl*
+/tdbg
 
 # Build info
 /build
