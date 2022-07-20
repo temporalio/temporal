@@ -71,16 +71,6 @@ func getRequiredGlobalOption(c *cli.Context, optionName string) (string, error) 
 	return value, nil
 }
 
-func formatTime(t time.Time, onlyTime bool) string {
-	var result string
-	if onlyTime {
-		result = t.Format(defaultTimeFormat)
-	} else {
-		result = t.Format(defaultDateTimeFormat)
-	}
-	return result
-}
-
 func parseTime(timeStr string, defaultValue time.Time, now time.Time) (time.Time, error) {
 	if len(timeStr) == 0 {
 		return defaultValue, nil
