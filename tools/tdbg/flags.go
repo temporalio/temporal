@@ -26,14 +26,8 @@ package tdbg
 
 // Flags used to specify cli command line arguments
 var (
-	FlagUsername                   = "username"
-	FlagPassword                   = "password"
-	FlagKeyspace                   = "keyspace"
 	FlagAddress                    = "address"
 	FlagHistoryAddress             = "history-address"
-	FlagDBEngine                   = "db-engine"
-	FlagDBAddress                  = "db-address"
-	FlagDBPort                     = "db-port"
 	FlagNamespaceID                = "namespace-id"
 	FlagNamespace                  = "namespace"
 	FlagNamespaceAlias             = []string{"n"}
@@ -49,10 +43,6 @@ var (
 	FlagTaskQueueType              = "task-queue-type"
 	FlagContextTimeout             = "context-timeout"
 	FlagContextTimeoutAlias        = []string{"ct"}
-	FlagInput                      = "input"
-	FlagInputAlias                 = []string{"i"}
-	FlagInputFile                  = "input-file"
-	FlagInputFileAlias             = []string{"if"}
 	FlagCluster                    = "cluster"
 	FlagPageSize                   = "pagesize"
 	FlagFrom                       = "from"
@@ -75,18 +65,11 @@ var (
 	FlagTLSServerName              = "tls-server-name"
 	FlagLastMessageID              = "last-message-id"
 	FlagYes                        = "yes"
-	FlagVersion                    = "version"
 	FlagMore                       = "more"
-	FlagElasticsearchURL           = "url"
 	FlagMinEventVersion            = "min-event-version"
 	FlagMaxEventVersion            = "max-event-version"
 	FlagMinTaskID                  = "min-task-id"
 	FlagMaxTaskID                  = "max-task-id"
-	FlagElasticsearchIndex         = "index"
-	FlagElasticsearchUsername      = "es-username"
-	FlagElasticsearchPassword      = "es-password"
-	FlagFrontendAddress            = "frontend-address"
-	FlagConnectionEnable           = "enable-connection"
 	FlagDLQType                    = "dlq-type"
 	FlagMaxMessageCount            = "max-message-count"
 	FlagProtoType                  = "type"
