@@ -63,9 +63,7 @@ func AdminDecodeProto(c *cli.Context) error {
 			hexData = string(hexBytes)
 		}
 
-		if strings.HasPrefix(hexData, "0x") {
-			hexData = strings.TrimPrefix(hexData, "0x")
-		}
+		hexData = strings.TrimPrefix(hexData, "0x")
 
 		if hexData != "" {
 			protoData, err = hex.DecodeString(hexData)

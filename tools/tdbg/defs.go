@@ -26,8 +26,6 @@ package tdbg
 
 import (
 	"time"
-
-	"github.com/olekukonko/tablewriter"
 )
 
 const (
@@ -53,6 +51,5 @@ const (
 )
 
 var (
-	cFactory        ClientFactory
-	tableHeaderBlue = tablewriter.Colors{tablewriter.FgHiBlueColor}
+	cFactory ClientFactory
 )
