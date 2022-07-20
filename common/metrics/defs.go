@@ -450,8 +450,12 @@ const (
 	MatchingClientListTaskQueuePartitionsScope
 	// MatchingClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to matching service
 	MatchingClientUpdateWorkerBuildIdOrderingScope
-	// MatchingGetBuildIdOrdering tracks RPC calls to matching service
+	// MatchingGetWorkerBuildIdOrderingScope tracks RPC calls to matching service
 	MatchingClientGetWorkerBuildIdOrderingScope
+	// MatchingClientInvalidateTaskQueueMetadataScope tracks RPC calls to matching service
+	MatchingClientInvalidateTaskQueueMetadataScope
+	// MatchingClientGetTaskQueueMetadataScope tracks RPC calls to matching service
+	MatchingClientGetTaskQueueMetadataScope
 	// FrontendClientDeprecateNamespaceScope tracks RPC calls to frontend service
 	FrontendClientDeprecateNamespaceScope
 	// FrontendClientDescribeNamespaceScope tracks RPC calls to frontend service

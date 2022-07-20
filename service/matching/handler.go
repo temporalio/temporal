@@ -391,6 +391,22 @@ func (h *Handler) GetWorkerBuildIdOrdering(
 	return response, err
 }
 
+func (h *Handler) InvalidateTaskQueueMetadata(
+	ctx context.Context,
+	request *matchingservice.InvalidateTaskQueueMetadataRequest,
+) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (h *Handler) GetTaskQueueMetadata(
+	ctx context.Context,
+	request *matchingservice.GetTaskQueueMetadataRequest,
+) (*matchingservice.GetTaskQueueMetadataResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 	entry, err := h.namespaceRegistry.GetNamespaceByID(id)
 	if err != nil {

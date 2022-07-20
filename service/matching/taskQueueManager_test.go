@@ -510,9 +510,38 @@ func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartition(t *testing.T
 		func(tqm *taskQueueManagerImpl) {
 			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
 			mockMatchingClient.EXPECT().GetWorkerBuildIdOrdering(gomock.Any(), gomock.Any()).
-				Return(asResp, nil).AnyTimes()
+				Return(asResp, nil)
 			tqm.matchingClient = mockMatchingClient
 		})
 	subTq.Start()
 	require.NoError(t, subTq.WaitUntilInitialized(ctx))
+}
+
+func TestTaskQueueRootPartitionPropagatesVersioningInfoToChildren(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+
+	n0 := mkVerIdNode("0")
+	n1 := mkVerIdNode("1")
+	n1.PreviousIncompatible = n0
+	data := &persistencespb.VersioningData{
+		CurrentDefault: n1,
+	}
+	rootTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), defaultTqId(),
+		func(tqm *taskQueueManagerImpl) {
+			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+			mockMatchingClient.EXPECT().InvalidateTaskQueueMetadata(gomock.Any(), gomock.Any()).
+				Return(&matchingservice.InvalidateTaskQueueMetadataResponse{}, nil)
+			tqm.matchingClient = mockMatchingClient
+		})
+
+	rootTq.Start()
+	require.NoError(t, rootTq.WaitUntilInitialized(ctx))
+	// Make a change, verify it's propagated to children
+	require.NoError(t, rootTq.MutateVersioningData(ctx, func(vd *persistencespb.VersioningData) error {
+		vd = data
+		return nil
+	}))
+
 }

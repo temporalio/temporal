@@ -261,7 +261,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	// TODO: Could kick off fetching here?
+	// TODO: kick off fetching here
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
 }
@@ -666,7 +666,6 @@ func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartition(ctx context.
 			Namespace: c.namespace.String(), TaskQueue: rootTqName,
 		},
 	})
-	println(res)
 	c.db.versioningData = &persistencespb.VersioningData{
 		CurrentDefault:   res.Response.CurrentDefault,
 		CompatibleLeaves: res.Response.CompatibleLeaves,
