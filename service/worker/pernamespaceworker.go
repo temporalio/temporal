@@ -173,7 +173,7 @@ func (wm *perNamespaceWorkerManager) Stop() {
 }
 
 func (wm *perNamespaceWorkerManager) namespaceCallback(ns *namespace.Namespace, deleted bool) {
-	go wm.getWorkerSet(ns).refresh(ns, deleted)
+	go wm.getWorkerByNamespace(ns).refresh(ns, deleted)
 }
 
 func (wm *perNamespaceWorkerManager) membershipChangedListener() {
@@ -186,7 +186,7 @@ func (wm *perNamespaceWorkerManager) membershipChangedListener() {
 	}
 }
 
-func (wm *perNamespaceWorkerManager) getWorkerSet(ns *namespace.Namespace) *perNamespaceWorker {
+func (wm *perNamespaceWorkerManager) getWorkerByNamespace(ns *namespace.Namespace) *perNamespaceWorker {
 	wm.lock.Lock()
 	defer wm.lock.Unlock()
 
@@ -203,20 +203,20 @@ func (wm *perNamespaceWorkerManager) getWorkerSet(ns *namespace.Namespace) *perN
 	return worker
 }
 
-func (wm *perNamespaceWorkerManager) removeWorkerSet(ns *namespace.Namespace) {
+func (wm *perNamespaceWorkerManager) removeWorker(ns *namespace.Namespace) {
 	wm.lock.Lock()
 	defer wm.lock.Unlock()
 	delete(wm.workers, ns.ID())
 }
 
-func (wm *perNamespaceWorkerManager) responsibleForNamespace(ns *namespace.Namespace) (int, error) {
-	numWorkers := wm.config.PerNSNumWorkers(ns.Name().String())
+func (wm *perNamespaceWorkerManager) getWorkerMultiplicity(ns *namespace.Namespace) (int, error) {
+	workerCount := wm.config.PerNamespaceWorkerCount(ns.Name().String())
 	// This can result in fewer than the intended number of workers if numWorkers > 1, because
 	// multiple lookups might land on the same node. To compensate, we increase the number of
 	// pollers in that case, but it would be better to try to spread them across our nodes.
 	// TODO: implement this properly using LookupN in serviceResolver
 	multiplicity := 0
-	for i := 0; i < numWorkers; i++ {
+	for i := 0; i < workerCount; i++ {
 		key := fmt.Sprintf("%s/%d", ns.ID().String(), i)
 		target, err := wm.serviceResolver.Lookup(key)
 		if err != nil {
@@ -248,7 +248,7 @@ func (w *perNamespaceWorker) refresh(newNs *namespace.Namespace, newDeleted bool
 
 		if deleted {
 			// if namespace is fully deleted from db, we can remove from our map also
-			w.wm.removeWorkerSet(ns)
+			w.wm.removeWorker(ns)
 		}
 		return
 	}
@@ -273,7 +273,7 @@ func (w *perNamespaceWorker) refresh(newNs *namespace.Namespace, newDeleted bool
 		}
 
 		// check if we are responsible for this namespace at all
-		multiplicity, err := w.wm.responsibleForNamespace(ns)
+		multiplicity, err := w.wm.getWorkerMultiplicity(ns)
 		if err != nil {
 			// TODO: add metric for errors here
 			return err
@@ -327,6 +327,7 @@ func (w *perNamespaceWorker) startWorker(
 	multiplicity int,
 ) (sdkclient.Client, sdkworker.Worker, error) {
 	nsName := ns.Name().String()
+	// TODO: after sdk supports cloning clients to share connections, use that here
 	client, err := w.wm.sdkClientFactory.NewClient(nsName, w.wm.logger)
 	if err != nil {
 		return nil, nil, err

@@ -110,7 +110,7 @@ type (
 		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 		EnableBatcher                         dynamicconfig.BoolPropertyFn
 		EnableParentClosePolicyWorker         dynamicconfig.BoolPropertyFn
-		PerNSNumWorkers                       dynamicconfig.IntPropertyFnWithNamespaceFilter
+		PerNamespaceWorkerCount               dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 		StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 		StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
@@ -299,8 +299,8 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 			dynamicconfig.EnableParentClosePolicyWorker,
 			true,
 		),
-		PerNSNumWorkers: dc.GetIntPropertyFilteredByNamespace(
-			dynamicconfig.WorkerPerNSNumWorkers,
+		PerNamespaceWorkerCount: dc.GetIntPropertyFilteredByNamespace(
+			dynamicconfig.WorkerPerNamespaceWorkerCount,
 			1,
 		),
 		ThrottledLogRPS: dc.GetIntProperty(

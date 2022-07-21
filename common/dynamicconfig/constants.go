@@ -636,8 +636,8 @@ const (
 	WorkerParentCloseMaxConcurrentActivityTaskPollers = "worker.ParentCloseMaxConcurrentActivityTaskPollers"
 	// WorkerParentCloseMaxConcurrentWorkflowTaskPollers indicates worker parent close worker max concurrent workflow pollers
 	WorkerParentCloseMaxConcurrentWorkflowTaskPollers = "worker.ParentCloseMaxConcurrentWorkflowTaskPollers"
-	// WorkerPerNSNumWorkers controls number of per-ns (scheduler, batcher, etc.) workers to run per namespace
-	WorkerPerNSNumWorkers = "worker.perNSNumWorkers"
+	// WorkerPerNamespaceWorkerCount controls number of per-ns (scheduler, batcher, etc.) workers to run per namespace
+	WorkerPerNamespaceWorkerCount = "worker.perNamespaceWorkerCount"
 	// WorkerEnableScheduler controls whether to start the worker for scheduled workflows
 	WorkerEnableScheduler = "worker.enableScheduler"
 )
