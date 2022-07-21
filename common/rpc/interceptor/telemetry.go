@@ -122,7 +122,7 @@ func (ti *TelemetryInterceptor) Intercept(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	_, methodName := splitMethodName(info.FullMethod)
-	metricsScope, logTags := ti.metricsScopeLogTags(req, methodName)
+	metricsScope, logTags := ti.metricsScopeLogTags(req, info.FullMethod, methodName)
 
 	ctx = context.WithValue(ctx, metricsCtxKey, metricsScope)
 	metricsScope.IncCounter(metrics.ServiceRequests)
@@ -209,12 +209,13 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 
 func (ti *TelemetryInterceptor) metricsScopeLogTags(
 	req interface{},
+	fullMethod string,
 	methodName string,
 ) (metrics.Scope, []tag.Tag) {
 
 	// if the method name is not defined, will default to
 	// unknown scope, which carries value 0
-	scopeDef := ti.scopes[methodName]
+	scopeDef := ti.scopes[fullMethod]
 	scopeDef = ti.overrideScope(scopeDef, req)
 
 	nsName := GetNamespace(ti.namespaceRegistry, req)
