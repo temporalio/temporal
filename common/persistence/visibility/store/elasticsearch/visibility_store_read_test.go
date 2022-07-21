@@ -471,6 +471,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 	// test invalid query with ORDER BY
 	request.Query = `ORDER BY WorkflowId`
 	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.Nil(p)
 	s.Error(err)
 	var converterErr *query.ConverterError
 	s.ErrorAs(err, &converterErr)
