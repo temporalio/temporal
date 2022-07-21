@@ -757,7 +757,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
 	// namespaces along with the individual namespaces stats
 	adh.metricsClient.
-		Scope(metrics.AdminGetWorkflowExecutionRawHistoryScope).
+		Scope(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope).
 		RecordDistribution(metrics.HistorySize, size)
 	scope.RecordDistribution(metrics.HistorySize, size)
 

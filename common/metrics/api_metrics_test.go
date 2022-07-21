@@ -25,7 +25,6 @@
 package metrics
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -52,35 +51,31 @@ func (s *apiMetricsSuite) TearDownTest() {
 
 }
 
-func (s *apiMetricsSuite) TestFrontendAPIMetrics() {
-	apiNames := FrontendAPIMetricsNames()
-	apiNameToScope := FrontendAPIMetricsScopes()
-	for apiName := range apiNames {
-		if _, ok := apiNameToScope[apiName]; !ok {
-			fmt.Println(apiName)
+func (s *apiMetricsSuite) assertAllAPIHasMetricsDefined(apiNames map[string]string, scopeDef map[string]int) {
+	for _, fullName := range apiNames {
+		if _, ok := scopeDef[fullName]; !ok {
+			s.Fail("Missing metrics scope.", "API %s does not have metrics scope defined.", fullName)
 		}
 	}
+}
+
+func (s *apiMetricsSuite) TestFrontendAPIMetrics() {
+	apiNames := frontendAPIMetricsNames()
+	apiNameToScope := FrontendAPIMetricsScopes()
+	s.assertAllAPIHasMetricsDefined(apiNames, apiNameToScope)
 	s.Equal(len(apiNames), len(apiNameToScope))
 }
 
 func (s *apiMetricsSuite) TestMatchingAPIMetrics() {
-	apiNames := MatchingAPIMetricsNames()
+	apiNames := matchingAPIMetricsNames()
 	apiNameToScope := MatchingAPIMetricsScopes()
-	for apiName := range apiNames {
-		if _, ok := apiNameToScope[apiName]; !ok {
-			fmt.Println(apiName)
-		}
-	}
+	s.assertAllAPIHasMetricsDefined(apiNames, apiNameToScope)
 	s.Equal(len(apiNames), len(apiNameToScope))
 }
 
 func (s *apiMetricsSuite) TestHistoryAPIMetrics() {
-	apiNames := HistoryAPIMetricsNames()
+	apiNames := historyAPIMetricsNames()
 	apiNameToScope := HistoryAPIMetricsScopes()
-	for apiName := range apiNames {
-		if _, ok := apiNameToScope[apiName]; !ok {
-			fmt.Println(apiName)
-		}
-	}
+	s.assertAllAPIHasMetricsDefined(apiNames, apiNameToScope)
 	s.Equal(len(apiNames), len(apiNameToScope))
 }

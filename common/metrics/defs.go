@@ -576,8 +576,6 @@ const (
 	AdminClientRebuildMutableStateScope
 	// AdminClientDescribeMutableStateScope tracks RPC calls to admin service
 	AdminClientDescribeMutableStateScope
-	// AdminClientGetWorkflowExecutionRawHistoryScope tracks RPC calls to admin service
-	AdminClientGetWorkflowExecutionRawHistoryScope
 	// AdminClientGetWorkflowExecutionRawHistoryV2Scope tracks RPC calls to admin service
 	AdminClientGetWorkflowExecutionRawHistoryV2Scope
 	// AdminClientDescribeClusterScope tracks RPC calls to admin service
@@ -810,10 +808,8 @@ const (
 	AdminGetSearchAttributesScope
 	// AdminRebuildMutableStateScope is the metric scope for admin.AdminRebuildMutableStateScope
 	AdminRebuildMutableStateScope
-	// AdminDescribeWorkflowExecutionScope is the metric scope for admin.AdminDescribeWorkflowExecutionScope
-	AdminDescribeWorkflowExecutionScope
-	// AdminGetWorkflowExecutionRawHistoryScope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
-	AdminGetWorkflowExecutionRawHistoryScope
+	// AdminDescribeMutableStateScope is the metric scope for admin.AdminDescribeMutableStateScope
+	AdminDescribeMutableStateScope
 	// AdminGetWorkflowExecutionRawHistoryV2Scope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
 	AdminGetWorkflowExecutionRawHistoryV2Scope
 	// AdminGetReplicationMessagesScope is the metric scope for admin.GetReplicationMessages
@@ -838,8 +834,8 @@ const (
 	AdminGetShardScope
 	// AdminListHistoryTasksScope is the metric scope for admin.ListHistoryTasksScope
 	AdminListHistoryTasksScope
-	// AdminReadDLQMessagesScope is the metric scope for admin.AdminReadDLQMessagesScope
-	AdminReadDLQMessagesScope
+	// AdminGetDLQMessagesScope is the metric scope for admin.AdminGetDLQMessagesScope
+	AdminGetDLQMessagesScope
 	// AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessagesScope
 	AdminPurgeDLQMessagesScope
 	// AdminMergeDLQMessagesScope is the metric scope for admin.AdminMergeDLQMessagesScope
@@ -1546,7 +1542,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientDescribeHistoryHostScope:              {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientRebuildMutableStateScope:              {operation: "AdminClientRebuildMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeMutableStateScope:             {operation: "AdminClientDescribeMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientGetWorkflowExecutionRawHistoryScope:   {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryV2Scope: {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeClusterScope:                  {operation: "AdminClientDescribeCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientListClustersScope:                     {operation: "AdminClientListClusters", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1656,7 +1651,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminCloseShardScope:                       {operation: "AdminCloseShard"},
 		AdminGetShardScope:                         {operation: "AdminGetShard"},
 		AdminListHistoryTasksScope:                 {operation: "AdminListHistoryTasks"},
-		AdminReadDLQMessagesScope:                  {operation: "AdminReadDLQMessages"},
+		AdminGetDLQMessagesScope:                   {operation: "AdminGetDLQMessages"},
 		AdminPurgeDLQMessagesScope:                 {operation: "AdminPurgeDLQMessages"},
 		AdminMergeDLQMessagesScope:                 {operation: "AdminMergeDLQMessages"},
 		AdminDescribeHistoryHostScope:              {operation: "AdminDescribeHistoryHost"},
@@ -1664,8 +1659,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminRemoveSearchAttributesScope:           {operation: "AdminRemoveSearchAttributes"},
 		AdminGetSearchAttributesScope:              {operation: "AdminGetSearchAttributes"},
 		AdminRebuildMutableStateScope:              {operation: "AdminRebuildMutableState"},
-		AdminDescribeWorkflowExecutionScope:        {operation: "AdminDescribeWorkflowExecution"},
-		AdminGetWorkflowExecutionRawHistoryScope:   {operation: "AdminGetWorkflowExecutionRawHistory"},
+		AdminDescribeMutableStateScope:             {operation: "AdminDescribeMutableState"},
 		AdminGetWorkflowExecutionRawHistoryV2Scope: {operation: "AdminGetWorkflowExecutionRawHistoryV2"},
 		AdminGetReplicationMessagesScope:           {operation: "AdminGetReplicationMessages"},
 		AdminListClusterMembersScope:               {operation: "AdminListClusterMembers"},

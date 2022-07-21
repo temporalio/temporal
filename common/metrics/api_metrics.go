@@ -27,7 +27,6 @@ package metrics
 import (
 	"reflect"
 
-	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -36,7 +35,6 @@ import (
 
 const (
 	grpcWorkflowService = "/temporal.api.workflowservice.v1.WorkflowService"
-	grpcOperatorService = "/temporal.api.operatorservice.v1.OperatorService"
 	grpcAdminService    = "/temporal.server.api.adminservice.v1.AdminService"
 	grpcMatchingService = "/temporal.server.api.matchingservice.v1.MatchingService"
 	grpcHistoryService  = "/temporal.server.api.historyservice.v1.HistoryService"
@@ -51,22 +49,19 @@ func getAPINames(svcType reflect.Type, grpcSvcName string) map[string]string {
 	return apiNames
 }
 
-func FrontendAPIMetricsNames() map[string]string {
+func frontendAPIMetricsNames() map[string]string {
 	apiNames := getAPINames(reflect.TypeOf((*workflowservice.WorkflowServiceServer)(nil)).Elem(), grpcWorkflowService)
-	for methodName, fullName := range getAPINames(reflect.TypeOf((*operatorservice.OperatorServiceServer)(nil)).Elem(), grpcOperatorService) {
-		apiNames["Operator"+methodName] = fullName
-	}
-	for apiName, fullName := range getAPINames(reflect.TypeOf((*adminservice.AdminServiceServer)(nil)).Elem(), grpcAdminService) {
-		apiNames["Admin"+apiName] = fullName
+	for methodName, fullName := range getAPINames(reflect.TypeOf((*adminservice.AdminServiceServer)(nil)).Elem(), grpcAdminService) {
+		apiNames["Admin"+methodName] = fullName
 	}
 	return apiNames
 }
 
-func MatchingAPIMetricsNames() map[string]string {
+func matchingAPIMetricsNames() map[string]string {
 	return getAPINames(reflect.TypeOf((*matchingservice.MatchingServiceServer)(nil)).Elem(), grpcMatchingService)
 }
 
-func HistoryAPIMetricsNames() map[string]string {
+func historyAPIMetricsNames() map[string]string {
 	return getAPINames(reflect.TypeOf((*historyservice.HistoryServiceServer)(nil)).Elem(), grpcHistoryService)
 }
 
@@ -81,13 +76,13 @@ func getAPIMetricsScopes(apiNames map[string]string, scopeDefs map[int]scopeDefi
 }
 
 func FrontendAPIMetricsScopes() map[string]int {
-	return getAPIMetricsScopes(FrontendAPIMetricsNames(), ScopeDefs[Frontend])
+	return getAPIMetricsScopes(frontendAPIMetricsNames(), ScopeDefs[Frontend])
 }
 
 func MatchingAPIMetricsScopes() map[string]int {
-	return getAPIMetricsScopes(MatchingAPIMetricsNames(), ScopeDefs[Matching])
+	return getAPIMetricsScopes(matchingAPIMetricsNames(), ScopeDefs[Matching])
 }
 
 func HistoryAPIMetricsScopes() map[string]int {
-	return getAPIMetricsScopes(HistoryAPIMetricsNames(), ScopeDefs[History])
+	return getAPIMetricsScopes(historyAPIMetricsNames(), ScopeDefs[History])
 }
