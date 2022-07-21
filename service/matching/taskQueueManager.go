@@ -29,7 +29,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/api/workflowservice/v1"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -261,7 +260,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	go c.fetchVersioningDataFromRootPartition(context.TODO())
+	go c.fetchVersioningDataFromRootPartitionOnInit(context.TODO())
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
 }
@@ -444,6 +443,23 @@ func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persiste
 
 func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
 	err := c.db.MutateVersioningData(ctx, mutator)
+	// If this is the root partition, notify sub partitions that they should fetch changed data from us.
+	if c.taskQueueID.IsRoot() {
+		numParts := c.config.NumReadPartitions()
+		for i := 1; i <= numParts; i++ {
+			tq := c.taskQueueID.mkName(i)
+			_, err := c.matchingClient.InvalidateTaskQueueMetadata(ctx,
+				&matchingservice.InvalidateTaskQueueMetadataRequest{
+					NamespaceId:    c.namespace.String(),
+					TaskQueue:      tq,
+					VersioningData: true,
+				})
+			if err != nil {
+				c.logger.Warn("Failed to notify sub-partition of invalidated versioning data",
+					tag.WorkflowTaskQueueName(tq), tag.Error(err))
+			}
+		}
+	}
 	c.signalIfFatal(err)
 	return err
 }
@@ -643,28 +659,31 @@ func newIOContext() (context.Context, context.CancelFunc) {
 	return ctx, cancel
 }
 
-func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartition(ctx context.Context) {
-	if c.db.versioningData != nil {
+func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartitionOnInit(ctx context.Context) {
+	if c.fetchVersioningDatFut.Ready() {
 		return
 	}
-	// The root partition owns the versioning data, so it's immediately ready once we've already initialized.
+	c.fetchVersioningDatFut.Set(struct{}{}, c.fetchVersioningDataFromRootPartition(ctx))
+}
+
+func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartition(ctx context.Context) error {
+	// Nothing to do if we are the root partition
 	if c.taskQueueID.IsRoot() {
-		if !c.fetchVersioningDatFut.Ready() {
-			c.fetchVersioningDatFut.Set(struct{}{}, nil)
-			return
-		}
+		return nil
 	}
 
 	rootTqName := c.taskQueueID.GetRoot()
-	res, err := c.matchingClient.GetWorkerBuildIdOrdering(ctx, &matchingservice.GetWorkerBuildIdOrderingRequest{
-		NamespaceId: c.taskQueueID.namespaceID.String(),
-		Request: &workflowservice.GetWorkerBuildIdOrderingRequest{
-			Namespace: c.namespace.String(), TaskQueue: rootTqName,
-		},
+	res, err := c.matchingClient.GetTaskQueueMetadata(ctx, &matchingservice.GetTaskQueueMetadataRequest{
+		NamespaceId:               c.taskQueueID.namespaceID.String(),
+		TaskQueue:                 rootTqName,
+		WantVersioningDataCurhash: HashVersioningData(c.db.versioningData),
 	})
-	c.db.versioningData = &persistencespb.VersioningData{
-		CurrentDefault:   res.Response.CurrentDefault,
-		CompatibleLeaves: res.Response.CompatibleLeaves,
+	if err != nil {
+		return err
 	}
-	c.fetchVersioningDatFut.Set(struct{}{}, err)
+	if res.VersioningData == nil {
+		return fmt.Errorf("root partition returned nil versioning data")
+	}
+	c.db.versioningData = res.VersioningData
+	return nil
 }

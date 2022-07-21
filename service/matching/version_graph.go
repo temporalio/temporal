@@ -26,6 +26,7 @@ package matching
 
 import (
 	"fmt"
+	"github.com/dgryski/go-farm"
 
 	"github.com/gogo/protobuf/proto"
 	"go.temporal.io/api/serviceerror"
@@ -36,6 +37,19 @@ import (
 
 func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *workflowservice.GetWorkerBuildIdOrderingResponse {
 	return depthLimiter(g, maxDepth, true)
+}
+
+// HashVersioningData returns a farm.Fingerprint32 hash of the versioning data. If the data is nonexistent or invalid,
+// returns the empty string
+func HashVersioningData(data *persistence.VersioningData) string {
+	if data == nil {
+		return ""
+	}
+	asBytes, err := proto.Marshal(data)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", farm.Fingerprint32(asBytes))
 }
 
 func depthLimiter(g *persistence.VersioningData, maxDepth int, noMutate bool) *workflowservice.GetWorkerBuildIdOrderingResponse {

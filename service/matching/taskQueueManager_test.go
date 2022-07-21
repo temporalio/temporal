@@ -485,31 +485,30 @@ func TestAddTaskStandby(t *testing.T) {
 	require.False(t, syncMatch)
 }
 
-func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartition(t *testing.T) {
+func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartitionOnInit(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
 
-	n0 := mkVerIdNode("0")
-	n1 := mkVerIdNode("1")
-	n1.PreviousIncompatible = n0
 	data := &persistencespb.VersioningData{
-		CurrentDefault: n1,
+		CurrentDefault: mkVerIdNode("0"),
 	}
-	asResp := &matchingservice.GetWorkerBuildIdOrderingResponse{
-		Response: ToBuildIdOrderingResponse(data, 0),
+	asResp := &matchingservice.GetTaskQueueMetadataResponse{
+		VersioningData: data,
 	}
-
-	rootTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), defaultTqId())
-	rootTq.Start()
-	require.NoError(t, rootTq.WaitUntilInitialized(ctx))
 
 	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
 	require.NoError(t, err)
 	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), subTqId,
 		func(tqm *taskQueueManagerImpl) {
 			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
-			mockMatchingClient.EXPECT().GetWorkerBuildIdOrdering(gomock.Any(), gomock.Any()).
+			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(),
+				gomock.Eq(&matchingservice.GetTaskQueueMetadataRequest{
+					NamespaceId: defaultNamespaceId.String(),
+					TaskQueue:   defaultRootTqID,
+					// Empty string since it has nothing on startup
+					WantVersioningDataCurhash: "",
+				})).
 				Return(asResp, nil)
 			tqm.matchingClient = mockMatchingClient
 		})
@@ -517,22 +516,53 @@ func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartition(t *testing.T
 	require.NoError(t, subTq.WaitUntilInitialized(ctx))
 }
 
+func TestTaskQueueSubParitionSendsCurrentHashOfVersioningDataWhenFetching(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+
+	data := &persistencespb.VersioningData{
+		CurrentDefault: mkVerIdNode("0"),
+	}
+	asResp := &matchingservice.GetTaskQueueMetadataResponse{
+		VersioningData: data,
+	}
+	dataHash := HashVersioningData(data)
+
+	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	require.NoError(t, err)
+	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), subTqId,
+		func(tqm *taskQueueManagerImpl) {
+			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(),
+				gomock.Eq(&matchingservice.GetTaskQueueMetadataRequest{
+					NamespaceId:               defaultNamespaceId.String(),
+					TaskQueue:                 defaultRootTqID,
+					WantVersioningDataCurhash: dataHash,
+				})).
+				Return(asResp, nil)
+			tqm.matchingClient = mockMatchingClient
+		})
+	// Cram some versioning data in there so it will have something to hash when fetching
+	subTq.db.versioningData = data
+	// Don't start it. Just explicitly call fetching function.
+	require.NoError(t, subTq.fetchVersioningDataFromRootPartition(ctx))
+}
+
 func TestTaskQueueRootPartitionPropagatesVersioningInfoToChildren(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
 
-	n0 := mkVerIdNode("0")
-	n1 := mkVerIdNode("1")
-	n1.PreviousIncompatible = n0
 	data := &persistencespb.VersioningData{
-		CurrentDefault: n1,
+		CurrentDefault: mkVerIdNode("0"),
 	}
 	rootTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), defaultTqId(),
 		func(tqm *taskQueueManagerImpl) {
 			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
 			mockMatchingClient.EXPECT().InvalidateTaskQueueMetadata(gomock.Any(), gomock.Any()).
-				Return(&matchingservice.InvalidateTaskQueueMetadataResponse{}, nil)
+				Return(&matchingservice.InvalidateTaskQueueMetadataResponse{}, nil).
+				Times(tqm.config.NumReadPartitions())
 			tqm.matchingClient = mockMatchingClient
 		})
 
