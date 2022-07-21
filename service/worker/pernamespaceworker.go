@@ -100,7 +100,7 @@ type (
 
 func NewPerNamespaceWorkerManager(params perNamespaceWorkerManagerInitParams) *perNamespaceWorkerManager {
 	return &perNamespaceWorkerManager{
-		logger:              params.Logger,
+		logger:              log.With(params.Logger, tag.ComponentPerNSWorkerManager),
 		sdkClientFactory:    params.SdkClientFactory,
 		sdkWorkerFactory:    params.SdkWorkerFactory,
 		namespaceRegistry:   params.NamespaceRegistry,
@@ -132,7 +132,7 @@ func (wm *perNamespaceWorkerManager) Start(
 	wm.self = self
 	wm.serviceResolver = serviceResolver
 
-	wm.logger.Info("", tag.ComponentPerNSWorkerManager, tag.LifeCycleStarting)
+	wm.logger.Info("", tag.LifeCycleStarting)
 
 	// this will call namespaceCallback with current namespaces
 	wm.namespaceRegistry.RegisterStateChangeCallback(wm, wm.namespaceCallback)
@@ -140,7 +140,7 @@ func (wm *perNamespaceWorkerManager) Start(
 	wm.serviceResolver.AddListener(perNamespaceWorkerManagerListenerKey, wm.membershipChangedCh)
 	go wm.membershipChangedListener()
 
-	wm.logger.Info("", tag.ComponentPerNSWorkerManager, tag.LifeCycleStarted)
+	wm.logger.Info("", tag.LifeCycleStarted)
 }
 
 func (wm *perNamespaceWorkerManager) Stop() {
@@ -152,7 +152,7 @@ func (wm *perNamespaceWorkerManager) Stop() {
 		return
 	}
 
-	wm.logger.Info("", tag.ComponentPerNSWorkerManager, tag.LifeCycleStopping)
+	wm.logger.Info("", tag.LifeCycleStopping)
 
 	wm.namespaceRegistry.UnregisterStateChangeCallback(wm)
 	wm.serviceResolver.RemoveListener(perNamespaceWorkerManagerListenerKey)
@@ -278,7 +278,8 @@ func (w *perNamespaceWorker) refresh(ns *namespace.Namespace) {
 		// check if we are responsible for this namespace at all
 		multiplicity, err := w.wm.getWorkerMultiplicity(ns)
 		if err != nil {
-			// TODO: add metric for errors here
+			w.wm.logger.Error("Failed to look up hosts", tag.WorkflowNamespace(ns.Name().String()), tag.Error(err))
+			// TODO: add metric also
 			return err
 		}
 		if multiplicity == 0 {
@@ -303,7 +304,8 @@ func (w *perNamespaceWorker) refresh(ns *namespace.Namespace) {
 		// create worker outside of lock
 		client, worker, err := w.startWorker(ns, enabledComponents, multiplicity)
 		if err != nil {
-			// TODO: add metric for errors here
+			w.wm.logger.Error("Failed to start sdk worker", tag.WorkflowNamespace(ns.Name().String()), tag.Error(err))
+			// TODO: add metric also
 			return err
 		}
 
