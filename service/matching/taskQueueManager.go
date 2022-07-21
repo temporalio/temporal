@@ -261,7 +261,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	// TODO: kick off fetching here
+	go c.fetchVersioningDataFromRootPartition(context.TODO())
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
 }
@@ -296,17 +296,6 @@ func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	_, err := c.initializedError.Get(ctx)
 	if err != nil {
 		return err
-	}
-	// The root partition owns the versioning data, so it's immediately ready once we've already initialized.
-	if c.taskQueueID.IsRoot() {
-		if !c.fetchVersioningDatFut.Ready() {
-			c.fetchVersioningDatFut.Set(struct{}{}, nil)
-		}
-	} else {
-		fetchErr := c.fetchVersioningDataFromRootPartition(ctx)
-		if fetchErr != nil {
-			return fetchErr
-		}
 	}
 	_, verErr := c.fetchVersioningDatFut.Get(ctx)
 	return verErr
@@ -654,9 +643,16 @@ func newIOContext() (context.Context, context.CancelFunc) {
 	return ctx, cancel
 }
 
-func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartition(ctx context.Context) error {
+func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartition(ctx context.Context) {
 	if c.db.versioningData != nil {
-		return nil
+		return
+	}
+	// The root partition owns the versioning data, so it's immediately ready once we've already initialized.
+	if c.taskQueueID.IsRoot() {
+		if !c.fetchVersioningDatFut.Ready() {
+			c.fetchVersioningDatFut.Set(struct{}{}, nil)
+			return
+		}
 	}
 
 	rootTqName := c.taskQueueID.GetRoot()
@@ -670,7 +666,5 @@ func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartition(ctx context.
 		CurrentDefault:   res.Response.CurrentDefault,
 		CompatibleLeaves: res.Response.CompatibleLeaves,
 	}
-	// TODO: Currently future is pointless. Do we need it?
 	c.fetchVersioningDatFut.Set(struct{}{}, err)
-	return err
 }
