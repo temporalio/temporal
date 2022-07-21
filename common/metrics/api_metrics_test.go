@@ -25,6 +25,8 @@
 package metrics
 
 import (
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -51,31 +53,40 @@ func (s *apiMetricsSuite) TearDownTest() {
 
 }
 
-func (s *apiMetricsSuite) assertAllAPIHasMetricsDefined(apiNames map[string]string, scopeDef map[string]int) {
+func (s *apiMetricsSuite) assertAllAPIsHaveMetricsDefined(apiNames map[string]string, scopeDef map[string]int) {
+	var missingAPIs []string
 	for _, fullName := range apiNames {
 		if _, ok := scopeDef[fullName]; !ok {
-			s.Fail("Missing metrics scope.", "API %s does not have metrics scope defined.", fullName)
+			missingAPIs = append(missingAPIs, fullName)
 		}
+	}
+	if len(missingAPIs) > 0 {
+		sort.Strings(missingAPIs)
+		// You are here most likely because you added new API without defining metrics scope for them.
+		s.Fail(
+			"Missing metrics scope for APIs.",
+			"Missing metrics scope for below APIs:\n%s. \nPlease define them in common/metrics/def.go",
+			strings.Join(missingAPIs, ",\n"))
 	}
 }
 
 func (s *apiMetricsSuite) TestFrontendAPIMetrics() {
 	apiNames := frontendAPIMetricsNames()
 	apiNameToScope := FrontendAPIMetricsScopes()
-	s.assertAllAPIHasMetricsDefined(apiNames, apiNameToScope)
+	s.assertAllAPIsHaveMetricsDefined(apiNames, apiNameToScope)
 	s.Equal(len(apiNames), len(apiNameToScope))
 }
 
 func (s *apiMetricsSuite) TestMatchingAPIMetrics() {
 	apiNames := matchingAPIMetricsNames()
 	apiNameToScope := MatchingAPIMetricsScopes()
-	s.assertAllAPIHasMetricsDefined(apiNames, apiNameToScope)
+	s.assertAllAPIsHaveMetricsDefined(apiNames, apiNameToScope)
 	s.Equal(len(apiNames), len(apiNameToScope))
 }
 
 func (s *apiMetricsSuite) TestHistoryAPIMetrics() {
 	apiNames := historyAPIMetricsNames()
 	apiNameToScope := HistoryAPIMetricsScopes()
-	s.assertAllAPIHasMetricsDefined(apiNames, apiNameToScope)
+	s.assertAllAPIsHaveMetricsDefined(apiNames, apiNameToScope)
 	s.Equal(len(apiNames), len(apiNameToScope))
 }

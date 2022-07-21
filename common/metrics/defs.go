@@ -865,6 +865,12 @@ const (
 	// OperatorListSearchAttributesScope is the metric scope for operator.ListSearchAttributes
 	OperatorListSearchAttributesScope
 	OperatorDeleteNamespaceScope
+	OperatorAddOrUpdateRemoteCluster
+	OperatorDeleteWorkflowExecution
+	OperatorDescribeCluster
+	OperatorListClusterMembers
+	OperatorListClusters
+	OperatorRemoveRemoteCluster
 
 	NumOperatorScopes
 )
@@ -1679,6 +1685,12 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		OperatorRemoveSearchAttributesScope: {operation: "OperatorRemoveSearchAttributes"},
 		OperatorListSearchAttributesScope:   {operation: "OperatorListSearchAttributes"},
 		OperatorDeleteNamespaceScope:        {operation: "OperatorDeleteNamespace"},
+		OperatorAddOrUpdateRemoteCluster:    {operation: "OperatorAddOrUpdateRemoteCluster"},
+		OperatorDeleteWorkflowExecution:     {operation: "OperatorDeleteWorkflowExecution"},
+		OperatorDescribeCluster:             {operation: "OperatorDescribeCluster"},
+		OperatorListClusterMembers:          {operation: "OperatorListClusterMembers"},
+		OperatorListClusters:                {operation: "OperatorListClusters"},
+		OperatorRemoveRemoteCluster:         {operation: "OperatorRemoveRemoteCluster"},
 		// Workflow Service API
 		FrontendStartWorkflowExecutionScope:             {operation: "StartWorkflowExecution"},
 		FrontendPollWorkflowTaskQueueScope:              {operation: "PollWorkflowTaskQueue"},
