@@ -575,6 +575,8 @@ const (
 	// WorkerESProcessorAckTimeout is the timeout that store will wait to get ack signal from ES processor.
 	// Should be at least WorkerESProcessorFlushInterval+<time to process request>.
 	WorkerESProcessorAckTimeout = "worker.ESProcessorAckTimeout"
+	// WorkerESDisableOrderByClause indicates if ORDER BY clause should be disabled from ES processor.
+	WorkerESDisableOrderByClause = "worker.ESDisableOrderByClause"
 	// WorkerArchiverMaxConcurrentActivityExecutionSize indicates worker archiver max concurrent activity execution size
 	WorkerArchiverMaxConcurrentActivityExecutionSize = "worker.ArchiverMaxConcurrentActivityExecutionSize"
 	// WorkerArchiverMaxConcurrentWorkflowTaskExecutionSize indicates worker archiver max concurrent workflow execution size

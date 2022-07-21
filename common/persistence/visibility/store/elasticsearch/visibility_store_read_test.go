@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -106,13 +107,23 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute)
+	esDisableOrderByClause := dynamicconfig.GetBoolPropertyFn(false)
 
 	s.controller = gomock.NewController(s.T())
 	s.mockMetricsClient = metrics.NewMockClient(s.controller)
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClientV7(s.controller)
 	s.mockSearchAttributesMapper = searchattribute.NewMockMapper(s.controller)
-	s.visibilityStore = NewVisibilityStore(s.mockESClient, testIndex, searchattribute.NewTestProvider(), nil, s.mockProcessor, esProcessorAckTimeout, s.mockMetricsClient)
+	s.visibilityStore = NewVisibilityStore(
+		s.mockESClient,
+		testIndex,
+		searchattribute.NewTestProvider(),
+		nil,
+		s.mockProcessor,
+		esProcessorAckTimeout,
+		esDisableOrderByClause,
+		s.mockMetricsClient,
+	)
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {
@@ -426,6 +437,44 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	p, err = s.visibilityStore.buildSearchParametersV2(request)
 	s.Nil(p)
 	s.Error(err)
+	request.Query = ""
+}
+
+func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
+	request := &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID: testNamespaceID,
+		Namespace:   testNamespace,
+		PageSize:    testPageSize,
+	}
+
+	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String())
+
+	// disable ORDER BY clause
+	s.visibilityStore.disableOrderByClause = dynamicconfig.GetBoolPropertyFn(true)
+
+	// test valid query
+	request.Query = `WorkflowId="guid-2208"`
+	filterQuery := elastic.NewBoolQuery().Filter(elastic.NewMatchQuery(searchattribute.WorkflowID, "guid-2208"))
+	boolQuery := elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery)
+	p, err := s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(&client.SearchParameters{
+		Index:       testIndex,
+		Query:       boolQuery,
+		SearchAfter: nil,
+		PointInTime: nil,
+		PageSize:    testPageSize,
+		Sorter:      defaultSorter,
+	}, p)
+	request.Query = ""
+
+	// test invalid query with ORDER BY
+	request.Query = `ORDER BY WorkflowId`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.Error(err)
+	var converterErr *query.ConverterError
+	s.ErrorAs(err, &converterErr)
+	s.EqualError(err, "ORDER BY clause is disabled")
 	request.Query = ""
 }
 

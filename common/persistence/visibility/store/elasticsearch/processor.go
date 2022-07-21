@@ -79,7 +79,8 @@ type (
 		ESProcessorBulkSize      dynamicconfig.IntPropertyFn // max total size of bytes in bulk
 		ESProcessorFlushInterval dynamicconfig.DurationPropertyFn
 
-		ESProcessorAckTimeout dynamicconfig.DurationPropertyFn
+		ESProcessorAckTimeout  dynamicconfig.DurationPropertyFn
+		ESDisableOrderByClause dynamicconfig.BoolPropertyFn
 	}
 
 	ackFuture struct { // value of processorImpl.mapToAckFuture

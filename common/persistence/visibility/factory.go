@@ -293,13 +293,15 @@ func newAdvancedVisibilityStore(
 	}
 
 	var (
-		esProcessor           elasticsearch.Processor
-		esProcessorAckTimeout dynamicconfig.DurationPropertyFn
+		esProcessor            elasticsearch.Processor
+		esProcessorAckTimeout  dynamicconfig.DurationPropertyFn
+		esDisableOrderByClause dynamicconfig.BoolPropertyFn
 	)
 	if esProcessorConfig != nil {
 		esProcessor = elasticsearch.NewProcessor(esProcessorConfig, esClient, logger, metricsClient)
 		esProcessor.Start()
 		esProcessorAckTimeout = esProcessorConfig.ESProcessorAckTimeout
+		esDisableOrderByClause = esProcessorConfig.ESDisableOrderByClause
 	}
 	s := elasticsearch.NewVisibilityStore(
 		esClient,
@@ -308,6 +310,7 @@ func newAdvancedVisibilityStore(
 		searchAttributesMapper,
 		esProcessor,
 		esProcessorAckTimeout,
+		esDisableOrderByClause,
 		metricsClient)
 	return s
 }

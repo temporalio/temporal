@@ -195,6 +195,7 @@ func ESProcessorConfigProvider(
 		ESProcessorBulkSize:      serviceConfig.ESProcessorBulkSize,
 		ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
 		ESProcessorAckTimeout:    serviceConfig.ESProcessorAckTimeout,
+		ESDisableOrderByClause:   serviceConfig.ESDisableOrderByClause,
 	}
 }
 
