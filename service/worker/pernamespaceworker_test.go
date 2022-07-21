@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/common/util"
-	"go.temporal.io/server/service/worker/common"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
 
@@ -56,8 +55,8 @@ type perNsWorkerManagerSuite struct {
 	hostInfo        *membership.HostInfo
 	serviceResolver *membership.MockServiceResolver
 
-	cmp1 *common.MockPerNSWorkerComponent
-	cmp2 *common.MockPerNSWorkerComponent
+	cmp1 *workercommon.MockPerNSWorkerComponent
+	cmp2 *workercommon.MockPerNSWorkerComponent
 
 	manager *perNamespaceWorkerManager
 }
@@ -75,8 +74,8 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 	s.registry = namespace.NewMockRegistry(s.controller)
 	s.hostInfo = membership.NewHostInfo("self", nil)
 	s.serviceResolver = membership.NewMockServiceResolver(s.controller)
-	s.cmp1 = common.NewMockPerNSWorkerComponent(s.controller)
-	s.cmp2 = common.NewMockPerNSWorkerComponent(s.controller)
+	s.cmp1 = workercommon.NewMockPerNSWorkerComponent(s.controller)
+	s.cmp2 = workercommon.NewMockPerNSWorkerComponent(s.controller)
 
 	s.manager = NewPerNamespaceWorkerManager(perNamespaceWorkerManagerInitParams{
 		Logger:            s.logger,
@@ -89,7 +88,7 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 				return util.Max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 3}[ns])
 			},
 		},
-		Components: []common.PerNSWorkerComponent{s.cmp1, s.cmp2},
+		Components: []workercommon.PerNSWorkerComponent{s.cmp1, s.cmp2},
 	})
 	s.manager.initialRetry = 1 * time.Millisecond
 
@@ -109,10 +108,10 @@ func (s *perNsWorkerManagerSuite) TearDownTest() {
 func (s *perNsWorkerManagerSuite) TestDisabled() {
 	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
 
-	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: false,
 	}).AnyTimes()
-	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: false,
 	}).AnyTimes()
 
@@ -123,10 +122,10 @@ func (s *perNsWorkerManagerSuite) TestDisabled() {
 func (s *perNsWorkerManagerSuite) TestEnabledButResolvedToOther() {
 	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
 
-	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: true,
 	}).AnyTimes()
-	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: false,
 	}).AnyTimes()
 
@@ -140,10 +139,10 @@ func (s *perNsWorkerManagerSuite) TestEnabledButResolvedToOther() {
 func (s *perNsWorkerManagerSuite) TestEnabled() {
 	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
 
-	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: true,
 	}).AnyTimes()
-	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: false,
 	}).AnyTimes()
 
@@ -166,10 +165,10 @@ func (s *perNsWorkerManagerSuite) TestEnabled() {
 func (s *perNsWorkerManagerSuite) TestMultiplicity() {
 	ns := testns("ns3", enumspb.NAMESPACE_STATE_REGISTERED) // three workers
 
-	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: true,
 	}).AnyTimes()
-	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: false,
 	}).AnyTimes()
 
@@ -243,10 +242,10 @@ func (s *perNsWorkerManagerSuite) TestTwoNamespacesTwoComponents() {
 func (s *perNsWorkerManagerSuite) TestDeleteNs() {
 	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
 
-	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: true,
 	}).AnyTimes()
-	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: false,
 	}).AnyTimes()
 
@@ -291,10 +290,10 @@ func (s *perNsWorkerManagerSuite) TestDeleteNs() {
 func (s *perNsWorkerManagerSuite) TestMembershipChanged() {
 	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
 
-	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: true,
 	}).AnyTimes()
-	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: false,
 	}).AnyTimes()
 
@@ -328,10 +327,10 @@ func (s *perNsWorkerManagerSuite) TestMembershipChanged() {
 func (s *perNsWorkerManagerSuite) TestServiceResolverError() {
 	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
 
-	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: true,
 	}).AnyTimes()
-	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: false,
 	}).AnyTimes()
 
@@ -357,10 +356,10 @@ func (s *perNsWorkerManagerSuite) TestServiceResolverError() {
 func (s *perNsWorkerManagerSuite) TestNewClientError() {
 	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
 
-	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: true,
 	}).AnyTimes()
-	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: false,
 	}).AnyTimes()
 
@@ -387,10 +386,10 @@ func (s *perNsWorkerManagerSuite) TestNewClientError() {
 func (s *perNsWorkerManagerSuite) TestStartWorkerError() {
 	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
 
-	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: true,
 	}).AnyTimes()
-	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: false,
 	}).AnyTimes()
 
