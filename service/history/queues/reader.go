@@ -320,6 +320,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	}
 
 	// TODO: in error case, we need some backoff
+	// do this together with the retry improvement for existing queue implementation
 
 	if loadSlice.MoreTasks() {
 		r.notify()
