@@ -865,6 +865,9 @@ var ServiceTracingModule = fx.Options(
 	),
 	fx.Provide(
 		func(r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) []otelsdktrace.TracerProviderOption {
+			if len(sps) == 0 {
+				return make([]otelsdktrace.TracerProviderOption, 0)
+			}
 			opts := make([]otelsdktrace.TracerProviderOption, 0, len(sps)+1)
 			opts = append(opts, otelsdktrace.WithResource(r))
 			for _, sp := range sps {
@@ -873,11 +876,17 @@ var ServiceTracingModule = fx.Options(
 			return opts
 		},
 	),
-	fx.Provide(func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
-		tp := otelsdktrace.NewTracerProvider(opts...)
-		lc.Append(fx.Hook{OnStop: bestEffortHookFn(tp.Shutdown)})
-		return tp
-	}),
+	fx.Provide(
+		func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
+			tp := trace.NewNoopTracerProvider()
+			if len(opts) > 0 {
+				sdktp := otelsdktrace.NewTracerProvider(opts...)
+				lc.Append(fx.Hook{OnStop: bestEffortHookFn(sdktp.Shutdown)})
+				tp = sdktp
+			}
+			return tp
+		},
+	),
 	// Haven't had use for baggage propagation yet
 	fx.Provide(func() propagation.TextMapPropagator { return propagation.TraceContext{} }),
 	fx.Provide(telemetry.NewServerTraceInterceptor),
