@@ -875,7 +875,7 @@ var ServiceTracingModule = fx.Options(
 	),
 	fx.Provide(func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
 		tp := otelsdktrace.NewTracerProvider(opts...)
-		lc.Append(fx.Hook{OnStop: tp.Shutdown})
+		lc.Append(fx.Hook{OnStop: bestEffortHookFn(tp.Shutdown)})
 		return tp
 	}),
 	// Haven't had use for baggage propagation yet
@@ -883,6 +883,16 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(telemetry.NewServerTraceInterceptor),
 	fx.Provide(telemetry.NewClientTraceInterceptor),
 )
+
+// bestEffortHookFn wraps an fx hook function so as to discard any returned
+// error. This is useful in situations where runnning a hook function is
+// desirable but errors should not prevent control flow from proceeding.
+func bestEffortHookFn(hookFn func(ctx context.Context) error) func(context.Context) error {
+	return func(ctx context.Context) error {
+		_ = hookFn(ctx)
+		return nil
+	}
+}
 
 func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
 	type starter interface{ Start(context.Context) error }
