@@ -57,6 +57,20 @@ var rpsInf = math.Inf(1)
 const defaultNamespaceId = namespace.ID("deadbeef-0000-4567-890a-bcdef0123456")
 const defaultRootTqID = "tq"
 
+type tqmTestOpts struct {
+	config             *Config
+	tqId               *taskQueueID
+	matchingClientMock *matchingservicemock.MockMatchingServiceClient
+}
+
+func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
+	return &tqmTestOpts{
+		config:             defaultTestConfig(),
+		tqId:               defaultTqId(),
+		matchingClientMock: matchingservicemock.NewMockMatchingServiceClient(controller),
+	}
+}
+
 func TestDeliverBufferTasks(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
@@ -300,26 +314,24 @@ func mustCreateTestTaskQueueManager(
 	opts ...taskQueueManagerOpt,
 ) *taskQueueManagerImpl {
 	t.Helper()
-	return mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), defaultTqId(), opts...)
+	return mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTqmTestOpts(controller), opts...)
 }
 
 func mustCreateTestTaskQueueManagerWithConfig(
 	t *testing.T,
 	controller *gomock.Controller,
-	cfg *Config,
-	tqId *taskQueueID,
+	testOpts *tqmTestOpts,
 	opts ...taskQueueManagerOpt,
 ) *taskQueueManagerImpl {
 	t.Helper()
-	tqm, err := createTestTaskQueueManagerWithConfig(controller, cfg, tqId, opts...)
+	tqm, err := createTestTaskQueueManagerWithConfig(controller, testOpts, opts...)
 	require.NoError(t, err)
 	return tqm
 }
 
 func createTestTaskQueueManagerWithConfig(
 	controller *gomock.Controller,
-	cfg *Config,
-	tqId *taskQueueID,
+	testOpts *tqmTestOpts,
 	opts ...taskQueueManagerOpt,
 ) (*taskQueueManagerImpl, error) {
 	logger := log.NewTestLogger()
@@ -327,13 +339,13 @@ func createTestTaskQueueManagerWithConfig(
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
-	me := newMatchingEngine(cfg, tm, nil, logger, mockNamespaceCache)
+	me := newMatchingEngine(testOpts.config, tm, nil, logger, mockNamespaceCache, testOpts.matchingClientMock)
 	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
-	tlMgr, err := newTaskQueueManager(me, tqId, tlKind, cfg, cmeta, opts...)
+	tlMgr, err := newTaskQueueManager(me, testOpts.tqId, tlKind, testOpts.config, cmeta, opts...)
 	if err != nil {
 		return nil, err
 	}
-	me.taskQueues[*tqId] = tlMgr
+	me.taskQueues[*testOpts.tqId] = tlMgr
 	return tlMgr.(*taskQueueManagerImpl), nil
 }
 
@@ -411,15 +423,17 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.config = cfg
 
 	// Idle
-	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg, defaultTqId())
+	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 
 	// Active poll-er
-	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg, defaultTqId())
+	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity("test-poll"), nil)
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
@@ -429,7 +443,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
 
 	// Active adding task
-	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg, defaultTqId())
+	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
 	tlm.taskReader.Signal()
@@ -446,8 +460,7 @@ func TestAddTaskStandby(t *testing.T) {
 	tlm := mustCreateTestTaskQueueManagerWithConfig(
 		t,
 		controller,
-		NewConfig(dynamicconfig.NewNoopCollection()),
-		defaultTqId(),
+		defaultTqmTestOpts(controller),
 		func(tqm *taskQueueManagerImpl) {
 			// we need to override the mockNamespaceCache to return a passive namespace
 			mockNamespaceCache := namespace.NewMockRegistry(controller)
@@ -489,6 +502,10 @@ func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartitionOnInit(t *tes
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
+	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId = subTqId
 
 	data := &persistencespb.VersioningData{
 		CurrentDefault: mkVerIdNode("0"),
@@ -497,9 +514,7 @@ func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartitionOnInit(t *tes
 		VersioningData: data,
 	}
 
-	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
-	require.NoError(t, err)
-	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), subTqId,
+	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
 		func(tqm *taskQueueManagerImpl) {
 			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
 			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(),
@@ -520,6 +535,10 @@ func TestTaskQueueSubParitionSendsCurrentHashOfVersioningDataWhenFetching(t *tes
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
+	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId = subTqId
 
 	data := &persistencespb.VersioningData{
 		CurrentDefault: mkVerIdNode("0"),
@@ -529,9 +548,7 @@ func TestTaskQueueSubParitionSendsCurrentHashOfVersioningDataWhenFetching(t *tes
 	}
 	dataHash := HashVersioningData(data)
 
-	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
-	require.NoError(t, err)
-	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), subTqId,
+	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
 		func(tqm *taskQueueManagerImpl) {
 			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
 			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(),
@@ -549,7 +566,7 @@ func TestTaskQueueSubParitionSendsCurrentHashOfVersioningDataWhenFetching(t *tes
 	require.NoError(t, subTq.fetchVersioningDataFromRootPartition(ctx))
 }
 
-func TestTaskQueueRootPartitionPropagatesVersioningInfoToChildren(t *testing.T) {
+func TestTaskQueueRootPartitionNotifiesChildrenOfInvalidation(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
@@ -557,7 +574,7 @@ func TestTaskQueueRootPartitionPropagatesVersioningInfoToChildren(t *testing.T) 
 	data := &persistencespb.VersioningData{
 		CurrentDefault: mkVerIdNode("0"),
 	}
-	rootTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), defaultTqId(),
+	rootTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTqmTestOpts(controller),
 		func(tqm *taskQueueManagerImpl) {
 			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
 			mockMatchingClient.EXPECT().InvalidateTaskQueueMetadata(gomock.Any(), gomock.Any()).
@@ -568,10 +585,9 @@ func TestTaskQueueRootPartitionPropagatesVersioningInfoToChildren(t *testing.T) 
 
 	rootTq.Start()
 	require.NoError(t, rootTq.WaitUntilInitialized(ctx))
-	// Make a change, verify it's propagated to children
+	// Make a change, mock verifies children are invalidated
 	require.NoError(t, rootTq.MutateVersioningData(ctx, func(vd *persistencespb.VersioningData) error {
 		vd = data
 		return nil
 	}))
-
 }

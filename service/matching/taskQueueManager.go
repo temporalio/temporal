@@ -180,7 +180,7 @@ func newTaskQueueManager(
 
 	taskQueueConfig := newTaskQueueConfig(taskQueue, config, nsName)
 
-	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue.name, taskQueue.taskType, taskQueueKind, e.logger)
+	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue, taskQueueKind, e.logger)
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(taskQueue.name),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
@@ -684,6 +684,6 @@ func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartition(ctx context.
 	if res.VersioningData == nil {
 		return fmt.Errorf("root partition returned nil versioning data")
 	}
-	c.db.versioningData = res.VersioningData
+	c.db.setVersioningDataForNonRootPartition(res.VersioningData)
 	return nil
 }

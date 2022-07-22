@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -74,6 +75,7 @@ type (
 		suite.Suite
 		controller         *gomock.Controller
 		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
+		mockMatchingClient *matchingservicemock.MockMatchingServiceClient
 		mockNamespaceCache *namespace.MockRegistry
 
 		matchingEngine *matchingEngineImpl
@@ -106,6 +108,7 @@ func (s *matchingEngineSuite) SetupTest() {
 	defer s.Unlock()
 	s.controller = gomock.NewController(s.T())
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
+	s.mockMatchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	s.taskManager = newTestTaskManager(s.logger)
 	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: matchingTestNamespace}, nil, "")
@@ -131,12 +134,12 @@ func (s *matchingEngineSuite) TearDownTest() {
 func (s *matchingEngineSuite) newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager,
 ) *matchingEngineImpl {
-	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache)
+	return newMatchingEngine(config, taskMgr, s.mockHistoryClient, s.logger, s.mockNamespaceCache, s.mockMatchingClient)
 }
 
 func newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager, mockHistoryClient historyservice.HistoryServiceClient,
-	logger log.Logger, mockNamespaceCache namespace.Registry,
+	logger log.Logger, mockNamespaceCache namespace.Registry, mockMatchingClient matchingservice.MatchingServiceClient,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:       taskMgr,
@@ -145,6 +148,7 @@ func newMatchingEngine(
 		taskQueueCount:    make(map[taskQueueCounterKey]int),
 		logger:            logger,
 		metricsClient:     metrics.NoopClient,
+		matchingClient:    mockMatchingClient,
 		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
 		config:            config,
 		namespaceRegistry: mockNamespaceCache,
@@ -1848,6 +1852,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 }
 
 func (s *matchingEngineSuite) TestGetVersioningData() {
+	s.mockMatchingClient.EXPECT().InvalidateTaskQueueMetadata(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 	namespaceID := namespace.ID(uuid.New())
 	tq := "tupac"
 
