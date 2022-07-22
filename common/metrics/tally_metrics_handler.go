@@ -88,7 +88,7 @@ func (tmp *tallyMetricsHandler) Gauge(gauge string) GaugeMetric {
 // Timer obtains a timer for the given name and MetricOptions.
 func (tmp *tallyMetricsHandler) Timer(timer string) TimerMetric {
 	return TimerMetricFunc(func(d time.Duration, tag ...Tag) {
-		tmp.scope.Tagged(tagsToMap(tag, tmp.excludeTags)).Timer(timer).Record(d)
+		tmp.scope.Tagged(tagsToMap(tag, tmp.excludeTags)).Histogram(timer, tmp.perUnitBuckets[Milliseconds]).RecordValue(d.Seconds())
 	})
 }
 

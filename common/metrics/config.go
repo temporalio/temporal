@@ -32,6 +32,7 @@ import (
 	"github.com/uber-go/tally/v4"
 	"github.com/uber-go/tally/v4/m3"
 	"github.com/uber-go/tally/v4/prometheus"
+	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -299,14 +300,19 @@ func convertPrometheusConfigToTally(
 }
 
 func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
-	if clientConfig.PerUnitHistogramBoundaries == nil {
-		clientConfig.PerUnitHistogramBoundaries = make(map[string][]float64)
+	buckets := maps.Clone(defaultPerUnitHistogramBoundaries)
+	// In config, when overwrite default buckets, we use [dimensionless / miliseconds / bytes] as keys.
+	// But in code, we use [1 / ms / By] as key (to align with otel unit definition). So we do conversion here.
+	if bucket, ok := clientConfig.PerUnitHistogramBoundaries["dimensionless"]; ok {
+		buckets[Dimensionless] = bucket
 	}
-	for unit, bucket := range defaultPerUnitHistogramBoundaries {
-		if _, ok := clientConfig.PerUnitHistogramBoundaries[unit]; !ok {
-			clientConfig.PerUnitHistogramBoundaries[unit] = bucket
-		}
+	if bucket, ok := clientConfig.PerUnitHistogramBoundaries["milliseconds"]; ok {
+		buckets[Milliseconds] = bucket
 	}
+	if bucket, ok := clientConfig.PerUnitHistogramBoundaries["bytes"]; ok {
+		buckets[Bytes] = bucket
+	}
+	clientConfig.PerUnitHistogramBoundaries = buckets
 }
 
 // newStatsdScope returns a new statsd scope with
