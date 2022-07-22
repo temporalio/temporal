@@ -27,7 +27,6 @@ package ringpop
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -142,18 +141,6 @@ func (s *RingpopSuite) TestHostsMode() {
 	f, err := NewRingpopFactory(&cfg, "test", nil, log.NewNoopLogger(), nil, nil, nil, nil)
 	s.Nil(err)
 	s.NotNil(f)
-}
-
-type mockResolver struct {
-	Hosts map[string][]string
-}
-
-func (resolver *mockResolver) LookupHost(ctx context.Context, host string) ([]string, error) {
-	addrs, ok := resolver.Hosts[host]
-	if !ok {
-		return nil, fmt.Errorf("Host was not resolved: %s", host)
-	}
-	return addrs, nil
 }
 
 func (s *RingpopSuite) TestInvalidConfig() {

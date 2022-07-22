@@ -1589,14 +1589,15 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkerBuildIdOrdering(
 
 		if targetDC == handler.currentClusterName {
 			resp, err = handler.frontendHandler.UpdateWorkerBuildIdOrdering(ctx, request)
+			return err
 		} else {
 			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
 			if err != nil {
 				return err
 			}
 			resp, err = remoteClient.UpdateWorkerBuildIdOrdering(ctx, request)
+			return err
 		}
-		return err
 	})
 
 	return resp, err
@@ -1621,14 +1622,49 @@ func (handler *DCRedirectionHandlerImpl) GetWorkerBuildIdOrdering(
 		switch {
 		case targetDC == handler.currentClusterName:
 			resp, err = handler.frontendHandler.GetWorkerBuildIdOrdering(ctx, request)
+			return err
 		default:
 			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
 			if err != nil {
 				return err
 			}
 			resp, err = remoteClient.GetWorkerBuildIdOrdering(ctx, request)
+			return err
 		}
-		return err
+	})
+
+	return resp, err
+}
+
+// UpdateWorkflow API call
+func (handler *DCRedirectionHandlerImpl) UpdateWorkflow(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkflowRequest,
+) (resp *workflowservice.UpdateWorkflowResponse, retError error) {
+	var (
+		err     error
+		cluster string
+	)
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateWorkflowScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), "UpdateWorkflow", func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.UpdateWorkflow(ctx, request)
+			return err
+		default:
+			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			if err != nil {
+				return err
+			}
+			resp, err = remoteClient.UpdateWorkflow(ctx, request)
+			return err
+		}
 	})
 
 	return resp, err

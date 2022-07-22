@@ -271,8 +271,10 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 		"makeToast",
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	tqm, err := s.matchingEngine.getTaskQueueManager(
+		context.Background(),
 		queueID,
-		enumspb.TASK_QUEUE_KIND_NORMAL)
+		enumspb.TASK_QUEUE_KIND_NORMAL,
+		true)
 	s.Require().NoError(err)
 
 	tqm2, err := newTaskQueueManager(
@@ -288,7 +290,7 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	s.matchingEngine.unloadTaskQueue(tqm2)
 
 	got, err := s.matchingEngine.getTaskQueueManager(
-		queueID, enumspb.TASK_QUEUE_KIND_NORMAL)
+		context.Background(), queueID, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	s.Require().NoError(err)
 	s.Require().Same(tqm, got,
 		"Unload call with non-matching taskQueueManager should not cause unload")
@@ -297,7 +299,7 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 	s.matchingEngine.unloadTaskQueue(tqm)
 
 	got, err = s.matchingEngine.getTaskQueueManager(
-		queueID, enumspb.TASK_QUEUE_KIND_NORMAL)
+		context.Background(), queueID, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	s.Require().NoError(err)
 	s.Require().NotSame(tqm, got,
 		"Unload call with matching incarnation should have caused unload")
@@ -385,7 +387,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 		BacklogCountHint:       1,
 		StickyExecutionEnabled: true,
 		Query:                  nil,
-		WorkflowTaskInfo:       nil,
+		TransientWorkflowTask:  nil,
 		WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{
 			Name: tl,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -561,7 +563,7 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
-	tlm, err := s.matchingEngine.getTaskQueueManager(tlID, tlKind)
+	tlm, err := s.matchingEngine.getTaskQueueManager(context.Background(), tlID, tlKind, true)
 	s.Nil(err)
 
 	addRequest := matchingservice.AddActivityTaskRequest{
@@ -1925,7 +1927,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.NoError(err)
 	s.NotNil(res.GetResponse().GetCurrentDefault())
 	lastNode = res.GetResponse().GetCurrentDefault()
-	for true {
+	for {
 		if lastNode.GetPreviousIncompatible() == nil {
 			break
 		}
@@ -1933,7 +1935,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	}
 	s.Equal(mkVerId("95"), lastNode.GetVersion())
 	lastNode = res.GetResponse().GetCompatibleLeaves()[0]
-	for true {
+	for {
 		if lastNode.GetPreviousCompatible() == nil {
 			break
 		}
@@ -2029,7 +2031,6 @@ func (m *testTaskManager) GetName() string {
 }
 
 func (m *testTaskManager) Close() {
-	return
 }
 
 func (m *testTaskManager) getTaskQueueManager(id *taskQueueID) *testTaskQueueManager {

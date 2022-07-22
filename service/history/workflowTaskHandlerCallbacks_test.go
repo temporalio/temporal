@@ -147,7 +147,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
 
 	err := s.workflowTaskHandlerCallback.verifyFirstWorkflowTaskScheduled(context.Background(), request)
-	s.IsType(&serviceerror.WorkflowNotReady{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowCompleted() {
@@ -177,7 +177,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
 	err = s.workflowTaskHandlerCallback.verifyFirstWorkflowTaskScheduled(context.Background(), request)
-	s.IsType(&serviceerror.NotFound{}, err)
+	s.NoError(err)
 }
 
 func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowZombie() {
@@ -312,7 +312,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) constructQueryResults(ids []string, r
 	for _, id := range ids {
 		results[id] = &querypb.WorkflowQueryResult{
 			ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
-			Answer:     payloads.EncodeBytes(make([]byte, resultSize, resultSize)),
+			Answer:     payloads.EncodeBytes(make([]byte, resultSize)),
 		}
 	}
 	return results

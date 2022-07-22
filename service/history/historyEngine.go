@@ -398,8 +398,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				e.NotifyNewTasks(e.currentClusterName, fakeTasks)
 			}
 
-			// nolint:errcheck
-			e.shard.UpdateNamespaceNotificationVersion(newNotificationVersion)
+			_ = e.shard.UpdateNamespaceNotificationVersion(newNotificationVersion)
 		},
 	)
 }
@@ -651,7 +650,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		if err != nil {
 			return nil, err
 		}
-		defer e.eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID) // nolint:errcheck
+		defer func() { _ = e.eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID) }()
 		// check again in case the next event ID is updated
 		response, err = e.getMutableState(ctx, workflowKey)
 		if err != nil {
@@ -797,11 +796,11 @@ func (e *historyEngineImpl) QueryWorkflow(
 		scope.IncCounter(metrics.QueryBufferExceededCount)
 		return nil, consts.ErrConsistentQueryBufferExceeded
 	}
-	queryID, termCh := queryReg.BufferQuery(req.GetQuery())
+	queryID, completionCh := queryReg.BufferQuery(req.GetQuery())
 	defer queryReg.RemoveQuery(queryID)
 	weCtx.GetReleaseFn()(nil)
 	select {
-	case <-termCh:
+	case <-completionCh:
 		completionState, err := queryReg.GetCompletionState(queryID)
 		if err != nil {
 			scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
@@ -1962,6 +1961,13 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}, nil
 }
 
+func (h *historyEngineImpl) UpdateWorkflow(
+	ctx context.Context,
+	request *historyservice.UpdateWorkflowRequest,
+) (*historyservice.UpdateWorkflowResponse, error) {
+	return nil, serviceerror.NewUnimplemented("UpdateWorkflow is not supported on this server")
+}
+
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
 func (e *historyEngineImpl) RemoveSignalMutableState(
 	ctx context.Context,
@@ -2252,12 +2258,6 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 		),
 	)
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			// workflow not found error, verification logic need to keep waiting in this case
-			// if we return NotFound directly, caller can't tell if it's workflow not found or child not found
-			// standby logic will continue verification
-			return consts.ErrWorkflowNotReady
-		}
 		return err
 	}
 	defer func() { workflowContext.GetReleaseFn()(retError) }()
@@ -2265,9 +2265,8 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	mutableState := workflowContext.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() &&
 		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		// standby logic will stop verification as the parent has already completed
-		// and can't be blocked after failover.
-		return consts.ErrWorkflowCompleted
+		// parent has already completed and can't be blocked after failover.
+		return nil
 	}
 
 	onCurrentBranch, err := historyEventOnCurrentBranch(mutableState, request.ParentInitiatedId, request.ParentInitiatedVersion)

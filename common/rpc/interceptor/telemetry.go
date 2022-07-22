@@ -122,7 +122,7 @@ func (ti *TelemetryInterceptor) Intercept(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	_, methodName := splitMethodName(info.FullMethod)
-	metricsScope, logTags := ti.metricsScopeLogTags(req, methodName)
+	metricsScope, logTags := ti.metricsScopeLogTags(req, info.FullMethod, methodName)
 
 	ctx = context.WithValue(ctx, metricsCtxKey, metricsScope)
 	metricsScope.IncCounter(metrics.ServiceRequests)
@@ -209,21 +209,22 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 
 func (ti *TelemetryInterceptor) metricsScopeLogTags(
 	req interface{},
+	fullMethod string,
 	methodName string,
 ) (metrics.Scope, []tag.Tag) {
 
 	// if the method name is not defined, will default to
 	// unknown scope, which carries value 0
-	scopeDef, _ := ti.scopes[methodName]
+	scopeDef := ti.scopes[fullMethod]
 	scopeDef = ti.overrideScope(scopeDef, req)
 
-	namespace := GetNamespace(ti.namespaceRegistry, req)
-	if namespace == "" {
+	nsName := GetNamespace(ti.namespaceRegistry, req)
+	if nsName == "" {
 		return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceUnknownTag()), []tag.Tag{tag.Operation(methodName)}
 	}
-	return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceTag(namespace.String())), []tag.Tag{
+	return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceTag(nsName.String())), []tag.Tag{
 		tag.Operation(methodName),
-		tag.WorkflowNamespace(namespace.String()),
+		tag.WorkflowNamespace(nsName.String()),
 	}
 }
 
@@ -235,52 +236,40 @@ func (ti *TelemetryInterceptor) handleError(
 
 	scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ServiceErrorWithType)
 
-	if common.IsContextDeadlineExceededErr(err) {
-		scope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
-		return
-	}
-	if common.IsContextCanceledErr(err) {
-		scope.IncCounter(metrics.ServiceErrContextCancelledCounter)
+	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		return
 	}
 
 	switch err := err.(type) {
+	// we emit service_error_with_type metrics, no need to emit specific metric for these known error types.
 	case *serviceerror.WorkflowNotReady,
+		*serviceerror.NamespaceInvalidState,
+		*serviceerror.InvalidArgument,
+		*serviceerror.NamespaceNotActive,
+		*serviceerror.WorkflowExecutionAlreadyStarted,
+		*serviceerror.NotFound,
+		*serviceerror.NamespaceNotFound,
+		*serviceerror.NamespaceAlreadyExists,
+		*serviceerror.QueryFailed,
+		*serviceerror.ClientVersionNotSupported,
+		*serviceerror.PermissionDenied,
 		*serviceerrors.StickyWorkerUnavailable,
-		*serviceerror.NamespaceInvalidState:
-		// we emit service_errors_with_type metrics, no need to emit specific metric for this error type.
-		// TODO deprecate all metrics below
-	case *serviceerrors.ShardOwnershipLost:
-		scope.IncCounter(metrics.ServiceErrShardOwnershipLostCounter)
-	case *serviceerrors.TaskAlreadyStarted:
-		scope.IncCounter(metrics.ServiceErrTaskAlreadyStartedCounter)
-	case *serviceerror.InvalidArgument:
-		scope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
-	case *serviceerror.NamespaceNotActive:
-		scope.IncCounter(metrics.ServiceErrNamespaceNotActiveCounter)
-	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		scope.IncCounter(metrics.ServiceErrExecutionAlreadyStartedCounter)
-	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
-		scope.IncCounter(metrics.ServiceErrNotFoundCounter)
+		*serviceerrors.ShardOwnershipLost,
+		*serviceerrors.TaskAlreadyStarted,
+		*serviceerrors.RetryReplication:
+		// no-op
+
+	// specific metric for resource exhausted error with throttle reason
 	case *serviceerror.ResourceExhausted:
 		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)
-	case *serviceerrors.RetryReplication:
-		scope.IncCounter(metrics.ServiceErrRetryTaskCounter)
-	case *serviceerror.NamespaceAlreadyExists:
-		scope.IncCounter(metrics.ServiceErrNamespaceAlreadyExistsCounter)
-	case *serviceerror.QueryFailed:
-		scope.IncCounter(metrics.ServiceErrQueryFailedCounter)
-	case *serviceerror.ClientVersionNotSupported:
-		scope.IncCounter(metrics.ServiceErrClientVersionNotSupportedCounter)
-	case *serviceerror.DataLoss:
-		scope.IncCounter(metrics.ServiceFailures)
-		ti.logger.Error("unavailable error, data loss", append(logTags, tag.Error(err))...)
-	case *serviceerror.Unavailable:
-		scope.IncCounter(metrics.ServiceFailures)
-		ti.logger.Error("unavailable error", append(logTags, tag.Error(err))...)
+
+	// Any other errors are treated as ServiceFailures against SLA.
+	// Including below known errors and any other unknown errors.
+	//  *serviceerror.DataLoss,
+	//	*serviceerror.Unavailable:
 	default:
 		scope.IncCounter(metrics.ServiceFailures)
-		ti.logger.Error("uncategorized error", append(logTags, tag.Error(err))...)
+		ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
 	}
 }
 

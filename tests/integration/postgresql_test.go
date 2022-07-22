@@ -46,8 +46,6 @@ import (
 
 // TODO merge the initialization with existing persistence setup
 const (
-	testPostgreSQLClusterName = "temporal_postgresql_cluster"
-
 	testPostgreSQLUser               = "temporal"
 	testPostgreSQLPassword           = "temporal"
 	testPostgreSQLConnectionProtocol = "tcp"

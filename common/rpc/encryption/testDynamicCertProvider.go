@@ -37,7 +37,6 @@ type TestDynamicCertProvider struct {
 	caCerts         *x509.CertPool
 	wrongCACerts    *x509.CertPool
 	serverCertIndex int
-	caCertIndex     int
 	config          *config.GroupTLS
 	serverName      string
 }

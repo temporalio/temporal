@@ -33,6 +33,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/clock"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -147,6 +149,7 @@ type (
 		ArchivalMetadata                    archiver.ArchivalMetadata
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
+		TimeSource                          clock.TimeSource
 	}
 )
 
@@ -181,6 +184,7 @@ func NewAdminHandler(
 			args.ArchivalMetadata,
 			args.ArchiverProvider,
 			args.Config.EnableSchedules,
+			args.TimeSource,
 		),
 		namespaceDLQHandler: namespace.NewDLQMessageHandler(
 			namespaceReplicationTaskExecutor,
@@ -243,16 +247,13 @@ func (adh *AdminHandler) Stop() {
 func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *adminservice.AddSearchAttributesRequest) (_ *adminservice.AddSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminAddSearchAttributesScope)
-	defer sw.Stop()
-
 	// validate request
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 
 	if len(request.GetSearchAttributes()) == 0 {
-		return nil, adh.error(errSearchAttributesNotSet, scope)
+		return nil, errSearchAttributesNotSet
 	}
 
 	indexName := request.GetIndexName()
@@ -262,18 +263,18 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 
 	currentSearchAttributes, err := adh.saProvider.GetSearchAttributes(indexName, true)
 	if err != nil {
-		return nil, adh.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err)), scope)
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
 	for saName, saType := range request.GetSearchAttributes() {
 		if searchattribute.IsReserved(saName) {
-			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeIsReservedMessage, saName)), scope)
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeIsReservedMessage, saName))
 		}
 		if currentSearchAttributes.IsDefined(saName) {
-			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName)), scope)
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName))
 		}
 		if _, ok := enumspb.IndexedValueType_name[int32(saType)]; !ok {
-			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errUnknownSearchAttributeTypeMessage, saType)), scope)
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnknownSearchAttributeTypeMessage, saType))
 		}
 	}
 
@@ -295,16 +296,14 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 		wfParams,
 	)
 	if err != nil {
-		return nil, adh.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, addsearchattributes.WorkflowName, err)), scope)
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, addsearchattributes.WorkflowName, err))
 	}
 
 	// Wait for workflow to complete.
 	err = run.Get(ctx, nil)
 	if err != nil {
-		scope.IncCounter(metrics.AddSearchAttributesWorkflowFailuresCount)
-		return nil, adh.error(serviceerror.NewUnavailable(fmt.Sprintf(errWorkflowReturnedErrorMessage, addsearchattributes.WorkflowName, err)), scope)
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errWorkflowReturnedErrorMessage, addsearchattributes.WorkflowName, err))
 	}
-	scope.IncCounter(metrics.AddSearchAttributesWorkflowSuccessCount)
 
 	return &adminservice.AddSearchAttributesResponse{}, nil
 }
@@ -313,16 +312,13 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 func (adh *AdminHandler) RemoveSearchAttributes(ctx context.Context, request *adminservice.RemoveSearchAttributesRequest) (_ *adminservice.RemoveSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminRemoveSearchAttributesScope)
-	defer sw.Stop()
-
 	// validate request
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 
 	if len(request.GetSearchAttributes()) == 0 {
-		return nil, adh.error(errSearchAttributesNotSet, scope)
+		return nil, errSearchAttributesNotSet
 	}
 
 	indexName := request.GetIndexName()
@@ -332,24 +328,24 @@ func (adh *AdminHandler) RemoveSearchAttributes(ctx context.Context, request *ad
 
 	currentSearchAttributes, err := adh.saProvider.GetSearchAttributes(indexName, true)
 	if err != nil {
-		return nil, adh.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err)), scope)
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
 	newCustomSearchAttributes := maps.Clone(currentSearchAttributes.Custom())
 
 	for _, saName := range request.GetSearchAttributes() {
 		if !currentSearchAttributes.IsDefined(saName) {
-			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName)), scope)
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName))
 		}
 		if _, ok := newCustomSearchAttributes[saName]; !ok {
-			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToRemoveNonCustomSearchAttributesMessage, saName)), scope)
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToRemoveNonCustomSearchAttributesMessage, saName))
 		}
 		delete(newCustomSearchAttributes, saName)
 	}
 
 	err = adh.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
 	if err != nil {
-		return nil, adh.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err)), scope)
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err))
 	}
 
 	return &adminservice.RemoveSearchAttributesResponse{}, nil
@@ -358,11 +354,8 @@ func (adh *AdminHandler) RemoveSearchAttributes(ctx context.Context, request *ad
 func (adh *AdminHandler) GetSearchAttributes(ctx context.Context, request *adminservice.GetSearchAttributesRequest) (_ *adminservice.GetSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminGetSearchAttributesScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 
 	indexName := request.GetIndexName()
@@ -372,7 +365,7 @@ func (adh *AdminHandler) GetSearchAttributes(ctx context.Context, request *admin
 
 	resp, err := adh.getSearchAttributes(ctx, indexName, "")
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	return resp, nil
@@ -420,20 +413,17 @@ func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName stri
 func (adh *AdminHandler) RebuildMutableState(ctx context.Context, request *adminservice.RebuildMutableStateRequest) (_ *adminservice.RebuildMutableStateResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminRebuildMutableStateScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 
 	if err := validateExecution(request.Execution); err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	if _, err := adh.historyClient.RebuildMutableState(ctx, &historyservice.RebuildMutableStateRequest{
@@ -449,20 +439,17 @@ func (adh *AdminHandler) RebuildMutableState(ctx context.Context, request *admin
 func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *adminservice.DescribeMutableStateRequest) (_ *adminservice.DescribeMutableStateResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminDescribeWorkflowExecutionScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 
 	if err := validateExecution(request.Execution); err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), request.Execution.WorkflowId, adh.numberOfHistoryShards)
@@ -470,7 +457,7 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 
 	historyHost, err := adh.membershipMonitor.Lookup(common.HistoryServiceName, shardIDStr)
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	historyAddr := historyHost.GetAddress()
@@ -494,11 +481,8 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.RemoveTaskRequest) (_ *adminservice.RemoveTaskResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminRemoveTaskScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 	_, err := adh.historyClient.RemoveTask(ctx, &historyservice.RemoveTaskRequest{
 		ShardId:        request.GetShardId(),
@@ -512,12 +496,8 @@ func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.R
 // GetShard returns information about the internal states of a shard
 func (adh *AdminHandler) GetShard(ctx context.Context, request *adminservice.GetShardRequest) (_ *adminservice.GetShardResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
-
-	scope, sw := adh.startRequestProfile(metrics.AdminGetShardScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 	resp, err := adh.historyClient.GetShard(ctx, &historyservice.GetShardRequest{ShardId: request.GetShardId()})
 	if err != nil {
@@ -530,11 +510,8 @@ func (adh *AdminHandler) GetShard(ctx context.Context, request *adminservice.Get
 func (adh *AdminHandler) CloseShard(ctx context.Context, request *adminservice.CloseShardRequest) (_ *adminservice.CloseShardResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminCloseShardScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 	_, err := adh.historyClient.CloseShard(ctx, &historyservice.CloseShardRequest{ShardId: request.GetShardId()})
 	return &adminservice.CloseShardResponse{}, err
@@ -546,22 +523,19 @@ func (adh *AdminHandler) ListHistoryTasks(
 ) (_ *adminservice.ListHistoryTasksResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminListHistoryTasksScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 	taskRange := request.GetTaskRange()
 	if taskRange == nil {
-		return nil, adh.error(errTaskRangeNotSet, scope)
+		return nil, errTaskRangeNotSet
 	}
 
 	taskCategory, ok := tasks.GetCategoryByID(int32(request.Category))
 	if !ok {
-		return nil, adh.error(&serviceerror.InvalidArgument{
+		return nil, &serviceerror.InvalidArgument{
 			Message: fmt.Sprintf("unknown task category: %v", request.Category),
-		}, scope)
+		}
 	}
 
 	var minTaskKey, maxTaskKey tasks.Key
@@ -571,9 +545,9 @@ func (adh *AdminHandler) ListHistoryTasks(
 			taskRange.InclusiveMinTaskKey.TaskId,
 		)
 		if err := tasks.ValidateKey(minTaskKey); err != nil {
-			return nil, adh.error(&serviceerror.InvalidArgument{
+			return nil, &serviceerror.InvalidArgument{
 				Message: fmt.Sprintf("invalid minTaskKey: %v", err.Error()),
-			}, scope)
+			}
 		}
 	}
 	if taskRange.ExclusiveMaxTaskKey != nil {
@@ -582,9 +556,9 @@ func (adh *AdminHandler) ListHistoryTasks(
 			taskRange.ExclusiveMaxTaskKey.TaskId,
 		)
 		if err := tasks.ValidateKey(maxTaskKey); err != nil {
-			return nil, adh.error(&serviceerror.InvalidArgument{
+			return nil, &serviceerror.InvalidArgument{
 				Message: fmt.Sprintf("invalid maxTaskKey: %v", err.Error()),
-			}, scope)
+			}
 		}
 	}
 	resp, err := adh.persistenceExecutionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
@@ -596,7 +570,7 @@ func (adh *AdminHandler) ListHistoryTasks(
 		NextPageToken:       request.NextPageToken,
 	})
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	return &adminservice.ListHistoryTasksResponse{
@@ -625,11 +599,8 @@ func toAdminTask(tasks []tasks.Task) []*adminservice.Task {
 func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *adminservice.DescribeHistoryHostRequest) (_ *adminservice.DescribeHistoryHostResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminDescribeHistoryHostScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 
 	flagsCount := 0
@@ -651,11 +622,11 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	if request.WorkflowExecution != nil {
 		namespaceID, err = adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.Namespace))
 		if err != nil {
-			return nil, adh.error(err, scope)
+			return nil, err
 		}
 
 		if err := validateExecution(request.WorkflowExecution); err != nil {
-			return nil, adh.error(err, scope)
+			return nil, err
 		}
 	}
 
@@ -689,12 +660,12 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	if err := adh.validateGetWorkflowExecutionRawHistoryV2Request(
 		request,
 	); err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	ns, err := adh.getNamespaceFromRequest(request)
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 	scope = scope.Tagged(metrics.NamespaceTag(ns.Name().String()))
 
@@ -707,7 +678,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 			Execution:   execution,
 		})
 		if err != nil {
-			return nil, adh.error(err, scope)
+			return nil, err
 		}
 
 		targetVersionHistory, err = adh.setRequestDefaultValueAndGetTargetVersionHistory(
@@ -715,25 +686,25 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 			response.GetVersionHistories(),
 		)
 		if err != nil {
-			return nil, adh.error(err, scope)
+			return nil, err
 		}
 
 		pageToken = generatePaginationToken(request, response.GetVersionHistories())
 	} else {
 		pageToken, err = deserializeRawHistoryToken(request.NextPageToken)
 		if err != nil {
-			return nil, adh.error(err, scope)
+			return nil, err
 		}
 		versionHistories := pageToken.GetVersionHistories()
 		if versionHistories == nil {
-			return nil, adh.error(errInvalidVersionHistories, scope)
+			return nil, errInvalidVersionHistories
 		}
 		targetVersionHistory, err = adh.setRequestDefaultValueAndGetTargetVersionHistory(
 			request,
 			versionHistories,
 		)
 		if err != nil {
-			return nil, adh.error(err, scope)
+			return nil, err
 		}
 	}
 
@@ -741,7 +712,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		request,
 		pageToken,
 	); err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	if pageToken.GetStartEventId()+1 == pageToken.GetEndEventId() {
@@ -786,7 +757,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
 	// namespaces along with the individual namespaces stats
 	adh.metricsClient.
-		Scope(metrics.AdminGetWorkflowExecutionRawHistoryScope).
+		Scope(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope).
 		RecordDistribution(metrics.HistorySize, size)
 	scope.RecordDistribution(metrics.HistorySize, size)
 
@@ -814,14 +785,11 @@ func (adh *AdminHandler) DescribeCluster(
 ) (_ *adminservice.DescribeClusterResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminDescribeClusterScope)
-	defer sw.Stop()
-
 	membershipInfo := &clusterspb.MembershipInfo{}
 	if monitor := adh.membershipMonitor; monitor != nil {
 		currentHost, err := monitor.WhoAmI()
 		if err != nil {
-			return nil, adh.error(err, scope)
+			return nil, err
 		}
 
 		membershipInfo.CurrentHost = &clusterspb.HostInfo{
@@ -830,7 +798,7 @@ func (adh *AdminHandler) DescribeCluster(
 
 		members, err := monitor.GetReachableMembers()
 		if err != nil {
-			return nil, adh.error(err, scope)
+			return nil, err
 		}
 
 		membershipInfo.ReachableMembers = members
@@ -839,7 +807,7 @@ func (adh *AdminHandler) DescribeCluster(
 		for _, role := range []string{common.FrontendServiceName, common.HistoryServiceName, common.MatchingServiceName, common.WorkerServiceName} {
 			resolver, err := monitor.GetResolver(role)
 			if err != nil {
-				return nil, adh.error(err, scope)
+				return nil, err
 			}
 
 			var servers []*clusterspb.HostInfo
@@ -866,7 +834,7 @@ func (adh *AdminHandler) DescribeCluster(
 		&persistence.GetClusterMetadataRequest{ClusterName: request.GetClusterName()},
 	)
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	return &adminservice.DescribeClusterResponse{
@@ -892,11 +860,8 @@ func (adh *AdminHandler) ListClusters(
 ) (_ *adminservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminListClustersScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 	if request.GetPageSize() <= 0 {
 		request.PageSize = listClustersPageSize
@@ -907,7 +872,7 @@ func (adh *AdminHandler) ListClusters(
 		NextPageToken: request.GetNextPageToken(),
 	})
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	var clusterMetadataList []*persistencespb.ClusterMetadata
@@ -926,11 +891,8 @@ func (adh *AdminHandler) ListClusterMembers(
 ) (_ *adminservice.ListClusterMembersResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminListClusterMembersScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 
 	metadataMgr := adh.clusterMetadataManager
@@ -956,7 +918,7 @@ func (adh *AdminHandler) ListClusterMembers(
 		NextPageToken:       request.GetNextPageToken(),
 	})
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	var activeMembers []*clusterspb.ClusterMember
@@ -984,9 +946,6 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 ) (_ *adminservice.AddOrUpdateRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminAddOrUpdateRemoteClusterScope)
-	defer sw.Stop()
-
 	adminClient := adh.clientFactory.NewAdminClientWithTimeout(
 		request.GetFrontendAddress(),
 		admin.DefaultTimeout,
@@ -996,12 +955,12 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	// Fetch cluster metadata from remote cluster
 	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	err = adh.validateRemoteClusterMetadata(resp)
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	var updateRequestVersion int64 = 0
@@ -1016,7 +975,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	case *serviceerror.NotFound:
 		updateRequestVersion = 0
 	default:
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
@@ -1033,13 +992,11 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 		Version: updateRequestVersion,
 	})
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 	if !applied {
-		return nil, adh.error(serviceerror.NewInvalidArgument(
-			"Cannot update remote cluster due to update immutable fields"),
-			scope,
-		)
+		return nil, serviceerror.NewInvalidArgument(
+			"Cannot update remote cluster due to update immutable fields")
 	}
 	return &adminservice.AddOrUpdateRemoteClusterResponse{}, nil
 }
@@ -1050,14 +1007,11 @@ func (adh *AdminHandler) RemoveRemoteCluster(
 ) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminRemoveRemoteClusterScope)
-	defer sw.Stop()
-
 	if err := adh.clusterMetadataManager.DeleteClusterMetadata(
 		ctx,
 		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
 	); err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 	return &adminservice.RemoveRemoteClusterResponse{}, nil
 }
@@ -1066,14 +1020,11 @@ func (adh *AdminHandler) RemoveRemoteCluster(
 func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *adminservice.GetReplicationMessagesRequest) (_ *adminservice.GetReplicationMessagesResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminGetReplicationMessagesScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 	if request.GetClusterName() == "" {
-		return nil, adh.error(errClusterNameNotSet, scope)
+		return nil, errClusterNameNotSet
 	}
 
 	resp, err := adh.historyClient.GetReplicationMessages(ctx, &historyservice.GetReplicationMessagesRequest{
@@ -1081,7 +1032,7 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 		ClusterName: request.GetClusterName(),
 	})
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 	return &adminservice.GetReplicationMessagesResponse{ShardMessages: resp.GetShardMessages()}, nil
 }
@@ -1090,15 +1041,12 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, request *adminservice.GetNamespaceReplicationMessagesRequest) (_ *adminservice.GetNamespaceReplicationMessagesResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminGetNamespaceReplicationMessagesScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 
 	if adh.namespaceReplicationQueue == nil {
-		return nil, adh.error(errors.New("namespace replication queue not enabled for cluster"), scope)
+		return nil, errors.New("namespace replication queue not enabled for cluster")
 	}
 
 	lastMessageID := request.GetLastRetrievedMessageId()
@@ -1116,7 +1064,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 		getNamespaceReplicationMessageBatchSize,
 	)
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	if request.GetLastProcessedMessageId() != defaultLastMessageID {
@@ -1143,19 +1091,16 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 func (adh *AdminHandler) GetDLQReplicationMessages(ctx context.Context, request *adminservice.GetDLQReplicationMessagesRequest) (_ *adminservice.GetDLQReplicationMessagesResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminGetDLQReplicationMessagesScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 	if len(request.GetTaskInfos()) == 0 {
-		return nil, adh.error(errEmptyReplicationInfo, scope)
+		return nil, errEmptyReplicationInfo
 	}
 
 	resp, err := adh.historyClient.GetDLQReplicationMessages(ctx, &historyservice.GetDLQReplicationMessagesRequest{TaskInfos: request.GetTaskInfos()})
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 	return &adminservice.GetDLQReplicationMessagesResponse{ReplicationTasks: resp.GetReplicationTasks()}, nil
 }
@@ -1163,24 +1108,21 @@ func (adh *AdminHandler) GetDLQReplicationMessages(ctx context.Context, request 
 // ReapplyEvents applies stale events to the current workflow and the current run
 func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservice.ReapplyEventsRequest) (_ *adminservice.ReapplyEventsResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
-	scope, sw := adh.startRequestProfile(metrics.AdminReapplyEventsScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 	if request.WorkflowExecution == nil {
-		return nil, adh.error(errExecutionNotSet, scope)
+		return nil, errExecutionNotSet
 	}
 	if request.GetWorkflowExecution().GetWorkflowId() == "" {
-		return nil, adh.error(errWorkflowIDNotSet, scope)
+		return nil, errWorkflowIDNotSet
 	}
 	if request.GetEvents() == nil {
-		return nil, adh.error(errWorkflowIDNotSet, scope)
+		return nil, errWorkflowIDNotSet
 	}
 	namespaceEntry, err := adh.getNamespaceFromRequest(request)
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	_, err = adh.historyClient.ReapplyEvents(ctx, &historyservice.ReapplyEventsRequest{
@@ -1188,7 +1130,7 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 		Request:     request,
 	})
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 	return &adminservice.ReapplyEventsResponse{}, nil
 }
@@ -1198,13 +1140,9 @@ func (adh *AdminHandler) GetDLQMessages(
 	ctx context.Context,
 	request *adminservice.GetDLQMessagesRequest,
 ) (resp *adminservice.GetDLQMessagesResponse, retErr error) {
-
 	defer log.CapturePanic(adh.logger, &retErr)
-	scope, sw := adh.startRequestProfile(metrics.AdminReadDLQMessagesScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 
 	if request.GetMaximumPageSize() <= 0 {
@@ -1254,11 +1192,11 @@ func (adh *AdminHandler) GetDLQMessages(
 			}
 		}
 	default:
-		return nil, adh.error(errDLQTypeIsNotSupported, scope)
+		return nil, errDLQTypeIsNotSupported
 	}
 	retErr = backoff.ThrottleRetryContext(ctx, op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if retErr != nil {
-		return nil, adh.error(retErr, scope)
+		return nil, retErr
 	}
 
 	return &adminservice.GetDLQMessagesResponse{
@@ -1272,13 +1210,9 @@ func (adh *AdminHandler) PurgeDLQMessages(
 	ctx context.Context,
 	request *adminservice.PurgeDLQMessagesRequest,
 ) (_ *adminservice.PurgeDLQMessagesResponse, err error) {
-
 	defer log.CapturePanic(adh.logger, &err)
-	scope, sw := adh.startRequestProfile(metrics.AdminPurgeDLQMessagesScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 
 	if request.GetInclusiveEndMessageId() <= 0 {
@@ -1296,7 +1230,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 		})
 
 		if resp == nil {
-			return nil, adh.error(err, scope)
+			return nil, err
 		}
 
 		return &adminservice.PurgeDLQMessagesResponse{}, err
@@ -1310,11 +1244,11 @@ func (adh *AdminHandler) PurgeDLQMessages(
 			}
 		}
 	default:
-		return nil, adh.error(errDLQTypeIsNotSupported, scope)
+		return nil, errDLQTypeIsNotSupported
 	}
 	err = backoff.ThrottleRetryContext(ctx, op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	return &adminservice.PurgeDLQMessagesResponse{}, err
@@ -1325,13 +1259,9 @@ func (adh *AdminHandler) MergeDLQMessages(
 	ctx context.Context,
 	request *adminservice.MergeDLQMessagesRequest,
 ) (resp *adminservice.MergeDLQMessagesResponse, err error) {
-
 	defer log.CapturePanic(adh.logger, &err)
-	scope, sw := adh.startRequestProfile(metrics.AdminMergeDLQMessagesScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 
 	if request.GetInclusiveEndMessageId() <= 0 {
@@ -1351,7 +1281,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 			NextPageToken:         request.GetNextPageToken(),
 		})
 		if resp == nil {
-			return nil, adh.error(err, scope)
+			return nil, err
 		}
 
 		return &adminservice.MergeDLQMessagesResponse{
@@ -1374,11 +1304,11 @@ func (adh *AdminHandler) MergeDLQMessages(
 			}
 		}
 	default:
-		return nil, adh.error(errDLQTypeIsNotSupported, scope)
+		return nil, errDLQTypeIsNotSupported
 	}
 	err = backoff.ThrottleRetryContext(ctx, op, adminServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	return &adminservice.MergeDLQMessagesResponse{
@@ -1392,18 +1322,16 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	request *adminservice.RefreshWorkflowTasksRequest,
 ) (_ *adminservice.RefreshWorkflowTasksResponse, err error) {
 	defer log.CapturePanic(adh.logger, &err)
-	scope, sw := adh.startRequestProfile(metrics.AdminRefreshWorkflowTasksScope)
-	defer sw.Stop()
 
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 	if err := validateExecution(request.Execution); err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 	namespaceEntry, err := adh.getNamespaceFromRequest(request)
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	_, err = adh.historyClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
@@ -1411,7 +1339,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 		Request:     request,
 	})
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 	return &adminservice.RefreshWorkflowTasksResponse{}, nil
 }
@@ -1422,11 +1350,9 @@ func (adh *AdminHandler) ResendReplicationTasks(
 	request *adminservice.ResendReplicationTasksRequest,
 ) (_ *adminservice.ResendReplicationTasksResponse, err error) {
 	defer log.CapturePanic(adh.logger, &err)
-	scope, sw := adh.startRequestProfile(metrics.AdminResendReplicationTasksScope)
-	defer sw.Stop()
 
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 	resender := xdc.NewNDCHistoryResender(
 		adh.namespaceRegistry,
@@ -1460,16 +1386,14 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 	request *adminservice.GetTaskQueueTasksRequest,
 ) (_ *adminservice.GetTaskQueueTasksResponse, err error) {
 	defer log.CapturePanic(adh.logger, &err)
-	scope, sw := adh.startRequestProfile(metrics.AdminGetTaskQueueTasksScope)
-	defer sw.Stop()
 
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 
 	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	resp, err := adh.taskManager.GetTasks(ctx, &persistence.GetTasksRequest{
@@ -1482,7 +1406,7 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		NextPageToken:      request.NextPageToken,
 	})
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	return &adminservice.GetTaskQueueTasksResponse{
@@ -1496,20 +1420,18 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 	request *adminservice.DeleteWorkflowExecutionRequest,
 ) (_ *adminservice.DeleteWorkflowExecutionResponse, err error) {
 	defer log.CapturePanic(adh.logger, &err)
-	scope, sw := adh.startRequestProfile(metrics.AdminDeleteWorkflowExecutionScope)
-	defer sw.Stop()
 
 	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
+		return nil, errRequestNotSet
 	}
 
 	if err := validateExecution(request.Execution); err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 	execution := request.Execution
 
@@ -1531,7 +1453,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 			WorkflowID:  execution.WorkflowId,
 		})
 		if err != nil {
-			return nil, adh.error(err, scope)
+			return nil, err
 		}
 		execution.RunId = resp.RunID
 	}
@@ -1549,7 +1471,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 	})
 	if err != nil {
 		if common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err) {
-			return nil, adh.error(err, scope)
+			return nil, err
 		}
 		// continue to deletion
 		warnMsg := "Unable to load mutable state when deleting workflow execution, " +
@@ -1595,7 +1517,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 			WorkflowStartTime: startTime,
 			WorkflowCloseTime: closeTime,
 		}); err != nil {
-			return nil, adh.error(err, scope)
+			return nil, err
 		}
 	}
 
@@ -1605,7 +1527,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		WorkflowID:  execution.WorkflowId,
 		RunID:       execution.RunId,
 	}); err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	if err := adh.persistenceExecutionManager.DeleteWorkflowExecution(ctx, &persistence.DeleteWorkflowExecutionRequest{
@@ -1614,7 +1536,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		WorkflowID:  execution.WorkflowId,
 		RunID:       execution.RunId,
 	}); err != nil {
-		return nil, adh.error(err, scope)
+		return nil, err
 	}
 
 	for _, branchToken := range branchTokens {
@@ -1779,30 +1701,6 @@ func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.
 	sw := metricsScope.StartTimer(metrics.ServiceLatency)
 	metricsScope.IncCounter(metrics.ServiceRequests)
 	return metricsScope, sw
-}
-
-func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
-	scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ServiceErrorWithType)
-
-	switch err := err.(type) {
-	case *serviceerror.Unavailable:
-		adh.logger.Error("unavailable error", tag.Error(err))
-		scope.IncCounter(metrics.ServiceFailures)
-		return err
-	case *serviceerror.InvalidArgument:
-		scope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
-		return err
-	case *serviceerror.ResourceExhausted:
-		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)
-		return err
-	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
-		return err
-	}
-
-	adh.logger.Error("Unknown error", tag.Error(err))
-	scope.IncCounter(metrics.ServiceFailures)
-
-	return err
 }
 
 // TODO (alex): remove this func in 1.18+ together with `namespace` field in corresponding protos and namespace_validator.go.

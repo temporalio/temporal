@@ -26,7 +26,6 @@ package clitest
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -145,10 +144,4 @@ func (s *VersionTestSuite) createDatabase(database string) func() {
 		s.NoError(connection.DropDatabase(database))
 		connection.Close()
 	}
-}
-func (s *VersionTestSuite) createSchemaForVersion(subdir string, v string) {
-	vDir := subdir + "/v" + v
-	s.NoError(os.Mkdir(vDir, os.FileMode(0744)))
-	cqlFile := vDir + "/tmp.sql"
-	s.NoError(os.WriteFile(cqlFile, []byte{}, os.FileMode(0644)))
 }

@@ -286,7 +286,7 @@ func (s *localStoreCertProvider) fetchCertificate(
 	}
 
 	if certFile != "" && certData != "" {
-		return nil, errors.New("Cannot specify both certFile and certData properties")
+		return nil, errors.New("only one of certFile or certData properties should be spcified")
 	}
 
 	var certBytes []byte
@@ -385,14 +385,6 @@ func (s *localStoreCertProvider) fetchCAs(
 	}
 
 	return certPool, certs, nil
-}
-
-func (s *localStoreCertProvider) fetchClientCert() (*tls.Certificate, error) {
-	return s.FetchClientCertificate(false)
-}
-
-func (s *localStoreCertProvider) fetchWorkerCert() (*tls.Certificate, error) {
-	return s.FetchClientCertificate(true)
 }
 
 func checkTLSCertForExpiration(
@@ -533,7 +525,7 @@ func (s *localStoreCertProvider) refreshCerts() {
 	for {
 		select {
 		case <-s.stop:
-			break
+			return
 		case <-s.ticker.C:
 		}
 
@@ -585,7 +577,7 @@ func equal(a, b [][]byte) bool {
 		return false
 	}
 	for i := range a {
-		if bytes.Compare(a[i], b[i]) != 0 {
+		if !bytes.Equal(a[i], b[i]) {
 			return false
 		}
 	}

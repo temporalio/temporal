@@ -31,12 +31,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -45,7 +42,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type versioningIntegSuite struct {
@@ -96,7 +92,6 @@ func TestVersioningIntegrationSuite(t *testing.T) {
 func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 	ctx := NewContext()
 	tq := "integration-versioning-basic"
-	s.prepareQueue(ctx, tq)
 
 	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
 		Namespace:          s.namespace,
@@ -120,7 +115,6 @@ func (s *versioningIntegSuite) TestBasicVersionUpdate() {
 func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 	ctx := NewContext()
 	tq := "integration-versioning-series"
-	s.prepareQueue(ctx, tq)
 
 	for i := 0; i < 10; i++ {
 		res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
@@ -158,7 +152,6 @@ func (s *versioningIntegSuite) TestSeriesOfUpdates() {
 func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotFound() {
 	ctx := NewContext()
 	tq := "integration-versioning-compat-not-found"
-	s.prepareQueue(ctx, tq)
 
 	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
 		Namespace:          s.namespace,
@@ -176,7 +169,6 @@ func (s *versioningIntegSuite) TestLinkToNonexistentCompatibleVersionReturnsNotF
 func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	ctx := NewContext()
 	tq := "integration-versioning-not-destroyed"
-	s.prepareQueue(ctx, tq)
 
 	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
 		Namespace:          s.namespace,
@@ -217,36 +209,4 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	s.NoError(err)
 	s.NotNil(res2)
 	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
-}
-
-func (s *versioningIntegSuite) prepareQueue(ctx context.Context, tq string) {
-	workflowID := "integration-versioning-queuemaker"
-	wt := "integration-versioning-queuemaker"
-	identity := "worker1"
-
-	// Make sure the task queue exists by starting a workflow on it
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:             uuid.New(),
-		Namespace:             s.namespace,
-		WorkflowId:            workflowID,
-		WorkflowType:          &commonpb.WorkflowType{Name: wt},
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: tq},
-		Input:                 nil,
-		WorkflowRunTimeout:    timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout:   timestamp.DurationPtr(1 * time.Second),
-		Identity:              identity,
-		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING,
-	}
-
-	// start workflow task, to ensure that the task queue exists
-	// TODO: Should not be necessary - see https://github.com/temporalio/temporal/issues/2969
-	we, err := s.engine.StartWorkflowExecution(ctx, request)
-	s.NoError(err)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
-	_, err1 := s.engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{Name: tq},
-		Identity:  identity,
-	})
-	s.NoError(err1)
 }

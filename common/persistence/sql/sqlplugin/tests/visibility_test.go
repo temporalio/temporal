@@ -60,10 +60,6 @@ var (
 	testVisibilityData = []byte("random history execution activity data")
 )
 
-var testVisibilityOpenStatus = []enumspb.WorkflowExecutionStatus{
-	enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-}
-
 var testVisibilityCloseStatus = []enumspb.WorkflowExecutionStatus{
 	enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,

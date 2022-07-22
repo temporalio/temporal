@@ -66,8 +66,7 @@ type (
 		GetMetricsHandler() metrics.MetricsHandler
 		GetTimeSource() clock.TimeSource
 
-		GetEngine() (Engine, error)
-		GetEngineWithContext(ctx context.Context) (Engine, error)
+		GetEngine(ctx context.Context) (Engine, error)
 
 		AssertOwnership(ctx context.Context) error
 		NewVectorClock() (*clockspb.VectorClock, error)

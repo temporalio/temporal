@@ -33,6 +33,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/gogo/protobuf/jsonpb"
+	"go.temporal.io/server/common/clock"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -141,6 +143,7 @@ func NewWorkflowHandler(
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
+	timeSource clock.TimeSource,
 ) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
@@ -157,6 +160,7 @@ func NewWorkflowHandler(
 			archivalMetadata,
 			archiverProvider,
 			config.EnableSchedules,
+			timeSource,
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMrg:                   visibilityMrg,
@@ -3349,6 +3353,9 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		input.ConflictToken = int64(binary.BigEndian.Uint64(request.ConflictToken))
 	}
 	inputPayloads, err := payloads.Encode(input)
+	if err != nil {
+		return nil, err
+	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
@@ -3419,6 +3426,9 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 	}
 
 	inputPayloads, err := payloads.Encode(request.Patch)
+	if err != nil {
+		return nil, err
+	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(request.GetNamespace())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(request.GetNamespace())
@@ -3678,6 +3688,37 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, requ
 	return &workflowservice.UpdateWorkerBuildIdOrderingResponse{}, err
 }
 
+func (wh *WorkflowHandler) UpdateWorkflow(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkflowRequest,
+) (_ *workflowservice.UpdateWorkflowResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, err
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	nsID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	histResp, err := wh.historyClient.UpdateWorkflow(ctx, &historyservice.UpdateWorkflowRequest{
+		NamespaceId: nsID.String(),
+		Request:     request,
+	})
+
+	return histResp.GetResponse(), err
+}
+
 func (wh *WorkflowHandler) GetWorkerBuildIdOrdering(ctx context.Context, request *workflowservice.GetWorkerBuildIdOrderingRequest) (_ *workflowservice.GetWorkerBuildIdOrderingResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
@@ -3756,25 +3797,21 @@ func (wh *WorkflowHandler) getRawHistory(
 				tag.WorkflowID(execution.GetWorkflowId()),
 				tag.WorkflowRunID(execution.GetRunId()),
 				tag.Error(err))
-		}
-
-		blob, err := wh.payloadSerializer.SerializeEvent(transientWorkflowTaskInfo.ScheduledEvent, enumspb.ENCODING_TYPE_PROTO3)
-		if err != nil {
 			return nil, nil, err
 		}
-		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-			Data:         blob.Data,
-		})
 
-		blob, err = wh.payloadSerializer.SerializeEvent(transientWorkflowTaskInfo.StartedEvent, enumspb.ENCODING_TYPE_PROTO3)
-		if err != nil {
-			return nil, nil, err
+		suffix := extractHistorySuffix(transientWorkflowTaskInfo)
+
+		for _, event := range suffix {
+			blob, err := wh.payloadSerializer.SerializeEvent(event, enumspb.ENCODING_TYPE_PROTO3)
+			if err != nil {
+				return nil, nil, err
+			}
+			rawHistory = append(rawHistory, &commonpb.DataBlob{
+				EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				Data:         blob.Data,
+			})
 		}
-		rawHistory = append(rawHistory, &commonpb.DataBlob{
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-			Data:         blob.Data,
-		})
 	}
 
 	return rawHistory, resp.NextPageToken, nil
@@ -3834,7 +3871,6 @@ func (wh *WorkflowHandler) getHistory(
 			tag.WorkflowID(execution.GetWorkflowId()),
 			tag.WorkflowRunID(execution.GetRunId()),
 			tag.Error(err))
-		return nil, nil, err
 	}
 
 	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
@@ -3847,7 +3883,7 @@ func (wh *WorkflowHandler) getHistory(
 				tag.Error(err))
 		}
 		// Append the transient workflow task events once we are done enumerating everything from the events table
-		historyEvents = append(historyEvents, transientWorkflowTaskInfo.ScheduledEvent, transientWorkflowTaskInfo.StartedEvent)
+		historyEvents = append(historyEvents, extractHistorySuffix(transientWorkflowTaskInfo)...)
 	}
 
 	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
@@ -3961,20 +3997,41 @@ func (wh *WorkflowHandler) processIncomingSearchAttributes(searchAttributes *com
 }
 
 func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(
-	expectedNextEventID int64,
+	eventIDOffset int64,
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 ) error {
-
-	if transientWorkflowTaskInfo.ScheduledEvent.GetEventId() == expectedNextEventID &&
-		transientWorkflowTaskInfo.StartedEvent.GetEventId() == expectedNextEventID+1 {
-		return nil
+	suffix := extractHistorySuffix(transientWorkflowTaskInfo)
+	for i, event := range suffix {
+		expectedEventID := eventIDOffset + int64(i)
+		if event.GetEventId() != expectedEventID {
+			return serviceerror.NewInternal(
+				fmt.Sprintf(
+					"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
+					i,
+					expectedEventID,
+					event.GetEventId()))
+		}
 	}
 
-	return fmt.Errorf("invalid transient workflow task: expectedScheduledEventID=%v expectedStartedEventID=%v but have scheduledEventID=%v startedEventID=%v",
-		expectedNextEventID,
-		expectedNextEventID+1,
-		transientWorkflowTaskInfo.ScheduledEvent.GetEventId(),
-		transientWorkflowTaskInfo.StartedEvent.GetEventId())
+	return nil
+}
+
+func extractHistorySuffix(transientWorkflowTask *historyspb.TransientWorkflowTaskInfo) []*historypb.HistoryEvent {
+	// TODO (mmcshane): remove this function after v1.18 is release as we will
+	// be able to just use transientWorkflowTask.HistorySuffix directly and the other
+	// fields will be removed.
+
+	suffix := transientWorkflowTask.HistorySuffix
+	if len(suffix) == 0 {
+		// HistorySuffix is a new field - we may still need to handle
+		// instances that carry the separate ScheduledEvent and StartedEvent
+		// fields
+
+		// One might be tempted to check for nil here but the old code did not
+		// make that check and we aim to preserve compatiblity
+		suffix = append(suffix, transientWorkflowTask.ScheduledEvent, transientWorkflowTask.StartedEvent)
+	}
+	return suffix
 }
 
 func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
@@ -4076,7 +4133,7 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 			nextEventID,
 			int32(wh.config.HistoryMaxPageSize(namespaceEntry.Name().String())),
 			nil,
-			matchingResp.GetWorkflowTaskInfo(),
+			matchingResp.GetTransientWorkflowTask(),
 			branchToken,
 		)
 		if err != nil {
@@ -4089,7 +4146,7 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 				FirstEventId:          firstEventID,
 				NextEventId:           nextEventID,
 				PersistenceToken:      persistenceToken,
-				TransientWorkflowTask: matchingResp.GetWorkflowTaskInfo(),
+				TransientWorkflowTask: matchingResp.GetTransientWorkflowTask(),
 				BranchToken:           branchToken,
 			})
 			if err != nil {
@@ -4172,10 +4229,6 @@ func (wh *WorkflowHandler) verifyHistoryIsComplete(
 		isFirstPage,
 		isLastPage,
 		pageSize))
-}
-
-func (wh *WorkflowHandler) isFailoverRequest(updateRequest *workflowservice.UpdateNamespaceRequest) bool {
-	return updateRequest.ReplicationConfig != nil && updateRequest.ReplicationConfig.GetActiveClusterName() != ""
 }
 
 func (wh *WorkflowHandler) historyArchived(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest, namespaceID namespace.ID) bool {

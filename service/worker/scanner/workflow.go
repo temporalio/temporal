@@ -40,19 +40,7 @@ import (
 	"go.temporal.io/server/service/worker/scanner/taskqueue"
 )
 
-type (
-	contextKey int
-
-	scannerCtxExecMgrFactory struct {
-		ctx scannerContext
-	}
-)
-
-func (s scannerCtxExecMgrFactory) Close() {}
-
 const (
-	scannerContextKey = contextKey(0)
-
 	infiniteDuration = 20 * 365 * 24 * time.Hour
 
 	tqScannerWFID                  = "temporal-sys-tq-scanner"
@@ -71,7 +59,12 @@ const (
 	executionsScavengerActivityName = "temporal-sys-executions-scanner-scvg-activity"
 )
 
+type (
+	scannerContextKeyType struct{}
+)
+
 var (
+	scannerContextKey             = scannerContextKeyType{}
 	tlScavengerHBInterval         = 10 * time.Second
 	executionsScavengerHBInterval = 10 * time.Second
 

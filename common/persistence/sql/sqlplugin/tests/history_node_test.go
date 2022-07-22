@@ -334,7 +334,6 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Multiple() {
 	nodeID := int64(1)
 	minNodeID := nodeID
 
-	var nodes []sqlplugin.HistoryNodeRow
 	for i := 0; i < numNodeIDs; i++ {
 		for j := 0; j < nodePerNodeID; j++ {
 			node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, rand.Int63(), rand.Int63())
@@ -343,7 +342,6 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Multiple() {
 			rowsAffected, err := result.RowsAffected()
 			s.NoError(err)
 			s.Equal(1, int(rowsAffected))
-			nodes = append(nodes, node)
 		}
 		nodeID++
 	}

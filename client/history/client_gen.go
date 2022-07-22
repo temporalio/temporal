@@ -1004,6 +1004,30 @@ func (c *clientImpl) TerminateWorkflowExecution(
 	return response, nil
 }
 
+func (c *clientImpl) UpdateWorkflow(
+	ctx context.Context,
+	request *historyservice.UpdateWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.UpdateWorkflowResponse, error) {
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.GetRequest().GetWorkflowExecution().GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+	var response *historyservice.UpdateWorkflowResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.UpdateWorkflow(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,

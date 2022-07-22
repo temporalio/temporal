@@ -110,6 +110,12 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	runningDeleteExecutionsSelector := workflow.NewSelector(ctx)
 	var lastDeleteExecutionsActivityErr error
 
+	// Two activities DeleteExecutionsActivity and GetNextPageTokenActivity are executed here essentially in reverse order
+	// because Get is called immediately for GetNextPageTokenActivity but not for DeleteExecutionsActivity.
+	// These activities scan visibility storage independently but GetNextPageTokenActivity considered to be quick and can be done synchronously.
+	// It reads nextPageToken and pass it DeleteExecutionsActivity. This allocates block of workflow executions to delete for
+	// DeleteExecutionsActivity which takes much longer to complete. This is why this workflow starts
+	// ConcurrentDeleteExecutionsActivities number of them and executes them concurrently on available workers.
 	for i := 0; i < params.Config.PagesPerExecutionCount; i++ {
 		ctx1 := workflow.WithActivityOptions(ctx, deleteWorkflowExecutionsActivityOptions)
 		deleteExecutionsFuture := workflow.ExecuteActivity(ctx1, a.DeleteExecutionsActivity, &DeleteExecutionsActivityParams{
@@ -119,6 +125,18 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 			ListPageSize:  params.Config.PageSize,
 			NextPageToken: nextPageToken,
 		})
+
+		ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+		err := workflow.ExecuteLocalActivity(ctx2, a.GetNextPageTokenActivity, GetNextPageTokenParams{
+			NamespaceID:   params.NamespaceID,
+			Namespace:     params.Namespace,
+			PageSize:      params.Config.PageSize,
+			NextPageToken: nextPageToken,
+		}).Get(ctx, &nextPageToken)
+		if err != nil {
+			return result, fmt.Errorf("%w: GetNextPageTokenActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		}
+
 		runningDeleteExecutionsActivityCount++
 		runningDeleteExecutionsSelector.AddFuture(deleteExecutionsFuture, func(f workflow.Future) {
 			runningDeleteExecutionsActivityCount--
@@ -140,16 +158,6 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 			}
 		}
 
-		ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-		err := workflow.ExecuteLocalActivity(ctx2, a.GetNextPageTokenActivity, GetNextPageTokenParams{
-			NamespaceID:   params.NamespaceID,
-			Namespace:     params.Namespace,
-			PageSize:      params.Config.PageSize,
-			NextPageToken: nextPageToken,
-		}).Get(ctx, &nextPageToken)
-		if err != nil {
-			return result, fmt.Errorf("%w: GetNextPageTokenActivity: %v", errors.ErrUnableToExecuteActivity, err)
-		}
 		if nextPageToken == nil {
 			break
 		}

@@ -28,13 +28,11 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -152,30 +150,6 @@ func (r *taskProcessorManagerImpl) Stop() {
 		replicationTaskProcessor.Stop()
 	}
 	r.taskProcessorLock.Unlock()
-}
-
-func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
-	shardID := r.shard.GetShardID()
-	cleanupTimer := time.NewTimer(backoff.JitDuration(
-		r.config.ReplicationTaskProcessorCleanupInterval(shardID),
-		r.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
-	))
-	defer cleanupTimer.Stop()
-	for {
-		select {
-		case <-cleanupTimer.C:
-			if err := r.cleanupReplicationTasks(); err != nil {
-				r.logger.Error("Failed to clean up replication messages.", tag.Error(err))
-				r.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupFailure)
-			}
-			cleanupTimer.Reset(backoff.JitDuration(
-				r.config.ReplicationTaskProcessorCleanupInterval(shardID),
-				r.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
-			))
-		case <-r.shutdownChan:
-			return
-		}
-	}
 }
 
 func (r *taskProcessorManagerImpl) listenToClusterMetadataChange() {

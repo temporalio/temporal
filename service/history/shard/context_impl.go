@@ -185,11 +185,7 @@ func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
 }
 
-func (s *ContextImpl) GetEngine() (Engine, error) {
-	return s.engineFuture.Get(context.Background())
-}
-
-func (s *ContextImpl) GetEngineWithContext(
+func (s *ContextImpl) GetEngine(
 	ctx context.Context,
 ) (Engine, error) {
 	return s.engineFuture.Get(ctx)
@@ -631,7 +627,7 @@ func (s *ContextImpl) AddTasks(
 		return err
 	}
 
-	engine, err := s.GetEngineWithContext(ctx)
+	engine, err := s.GetEngine(ctx)
 	if err != nil {
 		return err
 	}
@@ -991,7 +987,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	}
 	defer cancel()
 
-	engine, err := s.GetEngineWithContext(ctx)
+	engine, err := s.GetEngine(ctx)
 	if err != nil {
 		return err
 	}
@@ -1165,7 +1161,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 		updatedShardInfo.StolenSinceRenew++
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), shardIOTimeout)
+	ctx, cancel := context.WithTimeout(s.lifecycleCtx, shardIOTimeout)
 	defer cancel()
 	err := s.persistenceShardManager.UpdateShard(ctx, &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
@@ -1218,7 +1214,7 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	updatedShardInfo := copyShardInfo(s.shardInfo)
 	s.emitShardInfoMetricsLogsLocked()
 
-	ctx, cancel := context.WithTimeout(context.Background(), shardIOTimeout)
+	ctx, cancel := context.WithTimeout(s.lifecycleCtx, shardIOTimeout)
 	defer cancel()
 	err = s.persistenceShardManager.UpdateShard(ctx, &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
@@ -1668,7 +1664,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	s.rUnlock()
 
 	// We don't have any shardInfo yet, load it (outside of context rwlock)
-	ctx, cancel := context.WithTimeout(context.Background(), shardIOTimeout)
+	ctx, cancel := context.WithTimeout(s.lifecycleCtx, shardIOTimeout)
 	defer cancel()
 	resp, err := s.persistenceShardManager.GetOrCreateShard(ctx, &persistence.GetOrCreateShardRequest{
 		ShardID:          s.shardID,
@@ -1792,8 +1788,21 @@ func (s *ContextImpl) getOrUpdateRemoteClusterInfoLocked(clusterName string) *re
 }
 
 func (s *ContextImpl) acquireShard() {
-	// Retry for 5m, with interval up to 10s (default)
-	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
+	// This is called in two contexts: initially acquiring the rangeid lock, and trying to
+	// re-acquire it after a persistence error. In both cases, we retry the acquire operation
+	// (renewRangeLocked) for 5 minutes. Each individual attempt uses shardIOTimeout (10s) as
+	// the timeout. This lets us handle a few minutes of persistence unavailability without
+	// dropping and reloading the whole shard context, which is relatively expensive (includes
+	// caches that would have to be refilled, etc.).
+	//
+	// We stop retrying on any of:
+	// 1. We succeed in acquiring the rangeid lock.
+	// 2. We get any error other than transient errors.
+	// 3. The state changes to Stopping or Stopped.
+	//
+	// If the shard controller sees that service resolver has assigned ownership to someone
+	// else, it will call finishStop, which will trigger case 3 above.
+	policy := backoff.NewExponentialRetryPolicy(1 * time.Second)
 	policy.SetExpirationInterval(5 * time.Minute)
 
 	// Remember this value across attempts
@@ -2025,7 +2034,7 @@ func (s *ContextImpl) ensureMinContextTimeout(
 		return ctx, func() {}, nil
 	}
 
-	newContext, cancel := context.WithTimeout(context.Background(), minContextTimeout)
+	newContext, cancel := context.WithTimeout(s.lifecycleCtx, minContextTimeout)
 	return newContext, cancel, nil
 }
 

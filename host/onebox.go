@@ -72,8 +72,6 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
-	"go.temporal.io/server/service/worker/archiver"
-	"go.temporal.io/server/service/worker/replicator"
 	"go.temporal.io/server/temporal"
 )
 
@@ -122,8 +120,6 @@ type (
 		shutdownCh                       chan struct{}
 		shutdownWG                       sync.WaitGroup
 		clusterNo                        int // cluster number
-		replicator                       *replicator.Replicator
-		clientWorker                     archiver.ClientWorker
 		archiverMetadata                 carchiver.ArchivalMetadata
 		archiverProvider                 provider.ArchiverProvider
 		historyConfig                    *HistoryConfig
@@ -452,7 +448,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		temporal.ServiceTracingModule,
 		frontend.Module,
 		fx.Populate(&frontendService, &clientBean, &namespaceRegistry),
-		fx.NopLogger,
+		temporal.FxLogAdapter,
 	)
 	err = feApp.Err()
 	if err != nil {
@@ -548,7 +544,8 @@ func (c *temporalImpl) startHistory(
 			history.Module,
 			replication.Module,
 			fx.Populate(&historyService, &clientBean, &namespaceRegistry),
-			fx.NopLogger)
+			temporal.FxLogAdapter,
+		)
 		err = app.Err()
 		if err != nil {
 			c.logger.Fatal("unable to construct history service", tag.Error(err))
@@ -623,7 +620,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		temporal.ServiceTracingModule,
 		matching.Module,
 		fx.Populate(&matchingService, &clientBean, &namespaceRegistry),
-		fx.NopLogger,
+		temporal.FxLogAdapter,
 	)
 	err = app.Err()
 	if err != nil {
@@ -716,7 +713,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		temporal.ServiceTracingModule,
 		worker.Module,
 		fx.Populate(&workerService, &clientBean, &namespaceRegistry),
-		fx.NopLogger,
+		temporal.FxLogAdapter,
 	)
 	err = app.Err()
 	if err != nil {
@@ -805,7 +802,6 @@ type rpcFactoryImpl struct {
 	sync.RWMutex
 	listener       net.Listener
 	ringpopChannel *tchannel.Channel
-	serverCfg      config.GroupTLS
 }
 
 func (c *rpcFactoryImpl) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {

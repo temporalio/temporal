@@ -20,8 +20,8 @@ SQL_USER=$USERNAME SQL_PASSWORD=$PASSWD make install-schema-mysql
 - All command below are taking MySQL as example. For postgres, simply use with "--plugin postgres"
 
 ```
-temporal-sql-tool --ep $SQL_HOST -p $port create --plugin mysql --db temporal
-temporal-sql-tool --ep $SQL_HOST -p $port create --plugin mysql --db temporal_visibility
+temporal-sql-tool --ep $SQL_HOST -p $port --db temporal --plugin mysql create
+temporal-sql-tool --ep $SQL_HOST -p $port --db temporal_visibility --plugin mysql create
 ```
 
 ```

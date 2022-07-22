@@ -119,7 +119,7 @@ func (a *defaultTokenKeyProvider) timerCallback() {
 	for {
 		select {
 		case <-a.stop:
-			break
+			return
 		case <-a.ticker.C:
 		}
 		if a.config.HasSourceURIsConfigured() {

@@ -87,6 +87,7 @@ func (s *conditionVariableSuite) TestSignal() {
 
 	signalWaitGroup.Wait()
 	s.lock.Lock()
+	func() {}()
 	s.lock.Unlock()
 	s.cv.Signal()
 	waitGroup.Wait()
@@ -113,6 +114,7 @@ func (s *conditionVariableSuite) TestInterrupt() {
 
 	interruptWaitGroup.Wait()
 	s.lock.Lock()
+	func() {}()
 	s.lock.Unlock()
 	interruptChan <- struct{}{}
 	waitGroup.Wait()
@@ -142,6 +144,7 @@ func (s *conditionVariableSuite) TestBroadcast() {
 
 	broadcastWaitGroup.Wait()
 	s.lock.Lock()
+	func() {}()
 	s.lock.Unlock()
 	s.cv.Broadcast()
 	waitGroup.Wait()

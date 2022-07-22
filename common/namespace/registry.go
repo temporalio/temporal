@@ -223,7 +223,7 @@ func (r *registry) Start() {
 	if err != nil {
 		r.logger.Fatal("Unable to initialize namespace cache", tag.Error(err))
 	}
-	r.refresher = goro.Go(context.Background(), r.refreshLoop)
+	r.refresher = goro.NewHandle(context.Background()).Go(r.refreshLoop)
 }
 
 // Stop the background refresh of Namespace data

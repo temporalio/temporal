@@ -497,7 +497,7 @@ func encodeBlob(o proto.Message, encoding enumspb.EncodingType) (*commonpb.DataB
 
 	switch encoding {
 	case enumspb.ENCODING_TYPE_JSON:
-		blob, err := codec.NewJSONPBEncoder().Encode(o.(proto.Message))
+		blob, err := codec.NewJSONPBEncoder().Encode(o)
 		if err != nil {
 			return nil, err
 		}

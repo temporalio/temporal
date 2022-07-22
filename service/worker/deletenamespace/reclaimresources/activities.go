@@ -65,6 +65,26 @@ func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context) (bool, erro
 	return strings.Contains(a.visibilityManager.GetName(), "elasticsearch"), nil
 }
 
+func (a *Activities) CountExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (int64, error) {
+	req := &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: nsID,
+		Namespace:   nsName,
+	}
+	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
+	if err != nil {
+		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.CountExecutionsFailuresCount)
+		a.logger.Error("Unable to count workflow executions.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+		return 0, err
+	}
+
+	if resp.Count > 0 {
+		a.logger.Info("There are some workflows in namespace.", tag.WorkflowNamespace(nsName.String()), tag.Counter(int(resp.Count)))
+	} else {
+		a.logger.Info("There are no workflows in namespace.", tag.WorkflowNamespace(nsName.String()))
+	}
+	return resp.Count, err
+}
+
 func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name, notDeletedCount int) error {
 	req := &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: nsID,
@@ -72,7 +92,7 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 	}
 	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
+		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.CountExecutionsFailuresCount)
 		a.logger.Error("Unable to count workflow executions.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
@@ -84,7 +104,7 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 		if activity.HasHeartbeatDetails(ctx) && activityInfo.Attempt > 7 {
 			var previousAttemptCount int
 			if err := activity.GetHeartbeatDetails(ctx, &previousAttemptCount); err != nil {
-				a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
+				a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.CountExecutionsFailuresCount)
 				a.logger.Error("Unable to get previous heartbeat details.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 				return err
 			}

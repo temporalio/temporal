@@ -3,7 +3,7 @@
 install: update-tools bins
 
 # Rebuild binaries (used by Dockerfile).
-bins: temporal-server temporal-cassandra-tool temporal-sql-tool
+bins: temporal-server temporal-cassandra-tool temporal-sql-tool tdbg
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
 all: update-tools clean proto bins check test
@@ -150,7 +150,7 @@ protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
 # Run protoc separately for each directory because of different package names.
 	$(foreach PROTO_DIR,$(PROTO_DIRS),\
-		protoc $(PROTO_IMPORTS) \
+		protoc --fatal_warnings $(PROTO_IMPORTS) \
 		 	--gogoslick_out=Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) \
 			$(PROTO_DIR)*.proto \
 	$(NEWLINE))
@@ -187,11 +187,16 @@ clean-bins:
 	@printf $(COLOR) "Delete old binaries..."
 	@rm -f temporal-server
 	@rm -f temporal-cassandra-tool
+	@rm -f tdbg
 	@rm -f temporal-sql-tool
 
 temporal-server: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-server with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-server ./cmd/server
+
+tdbg: $(ALL_SRC)
+	@printf $(COLOR) "Build tdbg with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
+	CGO_ENABLED=$(CGO_ENABLED) go build -o tdbg ./cmd/tools/tdbg
 
 temporal-cassandra-tool: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-cassandra-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
@@ -228,7 +233,7 @@ goimports:
 
 staticcheck:
 	@printf $(COLOR) "Run staticcheck..."
-	@staticcheck -fail none ./...
+	@staticcheck ./...
 
 errcheck:
 	@printf $(COLOR) "Run errcheck..."
@@ -351,23 +356,23 @@ install-schema: temporal-cassandra-tool
 
 install-schema-mysql: temporal-sql-tool
 	@printf $(COLOR) "Install MySQL schema..."
-	./temporal-sql-tool -u temporal --pw temporal drop --db $(TEMPORAL_DB) -f
-	./temporal-sql-tool -u temporal --pw temporal create --db $(TEMPORAL_DB)
+	./temporal-sql-tool -u temporal --pw temporal --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u temporal --pw temporal --db $(TEMPORAL_DB) create
 	./temporal-sql-tool -u temporal --pw temporal --db $(TEMPORAL_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u temporal --pw temporal --db $(TEMPORAL_DB) update-schema -d ./schema/mysql/v57/temporal/versioned
-	./temporal-sql-tool -u temporal --pw temporal drop --db $(VISIBILITY_DB) -f
-	./temporal-sql-tool -u temporal --pw temporal create --db $(VISIBILITY_DB)
+	./temporal-sql-tool -u temporal --pw temporal --db $(VISIBILITY_DB) drop  -f
+	./temporal-sql-tool -u temporal --pw temporal --db $(VISIBILITY_DB) create
 	./temporal-sql-tool -u temporal --pw temporal --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u temporal --pw temporal --db $(VISIBILITY_DB) update-schema -d ./schema/mysql/v57/visibility/versioned
 
 install-schema-postgresql: temporal-sql-tool
 	@printf $(COLOR) "Install Postgres schema..."
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres drop --db $(TEMPORAL_DB) -f
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres create --db $(TEMPORAL_DB)
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(TEMPORAL_DB) drop -f
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(TEMPORAL_DB) create
 	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(TEMPORAL_DB) setup -v 0.0
 	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(TEMPORAL_DB) update-schema -d ./schema/postgresql/v96/temporal/versioned
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres drop --db $(VISIBILITY_DB) -f
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres create --db $(VISIBILITY_DB)
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(VISIBILITY_DB) drop -f
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(VISIBILITY_DB) create
 	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(VISIBILITY_DB) setup-schema -v 0.0
 	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v96/visibility/versioned
 

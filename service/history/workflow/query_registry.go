@@ -48,7 +48,7 @@ type (
 		HasFailedQuery() bool
 		GetFailedIDs() []string
 
-		GetQueryTermCh(string) (<-chan struct{}, error)
+		GetQueryCompletionCh(string) (<-chan struct{}, error)
 		GetQueryInput(string) (*querypb.WorkflowQuery, error)
 		GetCompletionState(string) (*QueryCompletionState, error)
 
@@ -125,7 +125,7 @@ func (r *queryRegistryImpl) GetFailedIDs() []string {
 	return r.getIDs(r.failed)
 }
 
-func (r *queryRegistryImpl) GetQueryTermCh(id string) (<-chan struct{}, error) {
+func (r *queryRegistryImpl) GetQueryCompletionCh(id string) (<-chan struct{}, error) {
 	r.RLock()
 	defer r.RUnlock()
 	q, err := r.getQueryNoLock(id)
@@ -225,7 +225,7 @@ func (r *queryRegistryImpl) getQueryNoLock(id string) (query, error) {
 }
 
 func (r *queryRegistryImpl) getIDs(m map[string]query) []string {
-	result := make([]string, len(m), len(m))
+	result := make([]string, len(m))
 	index := 0
 	for id := range m {
 		result[index] = id

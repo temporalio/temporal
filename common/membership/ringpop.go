@@ -34,6 +34,7 @@ import (
 	"github.com/temporalio/ringpop-go/swim"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
@@ -87,12 +88,13 @@ func (r *RingPop) bootstrap(
 	bootstrapHostPostRetriever func() ([]string, error),
 	bootstrapRetryBackoffInterval time.Duration,
 ) {
-	retryCount := 0
-
-	for {
+	policy := backoff.NewExponentialRetryPolicy(bootstrapRetryBackoffInterval)
+	policy.SetBackoffCoefficient(1)
+	policy.SetMaximumAttempts(maxBootstrapRetries)
+	op := func() error {
 		hostPorts, err := bootstrapHostPostRetriever()
 		if err != nil {
-			r.logger.Fatal("unable to bootstrap ringpop. unable to read hostport bootstrap list", tag.Error(err))
+			return err
 		}
 
 		bootParams := &swim.BootstrapOptions{
@@ -103,17 +105,15 @@ func (r *RingPop) bootstrap(
 		}
 
 		_, err = r.Ringpop.Bootstrap(bootParams)
-		if err == nil {
-			return
+		if err != nil {
+			r.logger.Error("unable to bootstrap ringpop. retrying", tag.Error(err))
 		}
+		return err
 
-		if retryCount >= maxBootstrapRetries {
-			r.logger.Fatal("unable to bootstrap ringpop. exhausted all retries", tag.Error(err))
-		}
-
-		r.logger.Error("unable to bootstrap ringpop. retrying", tag.Error(err))
-		retryCount = retryCount + 1
-		time.Sleep(bootstrapRetryBackoffInterval)
+	}
+	err := backoff.ThrottleRetry(op, policy, nil)
+	if err != nil {
+		r.logger.Fatal("unable to bootstrap ringpop. exhausted all retries", tag.Error(err))
 	}
 }
 

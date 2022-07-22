@@ -34,5 +34,5 @@ import (
 )
 
 func main() {
-	sql.RunTool(os.Args) //nolint:errcheck
+	_ = sql.RunTool(os.Args)
 }

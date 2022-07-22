@@ -61,7 +61,6 @@ import (
 var (
 	workflowTerminationReason   = "Terminate Workflow Due To Version Conflict."
 	workflowTerminationIdentity = "worker-service"
-	workflowResetReason         = "Reset Workflow Due To Events Re-application."
 )
 
 const (

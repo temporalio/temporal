@@ -159,9 +159,8 @@ func (s *remoteGateSuite) TestTimerFireAfterUpdate_NotActive_Updated() {
 	deadline := now.Add(2 * time.Second)
 
 	s.remoteTimerGate.Update(newTimer)
-	select { // this is to drain existing signal
-	case <-s.remoteTimerGate.FireChan():
-	}
+	// this is to drain existing signal
+	<-s.remoteTimerGate.FireChan()
 	// test setup up complete
 
 	s.True(s.remoteTimerGate.Update(updatedNewTimer))
@@ -185,9 +184,8 @@ func (s *remoteGateSuite) TestTimerFireAfterUpdate_NotActive_NotUpdated() {
 	updatedNewTimer := now.Add(-1 * time.Second)
 
 	s.remoteTimerGate.Update(newTimer)
-	select { // this is to drain existing signal
-	case <-s.remoteTimerGate.FireChan():
-	}
+	// this is to drain existing signal
+	<-s.remoteTimerGate.FireChan()
 	// test setup up complete
 
 	s.True(s.remoteTimerGate.Update(updatedNewTimer))
@@ -215,9 +213,8 @@ func (s *remoteGateSuite) TestTimerSetCurrentTime_Update_TimerAlreadyFired() {
 	newCurrentTime := now.Add(1 * time.Second)
 
 	s.remoteTimerGate.Update(newTimer)
-	select { // this is to drain existing signal
-	case <-s.remoteTimerGate.FireChan():
-	}
+	// this is to drain existing signal
+	<-s.remoteTimerGate.FireChan()
 	// test setup up complete
 
 	s.True(s.remoteTimerGate.SetCurrentTime(newCurrentTime))

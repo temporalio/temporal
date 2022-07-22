@@ -5340,7 +5340,7 @@ func addWorkflowTaskCompletedEvent(builder workflow.MutableState, scheduledEvent
 		Identity: identity,
 	}, configs.DefaultHistoryMaxAutoResetPoints)
 
-	builder.FlushBufferedEvents() // nolint:errcheck
+	builder.FlushBufferedEvents()
 
 	return event
 }

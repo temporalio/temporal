@@ -916,3 +916,21 @@ func (c *metricClient) UpdateWorkerBuildIdOrdering(
 	}
 	return resp, err
 }
+
+func (c *metricClient) UpdateWorkflow(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkflowResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientUpdateWorkflowScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientUpdateWorkflowScope, metrics.ClientLatency)
+	resp, err := c.client.UpdateWorkflow(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientUpdateWorkflowScope, metrics.ClientFailures)
+	}
+	return resp, err
+}

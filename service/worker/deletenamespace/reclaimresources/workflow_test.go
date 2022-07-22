@@ -68,6 +68,7 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 	}, nil).Once()
 
 	env.OnActivity(a.IsAdvancedVisibilityActivity, mock.Anything).Return(true, nil).Once()
+	env.OnActivity(a.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).Return(nil).Once()
 
 	env.OnActivity(a.DeleteNamespaceActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(nil).Once()
@@ -115,6 +116,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 	}, nil).Once()
 
 	env.OnActivity(a.IsAdvancedVisibilityActivity, mock.Anything).Return(true, nil).Once()
+	env.OnActivity(a.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
 		Return(stderrors.New("specific_error_from_activity")).
 		Times(10) // GoSDK defaultMaximumAttemptsForUnitTest value.
@@ -160,6 +162,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 	}, nil).Once()
 
 	env.OnActivity(a.IsAdvancedVisibilityActivity, mock.Anything).Return(true, nil).Once()
+	env.OnActivity(a.CountExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(int64(10), nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
 		Return(errors.NewExecutionsStillExistError(1)).
 		Times(10) // GoSDK defaultMaximumAttemptsForUnitTest value.
@@ -189,6 +192,15 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 	visibilityManager := manager.NewMockVisibilityManager(ctrl)
 	visibilityManager.EXPECT().GetName().Return("elasticsearch")
 
+	// For CountExecutionsAdvVisibilityActivity.
+	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+	}).Return(&manager.CountWorkflowExecutionsResponse{
+		Count: 1,
+	}, nil)
+
+	// For EnsureNoExecutionsAdvVisibilityActivity.
 	countWorkflowExecutionsCallTimes := 1
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
@@ -219,6 +231,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 	}
 
 	env.RegisterActivity(a.IsAdvancedVisibilityActivity)
+	env.RegisterActivity(a.CountExecutionsAdvVisibilityActivity)
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
 	env.RegisterActivity(a.DeleteNamespaceActivity)
 
@@ -266,6 +279,15 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 	visibilityManager := manager.NewMockVisibilityManager(ctrl)
 	visibilityManager.EXPECT().GetName().Return("elasticsearch")
 
+	// For CountExecutionsAdvVisibilityActivity.
+	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+	}).Return(&manager.CountWorkflowExecutionsResponse{
+		Count: 1,
+	}, nil)
+
+	// For EnsureNoExecutionsAdvVisibilityActivity.
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
@@ -281,6 +303,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 	}
 
 	env.RegisterActivity(a.IsAdvancedVisibilityActivity)
+	env.RegisterActivity(a.CountExecutionsAdvVisibilityActivity)
 	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
 
 	env.RegisterWorkflow(deleteexecutions.DeleteExecutionsWorkflow)

@@ -277,6 +277,7 @@ func (c *clientV7) Bulk() BulkService {
 }
 
 func (c *clientV7) IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error) {
+	//lint:ignore SA1019 Changing to IndexPutIndexTemplate requires template changes and will be done separately.
 	resp, err := c.esClient.IndexPutTemplate(templateName).BodyString(bodyString).Do(ctx)
 	if err != nil {
 		return false, err

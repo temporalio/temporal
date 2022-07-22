@@ -26,35 +26,11 @@ package metrics
 
 import (
 	"fmt"
-	"time"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives"
 )
-
-const (
-	distributionToTimerRatio = int(time.Millisecond / time.Nanosecond)
-)
-
-func mergeMapToRight(src map[string]string, dest map[string]string) {
-	for k, v := range src {
-		dest[k] = v
-	}
-}
-
-func getMetricDefs(serviceIdx ServiceIdx) map[int]metricDefinition {
-	defs := make(map[int]metricDefinition)
-	for idx, def := range MetricDefs[Common] {
-		defs[idx] = def
-	}
-
-	for idx, def := range MetricDefs[serviceIdx] {
-		defs[idx] = def
-	}
-
-	return defs
-}
 
 // GetMetricsServiceIdx returns service id corresponding to serviceName
 func GetMetricsServiceIdx(serviceName string, logger log.Logger) ServiceIdx {

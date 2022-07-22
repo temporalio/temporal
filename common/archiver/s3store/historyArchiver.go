@@ -75,7 +75,6 @@ type (
 		s3cli     s3iface.S3API
 		// only set in test code
 		historyIterator archiver.HistoryIterator
-		config          *config.S3Archiver
 	}
 
 	getHistoryToken struct {

@@ -201,9 +201,9 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	for _, shardID := range myShards {
-		shard, err := s.shardController.GetShardByID(ctx, shardID)
+		shard, err := s.shardController.GetShardByID(shardID)
 		s.NoError(err)
-		_, err = shard.GetEngineWithContext(ctx)
+		_, err = shard.GetEngine(ctx)
 		s.NoError(err)
 		count++
 	}
@@ -265,9 +265,9 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	for _, shardID := range myShards {
-		shard, err := s.shardController.GetShardByID(ctx, shardID)
+		shard, err := s.shardController.GetShardByID(shardID)
 		s.NoError(err)
-		_, err = shard.GetEngineWithContext(ctx)
+		_, err = shard.GetEngine(ctx)
 		s.NoError(err)
 		count++
 	}
@@ -282,11 +282,11 @@ func (s *controllerSuite) TestAcquireShardLookupFailure() {
 	}
 
 	s.shardController.acquireShards()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(nil, errors.New("ring failure"))
-		s.Nil(s.shardController.GetShardByID(ctx, shardID))
+		shard, err := s.shardController.GetShardByID(shardID)
+		s.Error(err)
+		s.Nil(shard)
 	}
 }
 
@@ -330,18 +330,21 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards()
-	time.Sleep(100 * time.Millisecond) // TODO: fix this properly
 
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil)
 	}
 	s.shardController.acquireShards()
-	time.Sleep(100 * time.Millisecond) // TODO: fix this properly
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		s.NotNil(s.shardController.GetShardByID(ctx, shardID))
+		shard, err := s.shardController.GetShardByID(shardID)
+		s.NoError(err)
+		s.NotNil(shard)
+		engine, err := shard.GetEngine(ctx)
+		s.NoError(err)
+		s.NotNil(engine)
 	}
 }
 
@@ -385,18 +388,21 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards()
-	time.Sleep(100 * time.Millisecond) // TODO: fix this properly
 
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(nil, errors.New("ring failure"))
 	}
 	s.shardController.acquireShards()
-	time.Sleep(100 * time.Millisecond) // TODO: fix this properly
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		s.NotNil(s.shardController.GetShardByID(ctx, shardID))
+		shard, err := s.shardController.GetShardByID(shardID)
+		s.NoError(err)
+		s.NotNil(shard)
+		engine, err := shard.GetEngine(ctx)
+		s.NoError(err)
+		s.NotNil(engine)
 	}
 }
 
@@ -431,8 +437,11 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		go func() {
 			for attempt := 0; attempt < 10; attempt++ {
 				for shardID := int32(1); shardID <= numShards; shardID++ {
-					engine, err := s.shardController.GetShardByID(ctx, shardID)
-					s.Nil(err)
+					shard, err := s.shardController.GetShardByID(shardID)
+					s.NoError(err)
+					s.NotNil(shard)
+					engine, err := shard.GetEngine(ctx)
+					s.NoError(err)
 					s.NotNil(engine)
 				}
 			}
@@ -455,8 +464,11 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		go func() {
 			for attempt := 0; attempt < 10; attempt++ {
 				for shardID := int32(3); shardID <= numShards; shardID++ {
-					engine, err := s.shardController.GetShardByID(ctx, shardID)
-					s.Nil(err)
+					shard, err := s.shardController.GetShardByID(shardID)
+					s.NoError(err)
+					s.NotNil(shard)
+					engine, err := shard.GetEngine(ctx)
+					s.NoError(err)
 					s.NotNil(engine)
 					time.Sleep(20 * time.Millisecond)
 				}
@@ -471,7 +483,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 			shardLost := false
 			for attempt := 0; !shardLost && attempt < 10; attempt++ {
 				for shardID := int32(1); shardID <= 2; shardID++ {
-					_, err := s.shardController.GetShardByID(ctx, shardID)
+					_, err := s.shardController.GetShardByID(shardID)
 					if err != nil {
 						s.logger.Error("ShardLost", tag.Error(err))
 						shardLost = true
@@ -494,7 +506,6 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).AnyTimes()
 	}
 	s.shardController.Stop()
-	time.Sleep(100 * time.Millisecond) // TODO: fix this properly
 }
 
 func (s *controllerSuite) TestShardControllerClosed() {
@@ -514,15 +525,11 @@ func (s *controllerSuite) TestShardControllerClosed() {
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
 	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName, gomock.Any()).Return(nil).AnyTimes()
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.Start()
-	time.Sleep(100 * time.Millisecond) // TODO: fix this properly
 
 	var workerWG sync.WaitGroup
 	for w := 0; w < 10; w++ {
@@ -531,7 +538,7 @@ func (s *controllerSuite) TestShardControllerClosed() {
 			shardLost := false
 			for attempt := 0; !shardLost && attempt < 10; attempt++ {
 				for shardID := int32(1); shardID <= numShards; shardID++ {
-					_, err := s.shardController.GetShardByID(ctx, shardID)
+					_, err := s.shardController.GetShardByID(shardID)
 					if err != nil {
 						s.logger.Error("ShardLost", tag.Error(err))
 						shardLost = true
@@ -576,6 +583,47 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 	}
 	s.Equal(0, s.shardController.NumShards())
 	s.False(shard.isValid())
+}
+
+func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
+	s.config.NumberOfShards = 1
+
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
+	mockEngine := NewMockEngine(s.controller)
+	mockEngine.EXPECT().Stop().AnyTimes()
+
+	shardID := int32(0)
+	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil)
+
+	ready := make(chan struct{})
+	wasCanceled := make(chan bool)
+	// GetOrCreateShard blocks for 5s or until canceled
+	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).DoAndReturn(
+		func(ctx context.Context, req *persistence.GetOrCreateShardRequest) (*persistence.GetOrCreateShardResponse, error) {
+			ready <- struct{}{}
+			select {
+			case <-time.After(5 * time.Second):
+				wasCanceled <- false
+				return nil, errors.New("timed out")
+			case <-ctx.Done():
+				wasCanceled <- true
+				return nil, ctx.Err()
+			}
+		})
+
+	// get shard, will start initializing in background
+	shard, err := s.shardController.getOrCreateShardContext(0)
+	s.NoError(err)
+
+	<-ready
+	// now shard is blocked on GetOrCreateShard
+	s.False(shard.engineFuture.Ready())
+
+	start := time.Now()
+	shard.Unload() // this cancels the context so GetOrCreateShard returns immediately
+	s.True(<-wasCanceled)
+	s.Less(time.Since(start), 500*time.Millisecond)
 }
 
 func (s *controllerSuite) setupMocksForAcquireShard(

@@ -103,7 +103,7 @@ func newTimerQueueStandbyProcessor(
 			shard.GetNamespaceRegistry(),
 			clientBean,
 			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				engine, err := shard.GetEngine()
+				engine, err := shard.GetEngine(ctx)
 				if err != nil {
 					return err
 				}
@@ -199,11 +199,6 @@ func (t *timerQueueStandbyProcessorImpl) setCurrentTime(
 
 func (t *timerQueueStandbyProcessorImpl) getAckLevel() tasks.Key {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getAckLevel()
-}
-
-//nolint:unused
-func (t *timerQueueStandbyProcessorImpl) getReadLevel() tasks.Key {
-	return t.timerQueueProcessorBase.timerQueueAckMgr.getReadLevel()
 }
 
 // NotifyNewTimers - Notify the processor about the new standby timer events arrival.

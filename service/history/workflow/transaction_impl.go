@@ -75,7 +75,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 	clusterName string,
 ) (int64, error) {
 
-	engine, err := t.shard.GetEngine()
+	engine, err := t.shard.GetEngine(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -113,7 +113,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	clusterName string,
 ) (int64, int64, int64, error) {
 
-	engine, err := t.shard.GetEngine()
+	engine, err := t.shard.GetEngine(ctx)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -169,7 +169,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	clusterName string,
 ) (int64, int64, error) {
 
-	engine, err := t.shard.GetEngine()
+	engine, err := t.shard.GetEngine(ctx)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -210,7 +210,7 @@ func (t *TransactionImpl) SetWorkflowExecution(
 	clusterName string,
 ) error {
 
-	engine, err := t.shard.GetEngine()
+	engine, err := t.shard.GetEngine(ctx)
 	if err != nil {
 		return err
 	}
