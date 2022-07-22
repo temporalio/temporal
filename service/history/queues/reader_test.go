@@ -238,10 +238,10 @@ func (s *readerSuite) TestThrottle() {
 
 	now := time.Now()
 	delay := 100 * time.Millisecond
-	reader.Throttle(delay / 2)
+	reader.Pause(delay / 2)
 
 	// check if existing throttle timer will be overwritten
-	reader.Throttle(delay)
+	reader.Pause(delay)
 
 	doneCh := make(chan struct{})
 	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
@@ -260,7 +260,7 @@ func (s *readerSuite) TestLoadAndSubmitTasks_Throttled() {
 	scopes := NewRandomScopes(1)
 
 	reader := s.newTestReader(scopes, nil)
-	reader.Throttle(100 * time.Millisecond)
+	reader.Pause(100 * time.Millisecond)
 
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 

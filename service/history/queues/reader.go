@@ -49,10 +49,10 @@ type (
 		WalkSlices(SliceIterator)
 		SplitSlices(SliceSplitter)
 		MergeSlices(...Slice)
-		ClearSlices(SliceSelector)
+		ClearSlices(SlicePredicate)
 		ShrinkSlices()
 
-		Throttle(time.Duration)
+		Pause(time.Duration)
 	}
 
 	ReaderOptions struct {
@@ -65,7 +65,7 @@ type (
 
 	SliceSplitter func(s Slice) (remaining []Slice, split bool)
 
-	SliceSelector func(s Slice) bool
+	SlicePredicate func(s Slice) bool
 
 	ReaderImpl struct {
 		sync.Mutex
@@ -188,21 +188,23 @@ func (r *ReaderImpl) SplitSlices(splitter SliceSplitter) {
 	r.Lock()
 	defer r.Unlock()
 
-	var next *list.Element
-	for element := r.slices.Front(); element != nil; element = next {
-		next = element.Next()
-
-		newSlices, split := splitter(element.Value.(Slice))
+	splitSlices := list.New()
+	for element := r.slices.Front(); element != nil; element = element.Next() {
+		slice := element.Value.(Slice)
+		newSlices, split := splitter(slice)
 		if !split {
+			splitSlices.PushBack(slice)
 			continue
 		}
 
 		for _, newSlice := range newSlices {
-			r.slices.InsertBefore(newSlice, element)
+			splitSlices.PushBack(newSlice)
 		}
-
-		r.slices.Remove(element)
 	}
+
+	// clear existing list
+	r.slices.Init()
+	r.slices = splitSlices
 
 	r.resetNextReadSliceLocked()
 }
@@ -243,7 +245,7 @@ func (r *ReaderImpl) MergeSlices(incomingSlices ...Slice) {
 	r.resetNextReadSliceLocked()
 }
 
-func (r *ReaderImpl) ClearSlices(selector SliceSelector) {
+func (r *ReaderImpl) ClearSlices(selector SlicePredicate) {
 	r.Lock()
 	defer r.Unlock()
 
@@ -257,19 +259,19 @@ func (r *ReaderImpl) ClearSlices(selector SliceSelector) {
 	r.resetNextReadSliceLocked()
 }
 
-func (r *ReaderImpl) Throttle(backoff time.Duration) {
+func (r *ReaderImpl) Pause(duration time.Duration) {
 	r.Lock()
 	defer r.Unlock()
 
-	r.throttleLocked(backoff)
+	r.pauseLocked(duration)
 }
 
-func (r *ReaderImpl) throttleLocked(backoff time.Duration) {
+func (r *ReaderImpl) pauseLocked(duration time.Duration) {
 	if r.throttleTimer != nil {
 		r.throttleTimer.Stop()
 	}
 
-	r.throttleTimer = time.AfterFunc(backoff, func() {
+	r.throttleTimer = time.AfterFunc(duration, func() {
 		r.Lock()
 		defer r.Unlock()
 
@@ -313,10 +315,8 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 		r.logger.Error("Queue reader unable to retrieve tasks", tag.Error(err))
 	}
 
-	if len(tasks) != 0 {
-		for _, task := range tasks {
-			r.submit(task)
-		}
+	for _, task := range tasks {
+		r.submit(task)
 	}
 
 	// TODO: in error case, we need some backoff
@@ -388,7 +388,7 @@ func (r *ReaderImpl) submit(
 
 func (r *ReaderImpl) verifyPendingTaskSize() {
 	if r.rescheduler.Len() >= r.options.MaxPendingTasksCount() {
-		r.throttleLocked(r.options.PollBackoffInterval())
+		r.pauseLocked(r.options.PollBackoffInterval())
 	}
 }
 
