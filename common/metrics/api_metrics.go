@@ -27,6 +27,7 @@ package metrics
 import (
 	"reflect"
 
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -35,6 +36,7 @@ import (
 
 const (
 	grpcWorkflowService = "/temporal.api.workflowservice.v1.WorkflowService"
+	grpcOperatorService = "/temporal.api.operatorservice.v1.OperatorService"
 	grpcAdminService    = "/temporal.server.api.adminservice.v1.AdminService"
 	grpcMatchingService = "/temporal.server.api.matchingservice.v1.MatchingService"
 	grpcHistoryService  = "/temporal.server.api.historyservice.v1.HistoryService"
@@ -53,6 +55,9 @@ func frontendAPIMetricsNames() map[string]string {
 	apiNames := getAPINames(reflect.TypeOf((*workflowservice.WorkflowServiceServer)(nil)).Elem(), grpcWorkflowService)
 	for methodName, fullName := range getAPINames(reflect.TypeOf((*adminservice.AdminServiceServer)(nil)).Elem(), grpcAdminService) {
 		apiNames["Admin"+methodName] = fullName
+	}
+	for methodName, fullName := range getAPINames(reflect.TypeOf((*operatorservice.OperatorServiceServer)(nil)).Elem(), grpcOperatorService) {
+		apiNames["Operator"+methodName] = fullName
 	}
 	return apiNames
 }
