@@ -143,7 +143,7 @@ func NewVisibilityStore(
 
 	return &visibilityStore{
 		session:      session,
-		lowConslevel: gocql.One,
+		lowConslevel: gocql.Consistency(cfg.Consistency.GetConsistency()),
 	}, nil
 }
 
