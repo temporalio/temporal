@@ -100,14 +100,14 @@ func TestMeter(t *testing.T) {
 		},
 		{
 			InstrumentName:         "latency",
-			Sum:                    number.NewInt64Number(int64(2503 * time.Millisecond)),
+			Sum:                    number.NewInt64Number(6503),
 			Count:                  2,
 			Attributes:             nil,
 			InstrumentationLibrary: lib,
 			AggregationKind:        aggregation.HistogramKind,
 			NumberKind:             number.Int64Kind,
 			Histogram: aggregation.Buckets{
-				Counts: []uint64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2},
+				Counts: []uint64{1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 			},
 		},
 		{
@@ -157,7 +157,7 @@ func recordMetrics(mp MetricsHandler) {
 	c.Record(8)
 	g.Record(-100, StringTag("location", "Mare Imbrium"))
 	d.Record(1248 * time.Millisecond)
-	d.Record(1255 * time.Millisecond)
+	d.Record(5255 * time.Millisecond)
 	h.Record(1234567)
 	t.Record(11, TaskQueueTag("__sticky__"))
 	e.Record(14, TaskQueueTag("filtered"))
