@@ -96,7 +96,7 @@ func (omp *otelMetricsHandler) Timer(timer string) TimerMetric {
 	}
 
 	return TimerMetricFunc(func(i time.Duration, t ...Tag) {
-		c.Record(context.Background(), i.Nanoseconds(), tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		c.Record(context.Background(), i.Milliseconds(), tagsToAttributes(omp.tags, t, omp.excludeTags)...)
 	})
 }
 
