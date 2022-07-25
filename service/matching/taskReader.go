@@ -160,7 +160,7 @@ Loop:
 			return nil
 
 		case <-tr.notifyC:
-			tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch()
+			tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch(ctx)
 			tr.tlMgr.signalIfFatal(err)
 			if err != nil {
 				tr.Signal() // re-enqueue the event
@@ -197,10 +197,10 @@ Loop:
 	}
 }
 
-func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistencespb.AllocatedTaskInfo, error) {
+func (tr *taskReader) getTaskBatchWithRange(ctx context.Context, readLevel int64, maxReadLevel int64) ([]*persistencespb.AllocatedTaskInfo, error) {
 	var response *persistence.GetTasksResponse
 	var err error
-	err = executeWithRetry(context.TODO(), func(ctx context.Context) error {
+	err = executeWithRetry(ctx, func(ctx context.Context) error {
 		response, err = tr.tlMgr.db.GetTasks(ctx, readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
 		return err
 	})
@@ -213,7 +213,7 @@ func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64)
 // Returns a batch of tasks from persistence starting form current read level.
 // Also return a number that can be used to update readLevel
 // Also return a bool to indicate whether read is finished
-func (tr *taskReader) getTaskBatch() ([]*persistencespb.AllocatedTaskInfo, int64, bool, error) {
+func (tr *taskReader) getTaskBatch(ctx context.Context) ([]*persistencespb.AllocatedTaskInfo, int64, bool, error) {
 	var tasks []*persistencespb.AllocatedTaskInfo
 	readLevel := tr.tlMgr.taskAckManager.getReadLevel()
 	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
@@ -224,7 +224,7 @@ func (tr *taskReader) getTaskBatch() ([]*persistencespb.AllocatedTaskInfo, int64
 		if upper > maxReadLevel {
 			upper = maxReadLevel
 		}
-		tasks, err := tr.getTaskBatchWithRange(readLevel, upper)
+		tasks, err := tr.getTaskBatchWithRange(ctx, readLevel, upper)
 		if err != nil {
 			return nil, readLevel, true, err
 		}
