@@ -59,6 +59,7 @@ func NewManager(
 	advancedVisibilityWritingMode dynamicconfig.StringPropertyFn,
 	enableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	enableWriteToSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFn,
+	esDisableOrderByClause dynamicconfig.BoolPropertyFn,
 
 	metricsClient metrics.Client,
 	logger log.Logger,
@@ -83,6 +84,7 @@ func NewManager(
 		searchAttributesMapper,
 		advancedVisibilityPersistenceMaxReadQPS,
 		advancedVisibilityPersistenceMaxWriteQPS,
+		esDisableOrderByClause,
 		metricsClient,
 		logger,
 	)
@@ -98,6 +100,7 @@ func NewManager(
 		searchAttributesMapper,
 		advancedVisibilityPersistenceMaxReadQPS,
 		advancedVisibilityPersistenceMaxWriteQPS,
+		esDisableOrderByClause,
 		metricsClient,
 		logger,
 	)
@@ -188,6 +191,7 @@ func NewAdvancedManager(
 
 	advancedVisibilityPersistenceMaxReadQPS dynamicconfig.IntPropertyFn,
 	advancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn,
+	esDisableOrderByClause dynamicconfig.BoolPropertyFn,
 
 	metricsClient metrics.Client,
 	logger log.Logger,
@@ -202,6 +206,7 @@ func NewAdvancedManager(
 		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapper,
+		esDisableOrderByClause,
 		metricsClient,
 		logger)
 
@@ -285,6 +290,7 @@ func newAdvancedVisibilityStore(
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapper searchattribute.Mapper,
+	esDisableOrderByClause dynamicconfig.BoolPropertyFn,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) store.VisibilityStore {
@@ -293,15 +299,13 @@ func newAdvancedVisibilityStore(
 	}
 
 	var (
-		esProcessor            elasticsearch.Processor
-		esProcessorAckTimeout  dynamicconfig.DurationPropertyFn
-		esDisableOrderByClause dynamicconfig.BoolPropertyFn
+		esProcessor           elasticsearch.Processor
+		esProcessorAckTimeout dynamicconfig.DurationPropertyFn
 	)
 	if esProcessorConfig != nil {
 		esProcessor = elasticsearch.NewProcessor(esProcessorConfig, esClient, logger, metricsClient)
 		esProcessor.Start()
 		esProcessorAckTimeout = esProcessorConfig.ESProcessorAckTimeout
-		esDisableOrderByClause = esProcessorConfig.ESDisableOrderByClause
 	}
 	s := elasticsearch.NewVisibilityStore(
 		esClient,

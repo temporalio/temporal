@@ -79,6 +79,9 @@ const (
 	EnableReadVisibilityFromES = "system.enableReadVisibilityFromES"
 	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
 	EnableReadFromSecondaryAdvancedVisibility = "system.enableReadFromSecondaryAdvancedVisibility"
+	// ESDisableOrderByClause is the config to disable ORDERY BY clause for Elasticsearch
+	ESDisableOrderByClause = "system.esDisableOrderByClause"
+
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState = "system.historyArchivalState"
 	// EnableReadFromHistoryArchival is key for enabling reading history from archival store
@@ -575,8 +578,6 @@ const (
 	// WorkerESProcessorAckTimeout is the timeout that store will wait to get ack signal from ES processor.
 	// Should be at least WorkerESProcessorFlushInterval+<time to process request>.
 	WorkerESProcessorAckTimeout = "worker.ESProcessorAckTimeout"
-	// WorkerESDisableOrderByClause indicates if ORDER BY clause should be disabled from ES processor.
-	WorkerESDisableOrderByClause = "worker.ESDisableOrderByClause"
 	// WorkerArchiverMaxConcurrentActivityExecutionSize indicates worker archiver max concurrent activity execution size
 	WorkerArchiverMaxConcurrentActivityExecutionSize = "worker.ArchiverMaxConcurrentActivityExecutionSize"
 	// WorkerArchiverMaxConcurrentWorkflowTaskExecutionSize indicates worker archiver max concurrent workflow execution size
