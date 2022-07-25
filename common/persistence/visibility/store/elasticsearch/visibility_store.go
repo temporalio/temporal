@@ -65,7 +65,6 @@ const (
 var defaultSorter = []elastic.Sorter{
 	elastic.NewFieldSort(searchattribute.CloseTime).Desc().Missing("_first"),
 	elastic.NewFieldSort(searchattribute.StartTime).Desc().Missing("_first"),
-	elastic.NewFieldSort(searchattribute.RunID).Desc().Missing("_first"),
 }
 
 type (
