@@ -59,7 +59,7 @@ func NewManager(
 	advancedVisibilityWritingMode dynamicconfig.StringPropertyFn,
 	enableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	enableWriteToSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFn,
-	esDisableOrderByClause dynamicconfig.BoolPropertyFn,
+	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFn,
 
 	metricsClient metrics.Client,
 	logger log.Logger,
@@ -84,7 +84,7 @@ func NewManager(
 		searchAttributesMapper,
 		advancedVisibilityPersistenceMaxReadQPS,
 		advancedVisibilityPersistenceMaxWriteQPS,
-		esDisableOrderByClause,
+		visibilityDisableOrderByClause,
 		metricsClient,
 		logger,
 	)
@@ -100,7 +100,7 @@ func NewManager(
 		searchAttributesMapper,
 		advancedVisibilityPersistenceMaxReadQPS,
 		advancedVisibilityPersistenceMaxWriteQPS,
-		esDisableOrderByClause,
+		visibilityDisableOrderByClause,
 		metricsClient,
 		logger,
 	)
@@ -191,7 +191,7 @@ func NewAdvancedManager(
 
 	advancedVisibilityPersistenceMaxReadQPS dynamicconfig.IntPropertyFn,
 	advancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn,
-	esDisableOrderByClause dynamicconfig.BoolPropertyFn,
+	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFn,
 
 	metricsClient metrics.Client,
 	logger log.Logger,
@@ -206,7 +206,7 @@ func NewAdvancedManager(
 		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapper,
-		esDisableOrderByClause,
+		visibilityDisableOrderByClause,
 		metricsClient,
 		logger)
 
@@ -290,7 +290,7 @@ func newAdvancedVisibilityStore(
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapper searchattribute.Mapper,
-	esDisableOrderByClause dynamicconfig.BoolPropertyFn,
+	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFn,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) store.VisibilityStore {
@@ -314,7 +314,7 @@ func newAdvancedVisibilityStore(
 		searchAttributesMapper,
 		esProcessor,
 		esProcessorAckTimeout,
-		esDisableOrderByClause,
+		visibilityDisableOrderByClause,
 		metricsClient)
 	return s
 }

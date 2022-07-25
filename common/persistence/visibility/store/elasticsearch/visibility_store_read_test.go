@@ -107,7 +107,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute)
-	esDisableOrderByClause := dynamicconfig.GetBoolPropertyFn(false)
+	visibilityDisableOrderByClause := dynamicconfig.GetBoolPropertyFn(false)
 
 	s.controller = gomock.NewController(s.T())
 	s.mockMetricsClient = metrics.NewMockClient(s.controller)
@@ -121,7 +121,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 		nil,
 		s.mockProcessor,
 		esProcessorAckTimeout,
-		esDisableOrderByClause,
+		visibilityDisableOrderByClause,
 		s.mockMetricsClient,
 	)
 }
