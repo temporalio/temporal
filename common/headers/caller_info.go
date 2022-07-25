@@ -74,6 +74,6 @@ func GetCallerInfo(
 ) CallerInfo {
 	values := GetValues(ctx, callerTypeHeaderName)
 	return CallerInfo{
-		CallerType: values[1],
+		CallerType: values[0],
 	}
 }

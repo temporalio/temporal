@@ -96,31 +96,3 @@ func (s *callerInfoSuite) TestSetCallerInfo_WithExistingCallerInfo() {
 	s.Equal(callerType, md.Get(callerTypeHeaderName)[0])
 	s.Len(md, 1)
 }
-
-func (s *callerInfoSuite) TestSetCallerInfo_WithPartialCallerInfo() {
-	callerType := CallerTypeBackground
-
-	ctx := SetCallerInfo(context.Background(), CallerInfo{
-		CallerType: "",
-	})
-	ctx = SetCallerInfo(ctx, CallerInfo{
-		CallerType: callerType,
-	})
-
-	md, ok := metadata.FromIncomingContext(ctx)
-	s.True(ok)
-	s.Equal(callerType, md.Get(callerTypeHeaderName)[0])
-	s.Len(md, 1)
-
-	ctx = SetCallerInfo(context.Background(), CallerInfo{
-		CallerType: callerType,
-	})
-	ctx = SetCallerInfo(ctx, CallerInfo{
-		CallerType: "",
-	})
-
-	md, ok = metadata.FromIncomingContext(ctx)
-	s.True(ok)
-	s.Equal(callerType, md.Get(callerTypeHeaderName)[0])
-	s.Len(md, 1)
-}
