@@ -51,7 +51,6 @@ func (s *callerInfoSuite) SetupTest() {
 func (s *callerInfoSuite) TestSetCallerInfo_PreserveOtherValues() {
 	existingKey := "key"
 	existingValue := "value"
-	callerName := "callerName"
 	callerType := CallerTypeAPI
 
 	ctx := metadata.NewIncomingContext(
@@ -59,63 +58,69 @@ func (s *callerInfoSuite) TestSetCallerInfo_PreserveOtherValues() {
 		metadata.Pairs(existingKey, existingValue),
 	)
 
-	ctx = SetCallerInfo(ctx, callerName, callerType)
+	ctx = SetCallerInfo(ctx, NewCallerInfo(callerType))
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	s.True(ok)
 	s.Equal(existingValue, md.Get(existingKey)[0])
-	s.Equal(callerName, md.Get(CallerNameHeaderName)[0])
-	s.Equal(callerType, md.Get(CallerTypeHeaderName)[0])
-	s.Len(md, 3)
+	s.Equal(callerType, md.Get(callerTypeHeaderName)[0])
+	s.Len(md, 2)
 }
 
 func (s *callerInfoSuite) TestSetCallerInfo_NoExistingCallerInfo() {
-	callerName := "callerName"
 	callerType := CallerTypeAPI
 
-	ctx := SetCallerInfo(context.Background(), callerName, callerType)
+	ctx := SetCallerInfo(context.Background(), CallerInfo{
+		CallerType: callerType,
+	})
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	s.True(ok)
-	s.Equal(callerName, md.Get(CallerNameHeaderName)[0])
-	s.Equal(callerType, md.Get(CallerTypeHeaderName)[0])
-	s.Len(md, 2)
+	s.Equal(callerType, md.Get(callerTypeHeaderName)[0])
+	s.Len(md, 1)
 }
 
 func (s *callerInfoSuite) TestSetCallerInfo_WithExistingCallerInfo() {
-	callerName := "callerName"
 	callerType := CallerTypeAPI
 
-	ctx := SetCallerInfo(context.Background(), callerName, callerType)
+	ctx := SetCallerInfo(context.Background(), CallerInfo{
+		CallerType: callerType,
+	})
 
-	ctx = SetCallerInfo(ctx, "another caller", CallerTypeBackground)
+	ctx = SetCallerInfo(ctx, CallerInfo{
+		CallerType: CallerTypeBackground,
+	})
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	s.True(ok)
-	s.Equal(callerName, md.Get(CallerNameHeaderName)[0])
-	s.Equal(callerType, md.Get(CallerTypeHeaderName)[0])
-	s.Len(md, 2)
+	s.Equal(callerType, md.Get(callerTypeHeaderName)[0])
+	s.Len(md, 1)
 }
 
 func (s *callerInfoSuite) TestSetCallerInfo_WithPartialCallerInfo() {
-	callerName := "callerName"
 	callerType := CallerTypeBackground
 
-	ctx := SetCallerInfo(context.Background(), callerName, "")
-	ctx = SetCallerInfo(ctx, "another caller", callerType)
+	ctx := SetCallerInfo(context.Background(), CallerInfo{
+		CallerType: "",
+	})
+	ctx = SetCallerInfo(ctx, CallerInfo{
+		CallerType: callerType,
+	})
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	s.True(ok)
-	s.Equal(callerName, md.Get(CallerNameHeaderName)[0])
-	s.Equal(callerType, md.Get(CallerTypeHeaderName)[0])
-	s.Len(md, 2)
+	s.Equal(callerType, md.Get(callerTypeHeaderName)[0])
+	s.Len(md, 1)
 
-	ctx = SetCallerInfo(context.Background(), "", callerType)
-	ctx = SetCallerInfo(ctx, callerName, "")
+	ctx = SetCallerInfo(context.Background(), CallerInfo{
+		CallerType: callerType,
+	})
+	ctx = SetCallerInfo(ctx, CallerInfo{
+		CallerType: "",
+	})
 
 	md, ok = metadata.FromIncomingContext(ctx)
 	s.True(ok)
-	s.Equal(callerName, md.Get(CallerNameHeaderName)[0])
-	s.Equal(callerType, md.Get(CallerTypeHeaderName)[0])
-	s.Len(md, 2)
+	s.Equal(callerType, md.Get(callerTypeHeaderName)[0])
+	s.Len(md, 1)
 }

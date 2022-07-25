@@ -57,8 +57,7 @@ func (i *CallerInfoInterceptor) Intercept(
 	return handler(
 		headers.SetCallerInfo(
 			ctx,
-			GetNamespace(i.namespaceRegistry, req).String(),
-			headers.CallerTypeAPI,
+			headers.NewCallerInfo(headers.CallerTypeAPI),
 		),
 		req,
 	)

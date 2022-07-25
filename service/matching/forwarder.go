@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 )
@@ -143,7 +142,6 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		}
 	}
 
-	ctx = headers.SetCallerInfo(ctx, task.event.Data.GetNamespaceId(), "")
 	switch fwdr.taskQueueID.taskType {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
 		_, err = fwdr.client.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
@@ -196,7 +194,6 @@ func (fwdr *Forwarder) ForwardQueryTask(
 		return nil, errNoParent
 	}
 
-	ctx = headers.SetCallerInfo(ctx, task.query.request.GetNamespaceId(), "")
 	resp, err := fwdr.client.QueryWorkflow(ctx, &matchingservice.QueryWorkflowRequest{
 		NamespaceId: task.query.request.GetNamespaceId(),
 		TaskQueue: &taskqueuepb.TaskQueue{

@@ -77,7 +77,7 @@ func New(
 func (s *Batcher) Start() error {
 	// start worker for batch operation workflows
 	ctx := context.WithValue(context.Background(), batcherContextKey, s)
-	ctx = headers.SetCallerInfo(ctx, "", headers.CallerTypeBackground)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
 
 	workerOpts := worker.Options{
 		MaxConcurrentActivityExecutionSize:     s.cfg.MaxConcurrentActivityExecutionSize(),

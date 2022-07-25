@@ -220,7 +220,7 @@ func (r *registry) Start() {
 	defer atomic.StoreInt32(&r.status, running)
 
 	// initialize the cache by initial scan
-	ctx := headers.SetCallerInfo(context.Background(), "", headers.CallerTypeBackground)
+	ctx := headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(headers.CallerTypeBackground))
 
 	err := r.refreshNamespaces(ctx)
 	if err != nil {

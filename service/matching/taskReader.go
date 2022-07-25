@@ -103,7 +103,7 @@ func (tr *taskReader) Signal() {
 }
 
 func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
-	ctx = headers.SetCallerInfo(ctx, "", headers.CallerTypeBackground)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
 
 dispatchLoop:
 	for {
@@ -136,7 +136,7 @@ dispatchLoop:
 }
 
 func (tr *taskReader) getTasksPump(ctx context.Context) error {
-	ctx = headers.SetCallerInfo(ctx, "", headers.CallerTypeBackground)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
 
 	if err := tr.tlMgr.WaitUntilInitialized(ctx); err != nil {
 		return err

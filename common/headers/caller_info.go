@@ -35,31 +35,45 @@ const (
 	CallerTypeBackground = "background"
 )
 
+type CallerInfo struct {
+	CallerType string
+
+	// TODO: add fields for CallerName and CallerInitiation
+}
+
+func NewCallerInfo(
+	callerType string,
+) CallerInfo {
+	return CallerInfo{
+		CallerType: callerType,
+	}
+}
+
 // SetCallerInfo sets callerName and callerType value in incoming context
 // if not already exists.
+// TODO: consider only set the caller info to golang context instead of grpc metadata
+// and propagate to grpc outgoing context upon making an rpc call
 func SetCallerInfo(
 	ctx context.Context,
-	callerName string,
-	callerType string,
+	info CallerInfo,
 ) context.Context {
 	mdIncoming, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		mdIncoming = metadata.MD{}
 	}
 
-	values := GetValues(
-		ctx,
-		CallerNameHeaderName,
-		CallerTypeHeaderName,
-	)
-
-	if values[0] == "" {
-		mdIncoming.Set(CallerNameHeaderName, callerName)
-	}
-
-	if values[1] == "" {
-		mdIncoming.Set(CallerTypeHeaderName, callerType)
+	if len(mdIncoming.Get(callerTypeHeaderName)) == 0 {
+		mdIncoming.Set(callerTypeHeaderName, string(info.CallerType))
 	}
 
 	return metadata.NewIncomingContext(ctx, mdIncoming)
+}
+
+func GetCallerInfo(
+	ctx context.Context,
+) CallerInfo {
+	values := GetValues(ctx, callerTypeHeaderName)
+	return CallerInfo{
+		CallerType: values[1],
+	}
 }

@@ -348,9 +348,7 @@ func (e *taskExecutorImpl) newTaskContext(
 	namespaceID string,
 ) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
-
-	namespace, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID))
-	ctx = headers.SetCallerInfo(ctx, namespace.String(), headers.CallerTypeBackground)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
 
 	return ctx, cancel
 }

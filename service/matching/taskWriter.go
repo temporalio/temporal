@@ -217,7 +217,7 @@ func (w *taskWriter) appendTasks(
 }
 
 func (w *taskWriter) taskWriterLoop(ctx context.Context) error {
-	ctx = headers.SetCallerInfo(ctx, "", headers.CallerTypeBackground)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
 
 	err := w.initReadWriteState(ctx)
 	w.tlMgr.initializedError.Set(struct{}{}, err)

@@ -121,7 +121,7 @@ func New(
 // Start starts the scanner
 func (s *Scanner) Start() error {
 	ctx := context.WithValue(context.Background(), scannerContextKey, s.context)
-	ctx = headers.SetCallerInfo(ctx, "", headers.CallerTypeBackground)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
 
 	workerOpts := worker.Options{
 		MaxConcurrentActivityExecutionSize:     s.context.cfg.MaxConcurrentActivityExecutionSize(),

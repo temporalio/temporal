@@ -161,7 +161,7 @@ func (e *executableImpl) Execute() error {
 	}
 
 	ctx := metrics.AddMetricsContext(context.Background())
-	ctx = headers.SetCallerInfo(ctx, e.GetNamespaceID(), headers.CallerTypeBackground)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
 	startTime := e.timeSource.Now()
 
 	var err error

@@ -985,6 +985,6 @@ func allow(
 		api,
 		RateLimitDefaultToken,
 		"", // caller: currently not used when calculating priority
-		headers.GetValues(ctx, headers.CallerTypeHeaderName)[0],
+		headers.GetCallerInfo(ctx).CallerType,
 	))
 }

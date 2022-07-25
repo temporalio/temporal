@@ -107,7 +107,7 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 	globalMetricsClient = container.MetricsClient
 	globalConfig = container.Config
 	actCtx := context.WithValue(context.Background(), bootstrapContainerKey, container)
-	actCtx = headers.SetCallerInfo(actCtx, "", headers.CallerTypeBackground)
+	actCtx = headers.SetCallerInfo(actCtx, headers.NewCallerInfo(headers.CallerTypeBackground))
 
 	sdkClient := container.SdkClientFactory.GetSystemClient(container.Logger)
 	wo := worker.Options{
