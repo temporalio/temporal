@@ -32,7 +32,6 @@ import (
 
 const (
 	CallerTypeAPI        = "api"
-	CallerTypeSystem     = "system"
 	CallerTypeBackground = "background"
 )
 
