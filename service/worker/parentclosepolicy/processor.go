@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -102,6 +103,8 @@ func (s *Processor) Start() error {
 
 func getWorkerOptions(p *Processor) worker.Options {
 	ctx := context.WithValue(context.Background(), processorContextKey, p)
+	ctx = headers.SetCallerInfo(ctx, "", headers.CallerTypeBackground)
+
 	return worker.Options{
 		MaxConcurrentActivityExecutionSize:     p.cfg.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: p.cfg.MaxConcurrentWorkflowTaskExecutionSize(),

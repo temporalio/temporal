@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -76,6 +77,7 @@ func New(
 func (s *Batcher) Start() error {
 	// start worker for batch operation workflows
 	ctx := context.WithValue(context.Background(), batcherContextKey, s)
+	ctx = headers.SetCallerInfo(ctx, "", headers.CallerTypeBackground)
 
 	workerOpts := worker.Options{
 		MaxConcurrentActivityExecutionSize:     s.cfg.MaxConcurrentActivityExecutionSize(),

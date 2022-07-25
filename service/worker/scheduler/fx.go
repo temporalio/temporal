@@ -25,6 +25,8 @@
 package scheduler
 
 import (
+	"context"
+
 	"go.uber.org/fx"
 
 	"go.temporal.io/api/workflowservice/v1"
@@ -32,6 +34,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -88,6 +91,9 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 		Enabled:    s.enabledForNs(ns.Name().String()),
 		TaskQueue:  TaskQueueName,
 		NumWorkers: s.numWorkers(ns.Name().String()),
+		Options: sdkworker.Options{
+			BackgroundActivityContext: headers.SetCallerInfo(context.Background(), "", headers.CallerTypeBackground),
+		},
 	}
 }
 
