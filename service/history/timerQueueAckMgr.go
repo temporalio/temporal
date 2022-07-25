@@ -25,7 +25,6 @@
 package history
 
 import (
-	"context"
 	"math"
 	"sort"
 	"sync"
@@ -351,6 +350,9 @@ MoveAckLevelLoop:
 // this function does not take cluster name as parameter, due to we only have one timer queue on Cassandra
 // all timer tasks are in this queue and filter will be applied.
 func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestamp time.Time, batchSize int, pageToken []byte) ([]tasks.Task, []byte, error) {
+	ctx, cancel := newQueueIOContext()
+	defer cancel()
+
 	request := &persistence.GetHistoryTasksRequest{
 		ShardID:             t.shard.GetShardID(),
 		TaskCategory:        tasks.CategoryTimer,
@@ -359,7 +361,7 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 		BatchSize:           batchSize,
 		NextPageToken:       pageToken,
 	}
-	response, err := t.executionMgr.GetHistoryTasks(context.TODO(), request)
+	response, err := t.executionMgr.GetHistoryTasks(ctx, request)
 	if err != nil {
 		return nil, nil, err
 	}

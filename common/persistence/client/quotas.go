@@ -22,35 +22,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package quotas
+package client
 
 import (
-	"context"
-	"time"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/quotas"
 )
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination request_rate_limiter_mock.go
-
-type (
-	// RequestRateLimiterFn returns generate a namespace specific rate limiter
-	RequestRateLimiterFn func(req Request) RequestRateLimiter
-
-	// RequestPriorityFn returns a priority for the given Request
-	RequestPriorityFn func(req Request) int
-
-	// RequestRateLimiter corresponds to basic rate limiting functionality.
-	RequestRateLimiter interface {
-		// Allow attempts to allow a request to go through. The method returns
-		// immediately with a true or false indicating if the request can make
-		// progress
-		Allow(now time.Time, request Request) bool
-
-		// Reserve returns a Reservation that indicates how long the caller
-		// must wait before event happen.
-		Reserve(now time.Time, request Request) Reservation
-
-		// Wait waits till the deadline for a rate limit token to allow the request
-		// to go through.
-		Wait(ctx context.Context, request Request) error
+var (
+	CallerTypeHeaderToPriority = map[string]int{
+		headers.CallerTypeAPI:        0,
+		headers.CallerTypeSystem:     0,
+		headers.CallerTypeBackground: 1,
 	}
+
+	RequestPrioritiesOrdered = []int{0, 1}
 )
+
+func NewPriorityRateLimiter(
+	rateFn quotas.RateFn,
+) quotas.RequestRateLimiter {
+	rateLimiters := make(map[int]quotas.RateLimiter)
+	for priority := range RequestPrioritiesOrdered {
+		rateLimiters[priority] = quotas.NewDefaultOutgoingRateLimiter(rateFn)
+	}
+
+	return quotas.NewPriorityRateLimiter(
+		func(req quotas.Request) int {
+			if priority, ok := CallerTypeHeaderToPriority[req.Caller]; ok {
+				return priority
+			}
+
+			// default requests to high priority to be consistent with existing behavior
+			return RequestPrioritiesOrdered[0]
+		},
+		rateLimiters,
+	)
+}

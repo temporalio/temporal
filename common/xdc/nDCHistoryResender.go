@@ -58,6 +58,7 @@ type (
 	NDCHistoryResender interface {
 		// SendSingleWorkflowHistory sends multiple run IDs's history events to remote
 		SendSingleWorkflowHistory(
+			ctx context.Context,
 			remoteClusterName string,
 			namespaceID namespace.ID,
 			workflowID string,
@@ -111,6 +112,7 @@ func NewNDCHistoryResender(
 
 // SendSingleWorkflowHistory sends one run IDs's history events to remote
 func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
+	ctx context.Context,
 	remoteClusterName string,
 	namespaceID namespace.ID,
 	workflowID string,
@@ -121,18 +123,19 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 	endEventVersion int64,
 ) error {
 
-	ctx := context.Background()
+	resendCtx := context.Background()
 	var cancel context.CancelFunc
 	if n.rereplicationTimeout != nil {
 		resendContextTimeout := n.rereplicationTimeout(namespaceID.String())
 		if resendContextTimeout > 0 {
-			ctx, cancel = context.WithTimeout(ctx, resendContextTimeout)
+			resendCtx, cancel = context.WithTimeout(resendCtx, resendContextTimeout)
 			defer cancel()
 		}
 	}
+	rpc.CopyContextValues(resendCtx, ctx)
 
 	historyIterator := collection.NewPagingIterator(n.getPaginationFn(
-		ctx,
+		resendCtx,
 		remoteClusterName,
 		namespaceID,
 		workflowID,
@@ -161,7 +164,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 			batch.rawEventBatch,
 			batch.versionHistory.GetItems())
 
-		err = n.sendReplicationRawRequest(ctx, replicationRequest)
+		err = n.sendReplicationRawRequest(resendCtx, replicationRequest)
 		if err != nil {
 			n.logger.Error("failed to replicate events",
 				tag.WorkflowNamespaceID(namespaceID.String()),
@@ -269,7 +272,7 @@ func (n *NDCHistoryResenderImpl) getHistory(
 		return nil, err
 	}
 
-	ctx, cancel := rpc.NewContextFromParentWithTimeoutAndHeaders(ctx, resendContextTimeout)
+	ctx, cancel := rpc.NewContextFromParentWithTimeoutAndVersionHeaders(ctx, resendContextTimeout)
 	defer cancel()
 
 	adminClient, err := n.clientBean.GetRemoteAdminClient(remoteClusterName)

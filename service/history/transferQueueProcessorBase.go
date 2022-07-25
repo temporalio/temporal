@@ -26,7 +26,9 @@ package history
 
 import (
 	"context"
+	"time"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -35,6 +37,10 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+)
+
+const (
+	queueIOTimeout = 5 * time.Second
 )
 
 type (
@@ -76,7 +82,10 @@ func newTransferQueueProcessorBase(
 func (t *transferQueueProcessorBase) readTasks(
 	readLevel int64,
 ) ([]tasks.Task, bool, error) {
-	response, err := t.executionManager.GetHistoryTasks(context.TODO(), &persistence.GetHistoryTasksRequest{
+	ctx, cancel := newQueueIOContext()
+	defer cancel()
+
+	response, err := t.executionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             t.shard.GetShardID(),
 		TaskCategory:        tasks.CategoryTransfer,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(readLevel + 1),
@@ -119,4 +128,10 @@ func newTransferTaskScheduler(
 		metricProvider,
 		logger,
 	)
+}
+
+func newQueueIOContext() (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), queueIOTimeout)
+	headers.SetCallerInfo(ctx, "", headers.CallerTypeBackground)
+	return ctx, cancel
 }

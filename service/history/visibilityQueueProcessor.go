@@ -25,7 +25,6 @@
 package history
 
 import (
-	"context"
 	"errors"
 	"sync/atomic"
 	"time"
@@ -295,7 +294,10 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 	t.metricsClient.IncCounter(metrics.VisibilityQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel < upperAckLevel {
-		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
+		ctx, cancel := newQueueIOContext()
+		defer cancel()
+
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             t.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryVisibility,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(lowerAckLevel + 1),
@@ -320,7 +322,10 @@ func (t *visibilityQueueProcessorImpl) notifyNewTask() {
 func (t *visibilityQueueProcessorImpl) readTasks(
 	readLevel int64,
 ) ([]tasks.Task, bool, error) {
-	response, err := t.executionManager.GetHistoryTasks(context.TODO(), &persistence.GetHistoryTasksRequest{
+	ctx, cancel := newQueueIOContext()
+	defer cancel()
+
+	response, err := t.executionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             t.shard.GetShardID(),
 		TaskCategory:        tasks.CategoryVisibility,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(readLevel + 1),

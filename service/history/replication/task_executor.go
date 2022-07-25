@@ -35,6 +35,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -160,7 +161,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 		LastWorkerIdentity: attr.LastWorkerIdentity,
 		VersionHistory:     attr.GetVersionHistory(),
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := e.newTaskContext(task.TaskType, attr.NamespaceId)
 	defer cancel()
 
 	err = e.historyEngine.SyncActivity(ctx, request)
@@ -174,6 +175,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 		defer stopwatch.Stop()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+			ctx,
 			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
 			retryErr.WorkflowId,
@@ -225,7 +227,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		// new run events does not need version history since there is no prior events
 		NewRunEvents: attr.NewRunEvents,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := e.newTaskContext(task.TaskType, attr.NamespaceId)
 	defer cancel()
 
 	err = e.historyEngine.ReplicateEventsV2(ctx, request)
@@ -239,6 +241,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		defer resendStopWatch.Stop()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+			ctx,
 			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
 			retryErr.WorkflowId,
@@ -280,7 +283,7 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := e.newTaskContext(task.TaskType, executionInfo.NamespaceId)
 	defer cancel()
 
 	return e.historyEngine.ReplicateWorkflowState(ctx, &historyservice.ReplicateWorkflowStateRequest{
@@ -338,4 +341,16 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		mutableState,
 		false,
 	)
+}
+
+func (e *taskExecutorImpl) newTaskContext(
+	taskType enumsspb.ReplicationTaskType,
+	namespaceID string,
+) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+
+	namespace, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID))
+	ctx = headers.SetCallerInfo(ctx, namespace.String(), headers.CallerTypeBackground)
+
+	return ctx, cancel
 }

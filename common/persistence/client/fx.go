@@ -67,16 +67,17 @@ func ClusterNameProvider(config *cluster.Config) ClusterName {
 func FactoryProvider(
 	params NewFactoryParams,
 ) Factory {
-	var ratelimiter quotas.RateLimiter
+	var requestRatelimiter quotas.RequestRateLimiter
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
-		ratelimiter = quotas.NewDefaultOutgoingRateLimiter(
+		requestRatelimiter = NewPriorityRateLimiter(
 			func() float64 { return float64(params.PersistenceMaxQPS()) },
 		)
 	}
+
 	return NewFactory(
 		params.DataStoreFactory,
 		params.Cfg,
-		ratelimiter,
+		requestRatelimiter,
 		serialization.NewSerializer(),
 		string(params.ClusterName),
 		params.MetricsClient,

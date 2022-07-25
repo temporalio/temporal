@@ -22,50 +22,44 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package rpc
+package interceptor
 
 import (
 	"context"
-	"time"
 
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/namespace"
+	"google.golang.org/grpc"
 )
 
 type (
-	valueCopyCtx struct {
-		context.Context
-
-		valueCtx context.Context
+	CallerInfoInterceptor struct {
+		namespaceRegistry namespace.Registry
 	}
 )
 
-func (c *valueCopyCtx) Value(key any) any {
-	if value := c.Context.Value(key); value != nil {
-		return value
-	}
+var _ grpc.UnaryServerInterceptor = (*CallerInfoInterceptor)(nil).Intercept
 
-	return c.valueCtx.Value(key)
-}
-
-// CopyContextValues copies values in source Context to destination Context.
-func CopyContextValues(dst context.Context, src context.Context) context.Context {
-	return &valueCopyCtx{
-		Context:  dst,
-		valueCtx: src,
+func NewCallerInfoInterceptor(
+	namespaceRegistry namespace.Registry,
+) *CallerInfoInterceptor {
+	return &CallerInfoInterceptor{
+		namespaceRegistry: namespaceRegistry,
 	}
 }
 
-// NewContextWithTimeout creates context with timeout.
-func NewContextWithTimeout(timeout time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), timeout)
-}
-
-// NewContextWithTimeoutAndVersionHeaders creates context with timeout and version headers.
-func NewContextWithTimeoutAndVersionHeaders(timeout time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(headers.SetVersions(context.Background()), timeout)
-}
-
-// NewContextFromParentWithTimeoutAndVersionHeaders creates context from parent context with timeout and version headers.
-func NewContextFromParentWithTimeoutAndVersionHeaders(parentCtx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(headers.SetVersions(parentCtx), timeout)
+func (i *CallerInfoInterceptor) Intercept(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+	return handler(
+		headers.SetCallerInfo(
+			ctx,
+			GetNamespace(i.namespaceRegistry, req).String(),
+			headers.CallerTypeAPI,
+		),
+		req,
+	)
 }

@@ -271,6 +271,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 	)
 	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(resendErr)
 	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		gomock.Any(),
 		s.remoteCluster,
 		namespaceID,
 		workflowID,
@@ -358,6 +359,7 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 	)
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(resendErr)
 	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		gomock.Any(),
 		s.remoteCluster,
 		namespaceID,
 		workflowID,

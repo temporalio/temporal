@@ -36,6 +36,9 @@ const (
 	SupportedServerVersionsHeaderName = "supported-server-versions"
 	SupportedFeaturesHeaderName       = "supported-features"
 	SupportedFeaturesHeaderDelim      = ","
+
+	CallerNameHeaderName = "caller-name"
+	CallerTypeHeaderName = "caller-type"
 )
 
 var (
@@ -45,14 +48,9 @@ var (
 		ClientVersionHeaderName,
 		SupportedServerVersionsHeaderName,
 		SupportedFeaturesHeaderName,
+		CallerNameHeaderName,
+		CallerTypeHeaderName,
 	}
-
-	internalVersionHeaders = metadata.New(map[string]string{
-		ClientNameHeaderName:              ClientNameServer,
-		ClientVersionHeaderName:           ServerVersion,
-		SupportedServerVersionsHeaderName: SupportedServerVersions,
-		SupportedFeaturesHeaderName:       AllFeatures,
-	})
 )
 
 // GetValues returns header values for passed header names.
@@ -70,7 +68,7 @@ func GetValues(ctx context.Context, headerNames ...string) []string {
 }
 
 // Propagate propagates version headers from incoming context to outgoing context.
-// It copies all version headers to outgoing context only if they are exist in incoming context
+// It copies all headers to outgoing context only if they are exist in incoming context
 // and doesn't exist in outgoing context already.
 func Propagate(ctx context.Context) context.Context {
 	if mdIncoming, ok := metadata.FromIncomingContext(ctx); ok {
@@ -95,22 +93,6 @@ func Propagate(ctx context.Context) context.Context {
 		}
 	}
 	return ctx
-}
-
-// SetVersions sets headers for internal communications.
-func SetVersions(ctx context.Context) context.Context {
-	return metadata.NewOutgoingContext(ctx, internalVersionHeaders)
-}
-
-// SetVersionsForTests sets headers as they would be received from the client.
-// Must be used in tests only.
-func SetVersionsForTests(ctx context.Context, clientVersion, clientName, supportedServerVersions, supportedFeatures string) context.Context {
-	return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-		ClientNameHeaderName:              clientName,
-		ClientVersionHeaderName:           clientVersion,
-		SupportedServerVersionsHeaderName: supportedServerVersions,
-		SupportedFeaturesHeaderName:       supportedFeatures,
-	}))
 }
 
 func getSingleHeaderValue(md metadata.MD, headerName string) string {
