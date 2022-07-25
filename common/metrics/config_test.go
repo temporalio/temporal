@@ -127,21 +127,20 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 
 	customizedBoundaries := map[string][]float64{
 		Dimensionless: {1},
-		"notDefine":   {1},
 		Milliseconds:  defaultPerUnitHistogramBoundaries[Milliseconds],
 		Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
 	}
 	testCases := []histogramTest{
 		{
-			nil,
-			defaultPerUnitHistogramBoundaries,
+			input:        nil,
+			expectResult: defaultPerUnitHistogramBoundaries,
 		},
 		{
-			map[string][]float64{
-				Dimensionless: {1},
-				"notDefine":   {1},
+			input: map[string][]float64{
+				UnitNameDimensionless: {1},
+				"notDefine":           {1},
 			},
-			customizedBoundaries,
+			expectResult: customizedBoundaries,
 		},
 	}
 

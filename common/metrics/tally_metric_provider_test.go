@@ -33,13 +33,24 @@ import (
 	"github.com/uber-go/tally/v4"
 )
 
+var defaultConfig = ClientConfig{
+	Tags: nil,
+	ExcludeTags: map[string][]string{
+		"taskqueue":    {"__sticky__"},
+		"activityType": {},
+		"workflowType": {},
+	},
+	Prefix:                     "",
+	PerUnitHistogramBoundaries: map[string][]float64{Dimensionless: {0, 10, 100}, Bytes: {1024, 2048}, Milliseconds: {10, 500, 1000, 5000, 10000}},
+}
+
 func TestTallyScope(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
 	mp := NewTallyMetricsHandler(defaultConfig, scope)
 	recordTallyMetrics(mp)
 
 	snap := scope.Snapshot()
-	counters, gauges, timers, histograms := snap.Counters(), snap.Gauges(), snap.Timers(), snap.Histograms()
+	counters, gauges, timers, histograms := snap.Counters(), snap.Gauges(), snap.Histograms(), snap.Histograms()
 
 	assert.EqualValues(t, 8, counters["test.hits+"].Value())
 	assert.EqualValues(t, map[string]string{}, counters["test.hits+"].Tags())
@@ -55,10 +66,14 @@ func TestTallyScope(t *testing.T) {
 		"location": "Mare Imbrium",
 	}, gauges["test.temp+location=Mare Imbrium"].Tags())
 
-	assert.EqualValues(t, []time.Duration{
-		1248 * time.Millisecond,
-		1255 * time.Millisecond,
-	}, timers["test.latency+"].Values())
+	assert.EqualValues(t, map[time.Duration]int64{
+		10 * time.Millisecond:    0,
+		500 * time.Millisecond:   0,
+		1000 * time.Millisecond:  0,
+		5000 * time.Millisecond:  1,
+		10000 * time.Millisecond: 1,
+		math.MaxInt64:            0,
+	}, timers["test.latency+"].Durations())
 	assert.EqualValues(t, map[string]string{}, timers["test.latency+"].Tags())
 
 	assert.EqualValues(t, map[float64]int64{
@@ -81,7 +96,7 @@ func recordTallyMetrics(mp MetricsHandler) {
 	c.Record(8)
 	g.Record(-100, StringTag("location", "Mare Imbrium"))
 	d.Record(1248 * time.Millisecond)
-	d.Record(1255 * time.Millisecond)
+	d.Record(5255 * time.Millisecond)
 	h.Record(1234567)
 	t.Record(11, TaskQueueTag("__sticky__"))
 	e.Record(14, TaskQueueTag("filtered"))
