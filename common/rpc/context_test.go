@@ -50,18 +50,14 @@ func (s *contextSuite) SetupTest() {
 }
 
 func (s *contextSuite) TestCopyContextValues_ValueCopied() {
-	strKey := "key"
-	strValue := "value"
-
-	structKey := struct{}{}
-	structValue := struct{}{}
+	key := struct{}{}
+	value := "value"
 
 	metadataKey := "header-key"
 	metadataValue := "header-value"
 
 	ctx := context.Background()
-	ctx = context.WithValue(ctx, strKey, strValue)
-	ctx = context.WithValue(ctx, structKey, structValue)
+	ctx = context.WithValue(ctx, key, value)
 	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs(metadataKey, metadataValue))
 
 	newDeadline := time.Now().Add(time.Hour)
@@ -69,8 +65,7 @@ func (s *contextSuite) TestCopyContextValues_ValueCopied() {
 
 	newContext = CopyContextValues(newContext, ctx)
 
-	s.Equal(strValue, newContext.Value(strKey))
-	s.Equal(structValue, newContext.Value(structKey))
+	s.Equal(value, newContext.Value(key))
 	md, ok := metadata.FromIncomingContext(newContext)
 	s.True(ok)
 	s.Equal(metadataValue, md[metadataKey][0])
