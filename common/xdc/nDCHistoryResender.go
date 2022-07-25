@@ -132,7 +132,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 			defer cancel()
 		}
 	}
-	rpc.CopyContextValues(resendCtx, ctx)
+	resendCtx = rpc.CopyContextValues(resendCtx, ctx)
 
 	historyIterator := collection.NewPagingIterator(n.getPaginationFn(
 		resendCtx,
