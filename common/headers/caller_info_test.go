@@ -99,7 +99,7 @@ func (s *callerInfoSuite) TestSetCallerInfo_WithExistingCallerInfo() {
 
 func (s *callerInfoSuite) TestSetCallerInfo_WithPartialCallerInfo() {
 	callerName := "callerName"
-	callerType := CallerTypeAPI
+	callerType := CallerTypeBackground
 
 	ctx := SetCallerInfo(context.Background(), callerName, "")
 	ctx = SetCallerInfo(ctx, "another caller", callerType)

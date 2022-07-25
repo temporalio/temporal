@@ -37,6 +37,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -216,6 +217,8 @@ func (w *taskWriter) appendTasks(
 }
 
 func (w *taskWriter) taskWriterLoop(ctx context.Context) error {
+	ctx = headers.SetCallerInfo(ctx, "", headers.CallerTypeBackground)
+
 	err := w.initReadWriteState(ctx)
 	w.tlMgr.initializedError.Set(struct{}{}, err)
 	if err != nil {

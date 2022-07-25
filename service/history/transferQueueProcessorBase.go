@@ -132,6 +132,6 @@ func newTransferTaskScheduler(
 
 func newQueueIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), queueIOTimeout)
-	headers.SetCallerInfo(ctx, "", headers.CallerTypeBackground)
+	ctx = headers.SetCallerInfo(ctx, "", headers.CallerTypeBackground)
 	return ctx, cancel
 }

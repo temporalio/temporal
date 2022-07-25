@@ -58,7 +58,7 @@ func SetCallerInfo(
 	}
 
 	if values[1] == "" {
-		mdIncoming.Set(CallerTypeHeaderName, CallerTypeAPI)
+		mdIncoming.Set(CallerTypeHeaderName, callerType)
 	}
 
 	return metadata.NewIncomingContext(ctx, mdIncoming)

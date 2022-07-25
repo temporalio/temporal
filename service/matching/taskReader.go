@@ -32,6 +32,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -102,6 +103,8 @@ func (tr *taskReader) Signal() {
 }
 
 func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
+	ctx = headers.SetCallerInfo(ctx, "", headers.CallerTypeBackground)
+
 dispatchLoop:
 	for {
 		select {
@@ -133,6 +136,8 @@ dispatchLoop:
 }
 
 func (tr *taskReader) getTasksPump(ctx context.Context) error {
+	ctx = headers.SetCallerInfo(ctx, "", headers.CallerTypeBackground)
+
 	if err := tr.tlMgr.WaitUntilInitialized(ctx); err != nil {
 		return err
 	}
