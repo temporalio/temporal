@@ -78,6 +78,7 @@ type (
 		searchAttributesMapper   searchattribute.Mapper
 		processor                Processor
 		processorAckTimeout      dynamicconfig.DurationPropertyFn
+		disableOrderByClause     dynamicconfig.BoolPropertyFn
 		metricsClient            metrics.Client
 	}
 
@@ -106,6 +107,7 @@ func NewVisibilityStore(
 	searchAttributesMapper searchattribute.Mapper,
 	processor Processor,
 	processorAckTimeout dynamicconfig.DurationPropertyFn,
+	disableOrderByClause dynamicconfig.BoolPropertyFn,
 	metricsClient metrics.Client,
 ) *visibilityStore {
 
@@ -116,6 +118,7 @@ func NewVisibilityStore(
 		searchAttributesMapper:   searchAttributesMapper,
 		processor:                processor,
 		processorAckTimeout:      processorAckTimeout,
+		disableOrderByClause:     disableOrderByClause,
 		metricsClient:            metricsClient,
 	}
 }
@@ -650,9 +653,22 @@ func (s *visibilityStore) buildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*client.SearchParameters, error) {
 
-	boolQuery, fieldSorts, err := s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
+	boolQuery, fieldSorts, err := s.convertQuery(
+		request.Namespace,
+		request.NamespaceID,
+		request.Query,
+	)
 	if err != nil {
 		return nil, err
+	}
+
+	// TODO(rodrigozhou): investigate possible solutions to slow ORDER BY.
+	// ORDER BY clause can be slow if there is a large number of documents and
+	// using a field that was not indexed by ES. Since slow queries can block
+	// writes for unreasonably long, this option forbids the usage of ORDER BY
+	// clause to prevent slow down issues.
+	if s.disableOrderByClause() && len(fieldSorts) > 0 {
+		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
 	}
 
 	params := &client.SearchParameters{
@@ -664,7 +680,11 @@ func (s *visibilityStore) buildSearchParametersV2(
 
 	return params, nil
 }
-func (s *visibilityStore) convertQuery(namespace namespace.Name, namespaceID namespace.ID, requestQueryStr string) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
+func (s *visibilityStore) convertQuery(
+	namespace namespace.Name,
+	namespaceID namespace.ID,
+	requestQueryStr string,
+) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
