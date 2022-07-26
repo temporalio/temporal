@@ -107,6 +107,8 @@ type (
 		GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error)
 		// MutateVersioningData allows callers to update versioning data for this task queue
 		MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error
+		// InvalidateMetadata allows callers to invalidate cached data on this task queue
+		InvalidateMetadata(ctx context.Context, request *matchingservice.InvalidateTaskQueueMetadataRequest) error
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
@@ -450,7 +452,7 @@ func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator
 			tq := c.taskQueueID.mkName(i)
 			_, err := c.matchingClient.InvalidateTaskQueueMetadata(ctx,
 				&matchingservice.InvalidateTaskQueueMetadataRequest{
-					NamespaceId:    c.namespace.String(),
+					NamespaceId:    c.taskQueueID.namespaceID.String(),
 					TaskQueue:      tq,
 					VersioningData: true,
 				})
@@ -462,6 +464,20 @@ func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator
 	}
 	c.signalIfFatal(err)
 	return err
+}
+
+func (c *taskQueueManagerImpl) InvalidateMetadata(ctx context.Context, request *matchingservice.InvalidateTaskQueueMetadataRequest) error {
+	if request.GetVersioningData() {
+		if c.taskQueueID.IsRoot() {
+			// Should never happen. Root partitions do not get their versioning data invalidated.
+			c.logger.Warn("A root partition was told to invalidate its versioning data, this should not happen",
+				tag.WorkflowTaskQueueName(c.taskQueueID.name))
+			return nil
+		}
+		c.db.setVersioningDataForNonRootPartition(nil)
+		return c.fetchVersioningDataFromRootPartition(ctx)
+	}
+	return nil
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
@@ -673,17 +689,25 @@ func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartition(ctx context.
 	}
 
 	rootTqName := c.taskQueueID.GetRoot()
+	curHash := HashVersioningData(c.db.versioningData)
+	if len(curHash) == 0 {
+		// if we have no data, make sure we send something, so it's known we desire versioning data
+		curHash = []byte{0}
+	}
 	res, err := c.matchingClient.GetTaskQueueMetadata(ctx, &matchingservice.GetTaskQueueMetadataRequest{
 		NamespaceId:               c.taskQueueID.namespaceID.String(),
 		TaskQueue:                 rootTqName,
-		WantVersioningDataCurhash: HashVersioningData(c.db.versioningData),
+		WantVersioningDataCurhash: curHash,
 	})
 	if err != nil {
 		return err
 	}
-	if res.VersioningData == nil {
-		return fmt.Errorf("root partition returned nil versioning data")
+	// If the root partition returns nil here, then that means our data matched, and we don't need to update.
+	// If it's nil because it never existed, then we'd never have any data.
+	// It can't be nil due to removing versions, as that would result in a non-nil container with
+	// nil inner fields.
+	if res.VersioningData != nil {
+		c.db.setVersioningDataForNonRootPartition(res.VersioningData)
 	}
-	c.db.setVersioningDataForNonRootPartition(res.VersioningData)
 	return nil
 }

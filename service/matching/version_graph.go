@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"encoding/binary"
 	"fmt"
 	"github.com/dgryski/go-farm"
 
@@ -39,17 +40,19 @@ func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *wor
 	return depthLimiter(g, maxDepth, true)
 }
 
-// HashVersioningData returns a farm.Fingerprint32 hash of the versioning data. If the data is nonexistent or invalid,
-// returns the empty string
-func HashVersioningData(data *persistence.VersioningData) string {
-	if data == nil {
-		return ""
+// HashVersioningData returns a farm.Fingerprint32 hash of the versioning data as bytes. If the data is nonexistent or
+// invalid, returns an empty slice.
+func HashVersioningData(data *persistence.VersioningData) []byte {
+	if data == nil || data.GetCurrentDefault() == nil {
+		return []byte{}
 	}
 	asBytes, err := proto.Marshal(data)
 	if err != nil {
-		return ""
+		return []byte{}
 	}
-	return fmt.Sprintf("%v", farm.Fingerprint32(asBytes))
+	b := make([]byte, 4)
+	binary.LittleEndian.PutUint32(b, farm.Fingerprint32(asBytes))
+	return b
 }
 
 func depthLimiter(g *persistence.VersioningData, maxDepth int, noMutate bool) *workflowservice.GetWorkerBuildIdOrderingResponse {

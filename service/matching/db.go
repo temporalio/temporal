@@ -291,7 +291,10 @@ func (db *taskQueueDB) getVersioningDataLocked(
 		return db.versioningData, nil
 	}
 
-	// TODO: Don't ever read from DB directly on non-root partitions
+	if !db.taskQueue.IsRoot() {
+		return nil, fmt.Errorf("cannot read versioning data from a non-root task queue")
+	}
+
 	tqInfo, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
 		NamespaceID: db.namespaceID.String(),
 		TaskQueue:   db.taskQueue.name,

@@ -521,8 +521,8 @@ func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartitionOnInit(t *tes
 				gomock.Eq(&matchingservice.GetTaskQueueMetadataRequest{
 					NamespaceId: defaultNamespaceId.String(),
 					TaskQueue:   defaultRootTqID,
-					// Empty string since it has nothing on startup
-					WantVersioningDataCurhash: "",
+					// Nonsense value since it has nothing on startup
+					WantVersioningDataCurhash: []byte{0},
 				})).
 				Return(asResp, nil)
 			tqm.matchingClient = mockMatchingClient

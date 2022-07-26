@@ -28,6 +28,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"go.temporal.io/server/service/matching"
 	"testing"
 	"time"
 
@@ -209,4 +210,66 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	s.NoError(err)
 	s.NotNil(res2)
 	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
+}
+
+func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() {
+	ctx := NewContext()
+	tq := "integration-versioning-sub-partitions"
+
+	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		Namespace:     s.namespace,
+		TaskQueue:     tq,
+		VersionId:     &taskqueuepb.VersionId{WorkerBuildId: "foo"},
+		BecomeDefault: true,
+	})
+	s.NoError(err)
+	s.NotNil(res)
+
+	res2, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+	})
+	s.NoError(err)
+	s.NotNil(res2)
+	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
+
+	// Verify sub partitions have data
+	subParts, err := s.testCluster.GetHost().dynamicClient.GetIntValue(
+		dynamicconfig.MatchingNumTaskqueueReadPartitions, make([]map[dynamicconfig.Filter]interface{}, 0), 0)
+	s.NotEqual(0, subParts, "This test makes no sense unless there are sub partitions")
+	s.NoError(err)
+
+	for i := 1; i <= subParts; i++ {
+		subPartName, err := matching.NewTaskQueueNameWithPartition(tq, i)
+		s.NoError(err)
+		res, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
+			Namespace: s.namespace,
+			TaskQueue: subPartName.String(),
+		})
+		s.NoError(err)
+		s.NotNil(res)
+		s.Equal("foo", res.CurrentDefault.GetVersion().GetWorkerBuildId())
+	}
+
+	// Make a modification, verify it propagates to sub partitions
+	res, err = s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		Namespace:     s.namespace,
+		TaskQueue:     tq,
+		VersionId:     &taskqueuepb.VersionId{WorkerBuildId: "foo-2"},
+		BecomeDefault: true,
+	})
+	s.NoError(err)
+	s.NotNil(res)
+
+	for i := 1; i <= subParts; i++ {
+		subPartName, err := matching.NewTaskQueueNameWithPartition(tq, i)
+		s.NoError(err)
+		res, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
+			Namespace: s.namespace,
+			TaskQueue: subPartName.String(),
+		})
+		s.NoError(err)
+		s.NotNil(res)
+		s.Equal("foo-2", res.CurrentDefault.GetVersion().GetWorkerBuildId())
+	}
 }

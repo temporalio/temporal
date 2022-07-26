@@ -214,9 +214,10 @@ message GetTaskQueueMetadataRequest {
     string namespace_id = 1;
     string task_queue = 2;
     // If set nonempty, the requester wants the latest versioning data. The value must be the hash
-    // (using farm hash Fingerprint32) of the latest versioning data. If the data is up to date, no
-    // value will be returned.
-    string want_versioning_data_curhash = 3;
+    // (using farm hash Fingerprint32) of the latest versioning data. If the requester has no data,
+    // it can use any invalid value (ex: [0]).
+    // If the data is up to date, no value will be returned.
+    bytes want_versioning_data_curhash = 3;
 }
 message GetTaskQueueMetadataResponse {
     temporal.server.api.persistence.v1.VersioningData versioning_data = 1;

@@ -745,6 +745,59 @@ func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
 	}, nil
 }
 
+func (e *matchingEngineImpl) InvalidateTaskQueueMetadata(
+	hCtx *handlerContext,
+	req *matchingservice.InvalidateTaskQueueMetadataRequest,
+) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueueName := req.GetTaskQueue()
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	if err != nil {
+		if _, ok := err.(*serviceerror.NotFound); ok {
+			// Nothing to do here
+			return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
+		}
+		return nil, err
+	}
+	err = tqMgr.InvalidateMetadata(hCtx.Context, req)
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
+}
+
+func (e *matchingEngineImpl) GetTaskQueueMetadata(
+	hCtx *handlerContext,
+	req *matchingservice.GetTaskQueueMetadataRequest,
+) (*matchingservice.GetTaskQueueMetadataResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueueName := req.GetTaskQueue()
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	if err != nil {
+		return nil, err
+	}
+	retme := &matchingservice.GetTaskQueueMetadataResponse{}
+	verDatHash := req.GetWantVersioningDataCurhash()
+	if len(verDatHash) > 0 {
+		vDat, err := tqMgr.GetVersioningData(hCtx)
+		if err != nil {
+			return nil, err
+		}
+		if !bytes.Equal(HashVersioningData(vDat), verDatHash) {
+			retme.VersioningData = vDat
+		}
+	}
+	return retme, nil
+}
+
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 	host, err := e.keyResolver.Lookup(partitionKey)
 	if err != nil {
