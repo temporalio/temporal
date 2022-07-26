@@ -183,7 +183,7 @@ Loop:
 			tr.Signal()
 
 		case <-updateAckTimer.C:
-			err := tr.persistAckLevel()
+			err := tr.persistAckLevel(ctx)
 			tr.tlMgr.signalIfFatal(err)
 			if err != nil {
 				tr.logger().Error("Persistent store operation failure",
@@ -269,10 +269,10 @@ func (tr *taskReader) addSingleTaskToBuffer(
 	}
 }
 
-func (tr *taskReader) persistAckLevel() error {
+func (tr *taskReader) persistAckLevel(ctx context.Context) error {
 	ackLevel := tr.tlMgr.taskAckManager.getAckLevel()
 	tr.emitTaskLagMetric(ackLevel)
-	return tr.tlMgr.db.UpdateState(context.TODO(), ackLevel)
+	return tr.tlMgr.db.UpdateState(ctx, ackLevel)
 }
 
 func (tr *taskReader) isTaskAddedRecently(lastAddTime time.Time) bool {

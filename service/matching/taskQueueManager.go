@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/util"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -62,6 +63,8 @@ const (
 
 	// Fake Task ID to wrap a task for syncmatch
 	syncMatchTaskId = -137
+
+	ioTimeout = 5 * time.Second
 )
 
 type (
@@ -265,8 +268,11 @@ func (c *taskQueueManagerImpl) Stop() {
 	// metadata. UpdateState would fail on the lease check, but don't even bother calling it.
 	ackLevel := c.taskAckManager.getAckLevel()
 	if ackLevel >= 0 {
-		c.db.UpdateState(context.TODO(), ackLevel)
-		c.taskGC.RunNow(context.TODO(), ackLevel)
+		ctx, cancel := newIOContext()
+		defer cancel()
+
+		c.db.UpdateState(ctx, ackLevel)
+		c.taskGC.RunNow(ctx, ackLevel)
 	}
 	c.liveness.Stop()
 	c.taskWriter.Stop()
@@ -525,7 +531,11 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 	}
 
 	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
-	c.taskGC.Run(context.TODO(), ackLevel) // TODO: completeTaskFunc and task.finish() should take in a context
+
+	// TODO: completeTaskFunc and task.finish() should take in a context
+	ctx, cancel := newIOContext()
+	defer cancel()
+	c.taskGC.Run(ctx, ackLevel)
 }
 
 func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
@@ -604,4 +614,11 @@ func (c *taskQueueManagerImpl) QueueID() *taskQueueID {
 
 func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
 	return c.taskQueueKind
+}
+
+func newIOContext() (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
+	return ctx, cancel
 }
