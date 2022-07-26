@@ -666,7 +666,7 @@ func (s *visibilityStore) buildSearchParametersV2(
 	// writes for unreasonably long, this option forbids the usage of ORDER BY
 	// clause to prevent slow down issues.
 	if s.disableOrderByClause() && len(fieldSorts) > 0 {
-		return nil, query.NewConverterError("ORDER BY clause is disabled")
+		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
 	}
 
 	params := &client.SearchParameters{
