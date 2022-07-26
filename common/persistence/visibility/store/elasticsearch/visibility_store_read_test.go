@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -473,9 +472,9 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 	p, err = s.visibilityStore.buildSearchParametersV2(request)
 	s.Nil(p)
 	s.Error(err)
-	var converterErr *query.ConverterError
-	s.ErrorAs(err, &converterErr)
-	s.EqualError(err, "ORDER BY clause is disabled")
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.EqualError(err, "ORDER BY clause is not supported")
 	request.Query = ""
 }
 
