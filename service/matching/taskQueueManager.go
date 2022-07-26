@@ -65,6 +65,9 @@ const (
 	syncMatchTaskId = -137
 
 	ioTimeout = 5 * time.Second
+
+	// Threshold for counting a AddTask call as a no recent poller call
+	noPollerThreshold = time.Minute
 )
 
 type (
@@ -296,6 +299,11 @@ func (c *taskQueueManagerImpl) AddTask(
 	if params.forwardedFrom == "" {
 		// request sent by history service
 		c.liveness.markAlive(time.Now())
+	}
+
+	if params.forwardedFrom != "" {
+		// Only checks recent pollers in the root partition
+		c.checkRecentPollers()
 	}
 
 	var syncMatch bool
