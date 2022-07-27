@@ -28,11 +28,6 @@ fi
 
 echo "=== Step 1. Add new builtin search attributes ==="
 
-case $ES_VERSION in
-    v6) date_type='date'       ; doc_type='/_doc' ;;
-    *)  date_type='date_nanos' ; doc_type=''      ;;
-esac
-
 new_mapping='
 {
   "properties": {
