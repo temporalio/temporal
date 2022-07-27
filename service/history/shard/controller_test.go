@@ -628,6 +628,8 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 	s.Less(time.Since(start), 500*time.Millisecond)
 }
 
+// Tests random concurrent sequence of shard load/acquire/unload to catch any race conditions
+// that were not covered by specific tests.
 func (s *controllerSuite) TestShardControllerFuzz() {
 	s.config.NumberOfShards = 10
 
