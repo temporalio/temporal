@@ -72,6 +72,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
@@ -3128,7 +3129,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		Namespace:             request.Namespace,
 		WorkflowId:            request.ScheduleId,
 		WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: scheduler.TaskQueueName},
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: workercommon.PerNSWorkerTaskQueue},
 		Input:                 inputPayload,
 		Identity:              request.Identity,
 		RequestId:             request.RequestId,
