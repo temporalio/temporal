@@ -30,6 +30,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/server/common"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -181,12 +183,18 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	if err != nil {
 		return err
 	}
+	// TODO:
+	version := currentVersion
+	if deleteAfterClose {
+		version = common.IgnoreTaskVersion
+	}
 	closeTasks := []tasks.Task{
+
 		&tasks.CloseExecutionTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
 			VisibilityTimestamp: now,
-			Version:             currentVersion,
+			Version:             version,
 			DeleteAfterClose:    deleteAfterClose,
 		},
 	}
@@ -220,13 +228,11 @@ func (r *TaskGeneratorImpl) GenerateDeleteExecutionTask(
 	now time.Time,
 ) (*tasks.DeleteExecutionTask, error) {
 
-	currentVersion := r.mutableState.GetCurrentVersion()
-
 	return &tasks.DeleteExecutionTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
-		Version:             currentVersion,
+		Version:             common.IgnoreTaskVersion,
 	}, nil
 }
 

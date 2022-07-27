@@ -282,6 +282,7 @@ message TerminateWorkflowExecutionResponse {
 message DeleteWorkflowExecutionRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
+    int64 last_write_version = 3;
 }
 
 message DeleteWorkflowExecutionResponse {

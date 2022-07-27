@@ -2122,7 +2122,10 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 				nil)
 		}
 	}
-
+	var lastWriteVersion *int64
+	if request.LastWriteVersion > common.EmptyVersion {
+		lastWriteVersion = &request.LastWriteVersion
+	}
 	// If workflow execution is closed or in passive cluster.
 	return e.workflowDeleteManager.AddDeleteWorkflowExecutionTask(
 		ctx,
@@ -2136,6 +2139,7 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 		e.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, e.shard.GetClusterMetadata().GetCurrentClusterName()).TaskID,
 		// Use global ack level visibility queue ack level because cluster level is not updated.
 		e.shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID,
+		lastWriteVersion,
 	)
 }
 

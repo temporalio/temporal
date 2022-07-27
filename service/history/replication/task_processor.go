@@ -436,7 +436,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 		}, nil
 
 	default:
-		return nil, fmt.Errorf("unknown replication task type")
+		return nil, fmt.Errorf("unknown replication task type: %T", replicationTask.TaskType)
 	}
 }
 

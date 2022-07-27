@@ -260,13 +260,15 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		return err
 	}
 
-	lastWriteVersion, err := mutableState.GetLastWriteVersion()
-	if err != nil {
-		return err
-	}
-	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
-	if !ok {
-		return nil
+	if task.GetVersion() != common.IgnoreTaskVersion {
+		lastWriteVersion, err := mutableState.GetLastWriteVersion()
+		if err != nil {
+			return err
+		}
+		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
+		if !ok {
+			return nil
+		}
 	}
 
 	return t.workflowDeleteManager.DeleteWorkflowExecution(
@@ -275,7 +277,6 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		workflowExecution,
 		weCtx,
 		mutableState,
-		task.GetVersion(),
 		forceDeleteFromOpenVisibility,
 	)
 }
