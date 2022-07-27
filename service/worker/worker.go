@@ -25,12 +25,14 @@
 package worker
 
 import (
+	"context"
 	"sync/atomic"
 
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/sdk"
@@ -76,6 +78,7 @@ func (wm *workerManager) Start() {
 
 	defaultWorkerOptions := sdkworker.Options{
 		// TODO: add dynamic config for worker options
+		BackgroundActivityContext: headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(headers.CallerTypeBackground)),
 	}
 	sdkClient := wm.sdkClientFactory.GetSystemClient(wm.logger)
 	defaultWorker := sdkworker.New(sdkClient, DefaultWorkerTaskQueue, defaultWorkerOptions)

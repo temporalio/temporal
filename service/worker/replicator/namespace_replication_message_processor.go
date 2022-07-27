@@ -145,7 +145,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 		return
 	}
 
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(fetchTaskRequestTimeout)
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(fetchTaskRequestTimeout)
 	request := &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            p.currentCluster,
 		LastRetrievedMessageId: p.lastRetrievedMessageID,

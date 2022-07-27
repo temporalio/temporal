@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/quotas"
@@ -416,8 +417,9 @@ func (f *replicationTaskFetcherWorker) getMessages() error {
 		tokens = append(tokens, request.token)
 	}
 
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(fetchTaskRequestTimeout)
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(fetchTaskRequestTimeout)
 	defer cancel()
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
 
 	request := &adminservice.GetReplicationMessagesRequest{
 		Tokens:      tokens,

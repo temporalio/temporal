@@ -22,65 +22,58 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package interceptor
+package headers
 
 import (
 	"context"
-	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/quotas"
+	"google.golang.org/grpc/metadata"
 )
 
 const (
-	RateLimitDefaultToken = 1
+	CallerTypeAPI        = "api"
+	CallerTypeBackground = "background"
 )
 
-var (
-	RateLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "service rate limit exceeded")
-)
+type CallerInfo struct {
+	CallerType string
 
-type (
-	RateLimitInterceptor struct {
-		rateLimiter quotas.RequestRateLimiter
-		tokens      map[string]int
-	}
-)
+	// TODO: add fields for CallerName and CallerInitiation
+}
 
-var _ grpc.UnaryServerInterceptor = (*RateLimitInterceptor)(nil).Intercept
-
-func NewRateLimitInterceptor(
-	rateLimiter quotas.RequestRateLimiter,
-	tokens map[string]int,
-) *RateLimitInterceptor {
-	return &RateLimitInterceptor{
-		rateLimiter: rateLimiter,
-		tokens:      tokens,
+func NewCallerInfo(
+	callerType string,
+) CallerInfo {
+	return CallerInfo{
+		CallerType: callerType,
 	}
 }
 
-func (i *RateLimitInterceptor) Intercept(
+// SetCallerInfo sets callerName and callerType value in incoming context
+// if not already exists.
+// TODO: consider only set the caller info to golang context instead of grpc metadata
+// and propagate to grpc outgoing context upon making an rpc call
+func SetCallerInfo(
 	ctx context.Context,
-	req interface{},
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	_, methodName := splitMethodName(info.FullMethod)
-	token, ok := i.tokens[methodName]
+	info CallerInfo,
+) context.Context {
+	mdIncoming, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		token = RateLimitDefaultToken
+		mdIncoming = metadata.MD{}
 	}
 
-	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
-		methodName,
-		token,
-		"", // this interceptor layer does not throttle based on caller name
-		"", // this interceptor layer does not throttle based on caller type
-	)) {
-		return nil, RateLimitServerBusy
+	if len(mdIncoming.Get(callerTypeHeaderName)) == 0 {
+		mdIncoming.Set(callerTypeHeaderName, string(info.CallerType))
 	}
-	return handler(ctx, req)
+
+	return metadata.NewIncomingContext(ctx, mdIncoming)
+}
+
+func GetCallerInfo(
+	ctx context.Context,
+) CallerInfo {
+	values := GetValues(ctx, callerTypeHeaderName)
+	return CallerInfo{
+		CallerType: values[0],
+	}
 }

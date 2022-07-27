@@ -76,12 +76,7 @@ var (
 		"ListTaskQueuePartitions": 3,
 	}
 
-	ExecutionAPIPriorities = map[int]struct{}{
-		0: {},
-		1: {},
-		2: {},
-		3: {},
-	}
+	ExecutionAPIPrioritiesOrdered = []int{0, 1, 2, 3}
 
 	VisibilityAPIToPriority = map[string]int{
 		"CountWorkflowExecutions":        0,
@@ -92,9 +87,7 @@ var (
 		"ListArchivedWorkflowExecutions": 0,
 	}
 
-	VisibilityAPIPriorities = map[int]struct{}{
-		0: {},
-	}
+	VisibilityAPIPrioritiesOrdered = []int{0}
 
 	OtherAPIToPriority = map[string]int{
 		"GetClusterInfo":      0,
@@ -116,9 +109,7 @@ var (
 		"ListSchedules":             0,
 	}
 
-	OtherAPIPriorities = map[int]struct{}{
-		0: {},
-	}
+	OtherAPIPrioritiesOrdered = []int{0}
 )
 
 type (
@@ -179,28 +170,43 @@ func NewExecutionPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
-	for priority := range ExecutionAPIPriorities {
+	for priority := range ExecutionAPIPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute)
 	}
-	return quotas.NewPriorityRateLimiter(ExecutionAPIToPriority, rateLimiters)
+	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
+		if priority, ok := ExecutionAPIToPriority[req.API]; ok {
+			return priority
+		}
+		return ExecutionAPIPrioritiesOrdered[len(ExecutionAPIPrioritiesOrdered)-1]
+	}, rateLimiters)
 }
 
 func NewVisibilityPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
-	for priority := range VisibilityAPIPriorities {
+	for priority := range VisibilityAPIPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute)
 	}
-	return quotas.NewPriorityRateLimiter(VisibilityAPIToPriority, rateLimiters)
+	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
+		if priority, ok := VisibilityAPIToPriority[req.API]; ok {
+			return priority
+		}
+		return VisibilityAPIPrioritiesOrdered[len(VisibilityAPIPrioritiesOrdered)-1]
+	}, rateLimiters)
 }
 
 func NewOtherAPIPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
-	for priority := range OtherAPIPriorities {
+	for priority := range OtherAPIPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute)
 	}
-	return quotas.NewPriorityRateLimiter(OtherAPIToPriority, rateLimiters)
+	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
+		if priority, ok := OtherAPIToPriority[req.API]; ok {
+			return priority
+		}
+		return OtherAPIPrioritiesOrdered[len(OtherAPIPrioritiesOrdered)-1]
+	}, rateLimiters)
 }

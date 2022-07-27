@@ -22,35 +22,57 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package quotas
+package client
 
 import (
-	"context"
-	"time"
-)
+	"testing"
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination request_rate_limiter_mock.go
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"golang.org/x/exp/slices"
+)
 
 type (
-	// RequestRateLimiterFn returns generate a namespace specific rate limiter
-	RequestRateLimiterFn func(req Request) RequestRateLimiter
-
-	// RequestPriorityFn returns a priority for the given Request
-	RequestPriorityFn func(req Request) int
-
-	// RequestRateLimiter corresponds to basic rate limiting functionality.
-	RequestRateLimiter interface {
-		// Allow attempts to allow a request to go through. The method returns
-		// immediately with a true or false indicating if the request can make
-		// progress
-		Allow(now time.Time, request Request) bool
-
-		// Reserve returns a Reservation that indicates how long the caller
-		// must wait before event happen.
-		Reserve(now time.Time, request Request) Reservation
-
-		// Wait waits till the deadline for a rate limit token to allow the request
-		// to go through.
-		Wait(ctx context.Context, request Request) error
+	quotasSuite struct {
+		suite.Suite
+		*require.Assertions
 	}
 )
+
+func TestQuotasSuite(t *testing.T) {
+	s := new(quotasSuite)
+	suite.Run(t, s)
+}
+
+func (s *quotasSuite) SetupSuite() {
+}
+
+func (s *quotasSuite) TearDownSuite() {
+}
+
+func (s *quotasSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+}
+
+func (s *quotasSuite) TearDownTest() {
+}
+
+func (s *quotasSuite) TestCallerTypePriorityMapping() {
+	for _, priority := range CallerTypePriority {
+		index := slices.Index(RequestPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
+	}
+}
+
+func (s *quotasSuite) TestAPIPriorityOverrideMapping() {
+	for _, priority := range APIPriorityOverride {
+		index := slices.Index(RequestPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
+	}
+}
+
+func (s *quotasSuite) TestRequestPrioritiesOrdered() {
+	for idx := range RequestPrioritiesOrdered[1:] {
+		s.True(RequestPrioritiesOrdered[idx] < RequestPrioritiesOrdered[idx+1])
+	}
+}

@@ -1346,7 +1346,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 
 // ResendReplicationTasks requests replication task from remote cluster
 func (adh *AdminHandler) ResendReplicationTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *adminservice.ResendReplicationTasksRequest,
 ) (_ *adminservice.ResendReplicationTasksResponse, err error) {
 	defer log.CapturePanic(adh.logger, &err)
@@ -1366,6 +1366,7 @@ func (adh *AdminHandler) ResendReplicationTasks(
 		adh.logger,
 	)
 	if err := resender.SendSingleWorkflowHistory(
+		ctx,
 		request.GetRemoteCluster(),
 		namespace.ID(request.GetNamespaceId()),
 		request.GetWorkflowId(),
