@@ -89,7 +89,7 @@ func NewResult(
 			dc:                           dc,
 			enabledFeature:               dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcher, true),
 			enabledPerNSWorker:           dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcherPerNamespaceWorker, false),
-			numWorkers:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherNumWorkers, 1),
+			numWorkers:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherPerNamespaceWorkerCount, 1),
 			maxActivityExecutionSize:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherMaxConcurrentActivityExecutionSize, 1000),
 			maxWorkflowTaskExecutionSize: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize, 1000),
 			maxActivityPollers:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherMaxConcurrentActivityTaskPollers, 2),

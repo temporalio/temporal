@@ -619,11 +619,11 @@ const (
 	EnableBatcher = "worker.enableBatcher"
 	// EnableBatcherPerNamespaceWorker decides whether start batcher worker per namespace
 	EnableBatcherPerNamespaceWorker = "worker.enableBatcherPerNamespaceWorker"
-	// WorkerBatcherNumWorkers controls number of batcher workers to run per namespace
-	WorkerBatcherNumWorkers = "worker.batcherNumWorkers"
+	// WorkerBatcherPerNamespaceWorkerCount controls the number of batcher workers to run per namespace
+	WorkerBatcherPerNamespaceWorkerCount = "worker.batcherPerNamespaceWorkerCount"
 	// BatcherRPS controls number the rps of batch operations
 	BatcherRPS = "worker.batcherRPS"
-	// BatcherConcurrency controls the concurrency of batch operations
+	// BatcherConcurrency controls the concurrency of one batch operation
 	BatcherConcurrency = "worker.batcherConcurrency"
 	// WorkerParentCloseMaxConcurrentActivityExecutionSize indicates worker parent close worker max concurrent activity execution size
 	WorkerParentCloseMaxConcurrentActivityExecutionSize = "worker.ParentCloseMaxConcurrentActivityExecutionSize"
