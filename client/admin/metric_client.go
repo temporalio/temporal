@@ -25,21 +25,63 @@
 package admin
 
 import (
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
 
 var _ adminservice.AdminServiceClient = (*metricClient)(nil)
 
 type metricClient struct {
-	client        adminservice.AdminServiceClient
-	metricsClient metrics.Client
+	client          adminservice.AdminServiceClient
+	metricsClient   metrics.Client
+	throttledLogger log.Logger
 }
 
 // NewMetricClient creates a new instance of adminservice.AdminServiceClient that emits metrics
-func NewMetricClient(client adminservice.AdminServiceClient, metricsClient metrics.Client) adminservice.AdminServiceClient {
+func NewMetricClient(
+	client adminservice.AdminServiceClient,
+	metricsClient metrics.Client,
+	throttledLogger log.Logger,
+) adminservice.AdminServiceClient {
 	return &metricClient{
-		client:        client,
-		metricsClient: metricsClient,
+		client:          client,
+		metricsClient:   metricsClient,
+		throttledLogger: throttledLogger,
 	}
+}
+
+func (c *metricClient) startMetricsRecording(
+	metricScope int,
+) (metrics.Scope, metrics.Stopwatch) {
+	scope := c.metricsClient.Scope(metricScope)
+	scope.IncCounter(metrics.ClientRequests)
+	stopwatch := scope.StartTimer(metrics.ClientLatency)
+	return scope, stopwatch
+}
+
+func (c *metricClient) finishMetricsRecording(
+	scope metrics.Scope,
+	stopwatch metrics.Stopwatch,
+	err error,
+) {
+	if err != nil {
+		switch err.(type) {
+		case *serviceerror.Canceled,
+			*serviceerror.DeadlineExceeded,
+			*serviceerror.NotFound,
+			*serviceerror.QueryFailed,
+			*serviceerror.NamespaceNotFound,
+			*serviceerror.WorkflowNotReady,
+			*serviceerror.WorkflowExecutionAlreadyStarted:
+			// noop - not interest and too many logs
+		default:
+			c.throttledLogger.Info("admin client encountered error", tag.Error(err), tag.ErrorType(err))
+		}
+		scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ClientFailures)
+	}
+	stopwatch.Stop()
 }
