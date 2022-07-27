@@ -198,7 +198,7 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 	}
 	client := frontend.NewClient(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
 	if cf.metricsClient != nil {
-		client = frontend.NewMetricClient(client, cf.metricsClient)
+		client = frontend.NewMetricClient(client, cf.metricsClient, cf.throttledLogger)
 	}
 	return client
 }
@@ -216,7 +216,7 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeout(
 
 	client := admin.NewClient(timeout, largeTimeout, common.NewClientCache(keyResolver, clientProvider))
 	if cf.metricsClient != nil {
-		client = admin.NewMetricClient(client, cf.metricsClient)
+		client = admin.NewMetricClient(client, cf.metricsClient, cf.throttledLogger)
 	}
 	return client
 }
