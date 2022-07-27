@@ -27,6 +27,7 @@ package shard
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -376,8 +377,11 @@ func (c *ControllerImpl) acquireShards() {
 	}
 
 	// Submit tasks to the channel.
+	numShards := c.config.NumberOfShards
+	randomStartOffset := rand.Int31n(numShards)
 LoopSubmit:
-	for shardID := int32(1); shardID <= c.config.NumberOfShards; shardID++ {
+	for index := int32(0); index < numShards; index++ {
+		shardID := (index+randomStartOffset)%numShards + 1
 		select {
 		case <-c.shutdownCh:
 			break LoopSubmit

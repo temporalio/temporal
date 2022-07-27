@@ -233,6 +233,7 @@ func VisibilityManagerProvider(
 		serviceConfig.AdvancedVisibilityWritingMode,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
 		serviceConfig.EnableWriteToSecondaryAdvancedVisibility,
+		dynamicconfig.GetBoolPropertyFn(false), // history visibility never read
 		metricsClient,
 		logger,
 	)

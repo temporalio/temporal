@@ -79,6 +79,9 @@ const (
 	EnableReadVisibilityFromES = "system.enableReadVisibilityFromES"
 	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
 	EnableReadFromSecondaryAdvancedVisibility = "system.enableReadFromSecondaryAdvancedVisibility"
+	// VisibilityDisableOrderByClause is the config to disable ORDERY BY clause for Elasticsearch
+	VisibilityDisableOrderByClause = "system.visibilityDisableOrderByClause"
+
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState = "system.historyArchivalState"
 	// EnableReadFromHistoryArchival is key for enabling reading history from archival store
