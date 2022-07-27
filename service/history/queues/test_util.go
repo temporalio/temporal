@@ -31,6 +31,7 @@ import (
 
 	"golang.org/x/exp/slices"
 
+	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -102,4 +103,20 @@ func NewRandomOrderedRangesInRange(
 	})
 
 	return ranges
+}
+
+func NewRandomScopes(
+	numScopes int,
+) []Scope {
+	ranges := NewRandomOrderedRangesInRange(
+		NewRandomRange(),
+		numScopes,
+	)
+
+	scopes := make([]Scope, 0, 10)
+	for _, r := range ranges {
+		scopes = append(scopes, NewScope(r, predicates.Universal[tasks.Task]()))
+	}
+
+	return scopes
 }
