@@ -62,10 +62,18 @@ const (
 
 // Default sort by uses the sorting order defined in the index template, so no
 // additional sorting is needed during query.
+// Keep RunID as tiebreaker because ES v6 date precision is milliseconds.
+// ES v7 date precision is nanoseconds which is good enough for tie breaking.
+// Remove this when we drop support for ES v6.
 var defaultSorter = []elastic.Sorter{
 	elastic.NewFieldSort(searchattribute.CloseTime).Desc().Missing("_first"),
 	elastic.NewFieldSort(searchattribute.StartTime).Desc().Missing("_first"),
 	elastic.NewFieldSort(searchattribute.RunID).Desc().Missing("_first"),
+}
+
+var defaultSorterV7 = []elastic.Sorter{
+	elastic.NewFieldSort(searchattribute.CloseTime).Desc().Missing("_first"),
+	elastic.NewFieldSort(searchattribute.StartTime).Desc().Missing("_first"),
 }
 
 type (
@@ -637,7 +645,12 @@ func (s *visibilityStore) buildSearchParameters(
 		Index:    s.index,
 		Query:    boolQuery,
 		PageSize: request.PageSize,
-		Sorter:   defaultSorter,
+	}
+
+	if _, isV7 := s.esClient.(client.ClientV7); isV7 {
+		params.Sorter = defaultSorterV7
+	} else {
+		params.Sorter = defaultSorter
 	}
 
 	if token != nil && len(token.SearchAfter) > 0 {
@@ -712,7 +725,11 @@ func (s *visibilityStore) convertQuery(
 
 func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
 	if len(fieldSorts) == 0 {
-		return defaultSorter
+		if _, isV7 := s.esClient.(client.ClientV7); isV7 {
+			return defaultSorterV7
+		} else {
+			return defaultSorter
+		}
 	}
 
 	res := make([]elastic.Sorter, len(fieldSorts)+1)
