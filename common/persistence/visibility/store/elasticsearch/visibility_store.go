@@ -724,25 +724,20 @@ func (s *visibilityStore) convertQuery(
 }
 
 func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
-	_, isV7 := s.esClient.(client.ClientV7)
-
 	if len(fieldSorts) == 0 {
-		if isV7 {
+		if _, isV7 := s.esClient.(client.ClientV7); isV7 {
 			return defaultSorterV7
 		} else {
 			return defaultSorter
 		}
 	}
 
-	res := make([]elastic.Sorter, len(fieldSorts))
+	res := make([]elastic.Sorter, len(fieldSorts)+1)
 	for i, fs := range fieldSorts {
 		res[i] = fs
 	}
-
-	if !isV7 {
-		// Add RunID as explicit tiebreaker.
-		res = append(res, elastic.NewFieldSort(searchattribute.RunID).Desc())
-	}
+	// RunID is explicit tiebreaker.
+	res[len(res)-1] = elastic.NewFieldSort(searchattribute.RunID).Desc()
 
 	return res
 }
