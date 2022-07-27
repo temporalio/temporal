@@ -22,39 +22,57 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package configs
+package client
 
 import (
-	"go.temporal.io/server/common/quotas"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"golang.org/x/exp/slices"
 )
 
-var (
-	APIToPriority = map[string]int{
-		"AddActivityTask":           0,
-		"AddWorkflowTask":           0,
-		"CancelOutstandingPoll":     0,
-		"DescribeTaskQueue":         0,
-		"ListTaskQueuePartitions":   0,
-		"PollActivityTaskQueue":     0,
-		"PollWorkflowTaskQueue":     0,
-		"QueryWorkflow":             0,
-		"RespondQueryTaskCompleted": 0,
+type (
+	quotasSuite struct {
+		suite.Suite
+		*require.Assertions
 	}
-
-	APIPrioritiesOrdered = []int{0}
 )
 
-func NewPriorityRateLimiter(
-	rateFn quotas.RateFn,
-) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RateLimiter)
-	for priority := range APIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewDefaultIncomingRateLimiter(rateFn)
+func TestQuotasSuite(t *testing.T) {
+	s := new(quotasSuite)
+	suite.Run(t, s)
+}
+
+func (s *quotasSuite) SetupSuite() {
+}
+
+func (s *quotasSuite) TearDownSuite() {
+}
+
+func (s *quotasSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+}
+
+func (s *quotasSuite) TearDownTest() {
+}
+
+func (s *quotasSuite) TestCallerTypePriorityMapping() {
+	for _, priority := range CallerTypePriority {
+		index := slices.Index(RequestPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
 	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if priority, ok := APIToPriority[req.API]; ok {
-			return priority
-		}
-		return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
-	}, rateLimiters)
+}
+
+func (s *quotasSuite) TestAPIPriorityOverrideMapping() {
+	for _, priority := range APIPriorityOverride {
+		index := slices.Index(RequestPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
+	}
+}
+
+func (s *quotasSuite) TestRequestPrioritiesOrdered() {
+	for idx := range RequestPrioritiesOrdered[1:] {
+		s.True(RequestPrioritiesOrdered[idx] < RequestPrioritiesOrdered[idx+1])
+	}
 }

@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -218,11 +219,13 @@ func (r *registry) Start() {
 	defer atomic.StoreInt32(&r.status, running)
 
 	// initialize the cache by initial scan
-	err := r.refreshNamespaces(context.Background())
+	ctx := headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(headers.CallerTypeBackground))
+
+	err := r.refreshNamespaces(ctx)
 	if err != nil {
 		r.logger.Fatal("Unable to initialize namespace cache", tag.Error(err))
 	}
-	r.refresher = goro.Go(context.Background(), r.refreshLoop)
+	r.refresher = goro.Go(ctx, r.refreshLoop)
 }
 
 // Stop the background refresh of Namespace data

@@ -1643,14 +1643,14 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
 	tlMgr.taskAckManager.setReadLevel(tlMgr.taskWriter.GetMaxReadLevel())
-	tasks, readLevel, isReadBatchDone, err := tlMgr.taskReader.getTaskBatch()
+	tasks, readLevel, isReadBatchDone, err := tlMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
 	s.EqualValues(0, len(tasks))
 	s.EqualValues(tlMgr.taskWriter.GetMaxReadLevel(), readLevel)
 	s.True(isReadBatchDone)
 
 	tlMgr.taskAckManager.setReadLevel(0)
-	tasks, readLevel, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch()
+	tasks, readLevel, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
 	s.EqualValues(rangeSize, len(tasks))
 	s.EqualValues(rangeSize, readLevel)
@@ -1683,7 +1683,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 		}
 	}
 	s.EqualValues(taskCount-rangeSize, s.taskManager.getTaskCount(tlID))
-	tasks, _, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch()
+	tasks, _, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch(context.Background())
 	s.Nil(err)
 	s.True(0 < len(tasks) && len(tasks) <= rangeSize)
 	s.True(isReadBatchDone)
@@ -1713,14 +1713,14 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 
 	tlMgr.taskAckManager.setReadLevel(0)
 	atomic.StoreInt64(&tlMgr.taskWriter.maxReadLevel, maxReadLevel)
-	tasks, readLevel, isReadBatchDone, err := tlMgr.taskReader.getTaskBatch()
+	tasks, readLevel, isReadBatchDone, err := tlMgr.taskReader.getTaskBatch(context.Background())
 	s.Empty(tasks)
 	s.Equal(int64(rangeSize*10), readLevel)
 	s.False(isReadBatchDone)
 	s.NoError(err)
 
 	tlMgr.taskAckManager.setReadLevel(readLevel)
-	tasks, readLevel, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch()
+	tasks, readLevel, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch(context.Background())
 	s.Empty(tasks)
 	s.Equal(maxReadLevel, readLevel)
 	s.True(isReadBatchDone)

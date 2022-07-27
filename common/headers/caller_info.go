@@ -22,39 +22,58 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package configs
+package headers
 
 import (
-	"go.temporal.io/server/common/quotas"
+	"context"
+
+	"google.golang.org/grpc/metadata"
 )
 
-var (
-	APIToPriority = map[string]int{
-		"AddActivityTask":           0,
-		"AddWorkflowTask":           0,
-		"CancelOutstandingPoll":     0,
-		"DescribeTaskQueue":         0,
-		"ListTaskQueuePartitions":   0,
-		"PollActivityTaskQueue":     0,
-		"PollWorkflowTaskQueue":     0,
-		"QueryWorkflow":             0,
-		"RespondQueryTaskCompleted": 0,
-	}
-
-	APIPrioritiesOrdered = []int{0}
+const (
+	CallerTypeAPI        = "api"
+	CallerTypeBackground = "background"
 )
 
-func NewPriorityRateLimiter(
-	rateFn quotas.RateFn,
-) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RateLimiter)
-	for priority := range APIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewDefaultIncomingRateLimiter(rateFn)
+type CallerInfo struct {
+	CallerType string
+
+	// TODO: add fields for CallerName and CallerInitiation
+}
+
+func NewCallerInfo(
+	callerType string,
+) CallerInfo {
+	return CallerInfo{
+		CallerType: callerType,
 	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if priority, ok := APIToPriority[req.API]; ok {
-			return priority
-		}
-		return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
-	}, rateLimiters)
+}
+
+// SetCallerInfo sets callerName and callerType value in incoming context
+// if not already exists.
+// TODO: consider only set the caller info to golang context instead of grpc metadata
+// and propagate to grpc outgoing context upon making an rpc call
+func SetCallerInfo(
+	ctx context.Context,
+	info CallerInfo,
+) context.Context {
+	mdIncoming, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		mdIncoming = metadata.MD{}
+	}
+
+	if len(mdIncoming.Get(callerTypeHeaderName)) == 0 {
+		mdIncoming.Set(callerTypeHeaderName, string(info.CallerType))
+	}
+
+	return metadata.NewIncomingContext(ctx, mdIncoming)
+}
+
+func GetCallerInfo(
+	ctx context.Context,
+) CallerInfo {
+	values := GetValues(ctx, callerTypeHeaderName)
+	return CallerInfo{
+		CallerType: values[0],
+	}
 }

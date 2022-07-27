@@ -181,7 +181,7 @@ func (s *IntegrationBase) registerNamespace(
 	visibilityArchivalState enumspb.ArchivalState,
 	visibilityArchivalURI string,
 ) error {
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(10000 * time.Second)
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
 	_, err := s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
@@ -199,7 +199,7 @@ func (s *IntegrationBase) registerNamespace(
 func (s *IntegrationBase) deleteNamespace(
 	namespace string,
 ) error {
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(10000 * time.Second)
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
 	defer cancel()
 	_, err := s.engine.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,

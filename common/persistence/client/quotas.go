@@ -22,39 +22,64 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package configs
+package client
 
 import (
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
 )
 
 var (
-	APIToPriority = map[string]int{
-		"AddActivityTask":           0,
-		"AddWorkflowTask":           0,
-		"CancelOutstandingPoll":     0,
-		"DescribeTaskQueue":         0,
-		"ListTaskQueuePartitions":   0,
-		"PollActivityTaskQueue":     0,
-		"PollWorkflowTaskQueue":     0,
-		"QueryWorkflow":             0,
-		"RespondQueryTaskCompleted": 0,
+	CallerTypePriority = map[string]int{
+		headers.CallerTypeAPI:        0,
+		headers.CallerTypeBackground: 1,
 	}
 
-	APIPrioritiesOrdered = []int{0}
+	APIPriorityOverride = map[string]int{
+		"GetOrCreateShard": 0,
+		"UpdateShard":      0,
+
+		// this is a preprequisite for checkpoint queue process progress
+		"RangeCompleteHistoryTasks": 0,
+	}
+
+	RequestPrioritiesOrdered = []int{0, 1}
 )
 
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
-	for priority := range APIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewDefaultIncomingRateLimiter(rateFn)
+	for priority := range RequestPrioritiesOrdered {
+		rateLimiters[priority] = quotas.NewDefaultOutgoingRateLimiter(rateFn)
 	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if priority, ok := APIToPriority[req.API]; ok {
-			return priority
-		}
-		return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
-	}, rateLimiters)
+
+	return quotas.NewPriorityRateLimiter(
+		func(req quotas.Request) int {
+			if priority, ok := APIPriorityOverride[req.API]; ok {
+				return priority
+			}
+
+			if priority, ok := CallerTypePriority[req.CallerType]; ok {
+				return priority
+			}
+
+			// default requests to high priority to be consistent with existing behavior
+			return RequestPrioritiesOrdered[0]
+		},
+		rateLimiters,
+	)
+}
+
+func NewNoopPriorityRateLimiter(
+	rateFn quotas.RateFn,
+) quotas.RequestRateLimiter {
+	priority := RequestPrioritiesOrdered[0]
+
+	return quotas.NewPriorityRateLimiter(
+		func(_ quotas.Request) int { return priority },
+		map[int]quotas.RateLimiter{
+			priority: quotas.NewDefaultOutgoingRateLimiter(rateFn),
+		},
+	)
 }

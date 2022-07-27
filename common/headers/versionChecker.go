@@ -30,6 +30,8 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
+	"google.golang.org/grpc/metadata"
+
 	"go.temporal.io/api/serviceerror"
 )
 
@@ -69,6 +71,13 @@ var (
 		ClientNameServer:        "<2.0.0",
 		ClientNameUI:            "<3.0.0",
 	}
+
+	internalVersionHeaderPairs = []string{
+		ClientNameHeaderName, ClientNameServer,
+		ClientVersionHeaderName, ServerVersion,
+		SupportedServerVersionsHeaderName, SupportedServerVersions,
+		SupportedFeaturesHeaderName, AllFeatures,
+	}
 )
 
 type (
@@ -105,6 +114,22 @@ func GetClientNameAndVersion(ctx context.Context) (string, string) {
 	clientName := headers[0]
 	clientVersion := headers[1]
 	return clientName, clientVersion
+}
+
+// SetVersions sets headers for internal communications.
+func SetVersions(ctx context.Context) context.Context {
+	return metadata.AppendToOutgoingContext(ctx, internalVersionHeaderPairs...)
+}
+
+// SetVersionsForTests sets headers as they would be received from the client.
+// Must be used in tests only.
+func SetVersionsForTests(ctx context.Context, clientVersion, clientName, supportedServerVersions, supportedFeatures string) context.Context {
+	return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
+		ClientNameHeaderName:              clientName,
+		ClientVersionHeaderName:           clientVersion,
+		SupportedServerVersionsHeaderName: supportedServerVersions,
+		SupportedFeaturesHeaderName:       supportedFeatures,
+	}))
 }
 
 // ClientSupported returns an error if client is unsupported, nil otherwise.

@@ -76,17 +76,20 @@ var (
 		"DeleteWorkflowVisibilityRecord":         0,
 	}
 
-	APIPriorities = map[int]struct{}{
-		0: {},
-	}
+	APIPrioritiesOrdered = []int{0}
 )
 
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
-	for priority := range APIPriorities {
+	for priority := range APIPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewDefaultIncomingRateLimiter(rateFn)
 	}
-	return quotas.NewPriorityRateLimiter(APIToPriority, rateLimiters)
+	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
+		if priority, ok := APIToPriority[req.API]; ok {
+			return priority
+		}
+		return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
+	}, rateLimiters)
 }

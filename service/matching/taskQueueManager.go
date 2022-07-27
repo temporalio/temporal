@@ -40,12 +40,12 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/cluster"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -60,6 +60,8 @@ const (
 
 	// Fake Task ID to wrap a task for syncmatch
 	syncMatchTaskId = -137
+
+	ioTimeout = 5 * time.Second
 )
 
 type (
@@ -257,8 +259,11 @@ func (c *taskQueueManagerImpl) Stop() {
 	) {
 		return
 	}
-	_ = c.db.UpdateState(context.TODO(), c.taskAckManager.getAckLevel())
-	c.taskGC.RunNow(context.TODO(), c.taskAckManager.getAckLevel())
+	ctx, cancel := newIOContext()
+	defer cancel()
+
+	_ = c.db.UpdateState(ctx, c.taskAckManager.getAckLevel())
+	c.taskGC.RunNow(ctx, c.taskAckManager.getAckLevel())
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
@@ -501,7 +506,11 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 	}
 
 	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
-	c.taskGC.Run(context.TODO(), ackLevel) // TODO: completeTaskFunc and task.finish() should take in a context
+
+	// TODO: completeTaskFunc and task.finish() should take in a context
+	ctx, cancel := newIOContext()
+	defer cancel()
+	c.taskGC.Run(ctx, ackLevel)
 }
 
 func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
@@ -580,4 +589,11 @@ func (c *taskQueueManagerImpl) QueueID() *taskQueueID {
 
 func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
 	return c.taskQueueKind
+}
+
+func newIOContext() (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
+	return ctx, cancel
 }

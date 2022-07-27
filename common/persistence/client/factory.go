@@ -61,7 +61,7 @@ type (
 		metricsClient    metrics.Client
 		logger           log.Logger
 		clusterName      string
-		ratelimiter      quotas.RateLimiter
+		ratelimiter      quotas.RequestRateLimiter
 	}
 )
 
@@ -75,7 +75,7 @@ type (
 func NewFactory(
 	dataStoreFactory DataStoreFactory,
 	cfg *config.Persistence,
-	ratelimiter quotas.RateLimiter,
+	ratelimiter quotas.RequestRateLimiter,
 	serializer serialization.Serializer,
 	clusterName string,
 	metricsClient metrics.Client,

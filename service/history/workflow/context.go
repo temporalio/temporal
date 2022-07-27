@@ -855,7 +855,7 @@ func (c *ContextImpl) ReapplyEvents(
 	if sourceCluster == nil {
 		return serviceerror.NewInternal(fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster))
 	}
-	ctx2, cancel2 := rpc.NewContextWithTimeoutAndHeaders(defaultRemoteCallTimeout)
+	ctx2, cancel2 := rpc.NewContextWithTimeoutAndVersionHeaders(defaultRemoteCallTimeout)
 	defer cancel2()
 	_, err = sourceCluster.ReapplyEvents(
 		ctx2,
