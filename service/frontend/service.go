@@ -55,10 +55,11 @@ import (
 
 // Config represents configuration for frontend service
 type Config struct {
-	NumHistoryShards        int32
-	ESIndexName             string
-	PersistenceMaxQPS       dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS dynamicconfig.IntPropertyFn
+	NumHistoryShards                      int32
+	ESIndexName                           string
+	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
+	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 
 	StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 	StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
@@ -149,10 +150,11 @@ type Config struct {
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName string, enableReadFromES bool) *Config {
 	return &Config{
-		NumHistoryShards:        numHistoryShards,
-		ESIndexName:             esIndexName,
-		PersistenceMaxQPS:       dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
-		PersistenceGlobalMaxQPS: dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
+		NumHistoryShards:                      numHistoryShards,
+		ESIndexName:                           esIndexName,
+		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
+		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
+		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.FrontendEnablePersistencePriorityRateLimiting, true),
 
 		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
 		StandardVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),

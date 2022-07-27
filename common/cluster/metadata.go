@@ -33,10 +33,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/dynamicconfig"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -227,11 +227,12 @@ func (m *metadataImpl) Start() {
 		return
 	}
 
-	err := m.refreshClusterMetadata(context.Background())
+	ctx := headers.SetCallerInfo(context.TODO(), headers.NewCallerInfo(headers.CallerTypeBackground))
+	err := m.refreshClusterMetadata(ctx)
 	if err != nil {
 		m.logger.Fatal("Unable to initialize cluster metadata cache", tag.Error(err))
 	}
-	m.refresher = goro.NewHandle(context.Background()).Go(m.refreshLoop)
+	m.refresher = goro.NewHandle(ctx).Go(m.refreshLoop)
 }
 
 func (m *metadataImpl) Stop() {

@@ -28,12 +28,14 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -238,8 +240,13 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 		metrics.ReplicationTasksLag,
 		int(r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, currentCluster).Prev().TaskID-*minAckedTaskID),
 	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	defer cancel()
+
 	err := r.shard.GetExecutionManager().RangeCompleteHistoryTasks(
-		context.TODO(),
+		ctx,
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             r.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,

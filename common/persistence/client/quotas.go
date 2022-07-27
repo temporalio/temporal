@@ -70,3 +70,16 @@ func NewPriorityRateLimiter(
 		rateLimiters,
 	)
 }
+
+func NewNoopPriorityRateLimiter(
+	rateFn quotas.RateFn,
+) quotas.RequestRateLimiter {
+	priority := RequestPrioritiesOrdered[0]
+
+	return quotas.NewPriorityRateLimiter(
+		func(_ quotas.Request) int { return priority },
+		map[int]quotas.RateLimiter{
+			priority: quotas.NewDefaultOutgoingRateLimiter(rateFn),
+		},
+	)
+}
