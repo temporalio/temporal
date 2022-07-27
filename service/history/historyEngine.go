@@ -2750,7 +2750,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	ctx context.Context,
 	pollingCluster string,
 	ackMessageID int64,
-	ackTimestampe time.Time,
+	ackTimestamp time.Time,
 	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
 
@@ -2762,7 +2762,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 		); err != nil {
 			e.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
 		}
-		e.shard.UpdateRemoteClusterInfo(pollingCluster, ackMessageID, ackTimestampe)
+		e.shard.UpdateRemoteClusterInfo(pollingCluster, ackMessageID, ackTimestamp)
 	}
 
 	replicationMessages, err := e.replicationAckMgr.GetTasks(

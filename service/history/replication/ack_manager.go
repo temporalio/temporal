@@ -148,18 +148,21 @@ func (p *ackMgrImpl) GetMaxTaskInfo() (int64, time.Time) {
 	p.Lock()
 	defer p.Unlock()
 
-	// MaxTaskID and MaxTaskVisibilityTimestamp should be set in the same place.
-	if p.maxTaskID == nil || p.maxTaskVisibilityTimestamp == nil {
+	maxTaskID := p.maxTaskID
+	if maxTaskID == nil {
 		// maxTaskID is nil before any replication task is written which happens right after shard reload. In that case,
 		// use ImmediateTaskMaxReadLevel which is the max task id of any immediate task queues.
 		// ImmediateTaskMaxReadLevel will be the lower bound of new range_id if shard reload. Remote cluster will quickly (in
 		// a few seconds) ack to the latest ImmediateTaskMaxReadLevel if there is no replication tasks at all.
-		maxTaskID := p.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, p.currentClusterName).Prev().TaskID
-		maxVisibilityStampe := p.shard.GetTimeSource().Now()
-		return maxTaskID, maxVisibilityStampe
+		taskID := p.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, p.currentClusterName).Prev().TaskID
+		maxTaskID = &taskID
+	}
+	maxVisibilityTimestamp := p.maxTaskVisibilityTimestamp
+	if maxVisibilityTimestamp == nil {
+		maxVisibilityTimestamp = timestamp.TimePtr(p.shard.GetTimeSource().Now())
 	}
 
-	return *p.maxTaskID, timestamp.TimeValue(p.maxTaskVisibilityTimestamp)
+	return *maxTaskID, timestamp.TimeValue(maxVisibilityTimestamp)
 }
 
 func (p *ackMgrImpl) GetTask(
