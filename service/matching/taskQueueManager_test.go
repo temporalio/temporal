@@ -27,12 +27,13 @@ package matching
 import (
 	"context"
 	"errors"
-	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/api/matchingservicemock/v1"
 	"math"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -529,6 +530,7 @@ func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartitionOnInit(t *tes
 		})
 	subTq.Start()
 	require.NoError(t, subTq.WaitUntilInitialized(ctx))
+	subTq.Stop()
 }
 
 func TestTaskQueueSubParitionSendsCurrentHashOfVersioningDataWhenFetching(t *testing.T) {
@@ -563,7 +565,7 @@ func TestTaskQueueSubParitionSendsCurrentHashOfVersioningDataWhenFetching(t *tes
 	// Cram some versioning data in there so it will have something to hash when fetching
 	subTq.db.versioningData = data
 	// Don't start it. Just explicitly call fetching function.
-	require.NoError(t, subTq.fetchVersioningDataFromRootPartition(ctx))
+	require.NoError(t, subTq.fetchMetadataFromRootPartition(ctx))
 }
 
 func TestTaskQueueRootPartitionNotifiesChildrenOfInvalidation(t *testing.T) {
@@ -571,9 +573,6 @@ func TestTaskQueueRootPartitionNotifiesChildrenOfInvalidation(t *testing.T) {
 	defer controller.Finish()
 	ctx := context.Background()
 
-	data := &persistencespb.VersioningData{
-		CurrentDefault: mkVerIdNode("0"),
-	}
 	rootTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTqmTestOpts(controller),
 		func(tqm *taskQueueManagerImpl) {
 			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
@@ -587,7 +586,42 @@ func TestTaskQueueRootPartitionNotifiesChildrenOfInvalidation(t *testing.T) {
 	require.NoError(t, rootTq.WaitUntilInitialized(ctx))
 	// Make a change, mock verifies children are invalidated
 	require.NoError(t, rootTq.MutateVersioningData(ctx, func(vd *persistencespb.VersioningData) error {
-		vd = data
+		*vd = persistencespb.VersioningData{
+			CurrentDefault: mkVerIdNode("0"),
+		}
 		return nil
 	}))
+	rootTq.Stop()
+}
+
+func TestTaskQueueSubPartitionPollsPeriodically(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId = subTqId
+	tqCfg.config.MetadataPollFrequency = func(opts ...dynamicconfig.FilterOption) time.Duration {
+		return time.Millisecond * 10
+	}
+
+	data := &persistencespb.VersioningData{
+		CurrentDefault: mkVerIdNode("0"),
+	}
+	asResp := &matchingservice.GetTaskQueueMetadataResponse{
+		VersioningData: data,
+	}
+
+	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
+		func(tqm *taskQueueManagerImpl) {
+			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
+				Return(asResp, nil).MinTimes(3)
+			tqm.matchingClient = mockMatchingClient
+		})
+	// Don't start it. Just explicitly call fetching function.
+	require.NoError(t, subTq.fetchMetadataFromRootPartition(ctx))
+	// Wait a bit to make sure we poll a few times
+	<-time.After(time.Millisecond * 25)
 }

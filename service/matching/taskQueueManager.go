@@ -40,20 +40,20 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/future"
-	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/util"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -150,9 +150,17 @@ type (
 		signalFatalProblem   func(taskQueueManager)
 		clusterMeta          cluster.Metadata
 		initializedError     *future.FutureImpl[struct{}]
-		// fetchVersioningDatFut is fulfilled once versioning data is fetched from the root partition. If this TQ is
+		// metadataInitialFetchFut is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
-		fetchVersioningDatFut *future.FutureImpl[struct{}]
+		metadataInitialFetchFut *future.FutureImpl[struct{}]
+		metadataPoller          metadataPoller
+	}
+
+	metadataPoller struct {
+		// Ensures that we launch the goroutine for polling for updates only one time
+		launched          sync.Once
+		pollIntervalCfgFn dynamicconfig.DurationPropertyFn
+		stopChan          chan struct{}
 	}
 )
 
@@ -194,25 +202,30 @@ func newTaskQueueManager(
 		taskQueueKind,
 	).Tagged(metrics.TaskQueueTypeTag(taskQueue.taskType))
 	tlMgr := &taskQueueManagerImpl{
-		status:                common.DaemonStatusInitialized,
-		namespaceRegistry:     e.namespaceRegistry,
-		matchingClient:        e.matchingClient,
-		metricsClient:         e.metricsClient,
-		taskQueueID:           taskQueue,
-		taskQueueKind:         taskQueueKind,
-		logger:                logger,
-		db:                    db,
-		taskAckManager:        newAckManager(e.logger),
-		taskGC:                newTaskGC(db, taskQueueConfig),
-		config:                taskQueueConfig,
-		pollerHistory:         newPollerHistory(),
-		outstandingPollsMap:   make(map[string]context.CancelFunc),
-		signalFatalProblem:    e.unloadTaskQueue,
-		clusterMeta:           clusterMeta,
-		namespace:             nsName,
-		metricScope:           metricsScope,
-		initializedError:      future.NewFuture[struct{}](),
-		fetchVersioningDatFut: future.NewFuture[struct{}](),
+		status:                  common.DaemonStatusInitialized,
+		namespaceRegistry:       e.namespaceRegistry,
+		matchingClient:          e.matchingClient,
+		metricsClient:           e.metricsClient,
+		taskQueueID:             taskQueue,
+		taskQueueKind:           taskQueueKind,
+		logger:                  logger,
+		db:                      db,
+		taskAckManager:          newAckManager(e.logger),
+		taskGC:                  newTaskGC(db, taskQueueConfig),
+		config:                  taskQueueConfig,
+		pollerHistory:           newPollerHistory(),
+		outstandingPollsMap:     make(map[string]context.CancelFunc),
+		signalFatalProblem:      e.unloadTaskQueue,
+		clusterMeta:             clusterMeta,
+		namespace:               nsName,
+		metricScope:             metricsScope,
+		initializedError:        future.NewFuture[struct{}](),
+		metadataInitialFetchFut: future.NewFuture[struct{}](),
+		metadataPoller: metadataPoller{
+			launched:          sync.Once{},
+			pollIntervalCfgFn: e.config.MetadataPollFrequency,
+			stopChan:          make(chan struct{}),
+		},
 	}
 
 	tlMgr.liveness = newLiveness(
@@ -262,7 +275,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
-	go c.fetchVersioningDataFromRootPartitionOnInit(context.TODO())
+	go c.fetchMetadataFromRootPartitionOnInit(context.TODO())
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
 }
@@ -286,6 +299,7 @@ func (c *taskQueueManagerImpl) Stop() {
 		c.db.UpdateState(ctx, ackLevel)
 		c.taskGC.RunNow(ctx, ackLevel)
 	}
+	c.metadataPoller.Stop()
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
@@ -298,7 +312,7 @@ func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	_, verErr := c.fetchVersioningDatFut.Get(ctx)
+	_, verErr := c.metadataInitialFetchFut.Get(ctx)
 	return verErr
 }
 
@@ -475,7 +489,7 @@ func (c *taskQueueManagerImpl) InvalidateMetadata(ctx context.Context, request *
 			return nil
 		}
 		c.db.setVersioningDataForNonRootPartition(nil)
-		return c.fetchVersioningDataFromRootPartition(ctx)
+		return c.fetchMetadataFromRootPartition(ctx)
 	}
 	return nil
 }
@@ -675,15 +689,16 @@ func newIOContext() (context.Context, context.CancelFunc) {
 	return ctx, cancel
 }
 
-func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartitionOnInit(ctx context.Context) {
-	if c.fetchVersioningDatFut.Ready() {
+func (c *taskQueueManagerImpl) fetchMetadataFromRootPartitionOnInit(ctx context.Context) {
+	if c.metadataInitialFetchFut.Ready() {
 		return
 	}
-	c.fetchVersioningDatFut.Set(struct{}{}, c.fetchVersioningDataFromRootPartition(ctx))
+	c.metadataInitialFetchFut.Set(struct{}{}, c.fetchMetadataFromRootPartition(ctx))
 }
 
-func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartition(ctx context.Context) error {
+func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Context) error {
 	// Nothing to do if we are the root partition
+	// (for versioning - any later added metadata may need to not abort so early)
 	if c.taskQueueID.IsRoot() {
 		return nil
 	}
@@ -691,7 +706,7 @@ func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartition(ctx context.
 	rootTqName := c.taskQueueID.GetRoot()
 	curHash := HashVersioningData(c.db.versioningData)
 	if len(curHash) == 0 {
-		// if we have no data, make sure we send something, so it's known we desire versioning data
+		// if we have no data, make sure we send a sigil value, so it's known we desire versioning data
 		curHash = []byte{0}
 	}
 	res, err := c.matchingClient.GetTaskQueueMetadata(ctx, &matchingservice.GetTaskQueueMetadataRequest{
@@ -708,6 +723,33 @@ func (c *taskQueueManagerImpl) fetchVersioningDataFromRootPartition(ctx context.
 	// nil inner fields.
 	if res.VersioningData != nil {
 		c.db.setVersioningDataForNonRootPartition(res.VersioningData)
+		// Only start the poller if there's actually data to poll for
+		c.metadataPoller.StartIfUnstarted(func() { _ = c.fetchMetadataFromRootPartition(context.TODO()) })
 	}
 	return nil
+}
+
+func (mp *metadataPoller) StartIfUnstarted(pollFn func()) {
+	mp.launched.Do(func() {
+		go func() {
+			ticker := time.NewTicker(mp.pollIntervalCfgFn())
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-mp.stopChan:
+					return
+				case <-ticker.C:
+					// In case the interval has changed
+					ticker.Reset(mp.pollIntervalCfgFn())
+					pollFn()
+				}
+			}
+
+		}()
+	})
+}
+
+func (mp *metadataPoller) Stop() {
+	close(mp.stopChan)
 }

@@ -292,7 +292,7 @@ func (db *taskQueueDB) getVersioningDataLocked(
 	}
 
 	if !db.taskQueue.IsRoot() {
-		return nil, fmt.Errorf("cannot read versioning data from a non-root task queue")
+		return nil, fmt.Errorf("cannot read versioning data from db on a non-root task queue")
 	}
 
 	tqInfo, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{

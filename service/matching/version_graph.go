@@ -27,6 +27,7 @@ package matching
 import (
 	"encoding/binary"
 	"fmt"
+
 	"github.com/dgryski/go-farm"
 
 	"github.com/gogo/protobuf/proto"

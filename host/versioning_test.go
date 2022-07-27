@@ -28,9 +28,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"go.temporal.io/server/service/matching"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/service/matching"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
