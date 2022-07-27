@@ -332,6 +332,10 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 	if err != nil {
 		return err
 	}
+	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	if err != nil {
+		return err
+	}
 
 	return e.deleteManager.DeleteWorkflowExecution(
 		ctx,
@@ -339,6 +343,7 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		ex,
 		wfCtx,
 		mutableState,
+		lastWriteVersion,
 		false,
 	)
 }

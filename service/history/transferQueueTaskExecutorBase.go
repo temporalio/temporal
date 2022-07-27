@@ -260,8 +260,14 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		return err
 	}
 
-	// Do not validate version here because DeleteExecutionTask transfer task is created only for
-	// explicit API call, and in this case execution needs to be deleted regardless of the version.
+	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	if err != nil {
+		return err
+	}
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
+	if !ok {
+		return nil
+	}
 
 	return t.workflowDeleteManager.DeleteWorkflowExecution(
 		ctx,
@@ -269,6 +275,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		workflowExecution,
 		weCtx,
 		mutableState,
+		task.GetVersion(),
 		forceDeleteFromOpenVisibility,
 	)
 }

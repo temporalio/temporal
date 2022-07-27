@@ -965,6 +965,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	key definition.WorkflowKey,
 	branchToken []byte,
+	newTaskVersion int64,
 	startTime *time.Time,
 	closeTime *time.Time,
 ) (retErr error) {
@@ -1032,6 +1033,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 						// TaskID is set by addTasksLocked
 						WorkflowKey:         key,
 						VisibilityTimestamp: s.timeSource.Now(),
+						Version:             newTaskVersion,
 						StartTime:           startTime,
 						CloseTime:           closeTime,
 					},
