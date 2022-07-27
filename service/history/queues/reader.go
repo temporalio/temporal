@@ -299,7 +299,9 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	r.Lock()
 	defer r.Unlock()
 
-	r.verifyPendingTaskSize()
+	if !r.verifyPendingTaskSize() {
+		r.pauseLocked(r.options.PollBackoffInterval())
+	}
 
 	if r.throttleTimer != nil {
 		return
@@ -387,10 +389,8 @@ func (r *ReaderImpl) submit(
 	}
 }
 
-func (r *ReaderImpl) verifyPendingTaskSize() {
-	if r.rescheduler.Len() >= r.options.MaxPendingTasksCount() {
-		r.pauseLocked(r.options.PollBackoffInterval())
-	}
+func (r *ReaderImpl) verifyPendingTaskSize() bool {
+	return r.rescheduler.Len() < r.options.MaxPendingTasksCount()
 }
 
 func appendSlice(
