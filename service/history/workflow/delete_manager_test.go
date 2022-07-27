@@ -239,7 +239,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		1000,
 		1001,
-		nil,
+		0,
 	)
 	s.NoError(err)
 
@@ -255,7 +255,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		1000,
 		1001,
-		nil,
+		0,
 	)
 	s.NoError(err)
 
@@ -271,7 +271,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		1000,
 		1001,
-		nil,
+		0,
 	)
 	s.NoError(err)
 
@@ -289,7 +289,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		200,
 		201,
-		nil,
+		0,
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
 
@@ -305,7 +305,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		1000,
 		1000,
-		nil,
+		0,
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
 
@@ -323,7 +323,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		999,
 		1001,
-		nil,
+		0,
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
 
@@ -341,7 +341,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		999,
 		1001,
-		nil,
+		0,
 	)
 	s.NoError(err)
 
@@ -359,7 +359,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		999,
 		1000,
-		nil,
+		0,
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
 }

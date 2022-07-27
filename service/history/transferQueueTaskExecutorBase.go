@@ -260,8 +260,10 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		return err
 	}
 
-	// If the request is from explicit API call, skip the task version check.
-	if task.GetVersion() != common.IgnoreTaskVersion {
+	// Skip the task version check in two cases:
+	// 1. Request is from explicit API call
+	// 2. Local namespace
+	if task.GetVersion() != common.EmptyVersion {
 		lastWriteVersion, err := mutableState.GetLastWriteVersion()
 		if err != nil {
 			return err

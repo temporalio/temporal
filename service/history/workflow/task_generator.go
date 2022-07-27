@@ -183,10 +183,10 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	if err != nil {
 		return err
 	}
-	// TODO:
 	version := currentVersion
 	if deleteAfterClose {
-		version = common.IgnoreTaskVersion
+		// Ignore version check when delete request is from user API
+		version = common.EmptyVersion
 	}
 	closeTasks := []tasks.Task{
 
@@ -232,7 +232,6 @@ func (r *TaskGeneratorImpl) GenerateDeleteExecutionTask(
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
-		Version:             common.IgnoreTaskVersion,
 	}, nil
 }
 

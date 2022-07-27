@@ -61,17 +61,17 @@ func (m *MockDeleteManager) EXPECT() *MockDeleteManagerMockRecorder {
 }
 
 // AddDeleteWorkflowExecutionTask mocks base method.
-func (m *MockDeleteManager) AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we v1.WorkflowExecution, ms MutableState, transferQueueAckLevel, visibilityQueueAckLevel int64, lastWriteVersion *int64) error {
+func (m *MockDeleteManager) AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we v1.WorkflowExecution, ms MutableState, transferQueueAckLevel, visibilityQueueAckLevel, workflowClosedVersion int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddDeleteWorkflowExecutionTask", ctx, nsID, we, ms, transferQueueAckLevel, visibilityQueueAckLevel, lastWriteVersion)
+	ret := m.ctrl.Call(m, "AddDeleteWorkflowExecutionTask", ctx, nsID, we, ms, transferQueueAckLevel, visibilityQueueAckLevel, workflowClosedVersion)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AddDeleteWorkflowExecutionTask indicates an expected call of AddDeleteWorkflowExecutionTask.
-func (mr *MockDeleteManagerMockRecorder) AddDeleteWorkflowExecutionTask(ctx, nsID, we, ms, transferQueueAckLevel, visibilityQueueAckLevel, lastWriteVersion interface{}) *gomock.Call {
+func (mr *MockDeleteManagerMockRecorder) AddDeleteWorkflowExecutionTask(ctx, nsID, we, ms, transferQueueAckLevel, visibilityQueueAckLevel, workflowClosedVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDeleteWorkflowExecutionTask", reflect.TypeOf((*MockDeleteManager)(nil).AddDeleteWorkflowExecutionTask), ctx, nsID, we, ms, transferQueueAckLevel, visibilityQueueAckLevel, lastWriteVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddDeleteWorkflowExecutionTask", reflect.TypeOf((*MockDeleteManager)(nil).AddDeleteWorkflowExecutionTask), ctx, nsID, we, ms, transferQueueAckLevel, visibilityQueueAckLevel, workflowClosedVersion)
 }
 
 // DeleteWorkflowExecution mocks base method.

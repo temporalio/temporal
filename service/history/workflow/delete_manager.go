@@ -58,7 +58,7 @@ type (
 			ms MutableState,
 			transferQueueAckLevel int64,
 			visibilityQueueAckLevel int64,
-			lastWriteVersion *int64,
+			workflowClosedVersion int64,
 		) error
 		DeleteWorkflowExecution(
 			ctx context.Context,
@@ -115,7 +115,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	ms MutableState,
 	transferQueueAckLevel int64,
 	visibilityQueueAckLevel int64,
-	lastWriteVersion *int64,
+	workflowClosedVersion int64,
 ) error {
 
 	// In active cluster, create `DeleteWorkflowExecutionTask` only if workflow is closed successfully
@@ -144,11 +144,8 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	if err != nil {
 		return err
 	}
-	//TODO
-	if lastWriteVersion != nil {
-		deleteTask.Version = *lastWriteVersion
-	}
-	deleteTask.Version = common.IgnoreTaskVersion
+
+	deleteTask.Version = workflowClosedVersion
 	return m.shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 		ShardID: m.shard.GetShardID(),
 		// RangeID is set by shard
