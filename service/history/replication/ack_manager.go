@@ -148,6 +148,7 @@ func (p *ackMgrImpl) GetMaxTaskInfo() (int64, time.Time) {
 	p.Lock()
 	defer p.Unlock()
 
+	// MaxTaskID and MaxTaskVisibilityTimestamp should be set in the same place.
 	if p.maxTaskID == nil || p.maxTaskVisibilityTimestamp == nil {
 		// maxTaskID is nil before any replication task is written which happens right after shard reload. In that case,
 		// use ImmediateTaskMaxReadLevel which is the max task id of any immediate task queues.
