@@ -43,43 +43,33 @@ import (
 
 type (
 	service struct {
-		name               string
-		clientType         reflect.Type
-		clientGenerator    func(io.Writer, service)
-		metricGenerator    func(io.Writer, service)
-		retryableGenerator func(io.Writer, service)
+		name            string
+		clientType      reflect.Type
+		clientGenerator func(io.Writer, service)
 	}
 )
 
 var (
 	services = []service{
 		service{
-			name:               "frontend",
-			clientType:         reflect.TypeOf((*workflowservice.WorkflowServiceClient)(nil)),
-			clientGenerator:    generateFrontendOrAdminClient,
-			metricGenerator:    generateFrontendOrAdminMetricClient,
-			retryableGenerator: generateRetryableClient,
+			name:            "frontend",
+			clientType:      reflect.TypeOf((*workflowservice.WorkflowServiceClient)(nil)),
+			clientGenerator: generateFrontendOrAdminClient,
 		},
 		service{
-			name:               "admin",
-			clientType:         reflect.TypeOf((*adminservice.AdminServiceClient)(nil)),
-			clientGenerator:    generateFrontendOrAdminClient,
-			metricGenerator:    generateFrontendOrAdminMetricClient,
-			retryableGenerator: generateRetryableClient,
+			name:            "admin",
+			clientType:      reflect.TypeOf((*adminservice.AdminServiceClient)(nil)),
+			clientGenerator: generateFrontendOrAdminClient,
 		},
 		service{
-			name:               "history",
-			clientType:         reflect.TypeOf((*historyservice.HistoryServiceClient)(nil)),
-			clientGenerator:    generateHistoryClient,
-			metricGenerator:    generateHistoryOrMatchingMetricClient,
-			retryableGenerator: generateRetryableClient,
+			name:            "history",
+			clientType:      reflect.TypeOf((*historyservice.HistoryServiceClient)(nil)),
+			clientGenerator: generateHistoryClient,
 		},
 		service{
-			name:               "matching",
-			clientType:         reflect.TypeOf((*matchingservice.MatchingServiceClient)(nil)),
-			clientGenerator:    generateMatchingClient,
-			metricGenerator:    generateHistoryOrMatchingMetricClient,
-			retryableGenerator: generateRetryableClient,
+			name:            "matching",
+			clientType:      reflect.TypeOf((*matchingservice.MatchingServiceClient)(nil)),
+			clientGenerator: generateMatchingClient,
 		},
 	}
 
@@ -328,42 +318,7 @@ func (c *clientImpl) {{.Method}}(
 `)
 }
 
-func generateFrontendOrAdminMetricClient(w io.Writer, service service) {
-	writeTemplatedCode(w, service, `
-package {{.ServiceName}}
-
-import (
-	"context"
-
-	"{{.ServicePackagePath}}"
-	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/metrics"
-)
-`)
-
-	writeTemplatedMethods(w, service, "metricsClient", `
-func (c *metricClient) {{.Method}}(
-	ctx context.Context,
-	request {{.RequestType}},
-	opts ...grpc.CallOption,
-) ({{.ResponseType}}, error) {
-
-	c.metricsClient.IncCounter(metrics.{{.MetricPrefix}}{{.Method}}Scope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.{{.MetricPrefix}}{{.Method}}Scope, metrics.ClientLatency)
-	resp, err := c.client.{{.Method}}(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.{{.MetricPrefix}}{{.Method}}Scope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-`)
-}
-
-func generateHistoryOrMatchingMetricClient(w io.Writer, service service) {
+func generateMetricClient(w io.Writer, service service) {
 	writeTemplatedCode(w, service, `
 package {{.ServiceName}}
 
@@ -465,6 +420,6 @@ func main() {
 	licenseText := readLicenseFile(*licenseFlag)
 
 	callWithFile(svc.clientGenerator, svc, "client", licenseText)
-	callWithFile(svc.metricGenerator, svc, "metric_client", licenseText)
-	callWithFile(svc.retryableGenerator, svc, "retryable_client", licenseText)
+	callWithFile(generateMetricClient, svc, "metric_client", licenseText)
+	callWithFile(generateRetryableClient, svc, "retryable_client", licenseText)
 }

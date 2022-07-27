@@ -39,844 +39,656 @@ func (c *metricClient) CountWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.CountWorkflowExecutionsRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.CountWorkflowExecutionsResponse, error) {
+) (_ *workflowservice.CountWorkflowExecutionsResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientCountWorkflowExecutionsScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientCountWorkflowExecutionsScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientCountWorkflowExecutionsScope, metrics.ClientLatency)
-	resp, err := c.client.CountWorkflowExecutions(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientCountWorkflowExecutionsScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.CountWorkflowExecutions(ctx, request, opts...)
 }
 
 func (c *metricClient) CreateSchedule(
 	ctx context.Context,
 	request *workflowservice.CreateScheduleRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.CreateScheduleResponse, error) {
+) (_ *workflowservice.CreateScheduleResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientCreateScheduleScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientCreateScheduleScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientCreateScheduleScope, metrics.ClientLatency)
-	resp, err := c.client.CreateSchedule(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientCreateScheduleScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.CreateSchedule(ctx, request, opts...)
 }
 
 func (c *metricClient) DeleteSchedule(
 	ctx context.Context,
 	request *workflowservice.DeleteScheduleRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DeleteScheduleResponse, error) {
+) (_ *workflowservice.DeleteScheduleResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientDeleteScheduleScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDeleteScheduleScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientDeleteScheduleScope, metrics.ClientLatency)
-	resp, err := c.client.DeleteSchedule(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientDeleteScheduleScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.DeleteSchedule(ctx, request, opts...)
 }
 
 func (c *metricClient) DeprecateNamespace(
 	ctx context.Context,
 	request *workflowservice.DeprecateNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DeprecateNamespaceResponse, error) {
+) (_ *workflowservice.DeprecateNamespaceResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientDeprecateNamespaceScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDeprecateNamespaceScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientDeprecateNamespaceScope, metrics.ClientLatency)
-	resp, err := c.client.DeprecateNamespace(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientDeprecateNamespaceScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.DeprecateNamespace(ctx, request, opts...)
 }
 
 func (c *metricClient) DescribeNamespace(
 	ctx context.Context,
 	request *workflowservice.DescribeNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DescribeNamespaceResponse, error) {
+) (_ *workflowservice.DescribeNamespaceResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientDescribeNamespaceScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDescribeNamespaceScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientDescribeNamespaceScope, metrics.ClientLatency)
-	resp, err := c.client.DescribeNamespace(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientDescribeNamespaceScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.DescribeNamespace(ctx, request, opts...)
 }
 
 func (c *metricClient) DescribeSchedule(
 	ctx context.Context,
 	request *workflowservice.DescribeScheduleRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DescribeScheduleResponse, error) {
+) (_ *workflowservice.DescribeScheduleResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientDescribeScheduleScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDescribeScheduleScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientDescribeScheduleScope, metrics.ClientLatency)
-	resp, err := c.client.DescribeSchedule(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientDescribeScheduleScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.DescribeSchedule(ctx, request, opts...)
 }
 
 func (c *metricClient) DescribeTaskQueue(
 	ctx context.Context,
 	request *workflowservice.DescribeTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DescribeTaskQueueResponse, error) {
+) (_ *workflowservice.DescribeTaskQueueResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientDescribeTaskQueueScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDescribeTaskQueueScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientDescribeTaskQueueScope, metrics.ClientLatency)
-	resp, err := c.client.DescribeTaskQueue(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientDescribeTaskQueueScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
 func (c *metricClient) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.DescribeWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+) (_ *workflowservice.DescribeWorkflowExecutionResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientDescribeWorkflowExecutionScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDescribeWorkflowExecutionScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientDescribeWorkflowExecutionScope, metrics.ClientLatency)
-	resp, err := c.client.DescribeWorkflowExecution(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientDescribeWorkflowExecutionScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.DescribeWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) GetClusterInfo(
 	ctx context.Context,
 	request *workflowservice.GetClusterInfoRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.GetClusterInfoResponse, error) {
+) (_ *workflowservice.GetClusterInfoResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientGetClusterInfoScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientGetClusterInfoScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetClusterInfoScope, metrics.ClientLatency)
-	resp, err := c.client.GetClusterInfo(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientGetClusterInfoScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.GetClusterInfo(ctx, request, opts...)
 }
 
 func (c *metricClient) GetSearchAttributes(
 	ctx context.Context,
 	request *workflowservice.GetSearchAttributesRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.GetSearchAttributesResponse, error) {
+) (_ *workflowservice.GetSearchAttributesResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientGetSearchAttributesScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientGetSearchAttributesScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetSearchAttributesScope, metrics.ClientLatency)
-	resp, err := c.client.GetSearchAttributes(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientGetSearchAttributesScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.GetSearchAttributes(ctx, request, opts...)
 }
 
 func (c *metricClient) GetSystemInfo(
 	ctx context.Context,
 	request *workflowservice.GetSystemInfoRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.GetSystemInfoResponse, error) {
+) (_ *workflowservice.GetSystemInfoResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientGetSystemInfoScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientGetSystemInfoScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetSystemInfoScope, metrics.ClientLatency)
-	resp, err := c.client.GetSystemInfo(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientGetSystemInfoScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.GetSystemInfo(ctx, request, opts...)
 }
 
 func (c *metricClient) GetWorkflowExecutionHistory(
 	ctx context.Context,
 	request *workflowservice.GetWorkflowExecutionHistoryRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.GetWorkflowExecutionHistoryResponse, error) {
+) (_ *workflowservice.GetWorkflowExecutionHistoryResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientGetWorkflowExecutionHistoryScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientGetWorkflowExecutionHistoryScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetWorkflowExecutionHistoryScope, metrics.ClientLatency)
-	resp, err := c.client.GetWorkflowExecutionHistory(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientGetWorkflowExecutionHistoryScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.GetWorkflowExecutionHistory(ctx, request, opts...)
 }
 
 func (c *metricClient) GetWorkflowExecutionHistoryReverse(
 	ctx context.Context,
 	request *workflowservice.GetWorkflowExecutionHistoryReverseRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.GetWorkflowExecutionHistoryReverseResponse, error) {
+) (_ *workflowservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientGetWorkflowExecutionHistoryReverseScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientGetWorkflowExecutionHistoryReverseScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientGetWorkflowExecutionHistoryReverseScope, metrics.ClientLatency)
-	resp, err := c.client.GetWorkflowExecutionHistoryReverse(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientGetWorkflowExecutionHistoryReverseScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.GetWorkflowExecutionHistoryReverse(ctx, request, opts...)
 }
 
 func (c *metricClient) ListArchivedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListArchivedWorkflowExecutionsRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListArchivedWorkflowExecutionsResponse, error) {
+) (_ *workflowservice.ListArchivedWorkflowExecutionsResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientListArchivedWorkflowExecutionsScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListArchivedWorkflowExecutionsScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientListArchivedWorkflowExecutionsScope, metrics.ClientLatency)
-	resp, err := c.client.ListArchivedWorkflowExecutions(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientListArchivedWorkflowExecutionsScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.ListArchivedWorkflowExecutions(ctx, request, opts...)
 }
 
 func (c *metricClient) ListClosedWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListClosedWorkflowExecutionsRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListClosedWorkflowExecutionsResponse, error) {
+) (_ *workflowservice.ListClosedWorkflowExecutionsResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientListClosedWorkflowExecutionsScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListClosedWorkflowExecutionsScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientListClosedWorkflowExecutionsScope, metrics.ClientLatency)
-	resp, err := c.client.ListClosedWorkflowExecutions(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientListClosedWorkflowExecutionsScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.ListClosedWorkflowExecutions(ctx, request, opts...)
 }
 
 func (c *metricClient) ListNamespaces(
 	ctx context.Context,
 	request *workflowservice.ListNamespacesRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListNamespacesResponse, error) {
+) (_ *workflowservice.ListNamespacesResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientListNamespacesScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListNamespacesScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientListNamespacesScope, metrics.ClientLatency)
-	resp, err := c.client.ListNamespaces(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientListNamespacesScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.ListNamespaces(ctx, request, opts...)
 }
 
 func (c *metricClient) ListOpenWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListOpenWorkflowExecutionsRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListOpenWorkflowExecutionsResponse, error) {
+) (_ *workflowservice.ListOpenWorkflowExecutionsResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientListOpenWorkflowExecutionsScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListOpenWorkflowExecutionsScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientListOpenWorkflowExecutionsScope, metrics.ClientLatency)
-	resp, err := c.client.ListOpenWorkflowExecutions(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientListOpenWorkflowExecutionsScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.ListOpenWorkflowExecutions(ctx, request, opts...)
 }
 
 func (c *metricClient) ListScheduleMatchingTimes(
 	ctx context.Context,
 	request *workflowservice.ListScheduleMatchingTimesRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListScheduleMatchingTimesResponse, error) {
+) (_ *workflowservice.ListScheduleMatchingTimesResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientListScheduleMatchingTimesScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListScheduleMatchingTimesScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientListScheduleMatchingTimesScope, metrics.ClientLatency)
-	resp, err := c.client.ListScheduleMatchingTimes(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientListScheduleMatchingTimesScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.ListScheduleMatchingTimes(ctx, request, opts...)
 }
 
 func (c *metricClient) ListSchedules(
 	ctx context.Context,
 	request *workflowservice.ListSchedulesRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListSchedulesResponse, error) {
+) (_ *workflowservice.ListSchedulesResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientListSchedulesScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListSchedulesScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientListSchedulesScope, metrics.ClientLatency)
-	resp, err := c.client.ListSchedules(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientListSchedulesScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.ListSchedules(ctx, request, opts...)
 }
 
 func (c *metricClient) ListTaskQueuePartitions(
 	ctx context.Context,
 	request *workflowservice.ListTaskQueuePartitionsRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListTaskQueuePartitionsResponse, error) {
+) (_ *workflowservice.ListTaskQueuePartitionsResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientListTaskQueuePartitionsScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListTaskQueuePartitionsScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientListTaskQueuePartitionsScope, metrics.ClientLatency)
-	resp, err := c.client.ListTaskQueuePartitions(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientListTaskQueuePartitionsScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
 func (c *metricClient) ListWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListWorkflowExecutionsRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ListWorkflowExecutionsResponse, error) {
+) (_ *workflowservice.ListWorkflowExecutionsResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientListWorkflowExecutionsScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListWorkflowExecutionsScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientListWorkflowExecutionsScope, metrics.ClientLatency)
-	resp, err := c.client.ListWorkflowExecutions(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientListWorkflowExecutionsScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.ListWorkflowExecutions(ctx, request, opts...)
 }
 
 func (c *metricClient) PatchSchedule(
 	ctx context.Context,
 	request *workflowservice.PatchScheduleRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.PatchScheduleResponse, error) {
+) (_ *workflowservice.PatchScheduleResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientPatchScheduleScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientPatchScheduleScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientPatchScheduleScope, metrics.ClientLatency)
-	resp, err := c.client.PatchSchedule(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientPatchScheduleScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.PatchSchedule(ctx, request, opts...)
 }
 
 func (c *metricClient) PollActivityTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollActivityTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.PollActivityTaskQueueResponse, error) {
+) (_ *workflowservice.PollActivityTaskQueueResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientPollActivityTaskQueueScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientPollActivityTaskQueueScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientPollActivityTaskQueueScope, metrics.ClientLatency)
-	resp, err := c.client.PollActivityTaskQueue(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientPollActivityTaskQueueScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.PollActivityTaskQueue(ctx, request, opts...)
 }
 
 func (c *metricClient) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollWorkflowTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
+) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientPollWorkflowTaskQueueScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientPollWorkflowTaskQueueScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientPollWorkflowTaskQueueScope, metrics.ClientLatency)
-	resp, err := c.client.PollWorkflowTaskQueue(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientPollWorkflowTaskQueueScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.PollWorkflowTaskQueue(ctx, request, opts...)
 }
 
 func (c *metricClient) QueryWorkflow(
 	ctx context.Context,
 	request *workflowservice.QueryWorkflowRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.QueryWorkflowResponse, error) {
+) (_ *workflowservice.QueryWorkflowResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientQueryWorkflowScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientQueryWorkflowScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientQueryWorkflowScope, metrics.ClientLatency)
-	resp, err := c.client.QueryWorkflow(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientQueryWorkflowScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.QueryWorkflow(ctx, request, opts...)
 }
 
 func (c *metricClient) RecordActivityTaskHeartbeat(
 	ctx context.Context,
 	request *workflowservice.RecordActivityTaskHeartbeatRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RecordActivityTaskHeartbeatResponse, error) {
+) (_ *workflowservice.RecordActivityTaskHeartbeatResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRecordActivityTaskHeartbeatScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRecordActivityTaskHeartbeatScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRecordActivityTaskHeartbeatScope, metrics.ClientLatency)
-	resp, err := c.client.RecordActivityTaskHeartbeat(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRecordActivityTaskHeartbeatScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.RecordActivityTaskHeartbeat(ctx, request, opts...)
 }
 
 func (c *metricClient) RecordActivityTaskHeartbeatById(
 	ctx context.Context,
 	request *workflowservice.RecordActivityTaskHeartbeatByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RecordActivityTaskHeartbeatByIdResponse, error) {
+) (_ *workflowservice.RecordActivityTaskHeartbeatByIdResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRecordActivityTaskHeartbeatByIdScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRecordActivityTaskHeartbeatByIdScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRecordActivityTaskHeartbeatByIdScope, metrics.ClientLatency)
-	resp, err := c.client.RecordActivityTaskHeartbeatById(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRecordActivityTaskHeartbeatByIdScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.RecordActivityTaskHeartbeatById(ctx, request, opts...)
 }
 
 func (c *metricClient) RegisterNamespace(
 	ctx context.Context,
 	request *workflowservice.RegisterNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RegisterNamespaceResponse, error) {
+) (_ *workflowservice.RegisterNamespaceResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRegisterNamespaceScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRegisterNamespaceScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRegisterNamespaceScope, metrics.ClientLatency)
-	resp, err := c.client.RegisterNamespace(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRegisterNamespaceScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.RegisterNamespace(ctx, request, opts...)
 }
 
 func (c *metricClient) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.RequestCancelWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RequestCancelWorkflowExecutionResponse, error) {
+) (_ *workflowservice.RequestCancelWorkflowExecutionResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRequestCancelWorkflowExecutionScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRequestCancelWorkflowExecutionScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRequestCancelWorkflowExecutionScope, metrics.ClientLatency)
-	resp, err := c.client.RequestCancelWorkflowExecution(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRequestCancelWorkflowExecutionScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.RequestCancelWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) ResetStickyTaskQueue(
 	ctx context.Context,
 	request *workflowservice.ResetStickyTaskQueueRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ResetStickyTaskQueueResponse, error) {
+) (_ *workflowservice.ResetStickyTaskQueueResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientResetStickyTaskQueueScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientResetStickyTaskQueueScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientResetStickyTaskQueueScope, metrics.ClientLatency)
-	resp, err := c.client.ResetStickyTaskQueue(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientResetStickyTaskQueueScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.ResetStickyTaskQueue(ctx, request, opts...)
 }
 
 func (c *metricClient) ResetWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.ResetWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ResetWorkflowExecutionResponse, error) {
+) (_ *workflowservice.ResetWorkflowExecutionResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientResetWorkflowExecutionScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientResetWorkflowExecutionScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientResetWorkflowExecutionScope, metrics.ClientLatency)
-	resp, err := c.client.ResetWorkflowExecution(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientResetWorkflowExecutionScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.ResetWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) RespondActivityTaskCanceled(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskCanceledRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCanceledResponse, error) {
+) (_ *workflowservice.RespondActivityTaskCanceledResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCanceledScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondActivityTaskCanceledScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskCanceledScope, metrics.ClientLatency)
-	resp, err := c.client.RespondActivityTaskCanceled(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCanceledScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.RespondActivityTaskCanceled(ctx, request, opts...)
 }
 
 func (c *metricClient) RespondActivityTaskCanceledById(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskCanceledByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCanceledByIdResponse, error) {
+) (_ *workflowservice.RespondActivityTaskCanceledByIdResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCanceledByIdScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondActivityTaskCanceledByIdScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskCanceledByIdScope, metrics.ClientLatency)
-	resp, err := c.client.RespondActivityTaskCanceledById(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCanceledByIdScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.RespondActivityTaskCanceledById(ctx, request, opts...)
 }
 
 func (c *metricClient) RespondActivityTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskCompletedRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCompletedResponse, error) {
+) (_ *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCompletedScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondActivityTaskCompletedScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskCompletedScope, metrics.ClientLatency)
-	resp, err := c.client.RespondActivityTaskCompleted(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCompletedScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.RespondActivityTaskCompleted(ctx, request, opts...)
 }
 
 func (c *metricClient) RespondActivityTaskCompletedById(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskCompletedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskCompletedByIdResponse, error) {
+) (_ *workflowservice.RespondActivityTaskCompletedByIdResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCompletedByIdScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondActivityTaskCompletedByIdScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskCompletedByIdScope, metrics.ClientLatency)
-	resp, err := c.client.RespondActivityTaskCompletedById(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskCompletedByIdScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.RespondActivityTaskCompletedById(ctx, request, opts...)
 }
 
 func (c *metricClient) RespondActivityTaskFailed(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskFailedRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskFailedResponse, error) {
+) (_ *workflowservice.RespondActivityTaskFailedResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskFailedScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondActivityTaskFailedScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskFailedScope, metrics.ClientLatency)
-	resp, err := c.client.RespondActivityTaskFailed(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskFailedScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.RespondActivityTaskFailed(ctx, request, opts...)
 }
 
 func (c *metricClient) RespondActivityTaskFailedById(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskFailedByIdRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondActivityTaskFailedByIdResponse, error) {
+) (_ *workflowservice.RespondActivityTaskFailedByIdResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskFailedByIdScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondActivityTaskFailedByIdScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondActivityTaskFailedByIdScope, metrics.ClientLatency)
-	resp, err := c.client.RespondActivityTaskFailedById(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondActivityTaskFailedByIdScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.RespondActivityTaskFailedById(ctx, request, opts...)
 }
 
 func (c *metricClient) RespondQueryTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondQueryTaskCompletedRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondQueryTaskCompletedResponse, error) {
+) (_ *workflowservice.RespondQueryTaskCompletedResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondQueryTaskCompletedScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondQueryTaskCompletedScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondQueryTaskCompletedScope, metrics.ClientLatency)
-	resp, err := c.client.RespondQueryTaskCompleted(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondQueryTaskCompletedScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.RespondQueryTaskCompleted(ctx, request, opts...)
 }
 
 func (c *metricClient) RespondWorkflowTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondWorkflowTaskCompletedResponse, error) {
+) (_ *workflowservice.RespondWorkflowTaskCompletedResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondWorkflowTaskCompletedScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondWorkflowTaskCompletedScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondWorkflowTaskCompletedScope, metrics.ClientLatency)
-	resp, err := c.client.RespondWorkflowTaskCompleted(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondWorkflowTaskCompletedScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.RespondWorkflowTaskCompleted(ctx, request, opts...)
 }
 
 func (c *metricClient) RespondWorkflowTaskFailed(
 	ctx context.Context,
 	request *workflowservice.RespondWorkflowTaskFailedRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.RespondWorkflowTaskFailedResponse, error) {
+) (_ *workflowservice.RespondWorkflowTaskFailedResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientRespondWorkflowTaskFailedScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondWorkflowTaskFailedScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientRespondWorkflowTaskFailedScope, metrics.ClientLatency)
-	resp, err := c.client.RespondWorkflowTaskFailed(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientRespondWorkflowTaskFailedScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.RespondWorkflowTaskFailed(ctx, request, opts...)
 }
 
 func (c *metricClient) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ScanWorkflowExecutionsRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.ScanWorkflowExecutionsResponse, error) {
+) (_ *workflowservice.ScanWorkflowExecutionsResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientScanWorkflowExecutionsScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientScanWorkflowExecutionsScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientScanWorkflowExecutionsScope, metrics.ClientLatency)
-	resp, err := c.client.ScanWorkflowExecutions(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientScanWorkflowExecutionsScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.ScanWorkflowExecutions(ctx, request, opts...)
 }
 
 func (c *metricClient) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
+) (_ *workflowservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientSignalWithStartWorkflowExecutionScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientSignalWithStartWorkflowExecutionScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientSignalWithStartWorkflowExecutionScope, metrics.ClientLatency)
-	resp, err := c.client.SignalWithStartWorkflowExecution(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientSignalWithStartWorkflowExecutionScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.SignalWithStartWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) SignalWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.SignalWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.SignalWorkflowExecutionResponse, error) {
+) (_ *workflowservice.SignalWorkflowExecutionResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientSignalWorkflowExecutionScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientSignalWorkflowExecutionScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientSignalWorkflowExecutionScope, metrics.ClientLatency)
-	resp, err := c.client.SignalWorkflowExecution(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientSignalWorkflowExecutionScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.SignalWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) StartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.StartWorkflowExecutionResponse, error) {
+) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientStartWorkflowExecutionScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientStartWorkflowExecutionScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientStartWorkflowExecutionScope, metrics.ClientLatency)
-	resp, err := c.client.StartWorkflowExecution(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientStartWorkflowExecutionScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.StartWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) TerminateWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.TerminateWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.TerminateWorkflowExecutionResponse, error) {
+) (_ *workflowservice.TerminateWorkflowExecutionResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientTerminateWorkflowExecutionScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientTerminateWorkflowExecutionScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientTerminateWorkflowExecutionScope, metrics.ClientLatency)
-	resp, err := c.client.TerminateWorkflowExecution(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientTerminateWorkflowExecutionScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.TerminateWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateNamespace(
 	ctx context.Context,
 	request *workflowservice.UpdateNamespaceRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateNamespaceResponse, error) {
+) (_ *workflowservice.UpdateNamespaceResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientUpdateNamespaceScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientUpdateNamespaceScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientUpdateNamespaceScope, metrics.ClientLatency)
-	resp, err := c.client.UpdateNamespace(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientUpdateNamespaceScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.UpdateNamespace(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateSchedule(
 	ctx context.Context,
 	request *workflowservice.UpdateScheduleRequest,
 	opts ...grpc.CallOption,
-) (*workflowservice.UpdateScheduleResponse, error) {
+) (_ *workflowservice.UpdateScheduleResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.FrontendClientUpdateScheduleScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientUpdateScheduleScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
-	sw := c.metricsClient.StartTimer(metrics.FrontendClientUpdateScheduleScope, metrics.ClientLatency)
-	resp, err := c.client.UpdateSchedule(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.FrontendClientUpdateScheduleScope, metrics.ClientFailures)
-	}
-	return resp, err
+	return c.client.UpdateSchedule(ctx, request, opts...)
 }
