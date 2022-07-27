@@ -90,7 +90,7 @@ func (s *rescheudulerSuite) TestStartStop() {
 	rescheduler.Start()
 
 	numTasks := 20
-	taskCh := make(chan struct{})
+	taskCh := make(chan struct{}, numTasks)
 	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
 		taskCh <- struct{}{}
 		return true, nil

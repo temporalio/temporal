@@ -87,7 +87,7 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, interceptor
 		grpc.WithChainUnaryInterceptor(
 			append(
 				interceptors,
-				versionHeadersInterceptor,
+				headersInterceptor,
 				metrics.NewClientMetricsTrailerPropagatorInterceptor(logger),
 				errorInterceptor,
 			)...,
@@ -116,7 +116,7 @@ func errorInterceptor(
 	return err
 }
 
-func versionHeadersInterceptor(
+func headersInterceptor(
 	ctx context.Context,
 	method string,
 	req, reply interface{},

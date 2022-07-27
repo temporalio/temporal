@@ -659,6 +659,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	// NOTE: history resend may take long time and its timeout is currently
 	// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
 	if err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+		ctx,
 		remoteClusterName,
 		namespace.ID(taskInfo.GetNamespaceID()),
 		taskInfo.GetWorkflowID(),

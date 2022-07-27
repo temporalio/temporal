@@ -79,10 +79,11 @@ var Module = fx.Options(
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
+	fx.Provide(CallerInfoInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
-	fx.Provide(PersistenceMaxQpsProvider),
+	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
 	fx.Provide(func(so []grpc.ServerOption) *grpc.Server { return grpc.NewServer(so...) }),
 	fx.Provide(healthServerProvider),
@@ -137,6 +138,7 @@ func GrpcServerOptionsProvider(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	traceInterceptor telemetry.ServerTraceInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
+	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
 	audienceGetter authorization.JWTAudienceMapper,
@@ -176,6 +178,7 @@ func GrpcServerOptionsProvider(
 			audienceGetter,
 		),
 		sdkVersionInterceptor.Intercept,
+		callerInfoInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		interceptors = append(interceptors, customInterceptors...)
@@ -303,10 +306,20 @@ func SDKVersionInterceptorProvider() *interceptor.SDKVersionInterceptor {
 	return interceptor.NewSDKVersionInterceptor()
 }
 
-func PersistenceMaxQpsProvider(
+func CallerInfoInterceptorProvider(
+	namespaceRegistry namespace.Registry,
+) *interceptor.CallerInfoInterceptor {
+	return interceptor.NewCallerInfoInterceptor(namespaceRegistry)
+}
+
+func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
-) persistenceClient.PersistenceMaxQps {
-	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS)
+) service.PersistenceRateLimitingParams {
+	return service.NewPersistenceRateLimitingParams(
+		serviceConfig.PersistenceMaxQPS,
+		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.EnablePersistencePriorityRateLimiting,
+	)
 }
 
 func VisibilityManagerProvider(
