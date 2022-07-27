@@ -426,6 +426,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		PageSize:    testPageSize,
 		Sorter: []elastic.Sorter{
 			elastic.NewFieldSort(searchattribute.WorkflowID).Asc(),
+			elastic.NewFieldSort(searchattribute.RunID).Desc(),
 		},
 	}, p)
 	request.Query = ""
