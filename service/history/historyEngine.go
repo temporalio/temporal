@@ -3160,13 +3160,13 @@ func (e *historyEngineImpl) GetReplicationStatus(
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
 
 	resp := &historyservice.ShardReplicationStatus{
-		ShardId: e.shard.GetShardID(),
+		ShardId:        e.shard.GetShardID(),
+		ShardLocalTime: timestamp.TimePtr(e.shard.GetTimeSource().Now()),
 	}
 
 	maxReplicationTaskId, maxTaskVisibilityTimeStamp := e.replicationAckMgr.GetMaxTaskInfo()
 	resp.MaxReplicationTaskId = maxReplicationTaskId
-	// This is the latest replication task creation timestamp in the shard.
-	resp.ShardLocalTime = timestamp.TimePtr(maxTaskVisibilityTimeStamp)
+	resp.MaxReplicationTaskVisibilityTime = timestamp.TimePtr(maxTaskVisibilityTimeStamp)
 
 	remoteClusters, handoverNamespaces, err := e.shard.GetReplicationStatus(request.RemoteClusters)
 	if err != nil {
