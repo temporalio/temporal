@@ -312,7 +312,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: []interface{}{json.Number("1528358645123456789"), "qwe"},
 		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 
 	// test request latestTime overflow
@@ -326,7 +326,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: []interface{}{json.Number("1528358645123456789"), "qwe"},
 		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 	request = createTestRequest() // revert
 
@@ -340,7 +340,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: nil,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 
 	// test for additional boolQuery
@@ -354,7 +354,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: nil,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 
 	// test for search after
@@ -371,7 +371,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: token.SearchAfter,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 	request = createTestRequest() // revert
 
@@ -386,7 +386,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		PageSize:    testPageSize,
 		SearchAfter: nil,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 }
 
@@ -411,7 +411,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		SearchAfter: nil,
 		PointInTime: nil,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 	request.Query = ""
 
@@ -465,7 +465,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 		SearchAfter: nil,
 		PointInTime: nil,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 	request.Query = ""
 
