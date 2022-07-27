@@ -107,6 +107,7 @@ type (
 		ThrottledLogRPS               dynamicconfig.IntPropertyFn
 		PersistenceMaxQPS             dynamicconfig.IntPropertyFn
 		PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
+		PersistenceNamespaceMaxQPS    dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableBatcher                 dynamicconfig.BoolPropertyFn
 		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
 
@@ -307,6 +308,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 		PersistenceGlobalMaxQPS: dc.GetIntProperty(
 			dynamicconfig.WorkerPersistenceGlobalMaxQPS,
 			0,
+		),
+		PersistenceNamespaceMaxQPS: dc.GetIntPropertyFilteredByNamespace(
+			dynamicconfig.WorkerPersistenceNamespaceMaxQPS,
+			500,
 		),
 
 		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),

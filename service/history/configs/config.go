@@ -40,10 +40,11 @@ type Config struct {
 	NumberOfShards             int32
 	DefaultVisibilityIndexName string
 
-	RPS                     dynamicconfig.IntPropertyFn
-	MaxIDLengthLimit        dynamicconfig.IntPropertyFn
-	PersistenceMaxQPS       dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS dynamicconfig.IntPropertyFn
+	RPS                        dynamicconfig.IntPropertyFn
+	MaxIDLengthLimit           dynamicconfig.IntPropertyFn
+	PersistenceMaxQPS          dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS    dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	StandardVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
 	StandardVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
@@ -280,6 +281,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		MaxIDLengthLimit:           dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		PersistenceMaxQPS:          dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
 		PersistenceGlobalMaxQPS:    dc.GetIntProperty(dynamicconfig.HistoryPersistenceGlobalMaxQPS, 0),
+		PersistenceNamespaceMaxQPS: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryPersistenceNamespaceMaxQPS, 9000),
 		ShutdownDrainDuration:      dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0),
 		MaxAutoResetPoints:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, DefaultHistoryMaxAutoResetPoints),
 		DefaultWorkflowTaskTimeout: dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),

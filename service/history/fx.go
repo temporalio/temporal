@@ -200,8 +200,9 @@ func ESProcessorConfigProvider(
 
 func PersistenceMaxQpsProvider(
 	serviceConfig *configs.Config,
-) persistenceClient.PersistenceMaxQps {
-	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS)
+) (persistenceClient.PersistenceMaxQps, persistenceClient.PersistenceNamespaceMaxQps) {
+	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS),
+		persistenceClient.PersistenceNamespaceMaxQps(serviceConfig.PersistenceNamespaceMaxQPS)
 }
 
 func VisibilityManagerProvider(

@@ -37,18 +37,20 @@ import (
 )
 
 type (
-	PersistenceMaxQps dynamicconfig.IntPropertyFn
-	ClusterName       string
+	PersistenceMaxQps          dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ClusterName                string
 
 	NewFactoryParams struct {
 		fx.In
 
-		DataStoreFactory  DataStoreFactory
-		Cfg               *config.Persistence
-		PersistenceMaxQPS PersistenceMaxQps
-		ClusterName       ClusterName
-		MetricsClient     metrics.Client
-		Logger            log.Logger
+		DataStoreFactory           DataStoreFactory
+		Cfg                        *config.Persistence
+		PersistenceMaxQPS          PersistenceMaxQps
+		PersistenceNamespaceMaxQPS PersistenceNamespaceMaxQps
+		ClusterName                ClusterName
+		MetricsClient              metrics.Client
+		Logger                     log.Logger
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -69,8 +71,9 @@ func FactoryProvider(
 ) Factory {
 	var requestRatelimiter quotas.RequestRateLimiter
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
-		requestRatelimiter = NewPriorityRateLimiter(
-			func() float64 { return float64(params.PersistenceMaxQPS()) },
+		requestRatelimiter = NewRequestRateLimiter(
+			params.PersistenceNamespaceMaxQPS,
+			params.PersistenceMaxQPS,
 		)
 	}
 

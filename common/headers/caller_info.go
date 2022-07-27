@@ -33,19 +33,25 @@ import (
 const (
 	CallerTypeAPI        = "api"
 	CallerTypeBackground = "background"
+
+	CallerNameSystem = "system"
 )
 
 type CallerInfo struct {
-	CallerType string
-
-	// TODO: add fields for CallerName and CallerInitiation
+	CallerName     string
+	CallerType     string
+	CallInitiation string
 }
 
 func NewCallerInfo(
+	callerName string,
 	callerType string,
+	callInitiation string,
 ) CallerInfo {
 	return CallerInfo{
-		CallerType: callerType,
+		CallerName:     callerName,
+		CallerType:     callerType,
+		CallInitiation: callInitiation,
 	}
 }
 
@@ -62,8 +68,16 @@ func SetCallerInfo(
 		mdIncoming = metadata.MD{}
 	}
 
+	if len(mdIncoming.Get(callerNameHeaderName)) == 0 {
+		mdIncoming.Set(callerNameHeaderName, string(info.CallerName))
+	}
+
 	if len(mdIncoming.Get(callerTypeHeaderName)) == 0 {
 		mdIncoming.Set(callerTypeHeaderName, string(info.CallerType))
+	}
+
+	if len(mdIncoming.Get(callInitiationHeaderName)) == 0 {
+		mdIncoming.Set(callInitiationHeaderName, string(info.CallInitiation))
 	}
 
 	return metadata.NewIncomingContext(ctx, mdIncoming)
@@ -72,8 +86,10 @@ func SetCallerInfo(
 func GetCallerInfo(
 	ctx context.Context,
 ) CallerInfo {
-	values := GetValues(ctx, callerTypeHeaderName)
+	values := GetValues(ctx, callerNameHeaderName, callerTypeHeaderName, callInitiationHeaderName)
 	return CallerInfo{
-		CallerType: values[0],
+		CallerName:     values[0],
+		CallerType:     values[1],
+		CallInitiation: values[2],
 	}
 }

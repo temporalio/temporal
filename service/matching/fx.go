@@ -90,8 +90,9 @@ func RateLimitInterceptorProvider(
 // if-case comes from resourceImpl.New.
 func PersistenceMaxQpsProvider(
 	serviceConfig *Config,
-) persistenceClient.PersistenceMaxQps {
-	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS)
+) (persistenceClient.PersistenceMaxQps, persistenceClient.PersistenceNamespaceMaxQps) {
+	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS),
+		persistenceClient.PersistenceNamespaceMaxQps(serviceConfig.PersistenceNamespaceMaxQPS)
 }
 
 func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.ServiceResolver, error) {

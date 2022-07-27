@@ -148,6 +148,8 @@ const (
 	FrontendPersistenceMaxQPS = "frontend.persistenceMaxQPS"
 	// FrontendPersistenceGlobalMaxQPS is the max qps frontend cluster can query DB
 	FrontendPersistenceGlobalMaxQPS = "frontend.persistenceGlobalMaxQPS"
+	// FrontendPersistenceNamespaceMaxQPS is the max qps each namespace on frontend host can query DB
+	FrontendPersistenceNamespaceMaxQPS = "frontend.persistenceNamespaceMaxQPS"
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
 	FrontendVisibilityMaxPageSize = "frontend.visibilityMaxPageSize"
 	// FrontendESIndexMaxResultWindow is ElasticSearch index setting max_result_window
@@ -242,6 +244,8 @@ const (
 	MatchingPersistenceMaxQPS = "matching.persistenceMaxQPS"
 	// MatchingPersistenceGlobalMaxQPS is the max qps matching cluster can query DB
 	MatchingPersistenceGlobalMaxQPS = "matching.persistenceGlobalMaxQPS"
+	// MatchingPersistenceNamespaceMaxQPS is the max qps each namespace on matching host can query DB
+	MatchingPersistenceNamespaceMaxQPS = "matching.persistenceNamespaceMaxQPS"
 	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task queue throttling
 	MatchingMinTaskThrottlingBurstSize = "matching.minTaskThrottlingBurstSize"
 	// MatchingGetTasksBatchSize is the maximum batch size to fetch from the task buffer
@@ -287,6 +291,8 @@ const (
 	HistoryPersistenceMaxQPS = "history.persistenceMaxQPS"
 	// HistoryPersistenceGlobalMaxQPS is the max qps history cluster can query DB
 	HistoryPersistenceGlobalMaxQPS = "history.persistenceGlobalMaxQPS"
+	// HistoryPersistenceNamespaceMaxQPS is the max qps each namespace on history host can query DB
+	HistoryPersistenceNamespaceMaxQPS = "history.persistenceNamespaceMaxQPS"
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
 	HistoryLongPollExpirationInterval = "history.longPollExpirationInterval"
 	// HistoryCacheInitialSize is initial size of history cache
@@ -562,6 +568,8 @@ const (
 	WorkerPersistenceMaxQPS = "worker.persistenceMaxQPS"
 	// WorkerPersistenceGlobalMaxQPS is the max qps worker cluster can query DB
 	WorkerPersistenceGlobalMaxQPS = "worker.persistenceGlobalMaxQPS"
+	// WorkerPersistenceNamespaceMaxQPS is the max qps each namespace on worker host can query DB
+	WorkerPersistenceNamespaceMaxQPS = "worker.persistenceNamespaceMaxQPS"
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
 	WorkerIndexerConcurrency = "worker.indexerConcurrency"
 	// WorkerESProcessorNumOfWorkers is num of workers for esProcessor

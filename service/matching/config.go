@@ -35,11 +35,12 @@ import (
 type (
 	// Config represents configuration for matching service
 	Config struct {
-		PersistenceMaxQPS       dynamicconfig.IntPropertyFn
-		PersistenceGlobalMaxQPS dynamicconfig.IntPropertyFn
-		SyncMatchWaitDuration   dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		RPS                     dynamicconfig.IntPropertyFn
-		ShutdownDrainDuration   dynamicconfig.DurationPropertyFn
+		PersistenceMaxQPS          dynamicconfig.IntPropertyFn
+		PersistenceGlobalMaxQPS    dynamicconfig.IntPropertyFn
+		PersistenceNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
+		SyncMatchWaitDuration      dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		RPS                        dynamicconfig.IntPropertyFn
+		ShutdownDrainDuration      dynamicconfig.DurationPropertyFn
 
 		// taskQueueManager configuration
 
@@ -108,6 +109,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		PersistenceMaxQPS:               dc.GetIntProperty(dynamicconfig.MatchingPersistenceMaxQPS, 3000),
 		PersistenceGlobalMaxQPS:         dc.GetIntProperty(dynamicconfig.MatchingPersistenceGlobalMaxQPS, 0),
+		PersistenceNamespaceMaxQPS:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceNamespaceMaxQPS, 3000),
 		SyncMatchWaitDuration:           dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond),
 		RPS:                             dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
 		RangeSize:                       100000,

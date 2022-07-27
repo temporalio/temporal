@@ -168,12 +168,13 @@ func initSystemNamespaces(
 		nil,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
-		DataStoreFactory:  dataStoreFactory,
-		Cfg:               cfg,
-		PersistenceMaxQPS: nil,
-		ClusterName:       persistenceClient.ClusterName(currentClusterName),
-		MetricsClient:     nil,
-		Logger:            logger,
+		DataStoreFactory:           dataStoreFactory,
+		Cfg:                        cfg,
+		PersistenceMaxQPS:          nil,
+		PersistenceNamespaceMaxQPS: nil,
+		ClusterName:                persistenceClient.ClusterName(currentClusterName),
+		MetricsClient:              nil,
+		Logger:                     logger,
 	})
 	defer factory.Close()
 

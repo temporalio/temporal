@@ -30,12 +30,22 @@ import (
 )
 
 var (
-	CallerTypePriority = map[string]int{
-		headers.CallerTypeAPI:        0,
-		headers.CallerTypeBackground: 1,
+	CallerTypeDefaultPriority = map[string]int{
+		headers.CallerTypeAPI:        1,
+		headers.CallerTypeBackground: 2,
 	}
 
-	APIPriorityOverride = map[string]int{
+	APITypeCallInitiationPriorityOverride = map[string]int{
+		"StartWorkflowExecution":           0,
+		"SignalWithStartWorkflowExecution": 0,
+		"SignalWorkflowExecution":          0,
+		"RequestCancelWorkflowExecution":   0,
+		"TerminateWorkflowExecution":       0,
+		"GetWorkflowExecutionHistory":      0,
+		"UpdateWorkflow":                   0,
+	}
+
+	BackgroundTypeAPIPriorityOverride = map[string]int{
 		"GetOrCreateShard": 0,
 		"UpdateShard":      0,
 
@@ -43,8 +53,30 @@ var (
 		"RangeCompleteHistoryTasks": 0,
 	}
 
-	RequestPrioritiesOrdered = []int{0, 1}
+	RequestPrioritiesOrdered = []int{0, 1, 2}
 )
+
+func NewRequestRateLimiter(
+	namespaceMaxQPS PersistenceNamespaceMaxQps,
+	hostMaxQPS PersistenceMaxQps,
+) quotas.RequestRateLimiter {
+	hostRequestRateLimiter := NewPriorityRateLimiter(
+		func() float64 { return float64(hostMaxQPS()) },
+	)
+
+	return quotas.NewNamespaceRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
+		if req.Caller != "" && req.Caller != headers.CallerNameSystem {
+			return quotas.NewMultiRequestRateLimiter(
+				NewPriorityRateLimiter(
+					func() float64 { return float64(namespaceMaxQPS(req.Caller)) },
+				),
+				hostRequestRateLimiter,
+			)
+		}
+
+		return hostRequestRateLimiter
+	})
+}
 
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
@@ -56,16 +88,21 @@ func NewPriorityRateLimiter(
 
 	return quotas.NewPriorityRateLimiter(
 		func(req quotas.Request) int {
-			if priority, ok := APIPriorityOverride[req.API]; ok {
-				return priority
+			switch req.CallerType {
+			case headers.CallerTypeAPI:
+				if priority, ok := APITypeCallInitiationPriorityOverride[req.Initiation]; ok {
+					return priority
+				}
+				return CallerTypeDefaultPriority[req.CallerType]
+			case headers.CallerTypeBackground:
+				if priority, ok := BackgroundTypeAPIPriorityOverride[req.API]; ok {
+					return priority
+				}
+				return CallerTypeDefaultPriority[req.CallerType]
+			default:
+				// default requests to high priority to be consistent with existing behavior
+				return RequestPrioritiesOrdered[0]
 			}
-
-			if priority, ok := CallerTypePriority[req.CallerType]; ok {
-				return priority
-			}
-
-			// default requests to high priority to be consistent with existing behavior
-			return RequestPrioritiesOrdered[0]
 		},
 		rateLimiters,
 	)

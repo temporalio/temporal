@@ -314,8 +314,9 @@ func CallerInfoInterceptorProvider(
 
 func PersistenceMaxQpsProvider(
 	serviceConfig *Config,
-) persistenceClient.PersistenceMaxQps {
-	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS)
+) (persistenceClient.PersistenceMaxQps, persistenceClient.PersistenceNamespaceMaxQps) {
+	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS),
+		persistenceClient.PersistenceNamespaceMaxQps(serviceConfig.PersistenceNamespaceMaxQPS)
 }
 
 func VisibilityManagerProvider(

@@ -58,14 +58,14 @@ func (s *quotasSuite) TearDownTest() {
 }
 
 func (s *quotasSuite) TestCallerTypePriorityMapping() {
-	for _, priority := range CallerTypePriority {
+	for _, priority := range CallerTypeDefaultPriority {
 		index := slices.Index(RequestPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}
 }
 
 func (s *quotasSuite) TestAPIPriorityOverrideMapping() {
-	for _, priority := range APIPriorityOverride {
+	for _, priority := range BackgroundTypeAPIPriorityOverride {
 		index := slices.Index(RequestPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}
