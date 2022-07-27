@@ -72,6 +72,7 @@ func NewVersionChecker(
 func (vc *VersionChecker) Start() {
 	if vc.config.EnableServerVersionCheck() {
 		vc.startOnce.Do(func() {
+			// TODO: specify a timeout for the context
 			ctx := headers.SetCallerInfo(context.TODO(), headers.NewCallerInfo(headers.CallerTypeBackground))
 
 			go vc.versionCheckLoop(ctx)
