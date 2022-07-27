@@ -67,7 +67,7 @@ const (
 	ioTimeout = 5 * time.Second
 
 	// Threshold for counting a AddTask call as a no recent poller call
-	noPollerThreshold = time.Minute
+	noPollerThreshold = time.Minute * 2
 )
 
 type (
@@ -301,9 +301,9 @@ func (c *taskQueueManagerImpl) AddTask(
 		c.liveness.markAlive(time.Now())
 	}
 
-	if params.forwardedFrom != "" {
+	if c.QueueID().IsRoot() && !c.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
 		// Only checks recent pollers in the root partition
-		c.checkRecentPollers()
+		c.metricScope.IncCounter(metrics.NoRecentPollerTasksPerTaskQueueCounter)
 	}
 
 	var syncMatch bool
