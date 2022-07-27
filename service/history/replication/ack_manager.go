@@ -58,7 +58,7 @@ import (
 type (
 	AckManager interface {
 		NotifyNewTasks(tasks []tasks.Task)
-		GetMaxTaskID() int64
+		GetMaxTaskInfo() (int64, time.Time)
 		GetTasks(ctx context.Context, pollingCluster string, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
 		GetTask(ctx context.Context, taskInfo *replicationspb.ReplicationTaskInfo) (*replicationspb.ReplicationTask, error)
 	}
@@ -76,8 +76,9 @@ type (
 
 		sync.Mutex
 		// largest replication task ID generated
-		maxTaskID       *int64
-		sanityCheckTime time.Time
+		maxTaskID                  *int64
+		maxTaskVisibilityTimestamp *time.Time
+		sanityCheckTime            time.Time
 	}
 )
 
@@ -123,9 +124,13 @@ func (p *ackMgrImpl) NotifyNewTasks(
 		return
 	}
 	maxTaskID := tasks[0].GetTaskID()
+	maxVisibilityTimestamp := tasks[0].GetVisibilityTime()
 	for _, task := range tasks {
 		if maxTaskID < task.GetTaskID() {
 			maxTaskID = task.GetTaskID()
+		}
+		if maxVisibilityTimestamp.Before(task.GetVisibilityTime()) {
+			maxVisibilityTimestamp = task.GetVisibilityTime()
 		}
 	}
 
@@ -134,21 +139,26 @@ func (p *ackMgrImpl) NotifyNewTasks(
 	if p.maxTaskID == nil || *p.maxTaskID < maxTaskID {
 		p.maxTaskID = &maxTaskID
 	}
+	if p.maxTaskVisibilityTimestamp == nil || p.maxTaskVisibilityTimestamp.Before(maxVisibilityTimestamp) {
+		p.maxTaskVisibilityTimestamp = timestamp.TimePtr(maxVisibilityTimestamp)
+	}
 }
 
-func (p *ackMgrImpl) GetMaxTaskID() int64 {
+func (p *ackMgrImpl) GetMaxTaskInfo() (int64, time.Time) {
 	p.Lock()
 	defer p.Unlock()
 
-	if p.maxTaskID == nil {
+	if p.maxTaskID == nil || p.maxTaskVisibilityTimestamp == nil {
 		// maxTaskID is nil before any replication task is written which happens right after shard reload. In that case,
 		// use ImmediateTaskMaxReadLevel which is the max task id of any immediate task queues.
 		// ImmediateTaskMaxReadLevel will be the lower bound of new range_id if shard reload. Remote cluster will quickly (in
 		// a few seconds) ack to the latest ImmediateTaskMaxReadLevel if there is no replication tasks at all.
-		return p.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, p.currentClusterName).Prev().TaskID
+		maxTaskID := p.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, p.currentClusterName).Prev().TaskID
+		maxVisibilityStampe := p.shard.GetTimeSource().Now()
+		return maxTaskID, maxVisibilityStampe
 	}
 
-	return *p.maxTaskID
+	return *p.maxTaskID, timestamp.TimeValue(p.maxTaskVisibilityTimestamp)
 }
 
 func (p *ackMgrImpl) GetTask(

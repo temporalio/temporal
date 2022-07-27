@@ -358,7 +358,8 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			}
 
 			if e.shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-				e.shard.UpdateHandoverNamespaces(nextNamespaces, e.replicationAckMgr.GetMaxTaskID())
+				maxTaskID, _ := e.replicationAckMgr.GetMaxTaskInfo()
+				e.shard.UpdateHandoverNamespaces(nextNamespaces, maxTaskID)
 			}
 
 			newNotificationVersion := nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1
@@ -3159,11 +3160,14 @@ func (e *historyEngineImpl) GetReplicationStatus(
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
 
 	resp := &historyservice.ShardReplicationStatus{
-		ShardId:        e.shard.GetShardID(),
-		ShardLocalTime: timestamp.TimePtr(e.shard.GetTimeSource().Now()),
+		ShardId: e.shard.GetShardID(),
 	}
 
-	resp.MaxReplicationTaskId = e.replicationAckMgr.GetMaxTaskID()
+	maxReplicationTaskId, maxTaskVisibilityTimeStamp := e.replicationAckMgr.GetMaxTaskInfo()
+	resp.MaxReplicationTaskId = maxReplicationTaskId
+	// This is the latest replication task creation timestamp in the shard.
+	resp.ShardLocalTime = timestamp.TimePtr(maxTaskVisibilityTimeStamp)
+
 	remoteClusters, handoverNamespaces, err := e.shard.GetReplicationStatus(request.RemoteClusters)
 	if err != nil {
 		return nil, err
