@@ -48,7 +48,7 @@ import (
 
 // AdminShowWorkflow shows history
 func AdminShowWorkflow(c *cli.Context) error {
-	namespace, err := getRequiredGlobalOption(c, FlagNamespace)
+	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func AdminDescribeWorkflow(c *cli.Context) error {
 func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateResponse, error) {
 	adminClient := cFactory.AdminClient(c)
 
-	namespace, err := getRequiredGlobalOption(c, FlagNamespace)
+	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
 		return nil, err
 	}
@@ -180,9 +180,51 @@ func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateRes
 	return resp, nil
 }
 
-// AdminDeleteWorkflow delete a workflow execution from Cassandra and visibility document from Elasticsearch.
+// AdminDeleteWorkflow force delete a workflow's mutable state, history, and visibility records as long as it's possible.
+// It should only be used as a troubleshooting tool since no additional check will be done before the deletion.
+// (e.g. if a child workflow has recorded its result in the parent workflow)
+// Please use normal workflow delete command to gracefully delete a workflow execution.
 func AdminDeleteWorkflow(c *cli.Context) error {
-	return fmt.Errorf("not implemented")
+	adminClient := cFactory.AdminClient(c)
+
+	namespace, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
+	rid := c.String(FlagRunID)
+
+	msg := fmt.Sprintf("Namespace: %s WorkflowID: %s RunID: %s\nForce delete above workflow execution[Yes/No]?", namespace, wid, rid)
+	prompt(msg, c.Bool(FlagYes))
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	resp, err := adminClient.DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to delete workflow execution: %s", err)
+	}
+
+	if len(resp.Warnings) != 0 {
+		fmt.Println("Warnings:")
+		for _, warning := range resp.Warnings {
+			fmt.Printf("- %s\n", warning)
+		}
+		fmt.Println("")
+	}
+
+	fmt.Println("Workflow execution deleted.")
+
+	return nil
 }
 
 // AdminGetShardID get shardID
@@ -448,7 +490,7 @@ func AdminDescribeHistoryHost(c *cli.Context) error {
 func AdminRefreshWorkflowTasks(c *cli.Context) error {
 	adminClient := cFactory.AdminClient(c)
 
-	namespace, err := getRequiredGlobalOption(c, FlagNamespace)
+	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
 		return err
 	}
