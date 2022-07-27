@@ -192,17 +192,15 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		return err
 	}
 
-	shouldDeleteHistory := true
 	if archiveIfEnabled {
-		shouldDeleteHistory, err = m.archiveWorkflowIfEnabled(ctx, namespaceID, we, currentBranchToken, weCtx, ms, scope)
+		isArchived, err := m.archiveWorkflowIfEnabled(ctx, namespaceID, we, currentBranchToken, weCtx, ms, scope)
 		if err != nil {
 			return err
 		}
-	}
-
-	if !shouldDeleteHistory {
-		// currentBranchToken == nil means don't delete history.
-		currentBranchToken = nil
+		if isArchived {
+			// Don't delete workflow data. The workflow data will be deleted after history archived.
+			return nil
+		}
 	}
 
 	// These two fields are needed for cassandra standard visibility.
@@ -268,7 +266,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 
 	// TODO: @ycyang once archival backfill is in place cluster:paused && namespace:enabled should be a nop rather than a delete
 	if !archiveHistory {
-		return true, nil
+		return false, nil
 	}
 
 	closeFailoverVersion, err := ms.GetLastWriteVersion()
@@ -307,20 +305,10 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 
 	ctx, cancel := context.WithTimeout(context.Background(), m.config.TimerProcessorArchivalTimeLimit())
 	defer cancel()
-	resp, err := m.archivalClient.Archive(ctx, req)
+	_, err = m.archivalClient.Archive(ctx, req)
 	if err != nil {
 		return false, err
 	}
 
-	var deleteHistory bool
-	if resp.HistoryArchivedInline {
-		scope.IncCounter(metrics.WorkflowCleanupDeleteHistoryInlineCount)
-		deleteHistory = true
-	} else {
-		scope.IncCounter(metrics.WorkflowCleanupArchiveCount)
-		// Don't delete workflow history if it wasn't achieve inline because archival workflow will need it.
-		deleteHistory = false
-	}
-
-	return deleteHistory, nil
+	return true, nil
 }

@@ -89,7 +89,7 @@ const (
 	// Our history archiver delete mutable state, and then upload history to blob store and then delete history.
 	// This scanner will face racing condition with archiver because it relys on describe mutable state returning entityNotExist error.
 	// That's why we need to keep MaxWorkflowRetentionPeriod stable and not decreasing all the time.
-	cleanUpThreshold = common.MaxWorkflowRetentionPeriod * 2
+	cleanUpThreshold = 60 * 24 * time.Hour
 )
 
 // NewScavenger returns an instance of history scavenger daemon

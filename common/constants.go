@@ -94,7 +94,7 @@ const (
 	// MaxWorkflowRetentionPeriod is the maximum of workflow retention when registering namespace
 	// !!! Do NOT simply decrease this number, because it is being used by history scavenger to avoid race condition against history archival.
 	// Check more details in history scanner(scavenger)
-	MaxWorkflowRetentionPeriod = 30 * time.Hour * 24
+	//MaxWorkflowRetentionPeriod = 30 * time.Hour * 24
 )
 
 const (

@@ -28,6 +28,7 @@ package client
 
 import (
 	"fmt"
+	"go.temporal.io/api/operatorservice/v1"
 	"sync"
 	"sync/atomic"
 
@@ -51,6 +52,7 @@ type (
 		SetMatchingClient(client matchingservice.MatchingServiceClient)
 		GetFrontendClient() workflowservice.WorkflowServiceClient
 		SetFrontendClient(client workflowservice.WorkflowServiceClient)
+		GetOperatorClient() (operatorservice.OperatorServiceClient, error)
 		GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error)
 		SetRemoteAdminClient(cluster string, client adminservice.AdminServiceClient)
 		GetRemoteFrontendClient(cluster string) (workflowservice.WorkflowServiceClient, error)
@@ -163,6 +165,11 @@ func (h *clientBeanImpl) SetFrontendClient(
 	client workflowservice.WorkflowServiceClient,
 ) {
 	h.remoteFrontendClients[h.clusterMetadata.GetCurrentClusterName()] = client
+}
+
+// TODO: Create Operator Client
+func (h *clientBeanImpl) GetOperatorClient() (operatorservice.OperatorServiceClient, error) {
+	return h.factory.NewOperatorClientWithTimeout()
 }
 
 func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error) {

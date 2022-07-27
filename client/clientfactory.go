@@ -27,6 +27,8 @@
 package client
 
 import (
+	"github.com/pborman/uuid"
+	"go.temporal.io/api/operatorservice/v1"
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
@@ -61,6 +63,7 @@ type (
 		NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matchingservice.MatchingServiceClient, error)
 		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) workflowservice.WorkflowServiceClient
 		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) adminservice.AdminServiceClient
+		NewOperatorClientWithTimeout() (operatorservice.OperatorServiceClient, error)
 	}
 
 	// FactoryProvider can be used to provide a customized client Factory implementation.
@@ -219,6 +222,20 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeout(
 		client = admin.NewMetricClient(client, cf.metricsClient)
 	}
 	return client
+}
+
+func (cf *rpcClientFactory) NewOperatorClientWithTimeout() (operatorservice.OperatorServiceClient, error) {
+	resolver, err := cf.monitor.GetResolver(common.FrontendServiceName)
+	if err != nil {
+		return nil, err
+	}
+	keyResolver := newServiceKeyResolver(resolver)
+	hostAddress, err := keyResolver.Lookup(uuid.New())
+	if err != nil {
+		return nil, err
+	}
+	connection := cf.rpcFactory.CreateFrontendGRPCConnection(hostAddress)
+	return operatorservice.NewOperatorServiceClient(connection), nil
 }
 
 func newServiceKeyResolver(resolver membership.ServiceResolver) *serviceKeyResolverImpl {

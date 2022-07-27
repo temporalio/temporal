@@ -26,6 +26,7 @@ package archiver
 
 import (
 	"context"
+	"go.temporal.io/api/operatorservice/v1"
 	"time"
 
 	"go.temporal.io/sdk/activity"
@@ -64,6 +65,7 @@ type (
 		NamespaceCache   namespace.Registry
 		Config           *Config
 		ArchiverProvider provider.ArchiverProvider
+		OperatorClient   operatorservice.OperatorServiceClient
 	}
 
 	// Config for ClientWorker
