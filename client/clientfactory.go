@@ -27,9 +27,10 @@
 package client
 
 import (
+	"time"
+
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/operatorservice/v1"
-	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
 

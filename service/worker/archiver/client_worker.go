@@ -26,8 +26,9 @@ package archiver
 
 import (
 	"context"
-	"go.temporal.io/api/operatorservice/v1"
 	"time"
+
+	"go.temporal.io/api/operatorservice/v1"
 
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/worker"
