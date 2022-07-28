@@ -90,26 +90,26 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 		var adminClient adminservice.AdminServiceClient
 		var frontendClient workflowservice.WorkflowServiceClient
 		if clusterName != currentClusterName {
-			adminClient = factory.NewExternalAdminClientWithTimeout(
+			adminClient = factory.NewRemoteAdminClientWithTimeout(
 				info.RPCAddress,
 				admin.DefaultTimeout,
 				admin.DefaultLargeTimeout,
 			)
-			frontendClient = factory.NewExternalFrontendClientWithTimeout(
+			frontendClient = factory.NewRemoteFrontendClientWithTimeout(
 				info.RPCAddress,
 				frontend.DefaultTimeout,
 				frontend.DefaultLongPollTimeout,
 			)
 		} else {
 			// Init inner cluster client with membership info
-			adminClient, err = factory.NewInternalAdminClientWithTimeout(
+			adminClient, err = factory.NewLocalAdminClientWithTimeout(
 				admin.DefaultTimeout,
 				admin.DefaultLargeTimeout,
 			)
 			if err != nil {
 				return nil, err
 			}
-			frontendClient, err = factory.NewInternalFrontendClientWithTimeout(
+			frontendClient, err = factory.NewLocalFrontendClientWithTimeout(
 				frontend.DefaultTimeout,
 				frontend.DefaultLongPollTimeout,
 			)
@@ -205,7 +205,7 @@ func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) (adminservice.Admi
 		defer h.adminClientsLock.Unlock()
 		client, ok = h.adminClients[cluster]
 		if !ok {
-			client = h.factory.NewExternalAdminClientWithTimeout(
+			client = h.factory.NewRemoteAdminClientWithTimeout(
 				clusterInfo.RPCAddress,
 				admin.DefaultTimeout,
 				admin.DefaultLargeTimeout,
@@ -247,7 +247,7 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) (workflowservic
 		defer h.frontendClientsLock.Unlock()
 		client, ok = h.frontendClients[cluster]
 		if !ok {
-			client = h.factory.NewExternalFrontendClientWithTimeout(
+			client = h.factory.NewRemoteFrontendClientWithTimeout(
 				clusterInfo.RPCAddress,
 				frontend.DefaultTimeout,
 				frontend.DefaultLongPollTimeout,
