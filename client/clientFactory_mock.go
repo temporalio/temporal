@@ -140,6 +140,36 @@ func (mr *MockFactoryMockRecorder) NewHistoryClientWithTimeout(timeout interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewHistoryClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewHistoryClientWithTimeout), timeout)
 }
 
+// NewLocalAdminClientWithTimeout mocks base method.
+func (m *MockFactory) NewLocalAdminClientWithTimeout(timeout, largeTimeout time.Duration) (v10.AdminServiceClient, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewLocalAdminClientWithTimeout", timeout, largeTimeout)
+	ret0, _ := ret[0].(v10.AdminServiceClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewLocalAdminClientWithTimeout indicates an expected call of NewLocalAdminClientWithTimeout.
+func (mr *MockFactoryMockRecorder) NewLocalAdminClientWithTimeout(timeout, largeTimeout interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewLocalAdminClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewLocalAdminClientWithTimeout), timeout, largeTimeout)
+}
+
+// NewLocalFrontendClientWithTimeout mocks base method.
+func (m *MockFactory) NewLocalFrontendClientWithTimeout(timeout, longPollTimeout time.Duration) (v1.WorkflowServiceClient, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewLocalFrontendClientWithTimeout", timeout, longPollTimeout)
+	ret0, _ := ret[0].(v1.WorkflowServiceClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewLocalFrontendClientWithTimeout indicates an expected call of NewLocalFrontendClientWithTimeout.
+func (mr *MockFactoryMockRecorder) NewLocalFrontendClientWithTimeout(timeout, longPollTimeout interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewLocalFrontendClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewLocalFrontendClientWithTimeout), timeout, longPollTimeout)
+}
+
 // NewMatchingClient mocks base method.
 func (m *MockFactory) NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (v12.MatchingServiceClient, error) {
 	m.ctrl.T.Helper()
