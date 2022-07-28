@@ -180,7 +180,8 @@ func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateRes
 	return resp, nil
 }
 
-// AdminDeleteWorkflow force delete a workflow's mutable state, history, and visibility records as long as it's possible.
+// AdminDeleteWorkflow force deletes a workflow's mutable state (both concrete and current), history, and visibility
+// records as long as it's possible.
 // It should only be used as a troubleshooting tool since no additional check will be done before the deletion.
 // (e.g. if a child workflow has recorded its result in the parent workflow)
 // Please use normal workflow delete command to gracefully delete a workflow execution.
