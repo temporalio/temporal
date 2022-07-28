@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service"
@@ -48,7 +47,7 @@ import (
 var Module = fx.Options(
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(NewConfig),
-	fx.Provide(PersistenceMaxQpsProvider),
+	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
@@ -88,11 +87,15 @@ func RateLimitInterceptorProvider(
 
 // This function is the same between services but uses different config sources.
 // if-case comes from resourceImpl.New.
-func PersistenceMaxQpsProvider(
+func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
-) (persistenceClient.PersistenceMaxQps, persistenceClient.PersistenceNamespaceMaxQps) {
-	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS),
-		persistenceClient.PersistenceNamespaceMaxQps(serviceConfig.PersistenceNamespaceMaxQPS)
+) service.PersistenceRateLimitingParams {
+	return service.NewPersistenceRateLimitingParams(
+		serviceConfig.PersistenceMaxQPS,
+		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.PersistenceNamespaceMaxQPS,
+		serviceConfig.EnablePersistencePriorityRateLimiting,
+	)
 }
 
 func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.ServiceResolver, error) {

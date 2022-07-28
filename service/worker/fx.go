@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -58,7 +57,7 @@ var Module = fx.Options(
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(ConfigProvider),
-	fx.Provide(PersistenceMaxQpsProvider),
+	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(NewService),
 	fx.Provide(NewWorkerManager),
 	fx.Provide(NewPerNamespaceWorkerManager),
@@ -69,11 +68,15 @@ func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLogge
 	return func() float64 { return float64(serviceConfig.ThrottledLogRPS()) }
 }
 
-func PersistenceMaxQpsProvider(
+func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
-) (persistenceClient.PersistenceMaxQps, persistenceClient.PersistenceNamespaceMaxQps) {
-	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS),
-		persistenceClient.PersistenceNamespaceMaxQps(serviceConfig.PersistenceNamespaceMaxQPS)
+) service.PersistenceRateLimitingParams {
+	return service.NewPersistenceRateLimitingParams(
+		serviceConfig.PersistenceMaxQPS,
+		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.PersistenceNamespaceMaxQPS,
+		serviceConfig.EnablePersistencePriorityRateLimiting,
+	)
 }
 
 func ConfigProvider(
@@ -115,6 +118,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // worker visibility never write
 		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
 		dynamicconfig.GetBoolPropertyFn(false), // worker visibility never write
+		serviceConfig.VisibilityDisableOrderByClause,
 		metricsClient,
 		logger,
 	)

@@ -83,7 +83,7 @@ var Module = fx.Options(
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
-	fx.Provide(PersistenceMaxQpsProvider),
+	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
 	fx.Provide(func(so []grpc.ServerOption) *grpc.Server { return grpc.NewServer(so...) }),
 	fx.Provide(healthServerProvider),
@@ -312,11 +312,15 @@ func CallerInfoInterceptorProvider(
 	return interceptor.NewCallerInfoInterceptor(namespaceRegistry)
 }
 
-func PersistenceMaxQpsProvider(
+func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
-) (persistenceClient.PersistenceMaxQps, persistenceClient.PersistenceNamespaceMaxQps) {
-	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS),
-		persistenceClient.PersistenceNamespaceMaxQps(serviceConfig.PersistenceNamespaceMaxQPS)
+) service.PersistenceRateLimitingParams {
+	return service.NewPersistenceRateLimitingParams(
+		serviceConfig.PersistenceMaxQPS,
+		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.PersistenceNamespaceMaxQPS,
+		serviceConfig.EnablePersistencePriorityRateLimiting,
+	)
 }
 
 func VisibilityManagerProvider(
@@ -347,6 +351,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
 		dynamicconfig.GetBoolPropertyFn(false), // frontend visibility never write
+		serviceConfig.VisibilityDisableOrderByClause,
 		metricsClient,
 		logger,
 	)

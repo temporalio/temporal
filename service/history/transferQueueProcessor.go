@@ -25,7 +25,6 @@
 package history
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -340,7 +339,10 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel < upperAckLevel {
-		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
+		ctx, cancel := newQueueIOContext()
+		defer cancel()
+
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             t.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryTransfer,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(lowerAckLevel + 1),

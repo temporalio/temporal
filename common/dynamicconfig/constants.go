@@ -79,6 +79,9 @@ const (
 	EnableReadVisibilityFromES = "system.enableReadVisibilityFromES"
 	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
 	EnableReadFromSecondaryAdvancedVisibility = "system.enableReadFromSecondaryAdvancedVisibility"
+	// VisibilityDisableOrderByClause is the config to disable ORDERY BY clause for Elasticsearch
+	VisibilityDisableOrderByClause = "system.visibilityDisableOrderByClause"
+
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState = "system.historyArchivalState"
 	// EnableReadFromHistoryArchival is key for enabling reading history from archival store
@@ -150,6 +153,8 @@ const (
 	FrontendPersistenceGlobalMaxQPS = "frontend.persistenceGlobalMaxQPS"
 	// FrontendPersistenceNamespaceMaxQPS is the max qps each namespace on frontend host can query DB
 	FrontendPersistenceNamespaceMaxQPS = "frontend.persistenceNamespaceMaxQPS"
+	// FrontendEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in frontend persistence client
+	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
 	FrontendVisibilityMaxPageSize = "frontend.visibilityMaxPageSize"
 	// FrontendESIndexMaxResultWindow is ElasticSearch index setting max_result_window
@@ -246,6 +251,8 @@ const (
 	MatchingPersistenceGlobalMaxQPS = "matching.persistenceGlobalMaxQPS"
 	// MatchingPersistenceNamespaceMaxQPS is the max qps each namespace on matching host can query DB
 	MatchingPersistenceNamespaceMaxQPS = "matching.persistenceNamespaceMaxQPS"
+	// MatchingEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in matching persistence client
+	MatchingEnablePersistencePriorityRateLimiting = "matching.enablePersistencePriorityRateLimiting"
 	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task queue throttling
 	MatchingMinTaskThrottlingBurstSize = "matching.minTaskThrottlingBurstSize"
 	// MatchingGetTasksBatchSize is the maximum batch size to fetch from the task buffer
@@ -293,6 +300,8 @@ const (
 	HistoryPersistenceGlobalMaxQPS = "history.persistenceGlobalMaxQPS"
 	// HistoryPersistenceNamespaceMaxQPS is the max qps each namespace on history host can query DB
 	HistoryPersistenceNamespaceMaxQPS = "history.persistenceNamespaceMaxQPS"
+	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
+	HistoryEnablePersistencePriorityRateLimiting = "history.enablePersistencePriorityRateLimiting"
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
 	HistoryLongPollExpirationInterval = "history.longPollExpirationInterval"
 	// HistoryCacheInitialSize is initial size of history cache
@@ -570,6 +579,8 @@ const (
 	WorkerPersistenceGlobalMaxQPS = "worker.persistenceGlobalMaxQPS"
 	// WorkerPersistenceNamespaceMaxQPS is the max qps each namespace on worker host can query DB
 	WorkerPersistenceNamespaceMaxQPS = "worker.persistenceNamespaceMaxQPS"
+	// WorkerEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in worker persistence client
+	WorkerEnablePersistencePriorityRateLimiting = "worker.enablePersistencePriorityRateLimiting"
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
 	WorkerIndexerConcurrency = "worker.indexerConcurrency"
 	// WorkerESProcessorNumOfWorkers is num of workers for esProcessor

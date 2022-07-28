@@ -25,6 +25,7 @@
 package service
 
 import (
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common"
@@ -37,6 +38,29 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/telemetry"
 )
+
+type (
+	PersistenceRateLimitingParams struct {
+		fx.Out
+
+		PersistenceMaxQps          persistenceClient.PersistenceMaxQps
+		PersistenceNamespaceMaxQps persistenceClient.PersistenceNamespaceMaxQps
+		PriorityRateLimiting       persistenceClient.PriorityRateLimiting
+	}
+)
+
+func NewPersistenceRateLimitingParams(
+	maxQps dynamicconfig.IntPropertyFn,
+	globalMaxQps dynamicconfig.IntPropertyFn,
+	namespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	priorityRateLimiting dynamicconfig.BoolPropertyFn,
+) PersistenceRateLimitingParams {
+	return PersistenceRateLimitingParams{
+		PersistenceMaxQps:          PersistenceMaxQpsFn(maxQps, globalMaxQps),
+		PersistenceNamespaceMaxQps: persistenceClient.PersistenceNamespaceMaxQps(namespaceMaxQps),
+		PriorityRateLimiting:       persistenceClient.PriorityRateLimiting(priorityRateLimiting),
+	}
+}
 
 func PersistenceMaxQpsFn(
 	maxQps dynamicconfig.IntPropertyFn,

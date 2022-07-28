@@ -216,18 +216,18 @@ eventLoop:
 }
 
 func (p *queueProcessorBase) processBatch() {
+	ctx, cancel := context.WithTimeout(context.Background(), loadQueueTaskThrottleRetryDelay)
+	if err := p.rateLimiter.Wait(ctx); err != nil {
+		deadline, _ := ctx.Deadline()
+		p.throttle(deadline.Sub(p.timeSource.Now()))
+		cancel()
+		return
+	}
+	cancel()
 
 	if !p.verifyReschedulerSize() {
 		return
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), loadQueueTaskThrottleRetryDelay)
-	if err := p.rateLimiter.Wait(ctx); err != nil {
-		cancel()
-		p.notifyNewTask() // re-enqueue the event
-		return
-	}
-	cancel()
 
 	p.lastPollTime = p.timeSource.Now()
 	tasks, more, err := p.ackMgr.readQueueTasks()
@@ -265,12 +265,18 @@ func (p *queueProcessorBase) verifyReschedulerSize() bool {
 		p.backoffTimer = nil
 	}
 	if !passed && p.backoffTimer == nil {
-		p.backoffTimer = time.AfterFunc(p.options.PollBackoffInterval(), func() {
-			p.notifyNewTask() // re-enqueue the event
-		})
+		p.throttle(p.options.PollBackoffInterval())
 	}
 
 	return passed
+}
+
+func (p *queueProcessorBase) throttle(duration time.Duration) {
+	if p.backoffTimer == nil {
+		p.backoffTimer = time.AfterFunc(duration, func() {
+			p.notifyNewTask() // re-enqueue the event
+		})
+	}
 }
 
 func (p *queueProcessorBase) submitTask(

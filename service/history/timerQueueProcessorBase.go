@@ -299,17 +299,18 @@ eventLoop:
 }
 
 func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) {
-	if !t.verifyReschedulerSize() {
-		return nil, nil
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), loadTimerTaskThrottleRetryDelay)
 	if err := t.rateLimiter.Wait(ctx); err != nil {
+		deadline, _ := ctx.Deadline()
+		t.notifyNewTimer(deadline) // re-enqueue the event
 		cancel()
-		t.notifyNewTimer(time.Time{}) // re-enqueue the event
 		return nil, nil
 	}
 	cancel()
+
+	if !t.verifyReschedulerSize() {
+		return nil, nil
+	}
 
 	t.lastPollTime = t.timeSource.Now()
 	timerTasks, nextFireTime, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
