@@ -152,6 +152,7 @@ func newTimerQueueStandbyProcessor(
 				scheduler,
 				rescheduler,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
 				config.TimerTaskMaxRetryCount,
 				queues.QueueTypeStandbyTimer,

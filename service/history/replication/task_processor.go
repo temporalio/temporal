@@ -303,7 +303,7 @@ func (p *taskProcessorImpl) handleSyncShardStatus(
 	p.metricsClient.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteCounter)
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerNameSystem, headers.CallerTypeBackground, ""))
 
 	return p.historyEngine.SyncShardStatus(ctx, &historyservice.SyncShardStatusRequest{
 		SourceCluster: p.sourceCluster,

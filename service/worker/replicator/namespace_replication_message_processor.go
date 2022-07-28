@@ -35,6 +35,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -146,6 +147,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 	}
 
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(fetchTaskRequestTimeout)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerNameSystem, headers.CallerTypeBackground, ""))
 	request := &adminservice.GetNamespaceReplicationMessagesRequest{
 		ClusterName:            p.currentCluster,
 		LastRetrievedMessageId: p.lastRetrievedMessageID,
@@ -161,10 +163,12 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 
 	p.logger.Debug("Successfully fetched namespace replication tasks", tag.Counter(len(response.Messages.ReplicationTasks)))
 
+	// TODO: specify a timeout for processing namespace replication tasks
+	taskCtx := headers.SetCallerInfo(context.TODO(), headers.NewCallerInfo(headers.CallerNameSystem, headers.CallerTypeBackground, ""))
 	for taskIndex := range response.Messages.ReplicationTasks {
 		task := response.Messages.ReplicationTasks[taskIndex]
 		err := backoff.ThrottleRetry(func() error {
-			return p.handleNamespaceReplicationTask(task)
+			return p.handleNamespaceReplicationTask(taskCtx, task)
 		}, p.retryPolicy, isTransientRetryableError)
 
 		if err != nil {
@@ -172,7 +176,8 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 			p.logger.Error("Failed to apply namespace replication tasks", tag.Error(err))
 
 			dlqErr := backoff.ThrottleRetry(func() error {
-				return p.putNamespaceReplicationTaskToDLQ(task)
+
+				return p.putNamespaceReplicationTaskToDLQ(taskCtx, task)
 			}, p.retryPolicy, isTransientRetryableError)
 			if dlqErr != nil {
 				p.logger.Error("Failed to put replication tasks to DLQ", tag.Error(dlqErr))
@@ -187,6 +192,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 }
 
 func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
+	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 ) error {
 
@@ -200,17 +206,18 @@ func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 		metrics.NamespaceReplicationTaskScope,
 		metrics.NamespaceTag(namespaceAttribute.GetInfo().GetName()),
 	).IncCounter(metrics.NamespaceReplicationEnqueueDLQCount)
-	return p.namespaceReplicationQueue.PublishToDLQ(context.TODO(), task)
+	return p.namespaceReplicationQueue.PublishToDLQ(ctx, task)
 }
 
 func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
+	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 ) error {
 	p.metricsClient.IncCounter(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorMessages)
 	sw := p.metricsClient.StartTimer(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
-	return p.taskExecutor.Execute(context.TODO(), task.GetNamespaceTaskAttributes())
+	return p.taskExecutor.Execute(ctx, task.GetNamespaceTaskAttributes())
 }
 
 func (p *namespaceReplicationMessageProcessor) Stop() {

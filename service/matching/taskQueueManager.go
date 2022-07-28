@@ -268,7 +268,7 @@ func (c *taskQueueManagerImpl) Stop() {
 	// metadata. UpdateState would fail on the lease check, but don't even bother calling it.
 	ackLevel := c.taskAckManager.getAckLevel()
 	if ackLevel >= 0 {
-		ctx, cancel := newIOContext()
+		ctx, cancel := c.newIOContext()
 		defer cancel()
 
 		c.db.UpdateState(ctx, ackLevel)
@@ -533,7 +533,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
 
 	// TODO: completeTaskFunc and task.finish() should take in a context
-	ctx, cancel := newIOContext()
+	ctx, cancel := c.newIOContext()
 	defer cancel()
 	c.taskGC.Run(ctx, ackLevel)
 }
@@ -616,9 +616,11 @@ func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
 	return c.taskQueueKind
 }
 
-func newIOContext() (context.Context, context.CancelFunc) {
+func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
+	namespace, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(namespace.String(), headers.CallerTypeBackground, ""))
 
 	return ctx, cancel
 }

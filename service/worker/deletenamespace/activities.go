@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -65,6 +66,8 @@ func NewActivities(
 }
 
 func (a *activities) GetNamespaceInfoActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (getNamespaceInfoResult, error) {
+	ctx = headers.SetCallerName(ctx, nsName.String())
+
 	getNamespaceRequest := &persistence.GetNamespaceRequest{
 		Name: nsName.String(),
 		ID:   nsID.String(),
@@ -86,6 +89,8 @@ func (a *activities) GetNamespaceInfoActivity(ctx context.Context, nsID namespac
 }
 
 func (a *activities) MarkNamespaceDeletedActivity(ctx context.Context, nsName namespace.Name) error {
+	ctx = headers.SetCallerName(ctx, nsName.String())
+
 	getNamespaceRequest := &persistence.GetNamespaceRequest{
 		Name: nsName.String(),
 	}
@@ -122,6 +127,8 @@ func (a *activities) MarkNamespaceDeletedActivity(ctx context.Context, nsName na
 }
 
 func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (namespace.Name, error) {
+	ctx = headers.SetCallerName(ctx, nsName.String())
+
 	const initialSuffixLength = 5
 
 	for suffixLength := initialSuffixLength; suffixLength < len(nsID.String()); suffixLength++ { // Just in case. 5 chars from ID should be good enough.
@@ -147,6 +154,8 @@ func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, n
 }
 
 func (a *activities) RenameNamespaceActivity(ctx context.Context, previousName namespace.Name, newName namespace.Name) error {
+	ctx = headers.SetCallerName(ctx, previousName.String())
+
 	renameNamespaceRequest := &persistence.RenameNamespaceRequest{
 		PreviousName: previousName.String(),
 		NewName:      newName.String(),

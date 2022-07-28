@@ -92,7 +92,7 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 		TaskQueue:  TaskQueueName,
 		NumWorkers: s.numWorkers(ns.Name().String()),
 		Options: sdkworker.Options{
-			BackgroundActivityContext: headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(headers.CallerTypeBackground)),
+			BackgroundActivityContext: headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(ns.Name().String(), headers.CallerTypeBackground, "")),
 		},
 	}
 }

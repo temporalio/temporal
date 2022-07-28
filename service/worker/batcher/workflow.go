@@ -39,6 +39,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -228,6 +229,8 @@ func setDefaultParams(params BatchParams) BatchParams {
 
 // BatchActivity is activity for processing batch operation
 func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
+	ctx = headers.SetCallerName(ctx, batchParams.Namespace)
+
 	batcher := ctx.Value(batcherContextKey).(*Batcher)
 	logger := getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}

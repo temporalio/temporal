@@ -161,7 +161,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 		LastWorkerIdentity: attr.LastWorkerIdentity,
 		VersionHistory:     attr.GetVersionHistory(),
 	}
-	ctx, cancel := e.newTaskContext(task.TaskType, attr.NamespaceId)
+	ctx, cancel := e.newTaskContext(attr.NamespaceId)
 	defer cancel()
 
 	err = e.historyEngine.SyncActivity(ctx, request)
@@ -227,7 +227,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		// new run events does not need version history since there is no prior events
 		NewRunEvents: attr.NewRunEvents,
 	}
-	ctx, cancel := e.newTaskContext(task.TaskType, attr.NamespaceId)
+	ctx, cancel := e.newTaskContext(attr.NamespaceId)
 	defer cancel()
 
 	err = e.historyEngine.ReplicateEventsV2(ctx, request)
@@ -283,7 +283,7 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 		return err
 	}
 
-	ctx, cancel := e.newTaskContext(task.TaskType, executionInfo.NamespaceId)
+	ctx, cancel := e.newTaskContext(executionInfo.NamespaceId)
 	defer cancel()
 
 	return e.historyEngine.ReplicateWorkflowState(ctx, &historyservice.ReplicateWorkflowStateRequest{
@@ -344,11 +344,12 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 }
 
 func (e *taskExecutorImpl) newTaskContext(
-	taskType enumsspb.ReplicationTaskType,
 	namespaceID string,
 ) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
+	namespace, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID))
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(namespace.String(), headers.CallerTypeBackground, ""))
 
 	return ctx, cancel
 }

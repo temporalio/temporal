@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
@@ -96,10 +97,11 @@ type (
 		lowestPriority ctasks.Priority // priority for emitting metrics across multiple attempts
 		attempt        int
 
-		executor    Executor
-		scheduler   Scheduler
-		rescheduler Rescheduler
-		timeSource  clock.TimeSource
+		executor          Executor
+		scheduler         Scheduler
+		rescheduler       Rescheduler
+		timeSource        clock.TimeSource
+		namespaceRegistry namespace.Registry
 
 		loadTime                      time.Time
 		userLatency                   time.Duration
@@ -120,20 +122,22 @@ func NewExecutable(
 	scheduler Scheduler,
 	rescheduler Rescheduler,
 	timeSource clock.TimeSource,
+	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	criticalRetryAttempt dynamicconfig.IntPropertyFn,
 	queueType QueueType,
 	namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn,
 ) Executable {
 	return &executableImpl{
-		Task:        task,
-		state:       ctasks.TaskStatePending,
-		attempt:     1,
-		executor:    executor,
-		scheduler:   scheduler,
-		rescheduler: rescheduler,
-		timeSource:  timeSource,
-		loadTime:    util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
+		Task:              task,
+		state:             ctasks.TaskStatePending,
+		attempt:           1,
+		executor:          executor,
+		scheduler:         scheduler,
+		rescheduler:       rescheduler,
+		timeSource:        timeSource,
+		namespaceRegistry: namespaceRegistry,
+		loadTime:          util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
 		logger: log.NewLazyLogger(
 			logger,
 			func() []tag.Tag {
@@ -161,7 +165,9 @@ func (e *executableImpl) Execute() error {
 	}
 
 	ctx := metrics.AddMetricsContext(context.Background())
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	namespace, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(namespace.String(), headers.CallerTypeBackground, ""))
+
 	startTime := e.timeSource.Now()
 
 	var err error

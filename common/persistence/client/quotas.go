@@ -56,29 +56,31 @@ var (
 	RequestPrioritiesOrdered = []int{0, 1, 2}
 )
 
-func NewRequestRateLimiter(
+func NewPriorityRateLimiter(
 	namespaceMaxQPS PersistenceNamespaceMaxQps,
 	hostMaxQPS PersistenceMaxQps,
 ) quotas.RequestRateLimiter {
-	hostRequestRateLimiter := NewPriorityRateLimiter(
+	hostRequestRateLimiter := newPriorityRateLimiter(
 		func() float64 { return float64(hostMaxQPS()) },
 	)
 
 	return quotas.NewNamespaceRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
 		if req.Caller != "" && req.Caller != headers.CallerNameSystem {
-			return quotas.NewMultiRequestRateLimiter(
-				NewPriorityRateLimiter(
-					func() float64 { return float64(namespaceMaxQPS(req.Caller)) },
-				),
-				hostRequestRateLimiter,
-			)
+			if namespaceMaxQPS != nil && namespaceMaxQPS(req.Caller) > 0 {
+				return quotas.NewMultiRequestRateLimiter(
+					newPriorityRateLimiter(
+						func() float64 { return float64(namespaceMaxQPS(req.Caller)) },
+					),
+					hostRequestRateLimiter,
+				)
+			}
 		}
 
 		return hostRequestRateLimiter
 	})
 }
 
-func NewPriorityRateLimiter(
+func newPriorityRateLimiter(
 	rateFn quotas.RateFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
@@ -109,14 +111,16 @@ func NewPriorityRateLimiter(
 }
 
 func NewNoopPriorityRateLimiter(
-	rateFn quotas.RateFn,
+	maxQPS PersistenceMaxQps,
 ) quotas.RequestRateLimiter {
 	priority := RequestPrioritiesOrdered[0]
 
 	return quotas.NewPriorityRateLimiter(
 		func(_ quotas.Request) int { return priority },
 		map[int]quotas.RateLimiter{
-			priority: quotas.NewDefaultOutgoingRateLimiter(rateFn),
+			priority: quotas.NewDefaultOutgoingRateLimiter(
+				func() float64 { return float64(maxQPS()) },
+			),
 		},
 	)
 }

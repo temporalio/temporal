@@ -49,7 +49,9 @@ var (
 		ClientVersionHeaderName,
 		SupportedServerVersionsHeaderName,
 		SupportedFeaturesHeaderName,
+		callerNameHeaderName,
 		callerTypeHeaderName,
+		callInitiationHeaderName,
 	}
 )
 

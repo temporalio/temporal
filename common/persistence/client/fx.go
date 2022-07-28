@@ -73,12 +73,10 @@ func FactoryProvider(
 ) Factory {
 	var requestRatelimiter quotas.RequestRateLimiter
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
-		rateFn := func() float64 { return float64(params.PersistenceMaxQPS()) }
-
 		if params.PriorityRateLimiting != nil && params.PriorityRateLimiting() {
-			requestRatelimiter = NewPriorityRateLimiter(rateFn)
+			requestRatelimiter = NewPriorityRateLimiter(params.PersistenceNamespaceMaxQPS, params.PersistenceMaxQPS)
 		} else {
-			requestRatelimiter = NewNoopPriorityRateLimiter(rateFn)
+			requestRatelimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS)
 		}
 	}
 

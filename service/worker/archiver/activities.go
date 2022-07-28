@@ -33,6 +33,7 @@ import (
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -53,6 +54,7 @@ var (
 )
 
 func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err error) {
+	ctx = headers.SetCallerName(ctx, request.Namespace)
 	container := ctx.Value(bootstrapContainerKey).(*BootstrapContainer)
 	scope := container.MetricsClient.Scope(metrics.ArchiverUploadHistoryActivityScope, metrics.NamespaceTag(request.Namespace))
 	sw := scope.StartTimer(metrics.ServiceLatency)
@@ -98,6 +100,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 }
 
 func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err error) {
+	ctx = headers.SetCallerName(ctx, request.Namespace)
 	container := ctx.Value(bootstrapContainerKey).(*BootstrapContainer)
 	scope := container.MetricsClient.Scope(metrics.ArchiverDeleteHistoryActivityScope, metrics.NamespaceTag(request.Namespace))
 	sw := scope.StartTimer(metrics.ServiceLatency)
@@ -126,6 +129,7 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 }
 
 func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err error) {
+	ctx = headers.SetCallerName(ctx, request.Namespace)
 	container := ctx.Value(bootstrapContainerKey).(*BootstrapContainer)
 	scope := container.MetricsClient.Scope(metrics.ArchiverArchiveVisibilityActivityScope, metrics.NamespaceTag(request.Namespace))
 	sw := scope.StartTimer(metrics.ServiceLatency)

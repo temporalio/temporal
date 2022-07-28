@@ -55,34 +55,68 @@ func NewCallerInfo(
 	}
 }
 
-// SetCallerInfo sets callerName and callerType value in incoming context
-// if not already exists.
+// SetCallerInfo sets callerName, callerType and callInitiation in the context.
+// Existing values will be overwritten if new value is not empty.
 // TODO: consider only set the caller info to golang context instead of grpc metadata
 // and propagate to grpc outgoing context upon making an rpc call
 func SetCallerInfo(
 	ctx context.Context,
 	info CallerInfo,
 ) context.Context {
+	return setIncomingMD(ctx, map[string]string{
+		callerNameHeaderName:     info.CallerName,
+		callerTypeHeaderName:     info.CallerType,
+		callInitiationHeaderName: info.CallInitiation,
+	})
+}
+
+// SetCallerName set caller name in the context.
+// Existing caller name will be overwritten if exists and new caller name is not empty.
+func SetCallerName(
+	ctx context.Context,
+	callerName string,
+) context.Context {
+	return setIncomingMD(ctx, map[string]string{callerNameHeaderName: callerName})
+}
+
+// SetCallerType set caller type in the context.
+// Existing caller type will be overwritten if exists and new caller type is not empty.
+func SetCallerType(
+	ctx context.Context,
+	callerType string,
+) context.Context {
+	return setIncomingMD(ctx, map[string]string{callerTypeHeaderName: callerType})
+}
+
+// SetCallInitiation set call initiation in the context.
+// Existing call initiation will be overwritten if exists and new call initiation is not empty.
+func SetCallInitiation(
+	ctx context.Context,
+	callInitiation string,
+) context.Context {
+	return setIncomingMD(ctx, map[string]string{callInitiationHeaderName: callInitiation})
+}
+
+func setIncomingMD(
+	ctx context.Context,
+	kv map[string]string,
+) context.Context {
 	mdIncoming, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		mdIncoming = metadata.MD{}
 	}
 
-	if len(mdIncoming.Get(callerNameHeaderName)) == 0 {
-		mdIncoming.Set(callerNameHeaderName, string(info.CallerName))
-	}
-
-	if len(mdIncoming.Get(callerTypeHeaderName)) == 0 {
-		mdIncoming.Set(callerTypeHeaderName, string(info.CallerType))
-	}
-
-	if len(mdIncoming.Get(callInitiationHeaderName)) == 0 {
-		mdIncoming.Set(callInitiationHeaderName, string(info.CallInitiation))
+	for k, v := range kv {
+		if v != "" {
+			mdIncoming.Set(k, v)
+		}
 	}
 
 	return metadata.NewIncomingContext(ctx, mdIncoming)
 }
 
+// GetCallerInfo retrieves caller information from the context if exists. Empty value is returned
+// if any piece of caller information is not specified in the context.
 func GetCallerInfo(
 	ctx context.Context,
 ) CallerInfo {
