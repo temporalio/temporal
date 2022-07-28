@@ -313,7 +313,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 		),
 		PersistenceNamespaceMaxQPS: dc.GetIntPropertyFilteredByNamespace(
 			dynamicconfig.WorkerPersistenceNamespaceMaxQPS,
-			500,
+			0,
 		),
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(
 			dynamicconfig.WorkerEnablePersistencePriorityRateLimiting,
