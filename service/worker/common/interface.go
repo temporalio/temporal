@@ -31,6 +31,11 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
+const (
+	// All per-ns workers share one task queue
+	PerNSWorkerTaskQueue = "temporal-sys-per-ns-tq"
+)
+
 type (
 	// WorkerComponent represents a type of work needed for worker role
 	WorkerComponent interface {
@@ -60,13 +65,7 @@ type (
 	}
 
 	PerNSDedicatedWorkerOptions struct {
-		// Set this to false to disable a worker for this namespace
+		// Set this to false to disable this worker for this namespace
 		Enabled bool
-		// TaskQueue is required
-		TaskQueue string
-		// How many worker nodes should run a worker per namespace
-		NumWorkers int
-		// Other worker options
-		Options sdkworker.Options
 	}
 )
