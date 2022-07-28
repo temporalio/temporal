@@ -82,41 +82,35 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 	frontendClients := map[string]workflowservice.WorkflowServiceClient{}
 
 	currentClusterName := clusterMetadata.GetCurrentClusterName()
+	// Init local cluster client with membership info
+	adminClient, err := factory.NewLocalAdminClientWithTimeout(
+		admin.DefaultTimeout,
+		admin.DefaultLargeTimeout,
+	)
+	if err != nil {
+		return nil, err
+	}
+	frontendClient, err := factory.NewLocalFrontendClientWithTimeout(
+		frontend.DefaultTimeout,
+		frontend.DefaultLongPollTimeout,
+	)
+	adminClients[currentClusterName] = adminClient
+	frontendClients[currentClusterName] = frontendClient
+
 	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
-		if !info.Enabled {
+		if !info.Enabled || clusterName == currentClusterName {
 			continue
 		}
-
-		var adminClient adminservice.AdminServiceClient
-		var frontendClient workflowservice.WorkflowServiceClient
-		if clusterName != currentClusterName {
-			adminClient = factory.NewRemoteAdminClientWithTimeout(
-				info.RPCAddress,
-				admin.DefaultTimeout,
-				admin.DefaultLargeTimeout,
-			)
-			frontendClient = factory.NewRemoteFrontendClientWithTimeout(
-				info.RPCAddress,
-				frontend.DefaultTimeout,
-				frontend.DefaultLongPollTimeout,
-			)
-		} else {
-			// Init inner cluster client with membership info
-			adminClient, err = factory.NewLocalAdminClientWithTimeout(
-				admin.DefaultTimeout,
-				admin.DefaultLargeTimeout,
-			)
-			if err != nil {
-				return nil, err
-			}
-			frontendClient, err = factory.NewLocalFrontendClientWithTimeout(
-				frontend.DefaultTimeout,
-				frontend.DefaultLongPollTimeout,
-			)
-			if err != nil {
-				return nil, err
-			}
-		}
+		adminClient = factory.NewRemoteAdminClientWithTimeout(
+			info.RPCAddress,
+			admin.DefaultTimeout,
+			admin.DefaultLargeTimeout,
+		)
+		frontendClient = factory.NewRemoteFrontendClientWithTimeout(
+			info.RPCAddress,
+			frontend.DefaultTimeout,
+			frontend.DefaultLongPollTimeout,
+		)
 		adminClients[clusterName] = adminClient
 		frontendClients[clusterName] = frontendClient
 	}
