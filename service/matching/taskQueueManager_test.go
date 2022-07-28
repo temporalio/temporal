@@ -315,6 +315,7 @@ func createTestTaskQueueManagerWithConfig(
 	tm := newTestTaskManager(logger)
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
+	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("ns-name"), nil).AnyTimes()
 	cmeta := cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
 	me := newMatchingEngine(cfg, tm, nil, logger, mockNamespaceCache)
 	tl := "tq"
@@ -440,17 +441,19 @@ func TestAddTaskStandby(t *testing.T) {
 		controller,
 		NewConfig(dynamicconfig.NewNoopCollection()),
 		func(tqm *taskQueueManagerImpl) {
+			ns := namespace.NewGlobalNamespaceForTest(
+				&persistencespb.NamespaceInfo{},
+				&persistencespb.NamespaceConfig{},
+				&persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: cluster.TestAlternativeClusterName,
+				},
+				cluster.TestAlternativeClusterInitialFailoverVersion,
+			)
+
 			// we need to override the mockNamespaceCache to return a passive namespace
 			mockNamespaceCache := namespace.NewMockRegistry(controller)
-			mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).
-				Return(namespace.NewGlobalNamespaceForTest(
-					&persistencespb.NamespaceInfo{},
-					&persistencespb.NamespaceConfig{},
-					&persistencespb.NamespaceReplicationConfig{
-						ActiveClusterName: cluster.TestAlternativeClusterName,
-					},
-					cluster.TestAlternativeClusterInitialFailoverVersion,
-				), nil).AnyTimes()
+			mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
+			mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
 			tqm.namespaceRegistry = mockNamespaceCache
 		},
 	)
