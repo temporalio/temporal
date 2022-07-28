@@ -94,6 +94,9 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 		frontend.DefaultTimeout,
 		frontend.DefaultLongPollTimeout,
 	)
+	if err != nil {
+		return nil, err
+	}
 	adminClients[currentClusterName] = adminClient
 	frontendClients[currentClusterName] = frontendClient
 
