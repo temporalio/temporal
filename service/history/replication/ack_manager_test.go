@@ -583,3 +583,26 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRunning() {
 		VisibilityTime: timestamp.TimePtr(taskTimestamp),
 	}, result)
 }
+
+func (s *ackManagerSuite) Test_GetMaxTaskInfo() {
+	now := time.Now()
+	taskSet := []tasks.Task{
+		&tasks.HistoryReplicationTask{
+			TaskID:              1,
+			VisibilityTimestamp: now,
+		},
+		&tasks.HistoryReplicationTask{
+			TaskID:              6,
+			VisibilityTimestamp: now.Add(time.Second),
+		},
+		&tasks.HistoryReplicationTask{
+			TaskID:              3,
+			VisibilityTimestamp: now.Add(time.Hour),
+		},
+	}
+	s.replicationAckManager.NotifyNewTasks(taskSet)
+
+	maxTaskID, maxVisibilityTimestamp := s.replicationAckManager.GetMaxTaskInfo()
+	s.Equal(int64(6), maxTaskID)
+	s.Equal(now.Add(time.Hour), maxVisibilityTimestamp)
+}
