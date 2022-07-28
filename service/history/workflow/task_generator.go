@@ -30,8 +30,6 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/server/common"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -183,18 +181,13 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	if err != nil {
 		return err
 	}
-	version := currentVersion
-	if deleteAfterClose {
-		// Ignore version check when delete request is from user API
-		version = common.EmptyVersion
-	}
-	closeTasks := []tasks.Task{
 
+	closeTasks := []tasks.Task{
 		&tasks.CloseExecutionTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
 			VisibilityTimestamp: now,
-			Version:             version,
+			Version:             currentVersion,
 			DeleteAfterClose:    deleteAfterClose,
 		},
 	}
