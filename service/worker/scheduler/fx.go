@@ -25,8 +25,6 @@
 package scheduler
 
 import (
-	"context"
-
 	"go.uber.org/fx"
 
 	"go.temporal.io/api/workflowservice/v1"
@@ -34,7 +32,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -42,15 +39,13 @@ import (
 )
 
 const (
-	WorkflowType  = "temporal-sys-scheduler-workflow"
-	TaskQueueName = "temporal-sys-scheduler-tq"
+	WorkflowType = "temporal-sys-scheduler-workflow"
 )
 
 type (
 	workerComponent struct {
 		activityDeps activityDeps
 		enabledForNs dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		numWorkers   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -80,20 +75,13 @@ func NewResult(
 			activityDeps: params,
 			enabledForNs: dcCollection.GetBoolPropertyFnWithNamespaceFilter(
 				dynamicconfig.WorkerEnableScheduler, false),
-			numWorkers: dcCollection.GetIntPropertyFilteredByNamespace(
-				dynamicconfig.WorkerSchedulerNumWorkers, 1),
 		},
 	}
 }
 
 func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	return &workercommon.PerNSDedicatedWorkerOptions{
-		Enabled:    s.enabledForNs(ns.Name().String()),
-		TaskQueue:  TaskQueueName,
-		NumWorkers: s.numWorkers(ns.Name().String()),
-		Options: sdkworker.Options{
-			BackgroundActivityContext: headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(ns.Name().String(), headers.CallerTypeBackground, "")),
-		},
+		Enabled: s.enabledForNs(ns.Name().String()),
 	}
 }
 

@@ -1091,9 +1091,9 @@ type (
 		// its mandatory to specify it. On success this method returns the number of rows
 		// actually deleted. If the underlying storage doesn't support "limit", all rows
 		// less than or equal to taskID will be deleted.
-		// On success, this method returns:
-		//  - number of rows actually deleted, if limit is honored
-		//  - UnknownNumRowsDeleted, when all rows below value are deleted
+		// On success, this method returns either:
+		//  - UnknownNumRowsAffected (this means all rows below value are deleted)
+		//  - number of rows deleted, which may be equal to limit
 		CompleteTasksLessThan(ctx context.Context, request *CompleteTasksLessThanRequest) (int, error)
 	}
 
