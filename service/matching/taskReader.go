@@ -111,6 +111,14 @@ dispatchLoop:
 			}
 			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
 			for {
+				// We checked if the task was expired before putting it in the buffer, but it
+				// might have expired while it sat in the buffer, so we should check again.
+				if taskqueue.IsTaskExpired(taskInfo) {
+					task.finish(nil)
+					tr.scope().IncCounter(metrics.ExpiredTasksPerTaskQueueCounter)
+					// Don't try to set read level here because it may have been advanced already.
+					break
+				}
 				err := tr.tlMgr.DispatchTask(ctx, task)
 				if err == nil {
 					break

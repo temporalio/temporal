@@ -148,8 +148,6 @@ func (s *Scavenger) deleteHandlerLog(key *p.TaskQueueKey, state *taskQueueState,
 //  1. if task has valid TTL -> TTL reached -> delete
 //  2. if task has 0 TTL / no TTL -> logic need to additionally check if corresponding workflow still exists
 func IsTaskExpired(t *persistencespb.AllocatedTaskInfo) bool {
-	tExpiry := timestamp.TimeValue(t.Data.ExpiryTime)
-	tEpoch := time.Unix(0, 0).UTC()
-	tNow := time.Now().UTC()
-	return tExpiry.After(tEpoch) && tNow.After(tExpiry)
+	expiry := timestamp.TimeValue(t.GetData().GetExpiryTime())
+	return expiry.Unix() > 0 && expiry.Before(time.Now())
 }
