@@ -105,15 +105,12 @@ func newQueueBase(
 	metricsHandler metrics.MetricsHandler,
 ) *queueBase {
 	var readerScopes map[int32][]Scope
-	var inclusiveLowWatermark tasks.Key
 	var exclusiveHighWatermark tasks.Key
-
 	if persistenceState, ok := shard.GetQueueState(category); ok {
 		queueState := FromPersistenceQueueState(persistenceState)
 
 		readerScopes = queueState.readerScopes
 		exclusiveHighWatermark = queueState.exclusiveReaderHighWatermark
-		inclusiveLowWatermark = queueState.exclusiveReaderHighWatermark
 	} else {
 		ackLevel := shard.GetQueueAckLevel(category)
 		if category.Type() == tasks.CategoryTypeImmediate {
@@ -122,7 +119,6 @@ func newQueueBase(
 		}
 
 		exclusiveHighWatermark = ackLevel
-		inclusiveLowWatermark = ackLevel
 	}
 
 	timeSource := shard.GetTimeSource()
@@ -161,6 +157,7 @@ func newQueueBase(
 		)
 	}
 
+	inclusiveLowWatermark := exclusiveHighWatermark
 	readerGroup := NewReaderGroup(readerInitializer)
 	for readerID, scopes := range readerScopes {
 		slices := make([]Slice, 0, len(scopes))
