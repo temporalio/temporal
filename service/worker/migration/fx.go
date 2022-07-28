@@ -46,7 +46,7 @@ type (
 		ExecutionManager  persistence.ExecutionManager
 		NamespaceRegistry namespace.Registry
 		HistoryClient     historyservice.HistoryServiceClient
-		FrontendClient    workflowservice.WorkflowServiceClient
+		FrontendClient    workflowservice.WorkflowServiceClient `name:"workerFrontendClient"`
 		Logger            log.Logger
 		MetricsClient     metrics.Client
 	}
