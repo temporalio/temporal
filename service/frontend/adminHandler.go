@@ -946,7 +946,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 ) (_ *adminservice.AddOrUpdateRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	adminClient := adh.clientFactory.NewAdminClientWithTimeout(
+	adminClient := adh.clientFactory.NewExternalAdminClientWithTimeout(
 		request.GetFrontendAddress(),
 		admin.DefaultTimeout,
 		admin.DefaultLargeTimeout,
