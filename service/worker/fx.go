@@ -28,9 +28,9 @@ import (
 	"context"
 
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/client"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -49,6 +49,10 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
+const (
+	localFrontendClient = "localFrontendClient"
+)
+
 var Module = fx.Options(
 	migration.Module,
 	addsearchattributes.Module,
@@ -57,7 +61,7 @@ var Module = fx.Options(
 	scheduler.Module,
 	fx.Provide(
 		fx.Annotated{
-			Group:  "workerFrontendClient",
+			Name:   localFrontendClient,
 			Target: FrontendClientProvider,
 		},
 	),
