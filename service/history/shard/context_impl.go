@@ -1603,9 +1603,15 @@ func (s *ContextImpl) transition(request contextRequest) error {
 				// transition to Stopping/Stopped, engineFuture cannot be Set.
 				if s.engineFuture.Ready() {
 					// defensive check, this should never happen
+					s.contextTaggedLogger.Warn("transition to acquired with engine set twice")
 					return errInvalidTransition
 				}
 				s.engineFuture.Set(request.engine, nil)
+			}
+			if !s.engineFuture.Ready() {
+				// we should either have an engine from a previous transition, or set one now
+				s.contextTaggedLogger.Warn("transition to acquired but no engine set")
+				return errInvalidTransition
 			}
 			return nil
 		case contextRequestLost:
