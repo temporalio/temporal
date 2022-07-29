@@ -28,27 +28,26 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/pborman/uuid"
-	"go.temporal.io/server/api/adminservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/persistence"
-	"google.golang.org/grpc/health"
 	"testing"
 
 	"github.com/golang/mock/gomock"
-
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc/health"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
@@ -95,7 +94,6 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetClientFactory(),
-		s.mockResource.RemoteAdminClient,
 	}
 	s.handler = NewOperatorHandlerImpl(args)
 	s.handler.Start()

@@ -27,28 +27,28 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	serverClient "go.temporal.io/server/client"
-	"go.temporal.io/server/client/admin"
-	"go.temporal.io/server/common/persistence"
-	"sync/atomic"
-
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	svc "go.temporal.io/server/client"
+	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common"
 	clustermetadata "go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -78,7 +78,7 @@ type (
 		namespaceRegistry      namespace.Registry
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
-		clientFactory          serverClient.Factory
+		clientFactory          svc.Factory
 	}
 
 	NewOperatorHandlerImplArgs struct {
@@ -95,7 +95,7 @@ type (
 		namespaceRegistry      namespace.Registry
 		clusterMetadataManager persistence.ClusterMetadataManager
 		clusterMetadata        clustermetadata.Metadata
-		clientFactory          serverClient.Factory
+		clientFactory          svc.Factory
 	}
 )
 
@@ -374,11 +374,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	ctx context.Context,
 	request *operatorservice.AddOrUpdateRemoteClusterRequest,
 ) (_ *operatorservice.AddOrUpdateRemoteClusterResponse, retError error) {
-	const endpointName = "AddOrUpdateRemoteCluster"
 	defer log.CapturePanic(h.logger, &retError)
-
-	_, sw := h.startRequestProfile(metrics.OperatorAddOrUpdateRemoteClusterScope)
-	defer sw.Stop()
 
 	adminClient := h.clientFactory.NewAdminClientWithTimeout(
 		request.GetFrontendAddress(),
@@ -389,7 +385,11 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	// Fetch cluster metadata from remote cluster
 	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableConnectRemoteClusterMessage, endpointName, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
+			errUnableConnectRemoteClusterMessage,
+			request.GetFrontendAddress(),
+			err,
+		))
 	}
 
 	err = h.validateRemoteClusterMetadata(resp)
@@ -429,7 +429,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToStoreClusterInfo, err))
 	}
 	if !applied {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToStoreClusterInfo, err))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToStoreClusterInfo, err))
 	}
 	return &operatorservice.AddOrUpdateRemoteClusterResponse{}, nil
 }
@@ -438,11 +438,7 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 	ctx context.Context,
 	request *operatorservice.RemoveRemoteClusterRequest,
 ) (_ *operatorservice.RemoveRemoteClusterResponse, retError error) {
-	const endpointName = "RemoveRemoteCluster"
 	defer log.CapturePanic(h.logger, &retError)
-
-	_, sw := h.startRequestProfile(metrics.OperatorRemoveRemoteClusterScope)
-	defer sw.Stop()
 
 	if err := h.clusterMetadataManager.DeleteClusterMetadata(
 		ctx,
