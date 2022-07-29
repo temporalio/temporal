@@ -865,11 +865,11 @@ const (
 	// OperatorListSearchAttributesScope is the metric scope for operator.ListSearchAttributes
 	OperatorListSearchAttributesScope
 	OperatorDeleteNamespaceScope
-	// OperatorAddOrUpdateRemoteClusterScope is the metric scope for operator.AddOrUpdateRemoteClusterScope
+	// OperatorAddOrUpdateRemoteClusterScope is the metric scope for operator.AddOrUpdateRemoteCluster
 	OperatorAddOrUpdateRemoteClusterScope
-	// OperatorRemoveRemoteClusterScope is the metric scope for operator.RemoveRemoteClusterScope
+	// OperatorRemoveRemoteClusterScope is the metric scope for operator.RemoveRemoteCluster
 	OperatorRemoveRemoteClusterScope
-	// OperatorListClustersScope is the metric scope for operator.OperatorListClustersScope
+	// OperatorListClustersScope is the metric scope for operator.OperatorListClusters
 	OperatorListClustersScope
 	// OperatorDeleteWorkflowExecutionScope is the metric scope for operator.DeleteWorkflowExecution
 	OperatorDeleteWorkflowExecutionScope
