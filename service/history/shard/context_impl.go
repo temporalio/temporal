@@ -638,6 +638,7 @@ func (s *ContextImpl) AddTasks(
 
 	s.wLock()
 	if err := s.errorByState(); err != nil {
+		s.wUnlock()
 		return err
 	}
 	err = s.addTasksLocked(ctx, request, namespaceEntry)
