@@ -453,8 +453,17 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 	return c.matcher.OfferQuery(ctx, task)
 }
 
+// GetVersioningData returns the versioning data for the task queue if any. If this task queue is a sub-partition and
+// has no cached data, it will explicitly attempt a fetch from the root partition.
 func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error) {
-	return c.db.GetVersioningData(ctx)
+	vd, err := c.db.GetVersioningData(ctx)
+	if errors.Is(err, &versioningDataNotPresentOnSubPartition{}) {
+		// If this is a sub-partition with no versioning data, this call is indicating we might expect to find
+		// some. Since we may not have started the poller, we want to explicitly attempt to fetch now, because
+		// it's possible some was added to the root partition, but it failed to invalidate this sub partition.
+		return c.fetchMetadataFromRootPartition(ctx)
+	}
+	return vd, err
 }
 
 func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
@@ -489,7 +498,10 @@ func (c *taskQueueManagerImpl) InvalidateMetadata(ctx context.Context, request *
 			return nil
 		}
 		c.db.setVersioningDataForNonRootPartition(nil)
-		return c.fetchMetadataFromRootPartition(ctx)
+		_, fetchErr := c.fetchMetadataFromRootPartition(ctx)
+		if fetchErr != nil {
+			return fetchErr
+		}
 	}
 	return nil
 }
@@ -693,14 +705,17 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartitionOnInit(ctx context.
 	if c.metadataInitialFetchFut.Ready() {
 		return
 	}
-	c.metadataInitialFetchFut.Set(struct{}{}, c.fetchMetadataFromRootPartition(ctx))
+	_, err := c.fetchMetadataFromRootPartition(ctx)
+	c.metadataInitialFetchFut.Set(struct{}{}, err)
 }
 
-func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Context) error {
+// fetchMetadataFromRootPartition fetches metadata from root partition iff this partition is not a root partition.
+// Returns the fetched data, if fetching was necessary and successful.
+func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Context) (*persistencespb.VersioningData, error) {
 	// Nothing to do if we are the root partition
 	// (for versioning - any later added metadata may need to not abort so early)
 	if c.taskQueueID.IsRoot() {
-		return nil
+		return nil, nil
 	}
 
 	rootTqName := c.taskQueueID.GetRoot()
@@ -715,7 +730,7 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 		WantVersioningDataCurhash: curHash,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// If the root partition returns nil here, then that means our data matched, and we don't need to update.
 	// If it's nil because it never existed, then we'd never have any data.
@@ -724,9 +739,9 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 	if res.VersioningData != nil {
 		c.db.setVersioningDataForNonRootPartition(res.VersioningData)
 		// Only start the poller if there's actually data to poll for
-		c.metadataPoller.StartIfUnstarted(func() { _ = c.fetchMetadataFromRootPartition(context.TODO()) })
+		c.metadataPoller.StartIfUnstarted(func() { _, _ = c.fetchMetadataFromRootPartition(context.TODO()) })
 	}
-	return nil
+	return res.VersioningData, nil
 }
 
 func (mp *metadataPoller) StartIfUnstarted(pollFn func()) {

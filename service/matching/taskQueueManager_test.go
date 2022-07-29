@@ -565,7 +565,9 @@ func TestTaskQueueSubParitionSendsCurrentHashOfVersioningDataWhenFetching(t *tes
 	// Cram some versioning data in there so it will have something to hash when fetching
 	subTq.db.versioningData = data
 	// Don't start it. Just explicitly call fetching function.
-	require.NoError(t, subTq.fetchMetadataFromRootPartition(ctx))
+	res, err := subTq.fetchMetadataFromRootPartition(ctx)
+	require.NotNil(t, res)
+	require.NoError(t, err)
 }
 
 func TestTaskQueueRootPartitionNotifiesChildrenOfInvalidation(t *testing.T) {
@@ -620,8 +622,43 @@ func TestTaskQueueSubPartitionPollsPeriodically(t *testing.T) {
 				Return(asResp, nil).MinTimes(3)
 			tqm.matchingClient = mockMatchingClient
 		})
-	// Don't start it. Just explicitly call fetching function.
-	require.NoError(t, subTq.fetchMetadataFromRootPartition(ctx))
+	res, err := subTq.fetchMetadataFromRootPartition(ctx)
+	require.NotNil(t, res)
+	require.NoError(t, err)
 	// Wait a bit to make sure we poll a few times
 	<-time.After(time.Millisecond * 25)
+}
+
+func TestTaskQueueSubPartitionDoesNotPollIfNoData(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId = subTqId
+	tqCfg.config.MetadataPollFrequency = func(opts ...dynamicconfig.FilterOption) time.Duration {
+		return time.Millisecond * 10
+	}
+
+	asResp := &matchingservice.GetTaskQueueMetadataResponse{
+		VersioningData: nil,
+	}
+
+	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
+		func(tqm *taskQueueManagerImpl) {
+			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
+				Return(asResp, nil).Times(2)
+			tqm.matchingClient = mockMatchingClient
+		})
+	res, err := subTq.fetchMetadataFromRootPartition(ctx)
+	require.Nil(t, res)
+	require.NoError(t, err)
+	// Wait a bit to make sure we *don't* end up polling
+	<-time.After(time.Millisecond * 25)
+
+	// Explicitly try to get versioning data. Since we don't have any cached, it'll explicitly fetch.
+	_, err = subTq.GetVersioningData(ctx)
+	require.NoError(t, err)
 }

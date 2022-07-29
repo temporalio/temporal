@@ -62,6 +62,7 @@ type (
 		rangeID  int64
 		ackLevel int64
 	}
+	versioningDataNotPresentOnSubPartition struct{}
 )
 
 // newTaskQueueDB returns an instance of an object that represents
@@ -292,7 +293,7 @@ func (db *taskQueueDB) getVersioningDataLocked(
 	}
 
 	if !db.taskQueue.IsRoot() {
-		return nil, fmt.Errorf("cannot read versioning data from db on a non-root task queue")
+		return nil, &versioningDataNotPresentOnSubPartition{}
 	}
 
 	tqInfo, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
@@ -383,4 +384,8 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		ExpiryTime:     db.expiryTime(),
 		LastUpdateTime: timestamp.TimeNowPtrUtc(),
 	}
+}
+
+func (e *versioningDataNotPresentOnSubPartition) Error() string {
+	return "versioning data not present on sub-partition"
 }
