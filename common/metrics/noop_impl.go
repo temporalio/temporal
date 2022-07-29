@@ -25,67 +25,24 @@
 package metrics
 
 import (
-	"context"
 	"time"
-
-	"golang.org/x/exp/event"
 
 	"go.temporal.io/server/common/log"
 )
 
 var (
-	NoopReporter      Reporter      = newNoopReporter()
-	NoopClient        Client        = newNoopClient()
-	NoopScope         Scope         = newNoopScope()
-	NoopUserScope     UserScope     = newNoopUserScope()
-	NoopStopwatch     Stopwatch     = newNoopStopwatch()
-	NoopMetricHandler MetricHandler = newNoopMetricHandler()
+	NoopClient         Client         = newNoopClient()
+	NoopScope          Scope          = newNoopScope()
+	NoopStopwatch      Stopwatch      = newNoopStopwatch()
+	NoopMetricsHandler MetricsHandler = newNoopMetricsHandler()
 )
 
 type (
-	noopReporterImpl     struct{}
-	noopClientImpl       struct{}
-	noopMetricsUserScope struct{}
-	noopStopwatchImpl    struct{}
-	noopScopeImpl        struct{}
-	noopMetricHandler    struct{}
+	noopClientImpl     struct{}
+	noopStopwatchImpl  struct{}
+	noopScopeImpl      struct{}
+	noopMetricsHandler struct{}
 )
-
-func newNoopReporter() *noopReporterImpl {
-	return &noopReporterImpl{}
-}
-
-func (*noopReporterImpl) MetricProvider() MetricProvider {
-	return NewEventsMetricProvider(NoopMetricHandler)
-}
-
-func (*noopReporterImpl) Stop(logger log.Logger) {}
-
-func (*noopReporterImpl) UserScope() UserScope {
-	return NoopUserScope
-}
-
-func newNoopUserScope() *noopMetricsUserScope {
-	return &noopMetricsUserScope{}
-}
-
-func (n *noopMetricsUserScope) IncCounter(counter string) {}
-
-func (n *noopMetricsUserScope) AddCounter(counter string, delta int64) {}
-
-func (n *noopMetricsUserScope) StartTimer(timer string) Stopwatch {
-	return NoopStopwatch
-}
-
-func (n *noopMetricsUserScope) RecordTimer(timer string, d time.Duration) {}
-
-func (n *noopMetricsUserScope) RecordDistribution(id string, unit MetricUnit, d int) {}
-
-func (n *noopMetricsUserScope) UpdateGauge(gauge string, value float64) {}
-
-func (n *noopMetricsUserScope) Tagged(tags map[string]string) UserScope {
-	return n
-}
 
 func newNoopClient() *noopClientImpl {
 	return &noopClientImpl{}
@@ -153,12 +110,32 @@ func newNoopStopwatch() *noopStopwatchImpl {
 func (n *noopStopwatchImpl) Stop()                       {}
 func (n *noopStopwatchImpl) Subtract(nsec time.Duration) {}
 
-func newNoopMetricHandler() *noopMetricHandler {
-	return &noopMetricHandler{}
+func newNoopMetricsHandler() *noopMetricsHandler { return &noopMetricsHandler{} }
+
+// WithTags creates a new MetricProvder with provided []Tag
+// Tags are merged with registered Tags from the source MetricsHandler
+func (n *noopMetricsHandler) WithTags(...Tag) MetricsHandler {
+	return n
 }
 
-func (*noopMetricHandler) Event(ctx context.Context, _ *event.Event) context.Context {
-	return ctx
+// Counter obtains a counter for the given name and MetricOptions.
+func (*noopMetricsHandler) Counter(string) CounterMetric {
+	return CounterMetricFunc(func(i int64, t ...Tag) {})
 }
 
-func (*noopMetricHandler) Stop(log.Logger) {}
+// Gauge obtains a gauge for the given name and MetricOptions.
+func (*noopMetricsHandler) Gauge(string) GaugeMetric {
+	return GaugeMetricFunc(func(f float64, t ...Tag) {})
+}
+
+// Timer obtains a timer for the given name and MetricOptions.
+func (*noopMetricsHandler) Timer(string) TimerMetric {
+	return TimerMetricFunc(func(d time.Duration, t ...Tag) {})
+}
+
+// Histogram obtains a histogram for the given name and MetricOptions.
+func (*noopMetricsHandler) Histogram(string, MetricUnit) HistogramMetric {
+	return HistogramMetricFunc(func(i int64, t ...Tag) {})
+}
+
+func (*noopMetricsHandler) Stop(log.Logger) {}

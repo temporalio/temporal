@@ -28,6 +28,8 @@ import (
 	"context"
 	"testing"
 
+	"go.temporal.io/server/common/clock"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -126,6 +128,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
+		clock.NewRealTimeSource(),
 	)
 
 	s.mockFrontendHandler = workflowservicemock.NewMockWorkflowServiceServer(s.controller)
@@ -426,8 +429,8 @@ func (s *dcRedirectionHandlerSuite) TestRecordActivityTaskHeartbeat() {
 	apiName := "RecordActivityTaskHeartbeat"
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
-		ScheduleAttempt: 1,
-		NamespaceId:     s.namespaceID.String(),
+		Attempt:     1,
+		NamespaceId: s.namespaceID.String(),
 	})
 	s.NoError(err)
 	req := &workflowservice.RecordActivityTaskHeartbeatRequest{
@@ -546,8 +549,8 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCanceled() {
 	apiName := "RespondActivityTaskCanceled"
 
 	token, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
-		ScheduleAttempt: 1,
-		NamespaceId:     s.namespaceID.String(),
+		Attempt:     1,
+		NamespaceId: s.namespaceID.String(),
 	})
 	s.NoError(err)
 	req := &workflowservice.RespondActivityTaskCanceledRequest{
@@ -597,8 +600,8 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCompleted() {
 	apiName := "RespondActivityTaskCompleted"
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
-		ScheduleAttempt: 1,
-		NamespaceId:     s.namespaceID.String(),
+		Attempt:     1,
+		NamespaceId: s.namespaceID.String(),
 	})
 	s.NoError(err)
 	req := &workflowservice.RespondActivityTaskCompletedRequest{
@@ -648,8 +651,8 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailed() {
 	apiName := "RespondActivityTaskFailed"
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
-		ScheduleAttempt: 1,
-		NamespaceId:     s.namespaceID.String(),
+		Attempt:     1,
+		NamespaceId: s.namespaceID.String(),
 	})
 	s.NoError(err)
 	req := &workflowservice.RespondActivityTaskFailedRequest{
@@ -699,8 +702,8 @@ func (s *dcRedirectionHandlerSuite) TestRespondWorkflowTaskCompleted() {
 	apiName := "RespondWorkflowTaskCompleted"
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
-		ScheduleAttempt: 1,
-		NamespaceId:     s.namespaceID.String(),
+		Attempt:     1,
+		NamespaceId: s.namespaceID.String(),
 	})
 	s.NoError(err)
 	req := &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -727,8 +730,8 @@ func (s *dcRedirectionHandlerSuite) TestRespondWorkflowTaskFailed() {
 	apiName := "RespondWorkflowTaskFailed"
 
 	token, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
-		ScheduleAttempt: 1,
-		NamespaceId:     s.namespaceID.String(),
+		Attempt:     1,
+		NamespaceId: s.namespaceID.String(),
 	})
 	s.NoError(err)
 	req := &workflowservice.RespondWorkflowTaskFailedRequest{

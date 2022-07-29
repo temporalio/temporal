@@ -177,7 +177,7 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 			return nil, serviceerror.NewNamespaceAlreadyExists(msg)
 		}
 
-		return nil, serviceerror.NewNamespaceAlreadyExists(fmt.Sprintf("CreateNamespace operation failed because of conditional failure."))
+		return nil, serviceerror.NewNamespaceAlreadyExists("CreateNamespace operation failed because of conditional failure.")
 	}
 
 	return &p.CreateNamespaceResponse{ID: request.ID}, nil
@@ -206,7 +206,7 @@ func (m *MetadataStore) UpdateNamespace(
 	defer func() { _ = iter.Close() }()
 
 	if !applied {
-		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateNamespace operation failed because of conditional failure."))
+		return serviceerror.NewUnavailable("UpdateNamespace operation failed because of conditional failure.")
 	}
 
 	return nil
@@ -259,7 +259,7 @@ func (m *MetadataStore) RenameNamespace(
 	defer func() { _ = iter.Close() }()
 
 	if !applied {
-		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed because of conditional failure."))
+		return serviceerror.NewUnavailable("RenameNamespace operation failed because of conditional failure.")
 	}
 
 	return nil

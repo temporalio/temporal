@@ -313,7 +313,7 @@ func (s *TaskSerializer) transferActivityTaskToProto(
 		TargetRunId:             "",
 		TargetChildWorkflowOnly: false,
 		TaskQueue:               activityTask.TaskQueue,
-		ScheduleId:              activityTask.ScheduleID,
+		ScheduledEventId:        activityTask.ScheduledEventID,
 		Version:                 activityTask.Version,
 		TaskId:                  activityTask.TaskID,
 		VisibilityTime:          timestamp.TimePtr(activityTask.VisibilityTimestamp),
@@ -332,7 +332,7 @@ func (s *TaskSerializer) transferActivityTaskFromProto(
 		VisibilityTimestamp: *activityTask.VisibilityTime,
 		TaskID:              activityTask.TaskId,
 		TaskQueue:           activityTask.TaskQueue,
-		ScheduleID:          activityTask.ScheduleId,
+		ScheduledEventID:    activityTask.ScheduledEventId,
 		Version:             activityTask.Version,
 	}
 }
@@ -350,7 +350,7 @@ func (s *TaskSerializer) transferWorkflowTaskToProto(
 		TargetRunId:             "",
 		TargetChildWorkflowOnly: false,
 		TaskQueue:               workflowTask.TaskQueue,
-		ScheduleId:              workflowTask.ScheduleID,
+		ScheduledEventId:        workflowTask.ScheduledEventID,
 		Version:                 workflowTask.Version,
 		TaskId:                  workflowTask.TaskID,
 		VisibilityTime:          timestamp.TimePtr(workflowTask.VisibilityTimestamp),
@@ -369,7 +369,7 @@ func (s *TaskSerializer) transferWorkflowTaskFromProto(
 		VisibilityTimestamp: *workflowTask.VisibilityTime,
 		TaskID:              workflowTask.TaskId,
 		TaskQueue:           workflowTask.TaskQueue,
-		ScheduleID:          workflowTask.ScheduleId,
+		ScheduledEventID:    workflowTask.ScheduledEventId,
 		Version:             workflowTask.Version,
 	}
 }
@@ -387,7 +387,7 @@ func (s *TaskSerializer) transferRequestCancelTaskToProto(
 		TargetRunId:             requestCancelTask.TargetRunID,
 		TargetChildWorkflowOnly: requestCancelTask.TargetChildWorkflowOnly,
 		TaskQueue:               "",
-		ScheduleId:              requestCancelTask.InitiatedID,
+		ScheduledEventId:        requestCancelTask.InitiatedEventID,
 		Version:                 requestCancelTask.Version,
 		TaskId:                  requestCancelTask.TaskID,
 		VisibilityTime:          timestamp.TimePtr(requestCancelTask.VisibilityTimestamp),
@@ -409,7 +409,7 @@ func (s *TaskSerializer) transferRequestCancelTaskFromProto(
 		TargetWorkflowID:        requestCancelTask.TargetWorkflowId,
 		TargetRunID:             requestCancelTask.TargetRunId,
 		TargetChildWorkflowOnly: requestCancelTask.TargetChildWorkflowOnly,
-		InitiatedID:             requestCancelTask.ScheduleId,
+		InitiatedEventID:        requestCancelTask.ScheduledEventId,
 		Version:                 requestCancelTask.Version,
 	}
 }
@@ -427,7 +427,7 @@ func (s *TaskSerializer) transferSignalTaskToProto(
 		TargetRunId:             signalTask.TargetRunID,
 		TargetChildWorkflowOnly: signalTask.TargetChildWorkflowOnly,
 		TaskQueue:               "",
-		ScheduleId:              signalTask.InitiatedID,
+		ScheduledEventId:        signalTask.InitiatedEventID,
 		Version:                 signalTask.Version,
 		TaskId:                  signalTask.TaskID,
 		VisibilityTime:          timestamp.TimePtr(signalTask.VisibilityTimestamp),
@@ -449,7 +449,7 @@ func (s *TaskSerializer) transferSignalTaskFromProto(
 		TargetWorkflowID:        signalTask.TargetWorkflowId,
 		TargetRunID:             signalTask.TargetRunId,
 		TargetChildWorkflowOnly: signalTask.TargetChildWorkflowOnly,
-		InitiatedID:             signalTask.ScheduleId,
+		InitiatedEventID:        signalTask.ScheduledEventId,
 		Version:                 signalTask.Version,
 	}
 }
@@ -467,7 +467,7 @@ func (s *TaskSerializer) transferChildWorkflowTaskToProto(
 		TargetRunId:             "",
 		TargetChildWorkflowOnly: false,
 		TaskQueue:               "",
-		ScheduleId:              childWorkflowTask.InitiatedID,
+		ScheduledEventId:        childWorkflowTask.InitiatedEventID,
 		Version:                 childWorkflowTask.Version,
 		TaskId:                  childWorkflowTask.TaskID,
 		VisibilityTime:          timestamp.TimePtr(childWorkflowTask.VisibilityTimestamp),
@@ -487,7 +487,7 @@ func (s *TaskSerializer) transferChildWorkflowTaskFromProto(
 		TaskID:              signalTask.TaskId,
 		TargetNamespaceID:   signalTask.TargetNamespaceId,
 		TargetWorkflowID:    signalTask.TargetWorkflowId,
-		InitiatedID:         signalTask.ScheduleId,
+		InitiatedEventID:    signalTask.ScheduledEventId,
 		Version:             signalTask.Version,
 	}
 }
@@ -505,7 +505,7 @@ func (s *TaskSerializer) transferCloseTaskToProto(
 		TargetRunId:             "",
 		TargetChildWorkflowOnly: false,
 		TaskQueue:               "",
-		ScheduleId:              0,
+		ScheduledEventId:        0,
 		Version:                 closeTask.Version,
 		TaskId:                  closeTask.TaskID,
 		VisibilityTime:          timestamp.TimePtr(closeTask.VisibilityTimestamp),
@@ -542,7 +542,7 @@ func (s *TaskSerializer) transferResetTaskToProto(
 		TargetRunId:             "",
 		TargetChildWorkflowOnly: false,
 		TaskQueue:               "",
-		ScheduleId:              0,
+		ScheduledEventId:        0,
 		Version:                 resetTask.Version,
 		TaskId:                  resetTask.TaskID,
 		VisibilityTime:          timestamp.TimePtr(resetTask.VisibilityTimestamp),
@@ -572,7 +572,6 @@ func (s *TaskSerializer) transferDeleteExecutionTaskToProto(
 		WorkflowId:     deleteExecutionTask.WorkflowKey.WorkflowID,
 		RunId:          deleteExecutionTask.WorkflowKey.RunID,
 		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
-		Version:        deleteExecutionTask.Version,
 		TaskId:         deleteExecutionTask.TaskID,
 		VisibilityTime: timestamp.TimePtr(deleteExecutionTask.VisibilityTimestamp),
 	}
@@ -589,7 +588,6 @@ func (s *TaskSerializer) transferDeleteExecutionTaskFromProto(
 		),
 		VisibilityTimestamp: *deleteExecutionTask.VisibilityTime,
 		TaskID:              deleteExecutionTask.TaskId,
-		Version:             deleteExecutionTask.Version,
 	}
 }
 
@@ -931,7 +929,6 @@ func (s *TaskSerializer) visibilityDeleteTaskToProto(
 		WorkflowId:     deleteVisibilityTask.WorkflowKey.WorkflowID,
 		RunId:          deleteVisibilityTask.WorkflowKey.RunID,
 		TaskType:       enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
-		Version:        deleteVisibilityTask.Version,
 		TaskId:         deleteVisibilityTask.TaskID,
 		VisibilityTime: &deleteVisibilityTask.VisibilityTimestamp,
 		StartTime:      deleteVisibilityTask.StartTime,
@@ -950,7 +947,6 @@ func (s *TaskSerializer) visibilityDeleteTaskFromProto(
 		),
 		VisibilityTimestamp: *deleteVisibilityTask.VisibilityTime,
 		TaskID:              deleteVisibilityTask.TaskId,
-		Version:             deleteVisibilityTask.Version,
 		StartTime:           deleteVisibilityTask.StartTime,
 		CloseTime:           deleteVisibilityTask.CloseTime,
 	}
@@ -966,7 +962,7 @@ func (s *TaskSerializer) replicationActivityTaskToProto(
 		TaskType:          enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
 		TaskId:            activityTask.TaskID,
 		Version:           activityTask.Version,
-		ScheduledId:       activityTask.ScheduledID,
+		ScheduledEventId:  activityTask.ScheduledEventID,
 		FirstEventId:      0,
 		NextEventId:       0,
 		BranchToken:       nil,
@@ -991,7 +987,7 @@ func (s *TaskSerializer) replicationActivityTaskFromProto(
 		VisibilityTimestamp: visibilityTimestamp,
 		Version:             activityTask.Version,
 		TaskID:              activityTask.TaskId,
-		ScheduledID:         activityTask.ScheduledId,
+		ScheduledEventID:    activityTask.ScheduledEventId,
 	}
 }
 
@@ -1005,7 +1001,7 @@ func (s *TaskSerializer) replicationHistoryTaskToProto(
 		TaskType:          enumsspb.TASK_TYPE_REPLICATION_HISTORY,
 		TaskId:            historyTask.TaskID,
 		Version:           historyTask.Version,
-		ScheduledId:       0,
+		ScheduledEventId:  0,
 		FirstEventId:      historyTask.FirstEventID,
 		NextEventId:       historyTask.NextEventID,
 		BranchToken:       historyTask.BranchToken,

@@ -56,8 +56,8 @@ message Task {
     string namespace_id = 1;
     string workflow_id  = 2;
     string run_id = 3;
-    int64 schedule_id = 4;
-    int32 schedule_attempt = 5;
+    int64 scheduled_event_id = 4;
+    int32 attempt = 5;
     string activity_id = 6;
     string workflow_type = 7;
     string activity_type = 8;

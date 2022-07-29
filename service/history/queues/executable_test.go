@@ -33,6 +33,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/clock"
@@ -95,10 +96,10 @@ func (s *executableSuite) TestExecute_TaskExecuted() {
 		return true
 	})
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(metrics.NoopScope, errors.New("some random error"))
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(metrics.NoopMetricsHandler, errors.New("some random error"))
 	s.Error(executable.Execute())
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(metrics.NoopScope, nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(metrics.NoopMetricsHandler, nil)
 	s.NoError(executable.Execute())
 }
 
@@ -112,7 +113,7 @@ func (s *executableSuite) TestExecute_UserLatency() {
 		metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency, expectedUserLatency)
 	}
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(metrics.NoopScope, nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(metrics.NoopMetricsHandler, nil)
 	s.NoError(executable.Execute())
 	s.Equal(time.Duration(expectedUserLatency), executable.(*executableImpl).userLatency)
 }
@@ -194,10 +195,30 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 		return true
 	})
 
-	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Second))
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now()))
 
 	executable.Nack(consts.ErrTaskRetry) // this error won't trigger re-submit
 	s.Equal(ctasks.TaskStatePending, executable.State())
+}
+
+func (s *executableSuite) TestTaskCancellation() {
+	executable := s.newTestExecutable(func(_ tasks.Task) bool {
+		return true
+	})
+
+	executable.Cancel()
+
+	s.NoError(executable.Execute()) // should be no-op and won't invoke executor
+
+	executable.Ack() // should be no-op
+	s.Equal(ctasks.TaskStateCancelled, executable.State())
+
+	executable.Nack(errors.New("some random error")) // should be no-op and won't invoke scheduler or rescheduler
+
+	executable.Reschedule() // should be no-op and won't invoke rescheduler
+
+	// all error should be treated as non-retryable to break retry loop
+	s.False(executable.IsRetryableError(errors.New("some random error")))
 }
 
 func (s *executableSuite) newTestExecutable(
@@ -211,7 +232,7 @@ func (s *executableSuite) newTestExecutable(
 				tests.RunID,
 			),
 			tasks.CategoryTransfer,
-			time.Now(),
+			s.timeSource.Now(),
 		),
 		filter,
 		s.mockExecutor,

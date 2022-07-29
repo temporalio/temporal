@@ -32,6 +32,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -39,6 +40,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -66,11 +68,9 @@ func TestTimerQueueTaskExecutorBaseSuite(t *testing.T) {
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) SetupSuite() {
-
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TearDownSuite() {
-
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
@@ -87,7 +87,8 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: 0,
 				RangeId: 1,
-			}},
+			},
+		},
 		config,
 	)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -98,6 +99,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		s.mockDeleteManager,
 		nil,
 		s.testShardContext.GetLogger(),
+		metrics.NoopMetricsHandler,
 		config,
 	)
 }
@@ -141,7 +143,6 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 		we,
 		mockWeCtx,
 		mockMutableState,
-		int64(123),
 	).Return(nil)
 
 	err := s.timerQueueTaskExecutorBase.executeDeleteHistoryEventTask(
@@ -185,7 +186,6 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 		we,
 		mockWeCtx,
 		mockMutableState,
-		int64(123),
 	).Return(serviceerror.NewInternal("test error"))
 
 	err := s.timerQueueTaskExecutorBase.executeDeleteHistoryEventTask(

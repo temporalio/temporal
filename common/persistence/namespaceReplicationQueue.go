@@ -28,7 +28,6 @@ package persistence
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -103,13 +102,23 @@ type (
 	// NamespaceReplicationQueue is used to publish and list namespace replication tasks
 	NamespaceReplicationQueue interface {
 		common.Daemon
-		Publish(ctx context.Context, message interface{}) error
-		GetReplicationMessages(ctx context.Context, lastMessageID int64, maxCount int) ([]*replicationspb.ReplicationTask, int64, error)
+		Publish(ctx context.Context, task *replicationspb.ReplicationTask) error
+		GetReplicationMessages(
+			ctx context.Context,
+			lastMessageID int64,
+			maxCount int,
+		) ([]*replicationspb.ReplicationTask, int64, error)
 		UpdateAckLevel(ctx context.Context, lastProcessedMessageID int64, clusterName string) error
 		GetAckLevels(ctx context.Context) (map[string]int64, error)
 
-		PublishToDLQ(ctx context.Context, message interface{}) error
-		GetMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*replicationspb.ReplicationTask, []byte, error)
+		PublishToDLQ(ctx context.Context, task *replicationspb.ReplicationTask) error
+		GetMessagesFromDLQ(
+			ctx context.Context,
+			firstMessageID int64,
+			lastMessageID int64,
+			pageSize int,
+			pageToken []byte,
+		) ([]*replicationspb.ReplicationTask, []byte, error)
 		UpdateDLQAckLevel(ctx context.Context, lastProcessedMessageID int64) error
 		GetDLQAckLevel(ctx context.Context) (int64, error)
 
@@ -132,15 +141,7 @@ func (q *namespaceReplicationQueueImpl) Stop() {
 	close(q.done)
 }
 
-func (q *namespaceReplicationQueueImpl) Publish(
-	ctx context.Context,
-	message interface{},
-) error {
-	task, ok := message.(*replicationspb.ReplicationTask)
-	if !ok {
-		return errors.New("wrong message type")
-	}
-
+func (q *namespaceReplicationQueueImpl) Publish(ctx context.Context, task *replicationspb.ReplicationTask) error {
 	blob, err := q.serializer.ReplicationTaskToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
@@ -148,15 +149,7 @@ func (q *namespaceReplicationQueueImpl) Publish(
 	return q.queue.EnqueueMessage(ctx, *blob)
 }
 
-func (q *namespaceReplicationQueueImpl) PublishToDLQ(
-	ctx context.Context,
-	message interface{},
-) error {
-	task, ok := message.(*replicationspb.ReplicationTask)
-	if !ok {
-		return errors.New("wrong message type")
-	}
-
+func (q *namespaceReplicationQueueImpl) PublishToDLQ(ctx context.Context, task *replicationspb.ReplicationTask) error {
 	blob, err := q.serializer.ReplicationTaskToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
@@ -232,19 +225,22 @@ func (q *namespaceReplicationQueueImpl) updateAckLevel(
 	clusterName string,
 	isDLQ bool,
 ) error {
-	var err error
+	var ackLevelErr error
 	var internalMetadata *InternalQueueMetadata
 	if isDLQ {
-		internalMetadata, err = q.queue.GetDLQAckLevels(ctx)
+		internalMetadata, ackLevelErr = q.queue.GetDLQAckLevels(ctx)
 	} else {
-		internalMetadata, err = q.queue.GetAckLevels(ctx)
+		internalMetadata, ackLevelErr = q.queue.GetAckLevels(ctx)
 	}
 
-	if err != nil {
-		return err
+	if ackLevelErr != nil {
+		return ackLevelErr
 	}
 
 	ackLevels, err := q.ackLevelsFromBlob(internalMetadata.Blob)
+	if err != nil {
+		return err
+	}
 
 	// Ignore possibly delayed message
 	if ack, ok := ackLevels[clusterName]; ok && ack > lastProcessedMessageID {

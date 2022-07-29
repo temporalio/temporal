@@ -92,6 +92,15 @@ type (
 	workflowTaskResponseMutation func(
 		resp *historyservice.RespondWorkflowTaskCompletedResponse,
 	) error
+
+	commandPostAction func(
+		ctx context.Context,
+	) (workflowTaskResponseMutation, error)
+
+	handleCommandResponse struct {
+		workflowTaskResponseMutation workflowTaskResponseMutation
+		commandPostAction            commandPostAction
+	}
 )
 
 func newWorkflowTaskHandler(
@@ -146,8 +155,24 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 	}
 
 	var mutations []workflowTaskResponseMutation
+	var postActions []commandPostAction
 	for _, command := range commands {
-		mutation, err := handler.handleCommand(ctx, command)
+		response, err := handler.handleCommand(ctx, command)
+		if err != nil || handler.stopProcessing {
+			return nil, err
+		}
+		if response != nil {
+			if response.workflowTaskResponseMutation != nil {
+				mutations = append(mutations, response.workflowTaskResponseMutation)
+			}
+			if response.commandPostAction != nil {
+				postActions = append(postActions, response.commandPostAction)
+			}
+		}
+	}
+
+	for _, postAction := range postActions {
+		mutation, err := postAction(ctx)
 		if err != nil || handler.stopProcessing {
 			return nil, err
 		}
@@ -155,10 +180,11 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 			mutations = append(mutations, mutation)
 		}
 	}
+
 	return mutations, nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommand(ctx context.Context, command *commandpb.Command) (workflowTaskResponseMutation, error) {
+func (handler *workflowTaskHandlerImpl) handleCommand(ctx context.Context, command *commandpb.Command) (*handleCommandResponse, error) {
 	switch command.GetCommandType() {
 	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
 		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
@@ -207,7 +233,7 @@ func (handler *workflowTaskHandlerImpl) handleCommand(ctx context.Context, comma
 func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	_ context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
-) (workflowTaskResponseMutation, error) {
+) (*handleCommandResponse, error) {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
@@ -241,16 +267,16 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 
 	enums.SetDefaultTaskQueueKind(&attr.GetTaskQueue().Kind)
 
-	localDispatchActivity := false
+	eagerStartActivity := false
 	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
-	if attr.RequestEagerExecution && handler.config.EnableActivityLocalDispatch(namespace) {
-		localDispatchActivity = true
+	if attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) {
+		eagerStartActivity = true
 	}
 
-	event, ai, err := handler.mutableState.AddActivityTaskScheduledEvent(
+	_, _, err = handler.mutableState.AddActivityTaskScheduledEvent(
 		handler.workflowTaskCompletedID,
 		attr,
-		localDispatchActivity,
+		eagerStartActivity,
 	)
 	if err != nil {
 		if _, ok := err.(*serviceerror.InvalidArgument); ok {
@@ -259,61 +285,89 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 		return nil, err
 	}
 
-	if !localDispatchActivity {
+	if !eagerStartActivity {
+		return &handleCommandResponse{}, nil
+	}
+
+	return &handleCommandResponse{
+		commandPostAction: func(ctx context.Context) (workflowTaskResponseMutation, error) {
+			return handler.handlePostCommandEagerExecuteActivity(ctx, attr)
+		},
+	}, nil
+}
+
+func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
+	_ context.Context,
+	attr *commandpb.ScheduleActivityTaskCommandAttributes,
+) (workflowTaskResponseMutation, error) {
+	ai, ok := handler.mutableState.GetActivityByActivityID(attr.ActivityId)
+	if !ok {
+		// activity cancelled in the same worflow task
 		return nil, nil
 	}
 
 	if _, err := handler.mutableState.AddActivityTaskStartedEvent(
 		ai,
-		event.GetEventId(),
+		ai.GetScheduledEventId(),
 		uuid.New(),
 		handler.identity,
 	); err != nil {
 		return nil, err
 	}
-	return func(resp *historyservice.RespondWorkflowTaskCompletedResponse) error {
-		runID := handler.mutableState.GetExecutionState().RunId
-		attr := event.GetActivityTaskScheduledEventAttributes()
 
-		shardClock, err := handler.shard.NewVectorClock()
-		if err != nil {
-			return err
-		}
-		taskToken := &tokenspb.Task{
-			NamespaceId:     namespaceID.String(),
-			WorkflowId:      executionInfo.WorkflowId,
-			RunId:           runID,
-			ScheduleId:      event.EventId,
-			ScheduleAttempt: ai.Attempt,
-			ActivityId:      attr.ActivityId,
-			ActivityType:    attr.ActivityType.GetName(),
-			Clock:           shardClock,
-		}
-		serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
-		if err != nil {
-			return err
-		}
-		activityTask := &workflowservice.PollActivityTaskQueueResponse{
-			ActivityId:   attr.ActivityId,
-			ActivityType: attr.ActivityType,
-			Header:       attr.Header,
-			Input:        attr.Input,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: executionInfo.WorkflowId,
-				RunId:      runID,
-			},
-			CurrentAttemptScheduledTime: ai.ScheduledTime,
-			ScheduledTime:               event.EventTime,
-			ScheduleToCloseTimeout:      attr.ScheduleToCloseTimeout,
-			StartedTime:                 ai.StartedTime,
-			StartToCloseTimeout:         attr.StartToCloseTimeout,
-			HeartbeatTimeout:            attr.HeartbeatTimeout,
-			TaskToken:                   serializedToken,
-			Attempt:                     ai.Attempt,
-			HeartbeatDetails:            ai.LastHeartbeatDetails,
-			WorkflowType:                handler.mutableState.GetWorkflowType(),
-			WorkflowNamespace:           namespace,
-		}
+	executionInfo := handler.mutableState.GetExecutionInfo()
+	namespaceID := namespace.ID(executionInfo.NamespaceId)
+	runID := handler.mutableState.GetExecutionState().RunId
+
+	shardClock, err := handler.shard.NewVectorClock()
+	if err != nil {
+		return nil, err
+	}
+
+	taskToken := &tokenspb.Task{
+		NamespaceId:      namespaceID.String(),
+		WorkflowId:       executionInfo.WorkflowId,
+		RunId:            runID,
+		ScheduledEventId: ai.GetScheduledEventId(),
+		Attempt:          ai.Attempt,
+		ActivityId:       attr.ActivityId,
+		ActivityType:     attr.ActivityType.GetName(),
+		Clock:            shardClock,
+	}
+	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
+	if err != nil {
+		return nil, err
+	}
+
+	activityTask := &workflowservice.PollActivityTaskQueueResponse{
+		ActivityId:   attr.ActivityId,
+		ActivityType: attr.ActivityType,
+		Header:       attr.Header,
+		Input:        attr.Input,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: executionInfo.WorkflowId,
+			RunId:      runID,
+		},
+		CurrentAttemptScheduledTime: ai.ScheduledTime,
+		ScheduledTime:               ai.ScheduledTime,
+		ScheduleToCloseTimeout:      attr.ScheduleToCloseTimeout,
+		StartedTime:                 ai.StartedTime,
+		StartToCloseTimeout:         attr.StartToCloseTimeout,
+		HeartbeatTimeout:            attr.HeartbeatTimeout,
+		TaskToken:                   serializedToken,
+		Attempt:                     ai.Attempt,
+		HeartbeatDetails:            ai.LastHeartbeatDetails,
+		WorkflowType:                handler.mutableState.GetWorkflowType(),
+		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
+	}
+
+	handler.metricsClient.Scope(
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
+		metrics.NamespaceTag(string(handler.mutableState.GetNamespaceEntry().Name())),
+		metrics.TaskQueueTag(ai.TaskQueue),
+	).IncCounter(metrics.ActivityEagerExecutionCounter)
+
+	return func(resp *historyservice.RespondWorkflowTaskCompletedResponse) error {
 		resp.ActivityTasks = append(resp.ActivityTasks, activityTask)
 		return nil
 	}, nil
@@ -337,10 +391,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 		return err
 	}
 
-	scheduleID := attr.GetScheduledEventId()
+	scheduledEventID := attr.GetScheduledEventId()
 	actCancelReqEvent, ai, err := handler.mutableState.AddActivityTaskCancelRequestedEvent(
 		handler.workflowTaskCompletedID,
-		scheduleID,
+		scheduledEventID,
 		handler.identity,
 	)
 	if err != nil {
@@ -353,12 +407,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 		// If ai is nil, the activity has already been canceled/completed/timedout. The cancel request
 		// will be recorded in the history, but no further action will be taken.
 
-		if ai.StartedId == common.EmptyEventID {
+		if ai.StartedEventId == common.EmptyEventID {
 			// We haven't started the activity yet, we can cancel the activity right away and
 			// schedule a workflow task to ensure the workflow makes progress.
 			_, err = handler.mutableState.AddActivityTaskCanceledEvent(
-				ai.ScheduleId,
-				ai.StartedId,
+				ai.ScheduledEventId,
+				ai.StartedEventId,
 				actCancelReqEvent.GetEventId(),
 				payloads.EncodeString(activityCancellationMsgActivityNotStarted),
 				handler.identity,

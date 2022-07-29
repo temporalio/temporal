@@ -75,7 +75,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 	clusterName string,
 ) (int64, error) {
 
-	engine, err := t.shard.GetEngine()
+	engine, err := t.shard.GetEngine(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -113,7 +113,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	clusterName string,
 ) (int64, int64, int64, error) {
 
-	engine, err := t.shard.GetEngine()
+	engine, err := t.shard.GetEngine(ctx)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -169,7 +169,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	clusterName string,
 ) (int64, int64, error) {
 
-	engine, err := t.shard.GetEngine()
+	engine, err := t.shard.GetEngine(ctx)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -210,7 +210,7 @@ func (t *TransactionImpl) SetWorkflowExecution(
 	clusterName string,
 ) error {
 
-	engine, err := t.shard.GetEngine()
+	engine, err := t.shard.GetEngine(ctx)
 	if err != nil {
 		return err
 	}
@@ -332,7 +332,7 @@ func appendHistoryV2EventsWithRetry(
 		return err
 	}
 
-	err := backoff.RetryContext(
+	err := backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
@@ -354,7 +354,7 @@ func createWorkflowExecutionWithRetry(
 		return err
 	}
 
-	err := backoff.RetryContext(
+	err := backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
@@ -404,7 +404,7 @@ func conflictResolveWorkflowExecutionWithRetry(
 		return err
 	}
 
-	err := backoff.RetryContext(
+	err := backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
@@ -464,7 +464,7 @@ func getWorkflowExecutionWithRetry(
 		return err
 	}
 
-	err := backoff.RetryContext(
+	err := backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
@@ -511,7 +511,7 @@ func updateWorkflowExecutionWithRetry(
 		return err
 	}
 
-	err = backoff.RetryContext(
+	err = backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
@@ -570,7 +570,7 @@ func setWorkflowExecutionWithRetry(
 		return err
 	}
 
-	err = backoff.RetryContext(
+	err = backoff.ThrottleRetryContext(
 		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
@@ -645,7 +645,7 @@ func NotifyNewHistorySnapshotEvent(
 	workflowStatus := executionState.Status
 	lastFirstEventID := executionInfo.LastFirstEventId
 	lastFirstEventTxnID := executionInfo.LastFirstEventTxnId
-	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartId
+	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartedEventId
 	nextEventID := workflowSnapshot.NextEventID
 
 	engine.NotifyNewHistoryEvent(events.NewNotification(
@@ -689,7 +689,7 @@ func NotifyNewHistoryMutationEvent(
 	workflowStatus := executionState.Status
 	lastFirstEventID := executionInfo.LastFirstEventId
 	lastFirstEventTxnID := executionInfo.LastFirstEventTxnId
-	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartId
+	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartedEventId
 	nextEventID := workflowMutation.NextEventID
 
 	engine.NotifyNewHistoryEvent(events.NewNotification(

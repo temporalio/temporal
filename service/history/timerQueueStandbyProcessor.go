@@ -67,8 +67,8 @@ func newTimerQueueStandbyProcessor(
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
+	metricProvider metrics.MetricsHandler,
 ) *timerQueueStandbyProcessorImpl {
-
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(clusterName)
 	}
@@ -103,7 +103,7 @@ func newTimerQueueStandbyProcessor(
 			shard.GetNamespaceRegistry(),
 			clientBean,
 			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				engine, err := shard.GetEngine()
+				engine, err := shard.GetEngine(ctx)
 				if err != nil {
 					return err
 				}
@@ -115,6 +115,7 @@ func newTimerQueueStandbyProcessor(
 		),
 		matchingClient,
 		logger,
+		metricProvider,
 		clusterName,
 		config,
 	)
@@ -124,14 +125,15 @@ func newTimerQueueStandbyProcessor(
 	}
 
 	if scheduler == nil {
-		scheduler = newTimerTaskScheduler(shard, logger)
+		scheduler = newTimerTaskScheduler(shard, logger, metricProvider)
 		processor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		metricsClient.Scope(metrics.TimerStandbyQueueProcessorScope),
+		logger,
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationTimerStandbyQueueProcessor)),
 	)
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
@@ -192,7 +194,6 @@ func (t *timerQueueStandbyProcessorImpl) Stop() {
 func (t *timerQueueStandbyProcessorImpl) setCurrentTime(
 	currentTime time.Time,
 ) {
-
 	t.timerGate.SetCurrentTime(currentTime)
 }
 
@@ -200,16 +201,10 @@ func (t *timerQueueStandbyProcessorImpl) getAckLevel() tasks.Key {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getAckLevel()
 }
 
-//nolint:unused
-func (t *timerQueueStandbyProcessorImpl) getReadLevel() tasks.Key {
-	return t.timerQueueProcessorBase.timerQueueAckMgr.getReadLevel()
-}
-
 // NotifyNewTimers - Notify the processor about the new standby timer events arrival.
 // This should be called each time new timer events arrives, otherwise timers maybe fired unexpected.
 func (t *timerQueueStandbyProcessorImpl) notifyNewTimers(
 	timerTasks []tasks.Task,
 ) {
-
 	t.timerQueueProcessorBase.notifyNewTimers(timerTasks)
 }

@@ -680,18 +680,18 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowTaskCompletedEvent(arg0, arg1
 }
 
 // AddWorkflowTaskFailedEvent mocks base method.
-func (m *MockMutableState) AddWorkflowTaskFailedEvent(scheduleEventID, startedEventID int64, cause v11.WorkflowTaskFailedCause, failure *v12.Failure, identity, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowTaskFailedEvent(scheduledEventID, startedEventID int64, cause v11.WorkflowTaskFailedCause, failure *v12.Failure, identity, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowTaskFailedEvent", scheduleEventID, startedEventID, cause, failure, identity, binChecksum, baseRunID, newRunID, forkEventVersion)
+	ret := m.ctrl.Call(m, "AddWorkflowTaskFailedEvent", scheduledEventID, startedEventID, cause, failure, identity, binChecksum, baseRunID, newRunID, forkEventVersion)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddWorkflowTaskFailedEvent indicates an expected call of AddWorkflowTaskFailedEvent.
-func (mr *MockMutableStateMockRecorder) AddWorkflowTaskFailedEvent(scheduleEventID, startedEventID, cause, failure, identity, binChecksum, baseRunID, newRunID, forkEventVersion interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowTaskFailedEvent(scheduledEventID, startedEventID, cause, failure, identity, binChecksum, baseRunID, newRunID, forkEventVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskFailedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskFailedEvent), scheduleEventID, startedEventID, cause, failure, identity, binChecksum, baseRunID, newRunID, forkEventVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskFailedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowTaskFailedEvent), scheduledEventID, startedEventID, cause, failure, identity, binChecksum, baseRunID, newRunID, forkEventVersion)
 }
 
 // AddWorkflowTaskScheduleToStartTimeoutEvent mocks base method.
@@ -857,18 +857,18 @@ func (mr *MockMutableStateMockRecorder) CloseTransactionAsSnapshot(now, transact
 }
 
 // CreateTransientWorkflowTaskEvents mocks base method.
-func (m *MockMutableState) CreateTransientWorkflowTaskEvents(di *WorkflowTaskInfo, identity string) (*v13.HistoryEvent, *v13.HistoryEvent) {
+func (m *MockMutableState) CreateTransientWorkflowTaskEvents(workflowTask *WorkflowTaskInfo, identity string) (*v13.HistoryEvent, *v13.HistoryEvent) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateTransientWorkflowTaskEvents", di, identity)
+	ret := m.ctrl.Call(m, "CreateTransientWorkflowTaskEvents", workflowTask, identity)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(*v13.HistoryEvent)
 	return ret0, ret1
 }
 
 // CreateTransientWorkflowTaskEvents indicates an expected call of CreateTransientWorkflowTaskEvents.
-func (mr *MockMutableStateMockRecorder) CreateTransientWorkflowTaskEvents(di, identity interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) CreateTransientWorkflowTaskEvents(workflowTask, identity interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransientWorkflowTaskEvents", reflect.TypeOf((*MockMutableState)(nil).CreateTransientWorkflowTaskEvents), di, identity)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTransientWorkflowTaskEvents", reflect.TypeOf((*MockMutableState)(nil).CreateTransientWorkflowTaskEvents), workflowTask, identity)
 }
 
 // DeleteSignalRequested mocks base method.
@@ -953,9 +953,9 @@ func (mr *MockMutableStateMockRecorder) GetActivityInfo(arg0 interface{}) *gomoc
 }
 
 // GetActivityInfoWithTimerHeartbeat mocks base method.
-func (m *MockMutableState) GetActivityInfoWithTimerHeartbeat(scheduleEventID int64) (*v110.ActivityInfo, time.Time, bool) {
+func (m *MockMutableState) GetActivityInfoWithTimerHeartbeat(scheduledEventID int64) (*v110.ActivityInfo, time.Time, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetActivityInfoWithTimerHeartbeat", scheduleEventID)
+	ret := m.ctrl.Call(m, "GetActivityInfoWithTimerHeartbeat", scheduledEventID)
 	ret0, _ := ret[0].(*v110.ActivityInfo)
 	ret1, _ := ret[1].(time.Time)
 	ret2, _ := ret[2].(bool)
@@ -963,9 +963,9 @@ func (m *MockMutableState) GetActivityInfoWithTimerHeartbeat(scheduleEventID int
 }
 
 // GetActivityInfoWithTimerHeartbeat indicates an expected call of GetActivityInfoWithTimerHeartbeat.
-func (mr *MockMutableStateMockRecorder) GetActivityInfoWithTimerHeartbeat(scheduleEventID interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) GetActivityInfoWithTimerHeartbeat(scheduledEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityInfoWithTimerHeartbeat", reflect.TypeOf((*MockMutableState)(nil).GetActivityInfoWithTimerHeartbeat), scheduleEventID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityInfoWithTimerHeartbeat", reflect.TypeOf((*MockMutableState)(nil).GetActivityInfoWithTimerHeartbeat), scheduledEventID)
 }
 
 // GetActivityScheduledEvent mocks base method.
@@ -2256,7 +2256,7 @@ func (mr *MockMutableStateMockRecorder) ReplicateWorkflowTaskFailedEvent() *gomo
 }
 
 // ReplicateWorkflowTaskScheduledEvent mocks base method.
-func (m *MockMutableState) ReplicateWorkflowTaskScheduledEvent(arg0, arg1 int64, arg2 *v14.TaskQueue, arg3, arg4 int32, arg5, arg6 *time.Time) (*WorkflowTaskInfo, error) {
+func (m *MockMutableState) ReplicateWorkflowTaskScheduledEvent(arg0, arg1 int64, arg2 *v14.TaskQueue, arg3 *time.Duration, arg4 int32, arg5, arg6 *time.Time) (*WorkflowTaskInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowTaskScheduledEvent", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 	ret0, _ := ret[0].(*WorkflowTaskInfo)

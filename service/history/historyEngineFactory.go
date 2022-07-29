@@ -25,6 +25,7 @@
 package history
 
 import (
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/client"
@@ -53,9 +54,10 @@ type (
 		NewCacheFn                      workflow.NewCacheFn
 		ArchivalClient                  archiver.Client
 		EventSerializer                 serialization.Serializer
-		QueueProcessorFactories         []queues.ProcessorFactory `group:"queueProcessorFactory"`
+		QueueFactories                  []queues.Factory `group:"queueFactory"`
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
+		TracerProvider                  trace.TracerProvider
 	}
 
 	historyEngineFactory struct {
@@ -77,8 +79,9 @@ func (f *historyEngineFactory) CreateEngine(
 		f.NewCacheFn,
 		f.ArchivalClient,
 		f.EventSerializer,
-		f.QueueProcessorFactories,
+		f.QueueFactories,
 		f.ReplicationTaskFetcherFactory,
 		f.ReplicationTaskExecutorProvider,
+		f.TracerProvider,
 	)
 }

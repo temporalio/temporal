@@ -49,8 +49,8 @@ func BenchmarkPriorityMutex_High(b *testing.B) {
 	lock := NewPriorityMutex()
 	ctx := context.Background()
 	for n := 0; n < b.N; n++ {
-		_ = lock.LockHigh(ctx) //nolint:errcheck
-		lock.UnlockHigh()      //nolint:staticcheck
+		_ = lock.LockHigh(ctx)
+		lock.UnlockHigh()
 	}
 }
 
@@ -60,8 +60,8 @@ func BenchmarkPriorityMutex_Low(b *testing.B) {
 	lock := NewPriorityMutex()
 	ctx := context.Background()
 	for n := 0; n < b.N; n++ {
-		_ = lock.LockLow(ctx) //nolint:errcheck
-		lock.UnlockLow()      //nolint:staticcheck
+		_ = lock.LockLow(ctx)
+		lock.UnlockLow()
 	}
 }
 

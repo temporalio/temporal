@@ -45,7 +45,6 @@ import (
 )
 
 const (
-	batcherContextKey = "batcherContext"
 	// BatcherTaskQueueName is the taskqueue name
 	BatcherTaskQueueName = "temporal-sys-batcher-taskqueue"
 	// BatchWFTypeName is the workflow type
@@ -73,9 +72,6 @@ const (
 	// BatchTypeSignal is batch type for signaling workflows
 	BatchTypeSignal = "signal"
 )
-
-// AllBatchTypes is the batch types we supported
-var AllBatchTypes = []string{BatchTypeTerminate, BatchTypeCancel, BatchTypeSignal}
 
 type (
 	// TerminateParams is the parameters for terminating workflow
@@ -151,9 +147,13 @@ type (
 		// passing along the current heartbeat details to make heartbeat within a task so that it won't timeout
 		hbd HeartBeatDetails
 	}
+
+	batcherContextKeyType struct{}
 )
 
 var (
+	batcherContextKey = batcherContextKeyType{}
+
 	batchActivityRetryPolicy = temporal.RetryPolicy{
 		InitialInterval:    10 * time.Second,
 		BackoffCoefficient: 1.7,

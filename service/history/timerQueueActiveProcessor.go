@@ -66,9 +66,9 @@ func newTimerQueueActiveProcessor(
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
+	metricProvider metrics.MetricsHandler,
 	singleProcessor bool,
 ) *timerQueueActiveProcessorImpl {
-
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(currentClusterName)
@@ -91,14 +91,15 @@ func newTimerQueueActiveProcessor(
 	processor := &timerQueueActiveProcessorImpl{}
 
 	if scheduler == nil {
-		scheduler = newTimerTaskScheduler(shard, logger)
+		scheduler = newTimerTaskScheduler(shard, logger, metricProvider)
 		processor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		metricsClient.Scope(metrics.TimerActiveQueueProcessorScope),
+		logger,
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationTimerActiveQueueProcessor)),
 	)
 
 	timerTaskFilter := func(task tasks.Task) bool {
@@ -110,6 +111,7 @@ func newTimerQueueActiveProcessor(
 		workflowDeleteManager,
 		processor,
 		logger,
+		metricProvider,
 		config,
 		matchingClient,
 	)
@@ -132,7 +134,7 @@ func newTimerQueueActiveProcessor(
 					shard.GetNamespaceRegistry(),
 					clientBean,
 					func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-						engine, err := shard.GetEngine()
+						engine, err := shard.GetEngine(ctx)
 						if err != nil {
 							return err
 						}
@@ -144,6 +146,7 @@ func newTimerQueueActiveProcessor(
 				),
 				matchingClient,
 				logger,
+				metricProvider,
 				// note: the cluster name is for calculating time for standby tasks,
 				// here we are basically using current cluster time
 				// this field will be deprecated soon, currently exists so that
@@ -211,8 +214,8 @@ func newTimerQueueFailoverProcessor(
 	taskAllocator taskAllocator,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
+	metricProvider metrics.MetricsHandler,
 ) (func(ackLevel tasks.Key) error, *timerQueueActiveProcessorImpl) {
-
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
 		// should use current cluster's time when doing namespace failover
@@ -256,19 +259,21 @@ func newTimerQueueFailoverProcessor(
 		workflowDeleteManager,
 		processor,
 		logger,
+		metricProvider,
 		shard.GetConfig(),
 		matchingClient,
 	)
 
 	if scheduler == nil {
-		scheduler = newTimerTaskScheduler(shard, logger)
+		scheduler = newTimerTaskScheduler(shard, logger, metricProvider)
 		processor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
+		logger,
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationTimerActiveQueueProcessor)),
 	)
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(

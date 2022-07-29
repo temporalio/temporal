@@ -53,26 +53,26 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type MutableStateChecksumPayload struct {
-	CancelRequested              bool                        `protobuf:"varint,1,opt,name=cancel_requested,json=cancelRequested,proto3" json:"cancel_requested,omitempty"`
-	State                        v1.WorkflowExecutionState   `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.server.api.enums.v1.WorkflowExecutionState" json:"state,omitempty"`
-	Status                       v11.WorkflowExecutionStatus `protobuf:"varint,3,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
-	LastWriteVersion             int64                       `protobuf:"varint,4,opt,name=last_write_version,json=lastWriteVersion,proto3" json:"last_write_version,omitempty"`
-	LastWriteEventId             int64                       `protobuf:"varint,5,opt,name=last_write_event_id,json=lastWriteEventId,proto3" json:"last_write_event_id,omitempty"`
-	LastFirstEventId             int64                       `protobuf:"varint,6,opt,name=last_first_event_id,json=lastFirstEventId,proto3" json:"last_first_event_id,omitempty"`
-	NextEventId                  int64                       `protobuf:"varint,7,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-	LastProcessedEventId         int64                       `protobuf:"varint,8,opt,name=last_processed_event_id,json=lastProcessedEventId,proto3" json:"last_processed_event_id,omitempty"`
-	SignalCount                  int64                       `protobuf:"varint,9,opt,name=signal_count,json=signalCount,proto3" json:"signal_count,omitempty"`
-	WorkflowTaskAttempt          int32                       `protobuf:"varint,10,opt,name=workflow_task_attempt,json=workflowTaskAttempt,proto3" json:"workflow_task_attempt,omitempty"`
-	WorkflowTaskVersion          int64                       `protobuf:"varint,11,opt,name=workflow_task_version,json=workflowTaskVersion,proto3" json:"workflow_task_version,omitempty"`
-	WorkflowTaskScheduledId      int64                       `protobuf:"varint,12,opt,name=workflow_task_scheduled_id,json=workflowTaskScheduledId,proto3" json:"workflow_task_scheduled_id,omitempty"`
-	WorkflowTaskStartedId        int64                       `protobuf:"varint,13,opt,name=workflow_task_started_id,json=workflowTaskStartedId,proto3" json:"workflow_task_started_id,omitempty"`
-	PendingTimerStartedIds       []int64                     `protobuf:"varint,14,rep,packed,name=pending_timer_started_ids,json=pendingTimerStartedIds,proto3" json:"pending_timer_started_ids,omitempty"`
-	PendingActivityScheduledIds  []int64                     `protobuf:"varint,15,rep,packed,name=pending_activity_scheduled_ids,json=pendingActivityScheduledIds,proto3" json:"pending_activity_scheduled_ids,omitempty"`
-	PendingSignalInitiatedIds    []int64                     `protobuf:"varint,16,rep,packed,name=pending_signal_initiated_ids,json=pendingSignalInitiatedIds,proto3" json:"pending_signal_initiated_ids,omitempty"`
-	PendingReqCancelInitiatedIds []int64                     `protobuf:"varint,17,rep,packed,name=pending_req_cancel_initiated_ids,json=pendingReqCancelInitiatedIds,proto3" json:"pending_req_cancel_initiated_ids,omitempty"`
-	PendingChildInitiatedIds     []int64                     `protobuf:"varint,18,rep,packed,name=pending_child_initiated_ids,json=pendingChildInitiatedIds,proto3" json:"pending_child_initiated_ids,omitempty"`
-	StickyTaskQueueName          string                      `protobuf:"bytes,19,opt,name=sticky_task_queue_name,json=stickyTaskQueueName,proto3" json:"sticky_task_queue_name,omitempty"`
-	VersionHistories             *v12.VersionHistories       `protobuf:"bytes,20,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
+	CancelRequested                   bool                        `protobuf:"varint,1,opt,name=cancel_requested,json=cancelRequested,proto3" json:"cancel_requested,omitempty"`
+	State                             v1.WorkflowExecutionState   `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.server.api.enums.v1.WorkflowExecutionState" json:"state,omitempty"`
+	Status                            v11.WorkflowExecutionStatus `protobuf:"varint,3,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
+	LastWriteVersion                  int64                       `protobuf:"varint,4,opt,name=last_write_version,json=lastWriteVersion,proto3" json:"last_write_version,omitempty"`
+	LastWriteEventId                  int64                       `protobuf:"varint,5,opt,name=last_write_event_id,json=lastWriteEventId,proto3" json:"last_write_event_id,omitempty"`
+	LastFirstEventId                  int64                       `protobuf:"varint,6,opt,name=last_first_event_id,json=lastFirstEventId,proto3" json:"last_first_event_id,omitempty"`
+	NextEventId                       int64                       `protobuf:"varint,7,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
+	LastProcessedEventId              int64                       `protobuf:"varint,8,opt,name=last_processed_event_id,json=lastProcessedEventId,proto3" json:"last_processed_event_id,omitempty"`
+	SignalCount                       int64                       `protobuf:"varint,9,opt,name=signal_count,json=signalCount,proto3" json:"signal_count,omitempty"`
+	WorkflowTaskAttempt               int32                       `protobuf:"varint,10,opt,name=workflow_task_attempt,json=workflowTaskAttempt,proto3" json:"workflow_task_attempt,omitempty"`
+	WorkflowTaskVersion               int64                       `protobuf:"varint,11,opt,name=workflow_task_version,json=workflowTaskVersion,proto3" json:"workflow_task_version,omitempty"`
+	WorkflowTaskScheduledEventId      int64                       `protobuf:"varint,12,opt,name=workflow_task_scheduled_event_id,json=workflowTaskScheduledEventId,proto3" json:"workflow_task_scheduled_event_id,omitempty"`
+	WorkflowTaskStartedEventId        int64                       `protobuf:"varint,13,opt,name=workflow_task_started_event_id,json=workflowTaskStartedEventId,proto3" json:"workflow_task_started_event_id,omitempty"`
+	PendingTimerStartedEventIds       []int64                     `protobuf:"varint,14,rep,packed,name=pending_timer_started_event_ids,json=pendingTimerStartedEventIds,proto3" json:"pending_timer_started_event_ids,omitempty"`
+	PendingActivityScheduledEventIds  []int64                     `protobuf:"varint,15,rep,packed,name=pending_activity_scheduled_event_ids,json=pendingActivityScheduledEventIds,proto3" json:"pending_activity_scheduled_event_ids,omitempty"`
+	PendingSignalInitiatedEventIds    []int64                     `protobuf:"varint,16,rep,packed,name=pending_signal_initiated_event_ids,json=pendingSignalInitiatedEventIds,proto3" json:"pending_signal_initiated_event_ids,omitempty"`
+	PendingReqCancelInitiatedEventIds []int64                     `protobuf:"varint,17,rep,packed,name=pending_req_cancel_initiated_event_ids,json=pendingReqCancelInitiatedEventIds,proto3" json:"pending_req_cancel_initiated_event_ids,omitempty"`
+	PendingChildInitiatedEventIds     []int64                     `protobuf:"varint,18,rep,packed,name=pending_child_initiated_event_ids,json=pendingChildInitiatedEventIds,proto3" json:"pending_child_initiated_event_ids,omitempty"`
+	StickyTaskQueueName               string                      `protobuf:"bytes,19,opt,name=sticky_task_queue_name,json=stickyTaskQueueName,proto3" json:"sticky_task_queue_name,omitempty"`
+	VersionHistories                  *v12.VersionHistories       `protobuf:"bytes,20,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
 }
 
 func (m *MutableStateChecksumPayload) Reset()      { *m = MutableStateChecksumPayload{} }
@@ -184,51 +184,51 @@ func (m *MutableStateChecksumPayload) GetWorkflowTaskVersion() int64 {
 	return 0
 }
 
-func (m *MutableStateChecksumPayload) GetWorkflowTaskScheduledId() int64 {
+func (m *MutableStateChecksumPayload) GetWorkflowTaskScheduledEventId() int64 {
 	if m != nil {
-		return m.WorkflowTaskScheduledId
+		return m.WorkflowTaskScheduledEventId
 	}
 	return 0
 }
 
-func (m *MutableStateChecksumPayload) GetWorkflowTaskStartedId() int64 {
+func (m *MutableStateChecksumPayload) GetWorkflowTaskStartedEventId() int64 {
 	if m != nil {
-		return m.WorkflowTaskStartedId
+		return m.WorkflowTaskStartedEventId
 	}
 	return 0
 }
 
-func (m *MutableStateChecksumPayload) GetPendingTimerStartedIds() []int64 {
+func (m *MutableStateChecksumPayload) GetPendingTimerStartedEventIds() []int64 {
 	if m != nil {
-		return m.PendingTimerStartedIds
+		return m.PendingTimerStartedEventIds
 	}
 	return nil
 }
 
-func (m *MutableStateChecksumPayload) GetPendingActivityScheduledIds() []int64 {
+func (m *MutableStateChecksumPayload) GetPendingActivityScheduledEventIds() []int64 {
 	if m != nil {
-		return m.PendingActivityScheduledIds
+		return m.PendingActivityScheduledEventIds
 	}
 	return nil
 }
 
-func (m *MutableStateChecksumPayload) GetPendingSignalInitiatedIds() []int64 {
+func (m *MutableStateChecksumPayload) GetPendingSignalInitiatedEventIds() []int64 {
 	if m != nil {
-		return m.PendingSignalInitiatedIds
+		return m.PendingSignalInitiatedEventIds
 	}
 	return nil
 }
 
-func (m *MutableStateChecksumPayload) GetPendingReqCancelInitiatedIds() []int64 {
+func (m *MutableStateChecksumPayload) GetPendingReqCancelInitiatedEventIds() []int64 {
 	if m != nil {
-		return m.PendingReqCancelInitiatedIds
+		return m.PendingReqCancelInitiatedEventIds
 	}
 	return nil
 }
 
-func (m *MutableStateChecksumPayload) GetPendingChildInitiatedIds() []int64 {
+func (m *MutableStateChecksumPayload) GetPendingChildInitiatedEventIds() []int64 {
 	if m != nil {
-		return m.PendingChildInitiatedIds
+		return m.PendingChildInitiatedEventIds
 	}
 	return nil
 }
@@ -256,53 +256,53 @@ func init() {
 }
 
 var fileDescriptor_c8c4c1fd39c4866b = []byte{
-	// 732 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x94, 0xcd, 0x4e, 0xdb, 0x4e,
-	0x14, 0xc5, 0xe3, 0x7f, 0xfe, 0x50, 0x18, 0xbe, 0x82, 0xc3, 0x87, 0x1b, 0x2a, 0xd7, 0x45, 0x5d,
-	0xa4, 0x2a, 0x38, 0x05, 0x5a, 0x55, 0x15, 0xaa, 0x2a, 0x1a, 0x81, 0x9a, 0x4a, 0xad, 0xa8, 0x41,
-	0x45, 0xaa, 0x54, 0x59, 0x83, 0x7d, 0x49, 0x46, 0x71, 0xec, 0xc4, 0x33, 0x36, 0x64, 0xd7, 0x47,
-	0xe8, 0x23, 0x74, 0xd9, 0x47, 0xe9, 0x92, 0x25, 0xcb, 0x12, 0x36, 0x5d, 0xf2, 0x08, 0xd5, 0x8c,
-	0x3d, 0x24, 0x0e, 0x41, 0xdd, 0x59, 0xf7, 0xfc, 0xce, 0x99, 0xeb, 0x6b, 0xcf, 0x45, 0xeb, 0x0c,
-	0x5a, 0xed, 0x20, 0xc4, 0x5e, 0x85, 0x42, 0x18, 0x43, 0x58, 0xc1, 0x6d, 0x52, 0x71, 0x1a, 0xe0,
-	0x34, 0x69, 0xd4, 0xaa, 0xc4, 0x1b, 0x95, 0x16, 0x50, 0x8a, 0xeb, 0x60, 0xb6, 0xc3, 0x80, 0x05,
-	0xea, 0x43, 0x89, 0x9b, 0x09, 0x6e, 0xe2, 0x36, 0x31, 0x25, 0x6e, 0xc6, 0x1b, 0xa5, 0xc7, 0x37,
-	0x79, 0x3c, 0x08, 0xfc, 0xa8, 0x45, 0x79, 0xca, 0x69, 0x10, 0x36, 0x4f, 0xbc, 0xe0, 0x34, 0x89,
-	0x29, 0xad, 0x8d, 0x3a, 0xb5, 0x41, 0x28, 0x0b, 0xc2, 0xee, 0xad, 0x43, 0x4b, 0x4f, 0x47, 0xd1,
-	0x77, 0x44, 0xaf, 0xfe, 0x98, 0x44, 0x2b, 0x1f, 0x22, 0x86, 0x8f, 0x3d, 0x38, 0x60, 0x98, 0x41,
-	0x35, 0x6d, 0x6e, 0x1f, 0x77, 0xbd, 0x00, 0xbb, 0xea, 0x13, 0x54, 0x70, 0xb0, 0xef, 0x80, 0x67,
-	0x87, 0xd0, 0x89, 0x80, 0x32, 0x70, 0x35, 0xc5, 0x50, 0xca, 0x13, 0xd6, 0x5c, 0x52, 0xb7, 0x64,
-	0x59, 0x7d, 0x8f, 0xc6, 0x28, 0x8f, 0xd0, 0xfe, 0x33, 0x94, 0xf2, 0xec, 0xe6, 0x73, 0x73, 0xd4,
-	0xcb, 0x8b, 0x3e, 0xcc, 0x78, 0xc3, 0x3c, 0x4a, 0xfb, 0xd8, 0x3d, 0x03, 0x27, 0x62, 0x24, 0xf0,
-	0xc5, 0xf1, 0x56, 0x12, 0xa1, 0xee, 0xa1, 0x71, 0xfe, 0x10, 0x51, 0x2d, 0x2f, 0xc2, 0xcc, 0x7e,
-	0xd8, 0xbf, 0x53, 0x22, 0x6a, 0xa5, 0x6e, 0x75, 0x0d, 0xa9, 0x1e, 0xa6, 0xcc, 0x3e, 0x0d, 0x09,
-	0x03, 0x3b, 0x86, 0x90, 0x92, 0xc0, 0xd7, 0xfe, 0x37, 0x94, 0x72, 0xde, 0x2a, 0x70, 0xe5, 0x88,
-	0x0b, 0x9f, 0x93, 0xba, 0xba, 0x8e, 0x8a, 0x03, 0x34, 0xc4, 0xe0, 0x33, 0x9b, 0xb8, 0xda, 0xd8,
-	0x10, 0xbe, 0xcb, 0x85, 0x9a, 0x7b, 0x83, 0x9f, 0x90, 0x90, 0xb2, 0x3e, 0x3e, 0xde, 0xc7, 0xf7,
-	0xb8, 0x22, 0xf1, 0x55, 0x34, 0xe3, 0xc3, 0xd9, 0x00, 0x78, 0x4f, 0x80, 0x53, 0xbc, 0x28, 0x99,
-	0x17, 0x68, 0x59, 0x44, 0xb6, 0xc3, 0xc0, 0x01, 0x4a, 0xc1, 0xed, 0xd3, 0x13, 0x82, 0x5e, 0xe0,
-	0xf2, 0xbe, 0x54, 0xa5, 0xed, 0x11, 0x9a, 0xa6, 0xa4, 0xee, 0x63, 0xcf, 0x76, 0x82, 0xc8, 0x67,
-	0xda, 0x64, 0x92, 0x9c, 0xd4, 0xaa, 0xbc, 0xa4, 0x6e, 0xa2, 0x45, 0xf9, 0xe9, 0x6d, 0x86, 0x69,
-	0xd3, 0xc6, 0x8c, 0x8f, 0x94, 0x69, 0xc8, 0x50, 0xca, 0x63, 0x56, 0x51, 0x8a, 0x87, 0x98, 0x36,
-	0x77, 0x12, 0xe9, 0xb6, 0x47, 0x0e, 0x70, 0x4a, 0xe4, 0x67, 0x3c, 0x72, 0x86, 0xdb, 0xa8, 0x94,
-	0xf5, 0x50, 0xa7, 0x01, 0x6e, 0xe4, 0x81, 0xcb, 0x5f, 0x62, 0x5a, 0x18, 0x97, 0x07, 0x8d, 0x07,
-	0x52, 0xaf, 0xb9, 0xea, 0x4b, 0xa4, 0x0d, 0x99, 0x19, 0x0e, 0x59, 0x62, 0x9d, 0x11, 0xd6, 0xc5,
-	0x8c, 0x35, 0x51, 0x6b, 0xae, 0xfa, 0x0a, 0xdd, 0x6f, 0x83, 0xef, 0x12, 0xbf, 0x6e, 0x33, 0xd2,
-	0x82, 0x70, 0xc0, 0x48, 0xb5, 0x59, 0x23, 0x5f, 0xce, 0x5b, 0x4b, 0x29, 0x70, 0xc8, 0xf5, 0x1b,
-	0x27, 0x55, 0xab, 0x48, 0x97, 0x56, 0xec, 0x30, 0x12, 0x13, 0xd6, 0xcd, 0xf4, 0x4c, 0xb5, 0x39,
-	0xe1, 0x5f, 0x49, 0xa9, 0x9d, 0x14, 0x1a, 0xe8, 0x9b, 0xaa, 0x6f, 0xd0, 0x03, 0x19, 0x92, 0x7e,
-	0x08, 0xe2, 0x13, 0x46, 0xb0, 0x6c, 0xa1, 0x20, 0x22, 0x64, 0x8f, 0x07, 0x02, 0xa9, 0x49, 0x82,
-	0x07, 0xec, 0x21, 0x43, 0x06, 0x84, 0xd0, 0xb1, 0xd3, 0x3b, 0x97, 0x0d, 0x99, 0x17, 0x21, 0xf2,
-	0x20, 0x0b, 0x3a, 0x55, 0x41, 0x65, 0x72, 0x5e, 0x23, 0xd9, 0xa7, 0xed, 0x34, 0x88, 0xe7, 0x0e,
-	0x45, 0xa8, 0x22, 0x42, 0x4b, 0x91, 0x2a, 0x27, 0x32, 0xf6, 0x2d, 0xb4, 0x44, 0x19, 0x71, 0x9a,
-	0xdd, 0x64, 0xfc, 0x9d, 0x08, 0x22, 0xb0, 0x7d, 0xdc, 0x02, 0xad, 0x68, 0x28, 0xe5, 0x49, 0xab,
-	0x98, 0xa8, 0x7c, 0xf8, 0x9f, 0xb8, 0xf6, 0x11, 0xb7, 0x40, 0xfd, 0x8a, 0xe6, 0xd3, 0x1f, 0xc3,
-	0x4e, 0x96, 0x12, 0x01, 0xaa, 0x2d, 0x18, 0x4a, 0x79, 0x6a, 0xf3, 0xd9, 0xc8, 0x25, 0x90, 0xae,
-	0x2e, 0x7e, 0x81, 0xd3, 0xdf, 0xe6, 0x9d, 0xf4, 0x59, 0x85, 0x78, 0xa8, 0xf2, 0xd6, 0x3d, 0xbf,
-	0xd4, 0x73, 0x17, 0x97, 0x7a, 0xee, 0xfa, 0x52, 0x57, 0xbe, 0xf5, 0x74, 0xe5, 0x67, 0x4f, 0x57,
-	0x7e, 0xf5, 0x74, 0xe5, 0xbc, 0xa7, 0x2b, 0xbf, 0x7b, 0xba, 0xf2, 0xa7, 0xa7, 0xe7, 0xae, 0x7b,
-	0xba, 0xf2, 0xfd, 0x4a, 0xcf, 0x9d, 0x5f, 0xe9, 0xb9, 0x8b, 0x2b, 0x3d, 0xf7, 0xc5, 0xac, 0x07,
-	0xfd, 0xb3, 0x49, 0x70, 0xc7, 0xbe, 0xde, 0x96, 0xcf, 0xc7, 0xe3, 0x62, 0x1f, 0x6e, 0xfd, 0x0d,
-	0x00, 0x00, 0xff, 0xff, 0x60, 0xfa, 0xd9, 0x6d, 0xe2, 0x05, 0x00, 0x00,
+	// 729 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x94, 0x4d, 0x4f, 0xdb, 0x48,
+	0x18, 0xc7, 0xe3, 0xcd, 0xc2, 0xc2, 0xf0, 0x16, 0x1c, 0x76, 0xd7, 0x0a, 0xbb, 0x83, 0x41, 0x68,
+	0x95, 0xd5, 0x82, 0xb3, 0xc0, 0xee, 0xa9, 0x27, 0x48, 0x41, 0x80, 0x54, 0x04, 0x06, 0x15, 0xa9,
+	0x52, 0x65, 0x0d, 0xf6, 0x43, 0x32, 0x8a, 0x63, 0x27, 0x9e, 0xb1, 0x21, 0xb7, 0x7e, 0x84, 0x7e,
+	0x8c, 0x7e, 0x94, 0x1e, 0x39, 0x72, 0x2c, 0xe1, 0xd2, 0x4b, 0x25, 0x3e, 0x42, 0x35, 0x63, 0x0f,
+	0x79, 0x45, 0xbd, 0x45, 0xcf, 0xff, 0xf7, 0xfc, 0xe6, 0xcd, 0x79, 0xd0, 0x26, 0x87, 0x66, 0x2b,
+	0x8c, 0x88, 0x5f, 0x61, 0x10, 0x25, 0x10, 0x55, 0x48, 0x8b, 0x56, 0xdc, 0x3a, 0xb8, 0x0d, 0x16,
+	0x37, 0x2b, 0xc9, 0x56, 0xa5, 0x09, 0x8c, 0x91, 0x1a, 0x58, 0xad, 0x28, 0xe4, 0xa1, 0xbe, 0xa2,
+	0x70, 0x2b, 0xc5, 0x2d, 0xd2, 0xa2, 0x96, 0xc2, 0xad, 0x64, 0xab, 0xb4, 0xfe, 0xec, 0x13, 0x22,
+	0x08, 0xe2, 0x26, 0x13, 0x96, 0x9b, 0x30, 0x6a, 0x5c, 0xfb, 0xe1, 0x4d, 0xaa, 0x29, 0x6d, 0x8c,
+	0x5b, 0xb5, 0x4e, 0x19, 0x0f, 0xa3, 0xce, 0xc8, 0xa2, 0xa5, 0x7f, 0xc6, 0xd1, 0x2f, 0xa8, 0xd7,
+	0xbe, 0x4d, 0xa3, 0xe5, 0x37, 0x31, 0x27, 0x57, 0x3e, 0x9c, 0x73, 0xc2, 0xa1, 0x9a, 0x6d, 0xee,
+	0x94, 0x74, 0xfc, 0x90, 0x78, 0xfa, 0xdf, 0xa8, 0xe0, 0x92, 0xc0, 0x05, 0xdf, 0x89, 0xa0, 0x1d,
+	0x03, 0xe3, 0xe0, 0x19, 0x9a, 0xa9, 0x95, 0xa7, 0xec, 0x85, 0xb4, 0x6e, 0xab, 0xb2, 0x7e, 0x8c,
+	0x26, 0x98, 0x50, 0x18, 0x3f, 0x99, 0x5a, 0x79, 0x7e, 0xfb, 0x3f, 0x6b, 0xdc, 0xe1, 0xe5, 0x3e,
+	0xac, 0x64, 0xcb, 0xba, 0xcc, 0xf6, 0xb1, 0x7f, 0x0b, 0x6e, 0xcc, 0x69, 0x18, 0xc8, 0xe5, 0xed,
+	0x54, 0xa1, 0x1f, 0xa0, 0x49, 0xf1, 0x23, 0x66, 0x46, 0x5e, 0xca, 0xac, 0x9e, 0xec, 0xc7, 0x96,
+	0x98, 0xd9, 0x59, 0xb7, 0xbe, 0x81, 0x74, 0x9f, 0x30, 0xee, 0xdc, 0x44, 0x94, 0x83, 0x93, 0x40,
+	0xc4, 0x68, 0x18, 0x18, 0x3f, 0x9b, 0x5a, 0x39, 0x6f, 0x17, 0x44, 0x72, 0x29, 0x82, 0xb7, 0x69,
+	0x5d, 0xdf, 0x44, 0xc5, 0x3e, 0x1a, 0x12, 0x08, 0xb8, 0x43, 0x3d, 0x63, 0x62, 0x08, 0xdf, 0x17,
+	0xc1, 0x91, 0xf7, 0x8c, 0x5f, 0xd3, 0x88, 0xf1, 0x1e, 0x3e, 0xd9, 0xc3, 0x0f, 0x44, 0xa2, 0xf0,
+	0x35, 0x34, 0x17, 0xc0, 0x6d, 0x1f, 0xf8, 0x8b, 0x04, 0x67, 0x44, 0x51, 0x31, 0xff, 0xa3, 0xdf,
+	0xa5, 0xb2, 0x15, 0x85, 0x2e, 0x30, 0x06, 0x5e, 0x8f, 0x9e, 0x92, 0xf4, 0x92, 0x88, 0x4f, 0x55,
+	0xaa, 0xda, 0x56, 0xd1, 0x2c, 0xa3, 0xb5, 0x80, 0xf8, 0x8e, 0x1b, 0xc6, 0x01, 0x37, 0xa6, 0x53,
+	0x73, 0x5a, 0xab, 0x8a, 0x92, 0xbe, 0x8d, 0x7e, 0x55, 0x4f, 0xef, 0x70, 0xc2, 0x1a, 0x0e, 0xe1,
+	0xe2, 0x4a, 0xb9, 0x81, 0x4c, 0xad, 0x3c, 0x61, 0x17, 0x55, 0x78, 0x41, 0x58, 0x63, 0x37, 0x8d,
+	0x46, 0x7b, 0xd4, 0x05, 0xce, 0x48, 0xff, 0x40, 0x8f, 0xba, 0xc3, 0x03, 0x64, 0x0e, 0xf6, 0x30,
+	0xb7, 0x0e, 0x5e, 0xec, 0xf7, 0x1f, 0x65, 0x56, 0xb6, 0xff, 0xd1, 0xdf, 0x7e, 0xae, 0x28, 0x75,
+	0xa4, 0x3d, 0x84, 0x87, 0x3c, 0x9c, 0x44, 0xbc, 0xdf, 0x32, 0x27, 0x2d, 0xa5, 0x01, 0x4b, 0xca,
+	0x28, 0xc7, 0x6b, 0xb4, 0xd2, 0x82, 0xc0, 0xa3, 0x41, 0xcd, 0xe1, 0xb4, 0x09, 0xd1, 0x88, 0x83,
+	0x19, 0xf3, 0x66, 0xbe, 0x9c, 0xb7, 0x97, 0x33, 0xec, 0x42, 0x50, 0x83, 0x12, 0xa6, 0x9f, 0xa0,
+	0x75, 0x65, 0x21, 0x2e, 0xa7, 0x09, 0xe5, 0x9d, 0x31, 0x87, 0x62, 0xc6, 0x82, 0x54, 0x99, 0x19,
+	0xbb, 0x9b, 0xa1, 0xc3, 0x07, 0x63, 0xfa, 0x31, 0x5a, 0x53, 0xbe, 0xec, 0xd1, 0x68, 0x40, 0x39,
+	0x25, 0x83, 0x1b, 0x2b, 0x48, 0x1b, 0xce, 0xc8, 0x73, 0x09, 0x1e, 0x29, 0xee, 0xd9, 0x75, 0x86,
+	0xfe, 0x52, 0xae, 0x08, 0xda, 0x4e, 0xf6, 0x57, 0x1d, 0xe7, 0x5b, 0x94, 0xbe, 0xd5, 0x8c, 0xb6,
+	0xa1, 0x5d, 0x95, 0xec, 0xa8, 0xf2, 0x10, 0x29, 0xc8, 0x71, 0xeb, 0xd4, 0xf7, 0xc6, 0xda, 0x74,
+	0x69, 0xfb, 0x33, 0x03, 0xab, 0x82, 0x1b, 0x35, 0xed, 0xa0, 0xdf, 0x18, 0xa7, 0x6e, 0xa3, 0x93,
+	0x3e, 0x60, 0x3b, 0x86, 0x18, 0x9c, 0x80, 0x34, 0xc1, 0x28, 0x9a, 0x5a, 0x79, 0xda, 0x2e, 0xa6,
+	0xa9, 0x78, 0xb8, 0x33, 0x91, 0x9d, 0x90, 0x26, 0xe8, 0xef, 0xd1, 0x62, 0xf6, 0x95, 0x39, 0xe9,
+	0x84, 0xa3, 0xc0, 0x8c, 0x25, 0x53, 0x2b, 0xcf, 0x6c, 0xff, 0x3b, 0x76, 0xa2, 0x64, 0x73, 0x50,
+	0x4c, 0x83, 0xec, 0x1b, 0x3c, 0x54, 0x7d, 0x76, 0x21, 0x19, 0xaa, 0xec, 0x79, 0x77, 0x0f, 0x38,
+	0x77, 0xff, 0x80, 0x73, 0x4f, 0x0f, 0x58, 0xfb, 0xd0, 0xc5, 0xda, 0xa7, 0x2e, 0xd6, 0x3e, 0x77,
+	0xb1, 0x76, 0xd7, 0xc5, 0xda, 0x97, 0x2e, 0xd6, 0xbe, 0x76, 0x71, 0xee, 0xa9, 0x8b, 0xb5, 0x8f,
+	0x8f, 0x38, 0x77, 0xf7, 0x88, 0x73, 0xf7, 0x8f, 0x38, 0xf7, 0xce, 0xaa, 0x85, 0xbd, 0xb5, 0x69,
+	0xf8, 0xc2, 0xf0, 0x7f, 0xa5, 0x7e, 0x5f, 0x4d, 0xca, 0xe1, 0xba, 0xf3, 0x3d, 0x00, 0x00, 0xff,
+	0xff, 0xe2, 0xf9, 0x6f, 0xc9, 0x2f, 0x06, 0x00, 0x00,
 }
 
 func (this *MutableStateChecksumPayload) Equal(that interface{}) bool {
@@ -357,49 +357,49 @@ func (this *MutableStateChecksumPayload) Equal(that interface{}) bool {
 	if this.WorkflowTaskVersion != that1.WorkflowTaskVersion {
 		return false
 	}
-	if this.WorkflowTaskScheduledId != that1.WorkflowTaskScheduledId {
+	if this.WorkflowTaskScheduledEventId != that1.WorkflowTaskScheduledEventId {
 		return false
 	}
-	if this.WorkflowTaskStartedId != that1.WorkflowTaskStartedId {
+	if this.WorkflowTaskStartedEventId != that1.WorkflowTaskStartedEventId {
 		return false
 	}
-	if len(this.PendingTimerStartedIds) != len(that1.PendingTimerStartedIds) {
+	if len(this.PendingTimerStartedEventIds) != len(that1.PendingTimerStartedEventIds) {
 		return false
 	}
-	for i := range this.PendingTimerStartedIds {
-		if this.PendingTimerStartedIds[i] != that1.PendingTimerStartedIds[i] {
+	for i := range this.PendingTimerStartedEventIds {
+		if this.PendingTimerStartedEventIds[i] != that1.PendingTimerStartedEventIds[i] {
 			return false
 		}
 	}
-	if len(this.PendingActivityScheduledIds) != len(that1.PendingActivityScheduledIds) {
+	if len(this.PendingActivityScheduledEventIds) != len(that1.PendingActivityScheduledEventIds) {
 		return false
 	}
-	for i := range this.PendingActivityScheduledIds {
-		if this.PendingActivityScheduledIds[i] != that1.PendingActivityScheduledIds[i] {
+	for i := range this.PendingActivityScheduledEventIds {
+		if this.PendingActivityScheduledEventIds[i] != that1.PendingActivityScheduledEventIds[i] {
 			return false
 		}
 	}
-	if len(this.PendingSignalInitiatedIds) != len(that1.PendingSignalInitiatedIds) {
+	if len(this.PendingSignalInitiatedEventIds) != len(that1.PendingSignalInitiatedEventIds) {
 		return false
 	}
-	for i := range this.PendingSignalInitiatedIds {
-		if this.PendingSignalInitiatedIds[i] != that1.PendingSignalInitiatedIds[i] {
+	for i := range this.PendingSignalInitiatedEventIds {
+		if this.PendingSignalInitiatedEventIds[i] != that1.PendingSignalInitiatedEventIds[i] {
 			return false
 		}
 	}
-	if len(this.PendingReqCancelInitiatedIds) != len(that1.PendingReqCancelInitiatedIds) {
+	if len(this.PendingReqCancelInitiatedEventIds) != len(that1.PendingReqCancelInitiatedEventIds) {
 		return false
 	}
-	for i := range this.PendingReqCancelInitiatedIds {
-		if this.PendingReqCancelInitiatedIds[i] != that1.PendingReqCancelInitiatedIds[i] {
+	for i := range this.PendingReqCancelInitiatedEventIds {
+		if this.PendingReqCancelInitiatedEventIds[i] != that1.PendingReqCancelInitiatedEventIds[i] {
 			return false
 		}
 	}
-	if len(this.PendingChildInitiatedIds) != len(that1.PendingChildInitiatedIds) {
+	if len(this.PendingChildInitiatedEventIds) != len(that1.PendingChildInitiatedEventIds) {
 		return false
 	}
-	for i := range this.PendingChildInitiatedIds {
-		if this.PendingChildInitiatedIds[i] != that1.PendingChildInitiatedIds[i] {
+	for i := range this.PendingChildInitiatedEventIds {
+		if this.PendingChildInitiatedEventIds[i] != that1.PendingChildInitiatedEventIds[i] {
 			return false
 		}
 	}
@@ -428,13 +428,13 @@ func (this *MutableStateChecksumPayload) GoString() string {
 	s = append(s, "SignalCount: "+fmt.Sprintf("%#v", this.SignalCount)+",\n")
 	s = append(s, "WorkflowTaskAttempt: "+fmt.Sprintf("%#v", this.WorkflowTaskAttempt)+",\n")
 	s = append(s, "WorkflowTaskVersion: "+fmt.Sprintf("%#v", this.WorkflowTaskVersion)+",\n")
-	s = append(s, "WorkflowTaskScheduledId: "+fmt.Sprintf("%#v", this.WorkflowTaskScheduledId)+",\n")
-	s = append(s, "WorkflowTaskStartedId: "+fmt.Sprintf("%#v", this.WorkflowTaskStartedId)+",\n")
-	s = append(s, "PendingTimerStartedIds: "+fmt.Sprintf("%#v", this.PendingTimerStartedIds)+",\n")
-	s = append(s, "PendingActivityScheduledIds: "+fmt.Sprintf("%#v", this.PendingActivityScheduledIds)+",\n")
-	s = append(s, "PendingSignalInitiatedIds: "+fmt.Sprintf("%#v", this.PendingSignalInitiatedIds)+",\n")
-	s = append(s, "PendingReqCancelInitiatedIds: "+fmt.Sprintf("%#v", this.PendingReqCancelInitiatedIds)+",\n")
-	s = append(s, "PendingChildInitiatedIds: "+fmt.Sprintf("%#v", this.PendingChildInitiatedIds)+",\n")
+	s = append(s, "WorkflowTaskScheduledEventId: "+fmt.Sprintf("%#v", this.WorkflowTaskScheduledEventId)+",\n")
+	s = append(s, "WorkflowTaskStartedEventId: "+fmt.Sprintf("%#v", this.WorkflowTaskStartedEventId)+",\n")
+	s = append(s, "PendingTimerStartedEventIds: "+fmt.Sprintf("%#v", this.PendingTimerStartedEventIds)+",\n")
+	s = append(s, "PendingActivityScheduledEventIds: "+fmt.Sprintf("%#v", this.PendingActivityScheduledEventIds)+",\n")
+	s = append(s, "PendingSignalInitiatedEventIds: "+fmt.Sprintf("%#v", this.PendingSignalInitiatedEventIds)+",\n")
+	s = append(s, "PendingReqCancelInitiatedEventIds: "+fmt.Sprintf("%#v", this.PendingReqCancelInitiatedEventIds)+",\n")
+	s = append(s, "PendingChildInitiatedEventIds: "+fmt.Sprintf("%#v", this.PendingChildInitiatedEventIds)+",\n")
 	s = append(s, "StickyTaskQueueName: "+fmt.Sprintf("%#v", this.StickyTaskQueueName)+",\n")
 	if this.VersionHistories != nil {
 		s = append(s, "VersionHistories: "+fmt.Sprintf("%#v", this.VersionHistories)+",\n")
@@ -493,10 +493,10 @@ func (m *MutableStateChecksumPayload) MarshalToSizedBuffer(dAtA []byte) (int, er
 		i--
 		dAtA[i] = 0x9a
 	}
-	if len(m.PendingChildInitiatedIds) > 0 {
-		dAtA3 := make([]byte, len(m.PendingChildInitiatedIds)*10)
+	if len(m.PendingChildInitiatedEventIds) > 0 {
+		dAtA3 := make([]byte, len(m.PendingChildInitiatedEventIds)*10)
 		var j2 int
-		for _, num1 := range m.PendingChildInitiatedIds {
+		for _, num1 := range m.PendingChildInitiatedEventIds {
 			num := uint64(num1)
 			for num >= 1<<7 {
 				dAtA3[j2] = uint8(uint64(num)&0x7f | 0x80)
@@ -514,10 +514,10 @@ func (m *MutableStateChecksumPayload) MarshalToSizedBuffer(dAtA []byte) (int, er
 		i--
 		dAtA[i] = 0x92
 	}
-	if len(m.PendingReqCancelInitiatedIds) > 0 {
-		dAtA5 := make([]byte, len(m.PendingReqCancelInitiatedIds)*10)
+	if len(m.PendingReqCancelInitiatedEventIds) > 0 {
+		dAtA5 := make([]byte, len(m.PendingReqCancelInitiatedEventIds)*10)
 		var j4 int
-		for _, num1 := range m.PendingReqCancelInitiatedIds {
+		for _, num1 := range m.PendingReqCancelInitiatedEventIds {
 			num := uint64(num1)
 			for num >= 1<<7 {
 				dAtA5[j4] = uint8(uint64(num)&0x7f | 0x80)
@@ -535,10 +535,10 @@ func (m *MutableStateChecksumPayload) MarshalToSizedBuffer(dAtA []byte) (int, er
 		i--
 		dAtA[i] = 0x8a
 	}
-	if len(m.PendingSignalInitiatedIds) > 0 {
-		dAtA7 := make([]byte, len(m.PendingSignalInitiatedIds)*10)
+	if len(m.PendingSignalInitiatedEventIds) > 0 {
+		dAtA7 := make([]byte, len(m.PendingSignalInitiatedEventIds)*10)
 		var j6 int
-		for _, num1 := range m.PendingSignalInitiatedIds {
+		for _, num1 := range m.PendingSignalInitiatedEventIds {
 			num := uint64(num1)
 			for num >= 1<<7 {
 				dAtA7[j6] = uint8(uint64(num)&0x7f | 0x80)
@@ -556,10 +556,10 @@ func (m *MutableStateChecksumPayload) MarshalToSizedBuffer(dAtA []byte) (int, er
 		i--
 		dAtA[i] = 0x82
 	}
-	if len(m.PendingActivityScheduledIds) > 0 {
-		dAtA9 := make([]byte, len(m.PendingActivityScheduledIds)*10)
+	if len(m.PendingActivityScheduledEventIds) > 0 {
+		dAtA9 := make([]byte, len(m.PendingActivityScheduledEventIds)*10)
 		var j8 int
-		for _, num1 := range m.PendingActivityScheduledIds {
+		for _, num1 := range m.PendingActivityScheduledEventIds {
 			num := uint64(num1)
 			for num >= 1<<7 {
 				dAtA9[j8] = uint8(uint64(num)&0x7f | 0x80)
@@ -575,10 +575,10 @@ func (m *MutableStateChecksumPayload) MarshalToSizedBuffer(dAtA []byte) (int, er
 		i--
 		dAtA[i] = 0x7a
 	}
-	if len(m.PendingTimerStartedIds) > 0 {
-		dAtA11 := make([]byte, len(m.PendingTimerStartedIds)*10)
+	if len(m.PendingTimerStartedEventIds) > 0 {
+		dAtA11 := make([]byte, len(m.PendingTimerStartedEventIds)*10)
 		var j10 int
-		for _, num1 := range m.PendingTimerStartedIds {
+		for _, num1 := range m.PendingTimerStartedEventIds {
 			num := uint64(num1)
 			for num >= 1<<7 {
 				dAtA11[j10] = uint8(uint64(num)&0x7f | 0x80)
@@ -594,13 +594,13 @@ func (m *MutableStateChecksumPayload) MarshalToSizedBuffer(dAtA []byte) (int, er
 		i--
 		dAtA[i] = 0x72
 	}
-	if m.WorkflowTaskStartedId != 0 {
-		i = encodeVarintMessage(dAtA, i, uint64(m.WorkflowTaskStartedId))
+	if m.WorkflowTaskStartedEventId != 0 {
+		i = encodeVarintMessage(dAtA, i, uint64(m.WorkflowTaskStartedEventId))
 		i--
 		dAtA[i] = 0x68
 	}
-	if m.WorkflowTaskScheduledId != 0 {
-		i = encodeVarintMessage(dAtA, i, uint64(m.WorkflowTaskScheduledId))
+	if m.WorkflowTaskScheduledEventId != 0 {
+		i = encodeVarintMessage(dAtA, i, uint64(m.WorkflowTaskScheduledEventId))
 		i--
 		dAtA[i] = 0x60
 	}
@@ -717,43 +717,43 @@ func (m *MutableStateChecksumPayload) Size() (n int) {
 	if m.WorkflowTaskVersion != 0 {
 		n += 1 + sovMessage(uint64(m.WorkflowTaskVersion))
 	}
-	if m.WorkflowTaskScheduledId != 0 {
-		n += 1 + sovMessage(uint64(m.WorkflowTaskScheduledId))
+	if m.WorkflowTaskScheduledEventId != 0 {
+		n += 1 + sovMessage(uint64(m.WorkflowTaskScheduledEventId))
 	}
-	if m.WorkflowTaskStartedId != 0 {
-		n += 1 + sovMessage(uint64(m.WorkflowTaskStartedId))
+	if m.WorkflowTaskStartedEventId != 0 {
+		n += 1 + sovMessage(uint64(m.WorkflowTaskStartedEventId))
 	}
-	if len(m.PendingTimerStartedIds) > 0 {
+	if len(m.PendingTimerStartedEventIds) > 0 {
 		l = 0
-		for _, e := range m.PendingTimerStartedIds {
+		for _, e := range m.PendingTimerStartedEventIds {
 			l += sovMessage(uint64(e))
 		}
 		n += 1 + sovMessage(uint64(l)) + l
 	}
-	if len(m.PendingActivityScheduledIds) > 0 {
+	if len(m.PendingActivityScheduledEventIds) > 0 {
 		l = 0
-		for _, e := range m.PendingActivityScheduledIds {
+		for _, e := range m.PendingActivityScheduledEventIds {
 			l += sovMessage(uint64(e))
 		}
 		n += 1 + sovMessage(uint64(l)) + l
 	}
-	if len(m.PendingSignalInitiatedIds) > 0 {
+	if len(m.PendingSignalInitiatedEventIds) > 0 {
 		l = 0
-		for _, e := range m.PendingSignalInitiatedIds {
+		for _, e := range m.PendingSignalInitiatedEventIds {
 			l += sovMessage(uint64(e))
 		}
 		n += 2 + sovMessage(uint64(l)) + l
 	}
-	if len(m.PendingReqCancelInitiatedIds) > 0 {
+	if len(m.PendingReqCancelInitiatedEventIds) > 0 {
 		l = 0
-		for _, e := range m.PendingReqCancelInitiatedIds {
+		for _, e := range m.PendingReqCancelInitiatedEventIds {
 			l += sovMessage(uint64(e))
 		}
 		n += 2 + sovMessage(uint64(l)) + l
 	}
-	if len(m.PendingChildInitiatedIds) > 0 {
+	if len(m.PendingChildInitiatedEventIds) > 0 {
 		l = 0
-		for _, e := range m.PendingChildInitiatedIds {
+		for _, e := range m.PendingChildInitiatedEventIds {
 			l += sovMessage(uint64(e))
 		}
 		n += 2 + sovMessage(uint64(l)) + l
@@ -791,13 +791,13 @@ func (this *MutableStateChecksumPayload) String() string {
 		`SignalCount:` + fmt.Sprintf("%v", this.SignalCount) + `,`,
 		`WorkflowTaskAttempt:` + fmt.Sprintf("%v", this.WorkflowTaskAttempt) + `,`,
 		`WorkflowTaskVersion:` + fmt.Sprintf("%v", this.WorkflowTaskVersion) + `,`,
-		`WorkflowTaskScheduledId:` + fmt.Sprintf("%v", this.WorkflowTaskScheduledId) + `,`,
-		`WorkflowTaskStartedId:` + fmt.Sprintf("%v", this.WorkflowTaskStartedId) + `,`,
-		`PendingTimerStartedIds:` + fmt.Sprintf("%v", this.PendingTimerStartedIds) + `,`,
-		`PendingActivityScheduledIds:` + fmt.Sprintf("%v", this.PendingActivityScheduledIds) + `,`,
-		`PendingSignalInitiatedIds:` + fmt.Sprintf("%v", this.PendingSignalInitiatedIds) + `,`,
-		`PendingReqCancelInitiatedIds:` + fmt.Sprintf("%v", this.PendingReqCancelInitiatedIds) + `,`,
-		`PendingChildInitiatedIds:` + fmt.Sprintf("%v", this.PendingChildInitiatedIds) + `,`,
+		`WorkflowTaskScheduledEventId:` + fmt.Sprintf("%v", this.WorkflowTaskScheduledEventId) + `,`,
+		`WorkflowTaskStartedEventId:` + fmt.Sprintf("%v", this.WorkflowTaskStartedEventId) + `,`,
+		`PendingTimerStartedEventIds:` + fmt.Sprintf("%v", this.PendingTimerStartedEventIds) + `,`,
+		`PendingActivityScheduledEventIds:` + fmt.Sprintf("%v", this.PendingActivityScheduledEventIds) + `,`,
+		`PendingSignalInitiatedEventIds:` + fmt.Sprintf("%v", this.PendingSignalInitiatedEventIds) + `,`,
+		`PendingReqCancelInitiatedEventIds:` + fmt.Sprintf("%v", this.PendingReqCancelInitiatedEventIds) + `,`,
+		`PendingChildInitiatedEventIds:` + fmt.Sprintf("%v", this.PendingChildInitiatedEventIds) + `,`,
 		`StickyTaskQueueName:` + fmt.Sprintf("%v", this.StickyTaskQueueName) + `,`,
 		`VersionHistories:` + strings.Replace(fmt.Sprintf("%v", this.VersionHistories), "VersionHistories", "v12.VersionHistories", 1) + `,`,
 		`}`,
@@ -1053,9 +1053,9 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 			}
 		case 12:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field WorkflowTaskScheduledId", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field WorkflowTaskScheduledEventId", wireType)
 			}
-			m.WorkflowTaskScheduledId = 0
+			m.WorkflowTaskScheduledEventId = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMessage
@@ -1065,16 +1065,16 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.WorkflowTaskScheduledId |= int64(b&0x7F) << shift
+				m.WorkflowTaskScheduledEventId |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
 		case 13:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field WorkflowTaskStartedId", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field WorkflowTaskStartedEventId", wireType)
 			}
-			m.WorkflowTaskStartedId = 0
+			m.WorkflowTaskStartedEventId = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMessage
@@ -1084,7 +1084,7 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.WorkflowTaskStartedId |= int64(b&0x7F) << shift
+				m.WorkflowTaskStartedEventId |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1106,7 +1106,7 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 						break
 					}
 				}
-				m.PendingTimerStartedIds = append(m.PendingTimerStartedIds, v)
+				m.PendingTimerStartedEventIds = append(m.PendingTimerStartedEventIds, v)
 			} else if wireType == 2 {
 				var packedLen int
 				for shift := uint(0); ; shift += 7 {
@@ -1141,8 +1141,8 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 					}
 				}
 				elementCount = count
-				if elementCount != 0 && len(m.PendingTimerStartedIds) == 0 {
-					m.PendingTimerStartedIds = make([]int64, 0, elementCount)
+				if elementCount != 0 && len(m.PendingTimerStartedEventIds) == 0 {
+					m.PendingTimerStartedEventIds = make([]int64, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v int64
@@ -1160,10 +1160,10 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 							break
 						}
 					}
-					m.PendingTimerStartedIds = append(m.PendingTimerStartedIds, v)
+					m.PendingTimerStartedEventIds = append(m.PendingTimerStartedEventIds, v)
 				}
 			} else {
-				return fmt.Errorf("proto: wrong wireType = %d for field PendingTimerStartedIds", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PendingTimerStartedEventIds", wireType)
 			}
 		case 15:
 			if wireType == 0 {
@@ -1182,7 +1182,7 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 						break
 					}
 				}
-				m.PendingActivityScheduledIds = append(m.PendingActivityScheduledIds, v)
+				m.PendingActivityScheduledEventIds = append(m.PendingActivityScheduledEventIds, v)
 			} else if wireType == 2 {
 				var packedLen int
 				for shift := uint(0); ; shift += 7 {
@@ -1217,8 +1217,8 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 					}
 				}
 				elementCount = count
-				if elementCount != 0 && len(m.PendingActivityScheduledIds) == 0 {
-					m.PendingActivityScheduledIds = make([]int64, 0, elementCount)
+				if elementCount != 0 && len(m.PendingActivityScheduledEventIds) == 0 {
+					m.PendingActivityScheduledEventIds = make([]int64, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v int64
@@ -1236,10 +1236,10 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 							break
 						}
 					}
-					m.PendingActivityScheduledIds = append(m.PendingActivityScheduledIds, v)
+					m.PendingActivityScheduledEventIds = append(m.PendingActivityScheduledEventIds, v)
 				}
 			} else {
-				return fmt.Errorf("proto: wrong wireType = %d for field PendingActivityScheduledIds", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PendingActivityScheduledEventIds", wireType)
 			}
 		case 16:
 			if wireType == 0 {
@@ -1258,7 +1258,7 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 						break
 					}
 				}
-				m.PendingSignalInitiatedIds = append(m.PendingSignalInitiatedIds, v)
+				m.PendingSignalInitiatedEventIds = append(m.PendingSignalInitiatedEventIds, v)
 			} else if wireType == 2 {
 				var packedLen int
 				for shift := uint(0); ; shift += 7 {
@@ -1293,8 +1293,8 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 					}
 				}
 				elementCount = count
-				if elementCount != 0 && len(m.PendingSignalInitiatedIds) == 0 {
-					m.PendingSignalInitiatedIds = make([]int64, 0, elementCount)
+				if elementCount != 0 && len(m.PendingSignalInitiatedEventIds) == 0 {
+					m.PendingSignalInitiatedEventIds = make([]int64, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v int64
@@ -1312,10 +1312,10 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 							break
 						}
 					}
-					m.PendingSignalInitiatedIds = append(m.PendingSignalInitiatedIds, v)
+					m.PendingSignalInitiatedEventIds = append(m.PendingSignalInitiatedEventIds, v)
 				}
 			} else {
-				return fmt.Errorf("proto: wrong wireType = %d for field PendingSignalInitiatedIds", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PendingSignalInitiatedEventIds", wireType)
 			}
 		case 17:
 			if wireType == 0 {
@@ -1334,7 +1334,7 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 						break
 					}
 				}
-				m.PendingReqCancelInitiatedIds = append(m.PendingReqCancelInitiatedIds, v)
+				m.PendingReqCancelInitiatedEventIds = append(m.PendingReqCancelInitiatedEventIds, v)
 			} else if wireType == 2 {
 				var packedLen int
 				for shift := uint(0); ; shift += 7 {
@@ -1369,8 +1369,8 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 					}
 				}
 				elementCount = count
-				if elementCount != 0 && len(m.PendingReqCancelInitiatedIds) == 0 {
-					m.PendingReqCancelInitiatedIds = make([]int64, 0, elementCount)
+				if elementCount != 0 && len(m.PendingReqCancelInitiatedEventIds) == 0 {
+					m.PendingReqCancelInitiatedEventIds = make([]int64, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v int64
@@ -1388,10 +1388,10 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 							break
 						}
 					}
-					m.PendingReqCancelInitiatedIds = append(m.PendingReqCancelInitiatedIds, v)
+					m.PendingReqCancelInitiatedEventIds = append(m.PendingReqCancelInitiatedEventIds, v)
 				}
 			} else {
-				return fmt.Errorf("proto: wrong wireType = %d for field PendingReqCancelInitiatedIds", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PendingReqCancelInitiatedEventIds", wireType)
 			}
 		case 18:
 			if wireType == 0 {
@@ -1410,7 +1410,7 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 						break
 					}
 				}
-				m.PendingChildInitiatedIds = append(m.PendingChildInitiatedIds, v)
+				m.PendingChildInitiatedEventIds = append(m.PendingChildInitiatedEventIds, v)
 			} else if wireType == 2 {
 				var packedLen int
 				for shift := uint(0); ; shift += 7 {
@@ -1445,8 +1445,8 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 					}
 				}
 				elementCount = count
-				if elementCount != 0 && len(m.PendingChildInitiatedIds) == 0 {
-					m.PendingChildInitiatedIds = make([]int64, 0, elementCount)
+				if elementCount != 0 && len(m.PendingChildInitiatedEventIds) == 0 {
+					m.PendingChildInitiatedEventIds = make([]int64, 0, elementCount)
 				}
 				for iNdEx < postIndex {
 					var v int64
@@ -1464,10 +1464,10 @@ func (m *MutableStateChecksumPayload) Unmarshal(dAtA []byte) error {
 							break
 						}
 					}
-					m.PendingChildInitiatedIds = append(m.PendingChildInitiatedIds, v)
+					m.PendingChildInitiatedEventIds = append(m.PendingChildInitiatedEventIds, v)
 				}
 			} else {
-				return fmt.Errorf("proto: wrong wireType = %d for field PendingChildInitiatedIds", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PendingChildInitiatedEventIds", wireType)
 			}
 		case 19:
 			if wireType != 2 {

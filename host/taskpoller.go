@@ -178,11 +178,13 @@ Loop:
 			history := response.History
 			if history == nil {
 				p.Logger.Fatal("History is nil")
+				return false, nil, errors.New("history is nil")
 			}
 
 			events = history.Events
-			if events == nil || len(events) == 0 {
+			if len(events) == 0 {
 				p.Logger.Fatal("History Events are empty")
+				return false, nil, errors.New("history events are empty")
 			}
 
 			nextPageToken := response.NextPageToken
@@ -310,11 +312,13 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 	history := response.History
 	if history == nil {
 		p.Logger.Fatal("History is nil")
+		return nil, errors.New("history is nil")
 	}
 
 	events = history.Events
-	if events == nil || len(events) == 0 {
+	if len(events) == 0 {
 		p.Logger.Fatal("History Events are empty")
+		return nil, errors.New("history events are empty")
 	}
 
 	commands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType,

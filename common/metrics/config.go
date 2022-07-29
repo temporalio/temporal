@@ -32,6 +32,8 @@ import (
 	"github.com/uber-go/tally/v4"
 	"github.com/uber-go/tally/v4/m3"
 	"github.com/uber-go/tally/v4/prometheus"
+	"golang.org/x/exp/maps"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	statsdreporter "go.temporal.io/server/common/metrics/tally/statsd"
@@ -54,7 +56,7 @@ type (
 		// Tags is the set of key-value pairs to be reported as part of every metric
 		Tags map[string]string `yaml:"tags"`
 		// IgnoreTags is a map from tag name string to tag values string list.
-		// Each value present in keys will have relevant tag value replaced with "__disabled__"
+		// Each value present in keys will have relevant tag value replaced with "_tag_excluded_"
 		// Each value in values list will white-list tag values to be reported as usual.
 		ExcludeTags map[string][]string `yaml:"excludeTags"`
 		// Prefix sets the prefix to all outgoing metrics
@@ -68,9 +70,6 @@ type (
 		// - "dimensionless"
 		// - "milliseconds"
 		// - "bytes"
-		// - see defs.go:L62
-		//
-		// Tally implementation uses default buckets for timer/duration metrics.
 		PerUnitHistogramBoundaries map[string][]float64 `yaml:"perUnitHistogramBoundaries"`
 	}
 
@@ -103,9 +102,6 @@ type (
 		Framework string `yaml:"framework"`
 		// Address for prometheus to serve metrics from.
 		ListenAddress string `yaml:"listenAddress"`
-		// DefaultHistogramBoundaries defines the default histogram bucket
-		// boundaries.
-		DefaultHistogramBoundaries []float64 `yaml:"defaultHistogramBoundaries"`
 
 		// HandlerPath if specified will be used instead of using the default
 		// HTTP handler path "/metrics".
@@ -118,9 +114,15 @@ type (
 		ListenNetwork string `yaml:"listenNetwork"`
 
 		// Deprecated. TimerType is the default Prometheus type to use for Tally timers.
+		// TimerType is always histogram.
 		TimerType string `yaml:"timerType"`
 
-		// Deprecated. DefaultHistogramBuckets if specified will set the default histogram
+		// Deprecated. Please use PerUnitHistogramBoundaries in ClientConfig.
+		// DefaultHistogramBoundaries defines the default histogram bucket boundaries.
+		DefaultHistogramBoundaries []float64 `yaml:"defaultHistogramBoundaries"`
+
+		// Deprecated. Please use PerUnitHistogramBoundaries in ClientConfig.
+		// DefaultHistogramBuckets if specified will set the default histogram
 		// buckets to be used by the reporter.
 		DefaultHistogramBuckets []HistogramObjective `yaml:"defaultHistogramBuckets"`
 
@@ -148,15 +150,19 @@ type SummaryObjective struct {
 	AllowedError float64 `yaml:"allowedError"`
 }
 
+// Supported framework types
 const (
-	ms = float64(time.Millisecond) / float64(time.Second)
-
-	// Supported framework types
-
 	// FrameworkTally tally framework id
 	FrameworkTally = "tally"
 	// FrameworkOpentelemetry OpenTelemetry framework id
 	FrameworkOpentelemetry = "opentelemetry"
+)
+
+// Valid unit name for PerUnitHistogramBoundaries config field
+const (
+	UnitNameDimensionless = "dimensionless"
+	UnitNameMilliseconds  = "milliseconds"
+	UnitNameBytes         = "bytes"
 )
 
 // tally sanitizer options that satisfy both Prometheus and M3 restrictions.
@@ -185,8 +191,6 @@ var (
 		ReplacementCharacter: tally.DefaultReplacementCharacter,
 	}
 
-	defaultQuantiles = []float64{50, 75, 90, 95, 99}
-
 	defaultPerUnitHistogramBoundaries = map[string][]float64{
 		Dimensionless: {
 			1,
@@ -198,34 +202,34 @@ var (
 			100,
 			200,
 			500,
-			1000,
-			2000,
-			5000,
-			10000,
-			20000,
-			50000,
-			100000,
+			1_000,
+			2_000,
+			5_000,
+			10_000,
+			20_000,
+			50_000,
+			100_000,
 		},
 		Milliseconds: {
-			1 * ms,
-			2 * ms,
-			5 * ms,
-			10 * ms,
-			20 * ms,
-			50 * ms,
-			100 * ms,
-			200 * ms,
-			500 * ms,
-			1000 * ms,
-			2000 * ms,
-			5000 * ms,
-			10000 * ms,
-			20000 * ms,
-			50000 * ms,
-			100000 * ms,
-			200000 * ms,
-			500000 * ms,
-			1000000 * ms,
+			1,
+			2,
+			5,
+			10,
+			20,
+			50,
+			100,
+			200,
+			500,
+			1_000, // 1s
+			2_000,
+			5_000,
+			10_000, // 10s
+			20_000,
+			50_000,
+			100_000, // 100s = 1m40s
+			200_000,
+			500_000,
+			1_000_000, // 1000s = 16m40s
 		},
 		Bytes: {
 			1024,
@@ -245,13 +249,6 @@ var (
 			16777216,
 		},
 	}
-
-	defaultConfig = ClientConfig{
-		Tags:                       nil,
-		ExcludeTags:                map[string][]string{},
-		Prefix:                     "",
-		PerUnitHistogramBoundaries: map[string][]float64{Dimensionless: {0, 10, 100}, Bytes: {1024, 2048}},
-	}
 )
 
 // NewScope builds a new tally scope for this metrics configuration
@@ -260,7 +257,7 @@ var (
 // only one of them will be used for reporting.
 //
 // Current priority order is:
-// m3 > statsd > prometheus
+// statsd > prometheus
 func NewScope(logger log.Logger, c *Config) tally.Scope {
 	if c.Statsd != nil {
 		return newStatsdScope(logger, c)
@@ -269,21 +266,6 @@ func NewScope(logger log.Logger, c *Config) tally.Scope {
 		return newPrometheusScope(logger, convertPrometheusConfigToTally(c.Prometheus), &c.ClientConfig)
 	}
 	return tally.NoopScope
-}
-
-func buildHistogramBuckets(
-	config *PrometheusConfig,
-) []prometheus.HistogramObjective {
-	var result []prometheus.HistogramObjective
-	if len(config.DefaultHistogramBuckets) > 0 {
-		result = make([]prometheus.HistogramObjective, len(config.DefaultHistogramBuckets))
-		for i, item := range config.DefaultHistogramBuckets {
-			result[i].Upper = item.Upper
-		}
-	} else if len(config.DefaultHistogramBoundaries) > 0 {
-		result = histogramBoundariesToHistogramObjectives(config.DefaultHistogramBoundaries)
-	}
-	return result
 }
 
 func convertPrometheusConfigToTally(
@@ -300,21 +282,27 @@ func convertPrometheusConfigToTally(
 		ListenNetwork:            config.ListenNetwork,
 		ListenAddress:            config.ListenAddress,
 		TimerType:                "histogram",
-		DefaultHistogramBuckets:  buildHistogramBuckets(config),
 		DefaultSummaryObjectives: defaultObjectives,
 		OnError:                  config.OnError,
 	}
 }
 
 func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
-	if clientConfig.PerUnitHistogramBoundaries == nil {
-		clientConfig.PerUnitHistogramBoundaries = make(map[string][]float64)
+	buckets := maps.Clone(defaultPerUnitHistogramBoundaries)
+
+	// In config, when overwrite default buckets, we use [dimensionless / miliseconds / bytes] as keys.
+	// But in code, we use [1 / ms / By] as key (to align with otel unit definition). So we do conversion here.
+	if bucket, ok := clientConfig.PerUnitHistogramBoundaries[UnitNameDimensionless]; ok {
+		buckets[Dimensionless] = bucket
 	}
-	for unit, bucket := range defaultPerUnitHistogramBoundaries {
-		if _, ok := clientConfig.PerUnitHistogramBoundaries[unit]; !ok {
-			clientConfig.PerUnitHistogramBoundaries[unit] = bucket
-		}
+	if bucket, ok := clientConfig.PerUnitHistogramBoundaries[UnitNameMilliseconds]; ok {
+		buckets[Milliseconds] = bucket
 	}
+	if bucket, ok := clientConfig.PerUnitHistogramBoundaries[UnitNameBytes]; ok {
+		buckets[Bytes] = bucket
+	}
+
+	clientConfig.PerUnitHistogramBoundaries = buckets
 }
 
 // newStatsdScope returns a new statsd scope with
@@ -324,7 +312,12 @@ func newStatsdScope(logger log.Logger, c *Config) tally.Scope {
 	if len(config.HostPort) == 0 {
 		return tally.NoopScope
 	}
-	statter, err := statsd.NewBufferedClient(config.HostPort, config.Prefix, config.FlushInterval, config.FlushBytes)
+	statter, err := statsd.NewClientWithConfig(&statsd.ClientConfig{
+		Address:       config.HostPort,
+		Prefix:        config.Prefix,
+		FlushInterval: config.FlushInterval,
+		FlushBytes:    config.FlushBytes,
+	})
 	if err != nil {
 		logger.Fatal("error creating statsd client", tag.Error(err))
 	}
@@ -372,15 +365,37 @@ func newPrometheusScope(
 	return scope
 }
 
-func histogramBoundariesToHistogramObjectives(boundaries []float64) []prometheus.HistogramObjective {
-	var result []prometheus.HistogramObjective
-	for _, value := range boundaries {
-		result = append(
-			result,
-			prometheus.HistogramObjective{
-				Upper: value,
-			},
-		)
+// MetricsHandlerFromConfig is used at startup to construct a MetricsHandler
+func MetricsHandlerFromConfig(logger log.Logger, c *Config) MetricsHandler {
+	if c == nil {
+		return NoopMetricsHandler
 	}
-	return result
+
+	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
+
+	if c.Prometheus != nil && c.Prometheus.Framework == FrameworkOpentelemetry {
+		otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
+		if err != nil {
+			logger.Fatal(err.Error())
+		}
+
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig)
+	}
+
+	return NewTallyMetricsHandler(
+		c.ClientConfig,
+		NewScope(logger, c),
+	)
+}
+
+func configExcludeTags(cfg ClientConfig) map[string]map[string]struct{} {
+	tagsToFilter := make(map[string]map[string]struct{})
+	for key, val := range cfg.ExcludeTags {
+		exclusions := make(map[string]struct{})
+		for _, val := range val {
+			exclusions[val] = struct{}{}
+		}
+		tagsToFilter[key] = exclusions
+	}
+	return tagsToFilter
 }

@@ -25,7 +25,6 @@
 package history
 
 import (
-	"context"
 	"errors"
 	"sync/atomic"
 	"time"
@@ -55,7 +54,7 @@ type (
 		shard                    shard.Context
 		options                  *QueueProcessorOptions
 		executionManager         persistence.ExecutionManager
-		maxReadAckLevel          maxReadAckLevel
+		maxReadLevel             maxReadLevel
 		updateVisibilityAckLevel updateVisibilityAckLevel
 		visibilityQueueShutdown  visibilityQueueShutdown
 		visibilityTaskFilter     taskFilter
@@ -78,30 +77,29 @@ func newVisibilityQueueProcessor(
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
 	visibilityMgr manager.VisibilityManager,
+	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
-) queues.Processor {
+) queues.Queue {
 
 	config := shard.GetConfig()
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
 	metricsClient := shard.GetMetricsClient()
 
 	options := &QueueProcessorOptions{
-		BatchSize:                           config.VisibilityTaskBatchSize,
-		MaxPollInterval:                     config.VisibilityProcessorMaxPollInterval,
-		MaxPollIntervalJitterCoefficient:    config.VisibilityProcessorMaxPollIntervalJitterCoefficient,
-		UpdateAckInterval:                   config.VisibilityProcessorUpdateAckInterval,
-		UpdateAckIntervalJitterCoefficient:  config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
-		RescheduleInterval:                  config.VisibilityProcessorRescheduleInterval,
-		RescheduleIntervalJitterCoefficient: config.VisibilityProcessorRescheduleIntervalJitterCoefficient,
-		MaxReschdulerSize:                   config.VisibilityProcessorMaxReschedulerSize,
-		PollBackoffInterval:                 config.VisibilityProcessorPollBackoffInterval,
-		MetricScope:                         metrics.VisibilityQueueProcessorScope,
+		BatchSize:                          config.VisibilityTaskBatchSize,
+		MaxPollInterval:                    config.VisibilityProcessorMaxPollInterval,
+		MaxPollIntervalJitterCoefficient:   config.VisibilityProcessorMaxPollIntervalJitterCoefficient,
+		UpdateAckInterval:                  config.VisibilityProcessorUpdateAckInterval,
+		UpdateAckIntervalJitterCoefficient: config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
+		MaxReschdulerSize:                  config.VisibilityProcessorMaxReschedulerSize,
+		PollBackoffInterval:                config.VisibilityProcessorPollBackoffInterval,
+		MetricScope:                        metrics.VisibilityQueueProcessorScope,
 	}
 	visibilityTaskFilter := func(taskInfo tasks.Task) bool {
 		return true
 	}
-	maxReadAckLevel := func() int64 {
-		return shard.GetQueueMaxReadLevel(
+	maxReadLevel := func() int64 {
+		return shard.GetQueueExclusiveHighReadWatermark(
 			tasks.CategoryVisibility,
 			shard.GetClusterMetadata().GetCurrentClusterName(),
 		).TaskID
@@ -118,7 +116,7 @@ func newVisibilityQueueProcessor(
 	retProcessor := &visibilityQueueProcessorImpl{
 		shard:                    shard,
 		options:                  options,
-		maxReadAckLevel:          maxReadAckLevel,
+		maxReadLevel:             maxReadLevel,
 		updateVisibilityAckLevel: updateVisibilityAckLevel,
 		visibilityQueueShutdown:  visibilityQueueShutdown,
 		visibilityTaskFilter:     visibilityTaskFilter,
@@ -139,17 +137,19 @@ func newVisibilityQueueProcessor(
 		workflowCache,
 		visibilityMgr,
 		logger,
+		metricProvider,
 	)
 
 	if scheduler == nil {
-		scheduler = newVisibilityTaskScheduler(shard, logger)
+		scheduler = newVisibilityTaskScheduler(shard, logger, metricProvider)
 		retProcessor.ownedScheduler = scheduler
 	}
 
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),
+		logger,
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
 	)
 
 	queueAckMgr := newQueueAckMgr(
@@ -294,7 +294,10 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 	t.metricsClient.IncCounter(metrics.VisibilityQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel < upperAckLevel {
-		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
+		ctx, cancel := newQueueIOContext()
+		defer cancel()
+
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             t.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryVisibility,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(lowerAckLevel + 1),
@@ -319,15 +322,16 @@ func (t *visibilityQueueProcessorImpl) notifyNewTask() {
 func (t *visibilityQueueProcessorImpl) readTasks(
 	readLevel int64,
 ) ([]tasks.Task, bool, error) {
+	ctx, cancel := newQueueIOContext()
+	defer cancel()
 
-	response, err := t.executionManager.GetHistoryTasks(context.TODO(), &persistence.GetHistoryTasksRequest{
+	response, err := t.executionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             t.shard.GetShardID(),
 		TaskCategory:        tasks.CategoryVisibility,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(readLevel + 1),
-		ExclusiveMaxTaskKey: tasks.NewImmediateKey(t.maxReadAckLevel() + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(t.maxReadLevel()),
 		BatchSize:           t.options.BatchSize(),
 	})
-
 	if err != nil {
 		return nil, false, err
 	}
@@ -338,7 +342,6 @@ func (t *visibilityQueueProcessorImpl) readTasks(
 func (t *visibilityQueueProcessorImpl) updateAckLevel(
 	ackLevel int64,
 ) error {
-
 	return t.updateVisibilityAckLevel(ackLevel)
 }
 
@@ -349,6 +352,7 @@ func (t *visibilityQueueProcessorImpl) queueShutdown() error {
 func newVisibilityTaskScheduler(
 	shard shard.Context,
 	logger log.Logger,
+	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
 	return queues.NewScheduler(
@@ -362,7 +366,7 @@ func newVisibilityTaskScheduler(
 				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.VisibilityProcessorSchedulerRoundRobinWeights(), logger),
 			},
 		},
-		shard.GetMetricsClient(),
+		metricProvider,
 		logger,
 	)
 }

@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/client"
@@ -60,7 +61,6 @@ type (
 		tlsConfigProvider          encryption.TLSConfigProvider
 		claimMapper                authorization.ClaimMapper
 		audienceGetter             authorization.JWTAudienceMapper
-		metricsReporter            metrics.Reporter
 		persistenceServiceResolver resolver.ServiceResolver
 		elasticsearchHttpClient    *http.Client
 		dynamicConfigClient        dynamicconfig.Client
@@ -68,7 +68,7 @@ type (
 		clientFactoryProvider      client.FactoryProvider
 		searchAttributesMapper     searchattribute.Mapper
 		customInterceptors         []grpc.UnaryServerInterceptor
-		metricHandler              metrics.MetricHandler
+		metricProvider             metrics.MetricsHandler
 	}
 )
 
@@ -86,7 +86,7 @@ func newServerOptions(opts []ServerOption) *serverOptions {
 
 func (so *serverOptions) loadAndValidate() error {
 	for serviceName := range so.serviceNames {
-		if !isValidService(serviceName) {
+		if !slices.Contains(Services, serviceName) {
 			return fmt.Errorf("invalid service %q in service list %v", serviceName, so.serviceNames)
 		}
 	}
@@ -127,13 +127,4 @@ func (so *serverOptions) validateConfig() error {
 		}
 	}
 	return nil
-}
-
-func isValidService(service string) bool {
-	for _, s := range Services {
-		if s == service {
-			return true
-		}
-	}
-	return false
 }

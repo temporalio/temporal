@@ -340,12 +340,12 @@ func (s *TaskQueueTaskSuite) randomTask(
 	return &persistencespb.AllocatedTaskInfo{
 		TaskId: taskID,
 		Data: &persistencespb.TaskInfo{
-			NamespaceId: s.namespaceID,
-			WorkflowId:  uuid.New().String(),
-			RunId:       uuid.New().String(),
-			ScheduleId:  rand.Int63(),
-			CreateTime:  now,
-			ExpiryTime:  timestamp.TimePtr(now.Add(s.taskTTL)),
+			NamespaceId:      s.namespaceID,
+			WorkflowId:       uuid.New().String(),
+			RunId:            uuid.New().String(),
+			ScheduledEventId: rand.Int63(),
+			CreateTime:       now,
+			ExpiryTime:       timestamp.TimePtr(now.Add(s.taskTTL)),
 			Clock: &clockspb.VectorClock{
 				ClusterId: rand.Int63(),
 				ShardId:   rand.Int31(),

@@ -86,7 +86,7 @@ type (
 
 		membershipMonitor membership.Monitor
 
-		userMetricsScope metrics.UserScope
+		metricsHandler metrics.MetricsHandler
 
 		status           int32
 		stopC            chan struct{}
@@ -100,15 +100,17 @@ type (
 
 	// Config contains all the service config for worker
 	Config struct {
-		ArchiverConfig                *archiver.Config
-		ScannerCfg                    *scanner.Config
-		ParentCloseCfg                *parentclosepolicy.Config
-		BatcherCfg                    *batcher.Config
-		ThrottledLogRPS               dynamicconfig.IntPropertyFn
-		PersistenceMaxQPS             dynamicconfig.IntPropertyFn
-		PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
-		EnableBatcher                 dynamicconfig.BoolPropertyFn
-		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
+		ArchiverConfig                        *archiver.Config
+		ScannerCfg                            *scanner.Config
+		ParentCloseCfg                        *parentclosepolicy.Config
+		BatcherCfg                            *batcher.Config
+		ThrottledLogRPS                       dynamicconfig.IntPropertyFn
+		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
+		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
+		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
+		EnableBatcher                         dynamicconfig.BoolPropertyFn
+		EnableParentClosePolicyWorker         dynamicconfig.BoolPropertyFn
+		PerNamespaceWorkerCount               dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 		StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 		StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
@@ -116,6 +118,7 @@ type (
 		AdvancedVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
 		EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityDisableOrderByClause            dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -135,7 +138,7 @@ func NewService(
 	persistenceBean persistenceClient.Bean,
 	membershipMonitor membership.Monitor,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-	metricsScope metrics.UserScope,
+	metricsHandler metrics.MetricsHandler,
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
@@ -167,7 +170,7 @@ func NewService(
 		membershipMonitor:         membershipMonitor,
 		archiverProvider:          archiverProvider,
 		namespaceReplicationQueue: namespaceReplicationQueue,
-		userMetricsScope:          metricsScope,
+		metricsHandler:            metricsHandler,
 		metadataManager:           metadataManager,
 		taskManager:               taskManager,
 		historyClient:             historyClient,
@@ -296,6 +299,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 			dynamicconfig.EnableParentClosePolicyWorker,
 			true,
 		),
+		PerNamespaceWorkerCount: dc.GetIntPropertyFilteredByNamespace(
+			dynamicconfig.WorkerPerNamespaceWorkerCount,
+			1,
+		),
 		ThrottledLogRPS: dc.GetIntProperty(
 			dynamicconfig.WorkerThrottledLogRPS,
 			20,
@@ -308,6 +315,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 			dynamicconfig.WorkerPersistenceGlobalMaxQPS,
 			0,
 		),
+		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(
+			dynamicconfig.WorkerEnablePersistencePriorityRateLimiting,
+			true,
+		),
 
 		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
 		StandardVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
@@ -315,6 +326,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 		AdvancedVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
 		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
 		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
+		VisibilityDisableOrderByClause:            dc.GetBoolProperty(dynamicconfig.VisibilityDisableOrderByClause, false),
 	}
 	return config
 }
@@ -334,8 +346,7 @@ func (s *Service) Start() {
 		tag.ComponentWorker,
 	)
 
-	// todo: introduce proper counter (same in resource.go)
-	s.userMetricsScope.AddCounter(metrics.RestartCount, 1)
+	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
 
 	s.clusterMetadata.Start()
 	s.membershipMonitor.Start()

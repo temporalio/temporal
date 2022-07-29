@@ -217,6 +217,7 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 		taskInfo:  &persistencespb.TaskInfo{},
 		source:    enumsspb.TASK_SOURCE_HISTORY,
 	})
+	require.NoError(t, err)
 	require.False(t, sync)
 }
 
@@ -268,7 +269,7 @@ func TestReaderSignaling(t *testing.T) {
 // The second return value is a channel of either error or *internalTask.
 func runOneShotPoller(ctx context.Context, tqm taskQueueManager) (*goro.Handle, chan interface{}) {
 	out := make(chan interface{}, 1)
-	handle := goro.Go(ctx, func(ctx context.Context) error {
+	handle := goro.NewHandle(ctx).Go(func(ctx context.Context) error {
 		task, err := tqm.GetTask(ctx, &rpsInf)
 		if task == nil {
 			out <- err

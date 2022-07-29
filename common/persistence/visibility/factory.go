@@ -59,6 +59,7 @@ func NewManager(
 	advancedVisibilityWritingMode dynamicconfig.StringPropertyFn,
 	enableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	enableWriteToSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFn,
+	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFn,
 
 	metricsClient metrics.Client,
 	logger log.Logger,
@@ -83,6 +84,7 @@ func NewManager(
 		searchAttributesMapper,
 		advancedVisibilityPersistenceMaxReadQPS,
 		advancedVisibilityPersistenceMaxWriteQPS,
+		visibilityDisableOrderByClause,
 		metricsClient,
 		logger,
 	)
@@ -98,6 +100,7 @@ func NewManager(
 		searchAttributesMapper,
 		advancedVisibilityPersistenceMaxReadQPS,
 		advancedVisibilityPersistenceMaxWriteQPS,
+		visibilityDisableOrderByClause,
 		metricsClient,
 		logger,
 	)
@@ -188,6 +191,7 @@ func NewAdvancedManager(
 
 	advancedVisibilityPersistenceMaxReadQPS dynamicconfig.IntPropertyFn,
 	advancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn,
+	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFn,
 
 	metricsClient metrics.Client,
 	logger log.Logger,
@@ -202,6 +206,7 @@ func NewAdvancedManager(
 		esProcessorConfig,
 		searchAttributesProvider,
 		searchAttributesMapper,
+		visibilityDisableOrderByClause,
 		metricsClient,
 		logger)
 
@@ -285,6 +290,7 @@ func newAdvancedVisibilityStore(
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapper searchattribute.Mapper,
+	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFn,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) store.VisibilityStore {
@@ -308,6 +314,7 @@ func newAdvancedVisibilityStore(
 		searchAttributesMapper,
 		esProcessor,
 		esProcessorAckTimeout,
+		visibilityDisableOrderByClause,
 		metricsClient)
 	return s
 }

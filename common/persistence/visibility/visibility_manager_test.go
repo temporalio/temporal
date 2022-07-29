@@ -63,8 +63,6 @@ var (
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",
 	}
 	testWorkflowTypeName = "visibility-workflow"
-
-	listErrMsg = "Persistence Max QPS Reached."
 )
 
 func TestVisibilityManagerSuite(t *testing.T) {

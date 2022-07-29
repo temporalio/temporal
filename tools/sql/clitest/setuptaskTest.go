@@ -88,8 +88,8 @@ func (s *SetupSchemaTestSuite) TestCreateDatabase() {
 		"-u", testUser,
 		"--pw", testPassword,
 		"--pl", s.pluginName,
-		"create",
 		"--db", testDatabase,
+		"create",
 	})
 	s.NoError(err)
 	err = s.conn.DropDatabase(testDatabase)
@@ -105,8 +105,8 @@ func (s *SetupSchemaTestSuite) TestCreateDatabaseIdempotent() {
 		"-u", testUser,
 		"--pw", testPassword,
 		"--pl", s.pluginName,
-		"create",
 		"--db", testDatabase,
+		"create",
 	})
 	s.NoError(err)
 
@@ -117,8 +117,8 @@ func (s *SetupSchemaTestSuite) TestCreateDatabaseIdempotent() {
 		"-u", testUser,
 		"--pw", testPassword,
 		"--pl", s.pluginName,
-		"create",
 		"--db", testDatabase,
+		"create",
 	})
 	s.NoError(err)
 

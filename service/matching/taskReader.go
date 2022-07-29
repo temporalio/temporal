@@ -32,6 +32,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -65,6 +66,8 @@ func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
 	}
 }
 
+// Start reading pump for the given task queue.
+// The pump fills up taskBuffer from persistence.
 func (tr *taskReader) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&tr.status,
@@ -76,11 +79,9 @@ func (tr *taskReader) Start() {
 
 	tr.gorogrp.Go(tr.dispatchBufferedTasks)
 	tr.gorogrp.Go(tr.getTasksPump)
-
-	// Do not signal getTasksPump to start here, let it wait until taskWriter
-	// acquires the lease and initializes the read level and max read level.
 }
 
+// Stop pump that fills up taskBuffer from persistence.
 func (tr *taskReader) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&tr.status,
@@ -102,6 +103,8 @@ func (tr *taskReader) Signal() {
 }
 
 func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
 dispatchLoop:
 	for {
 		select {
@@ -111,6 +114,14 @@ dispatchLoop:
 			}
 			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
 			for {
+				// We checked if the task was expired before putting it in the buffer, but it
+				// might have expired while it sat in the buffer, so we should check again.
+				if taskqueue.IsTaskExpired(taskInfo) {
+					task.finish(nil)
+					tr.scope().IncCounter(metrics.ExpiredTasksPerTaskQueueCounter)
+					// Don't try to set read level here because it may have been advanced already.
+					break
+				}
 				err := tr.tlMgr.DispatchTask(ctx, task)
 				if err == nil {
 					break
@@ -133,17 +144,16 @@ dispatchLoop:
 }
 
 func (tr *taskReader) getTasksPump(ctx context.Context) error {
-	// Wait for one notification from taskWriter
-	select {
-	case <-ctx.Done():
-		return nil
-	case <-tr.notifyC:
-		tr.Signal()
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
+	if err := tr.tlMgr.WaitUntilInitialized(ctx); err != nil {
+		return err
 	}
 
 	updateAckTimer := time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
 	defer updateAckTimer.Stop()
 
+	tr.Signal() // prime pump
 Loop:
 	for {
 		// Prioritize exiting over other processing
@@ -158,7 +168,7 @@ Loop:
 			return nil
 
 		case <-tr.notifyC:
-			tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch()
+			tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch(ctx)
 			tr.tlMgr.signalIfFatal(err)
 			if err != nil {
 				tr.Signal() // re-enqueue the event
@@ -181,7 +191,7 @@ Loop:
 			tr.Signal()
 
 		case <-updateAckTimer.C:
-			err := tr.persistAckLevel()
+			err := tr.persistAckLevel(ctx)
 			tr.tlMgr.signalIfFatal(err)
 			if err != nil {
 				tr.logger().Error("Persistent store operation failure",
@@ -195,11 +205,11 @@ Loop:
 	}
 }
 
-func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistencespb.AllocatedTaskInfo, error) {
+func (tr *taskReader) getTaskBatchWithRange(ctx context.Context, readLevel int64, maxReadLevel int64) ([]*persistencespb.AllocatedTaskInfo, error) {
 	var response *persistence.GetTasksResponse
 	var err error
-	err = executeWithRetry(func() error {
-		response, err = tr.tlMgr.db.GetTasks(context.TODO(), readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
+	err = executeWithRetry(ctx, func(ctx context.Context) error {
+		response, err = tr.tlMgr.db.GetTasks(ctx, readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
 		return err
 	})
 	if err != nil {
@@ -211,7 +221,7 @@ func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64)
 // Returns a batch of tasks from persistence starting form current read level.
 // Also return a number that can be used to update readLevel
 // Also return a bool to indicate whether read is finished
-func (tr *taskReader) getTaskBatch() ([]*persistencespb.AllocatedTaskInfo, int64, bool, error) {
+func (tr *taskReader) getTaskBatch(ctx context.Context) ([]*persistencespb.AllocatedTaskInfo, int64, bool, error) {
 	var tasks []*persistencespb.AllocatedTaskInfo
 	readLevel := tr.tlMgr.taskAckManager.getReadLevel()
 	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
@@ -222,7 +232,7 @@ func (tr *taskReader) getTaskBatch() ([]*persistencespb.AllocatedTaskInfo, int64
 		if upper > maxReadLevel {
 			upper = maxReadLevel
 		}
-		tasks, err := tr.getTaskBatchWithRange(readLevel, upper)
+		tasks, err := tr.getTaskBatchWithRange(ctx, readLevel, upper)
 		if err != nil {
 			return nil, readLevel, true, err
 		}
@@ -267,10 +277,10 @@ func (tr *taskReader) addSingleTaskToBuffer(
 	}
 }
 
-func (tr *taskReader) persistAckLevel() error {
+func (tr *taskReader) persistAckLevel(ctx context.Context) error {
 	ackLevel := tr.tlMgr.taskAckManager.getAckLevel()
 	tr.emitTaskLagMetric(ackLevel)
-	return tr.tlMgr.db.UpdateState(context.TODO(), ackLevel)
+	return tr.tlMgr.db.UpdateState(ctx, ackLevel)
 }
 
 func (tr *taskReader) isTaskAddedRecently(lastAddTime time.Time) bool {

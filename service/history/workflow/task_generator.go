@@ -64,18 +64,18 @@ type (
 		) error
 		GenerateScheduleWorkflowTaskTasks(
 			now time.Time,
-			workflowTaskScheduleID int64,
+			workflowTaskScheduledEventID int64,
 		) error
 		GenerateStartWorkflowTaskTasks(
 			now time.Time,
-			workflowTaskScheduleID int64,
+			workflowTaskScheduledEventID int64,
 		) error
 		GenerateActivityTasks(
 			now time.Time,
 			event *historypb.HistoryEvent,
 		) error
 		GenerateActivityRetryTasks(
-			activityScheduleID int64,
+			activityScheduledEventID int64,
 		) error
 		GenerateChildWorkflowTasks(
 			now time.Time,
@@ -220,13 +220,10 @@ func (r *TaskGeneratorImpl) GenerateDeleteExecutionTask(
 	now time.Time,
 ) (*tasks.DeleteExecutionTask, error) {
 
-	currentVersion := r.mutableState.GetCurrentVersion()
-
 	return &tasks.DeleteExecutionTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
-		Version:             currentVersion,
 	}, nil
 }
 
@@ -280,14 +277,14 @@ func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
 
 func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	now time.Time,
-	workflowTaskScheduleID int64,
+	workflowTaskScheduledEventID int64,
 ) error {
 
 	workflowTask, ok := r.mutableState.GetWorkflowTaskInfo(
-		workflowTaskScheduleID,
+		workflowTaskScheduledEventID,
 	)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduleID))
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduledEventID))
 	}
 
 	r.mutableState.AddTasks(&tasks.WorkflowTask{
@@ -295,7 +292,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
 		TaskQueue:           workflowTask.TaskQueue.GetName(),
-		ScheduleID:          workflowTask.ScheduleID,
+		ScheduledEventID:    workflowTask.ScheduledEventID,
 		Version:             workflowTask.Version,
 	})
 
@@ -308,7 +305,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
 			VisibilityTimestamp: scheduledTime.Add(scheduleToStartTimeout),
 			TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-			EventID:             workflowTask.ScheduleID,
+			EventID:             workflowTask.ScheduledEventID,
 			ScheduleAttempt:     workflowTask.Attempt,
 			Version:             workflowTask.Version,
 		})
@@ -319,14 +316,14 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 
 func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 	_ time.Time,
-	workflowTaskScheduleID int64,
+	workflowTaskScheduledEventID int64,
 ) error {
 
 	workflowTask, ok := r.mutableState.GetWorkflowTaskInfo(
-		workflowTaskScheduleID,
+		workflowTaskScheduledEventID,
 	)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", workflowTaskScheduleID))
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", workflowTaskScheduledEventID))
 	}
 
 	startedTime := timestamp.TimeValue(workflowTask.StartedTime)
@@ -337,7 +334,7 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: startedTime.Add(workflowTaskTimeout),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		EventID:             workflowTask.ScheduleID,
+		EventID:             workflowTask.ScheduledEventID,
 		ScheduleAttempt:     workflowTask.Attempt,
 		Version:             workflowTask.Version,
 	})
@@ -350,10 +347,10 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 	event *historypb.HistoryEvent,
 ) error {
 
-	activityScheduleID := event.GetEventId()
-	activityInfo, ok := r.mutableState.GetActivityInfo(activityScheduleID)
+	activityScheduledEventID := event.GetEventId()
+	activityInfo, ok := r.mutableState.GetActivityInfo(activityScheduledEventID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID))
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduledEventID))
 	}
 
 	r.mutableState.AddTasks(&tasks.ActivityTask{
@@ -361,7 +358,7 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
 		TaskQueue:           activityInfo.TaskQueue,
-		ScheduleID:          activityInfo.ScheduleId,
+		ScheduledEventID:    activityInfo.ScheduledEventId,
 		Version:             activityInfo.Version,
 	})
 
@@ -369,12 +366,12 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(
-	activityScheduleID int64,
+	activityScheduledEventID int64,
 ) error {
 
-	ai, ok := r.mutableState.GetActivityInfo(activityScheduleID)
+	ai, ok := r.mutableState.GetActivityInfo(activityScheduledEventID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID))
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduledEventID))
 	}
 
 	r.mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
@@ -382,7 +379,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		Version:             ai.Version,
 		VisibilityTimestamp: *ai.ScheduledTime,
-		EventID:             ai.ScheduleId,
+		EventID:             ai.ScheduledEventId,
 		Attempt:             ai.Attempt,
 	})
 	return nil
@@ -394,11 +391,11 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 ) error {
 
 	attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-	childWorkflowScheduleID := event.GetEventId()
+	childWorkflowScheduledEventID := event.GetEventId()
 
-	childWorkflowInfo, ok := r.mutableState.GetChildExecutionInfo(childWorkflowScheduleID)
+	childWorkflowInfo, ok := r.mutableState.GetChildExecutionInfo(childWorkflowScheduledEventID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending child workflow: %v", childWorkflowScheduleID))
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending child workflow: %v", childWorkflowScheduledEventID))
 	}
 
 	targetNamespaceID, err := r.getTargetNamespaceID(namespace.Name(attr.GetNamespace()), namespace.ID(attr.GetNamespaceId()))
@@ -412,7 +409,7 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 		VisibilityTimestamp: now,
 		TargetNamespaceID:   targetNamespaceID.String(),
 		TargetWorkflowID:    childWorkflowInfo.StartedWorkflowId,
-		InitiatedID:         childWorkflowInfo.InitiatedId,
+		InitiatedEventID:    childWorkflowInfo.InitiatedEventId,
 		Version:             childWorkflowInfo.Version,
 	})
 
@@ -425,15 +422,15 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 ) error {
 
 	attr := event.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
-	scheduleID := event.GetEventId()
+	scheduledEventID := event.GetEventId()
 	version := event.GetVersion()
 	targetWorkflowID := attr.GetWorkflowExecution().GetWorkflowId()
 	targetRunID := attr.GetWorkflowExecution().GetRunId()
 	targetChildOnly := attr.GetChildWorkflowOnly()
 
-	_, ok := r.mutableState.GetRequestCancelInfo(scheduleID)
+	_, ok := r.mutableState.GetRequestCancelInfo(scheduledEventID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending request cancel external workflow: %v", scheduleID))
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending request cancel external workflow: %v", scheduledEventID))
 	}
 
 	targetNamespaceID, err := r.getTargetNamespaceID(namespace.Name(attr.GetNamespace()), namespace.ID(attr.GetNamespaceId()))
@@ -449,7 +446,7 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 		TargetWorkflowID:        targetWorkflowID,
 		TargetRunID:             targetRunID,
 		TargetChildWorkflowOnly: targetChildOnly,
-		InitiatedID:             scheduleID,
+		InitiatedEventID:        scheduledEventID,
 		Version:                 version,
 	})
 
@@ -462,15 +459,15 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 ) error {
 
 	attr := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
-	scheduleID := event.GetEventId()
+	scheduledEventID := event.GetEventId()
 	version := event.GetVersion()
 	targetWorkflowID := attr.GetWorkflowExecution().GetWorkflowId()
 	targetRunID := attr.GetWorkflowExecution().GetRunId()
 	targetChildOnly := attr.GetChildWorkflowOnly()
 
-	_, ok := r.mutableState.GetSignalInfo(scheduleID)
+	_, ok := r.mutableState.GetSignalInfo(scheduledEventID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending signal external workflow: %v", scheduleID))
+		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending signal external workflow: %v", scheduledEventID))
 	}
 
 	targetNamespaceID, err := r.getTargetNamespaceID(namespace.Name(attr.GetNamespace()), namespace.ID(attr.GetNamespaceId()))
@@ -486,7 +483,7 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 		TargetWorkflowID:        targetWorkflowID,
 		TargetRunID:             targetRunID,
 		TargetChildWorkflowOnly: targetChildOnly,
-		InitiatedID:             scheduleID,
+		InitiatedEventID:        scheduledEventID,
 		Version:                 version,
 	})
 

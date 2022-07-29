@@ -35,6 +35,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -51,8 +52,8 @@ import (
 type (
 	DeleteManager interface {
 		AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, ms MutableState, transferQueueAckLevel int64, visibilityQueueAckLevel int64) error
-		DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64, forceDeleteFromOpenVisibility bool) error
-		DeleteWorkflowExecutionByRetention(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
+		DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, forceDeleteFromOpenVisibility bool) error
+		DeleteWorkflowExecutionByRetention(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState) error
 	}
 
 	DeleteManagerImpl struct {
@@ -140,7 +141,6 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	we commonpb.WorkflowExecution,
 	weCtx Context,
 	ms MutableState,
-	sourceTaskVersion int64,
 	forceDeleteFromOpenVisibility bool,
 ) error {
 
@@ -150,7 +150,6 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 		we,
 		weCtx,
 		ms,
-		sourceTaskVersion,
 		false,
 		forceDeleteFromOpenVisibility,
 		m.metricsClient.Scope(metrics.HistoryDeleteWorkflowExecutionScope),
@@ -163,7 +162,6 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	we commonpb.WorkflowExecution,
 	weCtx Context,
 	ms MutableState,
-	sourceTaskVersion int64,
 ) error {
 
 	return m.deleteWorkflowExecutionInternal(
@@ -172,7 +170,6 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 		we,
 		weCtx,
 		ms,
-		sourceTaskVersion,
 		true,  // When retention is fired, archive workflow execution.
 		false, // When retention is fired, workflow execution is always closed.
 		m.metricsClient.Scope(metrics.HistoryProcessDeleteHistoryEventScope),
@@ -185,7 +182,6 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	we commonpb.WorkflowExecution,
 	weCtx Context,
 	ms MutableState,
-	newTaskVersion int64,
 	archiveIfEnabled bool,
 	forceDeleteFromOpenVisibility bool,
 	scope metrics.Scope,
@@ -225,17 +221,24 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		}
 	}
 
-	if err := m.shard.DeleteWorkflowExecution(
+	op := func(ctx context.Context) error {
+		return m.shard.DeleteWorkflowExecution(
+			ctx,
+			definition.WorkflowKey{
+				NamespaceID: namespaceID.String(),
+				WorkflowID:  we.GetWorkflowId(),
+				RunID:       we.GetRunId(),
+			},
+			currentBranchToken,
+			startTime,
+			closeTime,
+		)
+	}
+	if err = backoff.ThrottleRetryContext(
 		ctx,
-		definition.WorkflowKey{
-			NamespaceID: namespaceID.String(),
-			WorkflowID:  we.GetWorkflowId(),
-			RunID:       we.GetRunId(),
-		},
-		currentBranchToken,
-		newTaskVersion,
-		startTime,
-		closeTime,
+		op,
+		PersistenceOperationRetryPolicy,
+		common.IsPersistenceTransientError,
 	); err != nil {
 		return err
 	}

@@ -225,6 +225,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		}).Return(nil, nil).Times(2)
 
 	err := s.rereplicator.SendSingleWorkflowHistory(
+		context.Background(),
 		cluster.TestCurrentClusterName,
 		s.namespaceID,
 		workflowID,

@@ -25,7 +25,6 @@
 package cassandra
 
 import (
-	"os"
 	"path"
 	"runtime"
 	"testing"
@@ -116,11 +115,4 @@ func (s *VersionTestSuite) createKeyspace(keyspace string) func() {
 		s.NoError(client.dropKeyspace(keyspace))
 		client.Close()
 	}
-}
-
-func (s *VersionTestSuite) createSchemaForVersion(subdir string, v string) {
-	vDir := subdir + "/v" + v
-	s.NoError(os.Mkdir(vDir, os.FileMode(0744)))
-	cqlFile := vDir + "/tmp.cql"
-	s.NoError(os.WriteFile(cqlFile, []byte{}, os.FileMode(0644)))
 }

@@ -211,7 +211,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 		return nil, err
 	}
 
-	taskExecutor, err := r.getOrCreateTaskExecutor(sourceCluster)
+	taskExecutor, err := r.getOrCreateTaskExecutor(ctx, sourceCluster)
 	if err != nil {
 		return nil, err
 	}
@@ -285,27 +285,27 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 		switch task := task.(type) {
 		case *tasks.SyncActivityTask:
 			taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
-				NamespaceId:  task.NamespaceID,
-				WorkflowId:   task.WorkflowID,
-				RunId:        task.RunID,
-				TaskType:     enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-				TaskId:       task.TaskID,
-				Version:      task.GetVersion(),
-				FirstEventId: 0,
-				NextEventId:  0,
-				ScheduledId:  task.ScheduledID,
+				NamespaceId:      task.NamespaceID,
+				WorkflowId:       task.WorkflowID,
+				RunId:            task.RunID,
+				TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+				TaskId:           task.TaskID,
+				Version:          task.GetVersion(),
+				FirstEventId:     0,
+				NextEventId:      0,
+				ScheduledEventId: task.ScheduledEventID,
 			})
 		case *tasks.HistoryReplicationTask:
 			taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
-				NamespaceId:  task.NamespaceID,
-				WorkflowId:   task.WorkflowID,
-				RunId:        task.RunID,
-				TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
-				TaskId:       task.TaskID,
-				Version:      task.Version,
-				FirstEventId: task.FirstEventID,
-				NextEventId:  task.NextEventID,
-				ScheduledId:  0,
+				NamespaceId:      task.NamespaceID,
+				WorkflowId:       task.WorkflowID,
+				RunId:            task.RunID,
+				TaskType:         enumsspb.TASK_TYPE_REPLICATION_HISTORY,
+				TaskId:           task.TaskID,
+				Version:          task.Version,
+				FirstEventId:     task.FirstEventID,
+				NextEventId:      task.NextEventID,
+				ScheduledEventId: 0,
 			})
 		default:
 			panic(fmt.Sprintf("Unknown repication task type: %v", task))
@@ -329,13 +329,13 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	return dlqResponse.ReplicationTasks, ackLevel, pageToken, nil
 }
 
-func (r *dlqHandlerImpl) getOrCreateTaskExecutor(clusterName string) (TaskExecutor, error) {
+func (r *dlqHandlerImpl) getOrCreateTaskExecutor(ctx context.Context, clusterName string) (TaskExecutor, error) {
 	r.taskExecutorsLock.Lock()
 	defer r.taskExecutorsLock.Unlock()
 	if executor, ok := r.taskExecutors[clusterName]; ok {
 		return executor, nil
 	}
-	engine, err := r.shard.GetEngine()
+	engine, err := r.shard.GetEngine(ctx)
 	if err != nil {
 		return nil, err
 	}

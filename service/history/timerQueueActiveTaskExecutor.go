@@ -70,6 +70,7 @@ func newTimerQueueActiveTaskExecutor(
 	workflowDeleteManager workflow.DeleteManager,
 	queueProcessor *timerQueueActiveProcessorImpl,
 	logger log.Logger,
+	metricProvider metrics.MetricsHandler,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Executor {
@@ -80,6 +81,7 @@ func newTimerQueueActiveTaskExecutor(
 			workflowDeleteManager,
 			matchingClient,
 			logger,
+			metricProvider,
 			config,
 		),
 		queueProcessor: queueProcessor,
@@ -89,31 +91,32 @@ func newTimerQueueActiveTaskExecutor(
 func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.Scope, error) {
-
+) (metrics.MetricsHandler, error) {
 	task := executable.GetTask()
-	scope := t.metricsClient.Scope(
-		tasks.GetActiveTimerTaskMetricScope(task),
-		getNamespaceTagByID(t.registry, task.GetNamespaceID()),
+	taskType := queues.GetActiveTimerTaskTypeTagValue(task)
+	metricsProvider := t.metricProvider.WithTags(
+		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType), // for backward compatibility
 	)
 
 	switch task := task.(type) {
 	case *tasks.UserTimerTask:
-		return scope, t.executeUserTimerTimeoutTask(ctx, task)
+		return metricsProvider, t.executeUserTimerTimeoutTask(ctx, task)
 	case *tasks.ActivityTimeoutTask:
-		return scope, t.executeActivityTimeoutTask(ctx, task)
+		return metricsProvider, t.executeActivityTimeoutTask(ctx, task)
 	case *tasks.WorkflowTaskTimeoutTask:
-		return scope, t.executeWorkflowTaskTimeoutTask(ctx, task)
+		return metricsProvider, t.executeWorkflowTaskTimeoutTask(ctx, task)
 	case *tasks.WorkflowTimeoutTask:
-		return scope, t.executeWorkflowTimeoutTask(ctx, task)
+		return metricsProvider, t.executeWorkflowTimeoutTask(ctx, task)
 	case *tasks.ActivityRetryTimerTask:
-		return scope, t.executeActivityRetryTimerTask(ctx, task)
+		return metricsProvider, t.executeActivityRetryTimerTask(ctx, task)
 	case *tasks.WorkflowBackoffTimerTask:
-		return scope, t.executeWorkflowBackoffTimerTask(ctx, task)
+		return metricsProvider, t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
-		return scope, t.executeDeleteHistoryEventTask(ctx, task)
+		return metricsProvider, t.executeDeleteHistoryEventTask(ctx, task)
 	default:
-		return scope, errUnknownTimerTask
+		return metricsProvider, errUnknownTimerTask
 	}
 }
 
@@ -256,8 +259,8 @@ Loop:
 			timerSequenceID.TimerType,
 		)
 		if _, err := mutableState.AddActivityTaskTimedOutEvent(
-			activityInfo.ScheduleId,
-			activityInfo.StartedId,
+			activityInfo.ScheduledEventId,
+			activityInfo.StartedEventId,
 			timeoutFailure,
 			retryState,
 		); err != nil {
@@ -316,15 +319,15 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		)
 		if _, err := mutableState.AddWorkflowTaskTimedOutEvent(
-			workflowTask.ScheduleID,
-			workflowTask.StartedID,
+			workflowTask.ScheduledEventID,
+			workflowTask.StartedEventID,
 		); err != nil {
 			return err
 		}
 		scheduleWorkflowTask = true
 
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
-		if workflowTask.StartedID != common.EmptyEventID {
+		if workflowTask.StartedEventID != common.EmptyEventID {
 			// workflowTask has already started
 			return nil
 		}
@@ -403,13 +406,13 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 
 	// generate activity task
 	activityInfo, ok := mutableState.GetActivityInfo(task.EventID)
-	if !ok || task.Attempt < activityInfo.Attempt || activityInfo.StartedId != common.EmptyEventID {
+	if !ok || task.Attempt < activityInfo.Attempt || activityInfo.StartedEventId != common.EmptyEventID {
 		if ok {
 			t.logger.Info("Duplicate activity retry timer task",
 				tag.WorkflowID(mutableState.GetExecutionInfo().WorkflowId),
 				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
 				tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().NamespaceId),
-				tag.WorkflowScheduleID(activityInfo.ScheduleId),
+				tag.WorkflowScheduledEventID(activityInfo.ScheduledEventId),
 				tag.Attempt(activityInfo.Attempt),
 				tag.FailoverVersion(activityInfo.Version),
 				tag.TimerTaskStatus(activityInfo.TimerTaskStatus),
@@ -439,7 +442,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 			RunId:      task.GetRunID(),
 		},
 		TaskQueue:              taskQueue,
-		ScheduleId:             task.EventID,
+		ScheduledEventId:       task.EventID,
 		ScheduleToStartTimeout: timestamp.DurationPtr(scheduleToStartTimeout),
 		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
 	})
@@ -567,7 +570,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 	mutableState workflow.MutableState,
 ) workflow.TimerSequence {
-
 	return workflow.NewTimerSequence(mutableState)
 }
 
@@ -577,7 +579,6 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	mutableState workflow.MutableState,
 	scheduleNewWorkflowTask bool,
 ) error {
-
 	var err error
 	if scheduleNewWorkflowTask {
 		// Schedule a new workflow task.

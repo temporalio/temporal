@@ -142,8 +142,7 @@ func (s *ConcurrentTxMapSuite) TestPutOrDo() {
 func (s *ConcurrentTxMapSuite) TestRemoveIf() {
 	testMap := NewShardedConcurrentTxMap(1, UUIDHashCode)
 	key := uuid.New()
-	var value intType
-	value = intType(1)
+	value := intType(1)
 	testMap.Put(key, &value)
 
 	removed := testMap.RemoveIf(key, func(key interface{}, value interface{}) bool {

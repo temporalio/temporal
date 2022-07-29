@@ -49,9 +49,9 @@ func (s *QuerySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *QuerySuite) TestValidateTerminationState() {
+func (s *QuerySuite) TestValidateCompletionState() {
 	testCases := []struct {
-		ts        *QueryTerminationState
+		ts        *QueryCompletionState
 		expectErr bool
 	}{
 		{
@@ -59,32 +59,32 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			expectErr: true,
 		},
 		{
-			ts: &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeCompleted,
+			ts: &QueryCompletionState{
+				Type: QueryCompletionTypeSucceeded,
 			},
 			expectErr: true,
 		},
 		{
-			ts: &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeCompleted,
-				QueryResult:          &querypb.WorkflowQueryResult{},
-				Failure:              errors.New("err"),
+			ts: &QueryCompletionState{
+				Type:   QueryCompletionTypeSucceeded,
+				Result: &querypb.WorkflowQueryResult{},
+				Err:    errors.New("err"),
 			},
 			expectErr: true,
 		},
 		{
-			ts: &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeCompleted,
-				QueryResult: &querypb.WorkflowQueryResult{
+			ts: &QueryCompletionState{
+				Type: QueryCompletionTypeSucceeded,
+				Result: &querypb.WorkflowQueryResult{
 					ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
 				},
 			},
 			expectErr: true,
 		},
 		{
-			ts: &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeCompleted,
-				QueryResult: &querypb.WorkflowQueryResult{
+			ts: &QueryCompletionState{
+				Type: QueryCompletionTypeSucceeded,
+				Result: &querypb.WorkflowQueryResult{
 					ResultType:   enumspb.QUERY_RESULT_TYPE_ANSWERED,
 					Answer:       payloads.EncodeBytes([]byte{1, 2, 3}),
 					ErrorMessage: "err",
@@ -93,9 +93,9 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			expectErr: true,
 		},
 		{
-			ts: &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeCompleted,
-				QueryResult: &querypb.WorkflowQueryResult{
+			ts: &QueryCompletionState{
+				Type: QueryCompletionTypeSucceeded,
+				Result: &querypb.WorkflowQueryResult{
 					ResultType: enumspb.QUERY_RESULT_TYPE_FAILED,
 					Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
 				},
@@ -103,9 +103,9 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			expectErr: true,
 		},
 		{
-			ts: &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeCompleted,
-				QueryResult: &querypb.WorkflowQueryResult{
+			ts: &QueryCompletionState{
+				Type: QueryCompletionTypeSucceeded,
+				Result: &querypb.WorkflowQueryResult{
 					ResultType:   enumspb.QUERY_RESULT_TYPE_FAILED,
 					ErrorMessage: "err",
 				},
@@ -113,9 +113,9 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			expectErr: false,
 		},
 		{
-			ts: &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeCompleted,
-				QueryResult: &querypb.WorkflowQueryResult{
+			ts: &QueryCompletionState{
+				Type: QueryCompletionTypeSucceeded,
+				Result: &querypb.WorkflowQueryResult{
 					ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
 					Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
 				},
@@ -123,42 +123,42 @@ func (s *QuerySuite) TestValidateTerminationState() {
 			expectErr: false,
 		},
 		{
-			ts: &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeUnblocked,
-				QueryResult:          &querypb.WorkflowQueryResult{},
+			ts: &QueryCompletionState{
+				Type:   QueryCompletionTypeUnblocked,
+				Result: &querypb.WorkflowQueryResult{},
 			},
 			expectErr: true,
 		},
 		{
-			ts: &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeUnblocked,
-				Failure:              errors.New("err"),
+			ts: &QueryCompletionState{
+				Type: QueryCompletionTypeUnblocked,
+				Err:  errors.New("err"),
 			},
 			expectErr: true,
 		},
 		{
-			ts: &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeUnblocked,
+			ts: &QueryCompletionState{
+				Type: QueryCompletionTypeUnblocked,
 			},
 			expectErr: false,
 		},
 		{
-			ts: &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeFailed,
+			ts: &QueryCompletionState{
+				Type: QueryCompletionTypeFailed,
 			},
 			expectErr: true,
 		},
 		{
-			ts: &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeFailed,
-				QueryResult:          &querypb.WorkflowQueryResult{},
+			ts: &QueryCompletionState{
+				Type:   QueryCompletionTypeFailed,
+				Result: &querypb.WorkflowQueryResult{},
 			},
 			expectErr: true,
 		},
 		{
-			ts: &QueryTerminationState{
-				QueryTerminationType: QueryTerminationTypeFailed,
-				Failure:              errors.New("err"),
+			ts: &QueryCompletionState{
+				Type: QueryCompletionTypeFailed,
+				Err:  errors.New("err"),
 			},
 			expectErr: false,
 		},
@@ -167,60 +167,60 @@ func (s *QuerySuite) TestValidateTerminationState() {
 	queryImpl := &queryImpl{}
 	for _, tc := range testCases {
 		if tc.expectErr {
-			s.Error(queryImpl.validateTerminationState(tc.ts))
+			s.Error(queryImpl.validateCompletionState(tc.ts))
 		} else {
-			s.NoError(queryImpl.validateTerminationState(tc.ts))
+			s.NoError(queryImpl.validateCompletionState(tc.ts))
 		}
 	}
 }
 
-func (s *QuerySuite) TestTerminationState_Failed() {
-	failedTerminationState := &QueryTerminationState{
-		QueryTerminationType: QueryTerminationTypeFailed,
-		Failure:              errors.New("err"),
+func (s *QuerySuite) TestCompletionState_Failed() {
+	completionStateFailed := &QueryCompletionState{
+		Type: QueryCompletionTypeFailed,
+		Err:  errors.New("err"),
 	}
-	s.testSetTerminationState(failedTerminationState)
+	s.testSetCompletionState(completionStateFailed)
 }
 
-func (s *QuerySuite) TestTerminationState_Completed() {
-	answeredTerminationState := &QueryTerminationState{
-		QueryTerminationType: QueryTerminationTypeCompleted,
-		QueryResult: &querypb.WorkflowQueryResult{
+func (s *QuerySuite) TestCompletionState_Completed() {
+	answeredCompletionState := &QueryCompletionState{
+		Type: QueryCompletionTypeSucceeded,
+		Result: &querypb.WorkflowQueryResult{
 			ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
 			Answer:     payloads.EncodeBytes([]byte{1, 2, 3}),
 		},
 	}
-	s.testSetTerminationState(answeredTerminationState)
+	s.testSetCompletionState(answeredCompletionState)
 }
 
-func (s *QuerySuite) TestTerminationState_Unblocked() {
-	unblockedTerminationState := &QueryTerminationState{
-		QueryTerminationType: QueryTerminationTypeUnblocked,
+func (s *QuerySuite) TestCompletionState_Unblocked() {
+	unblockedCompletionState := &QueryCompletionState{
+		Type: QueryCompletionTypeUnblocked,
 	}
-	s.testSetTerminationState(unblockedTerminationState)
+	s.testSetCompletionState(unblockedCompletionState)
 }
 
-func (s *QuerySuite) testSetTerminationState(terminationState *QueryTerminationState) {
+func (s *QuerySuite) testSetCompletionState(completionState *QueryCompletionState) {
 	query := newQuery(nil)
-	ts, err := query.GetTerminationState()
-	s.Equal(errQueryNotInTerminalState, err)
+	ts, err := query.GetCompletionState()
+	s.Equal(errQueryNotInCompletionState, err)
 	s.Nil(ts)
-	s.False(closed(query.getQueryTermCh()))
-	s.Equal(errTerminationStateInvalid, query.setTerminationState(nil))
-	s.NoError(query.setTerminationState(terminationState))
-	s.True(closed(query.getQueryTermCh()))
-	actualTerminationState, err := query.GetTerminationState()
+	s.False(closed(query.getCompletionCh()))
+	s.Equal(errCompletionStateInvalid, query.setCompletionState(nil))
+	s.NoError(query.setCompletionState(completionState))
+	s.True(closed(query.getCompletionCh()))
+	actualCompletionState, err := query.GetCompletionState()
 	s.NoError(err)
-	s.assertTerminationStateEqual(terminationState, actualTerminationState)
+	s.assertCompletionStateEqual(completionState, actualCompletionState)
 }
 
-func (s *QuerySuite) assertTerminationStateEqual(expected *QueryTerminationState, actual *QueryTerminationState) {
-	s.Equal(expected.QueryTerminationType, actual.QueryTerminationType)
-	if expected.Failure != nil {
-		s.Equal(expected.Failure.Error(), actual.Failure.Error())
+func (s *QuerySuite) assertCompletionStateEqual(expected *QueryCompletionState, actual *QueryCompletionState) {
+	s.Equal(expected.Type, actual.Type)
+	if expected.Err != nil {
+		s.Equal(expected.Err.Error(), actual.Err.Error())
 	}
-	if expected.QueryResult != nil {
-		s.EqualValues(actual.QueryResult, expected.QueryResult)
+	if expected.Result != nil {
+		s.EqualValues(actual.Result, expected.Result)
 	}
 }
 

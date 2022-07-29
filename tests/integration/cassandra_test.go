@@ -44,8 +44,6 @@ import (
 
 // TODO merge the initialization with existing persistence setup
 const (
-	testCassandraClusterName = "temporal_cassandra_cluster"
-
 	testCassandraUser               = "temporal"
 	testCassandraPassword           = "temporal"
 	testCassandraDatabaseNamePrefix = "test_"

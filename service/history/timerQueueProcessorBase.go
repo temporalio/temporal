@@ -97,7 +97,6 @@ func newTimerQueueProcessorBase(
 	logger log.Logger,
 	metricsScope metrics.Scope,
 ) *timerQueueProcessorBase {
-
 	logger = log.With(logger, tag.ComponentTimerQueue)
 	config := shard.GetConfig()
 
@@ -132,6 +131,8 @@ func (t *timerQueueProcessorBase) Start() {
 		return
 	}
 
+	t.rescheduler.Start()
+
 	t.shutdownWG.Add(1)
 	// notify a initial scan
 	t.notifyNewTimer(time.Time{})
@@ -144,6 +145,8 @@ func (t *timerQueueProcessorBase) Stop() {
 	if !atomic.CompareAndSwapInt32(&t.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
+
+	t.rescheduler.Stop()
 
 	t.timerGate.Close()
 	close(t.shutdownCh)
@@ -180,7 +183,6 @@ RetryProcessor:
 func (t *timerQueueProcessorBase) notifyNewTimers(
 	timerTasks []tasks.Task,
 ) {
-
 	if len(timerTasks) == 0 {
 		return
 	}
@@ -199,7 +201,6 @@ func (t *timerQueueProcessorBase) notifyNewTimers(
 func (t *timerQueueProcessorBase) notifyNewTimer(
 	newTime time.Time,
 ) {
-
 	t.newTimeLock.Lock()
 	defer t.newTimeLock.Unlock()
 	if t.newTime.IsZero() || newTime.Before(t.newTime) {
@@ -226,13 +227,16 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 	))
 	defer updateAckTimer.Stop()
 
-	rescheduleTimer := time.NewTimer(backoff.JitDuration(
-		t.config.TimerProcessorRescheduleInterval(),
-		t.config.TimerProcessorRescheduleIntervalJitterCoefficient(),
-	))
-	defer rescheduleTimer.Stop()
-
+eventLoop:
 	for {
+		// prioritize shutdown
+		select {
+		case <-t.shutdownCh:
+			break eventLoop
+		default:
+			// noop
+		}
+
 		// Wait until one of four things occurs:
 		// 1. we get notified of a new message
 		// 2. the timer gate fires (message scheduled to be delivered)
@@ -241,8 +245,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 		//
 		select {
 		case <-t.shutdownCh:
-			t.logger.Debug("Timer queue processor pump shutting down.")
-			return nil
+			break eventLoop
 		case <-t.timerQueueAckMgr.getFinishedChan():
 			// timer queue ack manager indicate that all task scanned
 			// are finished and no more tasks
@@ -289,28 +292,25 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 			// New Timer has arrived.
 			t.metricsClient.IncCounter(t.scope, metrics.NewTimerNotifyCounter)
 			t.timerGate.Update(newTime)
-		case <-rescheduleTimer.C:
-			t.rescheduler.Reschedule(0) // reschedule all
-			rescheduleTimer.Reset(backoff.JitDuration(
-				t.config.TimerProcessorRescheduleInterval(),
-				t.config.TimerProcessorRescheduleIntervalJitterCoefficient(),
-			))
 		}
 	}
+
+	return nil
 }
 
 func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) {
-	if !t.verifyReschedulerSize() {
-		return nil, nil
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), loadTimerTaskThrottleRetryDelay)
 	if err := t.rateLimiter.Wait(ctx); err != nil {
+		deadline, _ := ctx.Deadline()
+		t.notifyNewTimer(deadline) // re-enqueue the event
 		cancel()
-		t.notifyNewTimer(time.Time{}) // re-enqueue the event
 		return nil, nil
 	}
 	cancel()
+
+	if !t.verifyReschedulerSize() {
+		return nil, nil
+	}
 
 	t.lastPollTime = t.timeSource.Now()
 	timerTasks, nextFireTime, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
@@ -340,13 +340,7 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) 
 }
 
 func (t *timerQueueProcessorBase) verifyReschedulerSize() bool {
-	length := t.rescheduler.Len()
-	maxLength := t.config.TimerProcessorMaxReschedulerSize()
-	if length > maxLength {
-		t.rescheduler.Reschedule(length - maxLength + t.config.TimerTaskBatchSize()*2)
-	}
-
-	passed := t.rescheduler.Len() < maxLength
+	passed := t.rescheduler.Len() < t.config.TimerProcessorMaxReschedulerSize()
 	if !passed {
 		// set backoff timer
 		t.notifyNewTimer(t.timeSource.Now().Add(t.config.TimerProcessorPollBackoffInterval()))
@@ -358,7 +352,6 @@ func (t *timerQueueProcessorBase) verifyReschedulerSize() bool {
 func (t *timerQueueProcessorBase) submitTask(
 	executable queues.Executable,
 ) {
-
 	submitted, err := t.scheduler.TrySubmit(executable)
 	if err != nil {
 		t.logger.Error("Failed to submit task", tag.Error(err))
@@ -371,6 +364,7 @@ func (t *timerQueueProcessorBase) submitTask(
 func newTimerTaskScheduler(
 	shard shard.Context,
 	logger log.Logger,
+	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
 	return queues.NewScheduler(
@@ -384,7 +378,7 @@ func newTimerTaskScheduler(
 				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TimerProcessorSchedulerRoundRobinWeights(), logger),
 			},
 		},
-		shard.GetMetricsClient(),
+		metricProvider,
 		logger,
 	)
 }

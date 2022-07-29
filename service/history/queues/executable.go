@@ -29,18 +29,20 @@ package queues
 import (
 	"context"
 	"sync"
-	time "time"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
-	backoff "go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -59,7 +61,7 @@ type (
 	}
 
 	Executor interface {
-		Execute(context.Context, Executable) (metrics.Scope, error)
+		Execute(context.Context, Executable) (metrics.MetricsHandler, error)
 	}
 
 	// TaskFilter determines if the given task should be executed
@@ -102,7 +104,7 @@ type (
 		loadTime                      time.Time
 		userLatency                   time.Duration
 		logger                        log.Logger
-		scope                         metrics.Scope
+		metricsProvider               metrics.MetricsHandler
 		criticalRetryAttempt          dynamicconfig.IntPropertyFn
 		namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
 		queueType                     QueueType
@@ -131,14 +133,14 @@ func NewExecutable(
 		scheduler:   scheduler,
 		rescheduler: rescheduler,
 		timeSource:  timeSource,
-		loadTime:    timeSource.Now(),
+		loadTime:    util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
 		logger: log.NewLazyLogger(
 			logger,
 			func() []tag.Tag {
 				return tasks.Tags(task)
 			},
 		),
-		scope:                         metrics.NoopScope,
+		metricsProvider:               metrics.NoopMetricsHandler,
 		queueType:                     queueType,
 		criticalRetryAttempt:          criticalRetryAttempt,
 		filter:                        filter,
@@ -147,6 +149,10 @@ func NewExecutable(
 }
 
 func (e *executableImpl) Execute() error {
+	if e.State() == ctasks.TaskStateCancelled {
+		return nil
+	}
+
 	// this filter should also contain the logic for overriding
 	// results from task allocator (force executing some standby task types)
 	e.shouldProcess = e.filter(e.Task)
@@ -155,10 +161,11 @@ func (e *executableImpl) Execute() error {
 	}
 
 	ctx := metrics.AddMetricsContext(context.Background())
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
 	startTime := e.timeSource.Now()
 
 	var err error
-	e.scope, err = e.executor.Execute(ctx, e)
+	e.metricsProvider, err = e.executor.Execute(ctx, e)
 
 	var userLatency time.Duration
 	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
@@ -166,9 +173,9 @@ func (e *executableImpl) Execute() error {
 	}
 	e.userLatency += userLatency
 
-	e.scope.Tagged(metrics.TaskPriorityTag(e.priority.String())).IncCounter(metrics.TaskRequests)
-	e.scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))
-	e.scope.RecordTimer(metrics.TaskNoUserProcessingLatency, time.Since(startTime)-userLatency)
+	e.metricsProvider.Counter(TaskRequests).Record(1, metrics.TaskPriorityTag(e.priority.String()))
+	e.metricsProvider.Timer(TaskProcessingLatency).Record(time.Since(startTime))
+	e.metricsProvider.Timer(TaskNoUserProcessingLatency).Record(time.Since(startTime) - userLatency)
 	return err
 }
 
@@ -180,7 +187,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 			e.attempt++
 			if e.attempt > e.criticalRetryAttempt() {
-				e.scope.RecordDistribution(metrics.TaskAttemptTimer, e.attempt)
+				e.metricsProvider.Histogram(TaskAttempt, metrics.Dimensionless).Record(int64(e.attempt))
 				e.logger.Error("Critical error processing task, retrying.", tag.Error(err), tag.OperationCritical)
 			}
 		}
@@ -200,17 +207,17 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	if err == consts.ErrTaskRetry {
-		e.scope.IncCounter(metrics.TaskStandbyRetryCounter)
+		e.metricsProvider.Counter(TaskStandbyRetryCounter).Record(1)
 		return err
 	}
 
 	if err == consts.ErrWorkflowBusy {
-		e.scope.IncCounter(metrics.TaskWorkflowBusyCounter)
+		e.metricsProvider.Counter(TaskWorkflowBusyCounter).Record(1)
 		return err
 	}
 
 	if err == consts.ErrTaskDiscarded {
-		e.scope.IncCounter(metrics.TaskDiscarded)
+		e.metricsProvider.Counter(TaskDiscarded).Record(1)
 		return nil
 	}
 
@@ -219,14 +226,14 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 		if e.timeSource.Now().Sub(e.loadTime) > 2*e.namespaceCacheRefreshInterval() {
-			e.scope.IncCounter(metrics.TaskNotActiveCounter)
+			e.metricsProvider.Counter(TaskNotActiveCounter).Record(1)
 			return nil
 		}
 
 		return err
 	}
 
-	e.scope.IncCounter(metrics.TaskFailures)
+	e.metricsProvider.Counter(TaskFailures).Record(1)
 
 	e.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
 	return err
@@ -234,6 +241,10 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 func (e *executableImpl) IsRetryableError(err error) bool {
 	// this determines if the executable should be retried within one submission to scheduler
+
+	if e.State() == ctasks.TaskStateCancelled {
+		return false
+	}
 
 	if shard.IsShardOwnershipLostError(err) {
 		return false
@@ -257,28 +268,44 @@ func (e *executableImpl) RetryPolicy() backoff.RetryPolicy {
 	return schedulerRetryPolicy
 }
 
+func (e *executableImpl) Cancel() {
+	e.Lock()
+	defer e.Unlock()
+
+	if e.state == ctasks.TaskStatePending {
+		e.state = ctasks.TaskStateCancelled
+	}
+}
+
 func (e *executableImpl) Ack() {
 	e.Lock()
 	defer e.Unlock()
 
+	if e.state == ctasks.TaskStateCancelled {
+		return
+	}
+
 	e.state = ctasks.TaskStateAcked
 
 	if e.shouldProcess {
-		e.scope.RecordDistribution(metrics.TaskAttemptTimer, e.attempt)
+		e.metricsProvider.Histogram(TaskAttempt, metrics.Dimensionless).Record(int64(e.attempt))
 
-		priorityTaggedScope := e.scope.Tagged(metrics.TaskPriorityTag(e.lowestPriority.String()))
-		priorityTaggedScope.RecordTimer(metrics.TaskLatency, time.Since(e.loadTime))
-		priorityTaggedScope.RecordTimer(metrics.TaskQueueLatency, time.Since(e.GetVisibilityTime()))
-		priorityTaggedScope.RecordTimer(metrics.TaskUserLatency, e.userLatency)
-		priorityTaggedScope.RecordTimer(metrics.TaskNoUserLatency, time.Since(e.loadTime)-e.userLatency)
-		priorityTaggedScope.RecordTimer(metrics.TaskNoUserQueueLatency, time.Since(e.GetVisibilityTime())-e.userLatency)
+		priorityTaggedProvider := e.metricsProvider.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
+		priorityTaggedProvider.Timer(TaskLatency).Record(time.Since(e.loadTime))
+		priorityTaggedProvider.Timer(TaskQueueLatency).Record(time.Since(e.GetVisibilityTime()))
+		priorityTaggedProvider.Timer(TaskUserLatency).Record(e.userLatency)
+		priorityTaggedProvider.Timer(TaskNoUserLatency).Record(time.Since(e.loadTime) - e.userLatency)
+		priorityTaggedProvider.Timer(TaskNoUserQueueLatency).Record(time.Since(e.GetVisibilityTime()) - e.userLatency)
 	}
 }
 
 func (e *executableImpl) Nack(err error) {
+	if e.State() == ctasks.TaskStateCancelled {
+		return
+	}
+
 	submitted := false
-	attempt := e.Attempt()
-	if e.shouldResubmitOnNack(attempt, err) {
+	if e.shouldResubmitOnNack(e.Attempt(), err) {
 		// we do not need to know if there any error during submission
 		// as long as it's not submitted, the execuable should be add
 		// to the rescheduler
@@ -286,12 +313,16 @@ func (e *executableImpl) Nack(err error) {
 	}
 
 	if !submitted {
-		e.rescheduler.Add(e, e.rescheduleBackoff(attempt))
+		e.rescheduler.Add(e, e.rescheduleTime(e.Attempt()))
 	}
 }
 
 func (e *executableImpl) Reschedule() {
-	e.rescheduler.Add(e, e.rescheduleBackoff(e.Attempt()))
+	if e.State() == ctasks.TaskStateCancelled {
+		return
+	}
+
+	e.rescheduler.Add(e, e.rescheduleTime(e.Attempt()))
 }
 
 func (e *executableImpl) State() ctasks.State {
@@ -345,11 +376,13 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 		return false
 	}
 
-	return err == consts.ErrWorkflowBusy || common.IsContextDeadlineExceededErr(err) || e.IsRetryableError(err)
+	return err == consts.ErrWorkflowBusy ||
+		common.IsContextDeadlineExceededErr(err) ||
+		e.IsRetryableError(err)
 }
 
-func (e *executableImpl) rescheduleBackoff(attempt int) time.Duration {
+func (e *executableImpl) rescheduleTime(attempt int) time.Time {
 	// elapsedTime (the first parameter) is not relevant here since reschedule policy
 	// has no expiration interval.
-	return reschedulePolicy.ComputeNextDelay(0, attempt)
+	return e.timeSource.Now().Add(reschedulePolicy.ComputeNextDelay(0, attempt))
 }

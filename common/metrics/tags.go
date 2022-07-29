@@ -29,7 +29,6 @@ import (
 	"strconv"
 	"strings"
 
-	"go.temporal.io/api/enums/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
@@ -73,13 +72,6 @@ type (
 		value string
 	}
 )
-
-func newExcludedTag(key string) Tag {
-	return &tagImpl{
-		key:   key,
-		value: tagExcludedValue,
-	}
-}
 
 func (v *tagImpl) Key() string {
 	return v.key
@@ -137,7 +129,7 @@ func TaskQueueTag(value string) Tag {
 	return &tagImpl{key: taskQueue, value: sanitizer.Value(value)}
 }
 
-func TaskQueueTypeTag(tqType enums.TaskQueueType) Tag {
+func TaskQueueTypeTag(tqType enumspb.TaskQueueType) Tag {
 	return &tagImpl{key: TaskTypeTagName, value: tqType.String()}
 }
 

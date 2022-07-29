@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -92,7 +93,7 @@ type (
 		workflowTaskHandler        workflowTaskHandlerCallbacks
 		clusterMetadata            cluster.Metadata
 		executionManager           persistence.ExecutionManager
-		queueProcessors            map[tasks.Category]queues.Processor
+		queueProcessors            map[tasks.Category]queues.Queue
 		replicationAckMgr          replication.AckManager
 		nDCReplicator              nDCHistoryReplicator
 		nDCActivityReplicator      nDCActivityReplicator
@@ -114,6 +115,7 @@ type (
 		workflowDeleteManager      workflow.DeleteManager
 		eventSerializer            serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		tracer                     trace.Tracer
 	}
 )
 
@@ -129,9 +131,10 @@ func NewEngineWithShardContext(
 	newCacheFn workflow.NewCacheFn,
 	archivalClient archiver.Client,
 	eventSerializer serialization.Serializer,
-	queueProcessorFactories []queues.ProcessorFactory,
+	queueProcessorFactories []queues.Factory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
+	tracerProvider trace.TracerProvider,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -166,11 +169,12 @@ func NewEngineWithShardContext(
 		workflowDeleteManager:      workflowDeleteManager,
 		eventSerializer:            eventSerializer,
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(shard, historyCache),
+		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 	}
 
-	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Processor)
+	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
 	for _, factory := range queueProcessorFactories {
-		processor := factory.CreateProcessor(shard, historyEngImpl, historyCache)
+		processor := factory.CreateQueue(shard, historyEngImpl, historyCache)
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
@@ -314,8 +318,20 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 		namespaceFailoverNotificationVersion := nextNamespace.FailoverNotificationVersion()
 		namespaceActiveCluster := nextNamespace.ActiveClusterName()
 
+		// +1 in the following check as the version in shard is max notification version +1.
+		// Need to run action() when namespaceFailoverNotificationVersion+1 == shardNotificationVersion
+		// as we don't know if the failover queue execution for that notification version is
+		// completed or not.
+		//
+		// NOTE: theoretically we need to get rid of the check on shardNotificationVersion, as
+		// we have no idea if the failover queue for any notification version below that is completed
+		// or not. However, removing that will cause more load upon shard reload.
+		// So here assume failover queue processor for notification version < X-1 is completed if
+		// shard notification version is X.
+
 		if nextNamespace.IsGlobalNamespace() &&
-			namespaceFailoverNotificationVersion >= shardNotificationVersion &&
+			nextNamespace.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
+			namespaceFailoverNotificationVersion+1 >= shardNotificationVersion &&
 			namespaceActiveCluster == e.currentClusterName {
 			action()
 		}
@@ -342,7 +358,8 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			}
 
 			if e.shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-				e.shard.UpdateHandoverNamespaces(nextNamespaces, e.replicationAckMgr.GetMaxTaskID())
+				maxTaskID, _ := e.replicationAckMgr.GetMaxTaskInfo()
+				e.shard.UpdateHandoverNamespaces(nextNamespaces, maxTaskID)
 			}
 
 			newNotificationVersion := nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1
@@ -352,10 +369,10 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			// since we don't know if the previous failover queue processing has finished or not
 			// 2. We can return when newNotificationVersion < shardNotificationVersion. But the check
 			// is basically the same as the check in failover predicate. Because
-			// failover notification version <= NotificationVersion,
-			// there's no notification version that can make
+			// failoverNotificationVersion + 1 <= NotificationVersion + 1 = newNotificationVersion,
+			// there's no notification version can make
 			// newNotificationVersion < shardNotificationVersion and
-			// failoverNotificationVersion >= shardNotificationVersion are true at the same time
+			// failoverNotificationVersion + 1 >= shardNotificationVersion are true at the same time
 			// Meaning if the check decides to return, no namespace will pass the failover predicate.
 
 			failoverNamespaceIDs := map[string]struct{}{}
@@ -382,8 +399,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				e.NotifyNewTasks(e.currentClusterName, fakeTasks)
 			}
 
-			// nolint:errcheck
-			e.shard.UpdateNamespaceNotificationVersion(newNotificationVersion)
+			_ = e.shard.UpdateNamespaceNotificationVersion(newNotificationVersion)
 		},
 	)
 }
@@ -635,7 +651,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 		if err != nil {
 			return nil, err
 		}
-		defer e.eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID) // nolint:errcheck
+		defer func() { _ = e.eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID) }()
 		// check again in case the next event ID is updated
 		response, err = e.getMutableState(ctx, workflowKey)
 		if err != nil {
@@ -781,19 +797,19 @@ func (e *historyEngineImpl) QueryWorkflow(
 		scope.IncCounter(metrics.QueryBufferExceededCount)
 		return nil, consts.ErrConsistentQueryBufferExceeded
 	}
-	queryID, termCh := queryReg.BufferQuery(req.GetQuery())
+	queryID, completionCh := queryReg.BufferQuery(req.GetQuery())
 	defer queryReg.RemoveQuery(queryID)
 	weCtx.GetReleaseFn()(nil)
 	select {
-	case <-termCh:
-		state, err := queryReg.GetTerminationState(queryID)
+	case <-completionCh:
+		completionState, err := queryReg.GetCompletionState(queryID)
 		if err != nil {
 			scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 			return nil, err
 		}
-		switch state.QueryTerminationType {
-		case workflow.QueryTerminationTypeCompleted:
-			result := state.QueryResult
+		switch completionState.Type {
+		case workflow.QueryCompletionTypeSucceeded:
+			result := completionState.Result
 			switch result.GetResultType() {
 			case enumspb.QUERY_RESULT_TYPE_ANSWERED:
 				return &historyservice.QueryWorkflowResponse{
@@ -807,15 +823,15 @@ func (e *historyEngineImpl) QueryWorkflow(
 				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 				return nil, consts.ErrQueryEnteredInvalidState
 			}
-		case workflow.QueryTerminationTypeUnblocked:
+		case workflow.QueryCompletionTypeUnblocked:
 			msResp, err := e.getMutableState(ctx, workflowKey)
 			if err != nil {
 				return nil, err
 			}
 			req.Execution.RunId = msResp.Execution.RunId
 			return e.queryDirectlyThroughMatching(ctx, msResp, request.GetNamespaceId(), req, scope)
-		case workflow.QueryTerminationTypeFailed:
-			return nil, state.Failure
+		case workflow.QueryCompletionTypeFailed:
+			return nil, completionState.Err
 		default:
 			scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 			return nil, consts.ErrQueryEnteredInvalidState
@@ -1146,7 +1162,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			}
 			if ai.CancelRequested {
 				p.State = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
-			} else if ai.StartedId != common.EmptyEventID {
+			} else if ai.StartedEventId != common.EmptyEventID {
 				p.State = enumspb.PENDING_ACTIVITY_STATE_STARTED
 			} else {
 				p.State = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
@@ -1156,7 +1172,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				p.HeartbeatDetails = ai.LastHeartbeatDetails
 			}
 			// TODO: move to mutable state instead of loading it from event
-			scheduledEvent, err := mutableState.GetActivityScheduledEvent(ctx, ai.ScheduleId)
+			scheduledEvent, err := mutableState.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
 			if err != nil {
 				return nil, err
 			}
@@ -1192,25 +1208,24 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				WorkflowId:        ch.StartedWorkflowId,
 				RunId:             ch.StartedRunId,
 				WorkflowTypeName:  ch.WorkflowTypeName,
-				InitiatedId:       ch.InitiatedId,
+				InitiatedId:       ch.InitiatedEventId,
 				ParentClosePolicy: ch.ParentClosePolicy,
 			}
 			result.PendingChildren = append(result.PendingChildren, p)
 		}
 	}
 
-	if di, ok := mutableState.GetPendingWorkflowTask(); ok {
-		pendingWorkflowTask := &workflowpb.PendingWorkflowTaskInfo{
+	if pendingWorkflowTask, ok := mutableState.GetPendingWorkflowTask(); ok {
+		result.PendingWorkflowTask = &workflowpb.PendingWorkflowTaskInfo{
 			State:                 enumspb.PENDING_WORKFLOW_TASK_STATE_SCHEDULED,
-			ScheduledTime:         di.ScheduledTime,
-			OriginalScheduledTime: di.OriginalScheduledTime,
-			Attempt:               di.Attempt,
+			ScheduledTime:         pendingWorkflowTask.ScheduledTime,
+			OriginalScheduledTime: pendingWorkflowTask.OriginalScheduledTime,
+			Attempt:               pendingWorkflowTask.Attempt,
 		}
-		if di.StartedID != common.EmptyEventID {
-			pendingWorkflowTask.State = enumspb.PENDING_WORKFLOW_TASK_STATE_STARTED
-			pendingWorkflowTask.StartedTime = di.StartedTime
+		if pendingWorkflowTask.StartedEventID != common.EmptyEventID {
+			result.PendingWorkflowTask.State = enumspb.PENDING_WORKFLOW_TASK_STATE_STARTED
+			result.PendingWorkflowTask.StartedTime = pendingWorkflowTask.StartedTime
 		}
-		result.PendingWorkflowTask = pendingWorkflowTask
 	}
 
 	return result, nil
@@ -1243,15 +1258,15 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			scheduleID := request.GetScheduleId()
+			scheduledEventID := request.GetScheduledEventId()
 			requestID := request.GetRequestId()
-			ai, isRunning := mutableState.GetActivityInfo(scheduleID)
+			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
 
 			metricsScope := e.metricsClient.Scope(metrics.HistoryRecordActivityTaskStartedScope)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
-			if !isRunning && scheduleID >= mutableState.GetNextEventID() {
+			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
 				metricsScope.IncCounter(metrics.StaleMutableStateCounter)
 				return nil, consts.ErrStaleState
 			}
@@ -1264,14 +1279,14 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
-			scheduledEvent, err := mutableState.GetActivityScheduledEvent(ctx, scheduleID)
+			scheduledEvent, err := mutableState.GetActivityScheduledEvent(ctx, scheduledEventID)
 			if err != nil {
 				return nil, err
 			}
 			response.ScheduledEvent = scheduledEvent
 			response.CurrentAttemptScheduledTime = ai.ScheduledTime
 
-			if ai.StartedId != common.EmptyEventID {
+			if ai.StartedEventId != common.EmptyEventID {
 				// If activity is started as part of the current request scope then return a positive response
 				if ai.RequestId == requestID {
 					response.StartedTime = ai.StartedTime
@@ -1288,7 +1303,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			}
 
 			if _, err := mutableState.AddActivityTaskStartedEvent(
-				ai, scheduleID, requestID, request.PollRequest.GetIdentity(),
+				ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
 			); err != nil {
 				return nil, err
 			}
@@ -1403,28 +1418,28 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
-			scheduleID := token.GetScheduleId()
-			if scheduleID == common.EmptyEventID { // client call CompleteActivityById, so get scheduleID by activityID
-				scheduleID, err0 = getScheduleID(token.GetActivityId(), mutableState)
+			scheduledEventID := token.GetScheduledEventId()
+			if scheduledEventID == common.EmptyEventID { // client call CompleteActivityById, so get scheduledEventID by activityID
+				scheduledEventID, err0 = getscheduledEventID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return nil, err0
 				}
 			}
-			ai, isRunning := mutableState.GetActivityInfo(scheduleID)
+			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
-			if !isRunning && scheduleID >= mutableState.GetNextEventID() {
+			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
 				e.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskCompletedScope, metrics.StaleMutableStateCounter)
 				return nil, consts.ErrStaleState
 			}
 
-			if !isRunning || ai.StartedId == common.EmptyEventID ||
-				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != ai.Attempt) {
+			if !isRunning || ai.StartedEventId == common.EmptyEventID ||
+				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
-			if _, err := mutableState.AddActivityTaskCompletedEvent(scheduleID, ai.StartedId, request); err != nil {
+			if _, err := mutableState.AddActivityTaskCompletedEvent(scheduledEventID, ai.StartedEventId, request); err != nil {
 				// Unable to add ActivityTaskCompleted event to history
 				return nil, err
 			}
@@ -1489,28 +1504,28 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			scheduleID := token.GetScheduleId()
-			if scheduleID == common.EmptyEventID { // client call CompleteActivityById, so get scheduleID by activityID
-				scheduleID, err0 = getScheduleID(token.GetActivityId(), mutableState)
+			scheduledEventID := token.GetScheduledEventId()
+			if scheduledEventID == common.EmptyEventID { // client call CompleteActivityById, so get scheduledEventID by activityID
+				scheduledEventID, err0 = getscheduledEventID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return nil, err0
 				}
 			}
-			ai, isRunning := mutableState.GetActivityInfo(scheduleID)
+			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
-			if !isRunning && scheduleID >= mutableState.GetNextEventID() {
+			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
 				e.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskFailedScope, metrics.StaleMutableStateCounter)
 				return nil, consts.ErrStaleState
 			}
 
-			if !isRunning || ai.StartedId == common.EmptyEventID ||
-				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != ai.Attempt) {
+			if !isRunning || ai.StartedEventId == common.EmptyEventID ||
+				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
-			e.logger.Debug("RespondActivityTaskFailed", tag.WorkflowScheduleID(scheduleID), tag.ActivityInfo(ai), tag.NewBoolTag("hasHeartbeatDetails", request.GetLastHeartbeatDetails() != nil))
+			e.logger.Debug("RespondActivityTaskFailed", tag.WorkflowScheduledEventID(scheduledEventID), tag.ActivityInfo(ai), tag.NewBoolTag("hasHeartbeatDetails", request.GetLastHeartbeatDetails() != nil))
 
 			if request.GetLastHeartbeatDetails() != nil {
 				// Save heartbeat details as progress
@@ -1530,7 +1545,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			}
 			if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
 				// no more retry, and we want to record the failure event
-				if _, err := mutableState.AddActivityTaskFailedEvent(scheduleID, ai.StartedId, failure, retryState, request.GetIdentity()); err != nil {
+				if _, err := mutableState.AddActivityTaskFailedEvent(scheduledEventID, ai.StartedEventId, failure, retryState, request.GetIdentity()); err != nil {
 					// Unable to add ActivityTaskFailed event to history
 					return nil, err
 				}
@@ -1594,24 +1609,24 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			scheduleID := token.GetScheduleId()
-			if scheduleID == common.EmptyEventID { // client call CompleteActivityById, so get scheduleID by activityID
-				scheduleID, err0 = getScheduleID(token.GetActivityId(), mutableState)
+			scheduledEventID := token.GetScheduledEventId()
+			if scheduledEventID == common.EmptyEventID { // client call CompleteActivityById, so get scheduledEventID by activityID
+				scheduledEventID, err0 = getscheduledEventID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return nil, err0
 				}
 			}
-			ai, isRunning := mutableState.GetActivityInfo(scheduleID)
+			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
-			if !isRunning && scheduleID >= mutableState.GetNextEventID() {
+			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
 				e.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskCanceledScope, metrics.StaleMutableStateCounter)
 				return nil, consts.ErrStaleState
 			}
 
-			if !isRunning || ai.StartedId == common.EmptyEventID ||
-				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != ai.Attempt) {
+			if !isRunning || ai.StartedEventId == common.EmptyEventID ||
+				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
@@ -1621,8 +1636,8 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 			}
 
 			if _, err := mutableState.AddActivityTaskCanceledEvent(
-				scheduleID,
-				ai.StartedId,
+				scheduledEventID,
+				ai.StartedEventId,
 				ai.CancelRequestId,
 				request.Details,
 				request.Identity); err != nil {
@@ -1691,30 +1706,30 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			scheduleID := token.GetScheduleId()
-			if scheduleID == common.EmptyEventID { // client call RecordActivityHeartbeatByID, so get scheduleID by activityID
-				scheduleID, err0 = getScheduleID(token.GetActivityId(), mutableState)
+			scheduledEventID := token.GetScheduledEventId()
+			if scheduledEventID == common.EmptyEventID { // client call RecordActivityHeartbeatByID, so get scheduledEventID by activityID
+				scheduledEventID, err0 = getscheduledEventID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return nil, err0
 				}
 			}
-			ai, isRunning := mutableState.GetActivityInfo(scheduleID)
+			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
-			if !isRunning && scheduleID >= mutableState.GetNextEventID() {
+			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
 				e.metricsClient.IncCounter(metrics.HistoryRecordActivityTaskHeartbeatScope, metrics.StaleMutableStateCounter)
 				return nil, consts.ErrStaleState
 			}
 
-			if !isRunning || ai.StartedId == common.EmptyEventID ||
-				(token.GetScheduleId() != common.EmptyEventID && token.ScheduleAttempt != ai.Attempt) {
+			if !isRunning || ai.StartedEventId == common.EmptyEventID ||
+				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) {
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
 			cancelRequested = ai.CancelRequested
 
-			e.logger.Debug("Activity heartbeat", tag.WorkflowScheduleID(scheduleID), tag.ActivityInfo(ai), tag.Bool(cancelRequested))
+			e.logger.Debug("Activity heartbeat", tag.WorkflowScheduledEventID(scheduledEventID), tag.ActivityInfo(ai), tag.Bool(cancelRequested))
 
 			// Save progress and last HB reported time.
 			mutableState.UpdateActivityProgress(ai, request)
@@ -1947,6 +1962,13 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}, nil
 }
 
+func (h *historyEngineImpl) UpdateWorkflow(
+	ctx context.Context,
+	request *historyservice.UpdateWorkflowRequest,
+) (*historyservice.UpdateWorkflowResponse, error) {
+	return nil, serviceerror.NewUnimplemented("UpdateWorkflow is not supported on this server")
+}
+
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
 func (e *historyEngineImpl) RemoveSignalMutableState(
 	ctx context.Context,
@@ -2152,7 +2174,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 			}
 
 			ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
-			return !(isRunning && ci.StartedId == common.EmptyEventID) // !(potential stale)
+			return !(isRunning && ci.StartedEventId == common.EmptyEventID) // !(potential stale)
 		},
 		definition.NewWorkflowKey(
 			completionRequest.NamespaceId,
@@ -2172,8 +2194,8 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 
 			// Check mutable state to make sure child execution is in pending child executions
 			ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
-			if !isRunning || ci.StartedId == common.EmptyEventID {
-				// note we already checked if startedID is empty (in consistency predicate)
+			if !isRunning || ci.StartedEventId == common.EmptyEventID {
+				// note we already checked if startedEventID is empty (in consistency predicate)
 				// and reloaded mutable state
 				return nil, consts.ErrChildExecutionNotFound
 			}
@@ -2237,12 +2259,6 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 		),
 	)
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			// workflow not found error, verification logic need to keep waiting in this case
-			// if we return NotFound directly, caller can't tell if it's workflow not found or child not found
-			// standby logic will continue verification
-			return consts.ErrWorkflowNotReady
-		}
 		return err
 	}
 	defer func() { workflowContext.GetReleaseFn()(retError) }()
@@ -2250,9 +2266,8 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	mutableState := workflowContext.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() &&
 		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		// standby logic will stop verification as the parent has already completed
-		// and can't be blocked after failover.
-		return consts.ErrWorkflowCompleted
+		// parent has already completed and can't be blocked after failover.
+		return nil
 	}
 
 	onCurrentBranch, err := historyEventOnCurrentBranch(mutableState, request.ParentInitiatedId, request.ParentInitiatedVersion)
@@ -2270,7 +2285,7 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 
 	ci, isRunning := mutableState.GetChildExecutionInfo(request.ParentInitiatedId)
 	if isRunning {
-		if ci.StartedId != common.EmptyEventID &&
+		if ci.StartedEventId != common.EmptyEventID &&
 			ci.GetStartedWorkflowId() != request.ChildExecution.GetWorkflowId() {
 			// this can happen since we may not have the initiated version
 			return consts.ErrChildExecutionNotFound
@@ -2493,8 +2508,8 @@ func (e *historyEngineImpl) updateWorkflowWithNew(
 func (e *historyEngineImpl) failWorkflowTask(
 	ctx context.Context,
 	wfContext workflow.Context,
-	scheduleID int64,
-	startedID int64,
+	scheduledEventID int64,
+	startedEventID int64,
 	wtFailedCause *workflowTaskFailedCause,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (workflow.MutableState, error) {
@@ -2509,8 +2524,8 @@ func (e *historyEngineImpl) failWorkflowTask(
 	}
 
 	if _, err = mutableState.AddWorkflowTaskFailedEvent(
-		scheduleID,
-		startedID,
+		scheduledEventID,
+		startedEventID,
 		wtFailedCause.failedCause,
 		failure.NewServerFailure(wtFailedCause.Message(), true),
 		request.GetIdentity(),
@@ -2689,7 +2704,7 @@ func getActiveNamespaceEntryFromShard(
 	return namespaceEntry, nil
 }
 
-func getScheduleID(
+func getscheduledEventID(
 	activityID string,
 	mutableState workflow.MutableState,
 ) (int64, error) {
@@ -2701,7 +2716,7 @@ func getScheduleID(
 	if !ok {
 		return 0, serviceerror.NewNotFound(fmt.Sprintf("cannot find pending activity with ActivityID %s, check workflow execution history for more details", activityID))
 	}
-	return activityInfo.ScheduleId, nil
+	return activityInfo.ScheduledEventId, nil
 }
 
 func (e *historyEngineImpl) getStartRequest(
@@ -2735,7 +2750,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	ctx context.Context,
 	pollingCluster string,
 	ackMessageID int64,
-	ackTimestampe time.Time,
+	ackTimestamp time.Time,
 	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
 
@@ -2747,7 +2762,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 		); err != nil {
 			e.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
 		}
-		e.shard.UpdateRemoteClusterInfo(pollingCluster, ackMessageID, ackTimestampe)
+		e.shard.UpdateRemoteClusterInfo(pollingCluster, ackMessageID, ackTimestamp)
 	}
 
 	replicationMessages, err := e.replicationAckMgr.GetTasks(
@@ -3149,7 +3164,10 @@ func (e *historyEngineImpl) GetReplicationStatus(
 		ShardLocalTime: timestamp.TimePtr(e.shard.GetTimeSource().Now()),
 	}
 
-	resp.MaxReplicationTaskId = e.replicationAckMgr.GetMaxTaskID()
+	maxReplicationTaskId, maxTaskVisibilityTimeStamp := e.replicationAckMgr.GetMaxTaskInfo()
+	resp.MaxReplicationTaskId = maxReplicationTaskId
+	resp.MaxReplicationTaskVisibilityTime = timestamp.TimePtr(maxTaskVisibilityTimeStamp)
+
 	remoteClusters, handoverNamespaces, err := e.shard.GetReplicationStatus(request.RemoteClusters)
 	if err != nil {
 		return nil, err

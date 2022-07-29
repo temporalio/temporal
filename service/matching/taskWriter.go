@@ -37,6 +37,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -105,7 +106,8 @@ func (w *taskWriter) Start() {
 	) {
 		return
 	}
-	w.writeLoop = goro.Go(context.Background(), w.taskWriterLoop)
+	w.writeLoop = goro.NewHandle(context.Background())
+	w.writeLoop.Go(w.taskWriterLoop)
 }
 
 // Stop stops the taskWriter
@@ -133,7 +135,6 @@ func (w *taskWriter) initReadWriteState(ctx context.Context) error {
 	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
 	atomic.StoreInt64(&w.maxReadLevel, w.taskIDBlock.start-1)
 	w.tlMgr.taskAckManager.setAckLevel(state.ackLevel)
-	w.tlMgr.taskReader.Signal()
 	return nil
 }
 
@@ -216,9 +217,13 @@ func (w *taskWriter) appendTasks(
 }
 
 func (w *taskWriter) taskWriterLoop(ctx context.Context) error {
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
 	err := w.initReadWriteState(ctx)
+	w.tlMgr.initializedError.Set(struct{}{}, err)
 	if err != nil {
-		w.tlMgr.signalIfFatal(err)
+		// We can't recover from here without starting over, so unload the whole task queue
+		w.tlMgr.signalFatalProblem(w.tlMgr)
 		return err
 	}
 writerLoop:
@@ -299,7 +304,7 @@ func (w *taskWriter) renewLeaseWithRetry(
 		return
 	}
 	w.tlMgr.metricScope.IncCounter(metrics.LeaseRequestPerTaskQueueCounter)
-	err := backoff.RetryContext(ctx, op, retryPolicy, retryErrors)
+	err := backoff.ThrottleRetryContext(ctx, op, retryPolicy, retryErrors)
 	if err != nil {
 		w.tlMgr.metricScope.IncCounter(metrics.LeaseFailurePerTaskQueueCounter)
 		return newState, err

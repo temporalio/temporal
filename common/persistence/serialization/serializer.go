@@ -299,14 +299,9 @@ func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob, clusterName 
 	if shardInfo.GetQueueAckLevels() == nil {
 		shardInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
 	}
-	for category, ackLevels := range shardInfo.QueueAckLevels {
-		if ackLevels == nil {
-			ackLevels = &persistencespb.QueueAckLevel{}
-			shardInfo.QueueAckLevels[category] = ackLevels
-		}
-		if ackLevels.ClusterAckLevel == nil {
-			ackLevels.ClusterAckLevel = make(map[string]int64)
-		}
+
+	if shardInfo.GetQueueStates() == nil {
+		shardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
 	}
 
 	return shardInfo, nil
@@ -502,7 +497,7 @@ func encodeBlob(o proto.Message, encoding enumspb.EncodingType) (*commonpb.DataB
 
 	switch encoding {
 	case enumspb.ENCODING_TYPE_JSON:
-		blob, err := codec.NewJSONPBEncoder().Encode(o.(proto.Message))
+		blob, err := codec.NewJSONPBEncoder().Encode(o)
 		if err != nil {
 			return nil, err
 		}

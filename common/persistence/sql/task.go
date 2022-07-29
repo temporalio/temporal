@@ -57,7 +57,7 @@ type (
 
 var (
 	// minUUID = primitives.MustParseUUID("00000000-0000-0000-0000-000000000000")
-	minTaskQueueId = make([]byte, 0, 0)
+	minTaskQueueId = make([]byte, 0)
 )
 
 // newTaskPersistence creates a new instance of TaskManager
@@ -475,15 +475,6 @@ func (m *sqlTaskManager) CompleteTasksLessThan(
 		return 0, serviceerror.NewUnavailable(fmt.Sprintf("rowsAffected returned error: %v", err))
 	}
 	return int(nRows), nil
-}
-
-// Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType
-func (m *sqlTaskManager) calculateTaskQueueHash(
-	namespaceID primitives.UUID,
-	name string,
-	taskType enumspb.TaskQueueType,
-) uint32 {
-	return farm.Fingerprint32(m.taskQueueId(namespaceID, name, taskType))
 }
 
 // Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType

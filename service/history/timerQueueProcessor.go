@@ -25,7 +25,6 @@
 package history
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -51,9 +50,7 @@ import (
 	"go.temporal.io/server/service/worker/archiver"
 )
 
-var (
-	errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
-)
+var errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
 
 type (
 	timeNow                 func() time.Time
@@ -65,6 +62,7 @@ type (
 		shard                      shard.Context
 		taskAllocator              taskAllocator
 		config                     *configs.Config
+		metricProvider             metrics.MetricsHandler
 		metricsClient              metrics.Client
 		workflowCache              workflow.Cache
 		scheduler                  queues.Scheduler
@@ -90,8 +88,9 @@ func newTimerQueueProcessor(
 	clientBean client.Bean,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
+	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
-) queues.Processor {
+) queues.Queue {
 
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
 		shard.GetConfig().TimerProcessorEnableSingleCursor()
@@ -114,6 +113,7 @@ func newTimerQueueProcessor(
 		shard:                 shard,
 		taskAllocator:         taskAllocator,
 		config:                config,
+		metricProvider:        metricProvider,
 		metricsClient:         shard.GetMetricsClient(),
 		workflowCache:         workflowCache,
 		scheduler:             scheduler,
@@ -138,11 +138,11 @@ func newTimerQueueProcessor(
 				config.TimerProcessorMaxPollRPS,
 			),
 			logger,
+			metricProvider,
 			singleProcessor,
 		),
 		standbyTimerProcessors: make(map[string]*timerQueueStandbyProcessorImpl),
 	}
-
 }
 
 func (t *timerQueueProcessorImpl) Start() {
@@ -181,7 +181,6 @@ func (t *timerQueueProcessorImpl) NotifyNewTasks(
 	clusterName string,
 	timerTasks []tasks.Task,
 ) {
-
 	if clusterName == t.currentClusterName || t.singleProcessor {
 		t.activeTimerProcessor.notifyNewTimers(timerTasks)
 		return
@@ -249,6 +248,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 			t.config.TimerProcessorFailoverMaxPollRPS,
 		),
 		t.logger,
+		t.metricProvider,
 	)
 
 	// NOTE: READ REF BEFORE MODIFICATION
@@ -288,8 +288,8 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 	for {
 		select {
 		case <-t.shutdownChan:
-			// before shutdown, make sure the ack level is up to date
-			t.completeTimers() //nolint:errcheck
+			// before shutdown, make sure the ack level is up-to-date
+			_ = t.completeTimers()
 			return
 		case <-timer.C:
 		CompleteLoop:
@@ -342,7 +342,10 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel.FireTime.Before(upperAckLevel.FireTime) {
-		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
+		ctx, cancel := newQueueIOContext()
+		defer cancel()
+
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             t.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryTimer,
 			InclusiveMinTaskKey: tasks.NewKey(lowerAckLevel.FireTime, 0),
@@ -399,6 +402,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 					t.config.TimerProcessorMaxPollRPS,
 				),
 				t.logger,
+				t.metricProvider,
 			)
 			processor.Start()
 			t.standbyTimerProcessors[clusterName] = processor

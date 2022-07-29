@@ -136,31 +136,31 @@ func (mr *MockNamespaceReplicationQueueMockRecorder) GetReplicationMessages(ctx,
 }
 
 // Publish mocks base method.
-func (m *MockNamespaceReplicationQueue) Publish(ctx context.Context, message interface{}) error {
+func (m *MockNamespaceReplicationQueue) Publish(ctx context.Context, task *repication.ReplicationTask) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Publish", ctx, message)
+	ret := m.ctrl.Call(m, "Publish", ctx, task)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Publish indicates an expected call of Publish.
-func (mr *MockNamespaceReplicationQueueMockRecorder) Publish(ctx, message interface{}) *gomock.Call {
+func (mr *MockNamespaceReplicationQueueMockRecorder) Publish(ctx, task interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).Publish), ctx, message)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).Publish), ctx, task)
 }
 
 // PublishToDLQ mocks base method.
-func (m *MockNamespaceReplicationQueue) PublishToDLQ(ctx context.Context, message interface{}) error {
+func (m *MockNamespaceReplicationQueue) PublishToDLQ(ctx context.Context, task *repication.ReplicationTask) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishToDLQ", ctx, message)
+	ret := m.ctrl.Call(m, "PublishToDLQ", ctx, task)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PublishToDLQ indicates an expected call of PublishToDLQ.
-func (mr *MockNamespaceReplicationQueueMockRecorder) PublishToDLQ(ctx, message interface{}) *gomock.Call {
+func (mr *MockNamespaceReplicationQueueMockRecorder) PublishToDLQ(ctx, task interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishToDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).PublishToDLQ), ctx, message)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishToDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).PublishToDLQ), ctx, task)
 }
 
 // RangeDeleteMessagesFromDLQ mocks base method.

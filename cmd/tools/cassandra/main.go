@@ -31,5 +31,5 @@ import (
 )
 
 func main() {
-	cassandra.RunTool(os.Args) //nolint:errcheck
+	_ = cassandra.RunTool(os.Args)
 }

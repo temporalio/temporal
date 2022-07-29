@@ -39,15 +39,13 @@ import (
 )
 
 const (
-	WorkflowType  = "temporal-sys-scheduler-workflow"
-	TaskQueueName = "temporal-sys-scheduler-tq"
+	WorkflowType = "temporal-sys-scheduler-workflow"
 )
 
 type (
 	workerComponent struct {
 		activityDeps activityDeps
 		enabledForNs dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		numWorkers   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -55,7 +53,7 @@ type (
 		MetricsClient  metrics.Client
 		Logger         log.Logger
 		HistoryClient  historyservice.HistoryServiceClient
-		FrontendClient workflowservice.WorkflowServiceClient
+		FrontendClient workflowservice.WorkflowServiceClient `name:"localFrontendClient"`
 	}
 
 	fxResult struct {
@@ -77,17 +75,13 @@ func NewResult(
 			activityDeps: params,
 			enabledForNs: dcCollection.GetBoolPropertyFnWithNamespaceFilter(
 				dynamicconfig.WorkerEnableScheduler, false),
-			numWorkers: dcCollection.GetIntPropertyFilteredByNamespace(
-				dynamicconfig.WorkerSchedulerNumWorkers, 1),
 		},
 	}
 }
 
 func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	return &workercommon.PerNSDedicatedWorkerOptions{
-		Enabled:    s.enabledForNs(ns.Name().String()),
-		TaskQueue:  TaskQueueName,
-		NumWorkers: s.numWorkers(ns.Name().String()),
+		Enabled: s.enabledForNs(ns.Name().String()),
 	}
 }
 

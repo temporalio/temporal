@@ -1049,13 +1049,13 @@ type (
 
 		// AppendHistoryNodes add a node to history node table
 		AppendHistoryNodes(ctx context.Context, request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
-		// AppendRawHistoryNodes add a node of raw histories to history ndoe table
+		// AppendRawHistoryNodes add a node of raw histories to history node table
 		AppendRawHistoryNodes(ctx context.Context, request *AppendRawHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
 		// ReadHistoryBranchByBatch returns history node data for a branch ByBatch
 		ReadHistoryBranchByBatch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error)
-		// ReadHistoryBranch returns history node data for a branch
+		// ReadHistoryBranchReverse returns history node data for a branch
 		ReadHistoryBranchReverse(ctx context.Context, request *ReadHistoryBranchReverseRequest) (*ReadHistoryBranchReverseResponse, error)
 		// ReadRawHistoryBranch returns history node raw data for a branch ByBatch
 		// NOTE: this API should only be used by 3+DC
@@ -1073,7 +1073,7 @@ type (
 		GetAllHistoryTreeBranches(ctx context.Context, request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error)
 	}
 
-	// TaskManager is used to manage tasks
+	// TaskManager is used to manage tasks and task queues
 	TaskManager interface {
 		Closeable
 		GetName() string
@@ -1091,9 +1091,9 @@ type (
 		// its mandatory to specify it. On success this method returns the number of rows
 		// actually deleted. If the underlying storage doesn't support "limit", all rows
 		// less than or equal to taskID will be deleted.
-		// On success, this method returns:
-		//  - number of rows actually deleted, if limit is honored
-		//  - UnknownNumRowsDeleted, when all rows below value are deleted
+		// On success, this method returns either:
+		//  - UnknownNumRowsAffected (this means all rows below value are deleted)
+		//  - number of rows deleted, which may be equal to limit
 		CompleteTasksLessThan(ctx context.Context, request *CompleteTasksLessThanRequest) (int, error)
 	}
 

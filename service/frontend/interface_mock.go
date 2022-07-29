@@ -239,6 +239,21 @@ func (mr *MockHandlerMockRecorder) GetSystemInfo(arg0, arg1 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSystemInfo", reflect.TypeOf((*MockHandler)(nil).GetSystemInfo), arg0, arg1)
 }
 
+// GetWorkerBuildIdOrdering mocks base method.
+func (m *MockHandler) GetWorkerBuildIdOrdering(arg0 context.Context, arg1 *v10.GetWorkerBuildIdOrderingRequest) (*v10.GetWorkerBuildIdOrderingResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkerBuildIdOrdering", arg0, arg1)
+	ret0, _ := ret[0].(*v10.GetWorkerBuildIdOrderingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkerBuildIdOrdering indicates an expected call of GetWorkerBuildIdOrdering.
+func (mr *MockHandlerMockRecorder) GetWorkerBuildIdOrdering(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdOrdering", reflect.TypeOf((*MockHandler)(nil).GetWorkerBuildIdOrdering), arg0, arg1)
+}
+
 // GetWorkflowExecutionHistory mocks base method.
 func (m *MockHandler) GetWorkflowExecutionHistory(arg0 context.Context, arg1 *v10.GetWorkflowExecutionHistoryRequest) (*v10.GetWorkflowExecutionHistoryResponse, error) {
 	m.ctrl.T.Helper()
@@ -801,6 +816,36 @@ func (m *MockHandler) UpdateSchedule(arg0 context.Context, arg1 *v10.UpdateSched
 func (mr *MockHandlerMockRecorder) UpdateSchedule(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSchedule", reflect.TypeOf((*MockHandler)(nil).UpdateSchedule), arg0, arg1)
+}
+
+// UpdateWorkerBuildIdOrdering mocks base method.
+func (m *MockHandler) UpdateWorkerBuildIdOrdering(arg0 context.Context, arg1 *v10.UpdateWorkerBuildIdOrderingRequest) (*v10.UpdateWorkerBuildIdOrderingResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkerBuildIdOrdering", arg0, arg1)
+	ret0, _ := ret[0].(*v10.UpdateWorkerBuildIdOrderingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkerBuildIdOrdering indicates an expected call of UpdateWorkerBuildIdOrdering.
+func (mr *MockHandlerMockRecorder) UpdateWorkerBuildIdOrdering(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkerBuildIdOrdering", reflect.TypeOf((*MockHandler)(nil).UpdateWorkerBuildIdOrdering), arg0, arg1)
+}
+
+// UpdateWorkflow mocks base method.
+func (m *MockHandler) UpdateWorkflow(arg0 context.Context, arg1 *v10.UpdateWorkflowRequest) (*v10.UpdateWorkflowResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkflow", arg0, arg1)
+	ret0, _ := ret[0].(*v10.UpdateWorkflowResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWorkflow indicates an expected call of UpdateWorkflow.
+func (mr *MockHandlerMockRecorder) UpdateWorkflow(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflow", reflect.TypeOf((*MockHandler)(nil).UpdateWorkflow), arg0, arg1)
 }
 
 // MockOperatorHandler is a mock of OperatorHandler interface.

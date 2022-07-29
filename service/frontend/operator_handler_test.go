@@ -28,23 +28,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/pborman/uuid"
+	"go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/persistence"
+	"google.golang.org/grpc/health"
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
-	sdkmocks "go.temporal.io/sdk/mocks"
-	"go.temporal.io/server/api/adminservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/persistence"
-	"google.golang.org/grpc/health"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -53,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/service/worker/deletenamespace"
 )
 
@@ -202,11 +202,11 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 		})
 	}
 
-	mockSdkClient := &sdkmocks.Client{}
+	mockSdkClient := mocksdk.NewMockClient(s.controller)
 	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(mockSdkClient).AnyTimes()
 
 	// Start workflow failed.
-	mockSdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-add-search-attributes-workflow", mock.Anything).Return(nil, errors.New("start failed")).Once()
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-add-search-attributes-workflow", gomock.Any()).Return(nil, errors.New("start failed"))
 	resp, err := handler.AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -217,11 +217,11 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 	s.Nil(resp)
 
 	// Workflow failed.
-	mockRun := &sdkmocks.WorkflowRun{}
-	mockRun.On("Get", mock.Anything, nil).Return(errors.New("workflow failed")).Once()
+	mockRun := mocksdk.NewMockWorkflowRun(s.controller)
+	mockRun.EXPECT().Get(gomock.Any(), nil).Return(errors.New("workflow failed"))
 	const RunId = "31d8ebd6-93a7-11ec-b909-0242ac120002"
-	mockRun.On("GetRunID").Return(RunId).Once()
-	mockSdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-add-search-attributes-workflow", mock.Anything).Return(mockRun, nil)
+	mockRun.EXPECT().GetRunID().Return(RunId)
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-add-search-attributes-workflow", gomock.Any()).Return(mockRun, nil)
 	resp, err = handler.AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -233,7 +233,8 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 	s.Nil(resp)
 
 	// Success case.
-	mockRun.On("Get", mock.Anything, nil).Return(nil)
+	mockRun.EXPECT().Get(gomock.Any(), nil).Return(nil)
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-add-search-attributes-workflow", gomock.Any()).Return(mockRun, nil)
 
 	resp, err = handler.AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
@@ -242,8 +243,6 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-	mockRun.AssertExpectations(s.T())
-	mockSdkClient.AssertExpectations(s.T())
 }
 
 func (s *operatorHandlerSuite) Test_ListSearchAttributes() {
@@ -401,14 +400,19 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 		Expected error
 	}
 	// request validation tests
-	testCases1 := []test{
+	testCases := []test{
 		{
 			Name:     "nil request",
 			Request:  nil,
 			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
 		},
+		{
+			Name:     "system namespace",
+			Request:  &operatorservice.DeleteNamespaceRequest{Namespace: "temporal-system"},
+			Expected: &serviceerror.InvalidArgument{Message: "Unable to delete system namespace."},
+		},
 	}
-	for _, testCase := range testCases1 {
+	for _, testCase := range testCases {
 		s.T().Run(testCase.Name, func(t *testing.T) {
 			resp, err := handler.DeleteNamespace(ctx, testCase.Request)
 			s.Equal(testCase.Expected, err)
@@ -416,7 +420,7 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 		})
 	}
 
-	mockSdkClient := &sdkmocks.Client{}
+	mockSdkClient := mocksdk.NewMockClient(s.controller)
 	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(mockSdkClient).AnyTimes()
 
 	handler.config = &Config{
@@ -425,7 +429,7 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	}
 
 	// Start workflow failed.
-	mockSdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-delete-namespace-workflow", mock.Anything).Return(nil, errors.New("start failed")).Once()
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-delete-namespace-workflow", gomock.Any()).Return(nil, errors.New("start failed"))
 	resp, err := handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
 		Namespace: "test-namespace",
 	})
@@ -434,11 +438,11 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	s.Nil(resp)
 
 	// Workflow failed.
-	mockRun := &sdkmocks.WorkflowRun{}
-	mockRun.On("Get", mock.Anything, mock.Anything).Return(errors.New("workflow failed")).Once()
+	mockRun := mocksdk.NewMockWorkflowRun(s.controller)
+	mockRun.EXPECT().Get(gomock.Any(), gomock.Any()).Return(errors.New("workflow failed"))
 	const RunId = "9a9f668a-58b1-427e-bed6-bf1401049f7d"
-	mockRun.On("GetRunID").Return(RunId).Once()
-	mockSdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-delete-namespace-workflow", mock.Anything).Return(mockRun, nil)
+	mockRun.EXPECT().GetRunID().Return(RunId)
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-delete-namespace-workflow", gomock.Any()).Return(mockRun, nil)
 	resp, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
 		Namespace: "test-namespace",
 	})
@@ -448,12 +452,13 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	s.Nil(resp)
 
 	// Success case.
-	mockRun.On("Get", mock.Anything, mock.Anything).Return(func(ctx context.Context, valuePtr interface{}) error {
+	mockRun.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, valuePtr interface{}) error {
 		wfResult := valuePtr.(*deletenamespace.DeleteNamespaceWorkflowResult)
 		wfResult.DeletedNamespace = "test-namespace-deleted-ka2te"
 		wfResult.DeletedNamespaceID = "c13c01a7-3887-4eda-ba4b-9a07a6359e7e"
 		return nil
 	})
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-delete-namespace-workflow", gomock.Any()).Return(mockRun, nil)
 
 	resp, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
 		Namespace: "test-namespace",
@@ -461,8 +466,6 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	s.NoError(err)
 	s.NotNil(resp)
 	s.Equal("test-namespace-deleted-ka2te", resp.DeletedNamespace)
-	mockRun.AssertExpectations(s.T())
-	mockSdkClient.AssertExpectations(s.T())
 }
 
 func (s *operatorHandlerSuite) Test_DeleteWorkflowExecution() {
@@ -868,25 +871,4 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-}
-
-func (s *operatorHandlerSuite) Test_ListClusters_Success() {
-	var pageSize int32 = 1
-
-	s.mockResource.ClusterMetadataMgr.EXPECT().ListClusterMetadata(gomock.Any(), &persistence.ListClusterMetadataRequest{
-		PageSize: int(pageSize),
-	}).Return(
-		&persistence.ListClusterMetadataResponse{
-			ClusterMetadata: []*persistence.GetClusterMetadataResponse{
-				{
-					ClusterMetadata: persistencespb.ClusterMetadata{ClusterName: "test"},
-				},
-			}}, nil)
-
-	resp, err := s.handler.ListClusters(context.Background(), &operatorservice.ListClustersRequest{
-		PageSize: pageSize,
-	})
-	s.NoError(err)
-	s.Equal(1, len(resp.Clusters))
-	s.Equal(0, len(resp.GetNextPageToken()))
 }

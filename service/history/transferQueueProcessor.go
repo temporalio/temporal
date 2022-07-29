@@ -25,7 +25,6 @@
 package history
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -51,9 +50,7 @@ import (
 	"go.temporal.io/server/service/worker/archiver"
 )
 
-var (
-	errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
-)
+var errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
 
 type (
 	taskFilter func(task tasks.Task) bool
@@ -67,6 +64,7 @@ type (
 		sdkClientFactory          sdk.ClientFactory
 		taskAllocator             taskAllocator
 		config                    *configs.Config
+		metricProvider            metrics.MetricsHandler
 		metricsClient             metrics.Client
 		clientBean                client.Bean
 		matchingClient            matchingservice.MatchingServiceClient
@@ -93,8 +91,9 @@ func newTransferQueueProcessor(
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
+	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
-) queues.Processor {
+) queues.Queue {
 
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
 		shard.GetConfig().TransferProcessorEnableSingleCursor()
@@ -113,6 +112,7 @@ func newTransferQueueProcessor(
 		sdkClientFactory:   sdkClientFactory,
 		taskAllocator:      taskAllocator,
 		config:             config,
+		metricProvider:     metricProvider,
 		metricsClient:      shard.GetMetricsClient(),
 		clientBean:         clientBean,
 		matchingClient:     matchingClient,
@@ -137,6 +137,7 @@ func newTransferQueueProcessor(
 				config.TransferProcessorMaxPollRPS,
 			),
 			logger,
+			metricProvider,
 			singleProcessor,
 		),
 		standbyTaskProcessors: make(map[string]*transferQueueStandbyProcessorImpl),
@@ -177,7 +178,6 @@ func (t *transferQueueProcessorImpl) NotifyNewTasks(
 	clusterName string,
 	transferTasks []tasks.Task,
 ) {
-
 	if clusterName == t.currentClusterName || t.singleProcessor {
 		// we will ignore the current time passed in, since the active processor process task immediately
 		if len(transferTasks) != 0 {
@@ -243,6 +243,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 			t.config.TransferProcessorFailoverMaxPollRPS,
 		),
 		t.logger,
+		t.metricProvider,
 	)
 
 	// NOTE: READ REF BEFORE MODIFICATION
@@ -338,7 +339,10 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel < upperAckLevel {
-		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
+		ctx, cancel := newQueueIOContext()
+		defer cancel()
+
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             t.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryTransfer,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(lowerAckLevel + 1),
@@ -394,6 +398,7 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 					t.config.TransferProcessorMaxPollRPS,
 				),
 				t.logger,
+				t.metricProvider,
 				t.matchingClient,
 			)
 			processor.Start()

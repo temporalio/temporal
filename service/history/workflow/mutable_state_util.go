@@ -48,7 +48,7 @@ func convertSyncActivityInfos(
 			outputs = append(outputs, &tasks.SyncActivityTask{
 				WorkflowKey:         workflowKey,
 				Version:             activityInfo.Version,
-				ScheduledID:         activityInfo.ScheduleId,
+				ScheduledEventID:    activityInfo.ScheduledEventId,
 				VisibilityTimestamp: now,
 			})
 		}

@@ -215,17 +215,17 @@ func WorkflowEventID(eventID int64) ZapTag {
 	return NewInt64("wf-history-event-id", eventID)
 }
 
-// WorkflowScheduleID returns tag for WorkflowScheduleID
-func WorkflowScheduleID(scheduleID int64) ZapTag {
-	return NewInt64("wf-schedule-id", scheduleID)
+// WorkflowScheduledEventID returns tag for WorkflowScheduledEventID
+func WorkflowScheduledEventID(scheduledEventID int64) ZapTag {
+	return NewInt64("wf-scheduled-event-id", scheduledEventID)
 }
 
-// WorkflowStartedID returns tag for WorkflowStartedID
-func WorkflowStartedID(id int64) ZapTag {
-	return NewInt64("wf-started-id", id)
+// WorkflowStartedEventID returns tag for WorkflowStartedEventID
+func WorkflowStartedEventID(startedEventID int64) ZapTag {
+	return NewInt64("wf-started-event-id", startedEventID)
 }
 
-// WorkflowStartedID returns tag for WorkflowStartedTimestamp
+// WorkflowStartedTimestamp returns tag for WorkflowStartedTimestamp
 func WorkflowStartedTimestamp(t *time.Time) ZapTag {
 	return NewTimePtrTag("wf-started-timestamp", t)
 }

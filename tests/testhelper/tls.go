@@ -89,7 +89,13 @@ func GenerateTestChainWithSN(tempDir string, commonName string, serialNumber int
 func GenerateTestCerts(tempDir string, commonName string, num int) ([]*tls.Certificate, *x509.CertPool, *x509.CertPool, error) {
 
 	caCert, err := GenerateSelfSignedCA(CAFilePath(tempDir))
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	caPool, err := GenerateSelfSignedCAPool(caCert)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	chains := make([]*tls.Certificate, num)
 	for i := 0; i < num; i++ {
@@ -109,7 +115,7 @@ func GenerateTestCerts(tempDir string, commonName string, num int) ([]*tls.Certi
 
 	wrongCAPool, err := GenerateSelfSignedCAPool(wrongCACert)
 
-	return chains, caPool, wrongCAPool, nil
+	return chains, caPool, wrongCAPool, err
 }
 
 func GenerateSelfSignedCAPool(caCert *tls.Certificate) (*x509.CertPool, error) {

@@ -26,6 +26,7 @@ package shard
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -141,6 +142,14 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 				},
 			},
 		},
+		QueueStates: map[int32]*persistencespb.QueueState{
+			tasks.CategoryTimer.ID(): {
+				ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+					FireTime: timestamp.TimePtr(now.Add(time.Duration(rand.Intn(3)-2) * time.Minute)),
+					TaskId:   rand.Int63(),
+				},
+			},
+		},
 	}
 	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), gomock.Any()).Return(
 		&persistence.GetOrCreateShardResponse{
@@ -161,6 +170,7 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 		}
 
 		timerQueueAckLevels := persistenceShardInfo.QueueAckLevels[tasks.CategoryTimer.ID()]
+		timerQueueStates := persistenceShardInfo.QueueStates[tasks.CategoryTimer.ID()]
 
 		maxReadLevel := shardContextImpl.getScheduledTaskMaxReadLevel(clusterName).FireTime
 		s.False(maxReadLevel.Before(timestamp.UnixOrZeroTime(timerQueueAckLevels.AckLevel)))
@@ -168,19 +178,21 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 		if clusterAckLevel, ok := timerQueueAckLevels.ClusterAckLevel[clusterName]; ok {
 			s.False(maxReadLevel.Before(timestamp.UnixOrZeroTime(clusterAckLevel)))
 		}
+
+		s.False(maxReadLevel.Before(timestamp.TimeValue(timerQueueStates.ExclusiveReaderHighWatermark.FireTime)))
 	}
 }
 
 func (s *contextSuite) TestTimerMaxReadLevelUpdate() {
 	now := time.Now()
 	s.timeSource.Update(now)
-	maxReadLevel := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryTimer, cluster.TestCurrentClusterName)
+	maxReadLevel := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName)
 
 	s.timeSource.Update(now.Add(-time.Minute))
-	newMaxReadLevel := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryTimer, cluster.TestCurrentClusterName)
+	newMaxReadLevel := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName)
 	s.Equal(maxReadLevel, newMaxReadLevel)
 
 	s.timeSource.Update(now.Add(time.Minute))
-	newMaxReadLevel = s.mockShard.GetQueueMaxReadLevel(tasks.CategoryTimer, cluster.TestCurrentClusterName)
+	newMaxReadLevel = s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName)
 	s.True(newMaxReadLevel.FireTime.After(maxReadLevel.FireTime))
 }

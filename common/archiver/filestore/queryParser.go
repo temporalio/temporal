@@ -36,9 +36,9 @@ import (
 	"github.com/xwb1989/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -102,15 +102,15 @@ func (p *queryParser) convertWhereExpr(expr sqlparser.Expr, parsedQuery *parsedQ
 		return errors.New("where expression is nil")
 	}
 
-	switch expr.(type) {
+	switch expr := expr.(type) {
 	case *sqlparser.ComparisonExpr:
-		return p.convertComparisonExpr(expr.(*sqlparser.ComparisonExpr), parsedQuery)
+		return p.convertComparisonExpr(expr, parsedQuery)
 	case *sqlparser.AndExpr:
-		return p.convertAndExpr(expr.(*sqlparser.AndExpr), parsedQuery)
+		return p.convertAndExpr(expr, parsedQuery)
 	case *sqlparser.ParenExpr:
-		return p.convertParenExpr(expr.(*sqlparser.ParenExpr), parsedQuery)
+		return p.convertParenExpr(expr, parsedQuery)
 	default:
-		return errors.New("only comparsion and \"and\" expression is supported")
+		return errors.New("only comparison and \"and\" expression is supported")
 	}
 }
 
@@ -219,13 +219,13 @@ func (p *queryParser) convertCloseTime(timestamp time.Time, op string, parsedQue
 			return err
 		}
 	case "<":
-		parsedQuery.latestCloseTime = common.MinTime(parsedQuery.latestCloseTime, timestamp.Add(-1*time.Nanosecond))
+		parsedQuery.latestCloseTime = util.MinTime(parsedQuery.latestCloseTime, timestamp.Add(-1*time.Nanosecond))
 	case "<=":
-		parsedQuery.latestCloseTime = common.MinTime(parsedQuery.latestCloseTime, timestamp)
+		parsedQuery.latestCloseTime = util.MinTime(parsedQuery.latestCloseTime, timestamp)
 	case ">":
-		parsedQuery.earliestCloseTime = common.MaxTime(parsedQuery.earliestCloseTime, timestamp.Add(1*time.Nanosecond))
+		parsedQuery.earliestCloseTime = util.MaxTime(parsedQuery.earliestCloseTime, timestamp.Add(1*time.Nanosecond))
 	case ">=":
-		parsedQuery.earliestCloseTime = common.MaxTime(parsedQuery.earliestCloseTime, timestamp)
+		parsedQuery.earliestCloseTime = util.MaxTime(parsedQuery.earliestCloseTime, timestamp)
 	default:
 		return fmt.Errorf("operator %s is not supported for close time", op)
 	}

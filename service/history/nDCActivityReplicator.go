@@ -128,12 +128,12 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		return err
 	}
 
-	scheduleID := request.GetScheduledId()
+	scheduledEventID := request.GetScheduledEventId()
 	shouldApply, err := r.testVersionHistory(
 		namespaceID,
 		execution.GetWorkflowId(),
 		execution.GetRunId(),
-		scheduleID,
+		scheduledEventID,
 		mutableState,
 		request.GetVersionHistory(),
 	)
@@ -141,7 +141,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		return err
 	}
 
-	activityInfo, ok := mutableState.GetActivityInfo(scheduleID)
+	activityInfo, ok := mutableState.GetActivityInfo(scheduledEventID)
 	if !ok {
 		// this should not retry, can be caused by out of order delivery
 		// since the activity is already finished
@@ -158,7 +158,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 
 	// sync activity with empty started ID means activity retry
 	eventTime := timestamp.TimeValue(request.GetScheduledTime())
-	if request.StartedId == common.EmptyEventID && request.Attempt > activityInfo.GetAttempt() {
+	if request.StartedEventId == common.EmptyEventID && request.Attempt > activityInfo.GetAttempt() {
 		mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
 			WorkflowKey: definition.WorkflowKey{
 				NamespaceID: request.GetNamespaceId(),
@@ -166,7 +166,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 				RunID:       request.GetRunId(),
 			},
 			VisibilityTimestamp: eventTime,
-			EventID:             request.GetScheduledId(),
+			EventID:             request.GetScheduledEventId(),
 			Version:             request.GetVersion(),
 			Attempt:             request.GetAttempt(),
 		})
@@ -277,7 +277,7 @@ func (r *nDCActivityReplicatorImpl) testVersionHistory(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	scheduleID int64,
+	scheduledEventID int64,
 	mutableState workflow.MutableState,
 	incomingVersionHistory *historyspb.VersionHistory,
 ) (bool, error) {
@@ -314,7 +314,7 @@ func (r *nDCActivityReplicatorImpl) testVersionHistory(
 	if versionhistory.IsLCAVersionHistoryItemAppendable(currentVersionHistory, lcaItem) ||
 		versionhistory.IsLCAVersionHistoryItemAppendable(incomingVersionHistory, lcaItem) {
 		// case 1
-		if scheduleID > lcaItem.GetEventId() {
+		if scheduledEventID > lcaItem.GetEventId() {
 			return false, serviceerrors.NewRetryReplication(
 				resendMissingEventMessage,
 				namespaceID.String(),
