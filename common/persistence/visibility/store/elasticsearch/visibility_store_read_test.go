@@ -68,6 +68,7 @@ var (
 	testIndex        = "test-index"
 	testNamespace    = namespace.Name("test-namespace")
 	testNamespaceID  = namespace.ID("bfd5c907-f899-4baf-a7b2-2ab85e623ebd")
+	testNSDivision   = "hidden-stuff"
 	testPageSize     = 5
 	testEarliestTime = time.Unix(0, 1547596872371000000).UTC()
 	testLatestTime   = time.Unix(0, 2547596872371000000).UTC()
@@ -85,6 +86,7 @@ var (
 	filterByType            = fmt.Sprintf("map[term:map[WorkflowType:%s]", testWorkflowType)
 	filterByWID             = fmt.Sprintf("map[term:map[WorkflowId:%s]", testWorkflowID)
 	filterByExecutionStatus = fmt.Sprintf("map[term:map[ExecutionStatus:%s]", testStatus.String())
+	filterByNSDivision      = fmt.Sprintf("map[term:map[TemporalNamespaceDivision:%s]", testNSDivision)
 
 	namespaceDivisionExists = elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision)
 )
@@ -97,6 +99,12 @@ func createTestRequest() *manager.ListWorkflowExecutionsRequest {
 		EarliestStartTime: testEarliestTime,
 		LatestStartTime:   testLatestTime,
 	}
+}
+
+func createTestRequestWithNSDivision() *manager.ListWorkflowExecutionsRequest {
+	req := createTestRequest()
+	req.NamespaceDivision = testNSDivision
+	return req
 }
 
 func TestESVisibilitySuite(t *testing.T) {
@@ -147,6 +155,18 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {
 	_, ok := err.(*serviceerror.Unavailable)
 	s.True(ok)
 	s.Contains(err.Error(), "ListOpenWorkflowExecutions failed")
+}
+
+func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsWithNamespaceDivision() {
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, input *client.SearchParameters) (*elastic.SearchResult, error) {
+			source, _ := input.Query.Source()
+			s.Contains(fmt.Sprintf("%v", source), filterOpen)
+			s.Contains(fmt.Sprintf("%v", source), filterByNSDivision)
+			return testSearchResult, nil
+		})
+	_, err := s.visibilityStore.ListOpenWorkflowExecutions(context.Background(), createTestRequestWithNSDivision())
+	s.NoError(err)
 }
 
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
@@ -398,12 +418,30 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	}
 
 	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String())
+	matchNSDivision := elastic.NewMatchQuery(searchattribute.TemporalNamespaceDivision, "hidden-stuff")
 
 	// test for open
 	request.Query = `WorkflowId="guid-2208"`
 	filterQuery := elastic.NewBoolQuery().Filter(elastic.NewMatchQuery(searchattribute.WorkflowID, "guid-2208"))
 	boolQuery := elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery).MustNot(namespaceDivisionExists)
 	p, err := s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(&client.SearchParameters{
+		Index:       testIndex,
+		Query:       boolQuery,
+		SearchAfter: nil,
+		PointInTime: nil,
+		PageSize:    testPageSize,
+		Sorter:      defaultSorterV7,
+	}, p)
+	request.Query = ""
+
+	// test for open with namespace division
+	request.Query = `WorkflowId="guid-2208" and TemporalNamespaceDivision="hidden-stuff"`
+	// note namespace division appears in the filterQuery, not the boolQuery like the negative version
+	filterQuery = elastic.NewBoolQuery().Filter(elastic.NewMatchQuery(searchattribute.WorkflowID, "guid-2208"), matchNSDivision)
+	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery)
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
 	s.NoError(err)
 	s.Equal(&client.SearchParameters{
 		Index:       testIndex,
