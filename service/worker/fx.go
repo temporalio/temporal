@@ -27,8 +27,10 @@ package worker
 import (
 	"context"
 
+	"go.temporal.io/api/workflowservice/v1"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -48,12 +50,22 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
+const (
+	localFrontendClient = "localFrontendClient"
+)
+
 var Module = fx.Options(
 	migration.Module,
 	addsearchattributes.Module,
 	resource.Module,
 	deletenamespace.Module,
 	scheduler.Module,
+	fx.Provide(
+		fx.Annotated{
+			Name:   localFrontendClient,
+			Target: FrontendClientProvider,
+		},
+	),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
@@ -84,6 +96,13 @@ func ConfigProvider(
 		persistenceConfig,
 		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
+}
+
+func FrontendClientProvider(
+	cfg *config.Config,
+	clientFactory client.Factory,
+) (workflowservice.WorkflowServiceClient, error) {
+	return clientFactory.NewFrontendClient(cfg.PublicClient.HostPort)
 }
 
 func VisibilityManagerProvider(

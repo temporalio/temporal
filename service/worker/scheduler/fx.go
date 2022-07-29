@@ -55,7 +55,7 @@ type (
 		MetricsClient  metrics.Client
 		Logger         log.Logger
 		HistoryClient  historyservice.HistoryServiceClient
-		FrontendClient workflowservice.WorkflowServiceClient
+		FrontendClient workflowservice.WorkflowServiceClient `name:"localFrontendClient"`
 	}
 
 	fxResult struct {
