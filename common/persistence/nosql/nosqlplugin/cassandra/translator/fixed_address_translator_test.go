@@ -22,52 +22,67 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package translator
 
 import (
+	"net"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
-
-	"go.temporal.io/server/environment"
+	"go.temporal.io/server/common/config"
 )
 
 type (
-	HandlerTestSuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
+	fixedTranslatorPluginTestSuite struct {
 		suite.Suite
+		controller *gomock.Controller
 	}
 )
 
-func TestHandlerTestSuite(t *testing.T) {
-	suite.Run(t, new(HandlerTestSuite))
+func TestSessionTestSuite(t *testing.T) {
+	s := new(fixedTranslatorPluginTestSuite)
+	suite.Run(t, s)
 }
 
-func (s *HandlerTestSuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+func (s *fixedTranslatorPluginTestSuite) SetupSuite() {
+
 }
 
-func (s *HandlerTestSuite) TestValidateCQLClientConfig() {
-	config := new(CQLClientConfig)
-	s.NotNil(validateCQLClientConfig(config))
+func (s *fixedTranslatorPluginTestSuite) TearDownSuite() {
 
-	config.Hosts = environment.GetCassandraAddress()
-	s.NotNil(validateCQLClientConfig(config))
-
-	config.Keyspace = "foobar"
-	s.Nil(validateCQLClientConfig(config))
 }
 
-func (s *HandlerTestSuite) TestParsingOfOptionsMap() {
-	parsedMap := parseOptionsMap("key1=value1 ,key2= value2,key3=value3")
+func (s *fixedTranslatorPluginTestSuite) SetupTest() {
+	s.controller = gomock.NewController(s.T())
+}
 
-	s.Assert().Equal("value1", parsedMap["key1"])
-	s.Assert().Equal("value2", parsedMap["key2"])
-	s.Assert().Equal("value3", parsedMap["key3"])
-	s.Assert().Equal("", parsedMap["key4"])
+func (s *fixedTranslatorPluginTestSuite) TearDownTest() {
+	s.controller.Finish()
+}
 
-	parsedMap2 := parseOptionsMap("key1=,=value2")
+func (s *fixedTranslatorPluginTestSuite) TestFixedAddressTranslator() {
+	plugin := &FixedAddressTranslatorPlugin{}
 
-	s.Assert().Equal(0, len(parsedMap2))
+	configuration := &config.Cassandra{
+		AddressTranslator: &config.CassandraAddressTranslator{
+			Translator: fixedTranslatorName,
+			Options:    map[string]string{advertisedHostnameKey: "temporal.io"},
+		},
+	}
+
+	lookupIP, err := net.LookupIP("temporal.io")
+	if err != nil {
+		s.Errorf(err, "fail to lookup IP for temporal.io")
+	}
+
+	ipToExpect := lookupIP[0]
+
+	translator, err := plugin.GetTranslator(configuration)
+	translatedHost, translatedPort := translator.Translate(net.ParseIP("1.1.1.1"), 6001)
+
+	s.Equal(ipToExpect, translatedHost)
+	s.Equal(6001, translatedPort)
+
+	s.Equal(nil, err)
 }
