@@ -1,7 +1,7 @@
 .tmp/
 
 .idea/
-.vscode/settings.jsona
+.vscode/settings.json
 .vscode
 *.code-workspace
 .DS_Store
