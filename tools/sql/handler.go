@@ -25,7 +25,6 @@
 package sql
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -36,7 +35,6 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	SQLAuth "go.temporal.io/server/common/persistence/sql/sqlplugin/auth"
 	"go.temporal.io/server/tools/common/schema"
 )
 
@@ -90,12 +88,8 @@ func createDatabase(cli *cli.Context, logger log.Logger) error {
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
-	database := cli.String(schema.CLIOptDatabase)
-	if database == "" {
-		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError("missing "+flag(schema.CLIOptDatabase)+" argument ")))
-		return err
-	}
-	err = DoCreateDatabase(cfg, database)
+	defaultDb := cli.String(schema.CLIOptDefaultDb)
+	err = DoCreateDatabase(cfg, defaultDb)
 	if err != nil {
 		logger.Error("Unable to create SQL database.", tag.Error(err))
 		return err
@@ -103,14 +97,15 @@ func createDatabase(cli *cli.Context, logger log.Logger) error {
 	return nil
 }
 
-func DoCreateDatabase(cfg *config.SQL, name string) error {
-	cfg.DatabaseName = ""
+func DoCreateDatabase(cfg *config.SQL, defaultDb string) error {
+	dbToCreate := cfg.DatabaseName
+	cfg.DatabaseName = defaultDb
 	conn, err := NewConnection(cfg)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	return conn.CreateDatabase(name)
+	return conn.CreateDatabase(dbToCreate)
 }
 
 // dropDatabase drops a sql database
@@ -120,12 +115,8 @@ func dropDatabase(cli *cli.Context, logger log.Logger) error {
 		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
 		return err
 	}
-	database := cli.String(schema.CLIOptDatabase)
-	if database == "" {
-		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError("missing "+flag(schema.CLIOptDatabase)+" argument ")))
-		return err
-	}
-	err = DoDropDatabase(cfg, database)
+	defaultDb := cli.String(schema.CLIOptDefaultDb)
+	err = DoDropDatabase(cfg, defaultDb)
 	if err != nil {
 		logger.Error("Unable to drop SQL database.", tag.Error(err))
 		return err
@@ -133,13 +124,14 @@ func dropDatabase(cli *cli.Context, logger log.Logger) error {
 	return nil
 }
 
-func DoDropDatabase(cfg *config.SQL, name string) error {
-	cfg.DatabaseName = ""
+func DoDropDatabase(cfg *config.SQL, defaultDb string) error {
+	dbToDrop := cfg.DatabaseName
+	cfg.DatabaseName = defaultDb
 	conn, err := NewConnection(cfg)
 	if err != nil {
 		return err
 	}
-	err = conn.DropDatabase(name)
+	err = conn.DropDatabase(dbToDrop)
 	if err != nil {
 		return err
 	}
@@ -157,9 +149,6 @@ func parseConnectConfig(cli *cli.Context) (*config.SQL, error) {
 	cfg.Password = cli.GlobalString(schema.CLIOptPassword)
 	cfg.DatabaseName = cli.GlobalString(schema.CLIOptDatabase)
 	cfg.PluginName = cli.GlobalString(schema.CLIOptPluginName)
-	cfg.AuthPlugin = &config.SQLAuthPlugin{
-		Plugin: cli.GlobalString(schema.CLIOptAuthPluginName),
-	}
 
 	if cfg.ConnectAttributes == nil {
 		cfg.ConnectAttributes = map[string]string{}
@@ -208,12 +197,6 @@ func ValidateConnectConfig(cfg *config.SQL) error {
 	}
 	if cfg.DatabaseName == "" {
 		return schema.NewConfigError("missing " + flag(schema.CLIOptDatabase) + " argument")
-	}
-	if cfg.AuthPlugin != nil && cfg.AuthPlugin.Plugin != "" {
-		_, err := SQLAuth.LookupPlugin(cfg.AuthPlugin.Plugin)
-		if errors.Is(err, SQLAuth.ErrInvalidAuthPluginName) {
-			return schema.NewConfigError("invalid option for " + flag(schema.CLIOptAuthPluginName) + ": " + cfg.AuthPlugin.Plugin)
-		}
 	}
 
 	return nil

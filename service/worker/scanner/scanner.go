@@ -36,6 +36,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -119,13 +120,16 @@ func New(
 
 // Start starts the scanner
 func (s *Scanner) Start() error {
+	ctx := context.WithValue(context.Background(), scannerContextKey, s.context)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
 	workerOpts := worker.Options{
 		MaxConcurrentActivityExecutionSize:     s.context.cfg.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: s.context.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
 		MaxConcurrentActivityTaskPollers:       s.context.cfg.MaxConcurrentActivityTaskPollers(),
 		MaxConcurrentWorkflowTaskPollers:       s.context.cfg.MaxConcurrentWorkflowTaskPollers(),
 
-		BackgroundActivityContext: context.WithValue(context.Background(), scannerContextKey, s.context),
+		BackgroundActivityContext: ctx,
 	}
 
 	var workerTaskQueueNames []string
@@ -172,7 +176,7 @@ func (s *Scanner) startWorkflowWithRetry(
 	policy := backoff.NewExponentialRetryPolicy(time.Second)
 	policy.SetMaximumInterval(time.Minute)
 	policy.SetExpirationInterval(backoff.NoInterval)
-	err := backoff.Retry(func() error {
+	err := backoff.ThrottleRetry(func() error {
 		return s.startWorkflow(s.context.sdkSystemClient, options, workflowType, workflowArgs...)
 	}, policy, func(err error) bool {
 		return true

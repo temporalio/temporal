@@ -117,7 +117,7 @@ func encode(
 
 	switch encoding {
 	case enumspb.ENCODING_TYPE_JSON:
-		blob, err := codec.NewJSONPBEncoder().Encode(object.(proto.Message))
+		blob, err := codec.NewJSONPBEncoder().Encode(object)
 		if err != nil {
 			return commonpb.DataBlob{}, err
 		}

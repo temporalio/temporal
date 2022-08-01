@@ -36,32 +36,6 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-type nullStatsReporter struct{}
-
-func (r nullStatsReporter) Capabilities() tally.Capabilities {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) Flush() {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) AllocateCounter(name string, tags map[string]string) tally.CachedCount {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) AllocateGauge(name string, tags map[string]string) tally.CachedGauge {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) AllocateTimer(name string, tags map[string]string) tally.CachedTimer {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) AllocateHistogram(name string, tags map[string]string, buckets tally.Buckets) tally.CachedHistogram {
-	panic("implement me")
-}
-
 type MetricsSuite struct {
 	*require.Assertions
 	suite.Suite
@@ -163,21 +137,20 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 
 	customizedBoundaries := map[string][]float64{
 		Dimensionless: {1},
-		"notDefine":   {1},
 		Milliseconds:  defaultPerUnitHistogramBoundaries[Milliseconds],
 		Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
 	}
 	testCases := []histogramTest{
 		{
-			nil,
-			defaultPerUnitHistogramBoundaries,
+			input:        nil,
+			expectResult: defaultPerUnitHistogramBoundaries,
 		},
 		{
-			map[string][]float64{
-				Dimensionless: {1},
-				"notDefine":   {1},
+			input: map[string][]float64{
+				UnitNameDimensionless: {1},
+				"notDefine":           {1},
 			},
-			customizedBoundaries,
+			expectResult: customizedBoundaries,
 		},
 	}
 

@@ -79,10 +79,11 @@ var Module = fx.Options(
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
+	fx.Provide(CallerInfoInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
-	fx.Provide(PersistenceMaxQpsProvider),
+	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
 	fx.Provide(func(so []grpc.ServerOption) *grpc.Server { return grpc.NewServer(so...) }),
 	fx.Provide(healthServerProvider),
@@ -106,7 +107,7 @@ func NewServiceProvider(
 	visibilityMgr manager.VisibilityManager,
 	logger resource.SnTaggedLogger,
 	grpcListener net.Listener,
-	metricsScope metrics.UserScope,
+	metricsHandler metrics.MetricsHandler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 ) *Service {
 	return NewService(
@@ -120,7 +121,7 @@ func NewServiceProvider(
 		visibilityMgr,
 		logger,
 		grpcListener,
-		metricsScope,
+		metricsHandler,
 		faultInjectionDataStoreFactory,
 	)
 }
@@ -137,6 +138,7 @@ func GrpcServerOptionsProvider(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	traceInterceptor telemetry.ServerTraceInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
+	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
 	audienceGetter authorization.JWTAudienceMapper,
@@ -147,7 +149,7 @@ func GrpcServerOptionsProvider(
 		MinTime:             serviceConfig.KeepAliveMinTime(),
 		PermitWithoutStream: serviceConfig.KeepAlivePermitWithoutStream(),
 	}
-	var kp = keepalive.ServerParameters{
+	kp := keepalive.ServerParameters{
 		MaxConnectionIdle:     serviceConfig.KeepAliveMaxConnectionIdle(),
 		MaxConnectionAge:      serviceConfig.KeepAliveMaxConnectionAge(),
 		MaxConnectionAgeGrace: serviceConfig.KeepAliveMaxConnectionAgeGrace(),
@@ -165,9 +167,9 @@ func GrpcServerOptionsProvider(
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		telemetryInterceptor.Intercept,
 		namespaceValidatorInterceptor.Intercept,
-		rateLimitInterceptor.Intercept,
-		namespaceRateLimiterInterceptor.Intercept,
 		namespaceCountLimiterInterceptor.Intercept,
+		namespaceRateLimiterInterceptor.Intercept,
+		rateLimitInterceptor.Intercept,
 		authorization.NewAuthorizationInterceptor(
 			claimMapper,
 			authorizer,
@@ -176,6 +178,7 @@ func GrpcServerOptionsProvider(
 			audienceGetter,
 		),
 		sdkVersionInterceptor.Intercept,
+		callerInfoInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		interceptors = append(interceptors, customInterceptors...)
@@ -303,10 +306,20 @@ func SDKVersionInterceptorProvider() *interceptor.SDKVersionInterceptor {
 	return interceptor.NewSDKVersionInterceptor()
 }
 
-func PersistenceMaxQpsProvider(
+func CallerInfoInterceptorProvider(
+	namespaceRegistry namespace.Registry,
+) *interceptor.CallerInfoInterceptor {
+	return interceptor.NewCallerInfoInterceptor(namespaceRegistry)
+}
+
+func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
-) persistenceClient.PersistenceMaxQps {
-	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS)
+) service.PersistenceRateLimitingParams {
+	return service.NewPersistenceRateLimitingParams(
+		serviceConfig.PersistenceMaxQPS,
+		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.EnablePersistencePriorityRateLimiting,
+	)
 }
 
 func VisibilityManagerProvider(
@@ -337,6 +350,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
 		dynamicconfig.GetBoolPropertyFn(false), // frontend visibility never write
+		serviceConfig.VisibilityDisableOrderByClause,
 		metricsClient,
 		logger,
 	)
@@ -388,6 +402,7 @@ func AdminHandlerProvider(
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
 	eventSerializer serialization.Serializer,
+	timeSource clock.TimeSource,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -416,6 +431,7 @@ func AdminHandlerProvider(
 		archivalMetadata,
 		healthServer,
 		eventSerializer,
+		timeSource,
 	}
 	return NewAdminHandler(args)
 }
@@ -493,6 +509,7 @@ func HandlerProvider(
 		clusterMetadata,
 		archivalMetadata,
 		healthServer,
+		timeSource,
 	)
 	handler := NewDCRedirectionHandler(wfHandler, dcRedirectionPolicy, logger, clientBean, metricsClient, timeSource, namespaceRegistry, clusterMetadata)
 	return handler

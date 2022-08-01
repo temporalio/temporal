@@ -96,7 +96,7 @@ func (p *queryParser) Parse(query string) (*parsedQuery, error) {
 	}
 
 	if (parsedQuery.closeTime.IsZero() && parsedQuery.startTime.IsZero()) || (!parsedQuery.closeTime.IsZero() && !parsedQuery.startTime.IsZero()) {
-		return nil, errors.New("Requires a StartTime or CloseTime")
+		return nil, errors.New("requires a StartTime or CloseTime")
 	}
 
 	if parsedQuery.searchPrecision == nil {
@@ -111,15 +111,15 @@ func (p *queryParser) convertWhereExpr(expr sqlparser.Expr, parsedQuery *parsedQ
 		return errors.New("where expression is nil")
 	}
 
-	switch expr.(type) {
+	switch expr := expr.(type) {
 	case *sqlparser.ComparisonExpr:
-		return p.convertComparisonExpr(expr.(*sqlparser.ComparisonExpr), parsedQuery)
+		return p.convertComparisonExpr(expr, parsedQuery)
 	case *sqlparser.AndExpr:
-		return p.convertAndExpr(expr.(*sqlparser.AndExpr), parsedQuery)
+		return p.convertAndExpr(expr, parsedQuery)
 	case *sqlparser.ParenExpr:
-		return p.convertParenExpr(expr.(*sqlparser.ParenExpr), parsedQuery)
+		return p.convertParenExpr(expr, parsedQuery)
 	default:
-		return errors.New("only comparsion and \"and\" expression is supported")
+		return errors.New("only comparison and \"and\" expression is supported")
 	}
 }
 
@@ -230,21 +230,6 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		return fmt.Errorf("unknown filter name: %s", colNameStr)
 	}
 
-	return nil
-}
-
-func (p *queryParser) convertCloseTime(timestamp time.Time, op string, parsedQuery *parsedQuery) error {
-	switch op {
-	case "=":
-		if err := p.convertCloseTime(timestamp, ">=", parsedQuery); err != nil {
-			return err
-		}
-		if err := p.convertCloseTime(timestamp, "<=", parsedQuery); err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("operator %s is not supported for close time", op)
-	}
 	return nil
 }
 

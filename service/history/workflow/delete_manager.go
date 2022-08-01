@@ -221,7 +221,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		}
 	}
 
-	op := func() error {
+	op := func(ctx context.Context) error {
 		return m.shard.DeleteWorkflowExecution(
 			ctx,
 			definition.WorkflowKey{
@@ -234,7 +234,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 			closeTime,
 		)
 	}
-	if err = backoff.Retry(
+	if err = backoff.ThrottleRetryContext(
+		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
 		common.IsPersistenceTransientError,

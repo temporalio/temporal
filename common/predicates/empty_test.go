@@ -71,5 +71,5 @@ func (s *emptySuite) TestEmpty_Equals() {
 		newTestPredicate(4, 5, 6),
 	)))
 	s.False(s.emtpy.Equals(Not[int](newTestPredicate(1, 2, 3))))
-	s.False(s.emtpy.Equals(All[int]()))
+	s.False(s.emtpy.Equals(Universal[int]()))
 }

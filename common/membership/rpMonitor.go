@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/primitives"
 
 	"github.com/pborman/uuid"
@@ -56,6 +57,9 @@ const (
 
 type ringpopMonitor struct {
 	status int32
+
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
 
 	serviceName               string
 	services                  map[string]int
@@ -79,15 +83,22 @@ func NewRingpopMonitor(
 	broadcastHostPortResolver func() (string, error),
 ) Monitor {
 
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
+	lifecycleCtx = headers.SetCallerInfo(lifecycleCtx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
 	rpo := &ringpopMonitor{
-		broadcastHostPortResolver: broadcastHostPortResolver,
-		metadataManager:           metadataManager,
-		status:                    common.DaemonStatusInitialized,
+		status: common.DaemonStatusInitialized,
+
+		lifecycleCtx:    lifecycleCtx,
+		lifecycleCancel: lifecycleCancel,
+
 		serviceName:               serviceName,
 		services:                  services,
 		rp:                        rp,
-		logger:                    logger,
 		rings:                     make(map[string]*ringpopServiceResolver),
+		logger:                    logger,
+		metadataManager:           metadataManager,
+		broadcastHostPortResolver: broadcastHostPortResolver,
 		hostID:                    uuid.NewUUID(),
 	}
 	for service, port := range services {
@@ -119,7 +130,7 @@ func (rpo *ringpopMonitor) Start() {
 	}
 
 	rpo.rp.Start(
-		func() ([]string, error) { return fetchCurrentBootstrapHostports(rpo.metadataManager, rpo.logger) },
+		func() ([]string, error) { return rpo.fetchCurrentBootstrapHostports() },
 		healthyHostLastHeartbeatCutoff/2)
 
 	labels, err := rpo.rp.Labels()
@@ -191,7 +202,7 @@ func SplitHostPortTyped(hostPort string) (net.IP, uint16, error) {
 
 func (rpo *ringpopMonitor) startHeartbeat(broadcastHostport string) error {
 	// Start by cleaning up expired records to avoid growth
-	err := rpo.metadataManager.PruneClusterMembership(context.TODO(), &persistence.PruneClusterMembershipRequest{MaxRecordsPruned: 10})
+	err := rpo.metadataManager.PruneClusterMembership(rpo.lifecycleCtx, &persistence.PruneClusterMembershipRequest{MaxRecordsPruned: 10})
 	if err != nil {
 		return err
 	}
@@ -224,7 +235,7 @@ func (rpo *ringpopMonitor) startHeartbeat(broadcastHostport string) error {
 	// Expire in 48 hours to allow for inspection of table by humans for debug scenarios.
 	// For bootstrapping, we filter to a much shorter duration on the
 	// read side by filtering on the last time a heartbeat was seen.
-	err = rpo.upsertMyMembership(context.TODO(), req)
+	err = rpo.upsertMyMembership(rpo.lifecycleCtx, req)
 	if err == nil {
 		rpo.logger.Info("Membership heartbeat upserted successfully",
 			tag.Address(broadcastAddress.String()),
@@ -237,15 +248,15 @@ func (rpo *ringpopMonitor) startHeartbeat(broadcastHostport string) error {
 	return err
 }
 
-func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager, log log.Logger) ([]string, error) {
+func (rpo *ringpopMonitor) fetchCurrentBootstrapHostports() ([]string, error) {
 	pageSize := 1000
 	set := make(map[string]struct{})
 
 	var nextPageToken []byte
 
 	for {
-		resp, err := manager.GetClusterMembers(
-			context.TODO(),
+		resp, err := rpo.metadataManager.GetClusterMembers(
+			rpo.lifecycleCtx,
 			&persistence.GetClusterMembersRequest{
 				LastHeartbeatWithin: healthyHostLastHeartbeatCutoff,
 				PageSize:            pageSize,
@@ -268,7 +279,7 @@ func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager, 
 				bootstrapHostPorts = append(bootstrapHostPorts, k)
 			}
 
-			log.Info("bootstrap hosts fetched", tag.BootstrapHostPorts(strings.Join(bootstrapHostPorts, ",")))
+			rpo.logger.Info("bootstrap hosts fetched", tag.BootstrapHostPorts(strings.Join(bootstrapHostPorts, ",")))
 			return bootstrapHostPorts, nil
 		}
 
@@ -278,7 +289,7 @@ func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager, 
 func (rpo *ringpopMonitor) startHeartbeatUpsertLoop(request *persistence.UpsertClusterMembershipRequest) {
 	loopUpsertMembership := func() {
 		for {
-			err := rpo.upsertMyMembership(context.TODO(), request)
+			err := rpo.upsertMyMembership(rpo.lifecycleCtx, request)
 
 			if err != nil {
 				rpo.logger.Error("Membership upsert failed.", tag.Error(err))
@@ -300,6 +311,8 @@ func (rpo *ringpopMonitor) Stop() {
 	) {
 		return
 	}
+
+	rpo.lifecycleCancel()
 
 	for _, ring := range rpo.rings {
 		ring.Stop()

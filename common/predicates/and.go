@@ -47,7 +47,7 @@ func And[T any](
 		switch p := p.(type) {
 		case *AndImpl[T]:
 			flattened = appendPredicates(flattened, p.Predicates...)
-		case *AllImpl[T]:
+		case *UniversalImpl[T]:
 			continue
 		case *EmptyImpl[T]:
 			return p
@@ -58,7 +58,7 @@ func And[T any](
 
 	switch len(flattened) {
 	case 0:
-		return All[T]()
+		return Universal[T]()
 	case 1:
 		return flattened[0]
 	default:

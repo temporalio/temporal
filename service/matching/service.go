@@ -53,7 +53,7 @@ type Service struct {
 	membershipMonitor              membership.Monitor
 	grpcListener                   net.Listener
 	runtimeMetricsReporter         *metrics.RuntimeMetricsReporter
-	userMetricsScope               metrics.UserScope
+	metricsHandler                 metrics.MetricsHandler
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
 }
 
@@ -65,7 +65,7 @@ func NewService(
 	grpcListener net.Listener,
 	runtimeMetricsReporter *metrics.RuntimeMetricsReporter,
 	handler *Handler,
-	userMetricsScope metrics.UserScope,
+	metricsHandler metrics.MetricsHandler,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 ) *Service {
 	return &Service{
@@ -77,7 +77,7 @@ func NewService(
 		membershipMonitor:              membershipMonitor,
 		grpcListener:                   grpcListener,
 		runtimeMetricsReporter:         runtimeMetricsReporter,
-		userMetricsScope:               userMetricsScope,
+		metricsHandler:                 metricsHandler,
 		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
 	}
 }
@@ -91,7 +91,7 @@ func (s *Service) Start() {
 	s.logger.Info("matching starting")
 
 	// must start base service first
-	s.userMetricsScope.AddCounter(metrics.RestartCount, 1)
+	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
 	rand.Seed(time.Now().UnixNano())
 
 	s.handler.Start()

@@ -11,7 +11,7 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
   - Install on Ubuntu with `sudo apt install golang`.
 * [Protocol buffers compiler](https://github.com/protocolbuffers/protobuf/) (only if you are going to change `proto` files):
   - Install on macOS with `brew install protobuf`.
-  - Install on Ubuntu with `sudo apt install protobuf-compiler`.
+  - Download all other versions from [protoc release page](https://github.com/protocolbuffers/protobuf/releases).
 * [Temporal CLI tctl](https://github.com/temporalio/tctl)
   - Homebrew `brew install tctl`
   - Go install `make update-tctl`
@@ -114,6 +114,46 @@ When you are done, press `Ctrl+C` to stop the server. Don't forget to stop depen
 ```bash
 make stop-dependencies
 ```
+
+## Working with pending API changes
+If you need to make changes to the gRPC definitions while also working on code in this repo, do the following:
+
+1. Checkout [api](https://github.com/temporalio/api), [api-go](https://github.com/temporalio/api-go), and [sdk-go](https://github.com/temporalio/sdk-go)
+2. Make your changes to `api`, commit to a branch.
+3. In your copy of `api-go`:
+   1. Initialize submodules: `git submodule update --init --recursive`
+   2. Point api submodule at your branch. If you make more commits to the api repo, run the last command again.
+      ```bash
+      git submodule set-url proto/api ../api
+      git submodule set-branch --branch mystuff proto/api
+      git submodule update --remote proto/api
+      ```
+   3. Compile protos: `make proto`
+4. In your copy of `sdk-go`:
+    1. Point `go.mod` at local `api-go`:
+       ```
+       replace (
+           go.temporal.io/api => ../api-go
+       )
+        ```
+    2. Compile & fix errors: `make bins`
+5. In this repo:
+    1. Initialize submodules: `git submodule update --init --recursive`
+    2. Point api submodule at your branch. If you make more commits to the api repo, run the last command again.
+       ```bash
+       git submodule set-url proto/api ../api
+       git submodule set-branch --branch mystuff proto/api
+       git submodule update --remote proto/api
+       ```
+    3. Stage the change: `git add -u` (otherwise makefile will blow it away)
+    4. Point `go.mod` at local `api-go` and `sdk-go`:
+       ```
+       replace (
+           go.temporal.io/api => ../api-go
+           go.temporal.io/sdk => ../sdk-go
+       )
+        ```
+    5. Build & fix errors: `make proto && make bins`
 
 ## Licence headers
 This project is Open Source Software, and requires a header at the beginning of

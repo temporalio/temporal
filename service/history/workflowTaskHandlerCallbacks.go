@@ -634,11 +634,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 		),
 	)
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			// workflow not found error, verification logic need to keep waiting in this case
-			// as it's possible that replication has not replicate this workflow yet.
-			return consts.ErrWorkflowNotReady
-		}
 		return err
 	}
 	defer func() { workflowContext.GetReleaseFn()(retError) }()
@@ -646,7 +641,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 	mutableState := workflowContext.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() &&
 		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		return consts.ErrWorkflowCompleted
+		return nil
 	}
 
 	if !mutableState.HasProcessedOrPendingWorkflowTask() {
@@ -687,9 +682,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 		// This workflowTask is retried from mutable state
 		// Also return schedule and started which are not written to history yet
 		scheduledEvent, startedEvent := msBuilder.CreateTransientWorkflowTaskEvents(workflowTask, identity)
-		response.WorkflowTaskInfo = &historyspb.TransientWorkflowTaskInfo{}
-		response.WorkflowTaskInfo.ScheduledEvent = scheduledEvent
-		response.WorkflowTaskInfo.StartedEvent = startedEvent
+		response.TransientWorkflowTask = &historyspb.TransientWorkflowTaskInfo{}
+
+		// TODO (mmcshane): remove population of ScheduledEvent and StartedEvent
+		// after v1.18 is released
+		response.TransientWorkflowTask.ScheduledEvent = scheduledEvent
+		response.TransientWorkflowTask.StartedEvent = startedEvent
+		response.TransientWorkflowTask.HistorySuffix = []*historypb.HistoryEvent{scheduledEvent, startedEvent}
 	}
 	currentBranchToken, err := msBuilder.GetCurrentBranchToken()
 	if err != nil {

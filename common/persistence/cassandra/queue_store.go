@@ -340,6 +340,9 @@ func (q *QueueStore) updateAckLevel(
 
 	// TODO: remove this once cluster_ack_level is removed from DB
 	metadataStruct, err := serialization.QueueMetadataFromBlob(metadata.Blob.Data, metadata.Blob.EncodingType.String())
+	if err != nil {
+		return gocql.ConvertError("updateAckLevel", err)
+	}
 
 	query := q.session.Query(templateUpdateQueueMetadataQuery,
 		metadataStruct.ClusterAckLevels,
@@ -351,7 +354,7 @@ func (q *QueueStore) updateAckLevel(
 	).WithContext(ctx)
 	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
-		gocql.ConvertError("updateAckLevel", err)
+		return gocql.ConvertError("updateAckLevel", err)
 	}
 	if !applied {
 		return &persistence.ConditionFailedError{Msg: "UpdateAckLevel operation encountered concurrent write."}

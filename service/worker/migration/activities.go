@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -120,7 +121,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 			// Caught up to the last checked IDs, and within allowed lagging range
 			if clusterInfo.AckedTaskId >= waitRequest.WaitForTaskIds[shard.ShardId] &&
 				(shard.MaxReplicationTaskId-clusterInfo.AckedTaskId <= waitRequest.AllowedLaggingTasks ||
-					shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime) <= waitRequest.AllowedLagging) {
+					shard.MaxReplicationTaskVisibilityTime.Sub(*clusterInfo.AckedTaskVisibilityTime) <= waitRequest.AllowedLagging) {
 				readyShardCount++
 				continue
 			}
@@ -254,12 +255,10 @@ func (a *activities) generateWorkflowReplicationTask(ctx context.Context, wKey d
 		return err
 	}
 
-	err := backoff.RetryContext(ctx, op, historyServiceRetryPolicy, common.IsServiceTransientError)
-	if err != nil {
-		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
-			// ignore NotFound error
-			return nil
-		}
+	err := backoff.ThrottleRetryContext(ctx, op, historyServiceRetryPolicy, common.IsServiceTransientError)
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+		// ignore NotFound error
+		return nil
 	}
 
 	return err

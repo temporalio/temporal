@@ -168,7 +168,6 @@ func getExpectedTables(versioningEnabled bool, wantTables []string) map[string]s
 	expectedTables := make(map[string]struct{})
 	for _, tab := range wantTables {
 		expectedTables[tab] = struct{}{}
-		expectedTables[tab] = struct{}{}
 	}
 	if versioningEnabled {
 		expectedTables["schema_version"] = struct{}{}

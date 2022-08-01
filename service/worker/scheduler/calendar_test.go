@@ -269,10 +269,10 @@ func (s *calendarSuite) TestParseValue() {
 	s.NoError(err)
 	s.Equal(29, i)
 
-	i, err = parseValue("29", 1, 12, parseModeInt)
+	_, err = parseValue("29", 1, 12, parseModeInt)
 	s.Error(err)
 
-	i, err = parseValue("random text", 1, 31, parseModeInt)
+	_, err = parseValue("random text", 1, 31, parseModeInt)
 	s.Error(err)
 
 	i, err = parseValue("fri", 0, 7, parseModeDow)

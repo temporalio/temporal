@@ -43,6 +43,7 @@ import (
 // 2. type from typeMap (can be nil).
 // In case of error, it will continue to next search attribute and return last error.
 // Single values are converted using strconv, arrays are converted using json.Marshal.
+// Search attributes with `nil` values are skipped.
 func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap) (map[string]string, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil, nil
@@ -61,6 +62,10 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap
 			// If DecodeValue failed, save error and use raw JSON from Data field.
 			result[saName] = string(saPayload.GetData())
 			lastErr = err
+			continue
+		}
+
+		if saValue == nil {
 			continue
 		}
 

@@ -73,14 +73,3 @@ func mustConvertConsistency(c Consistency) gocql.Consistency {
 		panic(fmt.Sprintf("Unknown gocql Consistency level: %v", c))
 	}
 }
-
-func mustConvertSerialConsistency(c SerialConsistency) gocql.SerialConsistency {
-	switch c {
-	case Serial:
-		return gocql.Serial
-	case LocalSerial:
-		return gocql.LocalSerial
-	default:
-		panic(fmt.Sprintf("Unknown gocql SerialConsistency level: %v", c))
-	}
-}

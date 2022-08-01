@@ -17,3 +17,6 @@ mockgen -copyright_file ../../../LICENSE -package "$GOPACKAGE" go.temporal.io/sd
 	-e 's,internal "go.temporal.io/sdk/internal",activity "go.temporal.io/sdk/activity"\
 	workflow "go.temporal.io/sdk/workflow",' \
 	> worker_mock.go
+mockgen -copyright_file ../../../LICENSE -package "$GOPACKAGE" go.temporal.io/sdk/client WorkflowRun | sed \
+	-e 's,\<internal\>,client,g' \
+	> workflowrun_mock.go

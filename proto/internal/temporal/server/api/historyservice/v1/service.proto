@@ -139,8 +139,9 @@ service HistoryService {
     rpc TerminateWorkflowExecution (TerminateWorkflowExecutionRequest) returns (TerminateWorkflowExecutionResponse) {
     }
 
-    // DeleteWorkflowExecution deletes a closed workflow execution asynchronously (workflow must be completed or terminated before).
-    // This method is EXPERIMENTAL and may be changed or removed in a later release.
+    // DeleteWorkflowExecution asynchronously deletes a specific Workflow Execution (when WorkflowExecution.run_id is
+    // provided) or the latest Workflow Execution (when WorkflowExecution.run_id is not provided). If the Workflow
+    // Execution is Running, it will be terminated before deletion.
     rpc DeleteWorkflowExecution (DeleteWorkflowExecutionRequest) returns (DeleteWorkflowExecutionResponse) {
     }
 
@@ -271,5 +272,10 @@ service HistoryService {
     // This is used by admin delete workflow execution API to delete visibility record as frontend
     // visibility manager doesn't support write operations
     rpc DeleteWorkflowVisibilityRecord (DeleteWorkflowVisibilityRecordRequest) returns (DeleteWorkflowVisibilityRecordResponse) {
+    }
+
+    // (-- api-linter: core::0134=disabled
+    //     aip.dev/not-precedent: This service does not follow the update method AIP --)
+    rpc UpdateWorkflow(UpdateWorkflowRequest) returns (UpdateWorkflowResponse) {
     }
 }

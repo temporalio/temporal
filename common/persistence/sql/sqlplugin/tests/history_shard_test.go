@@ -141,6 +141,7 @@ func (s *historyShardSuite) TestInsertUpdate_Success() {
 	result, err = s.store.UpdateShards(newExecutionContext(), &shard)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
+	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 }
 
@@ -152,6 +153,7 @@ func (s *historyShardSuite) TestUpdate_Fail() {
 	result, err := s.store.UpdateShards(newExecutionContext(), &shard)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
 	s.Equal(0, int(rowsAffected))
 }
 
@@ -171,6 +173,7 @@ func (s *historyShardSuite) TestInsertUpdateSelect() {
 	result, err = s.store.UpdateShards(newExecutionContext(), &shard)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
+	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
 	filter := sqlplugin.ShardsFilter{

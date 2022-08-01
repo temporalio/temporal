@@ -79,6 +79,9 @@ const (
 	EnableReadVisibilityFromES = "system.enableReadVisibilityFromES"
 	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
 	EnableReadFromSecondaryAdvancedVisibility = "system.enableReadFromSecondaryAdvancedVisibility"
+	// VisibilityDisableOrderByClause is the config to disable ORDERY BY clause for Elasticsearch
+	VisibilityDisableOrderByClause = "system.visibilityDisableOrderByClause"
+
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState = "system.historyArchivalState"
 	// EnableReadFromHistoryArchival is key for enabling reading history from archival store
@@ -109,8 +112,8 @@ const (
 	EnableParentClosePolicyWorker = "system.enableParentClosePolicyWorker"
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
 	EnableStickyQuery = "system.enableStickyQuery"
-	// EnableActivityLocalDispatch indicates if acitivty local dispatch is enabled per namespace
-	EnableActivityLocalDispatch = "system.enableActivityLocalDispatch"
+	// EnableActivityEagerExecution indicates if acitivty eager execution is enabled per namespace
+	EnableActivityEagerExecution = "system.enableActivityEagerExecution"
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
 
@@ -135,6 +138,12 @@ const (
 	// MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskQueue, WorkflowID, ActivityID, TimerID,
 	// WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID
 	MaxIDLengthLimit = "limit.maxIDLength"
+	// WorkerBuildIdSizeLimit is the byte length limit for a worker build id as used in the rpc methods for updating
+	// the version graph for a task queue
+	WorkerBuildIdSizeLimit = "limit.workerBuildIdSize"
+	// VersionGraphNodeLimit is the max number of nodes allowed in the version graph for a task queue. Update requests
+	// which would cause the graph size to exceed this number will result in the oldest versions being dropped.
+	VersionGraphNodeLimit = "limit.versionGraphNodeSize"
 
 	// key for frontend
 
@@ -142,6 +151,8 @@ const (
 	FrontendPersistenceMaxQPS = "frontend.persistenceMaxQPS"
 	// FrontendPersistenceGlobalMaxQPS is the max qps frontend cluster can query DB
 	FrontendPersistenceGlobalMaxQPS = "frontend.persistenceGlobalMaxQPS"
+	// FrontendEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in frontend persistence client
+	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
 	FrontendVisibilityMaxPageSize = "frontend.visibilityMaxPageSize"
 	// FrontendESIndexMaxResultWindow is ElasticSearch index setting max_result_window
@@ -236,6 +247,8 @@ const (
 	MatchingPersistenceMaxQPS = "matching.persistenceMaxQPS"
 	// MatchingPersistenceGlobalMaxQPS is the max qps matching cluster can query DB
 	MatchingPersistenceGlobalMaxQPS = "matching.persistenceGlobalMaxQPS"
+	// MatchingEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in matching persistence client
+	MatchingEnablePersistencePriorityRateLimiting = "matching.enablePersistencePriorityRateLimiting"
 	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task queue throttling
 	MatchingMinTaskThrottlingBurstSize = "matching.minTaskThrottlingBurstSize"
 	// MatchingGetTasksBatchSize is the maximum batch size to fetch from the task buffer
@@ -281,6 +294,8 @@ const (
 	HistoryPersistenceMaxQPS = "history.persistenceMaxQPS"
 	// HistoryPersistenceGlobalMaxQPS is the max qps history cluster can query DB
 	HistoryPersistenceGlobalMaxQPS = "history.persistenceGlobalMaxQPS"
+	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
+	HistoryEnablePersistencePriorityRateLimiting = "history.enablePersistencePriorityRateLimiting"
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
 	HistoryLongPollExpirationInterval = "history.longPollExpirationInterval"
 	// HistoryCacheInitialSize is initial size of history cache
@@ -346,10 +361,6 @@ const (
 	TimerProcessorMaxPollInterval = "history.timerProcessorMaxPollInterval"
 	// TimerProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
 	TimerProcessorMaxPollIntervalJitterCoefficient = "history.timerProcessorMaxPollIntervalJitterCoefficient"
-	// TimerProcessorRescheduleInterval is the redispatch interval for timer processor
-	TimerProcessorRescheduleInterval = "history.timerProcessorRescheduleInterval"
-	// TimerProcessorRescheduleIntervalJitterCoefficient is the redispatch interval jitter coefficient
-	TimerProcessorRescheduleIntervalJitterCoefficient = "history.timerProcessorRescheduleIntervalJitterCoefficient"
 	// TimerProcessorMaxReschedulerSize is the threshold of the number of tasks in the redispatch queue for timer processor
 	TimerProcessorMaxReschedulerSize = "history.timerProcessorMaxReschedulerSize"
 	// TimerProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for timer processor
@@ -399,10 +410,6 @@ const (
 	TransferProcessorUpdateAckIntervalJitterCoefficient = "history.transferProcessorUpdateAckIntervalJitterCoefficient"
 	// TransferProcessorCompleteTransferInterval is complete timer interval for transferQueueProcessor
 	TransferProcessorCompleteTransferInterval = "history.transferProcessorCompleteTransferInterval"
-	// TransferProcessorRescheduleInterval is the redispatch interval for transferQueueProcessor
-	TransferProcessorRescheduleInterval = "history.transferProcessorRescheduleInterval"
-	// TransferProcessorRescheduleIntervalJitterCoefficient is the redispatch interval jitter coefficient
-	TransferProcessorRescheduleIntervalJitterCoefficient = "history.transferProcessorRescheduleIntervalJitterCoefficient"
 	// TransferProcessorMaxReschedulerSize is the threshold of the number of tasks in the redispatch queue for transferQueueProcessor
 	TransferProcessorMaxReschedulerSize = "history.transferProcessorMaxReschedulerSize"
 	// TransferProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for transferQueueProcessor
@@ -444,10 +451,6 @@ const (
 	VisibilityProcessorUpdateAckIntervalJitterCoefficient = "history.visibilityProcessorUpdateAckIntervalJitterCoefficient"
 	// VisibilityProcessorCompleteTaskInterval is complete timer interval for visibilityQueueProcessor
 	VisibilityProcessorCompleteTaskInterval = "history.visibilityProcessorCompleteTaskInterval"
-	// VisibilityProcessorRescheduleInterval is the redispatch interval for visibilityQueueProcessor
-	VisibilityProcessorRescheduleInterval = "history.visibilityProcessorRescheduleInterval"
-	// VisibilityProcessorRescheduleIntervalJitterCoefficient is the redispatch interval jitter coefficient
-	VisibilityProcessorRescheduleIntervalJitterCoefficient = "history.visibilityProcessorRescheduleIntervalJitterCoefficient"
 	// VisibilityProcessorMaxReschedulerSize is the threshold of the number of tasks in the redispatch queue for visibilityQueueProcessor
 	VisibilityProcessorMaxReschedulerSize = "history.visibilityProcessorMaxReschedulerSize"
 	// VisibilityProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for visibilityQueueProcessor
@@ -471,10 +474,6 @@ const (
 	ReplicatorProcessorUpdateAckInterval = "history.replicatorProcessorUpdateAckInterval"
 	// ReplicatorProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
 	ReplicatorProcessorUpdateAckIntervalJitterCoefficient = "history.replicatorProcessorUpdateAckIntervalJitterCoefficient"
-	// ReplicatorProcessorRescheduleInterval is the redispatch interval for ReplicatorProcessor
-	ReplicatorProcessorRescheduleInterval = "history.replicatorProcessorRescheduleInterval"
-	// ReplicatorProcessorRescheduleIntervalJitterCoefficient is the redispatch interval jitter coefficient
-	ReplicatorProcessorRescheduleIntervalJitterCoefficient = "history.replicatorProcessorRescheduleIntervalJitterCoefficient"
 	// ReplicatorProcessorMaxReschedulerSize is the threshold of the number of tasks in the redispatch queue for ReplicatorProcessor
 	ReplicatorProcessorMaxReschedulerSize = "history.replicatorProcessorMaxReschedulerSize"
 	// ReplicatorProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for ReplicatorProcessor
@@ -572,6 +571,8 @@ const (
 	WorkerPersistenceMaxQPS = "worker.persistenceMaxQPS"
 	// WorkerPersistenceGlobalMaxQPS is the max qps worker cluster can query DB
 	WorkerPersistenceGlobalMaxQPS = "worker.persistenceGlobalMaxQPS"
+	// WorkerEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in worker persistence client
+	WorkerEnablePersistencePriorityRateLimiting = "worker.enablePersistencePriorityRateLimiting"
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
 	WorkerIndexerConcurrency = "worker.indexerConcurrency"
 	// WorkerESProcessorNumOfWorkers is num of workers for esProcessor
@@ -635,10 +636,10 @@ const (
 	WorkerParentCloseMaxConcurrentActivityTaskPollers = "worker.ParentCloseMaxConcurrentActivityTaskPollers"
 	// WorkerParentCloseMaxConcurrentWorkflowTaskPollers indicates worker parent close worker max concurrent workflow pollers
 	WorkerParentCloseMaxConcurrentWorkflowTaskPollers = "worker.ParentCloseMaxConcurrentWorkflowTaskPollers"
+	// WorkerPerNamespaceWorkerCount controls number of per-ns (scheduler, batcher, etc.) workers to run per namespace
+	WorkerPerNamespaceWorkerCount = "worker.perNamespaceWorkerCount"
 	// WorkerEnableScheduler controls whether to start the worker for scheduled workflows
 	WorkerEnableScheduler = "worker.enableScheduler"
-	// WorkerSchedulerNumWorkers controls number of scheduler workers to run per namespace
-	WorkerSchedulerNumWorkers = "worker.schedulerNumWorkers"
 )
 
 // Filter represents a filter on the dynamic config key

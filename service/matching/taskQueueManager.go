@@ -42,6 +42,9 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/util"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -60,6 +63,11 @@ const (
 
 	// Fake Task ID to wrap a task for syncmatch
 	syncMatchTaskId = -137
+
+	ioTimeout = 5 * time.Second
+
+	// Threshold for counting a AddTask call as a no recent poller call
+	noPollerThreshold = time.Minute * 2
 )
 
 type (
@@ -80,6 +88,7 @@ type (
 	taskQueueManager interface {
 		Start()
 		Stop()
+		WaitUntilInitialized(context.Context) error
 		// AddTask adds a task to the task queue. This method will first attempt a synchronous
 		// match with a poller. When that fails, task will be written to database and later
 		// asynchronously matched with a poller
@@ -94,6 +103,10 @@ type (
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
+		// GetVersioningData returns the versioning data for this task queue
+		GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error)
+		// MutateVersioningData allows callers to update versioning data for this task queue
+		MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
@@ -133,6 +146,7 @@ type (
 		outstandingPollsMap  map[string]context.CancelFunc
 		signalFatalProblem   func(taskQueueManager)
 		clusterMeta          cluster.Metadata
+		initializedError     *future.FutureImpl[struct{}]
 	}
 )
 
@@ -160,10 +174,7 @@ func newTaskQueueManager(
 	}
 	nsName := namespaceEntry.Name()
 
-	taskQueueConfig, err := newTaskQueueConfig(taskQueue, config, nsName)
-	if err != nil {
-		return nil, err
-	}
+	taskQueueConfig := newTaskQueueConfig(taskQueue, config, nsName)
 
 	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue.name, taskQueue.taskType, taskQueueKind, e.logger)
 	logger := log.With(e.logger,
@@ -193,6 +204,7 @@ func newTaskQueueManager(
 		clusterMeta:         clusterMeta,
 		namespace:           nsName,
 		metricScope:         metricsScope,
+		initializedError:    future.NewFuture[struct{}](),
 	}
 
 	tlMgr.liveness = newLiveness(
@@ -231,8 +243,6 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	return false
 }
 
-// Start reading pump for the given task queue.
-// The pump fills up taskBuffer from persistence.
 func (c *taskQueueManagerImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
@@ -248,7 +258,6 @@ func (c *taskQueueManagerImpl) Start() {
 	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
 }
 
-// Stop pump that fills up taskBuffer from persistence.
 func (c *taskQueueManagerImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
@@ -257,13 +266,27 @@ func (c *taskQueueManagerImpl) Stop() {
 	) {
 		return
 	}
-	_ = c.db.UpdateState(context.TODO(), c.taskAckManager.getAckLevel())
-	c.taskGC.RunNow(context.TODO(), c.taskAckManager.getAckLevel())
+	// ackLevel in taskAckManager is initialized to -1 and then set to a real value (>= 0) once
+	// we've successfully acquired a lease. If it's still -1, then we don't have current
+	// metadata. UpdateState would fail on the lease check, but don't even bother calling it.
+	ackLevel := c.taskAckManager.getAckLevel()
+	if ackLevel >= 0 {
+		ctx, cancel := newIOContext()
+		defer cancel()
+
+		c.db.UpdateState(ctx, ackLevel)
+		c.taskGC.RunNow(ctx, ackLevel)
+	}
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.metricScope.IncCounter(metrics.TaskQueueStoppedCounter)
+}
+
+func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
+	_, err := c.initializedError.Get(ctx)
+	return err
 }
 
 // AddTask adds a task to the task queue. This method will first attempt a synchronous
@@ -278,8 +301,13 @@ func (c *taskQueueManagerImpl) AddTask(
 		c.liveness.markAlive(time.Now())
 	}
 
+	if c.QueueID().IsRoot() && !c.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
+		// Only checks recent pollers in the root partition
+		c.metricScope.IncCounter(metrics.NoRecentPollerTasksPerTaskQueueCounter)
+	}
+
 	var syncMatch bool
-	err := executeWithRetry(func() error {
+	err := executeWithRetry(ctx, func(_ context.Context) error {
 		taskInfo := params.taskInfo
 
 		namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceId()))
@@ -398,6 +426,16 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 	return c.matcher.OfferQuery(ctx, task)
 }
 
+func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error) {
+	return c.db.GetVersioningData(ctx)
+}
+
+func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
+	err := c.db.MutateVersioningData(ctx, mutator)
+	c.signalIfFatal(err)
+	return err
+}
+
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
 func (c *taskQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
 	return c.pollerHistory.getPollerInfo(time.Time{})
@@ -479,7 +517,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 		// again the underlying reason for failing to start will be resolved.
 		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
 		// re-written to persistence frequently.
-		err = executeWithRetry(func() error {
+		err = executeWithRetry(context.Background(), func(_ context.Context) error {
 			wf := &commonpb.WorkflowExecution{WorkflowId: task.Data.GetWorkflowId(), RunId: task.Data.GetRunId()}
 			_, err := c.taskWriter.appendTask(wf, task.Data)
 			return err
@@ -501,7 +539,11 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 	}
 
 	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
-	c.taskGC.Run(context.TODO(), ackLevel) // TODO: completeTaskFunc and task.finish() should take in a context
+
+	// TODO: completeTaskFunc and task.finish() should take in a context
+	ctx, cancel := newIOContext()
+	defer cancel()
+	c.taskGC.Run(ctx, ackLevel)
 }
 
 func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
@@ -513,9 +555,10 @@ func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
 
 // Retry operation on transient error.
 func executeWithRetry(
-	operation func() error,
+	ctx context.Context,
+	operation func(context.Context) error,
 ) error {
-	err := backoff.Retry(operation, persistenceOperationRetryPolicy, func(err error) bool {
+	err := backoff.ThrottleRetryContext(ctx, operation, persistenceOperationRetryPolicy, func(err error) bool {
 		if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 			return false
 		}
@@ -564,7 +607,7 @@ func (c *taskQueueManagerImpl) newChildContext(
 	}
 	remaining := deadline.Sub(time.Now().UTC()) - tailroom
 	if remaining < timeout {
-		timeout = time.Duration(common.MaxInt64(0, int64(remaining)))
+		timeout = time.Duration(util.Max(0, int64(remaining)))
 	}
 	return context.WithTimeout(parent, timeout)
 }
@@ -579,4 +622,11 @@ func (c *taskQueueManagerImpl) QueueID() *taskQueueID {
 
 func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
 	return c.taskQueueKind
+}
+
+func newIOContext() (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
+	return ctx, cancel
 }

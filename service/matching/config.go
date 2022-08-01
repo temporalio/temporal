@@ -27,19 +27,20 @@ package matching
 import (
 	"time"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/util"
 )
 
 type (
 	// Config represents configuration for matching service
 	Config struct {
-		PersistenceMaxQPS       dynamicconfig.IntPropertyFn
-		PersistenceGlobalMaxQPS dynamicconfig.IntPropertyFn
-		SyncMatchWaitDuration   dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		RPS                     dynamicconfig.IntPropertyFn
-		ShutdownDrainDuration   dynamicconfig.DurationPropertyFn
+		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
+		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
+		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
+		SyncMatchWaitDuration                 dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		RPS                                   dynamicconfig.IntPropertyFn
+		ShutdownDrainDuration                 dynamicconfig.DurationPropertyFn
 
 		// taskQueueManager configuration
 
@@ -54,6 +55,7 @@ type (
 		ForwarderMaxOutstandingTasks dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		ForwarderMaxRatePerSecond    dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		ForwarderMaxChildrenPerNode  dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
+		MaxVersionGraphSize          dynamicconfig.IntPropertyFn
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -105,43 +107,45 @@ type (
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		PersistenceMaxQPS:               dc.GetIntProperty(dynamicconfig.MatchingPersistenceMaxQPS, 3000),
-		PersistenceGlobalMaxQPS:         dc.GetIntProperty(dynamicconfig.MatchingPersistenceGlobalMaxQPS, 0),
-		SyncMatchWaitDuration:           dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond),
-		RPS:                             dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
-		RangeSize:                       100000,
-		GetTasksBatchSize:               dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingGetTasksBatchSize, 1000),
-		UpdateAckInterval:               dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingUpdateAckInterval, 1*time.Minute),
-		IdleTaskqueueCheckInterval:      dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingIdleTaskqueueCheckInterval, 5*time.Minute),
-		MaxTaskqueueIdleTime:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MaxTaskqueueIdleTime, 5*time.Minute),
-		LongPollExpirationInterval:      dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingLongPollExpirationInterval, time.Minute),
-		MinTaskThrottlingBurstSize:      dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1),
-		MaxTaskDeleteBatchSize:          dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMaxTaskDeleteBatchSize, 100),
-		OutstandingTaskAppendsThreshold: dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingOutstandingTaskAppendsThreshold, 250),
-		MaxTaskBatchSize:                dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMaxTaskBatchSize, 100),
-		ThrottledLogRPS:                 dc.GetIntProperty(dynamicconfig.MatchingThrottledLogRPS, 20),
-		NumTaskqueueWritePartitions:     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueWritePartitions, dynamicconfig.DefaultNumTaskQueuePartitions),
-		NumTaskqueueReadPartitions:      dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueReadPartitions, dynamicconfig.DefaultNumTaskQueuePartitions),
-		ForwarderMaxOutstandingPolls:    dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxOutstandingPolls, 1),
-		ForwarderMaxOutstandingTasks:    dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 1),
-		ForwarderMaxRatePerSecond:       dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxRatePerSecond, 10),
-		ForwarderMaxChildrenPerNode:     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
-		ShutdownDrainDuration:           dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0),
+		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.MatchingPersistenceMaxQPS, 3000),
+		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.MatchingPersistenceGlobalMaxQPS, 0),
+		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.MatchingEnablePersistencePriorityRateLimiting, true),
+		SyncMatchWaitDuration:                 dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond),
+		RPS:                                   dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
+		RangeSize:                             100000,
+		GetTasksBatchSize:                     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingGetTasksBatchSize, 1000),
+		UpdateAckInterval:                     dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingUpdateAckInterval, 1*time.Minute),
+		IdleTaskqueueCheckInterval:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingIdleTaskqueueCheckInterval, 5*time.Minute),
+		MaxTaskqueueIdleTime:                  dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MaxTaskqueueIdleTime, 5*time.Minute),
+		LongPollExpirationInterval:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingLongPollExpirationInterval, time.Minute),
+		MinTaskThrottlingBurstSize:            dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1),
+		MaxTaskDeleteBatchSize:                dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMaxTaskDeleteBatchSize, 100),
+		OutstandingTaskAppendsThreshold:       dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingOutstandingTaskAppendsThreshold, 250),
+		MaxTaskBatchSize:                      dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMaxTaskBatchSize, 100),
+		ThrottledLogRPS:                       dc.GetIntProperty(dynamicconfig.MatchingThrottledLogRPS, 20),
+		NumTaskqueueWritePartitions:           dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueWritePartitions, dynamicconfig.DefaultNumTaskQueuePartitions),
+		NumTaskqueueReadPartitions:            dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueReadPartitions, dynamicconfig.DefaultNumTaskQueuePartitions),
+		ForwarderMaxOutstandingPolls:          dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxOutstandingPolls, 1),
+		ForwarderMaxOutstandingTasks:          dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 1),
+		ForwarderMaxRatePerSecond:             dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxRatePerSecond, 10),
+		ForwarderMaxChildrenPerNode:           dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
+		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0),
+		MaxVersionGraphSize:                   dc.GetIntProperty(dynamicconfig.VersionGraphNodeLimit, 1000),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1000),
 	}
 }
 
-func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Name) (*taskQueueConfig, error) {
+func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Name) *taskQueueConfig {
 	taskQueueName := id.name
 	taskType := id.taskType
 
 	writePartition := func() int {
-		return common.MaxInt(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
+		return util.Max(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
 	}
 	readPartition := func() int {
-		return common.MaxInt(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
+		return util.Max(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
 	}
 
 	return &taskQueueConfig{
@@ -195,8 +199,8 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 				return config.ForwarderMaxRatePerSecond(namespace.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxChildrenPerNode: func() int {
-				return common.MaxInt(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
+				return util.Max(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
 			},
 		},
-	}, nil
+	}
 }

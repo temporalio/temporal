@@ -40,7 +40,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -50,6 +49,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -58,16 +58,22 @@ const (
 	delimiter                    = "~"
 	pointInTimeKeepAliveInterval = "1m"
 	scrollKeepAliveInterval      = "1m"
-
-	readTimeout = 16 * time.Second
 )
 
 // Default sort by uses the sorting order defined in the index template, so no
 // additional sorting is needed during query.
+// Keep RunID as tiebreaker because ES v6 date precision is milliseconds.
+// ES v7 date precision is nanoseconds which is good enough for tie breaking.
+// Remove this when we drop support for ES v6.
 var defaultSorter = []elastic.Sorter{
 	elastic.NewFieldSort(searchattribute.CloseTime).Desc().Missing("_first"),
 	elastic.NewFieldSort(searchattribute.StartTime).Desc().Missing("_first"),
 	elastic.NewFieldSort(searchattribute.RunID).Desc().Missing("_first"),
+}
+
+var defaultSorterV7 = []elastic.Sorter{
+	elastic.NewFieldSort(searchattribute.CloseTime).Desc().Missing("_first"),
+	elastic.NewFieldSort(searchattribute.StartTime).Desc().Missing("_first"),
 }
 
 type (
@@ -78,6 +84,7 @@ type (
 		searchAttributesMapper   searchattribute.Mapper
 		processor                Processor
 		processorAckTimeout      dynamicconfig.DurationPropertyFn
+		disableOrderByClause     dynamicconfig.BoolPropertyFn
 		metricsClient            metrics.Client
 	}
 
@@ -106,6 +113,7 @@ func NewVisibilityStore(
 	searchAttributesMapper searchattribute.Mapper,
 	processor Processor,
 	processorAckTimeout dynamicconfig.DurationPropertyFn,
+	disableOrderByClause dynamicconfig.BoolPropertyFn,
 	metricsClient metrics.Client,
 ) *visibilityStore {
 
@@ -116,6 +124,7 @@ func NewVisibilityStore(
 		searchAttributesMapper:   searchAttributesMapper,
 		processor:                processor,
 		processorAckTimeout:      processorAckTimeout,
+		disableOrderByClause:     disableOrderByClause,
 		metricsClient:            metricsClient,
 	}
 }
@@ -245,7 +254,7 @@ func (s *visibilityStore) addBulkRequestAndWait(
 
 	ackTimeout := s.processorAckTimeout()
 	if deadline, ok := ctx.Deadline(); ok {
-		ackTimeout = common.MinDuration(ackTimeout, time.Until(deadline))
+		ackTimeout = util.Min(ackTimeout, time.Until(deadline))
 	}
 	subCtx, subCtxCancelFn := context.WithTimeout(context.Background(), ackTimeout)
 	defer subCtxCancelFn()
@@ -636,7 +645,12 @@ func (s *visibilityStore) buildSearchParameters(
 		Index:    s.index,
 		Query:    boolQuery,
 		PageSize: request.PageSize,
-		Sorter:   defaultSorter,
+	}
+
+	if _, isV7 := s.esClient.(client.ClientV7); isV7 {
+		params.Sorter = defaultSorterV7
+	} else {
+		params.Sorter = defaultSorter
 	}
 
 	if token != nil && len(token.SearchAfter) > 0 {
@@ -650,9 +664,22 @@ func (s *visibilityStore) buildSearchParametersV2(
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*client.SearchParameters, error) {
 
-	boolQuery, fieldSorts, err := s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
+	boolQuery, fieldSorts, err := s.convertQuery(
+		request.Namespace,
+		request.NamespaceID,
+		request.Query,
+	)
 	if err != nil {
 		return nil, err
+	}
+
+	// TODO(rodrigozhou): investigate possible solutions to slow ORDER BY.
+	// ORDER BY clause can be slow if there is a large number of documents and
+	// using a field that was not indexed by ES. Since slow queries can block
+	// writes for unreasonably long, this option forbids the usage of ORDER BY
+	// clause to prevent slow down issues.
+	if s.disableOrderByClause() && len(fieldSorts) > 0 {
+		return nil, serviceerror.NewInvalidArgument("ORDER BY clause is not supported")
 	}
 
 	params := &client.SearchParameters{
@@ -664,7 +691,11 @@ func (s *visibilityStore) buildSearchParametersV2(
 
 	return params, nil
 }
-func (s *visibilityStore) convertQuery(namespace namespace.Name, namespaceID namespace.ID, requestQueryStr string) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
+func (s *visibilityStore) convertQuery(
+	namespace namespace.Name,
+	namespaceID namespace.ID,
+	requestQueryStr string,
+) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
@@ -694,7 +725,11 @@ func (s *visibilityStore) convertQuery(namespace namespace.Name, namespaceID nam
 
 func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
 	if len(fieldSorts) == 0 {
-		return defaultSorter
+		if _, isV7 := s.esClient.(client.ClientV7); isV7 {
+			return defaultSorterV7
+		} else {
+			return defaultSorter
+		}
 	}
 
 	res := make([]elastic.Sorter, len(fieldSorts)+1)
@@ -814,6 +849,11 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to decode search attributes: %v", err))
 	}
 	for saName, saValue := range searchAttributes {
+		if saValue == nil {
+			// If search attribute value is `nil`, it means that it shouldn't be added to the document.
+			// Empty slices are converted to `nil` while decoding.
+			continue
+		}
 		doc[saName] = saValue
 	}
 

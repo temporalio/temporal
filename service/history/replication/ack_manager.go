@@ -58,7 +58,7 @@ import (
 type (
 	AckManager interface {
 		NotifyNewTasks(tasks []tasks.Task)
-		GetMaxTaskID() int64
+		GetMaxTaskInfo() (int64, time.Time)
 		GetTasks(ctx context.Context, pollingCluster string, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
 		GetTask(ctx context.Context, taskInfo *replicationspb.ReplicationTaskInfo) (*replicationspb.ReplicationTask, error)
 	}
@@ -76,8 +76,9 @@ type (
 
 		sync.Mutex
 		// largest replication task ID generated
-		maxTaskID       *int64
-		sanityCheckTime time.Time
+		maxTaskID                  *int64
+		maxTaskVisibilityTimestamp *time.Time
+		sanityCheckTime            time.Time
 	}
 )
 
@@ -95,8 +96,8 @@ func NewAckManager(
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 
-	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	retryPolicy.SetMaximumAttempts(10)
+	retryPolicy := backoff.NewExponentialRetryPolicy(200 * time.Millisecond)
+	retryPolicy.SetMaximumAttempts(5)
 	retryPolicy.SetBackoffCoefficient(1)
 
 	return &ackMgrImpl{
@@ -123,9 +124,13 @@ func (p *ackMgrImpl) NotifyNewTasks(
 		return
 	}
 	maxTaskID := tasks[0].GetTaskID()
+	maxVisibilityTimestamp := tasks[0].GetVisibilityTime()
 	for _, task := range tasks {
 		if maxTaskID < task.GetTaskID() {
 			maxTaskID = task.GetTaskID()
+		}
+		if maxVisibilityTimestamp.Before(task.GetVisibilityTime()) {
+			maxVisibilityTimestamp = task.GetVisibilityTime()
 		}
 	}
 
@@ -134,21 +139,30 @@ func (p *ackMgrImpl) NotifyNewTasks(
 	if p.maxTaskID == nil || *p.maxTaskID < maxTaskID {
 		p.maxTaskID = &maxTaskID
 	}
+	if p.maxTaskVisibilityTimestamp == nil || p.maxTaskVisibilityTimestamp.Before(maxVisibilityTimestamp) {
+		p.maxTaskVisibilityTimestamp = timestamp.TimePtr(maxVisibilityTimestamp)
+	}
 }
 
-func (p *ackMgrImpl) GetMaxTaskID() int64 {
+func (p *ackMgrImpl) GetMaxTaskInfo() (int64, time.Time) {
 	p.Lock()
 	defer p.Unlock()
 
-	if p.maxTaskID == nil {
+	maxTaskID := p.maxTaskID
+	if maxTaskID == nil {
 		// maxTaskID is nil before any replication task is written which happens right after shard reload. In that case,
 		// use ImmediateTaskMaxReadLevel which is the max task id of any immediate task queues.
 		// ImmediateTaskMaxReadLevel will be the lower bound of new range_id if shard reload. Remote cluster will quickly (in
 		// a few seconds) ack to the latest ImmediateTaskMaxReadLevel if there is no replication tasks at all.
-		return p.shard.GetQueueMaxReadLevel(tasks.CategoryReplication, p.currentClusterName).TaskID
+		taskID := p.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, p.currentClusterName).Prev().TaskID
+		maxTaskID = &taskID
+	}
+	maxVisibilityTimestamp := p.maxTaskVisibilityTimestamp
+	if maxVisibilityTimestamp == nil {
+		maxVisibilityTimestamp = timestamp.TimePtr(p.shard.GetTimeSource().Now())
 	}
 
-	return *p.maxTaskID
+	return *maxTaskID, timestamp.TimeValue(maxVisibilityTimestamp)
 }
 
 func (p *ackMgrImpl) GetTask(
@@ -181,6 +195,17 @@ func (p *ackMgrImpl) GetTask(
 			Version:             taskInfo.Version,
 			FirstEventID:        taskInfo.FirstEventId,
 			NextEventID:         taskInfo.NextEventId,
+		})
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
+		return p.taskInfoToTask(ctx, &tasks.SyncWorkflowStateTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				taskInfo.GetNamespaceId(),
+				taskInfo.GetWorkflowId(),
+				taskInfo.GetRunId(),
+			),
+			VisibilityTimestamp: time.Unix(0, 0),
+			TaskID:              taskInfo.TaskId,
+			Version:             taskInfo.Version,
 		})
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", taskInfo.TaskType))
@@ -296,13 +321,13 @@ func (p *ackMgrImpl) taskInfoToTask(
 	task tasks.Task,
 ) (*replicationspb.ReplicationTask, error) {
 	var replicationTask *replicationspb.ReplicationTask
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		replicationTask, err = p.toReplicationTask(ctx, task)
 		return err
 	}
 
-	if err := backoff.Retry(op, p.retryPolicy, common.IsPersistenceTransientError); err != nil {
+	if err := backoff.ThrottleRetryContext(ctx, op, p.retryPolicy, common.IsPersistenceTransientError); err != nil {
 		return nil, err
 	}
 	return replicationTask, nil
@@ -312,7 +337,7 @@ func (p *ackMgrImpl) taskIDsRange(
 	lastReadMessageID int64,
 ) (minTaskID int64, maxTaskID int64) {
 	minTaskID = lastReadMessageID
-	maxTaskID = p.shard.GetQueueMaxReadLevel(tasks.CategoryReplication, p.currentClusterName).TaskID
+	maxTaskID = p.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, p.currentClusterName).Prev().TaskID
 
 	p.Lock()
 	defer p.Unlock()

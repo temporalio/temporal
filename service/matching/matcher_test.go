@@ -71,8 +71,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	t.taskQueue = newTestTaskQueueID(namespace.ID(uuid.New()), taskQueuePartitionPrefix+"tl0/1", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	tlCfg, err := newTaskQueueConfig(t.taskQueue, cfg, "test-namespace")
-	t.NoError(err)
+	tlCfg := newTaskQueueConfig(t.taskQueue, cfg, "test-namespace")
 	tlCfg.forwarderConfig = forwarderConfig{
 		ForwarderMaxOutstandingPolls: func() int { return 1 },
 		ForwarderMaxOutstandingTasks: func() int { return 1 },
@@ -84,8 +83,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.matcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopScope)
 
 	rootTaskQueue := newTestTaskQueueID(t.taskQueue.namespaceID, t.taskQueue.Parent(20), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	rootTaskqueueCfg, err := newTaskQueueConfig(rootTaskQueue, cfg, "test-namespace")
-	t.NoError(err)
+	rootTaskqueueCfg := newTaskQueueConfig(rootTaskQueue, cfg, "test-namespace")
 	t.rootMatcher = newTaskMatcher(rootTaskqueueCfg, nil, metrics.NoopScope)
 }
 
@@ -475,16 +473,6 @@ func (t *MatcherTestSuite) TestRemotePollForQuery() {
 	t.NotNil(req)
 	t.NotNil(task)
 	t.True(task.isStarted())
-}
-
-func (t *MatcherTestSuite) newNamespaceCache() namespace.Registry {
-	entry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: "test-namespace"},
-		&persistencespb.NamespaceConfig{},
-		"")
-	dc := namespace.NewMockRegistry(t.controller)
-	dc.EXPECT().GetNamespaceByID(gomock.Any()).Return(entry, nil).AnyTimes()
-	return dc
 }
 
 func randomTaskInfo() *persistencespb.AllocatedTaskInfo {

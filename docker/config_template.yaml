@@ -31,6 +31,14 @@ persistence:
                     keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
                     enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false" }}
                     serverName: {{ default .Env.CASSANDRA_HOST_NAME "" }}
+                {{- if .Env.CASSANDRA_ADDRESS_TRANSLATOR }}
+                addressTranslator:
+                    translator: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR "" }}
+                    {{- if .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS }}
+                    options:
+                        advertised-hostname: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS "" }}
+                    {{- end }}
+                {{- end }}
         visibility:
             cassandra:
                 {{ $visibility_seeds_default := default .Env.CASSANDRA_SEEDS "" }}
@@ -57,6 +65,14 @@ persistence:
                     keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
                     enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false" }}
                     serverName: {{ default .Env.CASSANDRA_HOST_NAME "" }}
+                {{- if .Env.CASSANDRA_ADDRESS_TRANSLATOR }}
+                addressTranslator:
+                    translator: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR "" }}
+                    {{- if .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS }}
+                    options:
+                        advertised-hostname: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS "" }}
+                    {{- end }}
+                {{- end }}
         {{- else if eq $db "mysql" }}
         default:
             sql:
@@ -73,8 +89,6 @@ persistence:
                 maxConns: {{ default .Env.SQL_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_MAX_IDLE_CONNS "20" }}
                 maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
-                authPlugin: 
-                    plugin: {{ default .Env.SQL_AUTH_PLUGIN "" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
                     caFile: {{ default .Env.SQL_CA "" }}
@@ -105,8 +119,6 @@ persistence:
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
-                authPlugin: 
-                    plugin: {{ default .Env.SQL_VIS_AUTH_PLUGIN "" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
                     caFile: {{ default .Env.SQL_CA "" }}
@@ -126,8 +138,6 @@ persistence:
                 maxConns: {{ default .Env.SQL_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_MAX_IDLE_CONNS "20" }}
                 maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
-                authPlugin: 
-                    plugin: {{ default .Env.SQL_AUTH_PLUGIN "" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
                     caFile: {{ default .Env.SQL_CA "" }}
@@ -154,8 +164,6 @@ persistence:
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
-                authPlugin: 
-                    plugin: {{ default .Env.SQL_VIS_AUTH_PLUGIN "" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
                     caFile: {{ default .Env.SQL_CA "" }}

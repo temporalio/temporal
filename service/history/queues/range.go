@@ -105,7 +105,7 @@ func (r *Range) Merge(
 	)
 }
 
-func (r *Range) Equal(
+func (r *Range) Equals(
 	input Range,
 ) bool {
 	return r.InclusiveMin.CompareTo(input.InclusiveMin) == 0 &&

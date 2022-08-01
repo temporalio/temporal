@@ -25,7 +25,6 @@
 package history
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -94,7 +93,8 @@ func newTransferQueueProcessor(
 	historyClient historyservice.HistoryServiceClient,
 	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
-) queues.Processor {
+) queues.Queue {
+
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
 		shard.GetConfig().TransferProcessorEnableSingleCursor()
 
@@ -339,7 +339,10 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel < upperAckLevel {
-		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
+		ctx, cancel := newQueueIOContext()
+		defer cancel()
+
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             t.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryTransfer,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(lowerAckLevel + 1),

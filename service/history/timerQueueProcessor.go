@@ -25,7 +25,6 @@
 package history
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -91,7 +90,8 @@ func newTimerQueueProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
-) queues.Processor {
+) queues.Queue {
+
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
 		shard.GetConfig().TimerProcessorEnableSingleCursor()
 
@@ -288,8 +288,8 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 	for {
 		select {
 		case <-t.shutdownChan:
-			// before shutdown, make sure the ack level is up to date
-			t.completeTimers() //nolint:errcheck
+			// before shutdown, make sure the ack level is up-to-date
+			_ = t.completeTimers()
 			return
 		case <-timer.C:
 		CompleteLoop:
@@ -342,7 +342,10 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel.FireTime.Before(upperAckLevel.FireTime) {
-		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
+		ctx, cancel := newQueueIOContext()
+		defer cancel()
+
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             t.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryTimer,
 			InclusiveMinTaskKey: tasks.NewKey(lowerAckLevel.FireTime, 0),

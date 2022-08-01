@@ -82,7 +82,7 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedspb.StartWorkf
 		req.NamespaceId,
 		req.Request,
 		nil,
-		timestamp.TimeValue(req.StartTime),
+		time.Now().UTC(),
 	)
 	request.LastCompletionResult = req.LastCompletionResult
 	request.ContinuedFailure = req.ContinuedFailure

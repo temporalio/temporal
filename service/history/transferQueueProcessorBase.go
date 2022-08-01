@@ -26,7 +26,9 @@ package history
 
 import (
 	"context"
+	"time"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -37,8 +39,12 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+const (
+	queueIOTimeout = 5 * time.Second
+)
+
 type (
-	maxReadAckLevel func() int64
+	maxReadLevel func() int64
 
 	updateTransferAckLevel func(ackLevel int64) error
 	transferQueueShutdown  func() error
@@ -47,7 +53,7 @@ type (
 		shard                  shard.Context
 		options                *QueueProcessorOptions
 		executionManager       persistence.ExecutionManager
-		maxReadAckLevel        maxReadAckLevel
+		maxReadLevel           maxReadLevel
 		updateTransferAckLevel updateTransferAckLevel
 		transferQueueShutdown  transferQueueShutdown
 		logger                 log.Logger
@@ -57,7 +63,7 @@ type (
 func newTransferQueueProcessorBase(
 	shard shard.Context,
 	options *QueueProcessorOptions,
-	maxReadAckLevel maxReadAckLevel,
+	maxReadLevel maxReadLevel,
 	updateTransferAckLevel updateTransferAckLevel,
 	transferQueueShutdown transferQueueShutdown,
 	logger log.Logger,
@@ -66,7 +72,7 @@ func newTransferQueueProcessorBase(
 		shard:                  shard,
 		options:                options,
 		executionManager:       shard.GetExecutionManager(),
-		maxReadAckLevel:        maxReadAckLevel,
+		maxReadLevel:           maxReadLevel,
 		updateTransferAckLevel: updateTransferAckLevel,
 		transferQueueShutdown:  transferQueueShutdown,
 		logger:                 logger,
@@ -76,11 +82,14 @@ func newTransferQueueProcessorBase(
 func (t *transferQueueProcessorBase) readTasks(
 	readLevel int64,
 ) ([]tasks.Task, bool, error) {
-	response, err := t.executionManager.GetHistoryTasks(context.TODO(), &persistence.GetHistoryTasksRequest{
+	ctx, cancel := newQueueIOContext()
+	defer cancel()
+
+	response, err := t.executionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             t.shard.GetShardID(),
 		TaskCategory:        tasks.CategoryTransfer,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(readLevel + 1),
-		ExclusiveMaxTaskKey: tasks.NewImmediateKey(t.maxReadAckLevel() + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(t.maxReadLevel()),
 		BatchSize:           t.options.BatchSize(),
 	})
 	if err != nil {
@@ -119,4 +128,10 @@ func newTransferTaskScheduler(
 		metricProvider,
 		logger,
 	)
+}
+
+func newQueueIOContext() (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), queueIOTimeout)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	return ctx, cancel
 }

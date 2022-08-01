@@ -101,6 +101,7 @@ var (
 
 // Pre-defined values for TagSysComponent
 var (
+	ComponentFX                       = component("fx")
 	ComponentTaskQueue                = component("taskqueue")
 	ComponentHistoryEngine            = component("history-engine")
 	ComponentHistoryCache             = component("history-cache")

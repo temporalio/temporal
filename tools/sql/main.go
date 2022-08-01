@@ -98,12 +98,6 @@ func BuildCLIOptions() *cli.App {
 			Usage:  "name of the sql plugin",
 			EnvVar: "SQL_PLUGIN",
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagAuthPluginName,
-			Value:  "",
-			Usage:  "authentication plugin for sql database (supported: ['rds-iam-auth'])",
-			EnvVar: "SQL_AUTH_PLUGIN",
-		},
 		cli.BoolFlag{
 			Name:  schema.CLIFlagQuiet,
 			Usage: "Don't set exit status to 1 on error",
@@ -197,8 +191,8 @@ func BuildCLIOptions() *cli.App {
 			Usage:   "creates a database",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  schema.CLIFlagDatabase,
-					Usage: "name of the database",
+					Name:  schema.CLIOptDefaultDb,
+					Usage: "optional default db to connect to, this is not the db to be created",
 				},
 			},
 			Action: func(c *cli.Context) {
@@ -211,8 +205,8 @@ func BuildCLIOptions() *cli.App {
 			Usage:   "drops a database",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  schema.CLIFlagDatabase,
-					Usage: "name of the database",
+					Name:  schema.CLIOptDefaultDb,
+					Usage: "optional default db to connect to, not the db to be deleted",
 				},
 				cli.BoolFlag{
 					Name:  schema.CLIFlagForce,
@@ -222,7 +216,7 @@ func BuildCLIOptions() *cli.App {
 			Action: func(c *cli.Context) {
 				drop := c.Bool(schema.CLIOptForce)
 				if !drop {
-					database := c.String(schema.CLIOptDatabase)
+					database := c.GlobalString(schema.CLIOptDatabase)
 					fmt.Printf("Are you sure you want to drop database %q (y/N)? ", database)
 					y := ""
 					_, _ = fmt.Scanln(&y)

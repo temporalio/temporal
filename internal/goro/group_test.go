@@ -60,7 +60,7 @@ func TestWaitOnNothing(t *testing.T) {
 func TestWaitOnDifferentThread(t *testing.T) {
 	var g goro.Group
 	g.Go(blockOnCtxReturnNil)
-	h := goro.Go(context.TODO(), func(context.Context) error {
+	h := goro.NewHandle(context.TODO()).Go(func(context.Context) error {
 		g.Wait()
 		return nil
 	})
