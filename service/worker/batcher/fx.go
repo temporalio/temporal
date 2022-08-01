@@ -39,8 +39,6 @@ import (
 )
 
 const (
-	// BatcherTaskQueueName is the taskqueue name
-	BatcherTaskQueueName = "temporal-sys-batcher-taskqueue"
 	// BatchWFTypeName is the workflow type
 	BatchWFTypeName = "temporal-sys-batch-workflow"
 	// DefaultRPS is the default RPS
@@ -51,15 +49,10 @@ const (
 
 type (
 	workerComponent struct {
-		activityDeps                 activityDeps
-		dc                           *dynamicconfig.Collection
-		enabledFeature               dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		enabledPerNSWorker           dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		numWorkers                   dynamicconfig.IntPropertyFnWithNamespaceFilter
-		maxActivityExecutionSize     dynamicconfig.IntPropertyFnWithNamespaceFilter
-		maxWorkflowTaskExecutionSize dynamicconfig.IntPropertyFnWithNamespaceFilter
-		maxActivityPollers           dynamicconfig.IntPropertyFnWithNamespaceFilter
-		maxWorkflowTaskPollers       dynamicconfig.IntPropertyFnWithNamespaceFilter
+		activityDeps       activityDeps
+		dc                 *dynamicconfig.Collection
+		enabledFeature     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enabledPerNSWorker dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -85,15 +78,10 @@ func NewResult(
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
-			activityDeps:                 params,
-			dc:                           dc,
-			enabledFeature:               dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcher, true),
-			enabledPerNSWorker:           dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcherPerNamespaceWorker, false),
-			numWorkers:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherPerNamespaceWorkerCount, 1),
-			maxActivityExecutionSize:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherMaxConcurrentActivityExecutionSize, 1000),
-			maxWorkflowTaskExecutionSize: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize, 1000),
-			maxActivityPollers:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherMaxConcurrentActivityTaskPollers, 2),
-			maxWorkflowTaskPollers:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.WorkerBatcherMaxConcurrentWorkflowTaskPollers, 2),
+			activityDeps:       params,
+			dc:                 dc,
+			enabledFeature:     dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcher, true),
+			enabledPerNSWorker: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcherPerNamespaceWorker, false),
 		},
 	}
 }
@@ -101,7 +89,7 @@ func NewResult(
 func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	namespaceName := ns.Name().String()
 	enableFeature := s.enabledFeature(namespaceName)
-	enablePerNSWorker := s.enabledPerNSWorker(namespaceName) || ns.Name().String() == common.SystemLocalNamespace
+	enablePerNSWorker := s.enabledPerNSWorker(namespaceName) || namespaceName == common.SystemLocalNamespace
 	return &workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: enableFeature && enablePerNSWorker,
 	}

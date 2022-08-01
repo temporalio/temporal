@@ -618,20 +618,10 @@ const (
 	HistoryScannerEnabled = "worker.historyScannerEnabled"
 	// ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner
 	ExecutionsScannerEnabled = "worker.executionsScannerEnabled"
-	// WorkerBatcherMaxConcurrentActivityExecutionSize indicates worker batcher max concurrent activity execution size
-	WorkerBatcherMaxConcurrentActivityExecutionSize = "worker.BatcherMaxConcurrentActivityExecutionSize"
-	// WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize indicates worker batcher max concurrent workflow execution size
-	WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize = "worker.BatcherMaxConcurrentWorkflowTaskExecutionSize"
-	// WorkerBatcherMaxConcurrentActivityTaskPollers indicates worker batcher max concurrent activity pollers
-	WorkerBatcherMaxConcurrentActivityTaskPollers = "worker.BatcherMaxConcurrentActivityTaskPollers"
-	// WorkerBatcherMaxConcurrentWorkflowTaskPollers indicates worker batcher max concurrent workflow pollers
-	WorkerBatcherMaxConcurrentWorkflowTaskPollers = "worker.BatcherMaxConcurrentWorkflowTaskPollers"
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher = "worker.enableBatcher"
 	// EnableBatcherPerNamespaceWorker decides whether start batcher worker per namespace
 	EnableBatcherPerNamespaceWorker = "worker.enableBatcherPerNamespaceWorker"
-	// WorkerBatcherPerNamespaceWorkerCount controls the number of batcher workers to run per namespace
-	WorkerBatcherPerNamespaceWorkerCount = "worker.batcherPerNamespaceWorkerCount"
 	// BatcherRPS controls number the rps of batch operations
 	BatcherRPS = "worker.batcherRPS"
 	// BatcherConcurrency controls the concurrency of one batch operation
