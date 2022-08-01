@@ -109,6 +109,9 @@ type (
 		// HTTP handler path "/metrics".
 		HandlerPath string `yaml:"handlerPath"`
 
+		// SanitizeOptions is an optional field that enables a user to specify which characters are valid and/or should be replaced before metrics are emitted.
+		SanitizeOptions *SanitizeOptions `yaml:"sanitizeOptions"`
+
 		// Configs below are kept for backwards compatibility with previously exposed tally prometheus.Configuration.
 
 		// Deprecated. ListenNetwork if specified will be used instead of using tcp network.
@@ -136,8 +139,6 @@ type (
 		// on the specified listen address or registering a metric with the
 		// Prometheus. By default the registerer will panic.
 		OnError string `yaml:"onError"`
-
-		SanitizeOptions *SanitizeOptions `yaml:"sanitizeOptions"`
 	}
 )
 
