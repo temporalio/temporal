@@ -103,15 +103,7 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 	enableFeature := s.enabledFeature(namespaceName)
 	enablePerNSWorker := s.enabledPerNSWorker(namespaceName) || ns.Name().String() == common.SystemLocalNamespace
 	return &workercommon.PerNSDedicatedWorkerOptions{
-		Enabled:    enableFeature && enablePerNSWorker,
-		TaskQueue:  BatcherTaskQueueName,
-		NumWorkers: s.numWorkers(namespaceName),
-		Options: sdkworker.Options{
-			MaxConcurrentActivityExecutionSize:     s.maxActivityExecutionSize(namespaceName),
-			MaxConcurrentWorkflowTaskExecutionSize: s.maxWorkflowTaskExecutionSize(namespaceName),
-			MaxConcurrentActivityTaskPollers:       s.maxActivityPollers(namespaceName),
-			MaxConcurrentWorkflowTaskPollers:       s.maxWorkflowTaskPollers(namespaceName),
-		},
+		Enabled: enableFeature && enablePerNSWorker,
 	}
 }
 

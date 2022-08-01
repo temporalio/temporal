@@ -101,6 +101,18 @@ func buildCLIOptions() *cli.App {
 			Usage:  "enable NetworkTopologyStrategy by providing datacenter name",
 			EnvVar: "CASSANDRA_DATACENTER",
 		},
+		cli.StringFlag{
+			Name:   schema.CLIOptAddressTranslator,
+			Value:  "",
+			Usage:  "name of address translator for cassandra hosts",
+			EnvVar: "CASSANDRA_ADDRESS_TRANSLATOR",
+		},
+		cli.StringFlag{
+			Name:   schema.CLIOptAddressTranslatorOptions,
+			Value:  "",
+			Usage:  "colon-separated list of key=value pairs as options for address translator",
+			EnvVar: "CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS_CLI",
+		},
 		cli.BoolFlag{
 			Name:  schema.CLIFlagQuiet,
 			Usage: "Don't set exit status to 1 on error",

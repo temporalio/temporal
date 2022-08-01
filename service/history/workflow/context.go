@@ -367,7 +367,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	}
 	c.SetHistorySize(int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff))
 
-	engine, err := c.shard.GetEngine()
+	engine, err := c.shard.GetEngine(ctx)
 	if err != nil {
 		return err
 	}
@@ -826,7 +826,7 @@ func (c *ContextImpl) ReapplyEvents(
 
 	activeCluster := namespaceEntry.ActiveClusterName()
 	if activeCluster == c.shard.GetClusterMetadata().GetCurrentClusterName() {
-		engine, err := c.shard.GetEngine()
+		engine, err := c.shard.GetEngine(ctx)
 		if err != nil {
 			return err
 		}
@@ -855,7 +855,7 @@ func (c *ContextImpl) ReapplyEvents(
 	if sourceCluster == nil {
 		return serviceerror.NewInternal(fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster))
 	}
-	ctx2, cancel2 := rpc.NewContextWithTimeoutAndHeaders(defaultRemoteCallTimeout)
+	ctx2, cancel2 := rpc.NewContextWithTimeoutAndVersionHeaders(defaultRemoteCallTimeout)
 	defer cancel2()
 	_, err = sourceCluster.ReapplyEvents(
 		ctx2,

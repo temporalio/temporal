@@ -769,3 +769,18 @@ func (c *retryableClient) UpdateWorkerBuildIdOrdering(
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
+
+func (c *retryableClient) UpdateWorkflow(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkflowResponse, error) {
+	var resp *workflowservice.UpdateWorkflowResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateWorkflow(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}

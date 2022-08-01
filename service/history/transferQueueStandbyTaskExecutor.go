@@ -294,11 +294,9 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				Clock:                  executionInfo.ParentClock,
 			})
 			switch err.(type) {
-			case nil, *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
-				// NOTE: NotFound is only returned when workflow already completed
-				// If workflow can't be found at all, WorkflowNotReady error will be returned.
+			case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 				return nil, nil
-			case *serviceerror.WorkflowNotReady:
+			case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
 				return verifyChildCompletionRecordedInfo, nil
 			default:
 				t.logger.Error("Failed to verify child execution completion recoreded",
@@ -450,11 +448,9 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			Clock: childWorkflowInfo.Clock,
 		})
 		switch err.(type) {
-		case nil, *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
-			// NOTE: NotFound is only returned when workflow already completed
-			// If workflow can't be found at all, WorkflowNotReady error will be returned.
+		case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 			return nil, nil
-		case *serviceerror.WorkflowNotReady:
+		case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
 			return &startChildExecutionPostActionInfo{}, nil
 		default:
 			t.logger.Error("Failed to verify first workflow task scheduled",
@@ -663,6 +659,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	// NOTE: history resend may take long time and its timeout is currently
 	// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
 	if err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+		ctx,
 		remoteClusterName,
 		namespace.ID(taskInfo.GetNamespaceID()),
 		taskInfo.GetWorkflowID(),

@@ -275,7 +275,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
 	defer cancel()
 	s.worker.RegisterWorkflow(testDataConverterWorkflow)
 	s.worker.RegisterActivity(testActivity)
@@ -311,7 +311,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
 	defer cancel()
 
 	s.worker.RegisterWorkflow(testDataConverterWorkflow)
@@ -419,7 +419,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
 	defer cancel()
 	s.worker.RegisterWorkflow(testParentWorkflow)
 	s.worker.RegisterWorkflow(testChildWorkflow)

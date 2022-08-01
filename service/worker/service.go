@@ -99,13 +99,16 @@ type (
 
 	// Config contains all the service config for worker
 	Config struct {
-		ArchiverConfig                *archiver.Config
-		ScannerCfg                    *scanner.Config
-		ParentCloseCfg                *parentclosepolicy.Config
-		ThrottledLogRPS               dynamicconfig.IntPropertyFn
-		PersistenceMaxQPS             dynamicconfig.IntPropertyFn
-		PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
-		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
+		ArchiverConfig                        *archiver.Config
+		ScannerCfg                            *scanner.Config
+		ParentCloseCfg                        *parentclosepolicy.Config
+		ThrottledLogRPS                       dynamicconfig.IntPropertyFn
+		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
+		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
+		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
+		EnableBatcher                         dynamicconfig.BoolPropertyFn
+		EnableParentClosePolicyWorker         dynamicconfig.BoolPropertyFn
+		PerNamespaceWorkerCount               dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 		StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 		StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
@@ -113,6 +116,7 @@ type (
 		AdvancedVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
 		EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityDisableOrderByClause            dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -272,6 +276,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 			dynamicconfig.EnableParentClosePolicyWorker,
 			true,
 		),
+		PerNamespaceWorkerCount: dc.GetIntPropertyFilteredByNamespace(
+			dynamicconfig.WorkerPerNamespaceWorkerCount,
+			1,
+		),
 		ThrottledLogRPS: dc.GetIntProperty(
 			dynamicconfig.WorkerThrottledLogRPS,
 			20,
@@ -284,6 +292,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 			dynamicconfig.WorkerPersistenceGlobalMaxQPS,
 			0,
 		),
+		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(
+			dynamicconfig.WorkerEnablePersistencePriorityRateLimiting,
+			true,
+		),
 
 		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
 		StandardVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
@@ -291,6 +303,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 		AdvancedVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
 		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
 		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
+		VisibilityDisableOrderByClause:            dc.GetBoolProperty(dynamicconfig.VisibilityDisableOrderByClause, false),
 	}
 	return config
 }

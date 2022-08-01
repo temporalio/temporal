@@ -36,6 +36,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -122,7 +123,10 @@ func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, no
 }
 
 func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) {
-	clusterMetadata, err := m.clusterMetadataManager.GetCurrentClusterMetadata(context.TODO())
+	// TODO: specify a timeout for the context
+	ctx := headers.SetCallerInfo(context.TODO(), headers.NewCallerInfo(headers.CallerTypeBackground))
+
+	clusterMetadata, err := m.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.NotFound:

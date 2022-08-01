@@ -25,7 +25,8 @@
 package metrics
 
 import (
-	"fmt"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -52,35 +53,40 @@ func (s *apiMetricsSuite) TearDownTest() {
 
 }
 
-func (s *apiMetricsSuite) TestFrontendAPIMetrics() {
-	apiNames := FrontendAPIMetricsNames()
-	apiNameToScope := FrontendAPIMetricsScopes()
-	for apiName := range apiNames {
-		if _, ok := apiNameToScope[apiName]; !ok {
-			fmt.Println(apiName)
+func (s *apiMetricsSuite) assertAllAPIsHaveMetricsDefined(apiNames map[string]string, scopeDef map[string]int) {
+	var missingAPIs []string
+	for _, fullName := range apiNames {
+		if _, ok := scopeDef[fullName]; !ok {
+			missingAPIs = append(missingAPIs, fullName)
 		}
 	}
+	if len(missingAPIs) > 0 {
+		sort.Strings(missingAPIs)
+		// You are here most likely because you added new API without defining metrics scope for them.
+		s.Fail(
+			"Missing metrics scope for APIs.",
+			"Missing metrics scope for below APIs:\n%s. \nPlease define them in common/metrics/def.go",
+			strings.Join(missingAPIs, ",\n"))
+	}
+}
+
+func (s *apiMetricsSuite) TestFrontendAPIMetrics() {
+	apiNames := frontendAPIMetricsNames()
+	apiNameToScope := FrontendAPIMetricsScopes()
+	s.assertAllAPIsHaveMetricsDefined(apiNames, apiNameToScope)
 	s.Equal(len(apiNames), len(apiNameToScope))
 }
 
 func (s *apiMetricsSuite) TestMatchingAPIMetrics() {
-	apiNames := MatchingAPIMetricsNames()
+	apiNames := matchingAPIMetricsNames()
 	apiNameToScope := MatchingAPIMetricsScopes()
-	for apiName := range apiNames {
-		if _, ok := apiNameToScope[apiName]; !ok {
-			fmt.Println(apiName)
-		}
-	}
+	s.assertAllAPIsHaveMetricsDefined(apiNames, apiNameToScope)
 	s.Equal(len(apiNames), len(apiNameToScope))
 }
 
 func (s *apiMetricsSuite) TestHistoryAPIMetrics() {
-	apiNames := HistoryAPIMetricsNames()
+	apiNames := historyAPIMetricsNames()
 	apiNameToScope := HistoryAPIMetricsScopes()
-	for apiName := range apiNames {
-		if _, ok := apiNameToScope[apiName]; !ok {
-			fmt.Println(apiName)
-		}
-	}
+	s.assertAllAPIsHaveMetricsDefined(apiNames, apiNameToScope)
 	s.Equal(len(apiNames), len(apiNameToScope))
 }

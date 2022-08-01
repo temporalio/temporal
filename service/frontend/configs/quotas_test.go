@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+	"golang.org/x/exp/slices"
 )
 
 type (
@@ -59,27 +60,42 @@ func (s *quotasSuite) TearDownTest() {
 }
 
 func (s *quotasSuite) TestExecutionAPIToPriorityMapping() {
-	mapping := make(map[int]struct{})
 	for _, priority := range ExecutionAPIToPriority {
-		mapping[priority] = struct{}{}
+		index := slices.Index(ExecutionAPIPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
 	}
-	s.Equal(mapping, ExecutionAPIPriorities)
 }
 
 func (s *quotasSuite) TestVisibilityAPIToPriorityMapping() {
-	mapping := make(map[int]struct{})
 	for _, priority := range VisibilityAPIToPriority {
-		mapping[priority] = struct{}{}
+		index := slices.Index(VisibilityAPIPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
 	}
-	s.Equal(mapping, VisibilityAPIPriorities)
 }
 
 func (s *quotasSuite) TestOtherAPIToPriorityMapping() {
-	mapping := make(map[int]struct{})
 	for _, priority := range OtherAPIToPriority {
-		mapping[priority] = struct{}{}
+		index := slices.Index(OtherAPIPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
 	}
-	s.Equal(mapping, OtherAPIPriorities)
+}
+
+func (s *quotasSuite) TestExecutionAPIPrioritiesOrdered() {
+	for idx := range ExecutionAPIPrioritiesOrdered[1:] {
+		s.True(ExecutionAPIPrioritiesOrdered[idx] < ExecutionAPIPrioritiesOrdered[idx+1])
+	}
+}
+
+func (s *quotasSuite) TestVisibilityAPIPrioritiesOrdered() {
+	for idx := range VisibilityAPIPrioritiesOrdered[1:] {
+		s.True(VisibilityAPIPrioritiesOrdered[idx] < VisibilityAPIPrioritiesOrdered[idx+1])
+	}
+}
+
+func (s *quotasSuite) TestOtherAPIPrioritiesOrdered() {
+	for idx := range OtherAPIPrioritiesOrdered[1:] {
+		s.True(OtherAPIPrioritiesOrdered[idx] < OtherAPIPrioritiesOrdered[idx+1])
+	}
 }
 
 func (s *quotasSuite) TestExecutionAPIs() {
@@ -91,6 +107,7 @@ func (s *quotasSuite) TestExecutionAPIs() {
 		"TerminateWorkflowExecution":         {},
 		"GetWorkflowExecutionHistory":        {},
 		"GetWorkflowExecutionHistoryReverse": {},
+		"UpdateWorkflow":                     {},
 
 		"RecordActivityTaskHeartbeat":      {},
 		"RecordActivityTaskHeartbeatById":  {},
