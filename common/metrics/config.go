@@ -25,6 +25,8 @@
 package metrics
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
@@ -133,6 +135,8 @@ type (
 		// on the specified listen address or registering a metric with the
 		// Prometheus. By default the registerer will panic.
 		OnError string `yaml:"onError"`
+
+		SanitizeOptions *SanitizeOptions `yaml:"sanitizeOptions"`
 	}
 )
 
@@ -147,6 +151,23 @@ type HistogramObjective struct {
 type SummaryObjective struct {
 	Percentile   float64 `yaml:"percentile"`
 	AllowedError float64 `yaml:"allowedError"`
+}
+
+type SanitizeRange struct {
+	StartRange string `yaml:"startRange"`
+	EndRange   string `yaml:"endRange"`
+}
+
+type ValidCharacters struct {
+	Ranges         []SanitizeRange `yaml:"ranges"`
+	SafeCharacters string          `yaml:"safeChars"`
+}
+
+type SanitizeOptions struct {
+	NameCharacters       *ValidCharacters `yaml:"nameChars"`
+	KeyCharacters        *ValidCharacters `yaml:"keyChars"`
+	ValueCharacters      *ValidCharacters `yaml:"valueChars"`
+	ReplacementCharacter string           `yaml:"replacementChar"`
 }
 
 const (
@@ -170,7 +191,7 @@ const (
 var (
 	safeCharacters = []rune{'_'}
 
-	sanitizeOptions = tally.SanitizeOptions{
+	defaultTallySanitizeOptions = tally.SanitizeOptions{
 		NameCharacters: tally.ValidCharacters{
 			Ranges:     tally.AlphanumericRange,
 			Characters: safeCharacters,
@@ -185,8 +206,6 @@ var (
 		},
 		ReplacementCharacter: tally.DefaultReplacementCharacter,
 	}
-
-	defaultQuantiles = []float64{50, 75, 90, 95, 99}
 
 	defaultPerUnitHistogramBoundaries = map[string][]float64{
 		Dimensionless: {
@@ -260,7 +279,18 @@ func NewScope(logger log.Logger, c *Config) tally.Scope {
 		return newStatsdScope(logger, c)
 	}
 	if c.Prometheus != nil {
-		return newPrometheusScope(logger, convertPrometheusConfigToTally(c.Prometheus), &c.ClientConfig)
+		sanitizeOptions, err := convertSanitizeOptionsToTally(c.Prometheus)
+		if err != nil {
+			logger.Fatal("invalid sanitize options input on prometheus config", tag.Error(err))
+			return nil
+		}
+
+		return newPrometheusScope(
+			logger,
+			convertPrometheusConfigToTally(c.Prometheus),
+			sanitizeOptions,
+			&c.ClientConfig,
+		)
 	}
 	return tally.NoopScope
 }
@@ -298,6 +328,14 @@ func convertPrometheusConfigToTally(
 		DefaultSummaryObjectives: defaultObjectives,
 		OnError:                  config.OnError,
 	}
+}
+
+func convertSanitizeOptionsToTally(config *PrometheusConfig) (tally.SanitizeOptions, error) {
+	if config.SanitizeOptions == nil {
+		return defaultTallySanitizeOptions, nil
+	}
+
+	return config.SanitizeOptions.toTally()
 }
 
 func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
@@ -342,6 +380,7 @@ func newStatsdScope(logger log.Logger, c *Config) tally.Scope {
 func newPrometheusScope(
 	logger log.Logger,
 	config *prometheus.Configuration,
+	sanitizeOptions tally.SanitizeOptions,
 	clientConfig *ClientConfig,
 ) tally.Scope {
 	reporter, err := config.NewReporter(
@@ -412,4 +451,65 @@ func configExcludeTags(cfg ClientConfig) map[string]map[string]struct{} {
 		tagsToFilter[key] = exclusions
 	}
 	return tagsToFilter
+}
+
+func (s SanitizeRange) toTally() (tally.SanitizeRange, error) {
+	startRangeRunes := []rune(s.StartRange)
+	if len(startRangeRunes) != 1 {
+		return tally.SanitizeRange{}, fmt.Errorf("start range '%+v' must be a single rune", startRangeRunes)
+	}
+
+	endRangeRunes := []rune(s.EndRange)
+	if len(endRangeRunes) != 1 {
+		return tally.SanitizeRange{}, fmt.Errorf("end range '%+v' must be a single rune", endRangeRunes)
+	}
+
+	return tally.SanitizeRange([2]rune{startRangeRunes[0], endRangeRunes[0]}), nil
+}
+
+func (v ValidCharacters) toTally() (tally.ValidCharacters, error) {
+	var ranges []tally.SanitizeRange
+
+	for _, r := range v.Ranges {
+		tallyRange, err := r.toTally()
+		if err != nil {
+			return tally.ValidCharacters{}, err
+		}
+
+		ranges = append(ranges, tallyRange)
+	}
+
+	return tally.ValidCharacters{
+		Ranges:     ranges,
+		Characters: []rune(v.SafeCharacters),
+	}, nil
+}
+
+func (s SanitizeOptions) toTally() (tally.SanitizeOptions, error) {
+	tallyNameChars, err := s.NameCharacters.toTally()
+	if err != nil {
+		return tally.SanitizeOptions{}, errors.New("invalid nameChars")
+	}
+
+	tallyKeyChars, err := s.KeyCharacters.toTally()
+	if err != nil {
+		return tally.SanitizeOptions{}, errors.New("invalid keyChars")
+	}
+
+	tallyValueChars, err := s.ValueCharacters.toTally()
+	if err != nil {
+		return tally.SanitizeOptions{}, errors.New("invalid valueChars")
+	}
+
+	replacementChars := []rune(s.ReplacementCharacter)
+	if len(replacementChars) != 1 {
+		return tally.SanitizeOptions{}, errors.New("can only specify a single replacement character")
+	}
+
+	return tally.SanitizeOptions{
+		NameCharacters:       tallyNameChars,
+		KeyCharacters:        tallyKeyChars,
+		ValueCharacters:      tallyValueChars,
+		ReplacementCharacter: replacementChars[0],
+	}, nil
 }
