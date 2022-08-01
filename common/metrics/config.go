@@ -479,17 +479,17 @@ func (v ValidCharacters) toTally() (tally.ValidCharacters, error) {
 func (s SanitizeOptions) toTally() (tally.SanitizeOptions, error) {
 	tallyNameChars, err := s.NameCharacters.toTally()
 	if err != nil {
-		return tally.SanitizeOptions{}, errors.New("invalid nameChars")
+		return tally.SanitizeOptions{}, fmt.Errorf("invalid nameChars: %v", err)
 	}
 
 	tallyKeyChars, err := s.KeyCharacters.toTally()
 	if err != nil {
-		return tally.SanitizeOptions{}, errors.New("invalid keyChars")
+		return tally.SanitizeOptions{}, fmt.Errorf("invalid keyChars: %v", err)
 	}
 
 	tallyValueChars, err := s.ValueCharacters.toTally()
 	if err != nil {
-		return tally.SanitizeOptions{}, errors.New("invalid valueChars")
+		return tally.SanitizeOptions{}, fmt.Errorf("invalid valueChars: %v", err)
 	}
 
 	replacementChars := []rune(s.ReplacementCharacter)
