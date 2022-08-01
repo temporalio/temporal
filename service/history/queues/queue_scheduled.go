@@ -216,6 +216,11 @@ func (p *scheduledQueue) processNewRange() {
 	p.lookAheadTask()
 }
 
+func (p *scheduledQueue) processPollTimer() {
+	p.queueBase.processPollTimer()
+	p.lookAheadTask()
+}
+
 func (p *scheduledQueue) lookAheadTask() {
 	lookAheadMinTime := p.nonReadableScope.Range.InclusiveMin.FireTime
 	lookAheadMaxTime := lookAheadMinTime.Add(p.options.MaxPollInterval())
@@ -225,7 +230,7 @@ func (p *scheduledQueue) lookAheadTask() {
 
 	request := &persistence.GetHistoryTasksRequest{
 		ShardID:             p.shard.GetShardID(),
-		TaskCategory:        tasks.CategoryTimer,
+		TaskCategory:        p.category,
 		InclusiveMinTaskKey: tasks.NewKey(lookAheadMinTime, 0),
 		ExclusiveMaxTaskKey: tasks.NewKey(lookAheadMaxTime, 0),
 		BatchSize:           1,
