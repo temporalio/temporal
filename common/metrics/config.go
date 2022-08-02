@@ -25,6 +25,8 @@
 package metrics
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
@@ -118,22 +120,31 @@ type (
 		TimerType string `yaml:"timerType"`
 
 		// Deprecated. Please use PerUnitHistogramBoundaries in ClientConfig.
-		// DefaultHistogramBoundaries defines the default histogram bucket boundaries.
+		// DefaultHistogramBoundaries defines the default histogram bucket boundaries for tally timer metrics.
 		DefaultHistogramBoundaries []float64 `yaml:"defaultHistogramBoundaries"`
 
 		// Deprecated. Please use PerUnitHistogramBoundaries in ClientConfig.
 		// DefaultHistogramBuckets if specified will set the default histogram
-		// buckets to be used by the reporter.
+		// buckets to be used by the reporter for tally timer metrics.
+		// The unit for value specified is Second.
+		// If specified, will override DefaultSummaryObjectives and PerUnitHistogramBoundaries["milliseconds"].
 		DefaultHistogramBuckets []HistogramObjective `yaml:"defaultHistogramBuckets"`
 
 		// Deprecated. DefaultSummaryObjectives if specified will set the default summary
 		// objectives to be used by the reporter.
+		// The unit for value specified is Second.
+		// If specified, will override PerUnitHistogramBoundaries["milliseconds"].
 		DefaultSummaryObjectives []SummaryObjective `yaml:"defaultSummaryObjectives"`
 
 		// Deprecated. OnError specifies what to do when an error either with listening
 		// on the specified listen address or registering a metric with the
 		// Prometheus. By default the registerer will panic.
 		OnError string `yaml:"onError"`
+
+		// Deprecated. SanitizeOptions is an optional field that enables a user to
+		// specify which characters are valid and/or should be replaced before metrics
+		// are emitted.
+		SanitizeOptions *SanitizeOptions `yaml:"sanitizeOptions"`
 	}
 )
 
@@ -148,6 +159,23 @@ type HistogramObjective struct {
 type SummaryObjective struct {
 	Percentile   float64 `yaml:"percentile"`
 	AllowedError float64 `yaml:"allowedError"`
+}
+
+type SanitizeRange struct {
+	StartRange string `yaml:"startRange"`
+	EndRange   string `yaml:"endRange"`
+}
+
+type ValidCharacters struct {
+	Ranges         []SanitizeRange `yaml:"ranges"`
+	SafeCharacters string          `yaml:"safeChars"`
+}
+
+type SanitizeOptions struct {
+	NameCharacters       *ValidCharacters `yaml:"nameChars"`
+	KeyCharacters        *ValidCharacters `yaml:"keyChars"`
+	ValueCharacters      *ValidCharacters `yaml:"valueChars"`
+	ReplacementCharacter string           `yaml:"replacementChar"`
 }
 
 // Supported framework types
@@ -175,7 +203,7 @@ const (
 var (
 	safeCharacters = []rune{'_'}
 
-	sanitizeOptions = tally.SanitizeOptions{
+	defaultTallySanitizeOptions = tally.SanitizeOptions{
 		NameCharacters: tally.ValidCharacters{
 			Ranges:     tally.AlphanumericRange,
 			Characters: safeCharacters,
@@ -263,12 +291,32 @@ func NewScope(logger log.Logger, c *Config) tally.Scope {
 		return newStatsdScope(logger, c)
 	}
 	if c.Prometheus != nil {
-		return newPrometheusScope(logger, convertPrometheusConfigToTally(c.Prometheus), &c.ClientConfig)
+		sanitizeOptions, err := convertSanitizeOptionsToTally(c.Prometheus)
+		if err != nil {
+			logger.Fatal("invalid sanitize options input on prometheus config", tag.Error(err))
+			return nil
+		}
+
+		return newPrometheusScope(
+			logger,
+			convertPrometheusConfigToTally(&c.ClientConfig, c.Prometheus),
+			sanitizeOptions,
+			&c.ClientConfig,
+		)
 	}
 	return tally.NoopScope
 }
 
+func convertSanitizeOptionsToTally(config *PrometheusConfig) (tally.SanitizeOptions, error) {
+	if config.SanitizeOptions == nil {
+		return defaultTallySanitizeOptions, nil
+	}
+
+	return config.SanitizeOptions.toTally()
+}
+
 func convertPrometheusConfigToTally(
+	clientConfig *ClientConfig,
 	config *PrometheusConfig,
 ) *prometheus.Configuration {
 	defaultObjectives := make([]prometheus.SummaryObjective, len(config.DefaultSummaryObjectives))
@@ -282,9 +330,42 @@ func convertPrometheusConfigToTally(
 		ListenNetwork:            config.ListenNetwork,
 		ListenAddress:            config.ListenAddress,
 		TimerType:                "histogram",
+		DefaultHistogramBuckets:  buildTallyTimerHistogramBuckets(clientConfig, config),
 		DefaultSummaryObjectives: defaultObjectives,
 		OnError:                  config.OnError,
 	}
+}
+
+func buildTallyTimerHistogramBuckets(
+	clientConfig *ClientConfig,
+	config *PrometheusConfig,
+) []prometheus.HistogramObjective {
+	if len(config.DefaultHistogramBuckets) > 0 {
+		result := make([]prometheus.HistogramObjective, len(config.DefaultHistogramBuckets))
+		for i, item := range config.DefaultHistogramBuckets {
+			result[i].Upper = item.Upper
+		}
+		return result
+	}
+
+	if len(config.DefaultHistogramBoundaries) > 0 {
+		result := make([]prometheus.HistogramObjective, 0, len(config.DefaultHistogramBoundaries))
+		for _, value := range config.DefaultHistogramBoundaries {
+			result = append(result, prometheus.HistogramObjective{
+				Upper: value,
+			})
+		}
+		return result
+	}
+
+	boundaries := clientConfig.PerUnitHistogramBoundaries[Milliseconds]
+	result := make([]prometheus.HistogramObjective, 0, len(boundaries))
+	for _, boundary := range boundaries {
+		result = append(result, prometheus.HistogramObjective{
+			Upper: boundary / float64(time.Second/time.Millisecond), // convert milliseconds to seconds
+		})
+	}
+	return result
 }
 
 func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
@@ -341,6 +422,7 @@ func newStatsdScope(logger log.Logger, c *Config) tally.Scope {
 func newPrometheusScope(
 	logger log.Logger,
 	config *prometheus.Configuration,
+	sanitizeOptions tally.SanitizeOptions,
 	clientConfig *ClientConfig,
 ) tally.Scope {
 	reporter, err := config.NewReporter(
@@ -398,4 +480,65 @@ func configExcludeTags(cfg ClientConfig) map[string]map[string]struct{} {
 		tagsToFilter[key] = exclusions
 	}
 	return tagsToFilter
+}
+
+func (s SanitizeRange) toTally() (tally.SanitizeRange, error) {
+	startRangeRunes := []rune(s.StartRange)
+	if len(startRangeRunes) != 1 {
+		return tally.SanitizeRange{}, fmt.Errorf("start range '%+v' must be a single rune", startRangeRunes)
+	}
+
+	endRangeRunes := []rune(s.EndRange)
+	if len(endRangeRunes) != 1 {
+		return tally.SanitizeRange{}, fmt.Errorf("end range '%+v' must be a single rune", endRangeRunes)
+	}
+
+	return tally.SanitizeRange([2]rune{startRangeRunes[0], endRangeRunes[0]}), nil
+}
+
+func (v ValidCharacters) toTally() (tally.ValidCharacters, error) {
+	var ranges []tally.SanitizeRange
+
+	for _, r := range v.Ranges {
+		tallyRange, err := r.toTally()
+		if err != nil {
+			return tally.ValidCharacters{}, err
+		}
+
+		ranges = append(ranges, tallyRange)
+	}
+
+	return tally.ValidCharacters{
+		Ranges:     ranges,
+		Characters: []rune(v.SafeCharacters),
+	}, nil
+}
+
+func (s SanitizeOptions) toTally() (tally.SanitizeOptions, error) {
+	tallyNameChars, err := s.NameCharacters.toTally()
+	if err != nil {
+		return tally.SanitizeOptions{}, fmt.Errorf("invalid nameChars: %v", err)
+	}
+
+	tallyKeyChars, err := s.KeyCharacters.toTally()
+	if err != nil {
+		return tally.SanitizeOptions{}, fmt.Errorf("invalid keyChars: %v", err)
+	}
+
+	tallyValueChars, err := s.ValueCharacters.toTally()
+	if err != nil {
+		return tally.SanitizeOptions{}, fmt.Errorf("invalid valueChars: %v", err)
+	}
+
+	replacementChars := []rune(s.ReplacementCharacter)
+	if len(replacementChars) != 1 {
+		return tally.SanitizeOptions{}, errors.New("can only specify a single replacement character")
+	}
+
+	return tally.SanitizeOptions{
+		NameCharacters:       tallyNameChars,
+		KeyCharacters:        tallyKeyChars,
+		ValueCharacters:      tallyValueChars,
+		ReplacementCharacter: replacementChars[0],
+	}, nil
 }

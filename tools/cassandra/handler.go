@@ -25,9 +25,12 @@
 package cassandra
 
 import (
+	"strings"
+
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/auth"
+	c "go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/environment"
@@ -191,10 +194,42 @@ func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
 		}
 	}
 
+	config.AddressTranslator = &c.CassandraAddressTranslator{
+		Translator: cli.GlobalString(schema.CLIOptAddressTranslator),
+		Options:    parseOptionsMap(cli.GlobalString(schema.CLIOptAddressTranslatorOptions)),
+	}
+
 	if err := validateCQLClientConfig(config); err != nil {
 		return nil, err
 	}
 	return config, nil
+}
+
+func parseOptionsMap(value string) map[string]string {
+	if len(value) == 0 {
+		return make(map[string]string)
+	}
+
+	split := strings.Split(value, ",")
+
+	parsedMap := make(map[string]string)
+
+	for _, pair := range split {
+		trimmedPair := strings.ReplaceAll(pair, " ", "")
+		if len(trimmedPair) == 0 {
+			continue
+		}
+		splitPair := strings.Split(trimmedPair, "=")
+		if len(splitPair) != 2 {
+			continue
+		}
+		if len(splitPair[0]) == 0 || len(splitPair[1]) == 0 {
+			continue
+		}
+		parsedMap[splitPair[0]] = splitPair[1]
+	}
+
+	return parsedMap
 }
 
 func validateCQLClientConfig(config *CQLClientConfig) error {
@@ -209,6 +244,12 @@ func validateCQLClientConfig(config *CQLClientConfig) error {
 	}
 	if config.numReplicas == 0 {
 		config.numReplicas = defaultNumReplicas
+	}
+
+	if config.AddressTranslator != nil && len(config.AddressTranslator.Options) != 0 {
+		if len(config.AddressTranslator.Translator) == 0 {
+			return schema.NewConfigError("missing address translator argument " + flag(schema.CLIOptAddressTranslator))
+		}
 	}
 
 	return nil

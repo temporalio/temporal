@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/translator"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -158,6 +159,18 @@ func NewCassandraCluster(
 	}
 
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
+
+	if cfg.AddressTranslator != nil && cfg.AddressTranslator.Translator != "" {
+		addressTranslator, err := translator.LookupTranslator(cfg.AddressTranslator.Translator)
+		if err != nil {
+			return nil, err
+		}
+		cluster.AddressTranslator, err = addressTranslator.GetTranslator(&cfg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return cluster, nil
 }
 

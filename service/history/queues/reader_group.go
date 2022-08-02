@@ -34,7 +34,7 @@ import (
 )
 
 type (
-	ReaderInitializer func(readerID int32, scopes []Scope) Reader
+	ReaderInitializer func(readerID int32, slices []Slice) Reader
 
 	ReaderGroup struct {
 		sync.Mutex
@@ -100,8 +100,8 @@ func (g *ReaderGroup) ReaderByID(readerID int32) (Reader, bool) {
 	return reader, ok
 }
 
-func (g *ReaderGroup) NewReaderWithScopes(readerID int32, scopes ...Scope) Reader {
-	reader := g.initializer(readerID, scopes)
+func (g *ReaderGroup) NewReader(readerID int32, slices ...Slice) Reader {
+	reader := g.initializer(readerID, slices)
 
 	g.Lock()
 	defer g.Unlock()
@@ -114,12 +114,6 @@ func (g *ReaderGroup) NewReaderWithScopes(readerID int32, scopes ...Scope) Reade
 	if g.isStarted() {
 		reader.Start()
 	}
-	return reader
-}
-
-func (g *ReaderGroup) NewReaderWithSlices(readerID int32, slices ...Slice) Reader {
-	reader := g.NewReaderWithScopes(readerID)
-	reader.MergeSlices(slices...)
 	return reader
 }
 

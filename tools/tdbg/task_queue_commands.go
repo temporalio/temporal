@@ -34,7 +34,7 @@ import (
 
 // AdminListTaskQueueTasks displays task information
 func AdminListTaskQueueTasks(c *cli.Context) error {
-	namespace, err := getRequiredGlobalOption(c, FlagNamespace)
+	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
 		return err
 	}
