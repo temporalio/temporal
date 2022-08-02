@@ -49,16 +49,7 @@ func NewTallyMetricsHandler(cfg ClientConfig, scope tally.Scope) *tallyMetricsHa
 	perUnitBuckets := make(map[MetricUnit]tally.Buckets)
 
 	for unit, boundariesList := range cfg.PerUnitHistogramBoundaries {
-		if unit != Milliseconds {
-			perUnitBuckets[MetricUnit(unit)] = tally.ValueBuckets(boundariesList)
-			continue
-		}
-
-		durations := make([]time.Duration, 0, len(boundariesList))
-		for _, duration := range boundariesList {
-			durations = append(durations, time.Duration(duration)*time.Millisecond)
-		}
-		perUnitBuckets[MetricUnit(unit)] = tally.DurationBuckets(durations)
+		perUnitBuckets[MetricUnit(unit)] = tally.ValueBuckets(boundariesList)
 	}
 
 	return &tallyMetricsHandler{
@@ -95,7 +86,7 @@ func (tmp *tallyMetricsHandler) Gauge(gauge string) GaugeMetric {
 // Timer obtains a timer for the given name and MetricOptions.
 func (tmp *tallyMetricsHandler) Timer(timer string) TimerMetric {
 	return TimerMetricFunc(func(d time.Duration, tag ...Tag) {
-		tmp.scope.Tagged(tagsToMap(tmp.tags, tag, tmp.excludeTags)).Histogram(timer, tmp.perUnitBuckets[Milliseconds]).RecordDuration(d)
+		tmp.scope.Tagged(tagsToMap(tmp.tags, tag, tmp.excludeTags)).Timer(timer).Record(d)
 	})
 }
 
