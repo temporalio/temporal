@@ -2,6 +2,7 @@
 
 .idea/
 .vscode/settings.json
+.vscode
 *.code-workspace
 .DS_Store
 .coverage
