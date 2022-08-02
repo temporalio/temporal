@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -78,6 +79,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		tests.NewDynamicConfig(),
 	)
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.scheduledQueue = NewScheduledQueue(
 		s.mockShard,
@@ -212,16 +214,40 @@ func (s *scheduledQueueSuite) TestLookAheadTask_ErrorLookAhead() {
 	}
 }
 
+func (s *scheduledQueueSuite) TestProcessNewRange_LookAheadPerformed() {
+	timerGate := timer.NewRemoteGate()
+	s.scheduledQueue.timerGate = timerGate
+
+	// test if look ahead if performed after processing new range
+	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(&persistence.GetHistoryTasksResponse{
+		Tasks:         []tasks.Task{},
+		NextPageToken: nil,
+	}, nil).Times(1)
+
+	s.scheduledQueue.processNewRange()
+}
+
+func (s *scheduledQueueSuite) TestProcessPollTimer_LookAheadPerformed() {
+	timerGate := timer.NewRemoteGate()
+	s.scheduledQueue.timerGate = timerGate
+	s.scheduledQueue.pollTimer = time.NewTimer(time.Second)
+
+	// test if look ahead if performed after processing poll timer
+	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(&persistence.GetHistoryTasksResponse{
+		Tasks:         []tasks.Task{},
+		NextPageToken: nil,
+	}, nil).Times(1)
+
+	s.scheduledQueue.processPollTimer()
+}
+
 func (s *scheduledQueueSuite) setupLookAheadMock(
 	hasLookAheadTask bool,
 ) (lookAheadRange Range, lookAheadTask *tasks.MockTask) {
-	s.scheduledQueue.nonReadableScope = NewScope(
-		NewRandomRange(),
-		predicates.Universal[tasks.Task](),
-	)
+	lookAheadMinTime := s.scheduledQueue.nonReadableScope.Range.InclusiveMin.FireTime
 	lookAheadRange = NewRange(
-		tasks.NewKey(s.scheduledQueue.nonReadableScope.Range.InclusiveMin.FireTime, 0),
-		tasks.NewKey(s.scheduledQueue.nonReadableScope.Range.InclusiveMin.FireTime.Add(testQueueOptions.MaxPollInterval()), 0),
+		tasks.NewKey(lookAheadMinTime, 0),
+		tasks.NewKey(lookAheadMinTime.Add(testQueueOptions.MaxPollInterval()), 0),
 	)
 
 	loadedTasks := []tasks.Task{}
