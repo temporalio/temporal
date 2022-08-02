@@ -29,6 +29,8 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -106,6 +108,8 @@ func (f *timerQueueFactory) CreateQueue(
 	workflowCache workflow.Cache,
 ) queues.Queue {
 	if f.scheduler != nil && f.Config.TimerProcessorEnableMultiCursor() {
+		logger := log.With(shard.GetLogger(), tag.ComponentTimerQueue)
+
 		currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 		workflowDeleteManager := workflow.NewDeleteManager(
 			shard,
@@ -120,7 +124,7 @@ func (f *timerQueueFactory) CreateQueue(
 			workflowCache,
 			workflowDeleteManager,
 			nil,
-			f.Logger,
+			logger,
 			f.MetricsHandler,
 			f.Config,
 			f.MatchingClient,
@@ -142,10 +146,10 @@ func (f *timerQueueFactory) CreateQueue(
 				},
 				shard.GetPayloadSerializer(),
 				f.Config.StandbyTaskReReplicationContextTimeout,
-				f.Logger,
+				logger,
 			),
 			f.MatchingClient,
-			f.Logger,
+			logger,
 			f.MetricsHandler,
 			// note: the cluster name is for calculating time for standby tasks,
 			// here we are basically using current cluster time
@@ -160,7 +164,7 @@ func (f *timerQueueFactory) CreateQueue(
 			f.NamespaceRegistry,
 			activeExecutor,
 			standbyExecutor,
-			f.Logger,
+			logger,
 		)
 
 		return queues.NewScheduledQueue(
@@ -184,8 +188,8 @@ func (f *timerQueueFactory) CreateQueue(
 				f.hostRateLimiter,
 				f.Config.TimerProcessorMaxPollRPS,
 			),
-			f.Logger,
-			f.MetricsHandler,
+			logger,
+			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTimerQueueProcessor)),
 		)
 	}
 

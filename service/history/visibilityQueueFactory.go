@@ -25,6 +25,8 @@
 package history
 
 import (
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -98,11 +100,13 @@ func (f *visibilityQueueFactory) CreateQueue(
 	workflowCache workflow.Cache,
 ) queues.Queue {
 	if f.scheduler != nil && f.Config.VisibilityProcessorEnableMultiCursor() {
+		logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
+
 		executor := newVisibilityQueueTaskExecutor(
 			shard,
 			workflowCache,
 			f.VisibilityMgr,
-			f.Logger,
+			logger,
 			f.MetricsHandler,
 		)
 
@@ -127,8 +131,8 @@ func (f *visibilityQueueFactory) CreateQueue(
 				f.hostRateLimiter,
 				f.Config.VisibilityProcessorMaxPollRPS,
 			),
-			f.Logger,
-			f.MetricsHandler,
+			logger,
+			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
 		)
 	}
 

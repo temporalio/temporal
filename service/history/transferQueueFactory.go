@@ -29,6 +29,8 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
@@ -109,13 +111,15 @@ func (f *transferQueueFactory) CreateQueue(
 	workflowCache workflow.Cache,
 ) queues.Queue {
 	if f.scheduler != nil && f.Config.TransferProcessorEnableMultiCursor() {
+		logger := log.With(shard.GetLogger(), tag.ComponentTransferQueue)
+
 		currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 		activeExecutor := newTransferQueueActiveTaskExecutor(
 			shard,
 			workflowCache,
 			f.ArchivalClient,
 			f.SdkClientFactory,
-			f.Logger,
+			logger,
 			f.MetricsHandler,
 			f.Config,
 			f.MatchingClient,
@@ -137,9 +141,9 @@ func (f *transferQueueFactory) CreateQueue(
 				},
 				shard.GetPayloadSerializer(),
 				f.Config.StandbyTaskReReplicationContextTimeout,
-				f.Logger,
+				logger,
 			),
-			f.Logger,
+			logger,
 			f.MetricsHandler,
 			currentClusterName,
 			f.MatchingClient,
@@ -150,7 +154,7 @@ func (f *transferQueueFactory) CreateQueue(
 			f.NamespaceRegistry,
 			activeExecutor,
 			standbyExecutor,
-			f.Logger,
+			logger,
 		)
 
 		return queues.NewImmediateQueue(
@@ -174,8 +178,8 @@ func (f *transferQueueFactory) CreateQueue(
 				f.hostRateLimiter,
 				f.Config.TransferProcessorMaxPollRPS,
 			),
-			f.Logger,
-			f.MetricsHandler,
+			logger,
+			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferQueueProcessor)),
 		)
 	}
 
