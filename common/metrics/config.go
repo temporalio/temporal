@@ -120,16 +120,20 @@ type (
 		TimerType string `yaml:"timerType"`
 
 		// Deprecated. Please use PerUnitHistogramBoundaries in ClientConfig.
-		// DefaultHistogramBoundaries defines the default histogram bucket boundaries.
+		// DefaultHistogramBoundaries defines the default histogram bucket boundaries for tally timer metrics.
 		DefaultHistogramBoundaries []float64 `yaml:"defaultHistogramBoundaries"`
 
 		// Deprecated. Please use PerUnitHistogramBoundaries in ClientConfig.
 		// DefaultHistogramBuckets if specified will set the default histogram
-		// buckets to be used by the reporter.
+		// buckets to be used by the reporter for tally timer metrics.
+		// The unit for value specified is Second.
+		// If specified, will override DefaultSummaryObjectives and PerUnitHistogramBoundaries["milliseconds"].
 		DefaultHistogramBuckets []HistogramObjective `yaml:"defaultHistogramBuckets"`
 
 		// Deprecated. DefaultSummaryObjectives if specified will set the default summary
 		// objectives to be used by the reporter.
+		// The unit for value specified is Second.
+		// If specified, will override PerUnitHistogramBoundaries["milliseconds"].
 		DefaultSummaryObjectives []SummaryObjective `yaml:"defaultSummaryObjectives"`
 
 		// Deprecated. OnError specifies what to do when an error either with listening
@@ -295,7 +299,7 @@ func NewScope(logger log.Logger, c *Config) tally.Scope {
 
 		return newPrometheusScope(
 			logger,
-			convertPrometheusConfigToTally(c.Prometheus),
+			convertPrometheusConfigToTally(&c.ClientConfig, c.Prometheus),
 			sanitizeOptions,
 			&c.ClientConfig,
 		)
@@ -303,7 +307,16 @@ func NewScope(logger log.Logger, c *Config) tally.Scope {
 	return tally.NoopScope
 }
 
+func convertSanitizeOptionsToTally(config *PrometheusConfig) (tally.SanitizeOptions, error) {
+	if config.SanitizeOptions == nil {
+		return defaultTallySanitizeOptions, nil
+	}
+
+	return config.SanitizeOptions.toTally()
+}
+
 func convertPrometheusConfigToTally(
+	clientConfig *ClientConfig,
 	config *PrometheusConfig,
 ) *prometheus.Configuration {
 	defaultObjectives := make([]prometheus.SummaryObjective, len(config.DefaultSummaryObjectives))
@@ -317,17 +330,42 @@ func convertPrometheusConfigToTally(
 		ListenNetwork:            config.ListenNetwork,
 		ListenAddress:            config.ListenAddress,
 		TimerType:                "histogram",
+		DefaultHistogramBuckets:  buildTallyTimerHistogramBuckets(clientConfig, config),
 		DefaultSummaryObjectives: defaultObjectives,
 		OnError:                  config.OnError,
 	}
 }
 
-func convertSanitizeOptionsToTally(config *PrometheusConfig) (tally.SanitizeOptions, error) {
-	if config.SanitizeOptions == nil {
-		return defaultTallySanitizeOptions, nil
+func buildTallyTimerHistogramBuckets(
+	clientConfig *ClientConfig,
+	config *PrometheusConfig,
+) []prometheus.HistogramObjective {
+	if len(config.DefaultHistogramBuckets) > 0 {
+		result := make([]prometheus.HistogramObjective, len(config.DefaultHistogramBuckets))
+		for i, item := range config.DefaultHistogramBuckets {
+			result[i].Upper = item.Upper
+		}
+		return result
 	}
 
-	return config.SanitizeOptions.toTally()
+	if len(config.DefaultHistogramBoundaries) > 0 {
+		result := make([]prometheus.HistogramObjective, 0, len(config.DefaultHistogramBoundaries))
+		for _, value := range config.DefaultHistogramBoundaries {
+			result = append(result, prometheus.HistogramObjective{
+				Upper: value,
+			})
+		}
+		return result
+	}
+
+	boundaries := clientConfig.PerUnitHistogramBoundaries[Milliseconds]
+	result := make([]prometheus.HistogramObjective, 0, len(boundaries))
+	for _, boundary := range boundaries {
+		result = append(result, prometheus.HistogramObjective{
+			Upper: boundary / float64(time.Second/time.Millisecond), // convert milliseconds to seconds
+		})
+	}
+	return result
 }
 
 func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
