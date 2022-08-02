@@ -166,10 +166,6 @@ type (
 
 var _ Context = (*ContextImpl)(nil)
 
-var (
-	PersistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
-)
-
 func NewContext(
 	shard shard.Context,
 	workflowKey definition.WorkflowKey,
@@ -271,7 +267,7 @@ func (c *ContextImpl) LoadWorkflowExecution(ctx context.Context) (MutableState, 
 	}
 
 	if c.MutableState == nil {
-		response, err := getWorkflowExecutionWithRetry(ctx, c.shard, &persistence.GetWorkflowExecutionRequest{
+		response, err := getWorkflowExecution(ctx, c.shard, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     c.shard.GetShardID(),
 			NamespaceID: c.workflowKey.NamespaceID,
 			WorkflowID:  c.workflowKey.WorkflowID,
@@ -357,7 +353,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		NewWorkflowEvents:   newWorkflowEvents,
 	}
 
-	resp, err := createWorkflowExecutionWithRetry(
+	resp, err := createWorkflowExecution(
 		ctx,
 		c.shard,
 		createRequest,

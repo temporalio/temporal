@@ -282,8 +282,8 @@ func FrontendClientProvider(clientBean client.Bean) workflowservice.WorkflowServ
 	frontendRawClient := clientBean.GetFrontendClient()
 	return frontend.NewRetryableClient(
 		frontendRawClient,
-		common.CreateFrontendServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
+		common.CreateFrontendClientRetryPolicy(),
+		common.IsServiceClientTransientError,
 	)
 }
 
@@ -341,8 +341,8 @@ func HistoryClientProvider(clientBean client.Bean) historyservice.HistoryService
 	historyRawClient := clientBean.GetHistoryClient()
 	historyClient := history.NewRetryableClient(
 		historyRawClient,
-		common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
+		common.CreateHistoryClientRetryPolicy(),
+		common.IsServiceClientTransientError,
 	)
 	return historyClient
 }
@@ -357,8 +357,8 @@ func MatchingRawClientProvider(clientBean client.Bean, namespaceRegistry namespa
 func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient {
 	return matching.NewRetryableClient(
 		matchingRawClient,
-		common.CreateMatchingServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
+		common.CreateMatchingClientRetryPolicy(),
+		common.IsServiceClientTransientError,
 	)
 }
 

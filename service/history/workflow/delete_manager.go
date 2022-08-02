@@ -35,7 +35,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -221,24 +220,16 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		}
 	}
 
-	op := func(ctx context.Context) error {
-		return m.shard.DeleteWorkflowExecution(
-			ctx,
-			definition.WorkflowKey{
-				NamespaceID: namespaceID.String(),
-				WorkflowID:  we.GetWorkflowId(),
-				RunID:       we.GetRunId(),
-			},
-			currentBranchToken,
-			startTime,
-			closeTime,
-		)
-	}
-	if err = backoff.ThrottleRetryContext(
+	if err := m.shard.DeleteWorkflowExecution(
 		ctx,
-		op,
-		PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
+		definition.WorkflowKey{
+			NamespaceID: namespaceID.String(),
+			WorkflowID:  we.GetWorkflowId(),
+			RunID:       we.GetRunId(),
+		},
+		currentBranchToken,
+		startTime,
+		closeTime,
 	); err != nil {
 		return err
 	}

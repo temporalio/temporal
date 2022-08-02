@@ -80,7 +80,6 @@ import (
 )
 
 const (
-	conditionalRetryCount                     = 5
 	activityCancellationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
 )
 

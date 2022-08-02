@@ -84,8 +84,6 @@ var (
 	minTime = time.Unix(0, 0).UTC()
 	maxTime = time.Date(2100, 1, 1, 1, 0, 0, 0, time.UTC)
 
-	// This error is used to bail out retry if context is near its deadline. (Cannot be retryable error).
-	errContextNearDeadline = serviceerror.NewDeadlineExceeded("context near deadline")
 	// Tail room for context deadline to bail out from retry for long poll.
 	longPollTailRoom = time.Second
 
@@ -118,10 +116,6 @@ type (
 		archivalMetadata                archiver.ArchivalMetadata
 		healthServer                    *health.Server
 	}
-)
-
-var (
-	frontendServiceRetryPolicy = common.CreateFrontendServiceRetryPolicy()
 )
 
 // NewWorkflowHandler creates a gRPC handler for workflowservice
@@ -901,33 +895,24 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	pollerID := uuid.New()
-	var matchingResp *matchingservice.PollWorkflowTaskQueueResponse
-	op := func(ctx context.Context) error {
-		if contextNearDeadline(ctx, longPollTailRoom) {
-			return errContextNearDeadline
-		}
-		var err error
-		matchingResp, err = wh.matchingClient.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
-			NamespaceId: namespaceID.String(),
-			PollerId:    pollerID,
-			PollRequest: request,
-		})
-		return err
+	if contextNearDeadline(ctx, longPollTailRoom) {
+		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 	}
 
-	err = backoff.ThrottleRetryContext(ctx, op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	pollerID := uuid.New()
+	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollerId:    pollerID,
+		PollRequest: request,
+	})
 	if err != nil {
-		if err == errContextNearDeadline {
-			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
-		}
-
 		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
 		if contextWasCanceled {
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
 			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
 			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 		}
+
 		// For all other errors log an error and return it back to client.
 		ctxTimeout := "not-set"
 		ctxDeadline, ok := ctx.Deadline()
@@ -1146,27 +1131,17 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	pollerID := uuid.New()
-	var matchingResponse *matchingservice.PollActivityTaskQueueResponse
-	op := func(ctx context.Context) error {
-		if contextNearDeadline(ctx, longPollTailRoom) {
-			return errContextNearDeadline
-		}
-
-		var err error
-		matchingResponse, err = wh.matchingClient.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
-			NamespaceId: namespaceID.String(),
-			PollerId:    pollerID,
-			PollRequest: request,
-		})
-		return err
+	if contextNearDeadline(ctx, longPollTailRoom) {
+		return &workflowservice.PollActivityTaskQueueResponse{}, nil
 	}
 
-	err = backoff.ThrottleRetryContext(ctx, op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	pollerID := uuid.New()
+	matchingResponse, err := wh.matchingClient.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollerId:    pollerID,
+		PollRequest: request,
+	})
 	if err != nil {
-		if err == errContextNearDeadline {
-			return &workflowservice.PollActivityTaskQueueResponse{}, nil
-		}
 		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
 		if contextWasCanceled {
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
@@ -1187,6 +1162,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 
 		return nil, err
 	}
+
 	return &workflowservice.PollActivityTaskQueueResponse{
 		TaskToken:                   matchingResponse.TaskToken,
 		WorkflowExecution:           matchingResponse.WorkflowExecution,
