@@ -1522,7 +1522,8 @@ func (m *GetWorkerBuildIdOrderingResponse) GetResponse() *v1.GetWorkerBuildIdOrd
 
 type InvalidateTaskQueueMetadataRequest struct {
 	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueue   string `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	// The name of the task queue, which always refers to / is applied to a workflow task queue.
+	TaskQueue string `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	// The task queue versioning data should be invalidated, and fresh data fetched from the root
 	// partition.
 	VersioningData bool `protobuf:"varint,3,opt,name=versioning_data,json=versioningData,proto3" json:"versioning_data,omitempty"`
@@ -1620,7 +1621,7 @@ type GetTaskQueueMetadataRequest struct {
 	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	TaskQueue   string `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	// If set nonempty, the requester wants the latest versioning data. The value must be the hash
-	// (using farm hash Fingerprint32) of the latest versioning data. If the requester has no data,
+	// (using farm hash Fingerprint64) of the latest versioning data. If the requester has no data,
 	// it can use any invalid value (ex: [0]).
 	// If the data is up to date, no value will be returned.
 	WantVersioningDataCurhash []byte `protobuf:"bytes,3,opt,name=want_versioning_data_curhash,json=wantVersioningDataCurhash,proto3" json:"want_versioning_data_curhash,omitempty"`

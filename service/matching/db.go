@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -62,8 +63,10 @@ type (
 		rangeID  int64
 		ackLevel int64
 	}
-	versioningDataNotPresentOnSubPartition struct{}
 )
+
+var errVersioningDataNotPresentOnPartition = errors.New("versioning data not present on non-root partition")
+var errVersioningDataNoMutateNonRoot = errors.New("cannot mutate versioning data on non-root task queue")
 
 // newTaskQueueDB returns an instance of an object that represents
 // persistence view of a taskQueue. All mutations / reads to taskQueues
@@ -293,7 +296,7 @@ func (db *taskQueueDB) getVersioningDataLocked(
 	}
 
 	if !db.taskQueue.IsRoot() {
-		return nil, &versioningDataNotPresentOnSubPartition{}
+		return nil, errVersioningDataNotPresentOnPartition
 	}
 
 	tqInfo, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
@@ -313,7 +316,7 @@ func (db *taskQueueDB) getVersioningDataLocked(
 // mutating function is guaranteed to be non-nil.
 func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
 	if !db.taskQueue.IsRoot() {
-		return fmt.Errorf("cannot mutate versioning data on non-root task queue")
+		return errVersioningDataNoMutateNonRoot
 	}
 	db.Lock()
 	defer db.Unlock()
@@ -355,11 +358,16 @@ func (db *taskQueueDB) updateTaskQueue(
 	ctx context.Context,
 	request *persistence.UpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
+	reqToPersist := request
 	// Only the root task queue stores versioning information
 	if !db.taskQueue.IsRoot() {
-		request.TaskQueueInfo.VersioningData = nil
+		tqInfoSansVerDat := *request.TaskQueueInfo
+		tqInfoSansVerDat.VersioningData = nil
+		reqClone := *request
+		reqClone.TaskQueueInfo = &tqInfoSansVerDat
+		reqToPersist = &reqClone
 	}
-	return db.store.UpdateTaskQueue(ctx, request)
+	return db.store.UpdateTaskQueue(ctx, reqToPersist)
 }
 
 func (db *taskQueueDB) expiryTime() *time.Time {
@@ -384,8 +392,4 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		ExpiryTime:     db.expiryTime(),
 		LastUpdateTime: timestamp.TimeNowPtrUtc(),
 	}
-}
-
-func (e *versioningDataNotPresentOnSubPartition) Error() string {
-	return "versioning data not present on sub-partition"
 }

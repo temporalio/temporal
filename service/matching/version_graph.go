@@ -41,18 +41,18 @@ func ToBuildIdOrderingResponse(g *persistence.VersioningData, maxDepth int) *wor
 	return depthLimiter(g, maxDepth, true)
 }
 
-// HashVersioningData returns a farm.Fingerprint32 hash of the versioning data as bytes. If the data is nonexistent or
-// invalid, returns an empty slice.
+// HashVersioningData returns a farm.Fingerprint64 hash of the versioning data as bytes. If the data is nonexistent or
+// invalid, returns nil.
 func HashVersioningData(data *persistence.VersioningData) []byte {
 	if data == nil || data.GetCurrentDefault() == nil {
-		return []byte{}
+		return nil
 	}
-	asBytes, err := proto.Marshal(data)
+	asBytes, err := data.Marshal()
 	if err != nil {
-		return []byte{}
+		return nil
 	}
-	b := make([]byte, 4)
-	binary.LittleEndian.PutUint32(b, farm.Fingerprint32(asBytes))
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, farm.Fingerprint64(asBytes))
 	return b
 }
 

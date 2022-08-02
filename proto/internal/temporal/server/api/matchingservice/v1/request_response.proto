@@ -203,6 +203,7 @@ message GetWorkerBuildIdOrderingResponse {
 
 message InvalidateTaskQueueMetadataRequest {
     string namespace_id = 1;
+    // The name of the task queue, which always refers to / is applied to a workflow task queue.
     string task_queue = 2;
     // The task queue versioning data should be invalidated, and fresh data fetched from the root
     // partition.
@@ -214,7 +215,7 @@ message GetTaskQueueMetadataRequest {
     string namespace_id = 1;
     string task_queue = 2;
     // If set nonempty, the requester wants the latest versioning data. The value must be the hash
-    // (using farm hash Fingerprint32) of the latest versioning data. If the requester has no data,
+    // (using farm hash Fingerprint64) of the latest versioning data. If the requester has no data,
     // it can use any invalid value (ex: [0]).
     // If the data is up to date, no value will be returned.
     bytes want_versioning_data_curhash = 3;

@@ -367,8 +367,7 @@ func (h *Handler) UpdateWorkerBuildIdOrdering(
 		metrics.MatchingUpdateWorkerBuildIdOrderingScope,
 	)
 
-	response, err := h.engine.UpdateWorkerBuildIdOrdering(hCtx, request)
-	return response, err
+	return h.engine.UpdateWorkerBuildIdOrdering(hCtx, request)
 }
 
 // GetWorkerBuildIdOrdering fetches the worker versioning graph for a task queue
@@ -387,8 +386,7 @@ func (h *Handler) GetWorkerBuildIdOrdering(
 		metrics.MatchingGetWorkerBuildIdOrderingScope,
 	)
 
-	response, err := h.engine.GetWorkerBuildIdOrdering(hCtx, request)
-	return response, err
+	return h.engine.GetWorkerBuildIdOrdering(hCtx, request)
 }
 
 // InvalidateTaskQueueMetadata notifies a task queue that some data has changed, and should be invalidated/refreshed
@@ -407,8 +405,7 @@ func (h *Handler) InvalidateTaskQueueMetadata(
 		metrics.MatchingInvalidateTaskQueueMetadataScope,
 	)
 
-	response, err := h.engine.InvalidateTaskQueueMetadata(hCtx, request)
-	return response, err
+	return h.engine.InvalidateTaskQueueMetadata(hCtx, request)
 }
 
 func (h *Handler) GetTaskQueueMetadata(
@@ -426,8 +423,7 @@ func (h *Handler) GetTaskQueueMetadata(
 		metrics.MatchingGetTaskQueueMetadataScope,
 	)
 
-	response, err := h.engine.GetTaskQueueMetadata(hCtx, request)
-	return response, err
+	return h.engine.GetTaskQueueMetadata(hCtx, request)
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {

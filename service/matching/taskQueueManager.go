@@ -150,10 +150,10 @@ type (
 		signalFatalProblem   func(taskQueueManager)
 		clusterMeta          cluster.Metadata
 		initializedError     *future.FutureImpl[struct{}]
-		// metadataInitialFetchFut is fulfilled once versioning data is fetched from the root partition. If this TQ is
+		// metadataFetched is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
-		metadataInitialFetchFut *future.FutureImpl[struct{}]
-		metadataPoller          metadataPoller
+		metadataFetched *future.FutureImpl[struct{}]
+		metadataPoller  metadataPoller
 	}
 
 	metadataPoller struct {
@@ -202,25 +202,25 @@ func newTaskQueueManager(
 		taskQueueKind,
 	).Tagged(metrics.TaskQueueTypeTag(taskQueue.taskType))
 	tlMgr := &taskQueueManagerImpl{
-		status:                  common.DaemonStatusInitialized,
-		namespaceRegistry:       e.namespaceRegistry,
-		matchingClient:          e.matchingClient,
-		metricsClient:           e.metricsClient,
-		taskQueueID:             taskQueue,
-		taskQueueKind:           taskQueueKind,
-		logger:                  logger,
-		db:                      db,
-		taskAckManager:          newAckManager(e.logger),
-		taskGC:                  newTaskGC(db, taskQueueConfig),
-		config:                  taskQueueConfig,
-		pollerHistory:           newPollerHistory(),
-		outstandingPollsMap:     make(map[string]context.CancelFunc),
-		signalFatalProblem:      e.unloadTaskQueue,
-		clusterMeta:             clusterMeta,
-		namespace:               nsName,
-		metricScope:             metricsScope,
-		initializedError:        future.NewFuture[struct{}](),
-		metadataInitialFetchFut: future.NewFuture[struct{}](),
+		status:              common.DaemonStatusInitialized,
+		namespaceRegistry:   e.namespaceRegistry,
+		matchingClient:      e.matchingClient,
+		metricsClient:       e.metricsClient,
+		taskQueueID:         taskQueue,
+		taskQueueKind:       taskQueueKind,
+		logger:              logger,
+		db:                  db,
+		taskAckManager:      newAckManager(e.logger),
+		taskGC:              newTaskGC(db, taskQueueConfig),
+		config:              taskQueueConfig,
+		pollerHistory:       newPollerHistory(),
+		outstandingPollsMap: make(map[string]context.CancelFunc),
+		signalFatalProblem:  e.unloadTaskQueue,
+		clusterMeta:         clusterMeta,
+		namespace:           nsName,
+		metricScope:         metricsScope,
+		initializedError:    future.NewFuture[struct{}](),
+		metadataFetched:     future.NewFuture[struct{}](),
 		metadataPoller: metadataPoller{
 			launched:          sync.Once{},
 			pollIntervalCfgFn: e.config.MetadataPollFrequency,
@@ -312,8 +312,8 @@ func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	_, verErr := c.metadataInitialFetchFut.Get(ctx)
-	return verErr
+	_, err = c.metadataFetched.Get(ctx)
+	return err
 }
 
 // AddTask adds a task to the task queue. This method will first attempt a synchronous
@@ -457,10 +457,10 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 // has no cached data, it will explicitly attempt a fetch from the root partition.
 func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error) {
 	vd, err := c.db.GetVersioningData(ctx)
-	if errors.Is(err, &versioningDataNotPresentOnSubPartition{}) {
-		// If this is a sub-partition with no versioning data, this call is indicating we might expect to find
+	if errors.Is(err, errVersioningDataNotPresentOnPartition) {
+		// If this is a non-root-partition with no versioning data, this call is indicating we might expect to find
 		// some. Since we may not have started the poller, we want to explicitly attempt to fetch now, because
-		// it's possible some was added to the root partition, but it failed to invalidate this sub partition.
+		// it's possible some was added to the root partition, but it failed to invalidate this partition.
 		return c.fetchMetadataFromRootPartition(ctx)
 	}
 	return vd, err
@@ -468,25 +468,34 @@ func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persiste
 
 func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
 	err := c.db.MutateVersioningData(ctx, mutator)
-	// If this is the root partition, notify sub partitions that they should fetch changed data from us.
+	c.signalIfFatal(err)
+	if err != nil {
+		return err
+	}
+	// If this is the root partition, notify partitions that they should fetch changed data from us.
 	if c.taskQueueID.IsRoot() {
-		numParts := c.config.NumReadPartitions()
-		for i := 1; i <= numParts; i++ {
-			tq := c.taskQueueID.mkName(i)
-			_, err := c.matchingClient.InvalidateTaskQueueMetadata(ctx,
-				&matchingservice.InvalidateTaskQueueMetadataRequest{
-					NamespaceId:    c.taskQueueID.namespaceID.String(),
-					TaskQueue:      tq,
-					VersioningData: true,
-				})
-			if err != nil {
-				c.logger.Warn("Failed to notify sub-partition of invalidated versioning data",
-					tag.WorkflowTaskQueueName(tq), tag.Error(err))
-			}
+		numParts := util.Max(c.config.NumReadPartitions(), c.config.NumWritePartitions())
+		wg := &sync.WaitGroup{}
+		for i := 1; i < numParts; i++ {
+			wg.Add(1)
+			go func(i int) {
+				tq := c.taskQueueID.mkName(i)
+				_, err := c.matchingClient.InvalidateTaskQueueMetadata(ctx,
+					&matchingservice.InvalidateTaskQueueMetadataRequest{
+						NamespaceId:    c.taskQueueID.namespaceID.String(),
+						TaskQueue:      tq,
+						VersioningData: true,
+					})
+				if err != nil {
+					c.logger.Warn("Failed to notify sub-partition of invalidated versioning data",
+						tag.WorkflowTaskQueueName(tq), tag.Error(err))
+				}
+				wg.Done()
+			}(i)
+			wg.Wait()
 		}
 	}
-	c.signalIfFatal(err)
-	return err
+	return nil
 }
 
 func (c *taskQueueManagerImpl) InvalidateMetadata(ctx context.Context, request *matchingservice.InvalidateTaskQueueMetadataRequest) error {
@@ -497,7 +506,6 @@ func (c *taskQueueManagerImpl) InvalidateMetadata(ctx context.Context, request *
 				tag.WorkflowTaskQueueName(c.taskQueueID.name))
 			return nil
 		}
-		c.db.setVersioningDataForNonRootPartition(nil)
 		_, fetchErr := c.fetchMetadataFromRootPartition(ctx)
 		if fetchErr != nil {
 			return fetchErr
@@ -702,11 +710,11 @@ func newIOContext() (context.Context, context.CancelFunc) {
 }
 
 func (c *taskQueueManagerImpl) fetchMetadataFromRootPartitionOnInit(ctx context.Context) {
-	if c.metadataInitialFetchFut.Ready() {
+	if c.metadataFetched.Ready() {
 		return
 	}
 	_, err := c.fetchMetadataFromRootPartition(ctx)
-	c.metadataInitialFetchFut.Set(struct{}{}, err)
+	c.metadataFetched.Set(struct{}{}, err)
 }
 
 // fetchMetadataFromRootPartition fetches metadata from root partition iff this partition is not a root partition.

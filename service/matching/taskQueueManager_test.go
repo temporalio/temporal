@@ -580,7 +580,7 @@ func TestTaskQueueRootPartitionNotifiesChildrenOfInvalidation(t *testing.T) {
 			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
 			mockMatchingClient.EXPECT().InvalidateTaskQueueMetadata(gomock.Any(), gomock.Any()).
 				Return(&matchingservice.InvalidateTaskQueueMetadataResponse{}, nil).
-				Times(tqm.config.NumReadPartitions())
+				Times(tqm.config.NumReadPartitions() - 1)
 			tqm.matchingClient = mockMatchingClient
 		})
 
@@ -626,7 +626,7 @@ func TestTaskQueueSubPartitionPollsPeriodically(t *testing.T) {
 	require.NotNil(t, res)
 	require.NoError(t, err)
 	// Wait a bit to make sure we poll a few times
-	<-time.After(time.Millisecond * 25)
+	time.Sleep(time.Millisecond * 25)
 }
 
 func TestTaskQueueSubPartitionDoesNotPollIfNoData(t *testing.T) {
@@ -656,7 +656,7 @@ func TestTaskQueueSubPartitionDoesNotPollIfNoData(t *testing.T) {
 	require.Nil(t, res)
 	require.NoError(t, err)
 	// Wait a bit to make sure we *don't* end up polling
-	<-time.After(time.Millisecond * 25)
+	time.Sleep(time.Millisecond * 25)
 
 	// Explicitly try to get versioning data. Since we don't have any cached, it'll explicitly fetch.
 	_, err = subTq.GetVersioningData(ctx)

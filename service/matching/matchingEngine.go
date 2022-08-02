@@ -756,11 +756,11 @@ func (e *matchingEngineImpl) InvalidateTaskQueueMetadata(
 		return nil, err
 	}
 	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	if tqMgr == nil && err == nil {
+		// Nothing to do here
+		return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
+	}
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			// Nothing to do here
-			return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
-		}
 		return nil, err
 	}
 	err = tqMgr.InvalidateMetadata(hCtx.Context, req)
@@ -784,18 +784,20 @@ func (e *matchingEngineImpl) GetTaskQueueMetadata(
 	if err != nil {
 		return nil, err
 	}
-	retme := &matchingservice.GetTaskQueueMetadataResponse{}
+	resp := &matchingservice.GetTaskQueueMetadataResponse{}
 	verDatHash := req.GetWantVersioningDataCurhash()
+	// This isn't != nil, because gogogproto will round-trip serialize an empty byte array in a request
+	// into a nil field.
 	if len(verDatHash) > 0 {
 		vDat, err := tqMgr.GetVersioningData(hCtx)
 		if err != nil {
 			return nil, err
 		}
 		if !bytes.Equal(HashVersioningData(vDat), verDatHash) {
-			retme.VersioningData = vDat
+			resp.VersioningData = vDat
 		}
 	}
-	return retme, nil
+	return resp, nil
 }
 
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
