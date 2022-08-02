@@ -34,6 +34,7 @@ import (
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
@@ -512,6 +513,35 @@ func AdminRefreshWorkflowTasks(c *cli.Context) error {
 		return fmt.Errorf("unable to refresh Workflow Task: %s", err)
 	} else {
 		fmt.Println("Refresh workflow task succeeded.")
+	}
+	return nil
+}
+
+// AdminRebuildMutableState rebuild a workflow mutable state using persisted history events
+func AdminRebuildMutableState(c *cli.Context) error {
+	adminClient := cFactory.AdminClient(c)
+
+	namespace, err := getRequiredGlobalOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+	wid := c.String(FlagWorkflowID)
+	rid := c.String(FlagRunID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err = adminClient.RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{
+		Namespace: namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("rebuild mutable state failed: %s", err)
+	} else {
+		fmt.Println("rebuild mutable state succeeded.")
 	}
 	return nil
 }
