@@ -87,6 +87,42 @@ func (s *MetricsSuite) TestPrometheus() {
 	s.NotNil(scope)
 }
 
+func (s *MetricsSuite) TestPrometheusWithSanitizeOptions() {
+	validChars := &ValidCharacters{
+		Ranges: []SanitizeRange{
+			{
+				StartRange: "a",
+				EndRange:   "z",
+			},
+			{
+				StartRange: "A",
+				EndRange:   "Z",
+			},
+			{
+				StartRange: "0",
+				EndRange:   "9",
+			},
+		},
+		SafeCharacters: "-",
+	}
+
+	prom := &PrometheusConfig{
+		OnError:       "panic",
+		TimerType:     "histogram",
+		ListenAddress: "127.0.0.1:0",
+		SanitizeOptions: &SanitizeOptions{
+			NameCharacters:       validChars,
+			KeyCharacters:        validChars,
+			ValueCharacters:      validChars,
+			ReplacementCharacter: "_",
+		},
+	}
+	config := new(Config)
+	config.Prometheus = prom
+	scope := NewScope(log.NewNoopLogger(), config)
+	s.NotNil(scope)
+}
+
 func (s *MetricsSuite) TestNoop() {
 	config := &Config{}
 	scope := NewScope(log.NewNoopLogger(), config)
