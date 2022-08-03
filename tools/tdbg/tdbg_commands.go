@@ -167,10 +167,6 @@ func newAdminWorkflowCommands() []*cli.Command {
 					Aliases: FlagRunIDAlias,
 					Usage:   "Run Id",
 				},
-				&cli.BoolFlag{
-					Name:  FlagSkipErrorMode,
-					Usage: "skip errors",
-				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDeleteWorkflow(c)

@@ -63,10 +63,10 @@ func prettyPrintJSONObject(o interface{}) {
 	fmt.Println()
 }
 
-func getRequiredGlobalOption(c *cli.Context, optionName string) (string, error) {
+func getRequiredOption(c *cli.Context, optionName string) (string, error) {
 	value := c.String(optionName)
 	if len(value) == 0 {
-		return "", fmt.Errorf("global option is required: %s", optionName)
+		return "", fmt.Errorf("option is required: %s", optionName)
 	}
 	return value, nil
 }

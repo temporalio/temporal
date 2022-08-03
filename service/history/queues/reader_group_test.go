@@ -54,19 +54,19 @@ func TestReaderGroupSuite(t *testing.T) {
 func (s *readerGroupSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.readerGroup = NewReaderGroup(func(_ int32, _ []Scope) Reader {
+	s.readerGroup = NewReaderGroup(func(_ int32, _ []Slice) Reader {
 		return newTestReader()
 	})
 }
 
 func (s *readerGroupSuite) TestStartStop() {
-	r := s.readerGroup.NewReaderWithScopes(0)
+	r := s.readerGroup.NewReader(defaultReaderId)
 	s.Equal(common.DaemonStatusInitialized, r.(*testReader).status)
 
 	s.readerGroup.Start()
 	s.Equal(common.DaemonStatusStarted, r.(*testReader).status)
 
-	r = s.readerGroup.NewReaderWithScopes(1)
+	r = s.readerGroup.NewReader(defaultReaderId + 1)
 	s.Equal(common.DaemonStatusStarted, r.(*testReader).status)
 
 	s.readerGroup.Stop()
@@ -76,19 +76,19 @@ func (s *readerGroupSuite) TestStartStop() {
 		s.Equal(common.DaemonStatusStopped, r.(*testReader).status)
 	}
 
-	r = s.readerGroup.NewReaderWithScopes(2)
+	r = s.readerGroup.NewReader(defaultReaderId + 2)
 	s.Equal(common.DaemonStatusInitialized, r.(*testReader).status)
 }
 
 func (s *readerGroupSuite) TestAddGetReader() {
 	s.Empty(s.readerGroup.Readers())
 
-	r, ok := s.readerGroup.ReaderByID(0)
+	r, ok := s.readerGroup.ReaderByID(defaultReaderId)
 	s.False(ok)
 	s.Nil(r)
 
 	for i := int32(0); i < 3; i++ {
-		r = s.readerGroup.NewReaderWithScopes(i)
+		r = s.readerGroup.NewReader(i)
 
 		readers := s.readerGroup.Readers()
 		s.Len(readers, int(i)+1)
@@ -100,7 +100,7 @@ func (s *readerGroupSuite) TestAddGetReader() {
 	}
 
 	s.Panics(func() {
-		s.readerGroup.NewReaderWithScopes(0)
+		s.readerGroup.NewReader(defaultReaderId)
 	})
 }
 
