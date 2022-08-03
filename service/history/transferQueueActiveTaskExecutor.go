@@ -285,13 +285,16 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		return nil
 	}
 
-	lastWriteVersion, err := mutableState.GetLastWriteVersion()
-	if err != nil {
-		return err
-	}
-	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
-	if !ok {
-		return nil
+	// Skip version check if the close workflow task is from user API calls.
+	if !task.DeleteAfterClose {
+		lastWriteVersion, err := mutableState.GetLastWriteVersion()
+		if err != nil {
+			return err
+		}
+		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+		if !ok {
+			return nil
+		}
 	}
 
 	workflowExecution := commonpb.WorkflowExecution{

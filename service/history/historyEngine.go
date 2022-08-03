@@ -2095,7 +2095,7 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	// Although running workflows in active cluster are terminated first and the termination event might be replicated.
 	// In passive cluster, workflow executions are just deleted in regardless of its state.
 
-	if weCtx.GetMutableState().IsWorkflowExecutionRunning() {
+	if weCtx.GetMutableState().IsWorkflowExecutionRunning() && !request.GetClosedWorkflowOnly() {
 		ns, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 		if err != nil {
 			return err
@@ -2136,7 +2136,7 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 		e.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, e.shard.GetClusterMetadata().GetCurrentClusterName()).TaskID,
 		// Use global ack level visibility queue ack level because cluster level is not updated.
 		e.shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID,
-		request.GetWorkflowClosedVersion(),
+		request.GetWorkflowVersion(),
 	)
 }
 
