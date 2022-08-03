@@ -80,12 +80,12 @@ func newAdminWorkflowCommands() []*cli.Command {
 				&cli.StringFlag{
 					Name:    FlagWorkflowID,
 					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow Id",
+					Usage:   "Workflow ID",
 				},
 				&cli.StringFlag{
 					Name:    FlagRunID,
 					Aliases: FlagRunIDAlias,
-					Usage:   "Run Id",
+					Usage:   "Run ID",
 				},
 				&cli.Int64Flag{
 					Name:  FlagMinEventID,
@@ -120,12 +120,12 @@ func newAdminWorkflowCommands() []*cli.Command {
 				&cli.StringFlag{
 					Name:    FlagWorkflowID,
 					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow Id",
+					Usage:   "Workflow ID",
 				},
 				&cli.StringFlag{
 					Name:    FlagRunID,
 					Aliases: FlagRunIDAlias,
-					Usage:   "Run Id",
+					Usage:   "Run ID",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -140,16 +140,36 @@ func newAdminWorkflowCommands() []*cli.Command {
 				&cli.StringFlag{
 					Name:    FlagWorkflowID,
 					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow Id",
+					Usage:   "Workflow ID",
 				},
 				&cli.StringFlag{
 					Name:    FlagRunID,
 					Aliases: FlagRunIDAlias,
-					Usage:   "Run Id",
+					Usage:   "Run ID",
 				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminRefreshWorkflowTasks(c)
+			},
+		},
+		{
+			Name:    "rebuild",
+			Aliases: []string{},
+			Usage:   "Rebuild a workflow mutable state using persisted history events",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagWorkflowID,
+					Aliases: FlagWorkflowIDAlias,
+					Usage:   "Workflow ID",
+				},
+				&cli.StringFlag{
+					Name:    FlagRunID,
+					Aliases: FlagRunIDAlias,
+					Usage:   "Run ID",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminRebuildMutableState(c)
 			},
 		},
 		{
@@ -160,12 +180,12 @@ func newAdminWorkflowCommands() []*cli.Command {
 				&cli.StringFlag{
 					Name:    FlagWorkflowID,
 					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow Id",
+					Usage:   "Workflow ID",
 				},
 				&cli.StringFlag{
 					Name:    FlagRunID,
 					Aliases: FlagRunIDAlias,
-					Usage:   "Run Id",
+					Usage:   "Run ID",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -180,11 +200,11 @@ func newAdminShardManagementCommands() []*cli.Command {
 		{
 			Name:    "describe",
 			Aliases: []string{"d"},
-			Usage:   "Describe shard by Id",
+			Usage:   "Describe shard by ID",
 			Flags: []cli.Flag{
 				&cli.IntFlag{
 					Name:  FlagShardID,
-					Usage: "The Id of the shard to describe",
+					Usage: "The ID of the shard to describe",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -193,7 +213,7 @@ func newAdminShardManagementCommands() []*cli.Command {
 		},
 		{
 			Name:  "list-tasks",
-			Usage: "List tasks for given shard Id and task type",
+			Usage: "List tasks for given shard ID and task type",
 			Flags: []cli.Flag{
 				&cli.BoolFlag{
 					Name:  FlagMore,
@@ -338,7 +358,7 @@ func newAdminHistoryHostCommands() []*cli.Command {
 				&cli.StringFlag{
 					Name:    FlagWorkflowID,
 					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow Id",
+					Usage:   "Workflow ID",
 				},
 				&cli.StringFlag{
 					Name:  FlagHistoryAddress,
@@ -368,7 +388,7 @@ func newAdminHistoryHostCommands() []*cli.Command {
 				&cli.StringFlag{
 					Name:    FlagWorkflowID,
 					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow Id",
+					Usage:   "Workflow ID",
 				},
 				&cli.IntFlag{
 					Name:  FlagNumberOfShards,
@@ -408,12 +428,12 @@ func newAdminTaskQueueCommands() []*cli.Command {
 				},
 				&cli.Int64Flag{
 					Name:  FlagMinTaskID,
-					Usage: "Minimum task Id",
+					Usage: "Minimum task ID",
 					Value: -12346, // include default task id
 				},
 				&cli.Int64Flag{
 					Name:  FlagMaxTaskID,
-					Usage: "Maximum task Id",
+					Usage: "Maximum task ID",
 				},
 				&cli.BoolFlag{
 					Name:  FlagPrintJSON,
