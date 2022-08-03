@@ -642,11 +642,10 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	}
 
 	return &adminservice.DescribeHistoryHostResponse{
-		ShardsNumber:          resp.GetShardsNumber(),
-		ShardIds:              resp.GetShardIds(),
-		NamespaceCache:        resp.GetNamespaceCache(),
-		ShardControllerStatus: resp.GetShardControllerStatus(),
-		Address:               resp.GetAddress(),
+		ShardsNumber:   resp.GetShardsNumber(),
+		ShardIds:       resp.GetShardIds(),
+		NamespaceCache: resp.GetNamespaceCache(),
+		Address:        resp.GetAddress(),
 	}, err
 }
 

@@ -98,7 +98,7 @@ type (
 		clusterMetadata               cluster.Metadata
 		archivalMetadata              archiver.ArchivalMetadata
 		hostInfoProvider              membership.HostInfoProvider
-		controller                    *shard.ControllerImpl
+		controller                    shard.Controller
 		tracer                        trace.Tracer
 	}
 
@@ -121,7 +121,7 @@ type (
 		ClusterMetadata               cluster.Metadata
 		ArchivalMetadata              archiver.ArchivalMetadata
 		HostInfoProvider              membership.HostInfoProvider
-		ShardController               *shard.ControllerImpl
+		ShardController               shard.Controller
 		EventNotifier                 events.Notifier
 		ReplicationTaskFetcherFactory replication.TaskFetcherFactory
 		TracerProvider                trace.TracerProvider
@@ -566,25 +566,16 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 	h.startWG.Wait()
 
 	itemsInCacheByIDCount, itemsInCacheByNameCount := h.namespaceRegistry.GetCacheSize()
-	status := ""
-	switch h.controller.Status() {
-	case common.DaemonStatusInitialized:
-		status = "initialized"
-	case common.DaemonStatusStarted:
-		status = "started"
-	case common.DaemonStatusStopped:
-		status = "stopped"
-	}
 
+	ownedShardIDs := h.controller.ShardIDs()
 	resp := &historyservice.DescribeHistoryHostResponse{
-		ShardsNumber: int32(h.controller.NumShards()),
-		ShardIds:     h.controller.ShardIDs(),
+		ShardsNumber: int32(len(ownedShardIDs)),
+		ShardIds:     ownedShardIDs,
 		NamespaceCache: &namespacespb.NamespaceCacheInfo{
 			ItemsInCacheByIdCount:   itemsInCacheByIDCount,
 			ItemsInCacheByNameCount: itemsInCacheByNameCount,
 		},
-		ShardControllerStatus: status,
-		Address:               h.hostInfoProvider.HostInfo().GetAddress(),
+		Address: h.hostInfoProvider.HostInfo().GetAddress(),
 	}
 	return resp, nil
 }

@@ -441,7 +441,7 @@ message DescribeHistoryHostResponse {
     repeated int32
     shard_ids = 2;
     temporal.server.api.namespace.v1.NamespaceCacheInfo namespace_cache = 3;
-    string shard_controller_status = 4;
+    reserved 4;
     string address = 5;
 }
 
