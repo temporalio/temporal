@@ -260,9 +260,9 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		return err
 	}
 
-	// Skip the task version check in two cases:
-	// 1. Request is from explicit API call
-	// 2. Local namespace
+	// If task version is EmptyVersion it means "don't check task version".
+	// This can happen when task was created from explicit user API call.
+	// Or the namespace is a local namespace which will not have version conflict.
 	if task.GetVersion() != common.EmptyVersion {
 		lastWriteVersion, err := mutableState.GetLastWriteVersion()
 		if err != nil {

@@ -344,9 +344,10 @@ func (h *OperatorHandlerImpl) DeleteWorkflowExecution(ctx context.Context, reque
 	}
 
 	_, err = h.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
-		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: request.GetWorkflowExecution(),
-		// Do not set last write version to make sure the workflow will be deleted eventually.
+		NamespaceId:        namespaceID.String(),
+		WorkflowExecution:  request.GetWorkflowExecution(),
+		WorkflowVersion:    common.EmptyVersion,
+		ClosedWorkflowOnly: false,
 	})
 	if err != nil {
 		return nil, err
