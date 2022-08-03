@@ -1241,6 +1241,64 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.NoError(err)
 }
 
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_DeleteAfterClose() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+			},
+		},
+	)
+	s.Nil(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+
+	taskID := int64(59)
+	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+
+	transferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version + 1,
+		TaskID:              taskID,
+		VisibilityTimestamp: time.Now().UTC(),
+		DeleteAfterClose:    true,
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
+	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
+
+	_, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(err)
+
+	transferTask.DeleteAfterClose = false
+	_, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(err)
+}
+
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Success() {
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",

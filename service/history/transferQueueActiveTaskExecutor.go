@@ -286,13 +286,17 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		return nil
 	}
 
-	lastWriteVersion, err := mutableState.GetLastWriteVersion()
-	if err != nil {
-		return err
-	}
-	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
-	if !ok {
-		return nil
+	// DeleteAfterClose is set to true when this close execution task was generated as part of delete open workflow execution procedure.
+	// Delete workflow execution is started by user API call and should be done regardless of current workflow version.
+	if !task.DeleteAfterClose {
+		lastWriteVersion, err := mutableState.GetLastWriteVersion()
+		if err != nil {
+			return err
+		}
+		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+		if !ok {
+			return nil
+		}
 	}
 
 	workflowExecution := commonpb.WorkflowExecution{

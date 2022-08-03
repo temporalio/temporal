@@ -181,6 +181,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	if err != nil {
 		return err
 	}
+
 	closeTasks := []tasks.Task{
 		&tasks.CloseExecutionTask{
 			// TaskID is set by shard
