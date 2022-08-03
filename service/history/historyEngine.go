@@ -2096,7 +2096,11 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	// Although running workflows in active cluster are terminated first and the termination event might be replicated.
 	// In passive cluster, workflow executions are just deleted in regardless of its state.
 
-	if weCtx.GetMutableState().IsWorkflowExecutionRunning() && !request.GetClosedWorkflowOnly() {
+	if weCtx.GetMutableState().IsWorkflowExecutionRunning() {
+		if request.GetClosedWorkflowOnly() {
+			// skip delete open workflow
+			return nil
+		}
 		ns, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 		if err != nil {
 			return err
