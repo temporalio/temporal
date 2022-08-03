@@ -279,7 +279,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	weCtx Context,
 	ms MutableState,
 	scope metrics.Scope,
-) (bool, error) {
+) (isArchived bool, err error) {
 
 	namespaceRegistryEntry := ms.GetNamespaceEntry()
 
@@ -328,9 +328,14 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 
 	ctx, cancel := context.WithTimeout(context.Background(), m.config.TimerProcessorArchivalTimeLimit())
 	defer cancel()
-	_, err = m.archivalClient.Archive(ctx, req)
+	resp, err := m.archivalClient.Archive(ctx, req)
 	if err != nil {
 		return false, err
+	}
+	if resp.HistoryArchivedInline {
+		scope.IncCounter(metrics.WorkflowCleanupDeleteHistoryInlineCount)
+	} else {
+		scope.IncCounter(metrics.WorkflowCleanupArchiveCount)
 	}
 
 	return true, nil

@@ -33,11 +33,10 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	v1 "go.temporal.io/api/operatorservice/v1"
-	v10 "go.temporal.io/api/workflowservice/v1"
-	v11 "go.temporal.io/server/api/adminservice/v1"
-	v12 "go.temporal.io/server/api/historyservice/v1"
-	v13 "go.temporal.io/server/api/matchingservice/v1"
+	v1 "go.temporal.io/api/workflowservice/v1"
+	v10 "go.temporal.io/server/api/adminservice/v1"
+	v11 "go.temporal.io/server/api/historyservice/v1"
+	v12 "go.temporal.io/server/api/matchingservice/v1"
 	common "go.temporal.io/server/common"
 	dynamicconfig "go.temporal.io/server/common/dynamicconfig"
 	log "go.temporal.io/server/common/log"
@@ -69,10 +68,10 @@ func (m *MockFactory) EXPECT() *MockFactoryMockRecorder {
 }
 
 // NewAdminClientWithTimeout mocks base method.
-func (m *MockFactory) NewAdminClientWithTimeout(rpcAddress string, timeout, largeTimeout time.Duration) v11.AdminServiceClient {
+func (m *MockFactory) NewAdminClientWithTimeout(rpcAddress string, timeout, largeTimeout time.Duration) v10.AdminServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewAdminClientWithTimeout", rpcAddress, timeout, largeTimeout)
-	ret0, _ := ret[0].(v11.AdminServiceClient)
+	ret0, _ := ret[0].(v10.AdminServiceClient)
 	return ret0
 }
 
@@ -83,10 +82,10 @@ func (mr *MockFactoryMockRecorder) NewAdminClientWithTimeout(rpcAddress, timeout
 }
 
 // NewFrontendClient mocks base method.
-func (m *MockFactory) NewFrontendClient(rpcAddress string) (v10.WorkflowServiceClient, error) {
+func (m *MockFactory) NewFrontendClient(rpcAddress string) (v1.WorkflowServiceClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewFrontendClient", rpcAddress)
-	ret0, _ := ret[0].(v10.WorkflowServiceClient)
+	ret0, _ := ret[0].(v1.WorkflowServiceClient)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -98,10 +97,10 @@ func (mr *MockFactoryMockRecorder) NewFrontendClient(rpcAddress interface{}) *go
 }
 
 // NewFrontendClientWithTimeout mocks base method.
-func (m *MockFactory) NewFrontendClientWithTimeout(rpcAddress string, timeout, longPollTimeout time.Duration) v10.WorkflowServiceClient {
+func (m *MockFactory) NewFrontendClientWithTimeout(rpcAddress string, timeout, longPollTimeout time.Duration) v1.WorkflowServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewFrontendClientWithTimeout", rpcAddress, timeout, longPollTimeout)
-	ret0, _ := ret[0].(v10.WorkflowServiceClient)
+	ret0, _ := ret[0].(v1.WorkflowServiceClient)
 	return ret0
 }
 
@@ -112,10 +111,10 @@ func (mr *MockFactoryMockRecorder) NewFrontendClientWithTimeout(rpcAddress, time
 }
 
 // NewHistoryClient mocks base method.
-func (m *MockFactory) NewHistoryClient() (v12.HistoryServiceClient, error) {
+func (m *MockFactory) NewHistoryClient() (v11.HistoryServiceClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewHistoryClient")
-	ret0, _ := ret[0].(v12.HistoryServiceClient)
+	ret0, _ := ret[0].(v11.HistoryServiceClient)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -127,10 +126,10 @@ func (mr *MockFactoryMockRecorder) NewHistoryClient() *gomock.Call {
 }
 
 // NewHistoryClientWithTimeout mocks base method.
-func (m *MockFactory) NewHistoryClientWithTimeout(timeout time.Duration) (v12.HistoryServiceClient, error) {
+func (m *MockFactory) NewHistoryClientWithTimeout(timeout time.Duration) (v11.HistoryServiceClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewHistoryClientWithTimeout", timeout)
-	ret0, _ := ret[0].(v12.HistoryServiceClient)
+	ret0, _ := ret[0].(v11.HistoryServiceClient)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -142,10 +141,10 @@ func (mr *MockFactoryMockRecorder) NewHistoryClientWithTimeout(timeout interface
 }
 
 // NewMatchingClient mocks base method.
-func (m *MockFactory) NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (v13.MatchingServiceClient, error) {
+func (m *MockFactory) NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (v12.MatchingServiceClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewMatchingClient", namespaceIDToName)
-	ret0, _ := ret[0].(v13.MatchingServiceClient)
+	ret0, _ := ret[0].(v12.MatchingServiceClient)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -157,10 +156,10 @@ func (mr *MockFactoryMockRecorder) NewMatchingClient(namespaceIDToName interface
 }
 
 // NewMatchingClientWithTimeout mocks base method.
-func (m *MockFactory) NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout, longPollTimeout time.Duration) (v13.MatchingServiceClient, error) {
+func (m *MockFactory) NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout, longPollTimeout time.Duration) (v12.MatchingServiceClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewMatchingClientWithTimeout", namespaceIDToName, timeout, longPollTimeout)
-	ret0, _ := ret[0].(v13.MatchingServiceClient)
+	ret0, _ := ret[0].(v12.MatchingServiceClient)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -169,21 +168,6 @@ func (m *MockFactory) NewMatchingClientWithTimeout(namespaceIDToName NamespaceID
 func (mr *MockFactoryMockRecorder) NewMatchingClientWithTimeout(namespaceIDToName, timeout, longPollTimeout interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewMatchingClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewMatchingClientWithTimeout), namespaceIDToName, timeout, longPollTimeout)
-}
-
-// NewOperatorClientWithTimeout mocks base method.
-func (m *MockFactory) NewOperatorClientWithTimeout() (v1.OperatorServiceClient, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewOperatorClientWithTimeout")
-	ret0, _ := ret[0].(v1.OperatorServiceClient)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// NewOperatorClientWithTimeout indicates an expected call of NewOperatorClientWithTimeout.
-func (mr *MockFactoryMockRecorder) NewOperatorClientWithTimeout() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewOperatorClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewOperatorClientWithTimeout))
 }
 
 // MockFactoryProvider is a mock of FactoryProvider interface.
