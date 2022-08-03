@@ -53,7 +53,10 @@ func AdminShowWorkflow(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	wid := c.String(FlagWorkflowID)
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
 	rid := c.String(FlagRunID)
 	startEventId := c.Int64(FlagMinEventID)
 	endEventId := c.Int64(FlagMaxEventID)
@@ -162,7 +165,10 @@ func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateRes
 	if err != nil {
 		return nil, err
 	}
-	wid := c.String(FlagWorkflowID)
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return nil, err
+	}
 	rid := c.String(FlagRunID)
 
 	ctx, cancel := newContext(c)
@@ -232,7 +238,10 @@ func AdminDeleteWorkflow(c *cli.Context) error {
 // AdminGetShardID get shardID
 func AdminGetShardID(c *cli.Context) error {
 	namespaceID := c.String(FlagNamespaceID)
-	wid := c.String(FlagWorkflowID)
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
 	numberOfShards := int32(c.Int(FlagNumberOfShards))
 
 	if numberOfShards <= 0 {
@@ -496,7 +505,10 @@ func AdminRefreshWorkflowTasks(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	wid := c.String(FlagWorkflowID)
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
 	rid := c.String(FlagRunID)
 
 	ctx, cancel := newContext(c)
@@ -521,11 +533,14 @@ func AdminRefreshWorkflowTasks(c *cli.Context) error {
 func AdminRebuildMutableState(c *cli.Context) error {
 	adminClient := cFactory.AdminClient(c)
 
-	namespace, err := getRequiredGlobalOption(c, FlagNamespace)
+	namespace, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
 		return err
 	}
-	wid := c.String(FlagWorkflowID)
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
 	rid := c.String(FlagRunID)
 
 	ctx, cancel := newContext(c)
