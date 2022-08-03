@@ -28,7 +28,6 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -39,6 +38,7 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
+		Version             int64
 		// These two fields are needed for cassandra standard visibility.
 		// TODO (alex): Remove them when cassandra standard visibility is removed.
 		StartTime *time.Time
@@ -51,14 +51,11 @@ func (t *DeleteExecutionVisibilityTask) GetKey() Key {
 }
 
 func (t *DeleteExecutionVisibilityTask) GetVersion() int64 {
-	// Version is not used for DeleteExecutionVisibilityTask visibility task because:
-	// 1. It is created from parent task which either check version itself (DeleteHistoryEventTask) or
-	// doesn't check version at all (DeleteExecutionTask).
-	// 2. Delete visibility task processor doesn't have access to mutable state (it is already gone).
-	return common.EmptyVersion
+	return t.Version
 }
 
-func (t *DeleteExecutionVisibilityTask) SetVersion(_ int64) {
+func (t *DeleteExecutionVisibilityTask) SetVersion(version int64) {
+	t.Version = version
 }
 
 func (t *DeleteExecutionVisibilityTask) GetTaskID() int64 {
