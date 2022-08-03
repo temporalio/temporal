@@ -28,12 +28,15 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -131,6 +134,7 @@ func (r *taskProcessorManagerImpl) Start() {
 
 	// Listen to cluster metadata and dynamically update replication processor for remote clusters.
 	r.listenToClusterMetadataChange()
+	go r.completeReplicationTaskLoop()
 }
 
 func (r *taskProcessorManagerImpl) Stop() {
@@ -206,6 +210,30 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 	}
 }
 
+func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
+	shardID := r.shard.GetShardID()
+	cleanupTimer := time.NewTimer(backoff.JitDuration(
+		r.config.ReplicationTaskProcessorCleanupInterval(shardID),
+		r.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
+	))
+	defer cleanupTimer.Stop()
+	for {
+		select {
+		case <-cleanupTimer.C:
+			if err := r.cleanupReplicationTasks(); err != nil {
+				r.logger.Error("Failed to clean up replication messages.", tag.Error(err))
+				r.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupFailure)
+			}
+			cleanupTimer.Reset(backoff.JitDuration(
+				r.config.ReplicationTaskProcessorCleanupInterval(shardID),
+				r.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
+			))
+		case <-r.shutdownChan:
+			return
+		}
+	}
+}
+
 func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	clusterMetadata := r.shard.GetClusterMetadata()
 	currentCluster := clusterMetadata.GetCurrentClusterName()
@@ -238,8 +266,13 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 		metrics.ReplicationTasksLag,
 		int(r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, currentCluster).Prev().TaskID-*minAckedTaskID),
 	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	defer cancel()
+
 	err := r.shard.GetExecutionManager().RangeCompleteHistoryTasks(
-		context.TODO(),
+		ctx,
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             r.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,

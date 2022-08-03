@@ -27,14 +27,15 @@ package worker
 import (
 	"context"
 
+	"go.temporal.io/api/workflowservice/v1"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -48,17 +49,27 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
+const (
+	localFrontendClient = "localFrontendClient"
+)
+
 var Module = fx.Options(
 	migration.Module,
 	addsearchattributes.Module,
 	resource.Module,
 	deletenamespace.Module,
 	scheduler.Module,
+	fx.Provide(
+		fx.Annotated{
+			Name:   localFrontendClient,
+			Target: FrontendClientProvider,
+		},
+	),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(ConfigProvider),
-	fx.Provide(PersistenceMaxQpsProvider),
+	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(NewService),
 	fx.Provide(NewWorkerManager),
 	fx.Provide(NewPerNamespaceWorkerManager),
@@ -69,10 +80,14 @@ func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLogge
 	return func() float64 { return float64(serviceConfig.ThrottledLogRPS()) }
 }
 
-func PersistenceMaxQpsProvider(
+func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
-) persistenceClient.PersistenceMaxQps {
-	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS)
+) service.PersistenceRateLimitingParams {
+	return service.NewPersistenceRateLimitingParams(
+		serviceConfig.PersistenceMaxQPS,
+		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.EnablePersistencePriorityRateLimiting,
+	)
 }
 
 func ConfigProvider(
@@ -84,6 +99,13 @@ func ConfigProvider(
 		persistenceConfig,
 		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
+}
+
+func FrontendClientProvider(
+	cfg *config.Config,
+	clientFactory client.Factory,
+) (workflowservice.WorkflowServiceClient, error) {
+	return clientFactory.NewFrontendClient(cfg.PublicClient.HostPort)
 }
 
 func VisibilityManagerProvider(

@@ -35,13 +35,6 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-type (
-	queueState struct {
-		readerScopes                 map[int32][]Scope
-		exclusiveReaderHighWatermark tasks.Key
-	}
-)
-
 func ToPersistenceQueueState(
 	queueState *queueState,
 ) *persistencespb.QueueState {
