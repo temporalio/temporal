@@ -235,12 +235,12 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
 
 	// Verify partitions have data
-	subParts, err := s.testCluster.GetHost().dynamicClient.GetIntValue(
+	partCount, err := s.testCluster.GetHost().dynamicClient.GetIntValue(
 		dynamicconfig.MatchingNumTaskqueueReadPartitions, nil, 0)
-	s.NotEqual(1, subParts, "This test makes no sense unless there are >1 partitions")
+	s.Greater(partCount, 1, "This test makes no sense unless there are >1 partitions")
 	s.NoError(err)
 
-	for i := 1; i <= subParts; i++ {
+	for i := 1; i < partCount; i++ {
 		subPartName, err := matching.NewTaskQueueNameWithPartition(tq, i)
 		s.NoError(err)
 		res, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
@@ -262,7 +262,7 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	s.NoError(err)
 	s.NotNil(res)
 
-	for i := 1; i <= subParts; i++ {
+	for i := 1; i < partCount; i++ {
 		subPartName, err := matching.NewTaskQueueNameWithPartition(tq, i)
 		s.NoError(err)
 		res, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
