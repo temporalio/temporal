@@ -108,14 +108,22 @@ func AndPredicates(a Predicate, b Predicate) Predicate {
 	switch a := a.(type) {
 	case *NamespacePredicate:
 		if b, ok := b.(*NamespacePredicate); ok {
+			intersection := intersect(a.NamespaceIDs, b.NamespaceIDs)
+			if len(intersection) == 0 {
+				return predicates.Universal[Task]()
+			}
 			return &NamespacePredicate{
-				NamespaceIDs: intersect(a.NamespaceIDs, b.NamespaceIDs),
+				NamespaceIDs: intersection,
 			}
 		}
 	case *TypePredicate:
 		if b, ok := b.(*TypePredicate); ok {
+			intersection := intersect(a.Types, b.Types)
+			if len(intersection) == 0 {
+				return predicates.Universal[Task]()
+			}
 			return &TypePredicate{
-				Types: intersect(a.Types, b.Types),
+				Types: intersection,
 			}
 		}
 	}
