@@ -22,58 +22,39 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package translator
 
 import (
-	"time"
+	"errors"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/definition"
+	"github.com/gocql/gocql"
+
+	"go.temporal.io/server/common/config"
 )
 
-var _ Task = (*DeleteExecutionTask)(nil)
+var (
+	ErrInvalidTranslatorPluginName = errors.New("translator_plugin: invalid translator plugin requested")
+	translators                    = map[string]TranslatorPlugin{}
+)
 
 type (
-	DeleteExecutionTask struct {
-		definition.WorkflowKey
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Version             int64
+	// TranslatorPlugin interface for Cassandra address translation mechanism
+	TranslatorPlugin interface {
+		GetTranslator(*config.Cassandra) (gocql.AddressTranslator, error)
 	}
 )
 
-func (a *DeleteExecutionTask) GetKey() Key {
-	return NewImmediateKey(a.TaskID)
+// RegisterPlugin adds an auth plugin to the plugin registry
+// it is only safe to use from a package init function
+func RegisterTranslator(name string, plugin TranslatorPlugin) {
+	translators[name] = plugin
 }
 
-func (a *DeleteExecutionTask) GetVersion() int64 {
-	return a.Version
-}
+func LookupTranslator(name string) (TranslatorPlugin, error) {
+	plugin, ok := translators[name]
+	if !ok {
+		return nil, ErrInvalidTranslatorPluginName
+	}
 
-func (a *DeleteExecutionTask) SetVersion(version int64) {
-	a.Version = version
-}
-
-func (a *DeleteExecutionTask) GetTaskID() int64 {
-	return a.TaskID
-}
-
-func (a *DeleteExecutionTask) SetTaskID(id int64) {
-	a.TaskID = id
-}
-
-func (a *DeleteExecutionTask) GetVisibilityTime() time.Time {
-	return a.VisibilityTimestamp
-}
-
-func (a *DeleteExecutionTask) SetVisibilityTime(timestamp time.Time) {
-	a.VisibilityTimestamp = timestamp
-}
-
-func (a *DeleteExecutionTask) GetCategory() Category {
-	return CategoryTransfer
-}
-
-func (a *DeleteExecutionTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION
+	return plugin, nil
 }

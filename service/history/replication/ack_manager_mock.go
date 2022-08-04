@@ -31,6 +31,7 @@ package replication
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	repication "go.temporal.io/server/api/replication/v1"
@@ -60,18 +61,19 @@ func (m *MockAckManager) EXPECT() *MockAckManagerMockRecorder {
 	return m.recorder
 }
 
-// GetMaxTaskID mocks base method.
-func (m *MockAckManager) GetMaxTaskID() int64 {
+// GetMaxTaskInfo mocks base method.
+func (m *MockAckManager) GetMaxTaskInfo() (int64, time.Time) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMaxTaskID")
+	ret := m.ctrl.Call(m, "GetMaxTaskInfo")
 	ret0, _ := ret[0].(int64)
-	return ret0
+	ret1, _ := ret[1].(time.Time)
+	return ret0, ret1
 }
 
-// GetMaxTaskID indicates an expected call of GetMaxTaskID.
-func (mr *MockAckManagerMockRecorder) GetMaxTaskID() *gomock.Call {
+// GetMaxTaskInfo indicates an expected call of GetMaxTaskInfo.
+func (mr *MockAckManagerMockRecorder) GetMaxTaskInfo() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMaxTaskID", reflect.TypeOf((*MockAckManager)(nil).GetMaxTaskID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMaxTaskInfo", reflect.TypeOf((*MockAckManager)(nil).GetMaxTaskInfo))
 }
 
 // GetTask mocks base method.

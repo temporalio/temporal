@@ -675,11 +675,16 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	var workerService *worker.Service
 	var clientBean client.Bean
 	var namespaceRegistry namespace.Registry
-
+	clientConfig := &config.Config{
+		PublicClient: config.PublicClient{
+			HostPort: c.FrontendGRPCAddress(),
+		},
+	}
 	app := fx.New(
 		fx.Supply(
 			stoppedCh,
 			persistenceConfig,
+			clientConfig,
 		),
 		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),

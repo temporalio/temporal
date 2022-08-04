@@ -28,6 +28,8 @@ import (
 	"context"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/common/persistence"
 )
 
 type taskGC struct {
@@ -78,10 +80,15 @@ func (tgc *taskGC) tryDeleteNextBatch(ctx context.Context, ackLevel int64, ignor
 	}
 	tgc.lastDeleteTime = time.Now().UTC()
 	n, err := tgc.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize)
-	switch {
-	case err != nil:
+	if err != nil {
 		return
-	case n < batchSize:
+	}
+	// implementation behavior for CompleteTasksLessThan:
+	// - unit test, cassandra: always return UnknownNumRowsAffected (in this case means "all")
+	// - sql: return number of rows affected (should be <= batchSize)
+	// if we get UnknownNumRowsAffected or a smaller number than our limit, we know we got
+	// everything <= ackLevel, so we can reset ours. if not, we may have to try again.
+	if n == persistence.UnknownNumRowsAffected || n < batchSize {
 		tgc.ackLevel = ackLevel
 	}
 }

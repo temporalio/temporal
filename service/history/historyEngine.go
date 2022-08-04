@@ -128,23 +128,23 @@ func NewEngineWithShardContext(
 	eventNotifier events.Notifier,
 	config *configs.Config,
 	rawMatchingClient matchingservice.MatchingServiceClient,
-	newCacheFn workflow.NewCacheFn,
+	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
 	eventSerializer serialization.Serializer,
 	queueProcessorFactories []queues.Factory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tracerProvider trace.TracerProvider,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
-	historyCache := newCacheFn(shard)
 
 	workflowDeleteManager := workflow.NewDeleteManager(
 		shard,
-		historyCache,
+		workflowCache,
 		config,
 		archivalClient,
 		shard.GetTimeSource(),
@@ -168,13 +168,13 @@ func NewEngineWithShardContext(
 		rawMatchingClient:          rawMatchingClient,
 		workflowDeleteManager:      workflowDeleteManager,
 		eventSerializer:            eventSerializer,
-		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(shard, historyCache),
+		workflowConsistencyChecker: workflowConsistencyChecker,
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
 	for _, factory := range queueProcessorFactories {
-		processor := factory.CreateQueue(shard, historyEngImpl, historyCache)
+		processor := factory.CreateQueue(shard, historyEngImpl, workflowCache)
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
@@ -183,31 +183,31 @@ func NewEngineWithShardContext(
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
 			shard,
-			historyCache,
+			workflowCache,
 			executionManager,
 			logger,
 		)
 		historyEngImpl.nDCReplicator = newNDCHistoryReplicator(
 			shard,
-			historyCache,
+			workflowCache,
 			historyEngImpl.eventsReapplier,
 			logger,
 			eventSerializer,
 		)
 		historyEngImpl.nDCActivityReplicator = newNDCActivityReplicator(
 			shard,
-			historyCache,
+			workflowCache,
 			logger,
 		)
 	}
 	historyEngImpl.workflowRebuilder = NewWorkflowRebuilder(
 		shard,
-		historyCache,
+		workflowCache,
 		logger,
 	)
 	historyEngImpl.workflowResetter = newWorkflowResetter(
 		shard,
-		historyCache,
+		workflowCache,
 		logger,
 	)
 
@@ -223,7 +223,7 @@ func NewEngineWithShardContext(
 	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(
 		shard,
 		workflowDeleteManager,
-		historyCache,
+		workflowCache,
 		clientBean,
 		replicationTaskExecutorProvider,
 	)
@@ -231,7 +231,7 @@ func NewEngineWithShardContext(
 		config,
 		shard,
 		historyEngImpl,
-		historyCache,
+		workflowCache,
 		workflowDeleteManager,
 		clientBean,
 		eventSerializer,
@@ -358,7 +358,8 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			}
 
 			if e.shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-				e.shard.UpdateHandoverNamespaces(nextNamespaces, e.replicationAckMgr.GetMaxTaskID())
+				maxTaskID, _ := e.replicationAckMgr.GetMaxTaskInfo()
+				e.shard.UpdateHandoverNamespaces(nextNamespaces, maxTaskID)
 			}
 
 			newNotificationVersion := nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1
@@ -2096,6 +2097,10 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	// In passive cluster, workflow executions are just deleted in regardless of its state.
 
 	if weCtx.GetMutableState().IsWorkflowExecutionRunning() {
+		if request.GetClosedWorkflowOnly() {
+			// skip delete open workflow
+			return nil
+		}
 		ns, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 		if err != nil {
 			return err
@@ -2136,6 +2141,7 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 		e.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, e.shard.GetClusterMetadata().GetCurrentClusterName()).TaskID,
 		// Use global ack level visibility queue ack level because cluster level is not updated.
 		e.shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID,
+		request.GetWorkflowVersion(),
 	)
 }
 
@@ -2749,7 +2755,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	ctx context.Context,
 	pollingCluster string,
 	ackMessageID int64,
-	ackTimestampe time.Time,
+	ackTimestamp time.Time,
 	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
 
@@ -2761,7 +2767,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 		); err != nil {
 			e.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
 		}
-		e.shard.UpdateRemoteClusterInfo(pollingCluster, ackMessageID, ackTimestampe)
+		e.shard.UpdateRemoteClusterInfo(pollingCluster, ackMessageID, ackTimestamp)
 	}
 
 	replicationMessages, err := e.replicationAckMgr.GetTasks(
@@ -3163,7 +3169,10 @@ func (e *historyEngineImpl) GetReplicationStatus(
 		ShardLocalTime: timestamp.TimePtr(e.shard.GetTimeSource().Now()),
 	}
 
-	resp.MaxReplicationTaskId = e.replicationAckMgr.GetMaxTaskID()
+	maxReplicationTaskId, maxTaskVisibilityTimeStamp := e.replicationAckMgr.GetMaxTaskInfo()
+	resp.MaxReplicationTaskId = maxReplicationTaskId
+	resp.MaxReplicationTaskVisibilityTime = timestamp.TimePtr(maxTaskVisibilityTimeStamp)
+
 	remoteClusters, handoverNamespaces, err := e.shard.GetReplicationStatus(request.RemoteClusters)
 	if err != nil {
 		return nil, err
