@@ -95,7 +95,7 @@ type (
 		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
 		ClientBean           *client.MockBean
 		ClientFactory        *client.MockFactory
-		ESClient             *esclient.MockClientV7
+		ESClient             *esclient.MockClient
 
 		// persistence clients
 
@@ -204,7 +204,7 @@ func NewTest(
 		RemoteFrontendClient: remoteFrontendClient,
 		ClientBean:           clientBean,
 		ClientFactory:        clientFactory,
-		ESClient:             esclient.NewMockClientV7(controller),
+		ESClient:             esclient.NewMockClient(controller),
 
 		// persistence clients
 
