@@ -25,12 +25,18 @@
 package client
 
 import (
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
+)
+
+var (
+	retryPolicy = common.CreatePersistenceClientRetryPolicy()
 )
 
 type (
@@ -123,6 +129,7 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 	if f.metricsClient != nil {
 		result = p.NewShardPersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
+	result = p.NewShardPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
 
@@ -140,6 +147,7 @@ func (f *factoryImpl) NewMetadataManager() (p.MetadataManager, error) {
 	if f.metricsClient != nil {
 		result = p.NewMetadataPersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
+	result = p.NewMetadataPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
 
@@ -157,6 +165,7 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 	if f.metricsClient != nil {
 		result = p.NewClusterMetadataPersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
+	result = p.NewClusterMetadataPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
 
@@ -174,6 +183,7 @@ func (f *factoryImpl) NewExecutionManager() (p.ExecutionManager, error) {
 	if f.metricsClient != nil {
 		result = p.NewExecutionPersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
+	result = p.NewExecutionPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil
 }
 
@@ -189,11 +199,20 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 	if f.metricsClient != nil {
 		result = p.NewQueuePersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
-
+	result = p.NewQueuePersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return p.NewNamespaceReplicationQueue(result, f.serializer, f.clusterName, f.metricsClient, f.logger)
 }
 
 // Close closes this factory
 func (f *factoryImpl) Close() {
 	f.dataStoreFactory.Close()
+}
+
+func IsPersistenceTransientError(err error) bool {
+	switch err.(type) {
+	case *serviceerror.Unavailable:
+		return true
+	}
+
+	return false
 }

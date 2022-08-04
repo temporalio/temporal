@@ -73,10 +73,9 @@ func (s *Scope) SplitByRange(
 func (s *Scope) SplitByPredicate(
 	predicate tasks.Predicate,
 ) (pass Scope, fail Scope) {
-	// TODO: special check if the predicates are the same type
 	passScope := NewScope(
 		s.Range,
-		predicates.And(s.Predicate, predicate),
+		tasks.AndPredicates(s.Predicate, predicate),
 	)
 	failScope := NewScope(
 		s.Range,
@@ -118,8 +117,7 @@ func (s *Scope) MergeByPredicate(
 		panic(fmt.Sprintf("Unable to merge scope with range %v with range %v by predicate", s.Range, incomingScope.Range))
 	}
 
-	// TODO: special check if the predicates are the same type
-	return NewScope(s.Range, predicates.Or(s.Predicate, incomingScope.Predicate))
+	return NewScope(s.Range, tasks.OrPredicates(s.Predicate, incomingScope.Predicate))
 }
 
 func (s *Scope) IsEmpty() bool {

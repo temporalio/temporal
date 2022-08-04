@@ -423,10 +423,14 @@ func (s *readerSuite) newTestReader(
 	scopes []Scope,
 	paginationFnProvider PaginationFnProvider,
 ) *ReaderImpl {
+	slices := make([]Slice, 0, len(scopes))
+	for _, scope := range scopes {
+		slice := NewSlice(paginationFnProvider, s.executableInitializer, scope)
+		slices = append(slices, slice)
+	}
+
 	return NewReader(
-		paginationFnProvider,
-		s.executableInitializer,
-		scopes,
+		slices,
 		&ReaderOptions{
 			BatchSize:            dynamicconfig.GetIntPropertyFn(10),
 			MaxPendingTasksCount: dynamicconfig.GetIntPropertyFn(100),

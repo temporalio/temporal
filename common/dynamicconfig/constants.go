@@ -332,9 +332,12 @@ const (
 	TimerTaskWorkerCount = "history.timerTaskWorkerCount"
 	// TimerTaskMaxRetryCount is max retry count for timer processor
 	TimerTaskMaxRetryCount = "history.timerTaskMaxRetryCount"
-	// TimerProcessorEnableSingleCursor indicates if only one timer processor should be started for both active and standby tasks
+	// TimerProcessorEnableSingleProcessor indicates if only one timer processor should be started for both active and standby tasks
 	// NOTE: this is an experimental flag for guarantee task execution and will be deprecated after multicursor solution is ready
-	TimerProcessorEnableSingleCursor = "history.timerProcessorEnableSingleCursor"
+	TimerProcessorEnableSingleProcessor = "history.timerProcessorEnableSingleProcessor"
+	// TimerProcessorEnableMultiCursor indicates if the new single processor multi-cursor timer processor implementation should be used
+	// NOTE: this flag only takes effect when history.timerProcessorEnablePriorityTaskScheduler is enabled.
+	TimerProcessorEnableMultiCursor = "history.timerProcessorEnableMultiCursor"
 	// TimerProcessorEnablePriorityTaskScheduler indicates whether host level priority task scheduler should be used for timer processor
 	TimerProcessorEnablePriorityTaskScheduler = "history.timerProcessorEnablePriorityTaskScheduler"
 	// TimerProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for timer processor
@@ -385,9 +388,12 @@ const (
 	TransferTaskWorkerCount = "history.transferTaskWorkerCount"
 	// TransferTaskMaxRetryCount is max times of retry for transferQueueProcessor
 	TransferTaskMaxRetryCount = "history.transferTaskMaxRetryCount"
-	// TransferProcessorEnableSingleCursor indicates if only one transfer processor should be started for both active and standby tasks
+	// TransferProcessorEnableSingleProcessor indicates if only one transfer processor should be started for both active and standby tasks
 	// NOTE: this is an experimental flag for guarantee task execution and will be deprecated after multicursor solution is ready
-	TransferProcessorEnableSingleCursor = "history.transferProcessorEnableSingleCursor"
+	TransferProcessorEnableSingleProcessor = "history.transferProcessorEnableSingleProcessor"
+	// TransferProcessorEnableMultiCursor indicates if the new single processor multi-cursor transfer processor implementation should be used
+	// NOTE: this flag only takes effect when history.transferProcessorEnablePriorityTaskScheduler is enabled.
+	TransferProcessorEnableMultiCursor = "history.transferProcessorEnableMultiCursor"
 	// TransferProcessorEnablePriorityTaskScheduler indicates whether host level priority task scheduler should be used for transferQueueProcessor
 	TransferProcessorEnablePriorityTaskScheduler = "history.transferProcessorEnablePriorityTaskScheduler"
 	// TransferProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for transferQueueProcessor
@@ -421,8 +427,6 @@ const (
 	VisibilityTaskHighPriorityRPS = "history.visibilityTaskHighPriorityRPS"
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"
-	// VisibilityProcessorFailoverMaxPollRPS is max poll rate per second for visibilityQueueProcessor
-	VisibilityProcessorFailoverMaxPollRPS = "history.visibilityProcessorFailoverMaxPollRPS"
 	// VisibilityProcessorMaxPollRPS is max poll rate per second for visibilityQueueProcessor
 	VisibilityProcessorMaxPollRPS = "history.visibilityProcessorMaxPollRPS"
 	// VisibilityProcessorMaxPollHostRPS is max poll rate per second for all visibilityQueueProcessor on a host
@@ -431,6 +435,9 @@ const (
 	VisibilityTaskWorkerCount = "history.visibilityTaskWorkerCount"
 	// VisibilityTaskMaxRetryCount is max times of retry for visibilityQueueProcessor
 	VisibilityTaskMaxRetryCount = "history.visibilityTaskMaxRetryCount"
+	// VisibilityProcessorEnableMultiCursor indicates if the new single processor multi-cursor visibility processor implementation should be used
+	// NOTE: this flag only takes effect when history.visibilityProcessorEnablePriorityTaskScheduler is enabled.
+	VisibilityProcessorEnableMultiCursor = "history.visibilityProcessorEnableMultiCursor"
 	// VisibilityProcessorEnablePriorityTaskScheduler indicates whether host level priority task scheduler should be used for visibilityQueueProcessor
 	VisibilityProcessorEnablePriorityTaskScheduler = "history.visibilityProcessorEnablePriorityTaskScheduler"
 	// VisibilityProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for visibilityQueueProcessor
@@ -618,6 +625,8 @@ const (
 	HistoryScannerEnabled = "worker.historyScannerEnabled"
 	// ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner
 	ExecutionsScannerEnabled = "worker.executionsScannerEnabled"
+	// HistoryScannerDataMinAge indicates the history scanner cleanup minimum age.
+	HistoryScannerDataMinAge = "worker.historyScannerDataMinAge"
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher = "worker.enableBatcher"
 	// EnableBatcherPerNamespaceWorker decides whether start batcher worker per namespace

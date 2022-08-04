@@ -27,6 +27,7 @@ package queues
 import (
 	"container/list"
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -91,9 +92,7 @@ type (
 )
 
 func NewReader(
-	paginationFnProvider PaginationFnProvider,
-	executableInitializer ExecutableInitializer,
-	scopes []Scope,
+	slices []Slice,
 	options *ReaderOptions,
 	scheduler Scheduler,
 	rescheduler Rescheduler,
@@ -103,13 +102,9 @@ func NewReader(
 	metricsHandler metrics.MetricsHandler,
 ) *ReaderImpl {
 
-	slices := list.New()
-	for _, scope := range scopes {
-		slices.PushBack(NewSlice(
-			paginationFnProvider,
-			executableInitializer,
-			scope,
-		))
+	sliceList := list.New()
+	for _, slice := range slices {
+		sliceList.PushBack(slice)
 	}
 
 	return &ReaderImpl{
@@ -124,8 +119,8 @@ func NewReader(
 		status:     common.DaemonStatusInitialized,
 		shutdownCh: make(chan struct{}),
 
-		slices:        slices,
-		nextReadSlice: slices.Front(),
+		slices:        sliceList,
+		nextReadSlice: sliceList.Front(),
 		notifyCh:      make(chan struct{}, 1),
 	}
 }
@@ -210,6 +205,8 @@ func (r *ReaderImpl) SplitSlices(splitter SliceSplitter) {
 }
 
 func (r *ReaderImpl) MergeSlices(incomingSlices ...Slice) {
+	validateSlicesOrderedDisjoint(incomingSlices)
+
 	r.Lock()
 	defer r.Unlock()
 
@@ -413,5 +410,24 @@ func appendSlice(
 	slices.Remove(lastElement)
 	for _, mergedSlice := range mergedSlices {
 		slices.PushBack(mergedSlice)
+	}
+}
+
+func validateSlicesOrderedDisjoint(
+	slices []Slice,
+) {
+	if len(slices) <= 1 {
+		return
+	}
+
+	for idx, slice := range slices[:len(slices)-1] {
+		nextSlice := slices[idx+1]
+		if slice.Scope().Range.ExclusiveMax.CompareTo(nextSlice.Scope().Range.InclusiveMin) > 0 {
+			panic(fmt.Sprintf(
+				"Found overlapping incoming slices, left slice range: %v, right slice range: %v",
+				slice.Scope().Range,
+				nextSlice.Scope().Range,
+			))
+		}
 	}
 }
