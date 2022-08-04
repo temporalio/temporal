@@ -158,6 +158,7 @@ func HistoryScavengerActivity(
 		rps,
 		ctx.historyClient,
 		hbd,
+		ctx.cfg.HistoryScannerDataMinAge,
 		ctx.metricsClient,
 		ctx.logger,
 	)

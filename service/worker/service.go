@@ -290,6 +290,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				dynamicconfig.ExecutionsScannerEnabled,
 				false,
 			),
+			HistoryScannerDataMinAge: dc.GetDurationProperty(
+				dynamicconfig.HistoryScannerDataMinAge,
+				90*24*time.Hour,
+			),
 		},
 		EnableBatcher: dc.GetBoolProperty(
 			dynamicconfig.EnableBatcher,
@@ -493,6 +497,7 @@ func (s *Service) startReplicator() {
 }
 
 func (s *Service) startArchiver() {
+	historyClient := s.clientBean.GetHistoryClient()
 	bc := &archiver.BootstrapContainer{
 		MetricsClient:    s.metricsClient,
 		Logger:           s.logger,
@@ -501,6 +506,7 @@ func (s *Service) startArchiver() {
 		Config:           s.config.ArchiverConfig,
 		ArchiverProvider: s.archiverProvider,
 		SdkClientFactory: s.sdkClientFactory,
+		HistoryClient:    historyClient,
 	}
 	clientWorker := archiver.NewClientWorker(bc)
 	if err := clientWorker.Start(); err != nil {

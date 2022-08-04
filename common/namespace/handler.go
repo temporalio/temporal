@@ -139,7 +139,8 @@ func (d *HandlerImpl) RegisterNamespace(
 
 	if err := validateRetentionDuration(
 		timestamp.DurationValue(registerRequest.WorkflowExecutionRetentionPeriod),
-		registerRequest.IsGlobalNamespace); err != nil {
+		registerRequest.IsGlobalNamespace,
+	); err != nil {
 		return nil, err
 	}
 
@@ -465,7 +466,10 @@ func (d *HandlerImpl) UpdateNamespace(
 			configurationChanged = true
 
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionTtl()
-			if err := validateRetentionDuration(timestamp.DurationValue(config.Retention), isGlobalNamespace); err != nil {
+			if err := validateRetentionDuration(
+				timestamp.DurationValue(config.Retention),
+				isGlobalNamespace,
+			); err != nil {
 				return nil, err
 			}
 		}
@@ -798,11 +802,10 @@ func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 // validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
 func validateRetentionDuration(retention time.Duration, isGlobalNamespace bool) error {
 	min := MinRetentionLocal
-	max := common.MaxWorkflowRetentionPeriod
 	if isGlobalNamespace {
 		min = MinRetentionGlobal
 	}
-	if retention < min || retention > max {
+	if retention < min {
 		return errInvalidRetentionPeriod
 	}
 	return nil
