@@ -575,15 +575,15 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 
 	shard, err := s.shardController.getOrCreateShardContext(0)
 	s.NoError(err)
-	s.Equal(1, s.shardController.NumShards())
+	s.Equal(1, len(s.shardController.ShardIDs()))
 
 	shard.Unload()
 
-	for tries := 0; tries < 100 && s.shardController.NumShards() != 0; tries++ {
+	for tries := 0; tries < 100 && len(s.shardController.ShardIDs()) != 0; tries++ {
 		// removal from map happens asynchronously
 		time.Sleep(1 * time.Millisecond)
 	}
-	s.Equal(0, s.shardController.NumShards())
+	s.Equal(0, len(s.shardController.ShardIDs()))
 	s.False(shard.isValid())
 }
 
