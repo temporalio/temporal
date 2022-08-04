@@ -262,7 +262,7 @@ func persistFirstWorkflowEvents(
 	prevTxnID := workflowEvents.PrevTxnID
 	txnID := workflowEvents.TxnID
 
-	size, err := appendHistoryV2Events(
+	size, err := appendHistoryEvents(
 		ctx,
 		shard,
 		namespaceID,
@@ -299,7 +299,7 @@ func persistNonFirstWorkflowEvents(
 	prevTxnID := workflowEvents.PrevTxnID
 	txnID := workflowEvents.TxnID
 
-	size, err := appendHistoryV2Events(
+	size, err := appendHistoryEvents(
 		ctx,
 		shard,
 		namespaceID,
@@ -315,7 +315,7 @@ func persistNonFirstWorkflowEvents(
 	return size, err
 }
 
-func appendHistoryV2Events(
+func appendHistoryEvents(
 	ctx context.Context,
 	shard shard.Context,
 	namespaceID namespace.ID,
