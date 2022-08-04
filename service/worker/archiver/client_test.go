@@ -28,9 +28,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"testing"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
-	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"

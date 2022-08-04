@@ -30,9 +30,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/api/historyservice/v1"
 	"math/rand"
 	"time"
+
+	"go.temporal.io/server/api/historyservice/v1"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"

@@ -26,8 +26,9 @@ package history
 
 import (
 	"context"
-	"go.temporal.io/server/api/historyservice/v1"
 	"net"
+
+	"go.temporal.io/server/api/historyservice/v1"
 
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
