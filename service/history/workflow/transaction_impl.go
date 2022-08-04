@@ -32,14 +32,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -80,7 +78,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 		return 0, err
 	}
 
-	resp, err := createWorkflowExecutionWithRetry(ctx, t.shard, &persistence.CreateWorkflowExecutionRequest{
+	resp, err := createWorkflowExecution(ctx, t.shard, &persistence.CreateWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                createMode,
@@ -118,7 +116,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		return 0, 0, 0, err
 	}
 
-	resp, err := conflictResolveWorkflowExecutionWithRetry(ctx, t.shard, &persistence.ConflictResolveWorkflowExecutionRequest{
+	resp, err := conflictResolveWorkflowExecution(ctx, t.shard, &persistence.ConflictResolveWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                    conflictResolveMode,
@@ -173,7 +171,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	if err != nil {
 		return 0, 0, err
 	}
-	resp, err := updateWorkflowExecutionWithRetry(ctx, t.shard, &persistence.UpdateWorkflowExecutionRequest{
+	resp, err := updateWorkflowExecution(ctx, t.shard, &persistence.UpdateWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                   updateMode,
@@ -214,7 +212,7 @@ func (t *TransactionImpl) SetWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	_, err = setWorkflowExecutionWithRetry(ctx, t.shard, &persistence.SetWorkflowExecutionRequest{
+	_, err = setWorkflowExecution(ctx, t.shard, &persistence.SetWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		SetWorkflowSnapshot: *workflowSnapshot,
@@ -264,7 +262,7 @@ func persistFirstWorkflowEvents(
 	prevTxnID := workflowEvents.PrevTxnID
 	txnID := workflowEvents.TxnID
 
-	size, err := appendHistoryV2EventsWithRetry(
+	size, err := appendHistoryEvents(
 		ctx,
 		shard,
 		namespaceID,
@@ -301,7 +299,7 @@ func persistNonFirstWorkflowEvents(
 	prevTxnID := workflowEvents.PrevTxnID
 	txnID := workflowEvents.TxnID
 
-	size, err := appendHistoryV2EventsWithRetry(
+	size, err := appendHistoryEvents(
 		ctx,
 		shard,
 		namespaceID,
@@ -317,7 +315,7 @@ func persistNonFirstWorkflowEvents(
 	return size, err
 }
 
-func appendHistoryV2EventsWithRetry(
+func appendHistoryEvents(
 	ctx context.Context,
 	shard shard.Context,
 	namespaceID namespace.ID,
@@ -325,198 +323,143 @@ func appendHistoryV2EventsWithRetry(
 	request *persistence.AppendHistoryNodesRequest,
 ) (int64, error) {
 
-	resp := 0
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = shard.AppendHistoryEvents(ctx, request, namespaceID, execution)
-		return err
-	}
-
-	err := backoff.ThrottleRetryContext(
-		ctx,
-		op,
-		PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
-	)
+	resp, err := shard.AppendHistoryEvents(ctx, request, namespaceID, execution)
 	return int64(resp), err
 }
 
-func createWorkflowExecutionWithRetry(
+func createWorkflowExecution(
 	ctx context.Context,
 	shard shard.Context,
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
 
-	var resp *persistence.CreateWorkflowExecutionResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = shard.CreateWorkflowExecution(ctx, request)
-		return err
+	resp, err := shard.CreateWorkflowExecution(ctx, request)
+	if err != nil {
+		switch err.(type) {
+		case *persistence.CurrentWorkflowConditionFailedError,
+			*persistence.WorkflowConditionFailedError,
+			*persistence.ConditionFailedError:
+			// it is possible that workflow already exists and caller need to apply
+			// workflow ID reuse policy
+			return nil, err
+		default:
+			shard.GetLogger().Error(
+				"Persistent store operation Failure",
+				tag.WorkflowNamespaceID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId),
+				tag.WorkflowID(request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId),
+				tag.WorkflowRunID(request.NewWorkflowSnapshot.ExecutionState.RunId),
+				tag.StoreOperationCreateWorkflowExecution,
+				tag.Error(err),
+			)
+			return nil, err
+		}
 	}
 
-	err := backoff.ThrottleRetryContext(
-		ctx,
-		op,
-		PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
-	)
-	switch err.(type) {
-	case nil:
-		if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
-			namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId),
-		); err == nil {
-			emitMutationMetrics(
-				shard,
-				namespaceEntry,
-				&resp.NewMutableStateStats,
-			)
-		}
-		return resp, nil
-	case *persistence.CurrentWorkflowConditionFailedError,
-		*persistence.WorkflowConditionFailedError,
-		*persistence.ConditionFailedError:
-		// it is possible that workflow already exists and caller need to apply
-		// workflow ID reuse policy
-		return nil, err
-	default:
-		shard.GetLogger().Error(
-			"Persistent store operation Failure",
-			tag.WorkflowNamespaceID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId),
-			tag.WorkflowID(request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId),
-			tag.WorkflowRunID(request.NewWorkflowSnapshot.ExecutionState.RunId),
-			tag.StoreOperationCreateWorkflowExecution,
-			tag.Error(err),
+	if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
+		namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId),
+	); err == nil {
+		emitMutationMetrics(
+			shard,
+			namespaceEntry,
+			&resp.NewMutableStateStats,
 		)
-		return nil, err
 	}
+	return resp, nil
 }
 
-func conflictResolveWorkflowExecutionWithRetry(
+func conflictResolveWorkflowExecution(
 	ctx context.Context,
 	shard shard.Context,
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 
-	var resp *persistence.ConflictResolveWorkflowExecutionResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = shard.ConflictResolveWorkflowExecution(ctx, request)
-		return err
+	resp, err := shard.ConflictResolveWorkflowExecution(ctx, request)
+	if err != nil {
+		switch err.(type) {
+		case *persistence.CurrentWorkflowConditionFailedError,
+			*persistence.WorkflowConditionFailedError,
+			*persistence.ConditionFailedError:
+			// it is possible that workflow already exists and caller need to apply
+			// workflow ID reuse policy
+			return nil, err
+		default:
+			shard.GetLogger().Error(
+				"Persistent store operation Failure",
+				tag.WorkflowNamespaceID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId),
+				tag.WorkflowID(request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId),
+				tag.WorkflowRunID(request.ResetWorkflowSnapshot.ExecutionState.RunId),
+				tag.StoreOperationConflictResolveWorkflowExecution,
+				tag.Error(err),
+			)
+			return nil, err
+		}
 	}
 
-	err := backoff.ThrottleRetryContext(
-		ctx,
-		op,
-		PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
-	)
-	switch err.(type) {
-	case nil:
-		if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
-			namespace.ID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId),
-		); err == nil {
-			emitMutationMetrics(
-				shard,
-				namespaceEntry,
-				&resp.ResetMutableStateStats,
-				resp.NewMutableStateStats,
-				resp.CurrentMutableStateStats,
-			)
-			emitCompletionMetrics(
-				shard,
-				namespaceEntry,
-				snapshotToCompletionMetric(&request.ResetWorkflowSnapshot),
-				snapshotToCompletionMetric(request.NewWorkflowSnapshot),
-				mutationToCompletionMetric(request.CurrentWorkflowMutation),
-			)
-		}
-		return resp, nil
-	case *persistence.CurrentWorkflowConditionFailedError,
-		*persistence.WorkflowConditionFailedError,
-		*persistence.ConditionFailedError:
-		// it is possible that workflow already exists and caller need to apply
-		// workflow ID reuse policy
-		return nil, err
-	default:
-		shard.GetLogger().Error(
-			"Persistent store operation Failure",
-			tag.WorkflowNamespaceID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId),
-			tag.WorkflowID(request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId),
-			tag.WorkflowRunID(request.ResetWorkflowSnapshot.ExecutionState.RunId),
-			tag.StoreOperationConflictResolveWorkflowExecution,
-			tag.Error(err),
+	if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
+		namespace.ID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId),
+	); err == nil {
+		emitMutationMetrics(
+			shard,
+			namespaceEntry,
+			&resp.ResetMutableStateStats,
+			resp.NewMutableStateStats,
+			resp.CurrentMutableStateStats,
 		)
-		return nil, err
+		emitCompletionMetrics(
+			shard,
+			namespaceEntry,
+			snapshotToCompletionMetric(&request.ResetWorkflowSnapshot),
+			snapshotToCompletionMetric(request.NewWorkflowSnapshot),
+			mutationToCompletionMetric(request.CurrentWorkflowMutation),
+		)
 	}
+	return resp, nil
 }
 
-func getWorkflowExecutionWithRetry(
+func getWorkflowExecution(
 	ctx context.Context,
 	shard shard.Context,
 	request *persistence.GetWorkflowExecutionRequest,
 ) (*persistence.GetWorkflowExecutionResponse, error) {
 
-	var resp *persistence.GetWorkflowExecutionResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = shard.GetWorkflowExecution(ctx, request)
-
-		return err
-	}
-
-	err := backoff.ThrottleRetryContext(
-		ctx,
-		op,
-		PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
-	)
-	switch err.(type) {
-	case nil:
-		if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
-			namespace.ID(resp.State.ExecutionInfo.NamespaceId),
-		); err == nil {
-			emitGetMetrics(
-				shard,
-				namespaceEntry,
-				&resp.MutableStateStats,
+	resp, err := shard.GetWorkflowExecution(ctx, request)
+	if err != nil {
+		switch err.(type) {
+		case *serviceerror.NotFound:
+			// it is possible that workflow does not exists
+			return nil, err
+		default:
+			shard.GetLogger().Error(
+				"Persistent fetch operation Failure",
+				tag.WorkflowNamespaceID(request.NamespaceID),
+				tag.WorkflowID(request.WorkflowID),
+				tag.WorkflowRunID(request.RunID),
+				tag.StoreOperationGetWorkflowExecution,
+				tag.Error(err),
 			)
+			return nil, err
 		}
-		return resp, nil
-	case *serviceerror.NotFound:
-		// it is possible that workflow does not exists
-		return nil, err
-	default:
-		shard.GetLogger().Error(
-			"Persistent fetch operation Failure",
-			tag.WorkflowNamespaceID(request.NamespaceID),
-			tag.WorkflowID(request.WorkflowID),
-			tag.WorkflowRunID(request.RunID),
-			tag.StoreOperationGetWorkflowExecution,
-			tag.Error(err),
-		)
-		return nil, err
 	}
+
+	if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
+		namespace.ID(resp.State.ExecutionInfo.NamespaceId),
+	); err == nil {
+		emitGetMetrics(
+			shard,
+			namespaceEntry,
+			&resp.MutableStateStats,
+		)
+	}
+	return resp, nil
 }
 
-func updateWorkflowExecutionWithRetry(
+func updateWorkflowExecution(
 	ctx context.Context,
 	shard shard.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
 
-	var resp *persistence.UpdateWorkflowExecutionResponse
-	var err error
-	op := func(ctx context.Context) error {
-		resp, err = shard.UpdateWorkflowExecution(ctx, request)
-		return err
-	}
-
-	err = backoff.ThrottleRetryContext(
-		ctx,
-		op,
-		PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
-	)
+	resp, err := shard.UpdateWorkflowExecution(ctx, request)
 	if err != nil {
 		shard.GetLogger().Error(
 			"Update workflow execution operation failed.",
@@ -526,15 +469,7 @@ func updateWorkflowExecutionWithRetry(
 			tag.StoreOperationUpdateWorkflowExecution,
 			tag.Error(err),
 		)
-		switch err.(type) {
-		case *persistence.CurrentWorkflowConditionFailedError,
-			*persistence.WorkflowConditionFailedError,
-			*persistence.ConditionFailedError:
-			// TODO get rid of ErrConflict
-			return nil, consts.ErrConflict
-		default:
-			return nil, err
-		}
+		return nil, err
 	}
 
 	if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
@@ -557,25 +492,13 @@ func updateWorkflowExecutionWithRetry(
 	return resp, nil
 }
 
-func setWorkflowExecutionWithRetry(
+func setWorkflowExecution(
 	ctx context.Context,
 	shard shard.Context,
 	request *persistence.SetWorkflowExecutionRequest,
 ) (*persistence.SetWorkflowExecutionResponse, error) {
 
-	var resp *persistence.SetWorkflowExecutionResponse
-	var err error
-	op := func(ctx context.Context) error {
-		resp, err = shard.SetWorkflowExecution(ctx, request)
-		return err
-	}
-
-	err = backoff.ThrottleRetryContext(
-		ctx,
-		op,
-		PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
-	)
+	resp, err := shard.SetWorkflowExecution(ctx, request)
 	if err != nil {
 		shard.GetLogger().Error(
 			"Set workflow execution operation failed.",
@@ -585,17 +508,8 @@ func setWorkflowExecutionWithRetry(
 			tag.StoreOperationUpdateWorkflowExecution,
 			tag.Error(err),
 		)
-		switch err.(type) {
-		case *persistence.CurrentWorkflowConditionFailedError,
-			*persistence.WorkflowConditionFailedError,
-			*persistence.ConditionFailedError:
-			// TODO get rid of ErrConflict
-			return nil, consts.ErrConflict
-		default:
-			return nil, err
-		}
+		return nil, err
 	}
-
 	return resp, nil
 }
 

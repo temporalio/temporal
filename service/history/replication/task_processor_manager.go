@@ -75,9 +75,9 @@ func NewTaskProcessorManager(
 ) *taskProcessorFactoryImpl {
 
 	// Intentionally use the raw client to create its own retry policy
-	historyClient := shard.GetHistoryClient()
+	historyRawClient := clientBean.GetHistoryClient()
 	historyRetryableClient := history.NewRetryableClient(
-		historyClient,
+		historyRawClient,
 		common.CreateReplicationServiceBusyRetryPolicy(),
 		common.IsResourceExhausted,
 	)

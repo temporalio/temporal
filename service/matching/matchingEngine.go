@@ -45,7 +45,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -86,7 +85,7 @@ type (
 	matchingEngineImpl struct {
 		status               int32
 		taskManager          persistence.TaskManager
-		historyService       historyservice.HistoryServiceClient
+		historyClient        historyservice.HistoryServiceClient
 		matchingClient       matchingservice.MatchingServiceClient
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
@@ -108,7 +107,6 @@ var (
 	// EmptyPollActivityTaskQueueResponse is the response when there are no activity tasks to hand out
 	emptyPollActivityTaskQueueResponse = &matchingservice.PollActivityTaskQueueResponse{}
 	persistenceOperationRetryPolicy    = common.CreatePersistenceRetryPolicy()
-	historyServiceOperationRetryPolicy = common.CreateHistoryServiceRetryPolicy()
 
 	// ErrNoTasks is exported temporarily for integration test
 	ErrNoTasks    = errors.New("No tasks")
@@ -121,8 +119,9 @@ var (
 var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed implemented
 
 // NewEngine creates an instance of matching engine
-func NewEngine(taskManager persistence.TaskManager,
-	historyService historyservice.HistoryServiceClient,
+func NewEngine(
+	taskManager persistence.TaskManager,
+	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
 	config *Config,
 	logger log.Logger,
@@ -135,7 +134,7 @@ func NewEngine(taskManager persistence.TaskManager,
 	return &matchingEngineImpl{
 		status:               common.DaemonStatusInitialized,
 		taskManager:          taskManager,
-		historyService:       historyService,
+		historyClient:        historyClient,
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		taskQueues:           make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:       make(map[taskQueueCounterKey]int),
@@ -395,7 +394,7 @@ pollLoop:
 
 			// for query task, we don't need to update history to record workflow task started. but we need to know
 			// the NextEventID so front end knows what are the history events to load for this workflow task.
-			mutableStateResp, err := e.historyService.GetMutableState(hCtx.Context, &historyservice.GetMutableStateRequest{
+			mutableStateResp, err := e.historyClient.GetMutableState(hCtx.Context, &historyservice.GetMutableStateRequest{
 				NamespaceId: req.GetNamespaceId(),
 				Execution:   task.workflowExecution(),
 			})
@@ -893,7 +892,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	pollReq *workflowservice.PollWorkflowTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	request := &historyservice.RecordWorkflowTaskStartedRequest{
+	return e.historyClient.RecordWorkflowTaskStarted(ctx, &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
 		ScheduledEventId:  task.event.Data.GetScheduledEventId(),
@@ -901,21 +900,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		TaskId:            task.event.GetTaskId(),
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
-	}
-	var resp *historyservice.RecordWorkflowTaskStartedResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = e.historyService.RecordWorkflowTaskStarted(ctx, request)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, historyServiceOperationRetryPolicy, func(err error) bool {
-		switch err.(type) {
-		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerrors.TaskAlreadyStarted:
-			return false
-		}
-		return true
 	})
-	return resp, err
 }
 
 func (e *matchingEngineImpl) recordActivityTaskStarted(
@@ -923,7 +908,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	pollReq *workflowservice.PollActivityTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	request := &historyservice.RecordActivityTaskStartedRequest{
+	return e.historyClient.RecordActivityTaskStarted(ctx, &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
 		ScheduledEventId:  task.event.Data.GetScheduledEventId(),
@@ -931,21 +916,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		TaskId:            task.event.GetTaskId(),
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
-	}
-	var resp *historyservice.RecordActivityTaskStartedResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = e.historyService.RecordActivityTaskStarted(ctx, request)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, historyServiceOperationRetryPolicy, func(err error) bool {
-		switch err.(type) {
-		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerrors.TaskAlreadyStarted:
-			return false
-		}
-		return true
 	})
-	return resp, err
 }
 
 func (e *matchingEngineImpl) emitForwardedSourceStats(

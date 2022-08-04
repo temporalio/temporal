@@ -46,7 +46,6 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
@@ -64,7 +63,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
@@ -1097,15 +1095,7 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 		return nil, h.convertError(err)
 	}
 
-	var resp *historyservice.QueryWorkflowResponse
-	err2 := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
-		var err error
-		resp, err = engine.QueryWorkflow(ctx, request)
-		return err
-	}, common.CreateHistoryServiceRetryPolicy(), func(err error) bool {
-		return err == consts.ErrBufferedQueryCleared
-	})
-
+	resp, err2 := engine.QueryWorkflow(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}

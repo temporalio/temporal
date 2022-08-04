@@ -45,10 +45,8 @@ var (
 	ErrTaskRetry = errors.New("passive task should retry due to condition in mutable state is not met")
 	// ErrDuplicate is exported temporarily for integration test
 	ErrDuplicate = errors.New("duplicate task, completing it")
-	// ErrConflict is exported temporarily for integration test
-	ErrConflict = errors.New("conditional update failed")
-	// ErrMaxAttemptsExceeded is exported temporarily for integration test
-	ErrMaxAttemptsExceeded = errors.New("maximum attempts exceeded to update history")
+	// ErrLocateCurrentWorkflowExecution is the error returned when current workflow execution can't be located
+	ErrLocateCurrentWorkflowExecution = serviceerror.NewUnavailable("unable to locate current workflow execution")
 	// ErrStaleState is the error returned during state update indicating that cached mutable state could be stale
 	ErrStaleState = errors.New("cache mutable state could potentially be stale")
 	// ErrActivityTaskNotFound is the error to indicate activity task could be duplicate and activity already completed

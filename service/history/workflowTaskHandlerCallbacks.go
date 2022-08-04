@@ -547,7 +547,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	if updateErr != nil {
-		if updateErr == consts.ErrConflict {
+		if persistence.IsConflictErr(updateErr) {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.ConcurrencyUpdateFailureCounter)
 		}
 

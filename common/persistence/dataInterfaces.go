@@ -1159,6 +1159,16 @@ func (e *TransactionSizeLimitError) Error() string {
 	return e.Msg
 }
 
+func IsConflictErr(err error) bool {
+	switch err.(type) {
+	case *CurrentWorkflowConditionFailedError,
+		*WorkflowConditionFailedError,
+		*ConditionFailedError:
+		return true
+	}
+	return false
+}
+
 // UnixMilliseconds returns t as a Unix time, the number of milliseconds elapsed since January 1, 1970 UTC.
 // It should be used for all CQL timestamp.
 func UnixMilliseconds(t time.Time) int64 {

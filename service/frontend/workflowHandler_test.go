@@ -1873,6 +1873,4 @@ func TestContextNearDeadline(t *testing.T) {
 	ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*500)
 	assert.True(t, contextNearDeadline(ctx, longPollTailRoom))
 	assert.False(t, contextNearDeadline(ctx, time.Millisecond))
-
-	assert.False(t, common.IsServiceTransientError(errContextNearDeadline))
 }

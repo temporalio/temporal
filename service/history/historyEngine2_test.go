@@ -399,53 +399,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 		RunId:      tests.RunID,
 	}
 
-	identity := "testIdentity"
-	tl := "testTaskQueue"
-
-	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
-
-	ms := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &persistence.ConditionFailedError{})
-
-	ms2 := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse2, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
-
-	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: &workflowExecution,
-		ScheduledEventId:  2,
-		TaskId:            100,
-		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: tl,
-			},
-			Identity: identity,
-		},
-	})
-	s.Nil(err)
-	s.NotNil(response)
-	s.Equal("wType", response.WorkflowType.Name)
-	s.True(response.PreviousStartedEventId == 0)
-	s.Equal(int64(3), response.StartedEventId)
-}
-
-func (s *engine2Suite) TestRecordWorkflowTaskRetrySameRequest() {
-	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
-		WorkflowId: "wId",
-		RunId:      tests.RunID,
-	}
-
 	tl := "testTaskQueue"
 	identity := "testIdentity"
-	requestID := "testRecordWorkflowTaskRetrySameRequestID"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
 	ms := workflow.TestCloneToProto(msBuilder)
@@ -453,96 +408,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskRetrySameRequest() {
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &persistence.ConditionFailedError{})
-
-	startedEventID := addWorkflowTaskStartedEventWithRequestID(msBuilder, int64(2), requestID, tl, identity)
-	ms2 := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse2, nil)
-
-	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: &workflowExecution,
-		ScheduledEventId:  2,
-		TaskId:            100,
-		RequestId:         requestID,
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: tl,
-			},
-			Identity: identity,
-		},
-	})
-
-	s.Nil(err)
-	s.NotNil(response)
-	s.Equal("wType", response.WorkflowType.Name)
-	s.True(response.PreviousStartedEventId == 0)
-	s.Equal(startedEventID.EventId, response.StartedEventId)
-}
-
-func (s *engine2Suite) TestRecordWorkflowTaskRetryDifferentRequest() {
-	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
-		WorkflowId: "wId",
-		RunId:      tests.RunID,
-	}
-
-	tl := "testTaskQueue"
-	identity := "testIdentity"
-	requestID := "testRecordWorkflowTaskRetrySameRequestID"
-
-	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
-	ms := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &persistence.ConditionFailedError{})
-
-	// Add event.
-	addWorkflowTaskStartedEventWithRequestID(msBuilder, int64(2), "some_other_req", tl, identity)
-	ms2 := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse2, nil)
-
-	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: &workflowExecution,
-		ScheduledEventId:  2,
-		TaskId:            100,
-		RequestId:         requestID,
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: tl,
-			},
-			Identity: identity,
-		},
-	})
-
-	s.Nil(response)
-	s.NotNil(err)
-	s.IsType(&serviceerrors.TaskAlreadyStarted{}, err)
-	s.logger.Info("Failed with error", tag.Error(err))
-}
-
-func (s *engine2Suite) TestRecordWorkflowTaskStartedMaxAttemptsExceeded() {
-	namespaceID := tests.NamespaceID
-	workflowExecution := commonpb.WorkflowExecution{
-		WorkflowId: "wId",
-		RunId:      tests.RunID,
-	}
-
-	tl := "testTaskQueue"
-	identity := "testIdentity"
-
-	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
-	for i := 0; i < conditionalRetryCount; i++ {
-		ms := workflow.TestCloneToProto(msBuilder)
-		gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
-
-		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	}
-
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil,
-		&persistence.ConditionFailedError{}).Times(conditionalRetryCount)
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID.String(),
@@ -560,10 +425,10 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedMaxAttemptsExceeded() {
 
 	s.NotNil(err)
 	s.Nil(response)
-	s.Equal(consts.ErrMaxAttemptsExceeded, err)
+	s.Equal(&persistence.ConditionFailedError{}, err)
 }
 
-func (s *engine2Suite) TestRecordWorkflowTaskSuccess() {
+func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 	namespaceID := tests.NamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",

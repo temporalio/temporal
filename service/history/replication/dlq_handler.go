@@ -113,9 +113,9 @@ func newDLQHandler(
 		panic("Failed to initialize replication DLQ handler due to nil task executors")
 	}
 
-	historyClient := shard.GetHistoryClient()
+	historyRawClient := clientBean.GetHistoryClient()
 	historyRetryableClient := history.NewRetryableClient(
-		historyClient,
+		historyRawClient,
 		common.CreateReplicationServiceBusyRetryPolicy(),
 		common.IsResourceExhausted,
 	)

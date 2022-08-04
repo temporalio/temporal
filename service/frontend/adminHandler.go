@@ -152,7 +152,8 @@ type (
 var (
 	_ adminservice.AdminServiceServer = (*AdminHandler)(nil)
 
-	adminServiceRetryPolicy = common.CreateAdminServiceRetryPolicy()
+	// TODO: get rid for this retry layer
+	adminHandlerRetryPolicy = common.CreateAdminHandlerRetryPolicy()
 	resendStartEventID      = int64(0)
 )
 
@@ -1258,7 +1259,7 @@ func (adh *AdminHandler) GetDLQMessages(
 	default:
 		return nil, adh.error(errDLQTypeIsNotSupported, scope)
 	}
-	retErr = backoff.ThrottleRetryContext(ctx, op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	retErr = backoff.ThrottleRetryContext(ctx, op, adminHandlerRetryPolicy, common.IsServiceTransientError)
 	if retErr != nil {
 		return nil, adh.error(retErr, scope)
 	}
@@ -1314,7 +1315,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 	default:
 		return nil, adh.error(errDLQTypeIsNotSupported, scope)
 	}
-	err = backoff.ThrottleRetryContext(ctx, op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	err = backoff.ThrottleRetryContext(ctx, op, adminHandlerRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
@@ -1378,7 +1379,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 	default:
 		return nil, adh.error(errDLQTypeIsNotSupported, scope)
 	}
-	err = backoff.ThrottleRetryContext(ctx, op, adminServiceRetryPolicy, common.IsServiceTransientError)
+	err = backoff.ThrottleRetryContext(ctx, op, adminHandlerRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}

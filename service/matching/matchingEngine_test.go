@@ -139,7 +139,7 @@ func newMatchingEngine(
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:       taskMgr,
-		historyService:    mockHistoryClient,
+		historyClient:     mockHistoryClient,
 		taskQueues:        make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:    make(map[taskQueueCounterKey]int),
 		logger:            logger,

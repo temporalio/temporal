@@ -1063,7 +1063,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedConflictOnUpdate() {
 		},
 	})
 	s.Error(err)
-	s.ErrorIs(err, consts.ErrConflict)
+	s.Equal(&persistence.ConditionFailedError{}, err)
 }
 
 func (s *engineSuite) TestValidateSignalRequest() {
@@ -2701,75 +2701,6 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	}
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
-	activity1ID := "activity1"
-	activity1Type := "activity_type1"
-	activity1Input := payloads.EncodeString("input1")
-	activity1Result := payloads.EncodeString("activity1_result")
-	activity2ID := "activity2"
-	activity2Type := "activity_type2"
-	activity2Input := payloads.EncodeString("input2")
-
-	msBuilder := workflow.TestLocalMutableState(s.mockHistoryEngine.shard, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
-	wt := addWorkflowTaskScheduledEvent(msBuilder)
-	workflowTaskStartedEvent1 := addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, tl, identity)
-	workflowTaskCompletedEvent1 := addWorkflowTaskCompletedEvent(msBuilder, wt.ScheduledEventID, workflowTaskStartedEvent1.EventId, identity)
-	activity1ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, workflowTaskCompletedEvent1.EventId, activity1ID, activity1Type, tl, activity1Input, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
-	activity2ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, workflowTaskCompletedEvent1.EventId, activity2ID, activity2Type, tl, activity2Input, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
-	addActivityTaskStartedEvent(msBuilder, activity1ScheduledEvent.EventId, identity)
-	addActivityTaskStartedEvent(msBuilder, activity2ScheduledEvent.EventId, identity)
-
-	ms1 := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
-
-	ms2 := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, &persistence.ConditionFailedError{})
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse2, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
-
-	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{
-			TaskToken: taskToken,
-			Result:    activity1Result,
-			Identity:  identity,
-		},
-	})
-	s.NoError(err)
-	executionBuilder := s.getBuilder(tests.NamespaceID, we)
-	s.Equal(int64(11), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartedEventId)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
-
-	s.True(executionBuilder.HasPendingWorkflowTask())
-	wt, ok := executionBuilder.GetWorkflowTaskInfo(int64(10))
-	s.True(ok)
-	s.EqualValues(int64(100), wt.WorkflowTaskTimeout.Seconds())
-	s.Equal(int64(10), wt.ScheduledEventID)
-	s.Equal(common.EmptyEventID, wt.StartedEventID)
-}
-
-func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
-	namespaceID := tests.NamespaceID
-	we := commonpb.WorkflowExecution{
-		WorkflowId: tests.WorkflowID,
-		RunId:      tests.RunID,
-	}
-	tl := "testTaskQueue"
-	tt := &tokenspb.Task{
-		Attempt:          1,
-		NamespaceId:      namespaceID.String(),
-		WorkflowId:       we.WorkflowId,
-		RunId:            we.RunId,
-		ScheduledEventId: 5,
-	}
-	taskToken, _ := tt.Marshal()
-	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
@@ -2784,13 +2715,11 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, workflowTaskCompletedEvent.EventId, activityID, activityType, tl, activityInput, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
 	addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
 
-	for i := 0; i < conditionalRetryCount; i++ {
-		ms := workflow.TestCloneToProto(msBuilder)
-		gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	ms := workflow.TestCloneToProto(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-		s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, &persistence.ConditionFailedError{})
-	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, &persistence.ConditionFailedError{})
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -2800,7 +2729,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedMaxAttemptsExceeded() {
 			Identity:  identity,
 		},
 	})
-	s.Equal(consts.ErrMaxAttemptsExceeded, err)
+	s.Equal(&persistence.ConditionFailedError{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
@@ -3245,80 +3174,6 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	}
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
-	activity1ID := "activity1"
-	activity1Type := "activity_type1"
-	activity1Input := payloads.EncodeString("input1")
-	failure := failure.NewServerFailure("fail reason", false)
-	activity2ID := "activity2"
-	activity2Type := "activity_type2"
-	activity2Input := payloads.EncodeString("input2")
-	activity2Result := payloads.EncodeString("activity2_result")
-
-	msBuilder := workflow.TestLocalMutableState(s.mockHistoryEngine.shard, s.eventsCache,
-		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 25*time.Second, 25*time.Second, 25*time.Second, identity)
-	di1 := addWorkflowTaskScheduledEvent(msBuilder)
-	workflowTaskStartedEvent1 := addWorkflowTaskStartedEvent(msBuilder, di1.ScheduledEventID, tl, identity)
-	workflowTaskCompletedEvent1 := addWorkflowTaskCompletedEvent(msBuilder, di1.ScheduledEventID, workflowTaskStartedEvent1.EventId, identity)
-	activity1ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, workflowTaskCompletedEvent1.EventId, activity1ID, activity1Type, tl, activity1Input, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
-	activity2ScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, workflowTaskCompletedEvent1.EventId, activity2ID, activity2Type, tl, activity2Input, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
-	addActivityTaskStartedEvent(msBuilder, activity1ScheduledEvent.EventId, identity)
-	activity2StartedEvent := addActivityTaskStartedEvent(msBuilder, activity2ScheduledEvent.EventId, identity)
-
-	ms1 := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
-
-	addActivityTaskCompletedEvent(msBuilder, activity2ScheduledEvent.EventId,
-		activity2StartedEvent.EventId, activity2Result, identity)
-	addWorkflowTaskScheduledEvent(msBuilder)
-
-	ms2 := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, &persistence.ConditionFailedError{})
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse2, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
-
-	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
-		NamespaceId: tests.NamespaceID.String(),
-		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
-			TaskToken: taskToken,
-			Failure:   failure,
-			Identity:  identity,
-		},
-	})
-	s.NoError(err)
-	executionBuilder := s.getBuilder(tests.NamespaceID, we)
-	s.Equal(int64(12), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartedEventId)
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
-
-	s.True(executionBuilder.HasPendingWorkflowTask())
-	wt, ok := executionBuilder.GetWorkflowTaskInfo(int64(10))
-	s.True(ok)
-	s.EqualValues(int64(25), wt.WorkflowTaskTimeout.Seconds())
-	s.Equal(int64(10), wt.ScheduledEventID)
-	s.Equal(common.EmptyEventID, wt.StartedEventID)
-}
-
-func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
-	namespaceID := tests.NamespaceID
-	we := commonpb.WorkflowExecution{
-		WorkflowId: tests.WorkflowID,
-		RunId:      tests.RunID,
-	}
-	tl := "testTaskQueue"
-	tt := &tokenspb.Task{
-		Attempt:          1,
-		NamespaceId:      namespaceID.String(),
-		WorkflowId:       we.WorkflowId,
-		RunId:            we.RunId,
-		ScheduledEventId: 5,
-	}
-	taskToken, _ := tt.Marshal()
-	identity := "testIdentity"
 	activityID := "activity1_id"
 	activityType := "activity_type1"
 	activityInput := payloads.EncodeString("input1")
@@ -3332,13 +3187,11 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 	activityScheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, workflowTaskCompletedEvent.EventId, activityID, activityType, tl, activityInput, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
 	addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
 
-	for i := 0; i < conditionalRetryCount; i++ {
-		ms := workflow.TestCloneToProto(msBuilder)
-		gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	ms := workflow.TestCloneToProto(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
-		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-		s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, &persistence.ConditionFailedError{})
-	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, &persistence.ConditionFailedError{})
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -3347,7 +3200,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedMaxAttemptsExceeded() {
 			Identity:  identity,
 		},
 	})
-	s.Equal(consts.ErrMaxAttemptsExceeded, err)
+	s.Equal(&persistence.ConditionFailedError{}, err)
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
