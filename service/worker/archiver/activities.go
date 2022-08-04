@@ -27,13 +27,12 @@ package archiver
 import (
 	"context"
 
-	"go.temporal.io/server/api/historyservice/v1"
-
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log/tag"

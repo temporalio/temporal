@@ -30,6 +30,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/api/historyservice/v1"
 	"math/rand"
 	"time"
 
@@ -104,6 +105,7 @@ type (
 		numWorkflows     dynamicconfig.IntPropertyFn
 		rateLimiter      quotas.RateLimiter
 		archiverProvider provider.ArchiverProvider
+		historyClient    historyservice.HistoryServiceClient
 	}
 
 	// ArchivalTarget is either history or visibility
@@ -131,6 +133,7 @@ func NewClient(
 	numWorkflows dynamicconfig.IntPropertyFn,
 	requestRPS dynamicconfig.IntPropertyFn,
 	archiverProvider provider.ArchiverProvider,
+	historyClient historyservice.HistoryServiceClient,
 ) Client {
 	return &client{
 		metricsScope:     metricsClient.Scope(metrics.ArchiverClientScope),
@@ -141,6 +144,7 @@ func NewClient(
 			func() float64 { return float64(requestRPS()) },
 		),
 		archiverProvider: archiverProvider,
+		historyClient:    historyClient,
 	}
 }
 
@@ -226,6 +230,19 @@ func (c *client) archiveHistoryInline(ctx context.Context, request *ClientReques
 		BranchToken:          request.ArchiveRequest.BranchToken,
 		NextEventID:          request.ArchiveRequest.NextEventID,
 		CloseFailoverVersion: request.ArchiveRequest.CloseFailoverVersion,
+	})
+	if err != nil {
+		return
+	}
+
+	_, err = c.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: request.ArchiveRequest.NamespaceID,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: request.ArchiveRequest.WorkflowID,
+			RunId:      request.ArchiveRequest.RunID,
+		},
+		WorkflowVersion:    request.ArchiveRequest.CloseFailoverVersion,
+		ClosedWorkflowOnly: true,
 	})
 }
 

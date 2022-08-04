@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"go.temporal.io/server/api/historyservice/v1"
 	"net"
 
 	"go.uber.org/fx"
@@ -261,6 +262,7 @@ func ArchivalClientProvider(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
+	historyClient historyservice.HistoryServiceClient,
 ) warchiver.Client {
 	return warchiver.NewClient(
 		metricsClient,
@@ -269,6 +271,7 @@ func ArchivalClientProvider(
 		config.NumArchiveSystemWorkflows,
 		config.ArchiveRequestRPS,
 		archiverProvider,
+		historyClient,
 	)
 }
 
