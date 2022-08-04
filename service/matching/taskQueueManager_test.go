@@ -652,11 +652,12 @@ func TestTaskQueueSubPartitionDoesNotPollIfNoDataThenPollsWhenInvalidated(t *tes
 			VersioningData: nil,
 		},
 	}
+	verDat := &persistencespb.VersioningData{
+		CurrentDefault: mkVerIdNode("0"),
+	}
 	hasDatResp := &matchingservice.GetTaskQueueMetadataResponse{
 		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
-			VersioningData: &persistencespb.VersioningData{
-				CurrentDefault: mkVerIdNode("0"),
-			},
+			VersioningData: verDat,
 		},
 	}
 
@@ -666,7 +667,7 @@ func TestTaskQueueSubPartitionDoesNotPollIfNoDataThenPollsWhenInvalidated(t *tes
 			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
 				Return(nilDatResp, nil).Times(2)
 			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
-				Return(hasDatResp, nil).MinTimes(2)
+				Return(hasDatResp, nil).MinTimes(1)
 			tqm.matchingClient = mockMatchingClient
 		})
 	res, err := subTq.fetchMetadataFromRootPartition(ctx)
@@ -678,10 +679,9 @@ func TestTaskQueueSubPartitionDoesNotPollIfNoDataThenPollsWhenInvalidated(t *tes
 	vDat, err := subTq.GetVersioningData(ctx)
 	require.NoError(t, err)
 	require.Nil(t, vDat)
-	// Now invalidate, one fetch will happen immediately, and the poll loop should be started, so we'll see
-	// at least two mock calls
-	err = subTq.InvalidateMetadata(ctx, &matchingservice.InvalidateTaskQueueMetadataRequest{
-		VersioningData: true,
+	// Now invalidate, the poll loop should be started, so we'll see at least one more mock call
+	err = subTq.InvalidateMetadata(&matchingservice.InvalidateTaskQueueMetadataRequest{
+		VersioningData: verDat,
 	})
 	require.NoError(t, err)
 	time.Sleep(time.Millisecond * 20)

@@ -108,7 +108,7 @@ type (
 		// MutateVersioningData allows callers to update versioning data for this task queue
 		MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error
 		// InvalidateMetadata allows callers to invalidate cached data on this task queue
-		InvalidateMetadata(ctx context.Context, request *matchingservice.InvalidateTaskQueueMetadataRequest) error
+		InvalidateMetadata(request *matchingservice.InvalidateTaskQueueMetadataRequest) error
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
@@ -469,7 +469,7 @@ func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persiste
 }
 
 func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
-	err := c.db.MutateVersioningData(ctx, mutator)
+	newDat, err := c.db.MutateVersioningData(ctx, mutator)
 	c.signalIfFatal(err)
 	if err != nil {
 		return err
@@ -486,7 +486,7 @@ func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator
 					&matchingservice.InvalidateTaskQueueMetadataRequest{
 						NamespaceId:    c.taskQueueID.namespaceID.String(),
 						TaskQueue:      tq,
-						VersioningData: true,
+						VersioningData: newDat,
 					})
 				if err != nil {
 					c.logger.Warn("Failed to notify sub-partition of invalidated versioning data",
@@ -500,18 +500,16 @@ func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator
 	return nil
 }
 
-func (c *taskQueueManagerImpl) InvalidateMetadata(ctx context.Context, request *matchingservice.InvalidateTaskQueueMetadataRequest) error {
-	if request.GetVersioningData() {
+func (c *taskQueueManagerImpl) InvalidateMetadata(request *matchingservice.InvalidateTaskQueueMetadataRequest) error {
+	if request.GetVersioningData() != nil {
 		if c.taskQueueID.IsRoot() {
 			// Should never happen. Root partitions do not get their versioning data invalidated.
 			c.logger.Warn("A root partition was told to invalidate its versioning data, this should not happen",
 				tag.WorkflowTaskQueueName(c.taskQueueID.name))
 			return nil
 		}
-		_, fetchErr := c.fetchMetadataFromRootPartition(ctx)
-		if fetchErr != nil {
-			return fetchErr
-		}
+		c.db.setVersioningDataForNonRootPartition(request.GetVersioningData())
+		c.startMetadataPollerIfUnstarted()
 	}
 	return nil
 }
@@ -753,20 +751,24 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 	}
 	// We want to start the poller as long as the root partition has any kind of data (or fetching hasn't worked)
 	if res.GetMatchedReqHash() || res.GetVersioningData() != nil || err != nil {
-		c.metadataPoller.StartIfUnstarted(func() bool {
-			dat, err := c.fetchMetadataFromRootPartition(context.TODO())
-			if dat == nil && err == nil {
-				// Can stop polling since there is no versioning data. Loop will be restarted if we
-				// are told to invalidate the data, or we attempt to fetch it via GetVersioningData.
-				return true
-			}
-			return false
-		})
+		c.startMetadataPollerIfUnstarted()
 	}
 	if err != nil {
 		return nil, err
 	}
 	return res.GetVersioningData(), nil
+}
+
+func (c *taskQueueManagerImpl) startMetadataPollerIfUnstarted() {
+	c.metadataPoller.StartIfUnstarted(func() bool {
+		dat, err := c.fetchMetadataFromRootPartition(context.TODO())
+		if dat == nil && err == nil {
+			// Can stop polling since there is no versioning data. Loop will be restarted if we
+			// are told to invalidate the data, or we attempt to fetch it via GetVersioningData.
+			return true
+		}
+		return false
+	})
 }
 
 // StartIfUnstarted starts the poller if it's not already started. The passed in function is called repeatedly

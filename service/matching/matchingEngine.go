@@ -755,7 +755,7 @@ func (e *matchingEngineImpl) InvalidateTaskQueueMetadata(
 	if err != nil {
 		return nil, err
 	}
-	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, false)
 	if tqMgr == nil && err == nil {
 		// Nothing to do here
 		return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
@@ -763,7 +763,7 @@ func (e *matchingEngineImpl) InvalidateTaskQueueMetadata(
 	if err != nil {
 		return nil, err
 	}
-	err = tqMgr.InvalidateMetadata(hCtx.Context, req)
+	err = tqMgr.InvalidateMetadata(req)
 	if err != nil {
 		return nil, err
 	}

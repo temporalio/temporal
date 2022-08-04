@@ -314,23 +314,25 @@ func (db *taskQueueDB) getVersioningDataLocked(
 
 // MutateVersioningData allows callers to update versioning data for this task queue. The pointer passed to the
 // mutating function is guaranteed to be non-nil.
-func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
+//
+// On success returns a pointer to the updated data (which must not be mutated).
+func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) (*persistencespb.VersioningData, error) {
 	if !db.taskQueue.IsRoot() {
-		return errVersioningDataNoMutateNonRoot
+		return nil, errVersioningDataNoMutateNonRoot
 	}
 	db.Lock()
 	defer db.Unlock()
 
 	verDat, err := db.getVersioningDataLocked(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if verDat == nil {
 		verDat = &persistencespb.VersioningData{}
 	}
 	if err := mutator(verDat); err != nil {
-		return err
+		return nil, err
 	}
 
 	queueInfo := db.cachedQueueInfo()
@@ -344,7 +346,7 @@ func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*p
 	if err == nil {
 		db.versioningData = verDat
 	}
-	return err
+	return verDat, err
 }
 
 func (db *taskQueueDB) setVersioningDataForNonRootPartition(verDat *persistencespb.VersioningData) {

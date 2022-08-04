@@ -205,9 +205,8 @@ message InvalidateTaskQueueMetadataRequest {
     string namespace_id = 1;
     // The name of the task queue, which always refers to / is applied to a workflow task queue.
     string task_queue = 2;
-    // The task queue versioning data should be invalidated, and fresh data fetched from the root
-    // partition.
-    bool versioning_data = 3;
+    // The task queue versioning data should be invalidated and replaced with this data, if set.
+    temporal.server.api.persistence.v1.VersioningData versioning_data = 3;
 }
 message InvalidateTaskQueueMetadataResponse {}
 
