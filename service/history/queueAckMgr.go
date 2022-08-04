@@ -27,8 +27,6 @@ package history
 import (
 	"sync"
 
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -36,8 +34,6 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"golang.org/x/exp/maps"
 )
 
@@ -124,15 +120,7 @@ func (a *queueAckMgrImpl) readQueueTasks() ([]queues.Executable, bool, error) {
 	readLevel := a.readLevel
 	a.RUnlock()
 
-	var tasks []tasks.Task
-	var morePage bool
-	op := func() error {
-		var err error
-		tasks, morePage, err = a.processor.readTasks(readLevel)
-		return err
-	}
-
-	err := backoff.ThrottleRetry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	tasks, morePage, err := a.processor.readTasks(readLevel)
 	if err != nil {
 		return nil, false, err
 	}

@@ -74,6 +74,7 @@ var Module = fx.Options(
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
+	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
@@ -135,6 +136,7 @@ func GrpcServerOptionsProvider(
 	namespaceCountLimiterInterceptor *interceptor.NamespaceCountLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
+	retryableInterceptor *interceptor.RetryableInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	traceInterceptor telemetry.ServerTraceInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
@@ -165,6 +167,7 @@ func GrpcServerOptionsProvider(
 		rpc.ServiceErrorInterceptor,
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
+		retryableInterceptor.Intercept,
 		telemetryInterceptor.Intercept,
 		namespaceValidatorInterceptor.Intercept,
 		namespaceCountLimiterInterceptor.Intercept,
@@ -216,6 +219,13 @@ func NamespaceLogInterceptorProvider(
 	return interceptor.NewNamespaceLogInterceptor(
 		namespaceRegistry,
 		namespaceLogger)
+}
+
+func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
+	return interceptor.NewRetryableInterceptor(
+		common.CreateFrontendHandlerRetryPolicy(),
+		common.IsServiceHandlerRetryableError,
+	)
 }
 
 func TelemetryInterceptorProvider(

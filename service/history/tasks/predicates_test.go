@@ -148,3 +148,98 @@ func (s *predicatesSuite) TestTypePredicate_Equals() {
 	s.False(p.Equals(NewNamespacePredicate([]string{uuid.New(), uuid.New()})))
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
+
+func (s *predicatesSuite) TestAndPredicates() {
+	testCases := []struct {
+		predicateA     Predicate
+		predicateB     Predicate
+		expectedResult Predicate
+	}{
+		{
+			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
+			predicateB:     NewNamespacePredicate([]string{"namespace2", "namespace3"}),
+			expectedResult: NewNamespacePredicate([]string{"namespace2"}),
+		},
+		{
+			predicateA: NewTypePredicate([]enumsspb.TaskType{
+				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+			}),
+			predicateB: NewTypePredicate([]enumsspb.TaskType{
+				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+				enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
+			}),
+			expectedResult: NewTypePredicate([]enumsspb.TaskType{
+				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+			}),
+		},
+		{
+			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
+			predicateB:     NewNamespacePredicate([]string{"namespace3"}),
+			expectedResult: predicates.Universal[Task](),
+		},
+		{
+			predicateA: NewNamespacePredicate([]string{"namespace1"}),
+			predicateB: NewTypePredicate([]enumsspb.TaskType{
+				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+			}),
+			expectedResult: predicates.And[Task](
+				NewNamespacePredicate([]string{"namespace1"}),
+				NewTypePredicate([]enumsspb.TaskType{
+					enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+				}),
+			),
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Equal(tc.expectedResult, AndPredicates(tc.predicateA, tc.predicateB))
+	}
+}
+
+func (s *predicatesSuite) TestOrPredicates() {
+	testCases := []struct {
+		predicateA     Predicate
+		predicateB     Predicate
+		expectedResult Predicate
+	}{
+		{
+			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
+			predicateB:     NewNamespacePredicate([]string{"namespace2", "namespace3"}),
+			expectedResult: NewNamespacePredicate([]string{"namespace1", "namespace2", "namespace3"}),
+		},
+		{
+			predicateA: NewTypePredicate([]enumsspb.TaskType{
+				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+			}),
+			predicateB: NewTypePredicate([]enumsspb.TaskType{
+				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+				enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
+			}),
+			expectedResult: NewTypePredicate([]enumsspb.TaskType{
+				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+				enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
+			}),
+		},
+		{
+			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
+			predicateB:     NewNamespacePredicate([]string{"namespace3"}),
+			expectedResult: NewNamespacePredicate([]string{"namespace1", "namespace2", "namespace3"}),
+		},
+		{
+			predicateA: NewNamespacePredicate([]string{"namespace1"}),
+			predicateB: NewTypePredicate([]enumsspb.TaskType{
+				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+			}),
+			expectedResult: predicates.Or[Task](
+				NewNamespacePredicate([]string{"namespace1"}),
+				NewTypePredicate([]enumsspb.TaskType{
+					enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+				}),
+			),
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Equal(tc.expectedResult, OrPredicates(tc.predicateA, tc.predicateB))
+	}
+}

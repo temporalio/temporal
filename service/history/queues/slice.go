@@ -204,26 +204,28 @@ func (s *SliceImpl) MergeWithSlice(slice Slice) []Slice {
 
 func (s *SliceImpl) mergeByRange(incomingSlice *SliceImpl) *SliceImpl {
 	mergedTaskTracker := s.executableTracker.merge(incomingSlice.executableTracker)
+	mergedIterators := s.mergeIterators(incomingSlice)
 
 	s.destroy()
 	incomingSlice.destroy()
 
 	return s.newSlice(
 		s.scope.MergeByRange(incomingSlice.scope),
-		s.mergeIterators(incomingSlice),
+		mergedIterators,
 		mergedTaskTracker,
 	)
 }
 
 func (s *SliceImpl) mergeByPredicate(incomingSlice *SliceImpl) *SliceImpl {
 	mergedTaskTracker := s.executableTracker.merge(incomingSlice.executableTracker)
+	mergedIterators := s.mergeIterators(incomingSlice)
 
 	s.destroy()
 	incomingSlice.destroy()
 
 	return s.newSlice(
 		s.scope.MergeByPredicate(incomingSlice.scope),
-		s.mergeIterators(incomingSlice),
+		mergedIterators,
 		mergedTaskTracker,
 	)
 }
