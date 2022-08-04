@@ -55,7 +55,8 @@ type (
 	Factory interface {
 		NewHistoryClient() (historyservice.HistoryServiceClient, error)
 		NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error)
-		NewFrontendClient(rpcAddress string) (workflowservice.WorkflowServiceClient, error)
+		NewRemoteFrontendClient(rpcAddress string) (workflowservice.WorkflowServiceClient, error)
+		NewLocalFrontendClient() (workflowservice.WorkflowServiceClient, error)
 
 		NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error)
 		NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matchingservice.MatchingServiceClient, error)
@@ -141,8 +142,12 @@ func (cf *rpcClientFactory) NewMatchingClient(namespaceIDToName NamespaceIDToNam
 	return cf.NewMatchingClientWithTimeout(namespaceIDToName, matching.DefaultTimeout, matching.DefaultLongPollTimeout)
 }
 
-func (cf *rpcClientFactory) NewFrontendClient(rpcAddress string) (workflowservice.WorkflowServiceClient, error) {
+func (cf *rpcClientFactory) NewRemoteFrontendClient(rpcAddress string) (workflowservice.WorkflowServiceClient, error) {
 	return cf.NewRemoteFrontendClientWithTimeout(rpcAddress, frontend.DefaultTimeout, frontend.DefaultLongPollTimeout), nil
+}
+
+func (cf *rpcClientFactory) NewLocalFrontendClient() (workflowservice.WorkflowServiceClient, error) {
+	return cf.NewLocalFrontendClientWithTimeout(frontend.DefaultTimeout, frontend.DefaultLongPollTimeout)
 }
 
 func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error) {
