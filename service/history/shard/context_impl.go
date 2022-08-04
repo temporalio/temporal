@@ -62,7 +62,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
@@ -2049,10 +2048,6 @@ func (s *ContextImpl) newIOContext() (context.Context, context.CancelFunc) {
 }
 
 func OperationPossiblySucceeded(err error) bool {
-	if err == consts.ErrConflict {
-		return false
-	}
-
 	switch err.(type) {
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,

@@ -81,6 +81,7 @@ func PersistenceMaxQpsFn(
 func GrpcServerOptionsProvider(
 	logger log.Logger,
 	rpcFactory common.RPCFactory,
+	retryableInterceptor *interceptor.RetryableInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	tracingInterceptor telemetry.ServerTraceInterceptor,
@@ -98,6 +99,7 @@ func GrpcServerOptionsProvider(
 			grpc.UnaryServerInterceptor(tracingInterceptor),
 			metrics.NewServerMetricsContextInjectorInterceptor(),
 			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
+			retryableInterceptor.Intercept,
 			telemetryInterceptor.Intercept,
 			rateLimitInterceptor.Intercept,
 		),
