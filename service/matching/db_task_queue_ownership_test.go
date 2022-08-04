@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/namespace"
+
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -92,13 +94,9 @@ func (s *dbTaskOwnershipSuite) SetupTest() {
 	s.taskQueueKind = enumspb.TaskQueueKind(
 		rand.Int31n(int32(len(enumspb.TaskQueueKind_name))-1) + 1,
 	)
-
+	taskQueueID, _ := newTaskQueueID(namespace.ID(s.namespaceID), s.taskQueueName, s.taskQueueType)
 	s.taskOwnership = newDBTaskQueueOwnership(
-		persistence.TaskQueueKey{
-			NamespaceID:   s.namespaceID,
-			TaskQueueName: s.taskQueueName,
-			TaskQueueType: s.taskQueueType,
-		},
+		taskQueueID,
 		s.taskQueueKind,
 		s.taskIDRangeSize,
 		s.taskStore,

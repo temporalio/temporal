@@ -59,6 +59,50 @@ func (m *MockdbTaskQueueOwnership) EXPECT() *MockdbTaskQueueOwnershipMockRecorde
 	return m.recorder
 }
 
+// GetVersioningData mocks base method.
+func (m *MockdbTaskQueueOwnership) GetVersioningData(ctx context.Context) (*persistence.VersioningData, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVersioningData", ctx)
+	ret0, _ := ret[0].(*persistence.VersioningData)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetVersioningData indicates an expected call of GetVersioningData.
+func (mr *MockdbTaskQueueOwnershipMockRecorder) GetVersioningData(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersioningData", reflect.TypeOf((*MockdbTaskQueueOwnership)(nil).GetVersioningData), ctx)
+}
+
+// MutateVersioningData mocks base method.
+func (m *MockdbTaskQueueOwnership) MutateVersioningData(ctx context.Context, mutator func(*persistence.VersioningData) error) (*persistence.VersioningData, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MutateVersioningData", ctx, mutator)
+	ret0, _ := ret[0].(*persistence.VersioningData)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MutateVersioningData indicates an expected call of MutateVersioningData.
+func (mr *MockdbTaskQueueOwnershipMockRecorder) MutateVersioningData(ctx, mutator interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MutateVersioningData", reflect.TypeOf((*MockdbTaskQueueOwnership)(nil).MutateVersioningData), ctx, mutator)
+}
+
+// RangeID mocks base method.
+func (m *MockdbTaskQueueOwnership) RangeID() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RangeID")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// RangeID indicates an expected call of RangeID.
+func (mr *MockdbTaskQueueOwnershipMockRecorder) RangeID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeID", reflect.TypeOf((*MockdbTaskQueueOwnership)(nil).RangeID))
+}
+
 // flushTasks mocks base method.
 func (m *MockdbTaskQueueOwnership) flushTasks(ctx context.Context, taskInfos ...*persistence.TaskInfo) error {
 	m.ctrl.T.Helper()
@@ -132,6 +176,18 @@ func (m *MockdbTaskQueueOwnership) persistTaskQueue(ctx context.Context) error {
 func (mr *MockdbTaskQueueOwnershipMockRecorder) persistTaskQueue(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "persistTaskQueue", reflect.TypeOf((*MockdbTaskQueueOwnership)(nil).persistTaskQueue), ctx)
+}
+
+// setVersioningDataForNonRootPartition mocks base method.
+func (m *MockdbTaskQueueOwnership) setVersioningDataForNonRootPartition(verDat *persistence.VersioningData) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "setVersioningDataForNonRootPartition", verDat)
+}
+
+// setVersioningDataForNonRootPartition indicates an expected call of setVersioningDataForNonRootPartition.
+func (mr *MockdbTaskQueueOwnershipMockRecorder) setVersioningDataForNonRootPartition(verDat interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "setVersioningDataForNonRootPartition", reflect.TypeOf((*MockdbTaskQueueOwnership)(nil).setVersioningDataForNonRootPartition), verDat)
 }
 
 // takeTaskQueueOwnership mocks base method.

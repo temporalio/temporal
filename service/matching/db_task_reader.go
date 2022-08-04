@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
@@ -48,6 +49,9 @@ type (
 		taskIterator(ctx context.Context, maxTaskID int64) collection.Iterator[*persistencespb.AllocatedTaskInfo]
 		ackTask(taskID int64)
 		moveAckedTaskID() int64
+		getBacklogCountHint() int64
+		getReadLevel() int64
+		getAckLevel() int64
 	}
 
 	dbTaskReaderImpl struct {
@@ -56,9 +60,10 @@ type (
 		logger       log.Logger
 
 		sync.Mutex
-		tasks        map[int64]bool // task ID -> true: acked or false not acked
-		ackedTaskID  int64          // acked task ID
-		loadedTaskID int64          // loaded into memory task ID
+		tasks          map[int64]bool // task ID -> true: acked or false not acked
+		ackedTaskID    int64          // acked task ID
+		loadedTaskID   int64          // loaded into memory task ID
+		backlogCounter int64
 	}
 )
 
@@ -98,13 +103,16 @@ func (t *dbTaskReaderImpl) ackTask(taskID int64) {
 		return
 	}
 	t.tasks[taskID] = true
+	atomic.AddInt64(&t.backlogCounter, -1)
 }
 
 // moveAckedTaskID tries to advance the acked task ID
 // e.g. assuming task ID & whether the task is completed
-//  10 -> true
-//  12 -> true
-//  15 -> false
+//
+//	10 -> true
+//	12 -> true
+//	15 -> false
+//
 // the acked task ID can be set to 12, meaning task with ID <= 12 are finished
 func (t *dbTaskReaderImpl) moveAckedTaskID() int64 {
 	t.Lock()
@@ -151,6 +159,7 @@ func (t *dbTaskReaderImpl) getPaginationFn(
 		defer t.Unlock()
 		for _, task := range response.Tasks {
 			t.loadedTaskID = task.GetTaskId()
+			atomic.AddInt64(&t.backlogCounter, 1)
 			t.tasks[task.GetTaskId()] = false
 		}
 		// special handling max task ID
@@ -168,4 +177,20 @@ func (t *dbTaskReaderImpl) getPaginationFn(
 		}
 		return paginateItems, token, nil
 	}
+}
+
+func (t *dbTaskReaderImpl) getBacklogCountHint() int64 {
+	return atomic.LoadInt64(&t.backlogCounter)
+}
+
+func (t *dbTaskReaderImpl) getReadLevel() int64 {
+	t.Lock()
+	defer t.Unlock()
+	return t.loadedTaskID
+}
+
+func (t *dbTaskReaderImpl) getAckLevel() int64 {
+	t.Lock()
+	defer t.Unlock()
+	return t.ackedTaskID
 }

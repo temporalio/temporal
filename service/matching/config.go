@@ -51,6 +51,9 @@ type (
 		UpdateAckInterval            dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		IdleTaskqueueCheckInterval   dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		MaxTaskqueueIdleTime         dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		DbTaskDeletionInterval       dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		DbTaskUpdateAckInterval      dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		DbTaskUpdateQueueInterval    dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		NumTaskqueueWritePartitions  dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		NumTaskqueueReadPartitions   dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		ForwarderMaxOutstandingPolls dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
@@ -92,6 +95,9 @@ type (
 		UpdateAckInterval          func() time.Duration
 		IdleTaskqueueCheckInterval func() time.Duration
 		MaxTaskqueueIdleTime       func() time.Duration
+		DbTaskDeletionInterval     func() time.Duration
+		DbTaskUpdateAckInterval    func() time.Duration
+		DbTaskUpdateQueueInterval  func() time.Duration
 		MinTaskThrottlingBurstSize func() int
 		MaxTaskDeleteBatchSize     func() int
 		// taskWriter configuration
@@ -135,6 +141,9 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		IdleTaskqueueCheckInterval:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingIdleTaskqueueCheckInterval, 5*time.Minute),
 		MaxTaskqueueIdleTime:                  dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MaxTaskqueueIdleTime, 5*time.Minute),
 		LongPollExpirationInterval:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingLongPollExpirationInterval, time.Minute),
+		DbTaskDeletionInterval:                dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingDbTaskDeletionInterval, time.Second*10),
+		DbTaskUpdateAckInterval:               dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingDbTaskUpdateAckInterval, time.Minute),
+		DbTaskUpdateQueueInterval:             dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingDbTaskUpdateQueueInterval, time.Minute),
 		MinTaskThrottlingBurstSize:            dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1),
 		MaxTaskDeleteBatchSize:                dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMaxTaskDeleteBatchSize, 100),
 		OutstandingTaskAppendsThreshold:       dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingOutstandingTaskAppendsThreshold, 250),
@@ -172,6 +181,15 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 		},
 		MaxTaskqueueIdleTime: func() time.Duration {
 			return config.MaxTaskqueueIdleTime(namespace.String(), taskQueueName, taskType)
+		},
+		DbTaskDeletionInterval: func() time.Duration {
+			return config.DbTaskDeletionInterval(namespace.String(), taskQueueName, taskType)
+		},
+		DbTaskUpdateAckInterval: func() time.Duration {
+			return config.DbTaskUpdateAckInterval(namespace.String(), taskQueueName, taskType)
+		},
+		DbTaskUpdateQueueInterval: func() time.Duration {
+			return config.DbTaskUpdateQueueInterval(namespace.String(), taskQueueName, taskType)
 		},
 		MinTaskThrottlingBurstSize: func() int {
 			return config.MinTaskThrottlingBurstSize(namespace.String(), taskQueueName, taskType)

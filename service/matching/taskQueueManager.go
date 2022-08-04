@@ -44,18 +44,17 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
-	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/util"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -66,26 +65,16 @@ const (
 	// Fake Task ID to wrap a task for syncmatch
 	syncMatchTaskId = -137
 
-	ioTimeout = 5 * time.Second
-
 	// Threshold for counting a AddTask call as a no recent poller call
 	noPollerThreshold = time.Minute * 2
-)
-
-var (
-	// this retry policy is currenly only used for matching persistence operations
-	// that, if failed, the entire task queue needs to be reload
-	persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-		WithMaximumInterval(1 * time.Second).
-		WithExpirationInterval(30 * time.Second)
 )
 
 type (
 	taskQueueManagerOpt func(*taskQueueManagerImpl)
 
-	idBlockAllocator interface {
-		RenewLease(context.Context) (taskQueueState, error)
-		RangeID() int64
+	taskIDBlock struct {
+		start int64
+		end   int64
 	}
 
 	addTaskParams struct {
@@ -98,7 +87,7 @@ type (
 	taskQueueManager interface {
 		Start()
 		Stop()
-		WaitUntilInitialized(context.Context) error
+		WaitUntilInitialized()
 		// AddTask adds a task to the task queue. This method will first attempt a synchronous
 		// match with a poller. When that fails, task will be written to database and later
 		// asynchronously matched with a poller
@@ -135,12 +124,8 @@ type (
 		taskQueueID       *taskQueueID
 		taskQueueKind     enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
 		config            *taskQueueConfig
-		db                *taskQueueDB
-		taskWriter        *taskWriter
-		taskReader        *taskReader // reads tasks from db and async matches it with poller
+		dbTaskManager     *dbTaskManager
 		liveness          *liveness
-		taskGC            *taskGC
-		taskAckManager    ackManager   // tracks ackLevel for delivered messages
 		matcher           *TaskMatcher // for matching a task producer with a poller
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
@@ -159,7 +144,6 @@ type (
 		outstandingPollsMap  map[string]context.CancelFunc
 		signalFatalProblem   func(taskQueueManager)
 		clusterMeta          cluster.Metadata
-		initializedError     *future.FutureImpl[struct{}]
 		// metadataInitialFetch is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
 		metadataInitialFetch *future.FutureImpl[struct{}]
@@ -179,12 +163,6 @@ var _ taskQueueManager = (*taskQueueManagerImpl)(nil)
 
 var errRemoteSyncMatchFailed = serviceerror.NewCanceled("remote sync match failed")
 
-func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
-	return func(tqm *taskQueueManagerImpl) {
-		tqm.taskWriter.idAlloc = ibl
-	}
-}
-
 func newTaskQueueManager(
 	e *matchingEngineImpl,
 	taskQueue *taskQueueID,
@@ -201,7 +179,6 @@ func newTaskQueueManager(
 
 	taskQueueConfig := newTaskQueueConfig(taskQueue, config, nsName)
 
-	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue, taskQueueKind, e.logger)
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(taskQueue.name),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
@@ -220,9 +197,6 @@ func newTaskQueueManager(
 		taskQueueID:          taskQueue,
 		taskQueueKind:        taskQueueKind,
 		logger:               logger,
-		db:                   db,
-		taskAckManager:       newAckManager(e.logger),
-		taskGC:               newTaskGC(db, taskQueueConfig),
 		config:               taskQueueConfig,
 		pollerHistory:        newPollerHistory(),
 		outstandingPollsMap:  make(map[string]context.CancelFunc),
@@ -230,7 +204,6 @@ func newTaskQueueManager(
 		clusterMeta:          clusterMeta,
 		namespace:            nsName,
 		metricScope:          metricsScope,
-		initializedError:     future.NewFuture[struct{}](),
 		metadataInitialFetch: future.NewFuture[struct{}](),
 		metadataPoller: metadataPoller{
 			running:           uberatomic.NewBool(false),
@@ -245,8 +218,6 @@ func newTaskQueueManager(
 		taskQueueConfig.IdleTaskqueueCheckInterval(),
 		func() { tlMgr.signalFatalProblem(tlMgr) },
 	)
-	tlMgr.taskWriter = newTaskWriter(tlMgr)
-	tlMgr.taskReader = newTaskReader(tlMgr)
 
 	var fwdr *Forwarder
 	if tlMgr.isFowardingAllowed(taskQueue, taskQueueKind) {
@@ -256,6 +227,19 @@ func newTaskQueueManager(
 	for _, opt := range opts {
 		opt(tlMgr)
 	}
+
+	tlMgr.dbTaskManager = newDBTaskManager(
+		e.namespaceRegistry,
+		taskQueue,
+		taskQueueKind,
+		config.RangeSize,
+		tlMgr.matcher.MustOffer,
+		e.taskManager,
+		e.logger,
+		taskQueueConfig.DbTaskDeletionInterval,
+		taskQueueConfig.DbTaskUpdateAckInterval,
+		taskQueueConfig.DbTaskUpdateQueueInterval,
+	)
 	return tlMgr, nil
 }
 
@@ -285,8 +269,7 @@ func (c *taskQueueManagerImpl) Start() {
 		return
 	}
 	c.liveness.Start()
-	c.taskWriter.Start()
-	c.taskReader.Start()
+	c.dbTaskManager.Start()
 	go c.fetchMetadataFromRootPartitionOnInit(context.TODO())
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
@@ -300,34 +283,17 @@ func (c *taskQueueManagerImpl) Stop() {
 	) {
 		return
 	}
-	// ackLevel in taskAckManager is initialized to -1 and then set to a real value (>= 0) once
-	// we've successfully acquired a lease. If it's still -1, then we don't have current
-	// metadata. UpdateState would fail on the lease check, but don't even bother calling it.
-	ackLevel := c.taskAckManager.getAckLevel()
-	if ackLevel >= 0 {
-		ctx, cancel := c.newIOContext()
-		defer cancel()
-
-		c.db.UpdateState(ctx, ackLevel)
-		c.taskGC.RunNow(ctx, ackLevel)
-	}
 	c.metadataPoller.Stop()
 	c.liveness.Stop()
-	c.taskWriter.Stop()
-	c.taskReader.Stop()
+	c.dbTaskManager.Stop()
 	c.logger.Info("", tag.LifeCycleStopped)
 	c.metricScope.IncCounter(metrics.TaskQueueStoppedCounter)
 }
 
-func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
-	_, err := c.initializedError.Get(ctx)
-	if err != nil {
-		return err
-	}
+func (c *taskQueueManagerImpl) WaitUntilInitialized() {
 	// We don't really care if the initial fetch worked or not, anything that *requires* a bit of metadata should fail
 	// that operation if it's never fetched OK. If the initial fetch errored, the metadataPoller will have been started.
-	_, _ = c.metadataInitialFetch.Get(ctx)
-	return err
+	_, _ = c.metadataInitialFetch.Get(context.Background())
 }
 
 // AddTask adds a task to the task queue. This method will first attempt a synchronous
@@ -366,11 +332,11 @@ func (c *taskQueueManagerImpl) AddTask(
 		// child partition will persist the task when sync match fails
 		return false, errRemoteSyncMatchFailed
 	}
-
-	_, err = c.taskWriter.appendTask(params.execution, taskInfo)
+	fut := c.dbTaskManager.BufferAndWriteTask(taskInfo)
+	_, err = fut.Get(ctx)
 	c.signalIfFatal(err)
 	if err == nil {
-		c.taskReader.Signal()
+		c.dbTaskManager.signalDispatch()
 	}
 	return false, err
 }
@@ -437,7 +403,7 @@ func (c *taskQueueManagerImpl) GetTask(
 	}
 
 	task.namespace = c.namespace
-	task.backlogCountHint = c.taskAckManager.getBacklogCountHint()
+	task.backlogCountHint = c.dbTaskManager.taskReader.getBacklogCountHint()
 	return task, nil
 }
 
@@ -465,7 +431,7 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 // GetVersioningData returns the versioning data for the task queue if any. If this task queue is a sub-partition and
 // has no cached data, it will explicitly attempt a fetch from the root partition.
 func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error) {
-	vd, err := c.db.GetVersioningData(ctx)
+	vd, err := c.dbTaskManager.taskQueueOwnership.GetVersioningData(ctx)
 	if errors.Is(err, errVersioningDataNotPresentOnPartition) {
 		// If this is a non-root-partition with no versioning data, this call is indicating we might expect to find
 		// some. Since we may not have started the poller, we want to explicitly attempt to fetch now, because
@@ -476,7 +442,7 @@ func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persiste
 }
 
 func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
-	newDat, err := c.db.MutateVersioningData(ctx, mutator)
+	newDat, err := c.dbTaskManager.taskQueueOwnership.MutateVersioningData(ctx, mutator)
 	c.signalIfFatal(err)
 	if err != nil {
 		return err
@@ -519,7 +485,7 @@ func (c *taskQueueManagerImpl) InvalidateMetadata(request *matchingservice.Inval
 			c.logger.Warn("A root workflow partition was told to invalidate its versioning data, this should not happen")
 			return nil
 		}
-		c.db.setVersioningDataForNonRootPartition(request.GetVersioningData())
+		c.dbTaskManager.taskQueueOwnership.setVersioningDataForNonRootPartition(request.GetVersioningData())
 		c.metadataPoller.StartIfUnstarted()
 	}
 	return nil
@@ -561,11 +527,11 @@ func (c *taskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *m
 		return response
 	}
 
-	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
+	taskIDBlock := rangeIDToTaskIDBlock(c.dbTaskManager.taskQueueOwnership.RangeID(), c.config.RangeSize)
 	response.TaskQueueStatus = &taskqueuepb.TaskQueueStatus{
-		ReadLevel:        c.taskAckManager.getReadLevel(),
-		AckLevel:         c.taskAckManager.getAckLevel(),
-		BacklogCountHint: c.taskAckManager.getBacklogCountHint(),
+		ReadLevel:        c.dbTaskManager.taskReader.getReadLevel(),
+		AckLevel:         c.dbTaskManager.taskReader.getAckLevel(),
+		BacklogCountHint: c.dbTaskManager.taskReader.getBacklogCountHint(),
 		RatePerSecond:    c.matcher.Rate(),
 		TaskIdBlock: &taskqueuepb.TaskIdBlock{
 			StartId: taskIDBlock.start,
@@ -583,56 +549,14 @@ func (c *taskQueueManagerImpl) String() string {
 	} else {
 		buf.WriteString("Workflow")
 	}
-	rangeID := c.db.RangeID()
+	rangeID := c.dbTaskManager.taskQueueOwnership.RangeID()
 	_, _ = fmt.Fprintf(buf, " task queue %v\n", c.taskQueueID.name)
 	_, _ = fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
 	_, _ = fmt.Fprintf(buf, "TaskIDBlock=%+v\n", rangeIDToTaskIDBlock(rangeID, c.config.RangeSize))
-	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
-	_, _ = fmt.Fprintf(buf, "MaxTaskID=%v\n", c.taskAckManager.getReadLevel())
+	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.dbTaskManager.taskReader.getAckLevel())
+	_, _ = fmt.Fprintf(buf, "MaxTaskID=%v\n", c.dbTaskManager.taskReader.getReadLevel())
 
 	return buf.String()
-}
-
-// completeTask marks a task as processed. Only tasks created by taskReader (i.e. backlog from db) reach
-// here. As part of completion:
-//   - task is deleted from the database when err is nil
-//   - new task is created and current task is deleted when err is not nil
-func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskInfo, err error) {
-	if err != nil {
-		// failed to start the task.
-		// We cannot just remove it from persistence because then it will be lost.
-		// We handle this by writing the task back to persistence with a higher taskID.
-		// This will allow subsequent tasks to make progress, and hopefully by the time this task is picked-up
-		// again the underlying reason for failing to start will be resolved.
-		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
-		// re-written to persistence frequently.
-		err = executeWithRetry(context.Background(), func(_ context.Context) error {
-			wf := &commonpb.WorkflowExecution{WorkflowId: task.Data.GetWorkflowId(), RunId: task.Data.GetRunId()}
-			_, err := c.taskWriter.appendTask(wf, task.Data)
-			return err
-		})
-
-		if err != nil {
-			// OK, we also failed to write to persistence.
-			// This should only happen in very extreme cases where persistence is completely down.
-			// We still can't lose the old task so we just unload the entire task queue
-			c.logger.Error("Persistent store operation failure",
-				tag.StoreOperationStopTaskQueue,
-				tag.Error(err),
-				tag.WorkflowTaskQueueName(c.taskQueueID.name),
-				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
-			c.signalFatalProblem(c)
-			return
-		}
-		c.taskReader.Signal()
-	}
-
-	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
-
-	// TODO: completeTaskFunc and task.finish() should take in a context
-	ctx, cancel := c.newIOContext()
-	defer cancel()
-	c.taskGC.Run(ctx, ackLevel)
 }
 
 func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
@@ -640,23 +564,6 @@ func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
 		start: (rangeID-1)*rangeSize + 1,
 		end:   rangeID * rangeSize,
 	}
-}
-
-// Retry operation on transient error.
-func executeWithRetry(
-	ctx context.Context,
-	operation func(context.Context) error,
-) error {
-	err := backoff.ThrottleRetryContext(ctx, operation, persistenceOperationRetryPolicy, func(err error) bool {
-		if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
-			return false
-		}
-		if _, ok := err.(*persistence.ConditionFailedError); ok {
-			return false
-		}
-		return common.IsPersistenceTransientError(err)
-	})
-	return err
 }
 
 func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
@@ -713,15 +620,6 @@ func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
 	return c.taskQueueKind
 }
 
-func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
-
-	namespace, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
-	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
-
-	return ctx, cancel
-}
-
 func (c *taskQueueManagerImpl) fetchMetadataFromRootPartitionOnInit(ctx context.Context) {
 	if c.metadataInitialFetch.Ready() {
 		return
@@ -739,7 +637,7 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 		return nil, nil
 	}
 
-	curDat, err := c.db.GetVersioningData(ctx)
+	curDat, err := c.dbTaskManager.taskQueueOwnership.GetVersioningData(ctx)
 	if err != nil && !errors.Is(err, errVersioningDataNotPresentOnPartition) {
 		return nil, err
 	}
@@ -760,7 +658,7 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 	// It can't be nil due to removing versions, as that would result in a non-nil container with
 	// nil inner fields.
 	if !res.GetMatchedReqHash() {
-		c.db.setVersioningDataForNonRootPartition(res.GetVersioningData())
+		c.dbTaskManager.taskQueueOwnership.setVersioningDataForNonRootPartition(res.GetVersioningData())
 	}
 	// We want to start the poller as long as the root partition has any kind of data (or fetching hasn't worked)
 	if res.GetMatchedReqHash() || res.GetVersioningData() != nil || err != nil {

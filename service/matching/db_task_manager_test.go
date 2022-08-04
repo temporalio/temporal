@@ -108,19 +108,24 @@ func (s *dbTaskManagerSuite) SetupTest() {
 
 	s.namespaceRegistry.EXPECT().GetNamespaceName(namespace.ID(s.namespaceID)).
 		Return(namespace.Name("namespaceName"), nil).AnyTimes()
-
+	taskQueueID, _ := newTaskQueueID(namespace.ID(s.namespaceID), s.taskQueueName, s.taskQueueType)
 	s.dbTaskManager = newDBTaskManager(
-		persistence.TaskQueueKey{
-			NamespaceID:   s.namespaceID,
-			TaskQueueName: s.taskQueueName,
-			TaskQueueType: s.taskQueueType,
-		},
+		s.namespaceRegistry,
+		taskQueueID,
 		s.taskQueueKind,
 		s.taskIDRangeSize,
 		s.dispatchTaskFn,
 		s.store,
-		s.namespaceRegistry,
 		logger,
+		func() time.Duration {
+			return time.Second
+		},
+		func() time.Duration {
+			return time.Second
+		},
+		func() time.Duration {
+			return time.Second
+		},
 	)
 	s.dbTaskManager.taskQueueOwnershipProvider = func() dbTaskQueueOwnership {
 		return s.taskQueueOwnership
@@ -172,7 +177,6 @@ func (s *dbTaskManagerSuite) TestStart_Success() {
 	s.taskWriter.EXPECT().notifyFlushChan().Return(nil).AnyTimes()
 
 	s.dbTaskManager.Start()
-	<-s.dbTaskManager.startupChan
 	s.False(s.dbTaskManager.isStopped())
 }
 
@@ -192,7 +196,6 @@ func (s *dbTaskManagerSuite) TestStart_ErrorThenSuccess() {
 	s.taskWriter.EXPECT().notifyFlushChan().Return(nil).AnyTimes()
 
 	s.dbTaskManager.Start()
-	<-s.dbTaskManager.startupChan
 	s.False(s.dbTaskManager.isStopped())
 }
 
@@ -200,18 +203,7 @@ func (s *dbTaskManagerSuite) TestStart_Error() {
 	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(&persistence.ConditionFailedError{})
 
 	s.dbTaskManager.Start()
-	<-s.dbTaskManager.startupChan
 	s.True(s.dbTaskManager.isStopped())
-}
-
-func (s *dbTaskManagerSuite) TestBufferAndWriteTask_NotReady() {
-	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(serviceerror.NewUnavailable("some random error")).AnyTimes()
-	s.dbTaskManager.Start()
-
-	taskInfo := &persistencespb.TaskInfo{}
-	fut := s.dbTaskManager.BufferAndWriteTask(taskInfo)
-	_, err := fut.Get(context.Background())
-	s.Equal(errDBTaskManagerNotReady, err)
 }
 
 func (s *dbTaskManagerSuite) TestBufferAndWriteTask_Ready() {
@@ -226,7 +218,6 @@ func (s *dbTaskManagerSuite) TestBufferAndWriteTask_Ready() {
 	)).AnyTimes()
 	s.taskWriter.EXPECT().notifyFlushChan().Return(nil).AnyTimes()
 	s.dbTaskManager.Start()
-	<-s.dbTaskManager.startupChan
 
 	taskInfo := &persistencespb.TaskInfo{}
 	taskWriterErr := serviceerror.NewInternal("random error")
@@ -396,7 +387,8 @@ func (s *dbTaskManagerSuite) TestDeleteAckedTasks_Failed() {
 }
 
 // TODO @wxing1292 add necessary tests
-//  once there is concensus about whether to keep the `task move to end` behavior
+//
+//	once there is concensus about whether to keep the `task move to end` behavior
 func (s *dbTaskManagerSuite) TestFinishTask_Success() {}
 
 func (s *dbTaskManagerSuite) TestFinishTask_Error() {}

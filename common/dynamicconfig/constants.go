@@ -273,6 +273,12 @@ const (
 	MatchingForwarderMaxChildrenPerNode = "matching.forwarderMaxChildrenPerNode"
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
+	// MatchingDbTaskDeletionInterval is how frequent acked db tasks get deleted
+	MatchingDbTaskDeletionInterval = "matching.dbTaskDeletionInterval"
+	// MatchingDbTaskUpdateAckInterval is how frequent acked task ID gets updated in memory
+	MatchingDbTaskUpdateAckInterval = "matching.dbTaskUpdateAckInterval"
+	// MatchingDbTaskUpdateQueueInterval is how frequent UpdateTaskQueue is called
+	MatchingDbTaskUpdateQueueInterval = "matching.dbTaskUpdateQueueInterval"
 	// MatchingMetadataPollFrequency is how often non-root partitions will poll the root partition for fresh metadata
 	MatchingMetadataPollFrequency = "matching.metadataPollFrequency"
 	// MatchingUseOldRouting is whether to use old task queue routing (name only) instead of namespace+name+type.

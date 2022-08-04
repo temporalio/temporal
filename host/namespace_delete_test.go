@@ -164,7 +164,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
-	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(100 * time.Second)
 	defer cancel()
 
 	retention := 24 * time.Hour
@@ -247,7 +247,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 
 	namespaceExistsPolicy := backoff.NewExponentialRetryPolicy(time.Second).
 		WithBackoffCoefficient(1).
-		WithExpirationInterval(30 * time.Second)
+		WithExpirationInterval(180 * time.Second)
 
 	err = backoff.ThrottleRetry(namespaceExistsOp, namespaceExistsPolicy, func(_ error) bool { return true })
 	s.NoError(err)

@@ -108,7 +108,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Competed() {
 			})
 			s.NoError(err)
 			if len(visibilityResponse.Executions) != 1 || visibilityResponse.Executions[0].Status != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(1000 * time.Millisecond)
 			} else {
 				executionsCount = len(visibilityResponse.Executions)
 				break
@@ -172,7 +172,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Competed() {
 			})
 			s.NoError(err)
 			if len(visibilityResponse.Executions) != 0 {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(1000 * time.Millisecond)
 				s.Logger.Warn("Visibility is not deleted yet")
 				continue
 			}
@@ -228,7 +228,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Running() {
 			})
 			s.NoError(err)
 			if len(visibilityResponse.Executions) != 1 || visibilityResponse.Executions[0].Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(1000 * time.Millisecond)
 			} else {
 				executionsCount = len(visibilityResponse.Executions)
 				break
@@ -259,7 +259,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Running() {
 			})
 			if err == nil {
 				s.Logger.Warn("Execution not deleted yet")
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(1000 * time.Millisecond)
 				continue
 			}
 			var notFoundErr *serviceerror.NotFound
@@ -284,7 +284,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Running() {
 			})
 			s.NoError(err)
 			if len(visibilityResponse.Executions) != 0 {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(1000 * time.Millisecond)
 				s.Logger.Warn("Visibility is not deleted yet")
 				continue
 			}
@@ -340,7 +340,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 			})
 			s.NoError(err)
 			if len(visibilityResponse.Executions) != 1 || visibilityResponse.Executions[0].Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(1000 * time.Millisecond)
 			} else {
 				executionsCount = len(visibilityResponse.Executions)
 				break
@@ -411,7 +411,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 			})
 			s.NoError(err)
 			if len(visibilityResponse.Executions) != 0 {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(1000 * time.Millisecond)
 				s.Logger.Warn("Visibility is not deleted yet")
 				continue
 			}
