@@ -221,5 +221,11 @@ message GetTaskQueueMetadataRequest {
     bytes want_versioning_data_curhash = 3;
 }
 message GetTaskQueueMetadataResponse {
-    temporal.server.api.persistence.v1.VersioningData versioning_data = 1;
+    oneof versioning_data_resp {
+        // The latest versioning data, if the request's hash did not match. May be null if no
+        // versioning data exists.
+        temporal.server.api.persistence.v1.VersioningData versioning_data = 1;
+        // If the request's hash matched, this variant is set (and will be true).
+        bool matched_req_hash = 2;
+    }
 }

@@ -512,7 +512,9 @@ func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartitionOnInit(t *tes
 		CurrentDefault: mkVerIdNode("0"),
 	}
 	asResp := &matchingservice.GetTaskQueueMetadataResponse{
-		VersioningData: data,
+		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
+			VersioningData: data,
+		},
 	}
 
 	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
@@ -546,7 +548,9 @@ func TestTaskQueueSubParitionSendsCurrentHashOfVersioningDataWhenFetching(t *tes
 		CurrentDefault: mkVerIdNode("0"),
 	}
 	asResp := &matchingservice.GetTaskQueueMetadataResponse{
-		VersioningData: data,
+		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
+			VersioningData: data,
+		},
 	}
 	dataHash := HashVersioningData(data)
 
@@ -608,11 +612,12 @@ func TestTaskQueueSubPartitionPollsPeriodically(t *testing.T) {
 		return time.Millisecond * 10
 	}
 
-	data := &persistencespb.VersioningData{
-		CurrentDefault: mkVerIdNode("0"),
-	}
 	asResp := &matchingservice.GetTaskQueueMetadataResponse{
-		VersioningData: data,
+		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
+			VersioningData: &persistencespb.VersioningData{
+				CurrentDefault: mkVerIdNode("0"),
+			},
+		},
 	}
 
 	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
@@ -627,9 +632,10 @@ func TestTaskQueueSubPartitionPollsPeriodically(t *testing.T) {
 	require.NoError(t, err)
 	// Wait a bit to make sure we poll a few times
 	time.Sleep(time.Millisecond * 25)
+	subTq.Stop()
 }
 
-func TestTaskQueueSubPartitionDoesNotPollIfNoData(t *testing.T) {
+func TestTaskQueueSubPartitionDoesNotPollIfNoDataThenPollsWhenInvalidated(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 	ctx := context.Background()
@@ -641,24 +647,116 @@ func TestTaskQueueSubPartitionDoesNotPollIfNoData(t *testing.T) {
 		return time.Millisecond * 10
 	}
 
-	asResp := &matchingservice.GetTaskQueueMetadataResponse{
-		VersioningData: nil,
+	nilDatResp := &matchingservice.GetTaskQueueMetadataResponse{
+		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
+			VersioningData: nil,
+		},
+	}
+	hasDatResp := &matchingservice.GetTaskQueueMetadataResponse{
+		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
+			VersioningData: &persistencespb.VersioningData{
+				CurrentDefault: mkVerIdNode("0"),
+			},
+		},
 	}
 
 	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
 		func(tqm *taskQueueManagerImpl) {
 			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
 			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
-				Return(asResp, nil).Times(2)
+				Return(nilDatResp, nil).Times(2)
+			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
+				Return(hasDatResp, nil).MinTimes(2)
 			tqm.matchingClient = mockMatchingClient
 		})
 	res, err := subTq.fetchMetadataFromRootPartition(ctx)
 	require.Nil(t, res)
 	require.NoError(t, err)
-	// Wait a bit to make sure we *don't* end up polling
+	// Wait a bit to make sure we *don't* end up polling (if we do, mock will fail with >2 fetches)
 	time.Sleep(time.Millisecond * 25)
-
 	// Explicitly try to get versioning data. Since we don't have any cached, it'll explicitly fetch.
-	_, err = subTq.GetVersioningData(ctx)
+	vDat, err := subTq.GetVersioningData(ctx)
 	require.NoError(t, err)
+	require.Nil(t, vDat)
+	// Now invalidate, one fetch will happen immediately, and the poll loop should be started, so we'll see
+	// at least two mock calls
+	err = subTq.InvalidateMetadata(ctx, &matchingservice.InvalidateTaskQueueMetadataRequest{
+		VersioningData: true,
+	})
+	require.NoError(t, err)
+	time.Sleep(time.Millisecond * 20)
+}
+
+func TestTaskQueueManagerWaitInitFailThenPass(t *testing.T) {
+	controller := gomock.NewController(t)
+	ctx := context.Background()
+
+	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId = subTqId
+	tqCfg.config.MetadataPollFrequency = func(opts ...dynamicconfig.FilterOption) time.Duration {
+		return time.Millisecond * 10
+	}
+
+	data := &persistencespb.VersioningData{
+		CurrentDefault: mkVerIdNode("0"),
+	}
+	asResp := &matchingservice.GetTaskQueueMetadataResponse{
+		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
+			VersioningData: data,
+		},
+	}
+
+	mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+	tq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
+		func(tqm *taskQueueManagerImpl) {
+			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
+				Return(nil, errors.New("some error")).Times(1)
+			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
+				Return(asResp, nil).Times(1)
+			tqm.matchingClient = mockMatchingClient
+		})
+
+	tq.Start()
+	// This does not error even if initial metadata fetch fails (and it does, here)
+	require.NoError(t, tq.WaitUntilInitialized(ctx))
+	// Wait long enough for poller retry to happen
+	time.Sleep(time.Millisecond * 15)
+	// Need to make sure both calls have happened *before* calling to get data, as it would make a call if the second
+	// call hasn't happened yet.
+	controller.Finish()
+	// Get the data and see it's set
+	dat, err := tq.GetVersioningData(ctx)
+	require.NoError(t, err)
+	require.Equal(t, data, dat)
+	tq.Stop()
+}
+
+func TestFetchingVersioningDataErrorsIfNeverFetchedFromRootSuccessfully(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId = subTqId
+	tqCfg.config.MetadataPollFrequency = func(opts ...dynamicconfig.FilterOption) time.Duration {
+		return time.Millisecond * 10
+	}
+
+	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
+		func(tqm *taskQueueManagerImpl) {
+			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
+				Return(nil, errors.New("fetching broken!")).AnyTimes()
+			tqm.matchingClient = mockMatchingClient
+		})
+	subTq.Start()
+	require.NoError(t, subTq.WaitUntilInitialized(ctx))
+	for i := 0; i < 10; i++ {
+		_, err := subTq.GetVersioningData(ctx)
+		require.Error(t, err)
+		time.Sleep(time.Millisecond * 2)
+	}
 }

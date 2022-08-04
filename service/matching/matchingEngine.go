@@ -786,7 +786,7 @@ func (e *matchingEngineImpl) GetTaskQueueMetadata(
 	}
 	resp := &matchingservice.GetTaskQueueMetadataResponse{}
 	verDatHash := req.GetWantVersioningDataCurhash()
-	// This isn't != nil, because gogogproto will round-trip serialize an empty byte array in a request
+	// This isn't != nil, because gogoproto will round-trip serialize an empty byte array in a request
 	// into a nil field.
 	if len(verDatHash) > 0 {
 		vDat, err := tqMgr.GetVersioningData(hCtx)
@@ -794,7 +794,9 @@ func (e *matchingEngineImpl) GetTaskQueueMetadata(
 			return nil, err
 		}
 		if !bytes.Equal(HashVersioningData(vDat), verDatHash) {
-			resp.VersioningData = vDat
+			resp.VersioningDataResp = &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
+				VersioningData: vDat,
+			}
 		}
 	}
 	return resp, nil

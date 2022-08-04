@@ -150,10 +150,10 @@ type (
 		signalFatalProblem   func(taskQueueManager)
 		clusterMeta          cluster.Metadata
 		initializedError     *future.FutureImpl[struct{}]
-		// metadataFetched is fulfilled once versioning data is fetched from the root partition. If this TQ is
+		// metadataInitialFetch is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
-		metadataFetched *future.FutureImpl[struct{}]
-		metadataPoller  metadataPoller
+		metadataInitialFetch *future.FutureImpl[struct{}]
+		metadataPoller       metadataPoller
 	}
 
 	metadataPoller struct {
@@ -202,25 +202,25 @@ func newTaskQueueManager(
 		taskQueueKind,
 	).Tagged(metrics.TaskQueueTypeTag(taskQueue.taskType))
 	tlMgr := &taskQueueManagerImpl{
-		status:              common.DaemonStatusInitialized,
-		namespaceRegistry:   e.namespaceRegistry,
-		matchingClient:      e.matchingClient,
-		metricsClient:       e.metricsClient,
-		taskQueueID:         taskQueue,
-		taskQueueKind:       taskQueueKind,
-		logger:              logger,
-		db:                  db,
-		taskAckManager:      newAckManager(e.logger),
-		taskGC:              newTaskGC(db, taskQueueConfig),
-		config:              taskQueueConfig,
-		pollerHistory:       newPollerHistory(),
-		outstandingPollsMap: make(map[string]context.CancelFunc),
-		signalFatalProblem:  e.unloadTaskQueue,
-		clusterMeta:         clusterMeta,
-		namespace:           nsName,
-		metricScope:         metricsScope,
-		initializedError:    future.NewFuture[struct{}](),
-		metadataFetched:     future.NewFuture[struct{}](),
+		status:               common.DaemonStatusInitialized,
+		namespaceRegistry:    e.namespaceRegistry,
+		matchingClient:       e.matchingClient,
+		metricsClient:        e.metricsClient,
+		taskQueueID:          taskQueue,
+		taskQueueKind:        taskQueueKind,
+		logger:               logger,
+		db:                   db,
+		taskAckManager:       newAckManager(e.logger),
+		taskGC:               newTaskGC(db, taskQueueConfig),
+		config:               taskQueueConfig,
+		pollerHistory:        newPollerHistory(),
+		outstandingPollsMap:  make(map[string]context.CancelFunc),
+		signalFatalProblem:   e.unloadTaskQueue,
+		clusterMeta:          clusterMeta,
+		namespace:            nsName,
+		metricScope:          metricsScope,
+		initializedError:     future.NewFuture[struct{}](),
+		metadataInitialFetch: future.NewFuture[struct{}](),
 		metadataPoller: metadataPoller{
 			launched:          sync.Once{},
 			pollIntervalCfgFn: e.config.MetadataPollFrequency,
@@ -312,7 +312,9 @@ func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.metadataFetched.Get(ctx)
+	// We don't really care if the initial fetch worked or not, anything that *requires* a bit of metadata should fail
+	// that operation if it's never fetched OK. If the initial fetch errored, the metadataPoller will have been started.
+	_, _ = c.metadataInitialFetch.Get(ctx)
 	return err
 }
 
@@ -710,11 +712,11 @@ func newIOContext() (context.Context, context.CancelFunc) {
 }
 
 func (c *taskQueueManagerImpl) fetchMetadataFromRootPartitionOnInit(ctx context.Context) {
-	if c.metadataFetched.Ready() {
+	if c.metadataInitialFetch.Ready() {
 		return
 	}
 	_, err := c.fetchMetadataFromRootPartition(ctx)
-	c.metadataFetched.Set(struct{}{}, err)
+	c.metadataInitialFetch.Set(struct{}{}, err)
 }
 
 // fetchMetadataFromRootPartition fetches metadata from root partition iff this partition is not a root partition.
@@ -726,8 +728,13 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 		return nil, nil
 	}
 
+	curDat, err := c.db.GetVersioningData(ctx)
+	if err != nil && !errors.Is(err, errVersioningDataNotPresentOnPartition) {
+		return nil, err
+	}
+	curHash := HashVersioningData(curDat)
+
 	rootTqName := c.taskQueueID.GetRoot()
-	curHash := HashVersioningData(c.db.versioningData)
 	if len(curHash) == 0 {
 		// if we have no data, make sure we send a sigil value, so it's known we desire versioning data
 		curHash = []byte{0}
@@ -737,22 +744,34 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 		TaskQueue:                 rootTqName,
 		WantVersioningDataCurhash: curHash,
 	})
-	if err != nil {
-		return nil, err
-	}
 	// If the root partition returns nil here, then that means our data matched, and we don't need to update.
 	// If it's nil because it never existed, then we'd never have any data.
 	// It can't be nil due to removing versions, as that would result in a non-nil container with
 	// nil inner fields.
-	if res.VersioningData != nil {
-		c.db.setVersioningDataForNonRootPartition(res.VersioningData)
-		// Only start the poller if there's actually data to poll for
-		c.metadataPoller.StartIfUnstarted(func() { _, _ = c.fetchMetadataFromRootPartition(context.TODO()) })
+	if !res.GetMatchedReqHash() {
+		c.db.setVersioningDataForNonRootPartition(res.GetVersioningData())
 	}
-	return res.VersioningData, nil
+	// We want to start the poller as long as the root partition has any kind of data (or fetching hasn't worked)
+	if res.GetMatchedReqHash() || res.GetVersioningData() != nil || err != nil {
+		c.metadataPoller.StartIfUnstarted(func() bool {
+			dat, err := c.fetchMetadataFromRootPartition(context.TODO())
+			if dat == nil && err == nil {
+				// Can stop polling since there is no versioning data. Loop will be restarted if we
+				// are told to invalidate the data, or we attempt to fetch it via GetVersioningData.
+				return true
+			}
+			return false
+		})
+	}
+	if err != nil {
+		return nil, err
+	}
+	return res.GetVersioningData(), nil
 }
 
-func (mp *metadataPoller) StartIfUnstarted(pollFn func()) {
+// StartIfUnstarted starts the poller if it's not already started. The passed in function is called repeatedly
+// and if it returns true, the poller will shut down, at which point it may be started again.
+func (mp *metadataPoller) StartIfUnstarted(pollFn func() bool) {
 	mp.launched.Do(func() {
 		go func() {
 			ticker := time.NewTicker(mp.pollIntervalCfgFn())
@@ -765,7 +784,11 @@ func (mp *metadataPoller) StartIfUnstarted(pollFn func()) {
 				case <-ticker.C:
 					// In case the interval has changed
 					ticker.Reset(mp.pollIntervalCfgFn())
-					pollFn()
+					shouldDie := pollFn()
+					if shouldDie {
+						mp.launched = sync.Once{}
+						return
+					}
 				}
 			}
 
