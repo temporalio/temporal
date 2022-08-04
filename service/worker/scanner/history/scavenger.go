@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -64,6 +65,9 @@ type (
 		metrics     metrics.Client
 		logger      log.Logger
 		isInTest    bool
+		// only clean up history branches that older than this age
+		// Our history archiver delete mutable state, and then upload history to blob store and then delete history.
+		historyDataMinAge dynamicconfig.DurationPropertyFn
 
 		sync.WaitGroup
 		sync.Mutex
@@ -83,10 +87,6 @@ type (
 const (
 	pageSize  = 100
 	numWorker = 10
-
-	// only clean up history branches that older than this threshold
-	// Our history archiver delete mutable state, and then upload history to blob store and then delete history.
-	cleanUpThreshold = 60 * 24 * time.Hour
 )
 
 // NewScavenger returns an instance of history scavenger daemon
@@ -102,6 +102,7 @@ func NewScavenger(
 	rps int,
 	client historyservice.HistoryServiceClient,
 	hbd ScavengerHeartbeatDetails,
+	historyDataMinAge dynamicconfig.DurationPropertyFn,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) *Scavenger {
@@ -113,8 +114,9 @@ func NewScavenger(
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(rps) },
 		),
-		metrics: metricsClient,
-		logger:  logger,
+		historyDataMinAge: historyDataMinAge,
+		metrics:           metricsClient,
+		logger:            logger,
 
 		hbd: hbd,
 	}
@@ -209,7 +211,7 @@ func (s *Scavenger) filterTask(
 	branch persistence.HistoryBranchDetail,
 ) *taskDetail {
 
-	if time.Now().UTC().Add(-cleanUpThreshold).Before(timestamp.TimeValue(branch.ForkTime)) {
+	if time.Now().UTC().Add(-s.historyDataMinAge()).Before(timestamp.TimeValue(branch.ForkTime)) {
 		s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerSkipCount)
 
 		s.Lock()

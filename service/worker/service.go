@@ -290,6 +290,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				dynamicconfig.ExecutionsScannerEnabled,
 				false,
 			),
+			HistoryScannerDataMinAge: dc.GetDurationProperty(
+				dynamicconfig.HistoryScannerDataMinAge,
+				90*24*time.Hour,
+			),
 		},
 		EnableBatcher: dc.GetBoolProperty(
 			dynamicconfig.EnableBatcher,

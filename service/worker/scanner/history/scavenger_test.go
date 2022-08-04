@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
@@ -37,6 +38,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -85,7 +87,8 @@ func (s *ScavengerTestSuite) createTestScavenger(
 	controller := gomock.NewController(s.T())
 	db := persistence.NewMockExecutionManager(controller)
 	historyClient := historyservicemock.NewMockHistoryServiceClient(controller)
-	scvgr := NewScavenger(s.numShards, db, rps, historyClient, ScavengerHeartbeatDetails{}, s.metric, s.logger)
+	dataAge := dynamicconfig.GetDurationPropertyFn(time.Hour)
+	scvgr := NewScavenger(s.numShards, db, rps, historyClient, ScavengerHeartbeatDetails{}, dataAge, s.metric, s.logger)
 	scvgr.isInTest = true
 	return db, historyClient, scvgr, controller
 }
@@ -153,13 +156,13 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 			{
 				TreeID:   "treeID1",
 				BranchID: "branchID1",
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     "error-info",
 			},
 			{
 				TreeID:   "treeID2",
 				BranchID: "branchID2",
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     "error-info",
 			},
 		},
@@ -173,13 +176,13 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 			{
 				TreeID:   "treeID3",
 				BranchID: "branchID3",
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     "error-info",
 			},
 			{
 				TreeID:   "treeID4",
 				BranchID: "branchID4",
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     "error-info",
 			},
 		},
@@ -205,13 +208,13 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 			{
 				TreeID:   "treeID1",
 				BranchID: "branchID1",
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
 				TreeID:   "treeID2",
 				BranchID: "branchID2",
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
@@ -225,13 +228,13 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 			{
 				TreeID:   "treeID3",
 				BranchID: "branchID3",
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
 				TreeID:   "treeID4",
 				BranchID: "branchID4",
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
@@ -286,13 +289,13 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 			{
 				TreeID:   treeID1,
 				BranchID: branchID1,
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
 				TreeID:   treeID2,
 				BranchID: branchID2,
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
@@ -305,13 +308,13 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 			{
 				TreeID:   treeID3,
 				BranchID: branchID3,
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
 				TreeID:   treeID4,
 				BranchID: branchID4,
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
@@ -399,7 +402,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 				// split error
 				TreeID:   treeID2,
 				BranchID: branchID2,
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     "error-info",
 			},
 		},
@@ -413,21 +416,21 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 				// delete succ
 				TreeID:   treeID3,
 				BranchID: branchID3,
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
 				// delete fail
 				TreeID:   treeID4,
 				BranchID: branchID4,
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 			{
 				// not delete
 				TreeID:   treeID5,
 				BranchID: branchID5,
-				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-cleanUpThreshold * 2),
+				ForkTime: timestamp.TimeNowPtrUtcAddDuration(-scvgr.historyDataMinAge() * 2),
 				Info:     persistence.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
 			},
 		},

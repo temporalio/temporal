@@ -618,6 +618,8 @@ const (
 	HistoryScannerEnabled = "worker.historyScannerEnabled"
 	// ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner
 	ExecutionsScannerEnabled = "worker.executionsScannerEnabled"
+	// HistoryScannerDataMinAge indicates the history scanner cleanup minimum age.
+	HistoryScannerDataMinAge = "worker.historyScannerDataMinAge"
 	// WorkerBatcherMaxConcurrentActivityExecutionSize indicates worker batcher max concurrent activity execution size
 	WorkerBatcherMaxConcurrentActivityExecutionSize = "worker.BatcherMaxConcurrentActivityExecutionSize"
 	// WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize indicates worker batcher max concurrent workflow execution size
