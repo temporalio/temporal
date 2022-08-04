@@ -51,9 +51,30 @@ import (
 
 type (
 	DeleteManager interface {
-		AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, ms MutableState, transferQueueAckLevel int64, visibilityQueueAckLevel int64) error
-		DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, forceDeleteFromOpenVisibility bool) error
-		DeleteWorkflowExecutionByRetention(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState) error
+		AddDeleteWorkflowExecutionTask(
+			ctx context.Context,
+			nsID namespace.ID,
+			we commonpb.WorkflowExecution,
+			ms MutableState,
+			transferQueueAckLevel int64,
+			visibilityQueueAckLevel int64,
+			workflowClosedVersion int64,
+		) error
+		DeleteWorkflowExecution(
+			ctx context.Context,
+			nsID namespace.ID,
+			we commonpb.WorkflowExecution,
+			weCtx Context,
+			ms MutableState,
+			forceDeleteFromOpenVisibility bool,
+		) error
+		DeleteWorkflowExecutionByRetention(
+			ctx context.Context,
+			nsID namespace.ID,
+			we commonpb.WorkflowExecution,
+			weCtx Context,
+			ms MutableState,
+		) error
 	}
 
 	DeleteManagerImpl struct {
@@ -94,6 +115,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	ms MutableState,
 	transferQueueAckLevel int64,
 	visibilityQueueAckLevel int64,
+	workflowClosedVersion int64,
 ) error {
 
 	// In active cluster, create `DeleteWorkflowExecutionTask` only if workflow is closed successfully
@@ -123,6 +145,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 		return err
 	}
 
+	deleteTask.Version = workflowClosedVersion
 	return m.shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 		ShardID: m.shard.GetShardID(),
 		// RangeID is set by shard
