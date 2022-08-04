@@ -125,7 +125,7 @@ func (s *sliceSuite) TestSplitByPredicate() {
 	passSlice, failSlice := slice.SplitByPredicate(splitPredicate)
 	s.Equal(r, passSlice.Scope().Range)
 	s.Equal(r, failSlice.Scope().Range)
-	s.True(predicates.And[tasks.Task](slice.scope.Predicate, splitPredicate).Equals(passSlice.Scope().Predicate))
+	s.True(tasks.AndPredicates(slice.scope.Predicate, splitPredicate).Equals(passSlice.Scope().Predicate))
 	s.True(predicates.And(slice.scope.Predicate, predicates.Not[tasks.Task](splitPredicate)).Equals(failSlice.Scope().Predicate))
 
 	s.validateSliceState(passSlice.(*SliceImpl))
@@ -500,7 +500,7 @@ func (s *sliceSuite) validateMergedSlice(
 		containedByCurrent := currentSlice.scope.Range.ContainsRange(mergedSlice.Scope().Range)
 		containedByIncoming := incomingSlice.scope.Range.ContainsRange(mergedSlice.Scope().Range)
 		if containedByCurrent && containedByIncoming {
-			s.True(predicates.Or(
+			s.True(tasks.OrPredicates(
 				currentSlice.scope.Predicate,
 				incomingSlice.scope.Predicate,
 			).Equals(mergedSlice.Scope().Predicate))

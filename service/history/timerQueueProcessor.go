@@ -93,7 +93,7 @@ func newTimerQueueProcessor(
 ) queues.Queue {
 
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
-		shard.GetConfig().TimerProcessorEnableSingleCursor()
+		shard.GetConfig().TimerProcessorEnableSingleProcessor()
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()

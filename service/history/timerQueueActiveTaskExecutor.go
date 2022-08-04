@@ -591,10 +591,9 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	now := t.shard.GetTimeSource().Now()
 	err = context.UpdateWorkflowExecutionAsActive(ctx, now)
 	if err != nil {
-		if shard.IsShardOwnershipLostError(err) {
+		if shard.IsShardOwnershipLostError(err) && t.queueProcessor != nil {
 			// Shard is stolen.  Stop timer processing to reduce duplicates
 			t.queueProcessor.Stop()
-			return err
 		}
 		return err
 	}
