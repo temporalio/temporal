@@ -374,9 +374,9 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockMutableState := NewMockMutableState(s.controller)
 
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
-	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED}).Times(0)
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(&closeTime, nil)
+	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(&closeTime, nil).Times(0)
 
 	// ====================== Archival mocks =======================================
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
@@ -418,8 +418,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 		nil,
 		nil,
 		&closeTime,
-	).Return(nil)
-	mockWeCtx.EXPECT().Clear()
+	).Return(nil).Times(0)
+	mockWeCtx.EXPECT().Clear().Times(0)
 
 	err := s.deleteManager.DeleteWorkflowExecutionByRetention(
 		context.Background(),
