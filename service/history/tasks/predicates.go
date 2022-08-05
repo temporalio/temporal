@@ -110,7 +110,7 @@ func AndPredicates(a Predicate, b Predicate) Predicate {
 		if b, ok := b.(*NamespacePredicate); ok {
 			intersection := intersect(a.NamespaceIDs, b.NamespaceIDs)
 			if len(intersection) == 0 {
-				return predicates.Universal[Task]()
+				return predicates.Empty[Task]()
 			}
 			return &NamespacePredicate{
 				NamespaceIDs: intersection,
@@ -120,7 +120,7 @@ func AndPredicates(a Predicate, b Predicate) Predicate {
 		if b, ok := b.(*TypePredicate); ok {
 			intersection := intersect(a.Types, b.Types)
 			if len(intersection) == 0 {
-				return predicates.Universal[Task]()
+				return predicates.Empty[Task]()
 			}
 			return &TypePredicate{
 				Types: intersection,
