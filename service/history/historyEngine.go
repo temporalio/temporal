@@ -426,6 +426,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	workflowID := request.GetWorkflowId()
 	runID := uuid.New()
 	workflowContext, err := api.NewWorkflowWithSignal(
+		ctx,
 		e.shard,
 		namespaceEntry,
 		workflowID,
@@ -520,7 +521,14 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 			),
 			prevExecutionUpdateAction,
 			func() (workflow.Context, workflow.MutableState, error) {
-				workflowContext, err := api.NewWorkflowWithSignal(e.shard, namespaceEntry, workflowID, runID, startRequest, nil)
+				workflowContext, err := api.NewWorkflowWithSignal(
+					ctx,
+					e.shard,
+					namespaceEntry,
+					workflowID,
+					runID,
+					startRequest,
+					nil)
 				if err != nil {
 					return nil, nil, err
 				}
