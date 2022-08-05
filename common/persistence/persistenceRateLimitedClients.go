@@ -672,7 +672,7 @@ func (p *executionRateLimitedPersistenceClient) ReadHistoryBranch(
 	return response, err
 }
 
-// ReadHistoryBranch returns history node data for a branch
+// ReadHistoryBranchReverse returns history node data for a branch
 func (p *executionRateLimitedPersistenceClient) ReadHistoryBranchReverse(
 	ctx context.Context,
 	request *ReadHistoryBranchReverseRequest,
