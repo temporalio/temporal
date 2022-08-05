@@ -288,9 +288,9 @@ func (mr *MockMutableStateMockRecorder) AddCompletedWorkflowEvent(arg0, arg1, ar
 }
 
 // AddContinueAsNewEvent mocks base method.
-func (m *MockMutableState) AddContinueAsNewEvent(arg0, arg1 int64, arg2 namespace.Name, arg3 *v1.ContinueAsNewWorkflowExecutionCommandAttributes) (*v13.HistoryEvent, MutableState, error) {
+func (m *MockMutableState) AddContinueAsNewEvent(arg0 context.Context, arg1, arg2 int64, arg3 namespace.Name, arg4 *v1.ContinueAsNewWorkflowExecutionCommandAttributes) (*v13.HistoryEvent, MutableState, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddContinueAsNewEvent", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "AddContinueAsNewEvent", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(MutableState)
 	ret2, _ := ret[2].(error)
@@ -298,9 +298,9 @@ func (m *MockMutableState) AddContinueAsNewEvent(arg0, arg1 int64, arg2 namespac
 }
 
 // AddContinueAsNewEvent indicates an expected call of AddContinueAsNewEvent.
-func (mr *MockMutableStateMockRecorder) AddContinueAsNewEvent(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddContinueAsNewEvent(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddContinueAsNewEvent", reflect.TypeOf((*MockMutableState)(nil).AddContinueAsNewEvent), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddContinueAsNewEvent", reflect.TypeOf((*MockMutableState)(nil).AddContinueAsNewEvent), arg0, arg1, arg2, arg3, arg4)
 }
 
 // AddExternalWorkflowExecutionCancelRequested mocks base method.
@@ -2341,17 +2341,17 @@ func (mr *MockMutableStateMockRecorder) SetHistoryBuilder(hBuilder interface{}) 
 }
 
 // SetHistoryTree mocks base method.
-func (m *MockMutableState) SetHistoryTree(treeID string) error {
+func (m *MockMutableState) SetHistoryTree(ctx context.Context, treeID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetHistoryTree", treeID)
+	ret := m.ctrl.Call(m, "SetHistoryTree", ctx, treeID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetHistoryTree indicates an expected call of SetHistoryTree.
-func (mr *MockMutableStateMockRecorder) SetHistoryTree(treeID interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) SetHistoryTree(ctx, treeID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryTree", reflect.TypeOf((*MockMutableState)(nil).SetHistoryTree), treeID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryTree", reflect.TypeOf((*MockMutableState)(nil).SetHistoryTree), ctx, treeID)
 }
 
 // SetUpdateCondition mocks base method.

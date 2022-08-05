@@ -898,6 +898,21 @@ func (p *executionPersistenceClient) AppendRawHistoryNodes(
 	return resp, err
 }
 
+// NewHistoryBranch initializes a new history branch
+func (p *executionPersistenceClient) NewHistoryBranch(
+	ctx context.Context,
+	request *NewHistoryBranchRequest,
+) (*NewHistoryBranchResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceNewHistoryBranchScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceNewHistoryBranchScope, metrics.PersistenceLatency)
+	response, err := p.persistence.NewHistoryBranch(ctx, request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceNewHistoryBranchScope, err)
+	}
+	return response, err
+}
+
 // ReadHistoryBranch returns history node data for a branch
 func (p *executionPersistenceClient) ReadHistoryBranch(
 	ctx context.Context,
