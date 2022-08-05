@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -285,29 +286,37 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 
 	timer := time.NewTimer(t.config.TimerProcessorCompleteTimerInterval())
 	defer timer.Stop()
+
+	completeTaskRetryPolicy := common.CreateCompleteTaskRetryPolicy()
+
 	for {
 		select {
 		case <-t.shutdownChan:
 			// before shutdown, make sure the ack level is up-to-date
-			_ = t.completeTimers()
+			if err := t.completeTimers(); err != nil {
+				t.logger.Error("Failed to complete timer task", tag.Error(err))
+			}
 			return
 		case <-timer.C:
-		CompleteLoop:
-			for attempt := 1; attempt <= t.config.TimerProcessorCompleteTimerFailureRetryCount(); attempt++ {
+			if err := backoff.ThrottleRetry(func() error {
 				err := t.completeTimers()
 				if err != nil {
-					t.logger.Info("Failed to complete timers.", tag.Error(err))
-					if err == shard.ErrShardClosed {
-						// shard is unloaded, timer processor should quit as well
-						go t.Stop()
-						return
-					}
-					backoff := time.Duration((attempt - 1) * 100)
-					time.Sleep(backoff * time.Millisecond)
-				} else {
-					break CompleteLoop
+					t.logger.Info("Failed to complete timer task", tag.Error(err))
 				}
+				return err
+			}, completeTaskRetryPolicy, func(err error) bool {
+				select {
+				case <-t.shutdownChan:
+					return false
+				default:
+				}
+				return err != shard.ErrShardClosed
+			}); err == shard.ErrShardClosed {
+				// shard is unloaded, timer processor should quit as well
+				go t.Stop()
+				return
 			}
+
 			timer.Reset(t.config.TimerProcessorCompleteTimerInterval())
 		}
 	}

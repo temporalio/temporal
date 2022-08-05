@@ -48,10 +48,8 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
-	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -151,7 +149,7 @@ func (h *historyArchiver) Archive(
 
 	var historyBatches []*historypb.History
 	for historyIterator.HasNext() {
-		historyBlob, err := getNextHistoryBlob(ctx, historyIterator)
+		historyBlob, err := historyIterator.Next()
 		if err != nil {
 			if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 				// workflow history no longer exists, may due to duplicated archival signal
@@ -296,24 +294,6 @@ func (h *historyArchiver) ValidateURI(URI archiver.URI) error {
 	}
 
 	return validateDirPath(URI.Path())
-}
-
-func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIterator) (*archiverspb.HistoryBlob, error) {
-	historyBlob, err := historyIterator.Next()
-	op := func(_ context.Context) error {
-		historyBlob, err = historyIterator.Next()
-		return err
-	}
-	for err != nil {
-		if !common.IsPersistenceTransientError(err) {
-			return nil, err
-		}
-		if contextExpired(ctx) {
-			return nil, archiver.ErrContextTimeout
-		}
-		err = backoff.ThrottleRetryContext(ctx, op, common.CreatePersistenceRetryPolicy(), common.IsPersistenceTransientError)
-	}
-	return historyBlob, nil
 }
 
 func getHighestVersion(dirPath string, request *archiver.GetHistoryRequest) (*int64, error) {

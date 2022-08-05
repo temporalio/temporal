@@ -56,11 +56,6 @@ import (
 )
 
 const (
-	// TODO: deprecate retryPersistenceOperation constants
-	retryPersistenceOperationInitialInterval    = 50 * time.Millisecond
-	retryPersistenceOperationMaxInterval        = 10 * time.Second
-	retryPersistenceOperationExpirationInterval = 30 * time.Second
-
 	persistenceClientRetryInitialInterval = 50 * time.Millisecond
 	persistenceClientRetryMaxAttempts     = 2
 
@@ -72,10 +67,6 @@ const (
 
 	matchingClientRetryInitialInterval = 1000 * time.Millisecond
 	matchingClientRetryMaxAttempts     = 2
-
-	adminHandlerRetryInitialInterval    = 200 * time.Millisecond
-	adminHandlerRetryMaxInterval        = 5 * time.Second
-	adminHandlerRetryExpirationInterval = 15 * time.Second
 
 	frontendHandlerRetryInitialInterval = 200 * time.Millisecond
 	frontendHandlerRetryMaxInterval     = time.Second
@@ -91,16 +82,16 @@ const (
 	readTaskRetryMaxInterval        = 1 * time.Second
 	readTaskRetryExpirationInterval = backoff.NoInterval
 
+	completeTaskRetryInitialInterval = 100 * time.Millisecond
+	completeTaskRetryMaxInterval     = 1 * time.Second
+	completeTaskRetryMaxAttempts     = 10
+
 	retryTaskProcessingInitialInterval = 50 * time.Millisecond
 	retryTaskProcessingMaxAttempts     = 1
 
 	rescheduleTaskRetryInitialInterval    = 3 * time.Second
 	rescheduleTaskRetryBackoffCoefficient = 1.05
 	rescheduleTaskRetryMaxInterval        = 3 * time.Minute
-
-	replicationServiceBusyInitialInterval    = 2 * time.Second
-	replicationServiceBusyMaxInterval        = 10 * time.Second
-	replicationServiceBusyExpirationInterval = 30 * time.Second
 
 	sdkClientFactoryRetryInitialInterval    = 200 * time.Millisecond
 	sdkClientFactoryRetryMaxInterval        = 5 * time.Second
@@ -161,15 +152,6 @@ func AwaitWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
 	}
 }
 
-// CreatePersistenceRetryPolicy creates a retry policy for persistence layer operations
-func CreatePersistenceRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(retryPersistenceOperationInitialInterval)
-	policy.SetMaximumInterval(retryPersistenceOperationMaxInterval)
-	policy.SetExpirationInterval(retryPersistenceOperationExpirationInterval)
-
-	return policy
-}
-
 // CreatePersistenceClientRetryPolicy creates a retry policy for calls to persistence
 func CreatePersistenceClientRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(persistenceClientRetryInitialInterval)
@@ -198,15 +180,6 @@ func CreateHistoryClientRetryPolicy() backoff.RetryPolicy {
 func CreateMatchingClientRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(matchingClientRetryInitialInterval)
 	policy.SetMaximumAttempts(matchingClientRetryMaxAttempts)
-
-	return policy
-}
-
-// CreateAdminHandlerRetryPolicy creates a retry policy for calls to matching service
-func CreateAdminHandlerRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(adminHandlerRetryInitialInterval)
-	policy.SetMaximumInterval(adminHandlerRetryMaxInterval)
-	policy.SetExpirationInterval(adminHandlerRetryExpirationInterval)
 
 	return policy
 }
@@ -245,6 +218,15 @@ func CreateReadTaskRetryPolicy() backoff.RetryPolicy {
 	return policy
 }
 
+// CreateCompleteTaskRetryPolicy creates a retry policy for completing background tasks
+func CreateCompleteTaskRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(completeTaskRetryInitialInterval)
+	policy.SetMaximumInterval(completeTaskRetryMaxInterval)
+	policy.SetMaximumAttempts(completeTaskRetryMaxAttempts)
+
+	return policy
+}
+
 // CreateTaskProcessingRetryPolicy creates a retry policy for task processing
 func CreateTaskProcessingRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(retryTaskProcessingInitialInterval)
@@ -259,15 +241,6 @@ func CreateTaskReschedulePolicy() backoff.RetryPolicy {
 	policy.SetBackoffCoefficient(rescheduleTaskRetryBackoffCoefficient)
 	policy.SetMaximumInterval(rescheduleTaskRetryMaxInterval)
 	policy.SetExpirationInterval(backoff.NoInterval)
-
-	return policy
-}
-
-// CreateReplicationServiceBusyRetryPolicy creates a retry policy to handle replication service busy
-func CreateReplicationServiceBusyRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(replicationServiceBusyInitialInterval)
-	policy.SetMaximumInterval(replicationServiceBusyMaxInterval)
-	policy.SetExpirationInterval(replicationServiceBusyExpirationInterval)
 
 	return policy
 }
