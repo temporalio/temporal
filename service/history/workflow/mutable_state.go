@@ -101,7 +101,7 @@ type (
 		AddChildWorkflowExecutionTerminatedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTerminatedEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionTimedOutEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTimedOutEventAttributes) (*historypb.HistoryEvent, error)
 		AddCompletedWorkflowEvent(int64, *commandpb.CompleteWorkflowExecutionCommandAttributes, string) (*historypb.HistoryEvent, error)
-		AddContinueAsNewEvent(int64, int64, namespace.Name, *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, MutableState, error)
+		AddContinueAsNewEvent(context.Context, int64, int64, namespace.Name, *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, MutableState, error)
 		AddWorkflowTaskCompletedEvent(int64, int64, *workflowservice.RespondWorkflowTaskCompletedRequest, int) (*historypb.HistoryEvent, error)
 		AddWorkflowTaskFailedEvent(scheduledEventID int64, startedEventID int64, cause enumspb.WorkflowTaskFailedCause, failure *failurepb.Failure, identity, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*historypb.HistoryEvent, error)
 		AddWorkflowTaskScheduleToStartTimeoutEvent(int64) (*historypb.HistoryEvent, error)
@@ -238,7 +238,7 @@ type (
 		ReplicateWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
 		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *HistoryBuilder)
-		SetHistoryTree(treeID string) error
+		SetHistoryTree(ctx context.Context, treeID string) error
 		UpdateActivity(*persistencespb.ActivityInfo) error
 		UpdateActivityWithTimerHeartbeat(*persistencespb.ActivityInfo, time.Time) error
 		UpdateActivityProgress(ai *persistencespb.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)

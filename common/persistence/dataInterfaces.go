@@ -740,6 +740,15 @@ type (
 		NodeID int64
 	}
 
+	NewHistoryBranchRequest struct {
+		TreeId string
+	}
+
+	NewHistoryBranchResponse struct {
+		// The newly created branch token
+		BranchToken []byte
+	}
+
 	// ReadHistoryBranchRequest is used to read a history branch
 	ReadHistoryBranchRequest struct {
 		// The shard to get history branch data
@@ -1051,6 +1060,8 @@ type (
 		AppendHistoryNodes(ctx context.Context, request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// AppendRawHistoryNodes add a node of raw histories to history node table
 		AppendRawHistoryNodes(ctx context.Context, request *AppendRawHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
+		// NewHistoryBranch initializes a new history branch
+		NewHistoryBranch(ctx context.Context, request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
 		// ReadHistoryBranchByBatch returns history node data for a branch ByBatch
