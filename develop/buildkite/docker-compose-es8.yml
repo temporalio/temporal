@@ -48,7 +48,7 @@ services:
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
-      - "ES_VERSION=v7"
+      - "ES_VERSION=v8"
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
       - "TEST_TAG=esintegration"
