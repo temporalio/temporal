@@ -41,6 +41,7 @@ import (
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 
@@ -136,7 +137,7 @@ type (
 		CheckResettable() error
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
-		CreateTransientWorkflowTaskEvents(workflowTask *WorkflowTaskInfo, identity string) (*historypb.HistoryEvent, *historypb.HistoryEvent)
+		CreateTransientWorkflowTask(workflowTask *WorkflowTaskInfo, identity string) *historyspb.TransientWorkflowTaskInfo
 		DeleteWorkflowTask()
 		DeleteSignalRequested(requestID string)
 		FlushBufferedEvents()

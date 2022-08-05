@@ -257,7 +257,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	s.NotNil(response)
 	s.True(response.StartedTime.After(*expectedResponse.ScheduledTime))
 	expectedResponse.StartedTime = response.StartedTime
-	expectedResponse.Queries = make(map[string]*querypb.WorkflowQuery)
 	s.Equal(&expectedResponse, response)
 }
 
