@@ -175,7 +175,7 @@ func (s *predicatesSuite) TestAndPredicates() {
 		{
 			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
 			predicateB:     NewNamespacePredicate([]string{"namespace3"}),
-			expectedResult: predicates.Universal[Task](),
+			expectedResult: predicates.Empty[Task](),
 		},
 		{
 			predicateA: NewNamespacePredicate([]string{"namespace1"}),
