@@ -27,6 +27,7 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pborman/uuid"
@@ -46,6 +47,7 @@ import (
 type (
 	MutableStateRebuilder interface {
 		ApplyEvents(
+			ctx context.Context,
 			namespaceID namespace.ID,
 			requestID string,
 			execution commonpb.WorkflowExecution,
@@ -87,6 +89,7 @@ func NewMutableStateRebuilder(
 }
 
 func (b *MutableStateRebuilderImpl) ApplyEvents(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	requestID string,
 	execution commonpb.WorkflowExecution,
@@ -171,6 +174,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := b.mutableState.SetHistoryTree(
+				ctx,
 				execution.GetRunId(),
 			); err != nil {
 				return nil, err
@@ -608,6 +612,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 					RunId:      newRunID,
 				}
 				_, err := newRunStateBuilder.ApplyEvents(
+					ctx,
 					namespaceID,
 					uuid.New(),
 					newExecution,

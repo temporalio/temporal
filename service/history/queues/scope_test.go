@@ -343,7 +343,7 @@ func (s *scopeSuite) TestMergeByPredicate_SamePredicateType() {
 
 	mockTask := tasks.NewMockTask(s.controller)
 	mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(r)).AnyTimes()
-	mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).Times(2)
+	mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
 	s.False(mergedScope.Contains(mockTask))
 }
 

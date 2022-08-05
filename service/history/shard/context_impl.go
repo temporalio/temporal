@@ -438,7 +438,7 @@ func (s *ContextImpl) UpdateQueueState(
 
 	// for compatability, update ack level and cluster ack level as well
 	// so after rollback or disabling the feature, we won't load too many tombstones
-	minAckLevel := tasks.MaximumKey
+	minAckLevel := convertFromPersistenceTaskKey(state.ExclusiveReaderHighWatermark)
 	for _, readerState := range state.ReaderStates {
 		if len(readerState.Scopes) != 0 {
 			minAckLevel = tasks.MinKey(

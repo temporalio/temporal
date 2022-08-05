@@ -752,7 +752,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
-	_ context.Context,
+	ctx context.Context,
 	attr *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -840,6 +840,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	}
 
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
+		ctx,
 		handler.workflowTaskCompletedID,
 		handler.workflowTaskCompletedID,
 		parentNamespace,
@@ -1087,6 +1088,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
 	newStateBuilder, err := api.CreateMutableState(
+		ctx,
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
 		newRunID,
@@ -1131,6 +1133,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 	}
 
 	newStateBuilder, err := api.CreateMutableState(
+		ctx,
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
 		newRunID,

@@ -55,8 +55,10 @@ const (
 
 // Operation tag value for queue processors
 const (
+	OperationTimerQueueProcessor           = "TimerQueueProcessor"
 	OperationTimerActiveQueueProcessor     = "TimerActiveQueueProcessor"
 	OperationTimerStandbyQueueProcessor    = "TimerStandbyQueueProcessor"
+	OperationTransferQueueProcessor        = "TransferQueueProcessor"
 	OperationTransferActiveQueueProcessor  = "TransferActiveQueueProcessor"
 	OperationTransferStandbyQueueProcessor = "TransferStandbyQueueProcessor"
 	OperationVisibilityQueueProcessor      = "VisibilityQueueProcessor"
