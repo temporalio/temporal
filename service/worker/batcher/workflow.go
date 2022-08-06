@@ -44,6 +44,10 @@ const (
 )
 
 const (
+	//BatchOperationTypeMemo stores batch operation type in memo
+	BatchOperationTypeMemo = "batch_operation_type"
+	//BatchReasonMemo stores batch operation reason in memo
+	BatchReasonMemo = "batch_operation_reason"
 	// BatchTypeTerminate is batch type for terminating workflows
 	BatchTypeTerminate = "terminate"
 	// BatchTypeCancel is the batch type for canceling workflows

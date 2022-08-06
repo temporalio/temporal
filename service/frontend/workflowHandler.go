@@ -28,14 +28,14 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
 	"github.com/gogo/protobuf/jsonpb"
-	"go.temporal.io/server/common/clock"
-
 	"github.com/pborman/uuid"
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	filterpb "go.temporal.io/api/filter/v1"
@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
@@ -73,12 +74,18 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
 var _ Handler = (*WorkflowHandler)(nil)
+
+const (
+	listBatchWorkflowPageSize = 50
+)
 
 var (
 	minTime = time.Unix(0, 0).UTC()
@@ -115,6 +122,7 @@ type (
 		saValidator                     *searchattribute.Validator
 		archivalMetadata                archiver.ArchivalMetadata
 		healthServer                    *health.Server
+		clientFactory                   sdk.ClientFactory
 	}
 )
 
@@ -3732,6 +3740,268 @@ func (wh *WorkflowHandler) GetWorkerBuildIdOrdering(ctx context.Context, request
 	return matchingResponse.Response, err
 }
 
+func (wh *WorkflowHandler) StartBatchOperation(
+	ctx context.Context,
+	request *workflowservice.StartBatchOperationRequest,
+) (_ *workflowservice.StartBatchOperationResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, err
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	jobId := uuid.New()
+	var identity string
+	var reason string
+	var operationType string
+	var signalParams batcher.SignalParams
+	switch op := request.Operation.(type) {
+	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
+		identity = op.TerminationOperation.GetIdentity()
+		reason = op.TerminationOperation.Reason
+		operationType = batcher.BatchTypeTerminate
+	case *workflowservice.StartBatchOperationRequest_SignalOperation:
+		identity = op.SignalOperation.GetIdentity()
+		operationType = batcher.BatchTypeSignal
+		signalParams.SignalName = op.SignalOperation.GetSignal()
+		signalParams.Input = op.SignalOperation.GetInput()
+	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
+		identity = op.CancellationOperation.GetIdentity()
+		reason = op.CancellationOperation.Reason
+		operationType = batcher.BatchTypeCancel
+	default:
+		identity = "user-start-batcher"
+	}
+	query := request.VisibilityQuery
+	if !strings.Contains(query, searchattribute.ExecutionStatus) {
+		var prefix string
+		if len(query) > 0 {
+			prefix = " AND"
+		}
+		query += fmt.Sprintf(
+			"%s %s = '%s'",
+			prefix,
+			searchattribute.ExecutionStatus,
+			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+		)
+	}
+	input := &batcher.BatchParams{
+		Namespace:       request.Namespace,
+		Query:           request.VisibilityQuery, //TODO
+		Reason:          reason,
+		BatchType:       operationType,
+		TerminateParams: batcher.TerminateParams{},
+		CancelParams:    batcher.CancelParams{},
+		SignalParams:    signalParams,
+	}
+	inputPayload, err := payloads.Encode(input)
+	if err != nil {
+		return nil, err
+	}
+
+	memo := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			batcher.BatchOperationTypeMemo: payload.EncodeString(operationType),
+			batcher.BatchReasonMemo:        payload.EncodeString(reason),
+		},
+	}
+	searchAttributes := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			searchattribute.BatcherUser: payload.EncodeString(identity),
+		},
+	}
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:             request.Namespace,
+		WorkflowId:            jobId,
+		WorkflowType:          &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: workercommon.PerNSWorkerTaskQueue},
+		Input:                 inputPayload,
+		Identity:              identity,
+		RequestId:             uuid.New(),
+		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		Memo:                  memo,
+		SearchAttributes:      searchAttributes,
+	}
+
+	_, err = wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC()))
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.StartBatchOperationResponse{
+		JobId: jobId,
+	}, nil
+}
+
+func (wh *WorkflowHandler) StopBatchOperation(
+	ctx context.Context,
+	request *workflowservice.StopBatchOperationRequest,
+) (_ *workflowservice.StopBatchOperationResponse, retError error) {
+
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, err
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	terminateReq := &historyservice.TerminateWorkflowExecutionRequest{
+		NamespaceId: namespaceID.String(),
+		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
+			Namespace: request.GetNamespace(),
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: request.GetJobId(),
+			},
+			Reason:   "request.GetReason()",   // TODO
+			Identity: "request.GetIdentity()", // TODO
+		},
+		ChildWorkflowOnly: false,
+	}
+	_, err = wh.historyClient.TerminateWorkflowExecution(ctx, terminateReq)
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.StopBatchOperationResponse{}, nil
+}
+
+func (wh *WorkflowHandler) DescribeBatchOperation(
+	ctx context.Context,
+	request *workflowservice.DescribeBatchOperationRequest,
+) (_ *workflowservice.DescribeBatchOperationResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, err
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: request.GetJobId(),
+		RunId:      "",
+	}
+	resp, err := wh.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: request.GetNamespace(),
+		Execution: execution,
+	})
+	if err != nil {
+		return nil, err
+	}
+	executionInfo := resp.GetWorkflowExecutionInfo()
+	operationState := getBatchOperationState(executionInfo.GetStatus())
+	typePayload := resp.GetWorkflowExecutionInfo().Memo.GetFields()[batcher.BatchOperationTypeMemo]
+	operationTypeString := payload.ToString(typePayload)
+	var operationType enumspb.BatchOperationType
+	switch operationTypeString {
+	case batcher.BatchTypeCancel:
+		operationType = enumspb.BATCH_OPERATION_TYPE_CANCEL
+	case batcher.BatchTypeSignal:
+		operationType = enumspb.BATCH_OPERATION_TYPE_SIGNAL
+	case batcher.BatchTypeTerminate:
+		operationType = enumspb.BATCH_OPERATION_TYPE_TERMINATE
+	default:
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %s is not supported", operationTypeString))
+	}
+
+	var totalOpsCount int64
+	var completedOpsCount int64
+	var failureOpsCount int64
+	if len(resp.GetPendingActivities()) > 0 {
+		hbdPayload := resp.GetPendingActivities()[0].HeartbeatDetails
+		var hbd batcher.HeartBeatDetails
+		err = payloads.Decode(hbdPayload, &hbd)
+		if err != nil {
+			return nil, err
+		}
+		totalOpsCount = hbd.TotalEstimate
+		completedOpsCount = int64(hbd.SuccessCount)
+		failureOpsCount = int64(hbd.ErrorCount)
+	}
+	return &workflowservice.DescribeBatchOperationResponse{
+		// TODO: add identity and operator
+		OperationType:          operationType,
+		JobId:                  executionInfo.Execution.GetWorkflowId(),
+		State:                  operationState,
+		StartTime:              executionInfo.StartTime,
+		CloseTime:              executionInfo.CloseTime,
+		TotalOperationCount:    totalOpsCount,
+		CompleteOperationCount: completedOpsCount,
+		FailureOperationCount:  failureOpsCount,
+	}, nil
+}
+
+func (wh *WorkflowHandler) ListBatchOperations(
+	ctx context.Context,
+	request *workflowservice.ListBatchOperationsRequest,
+) (_ *workflowservice.ListBatchOperationsResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, err
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	resp, err := wh.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace:     request.GetNamespace(),
+		PageSize:      listBatchWorkflowPageSize,
+		NextPageToken: request.GetNextPageToken(),
+		Query:         fmt.Sprintf("%s = '%s'", searchattribute.WorkflowType, batcher.BatchWFTypeName),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var operations []*batchpb.BatchOperationInfo
+	for _, execution := range resp.GetExecutions() {
+		operations = append(operations, &batchpb.BatchOperationInfo{
+			JobId:     execution.GetExecution().GetWorkflowId(),
+			State:     getBatchOperationState(execution.GetStatus()),
+			StartTime: execution.GetStartTime(),
+			CloseTime: execution.GetCloseTime(),
+		})
+	}
+	return &workflowservice.ListBatchOperationsResponse{
+		OperationInfo: operations,
+		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
 func (wh *WorkflowHandler) getRawHistory(
 	ctx context.Context,
 	scope metrics.Scope,
@@ -4531,4 +4801,17 @@ func (wh *WorkflowHandler) cleanScheduleMemo(memo *commonpb.Memo) *commonpb.Memo
 	}
 	// we don't define any fields here but might in the future
 	return memo
+}
+
+func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enumspb.BatchOperationState {
+	var operationState enumspb.BatchOperationState
+	switch workflowState {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		operationState = enumspb.BATCH_OPERATION_STATE_RUNNING
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
+		operationState = enumspb.BATCH_OPERATION_STATE_COMPLETED
+	default:
+		operationState = enumspb.BATCH_OPERATION_STATE_FAILED
+	}
+	return operationState
 }
