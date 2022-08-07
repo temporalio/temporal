@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -80,8 +81,9 @@ type (
 		startupChan  chan struct{}
 		shutdownChan chan struct{}
 
-		dispatchBackoffTimer *time.Timer
-		dispatchRetrier      backoff.Retrier
+		dispatchBackoffTimerLock sync.Mutex
+		dispatchBackoffTimer     *time.Timer
+		dispatchRetrier          backoff.Retrier
 
 		taskQueueOwnership        dbTaskQueueOwnership
 		taskReader                dbTaskReader
@@ -411,9 +413,16 @@ func (d *dbTaskManager) finishTask(
 }
 
 func (d *dbTaskManager) backoffDispatch(duration time.Duration) {
+	d.dispatchBackoffTimerLock.Lock()
+	defer d.dispatchBackoffTimerLock.Unlock()
+
 	if d.dispatchBackoffTimer == nil {
 		d.dispatchBackoffTimer = time.AfterFunc(duration, func() {
+			d.dispatchBackoffTimerLock.Lock()
+			defer d.dispatchBackoffTimerLock.Unlock()
+
 			d.signalDispatch() // re-enqueue the event
+			d.dispatchBackoffTimer = nil
 		})
 	}
 }

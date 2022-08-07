@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -54,8 +55,9 @@ type (
 		tlMgr      *taskQueueManagerImpl
 		gorogrp    goro.Group
 
-		backoffTimer *time.Timer
-		retrier      backoff.Retrier
+		backoffTimerLock sync.Mutex
+		backoffTimer     *time.Timer
+		retrier          backoff.Retrier
 	}
 )
 
@@ -315,9 +317,16 @@ func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
 }
 
 func (tr *taskReader) backoff(duration time.Duration) {
+	tr.backoffTimerLock.Lock()
+	defer tr.backoffTimerLock.Unlock()
+
 	if tr.backoffTimer == nil {
 		tr.backoffTimer = time.AfterFunc(duration, func() {
+			tr.backoffTimerLock.Lock()
+			defer tr.backoffTimerLock.Unlock()
+
 			tr.Signal() // re-enqueue the event
+			tr.backoffTimer = nil
 		})
 	}
 }
