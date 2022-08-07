@@ -226,7 +226,6 @@ func signalRemoteCluster(
 		}
 
 		signalCtx, cancel := context.WithTimeout(ctx, signalTimeout)
-		signalCtx = headers.SetCallerName(signalCtx, headers.CallerNameSystem)
 		_, err = remoteClient.SignalWithStartWorkflowExecution(
 			signalCtx,
 			&workflowservice.SignalWithStartWorkflowExecutionRequest{

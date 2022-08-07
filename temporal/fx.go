@@ -598,7 +598,7 @@ func ApplyClusterMetadataConfigProvider(
 		Cfg:                        &config.Persistence,
 		PersistenceMaxQPS:          nil,
 		PersistenceNamespaceMaxQPS: nil,
-		PriorityRateLimiting:       nil,
+		EnablePriorityRateLimiting: nil,
 		ClusterName:                persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
 		MetricsClient:              nil,
 		Logger:                     logger,

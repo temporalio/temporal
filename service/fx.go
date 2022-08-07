@@ -45,7 +45,7 @@ type (
 
 		PersistenceMaxQps          persistenceClient.PersistenceMaxQps
 		PersistenceNamespaceMaxQps persistenceClient.PersistenceNamespaceMaxQps
-		PriorityRateLimiting       persistenceClient.PriorityRateLimiting
+		EnablePriorityRateLimiting persistenceClient.EnablePriorityRateLimiting
 	}
 )
 
@@ -53,12 +53,12 @@ func NewPersistenceRateLimitingParams(
 	maxQps dynamicconfig.IntPropertyFn,
 	globalMaxQps dynamicconfig.IntPropertyFn,
 	namespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	priorityRateLimiting dynamicconfig.BoolPropertyFn,
+	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
 ) PersistenceRateLimitingParams {
 	return PersistenceRateLimitingParams{
 		PersistenceMaxQps:          PersistenceMaxQpsFn(maxQps, globalMaxQps),
 		PersistenceNamespaceMaxQps: persistenceClient.PersistenceNamespaceMaxQps(namespaceMaxQps),
-		PriorityRateLimiting:       persistenceClient.PriorityRateLimiting(priorityRateLimiting),
+		EnablePriorityRateLimiting: persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
 	}
 }
 

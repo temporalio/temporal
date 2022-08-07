@@ -102,7 +102,7 @@ func (s *Processor) Start() error {
 
 func getWorkerOptions(p *Processor) worker.Options {
 	ctx := context.WithValue(context.Background(), processorContextKey, p)
-	ctx = headers.SetCallerType(ctx, headers.CallerTypeBackground)
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
 	return worker.Options{
 		MaxConcurrentActivityExecutionSize:     p.cfg.MaxConcurrentActivityExecutionSize(),
