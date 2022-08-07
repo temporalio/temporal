@@ -188,7 +188,6 @@ func newVisibilityQueueProcessor(
 			config.VisibilityProcessorMaxPollRPS,
 		),
 		logger,
-		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),
 	)
 	retProcessor.queueAckMgr = queueAckMgr
 	retProcessor.queueProcessorBase = queueProcessorBase
