@@ -49,6 +49,7 @@ var Module = fx.Options(
 	fx.Provide(NewConfig),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
+	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HandlerProvider),
@@ -58,6 +59,13 @@ var Module = fx.Options(
 	fx.Provide(NewService),
 	fx.Invoke(ServiceLifetimeHooks),
 )
+
+func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
+	return interceptor.NewRetryableInterceptor(
+		common.CreateMatchingHandlerRetryPolicy(),
+		common.IsServiceHandlerRetryableError,
+	)
+}
 
 func TelemetryInterceptorProvider(
 	logger log.Logger,

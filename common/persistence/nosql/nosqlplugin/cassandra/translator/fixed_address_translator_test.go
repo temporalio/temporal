@@ -76,7 +76,7 @@ func (s *fixedTranslatorPluginTestSuite) TestFixedAddressTranslator() {
 		s.Errorf(err, "fail to lookup IP for temporal.io")
 	}
 
-	ipToExpect := lookupIP[0]
+	ipToExpect := lookupIP[0].To4()
 
 	translator, err := plugin.GetTranslator(configuration)
 	translatedHost, translatedPort := translator.Translate(net.ParseIP("1.1.1.1"), 6001)

@@ -159,9 +159,10 @@ func (e *executableImpl) Execute() error {
 
 	// this filter should also contain the logic for overriding
 	// results from task allocator (force executing some standby task types)
-	e.shouldProcess = e.filter(e.Task)
-	if !e.shouldProcess {
-		return nil
+	if e.filter != nil {
+		if e.shouldProcess = e.filter(e.Task); !e.shouldProcess {
+			return nil
+		}
 	}
 
 	ctx := metrics.AddMetricsContext(context.Background())

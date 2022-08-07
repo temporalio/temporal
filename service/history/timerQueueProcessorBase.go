@@ -51,7 +51,7 @@ import (
 var (
 	emptyTime = time.Time{}
 
-	loadTimerTaskThrottleRetryDelay = 5 * time.Second
+	loadTimerTaskThrottleRetryDelay = 3 * time.Second
 )
 
 type (
@@ -72,8 +72,8 @@ type (
 		timerGate        timer.Gate
 		timeSource       clock.TimeSource
 		rateLimiter      quotas.RateLimiter
-		retryPolicy      backoff.RetryPolicy
 		lastPollTime     time.Time
+		readTaskRetrier  backoff.Retrier
 		scheduler        queues.Scheduler
 		rescheduler      queues.Rescheduler
 
@@ -120,7 +120,10 @@ func newTimerQueueProcessorBase(
 		scheduler:        scheduler,
 		rescheduler:      rescheduler,
 		rateLimiter:      rateLimiter,
-		retryPolicy:      common.CreatePersistenceRetryPolicy(),
+		readTaskRetrier: backoff.NewRetrier(
+			common.CreateReadTaskRetryPolicy(),
+			backoff.SystemClock,
+		),
 	}
 
 	return base
@@ -315,9 +318,14 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) 
 	t.lastPollTime = t.timeSource.Now()
 	timerTasks, nextFireTime, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
 	if err != nil {
-		t.notifyNewTimer(time.Time{}) // re-enqueue the event
+		if common.IsResourceExhausted(err) {
+			t.notifyNewTimer(t.timeSource.Now().Add(loadTimerTaskThrottleRetryDelay))
+		} else {
+			t.notifyNewTimer(t.timeSource.Now().Add(t.readTaskRetrier.NextBackOff()))
+		}
 		return nil, err
 	}
+	t.readTaskRetrier.Reset()
 
 	for _, task := range timerTasks {
 		t.submitTask(task)

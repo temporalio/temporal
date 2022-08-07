@@ -105,7 +105,7 @@ type (
 )
 
 var (
-	historyServiceRetryPolicy = common.CreateHistoryServiceRetryPolicy()
+	historyServiceRetryPolicy = common.CreateHistoryClientRetryPolicy()
 )
 
 func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverParams) (retErr error) {

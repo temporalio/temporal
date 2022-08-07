@@ -27,16 +27,17 @@ package archiver
 import (
 	"context"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -113,9 +114,14 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 			err = temporal.NewNonRetryableApplicationError(err.Error(), "", nil)
 		}
 	}()
-	err = container.HistoryV2Manager.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
-		BranchToken: request.BranchToken,
-		ShardID:     request.ShardID,
+	_, err = container.HistoryClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: request.NamespaceID,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: request.WorkflowID,
+			RunId:      request.RunID,
+		},
+		WorkflowVersion:    request.CloseFailoverVersion,
+		ClosedWorkflowOnly: true,
 	})
 	if err == nil {
 		return nil

@@ -62,7 +62,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
@@ -439,7 +438,7 @@ func (s *ContextImpl) UpdateQueueState(
 
 	// for compatability, update ack level and cluster ack level as well
 	// so after rollback or disabling the feature, we won't load too many tombstones
-	minAckLevel := tasks.MaximumKey
+	minAckLevel := convertFromPersistenceTaskKey(state.ExclusiveReaderHighWatermark)
 	for _, readerState := range state.ReaderStates {
 		if len(readerState.Scopes) != 0 {
 			minAckLevel = tasks.MinKey(
@@ -616,7 +615,7 @@ func (s *ContextImpl) AddTasks(
 	ctx context.Context,
 	request *persistence.AddHistoryTasksRequest,
 ) error {
-	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	ctx, cancel, err := s.newDetachedContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -654,7 +653,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
-	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	ctx, cancel, err := s.newDetachedContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -698,7 +697,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
-	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	ctx, cancel, err := s.newDetachedContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -769,7 +768,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
-	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	ctx, cancel, err := s.newDetachedContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -833,7 +832,7 @@ func (s *ContextImpl) SetWorkflowExecution(
 	ctx context.Context,
 	request *persistence.SetWorkflowExecutionRequest,
 ) (*persistence.SetWorkflowExecutionResponse, error) {
-	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	ctx, cancel, err := s.newDetachedContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -983,7 +982,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	// The history branch won't be accessible (because mutable state is deleted) and special garbage collection workflow will delete it eventually.
 	// Step 4 shouldn't be done earlier because if this func fails after it, workflow execution will be accessible but won't have history (inconsistent state).
 
-	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	ctx, cancel, err := s.newDetachedContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -2024,21 +2023,28 @@ func (s *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
 	return s.archivalMetadata
 }
 
-func (s *ContextImpl) ensureMinContextTimeout(
+func (s *ContextImpl) newDetachedContext(
 	ctx context.Context,
 ) (context.Context, context.CancelFunc, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
 
+	detachedContext := rpc.CopyContextValues(s.lifecycleCtx, ctx)
+
+	var cancel context.CancelFunc
 	deadline, ok := ctx.Deadline()
-	if !ok || deadline.Sub(s.GetTimeSource().Now()) >= minContextTimeout {
-		return ctx, func() {}, nil
+	if ok {
+		timeout := deadline.Sub(s.GetTimeSource().Now())
+		if timeout < minContextTimeout {
+			timeout = minContextTimeout
+		}
+		detachedContext, cancel = context.WithTimeout(detachedContext, timeout)
+	} else {
+		cancel = func() {}
 	}
 
-	newContext, cancel := context.WithTimeout(s.lifecycleCtx, minContextTimeout)
-	newContext = rpc.CopyContextValues(newContext, ctx)
-	return newContext, cancel, nil
+	return detachedContext, cancel, nil
 }
 
 func (s *ContextImpl) newIOContext() (context.Context, context.CancelFunc) {
@@ -2049,10 +2055,6 @@ func (s *ContextImpl) newIOContext() (context.Context, context.CancelFunc) {
 }
 
 func OperationPossiblySucceeded(err error) bool {
-	if err == consts.ErrConflict {
-		return false
-	}
-
 	switch err.(type) {
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,

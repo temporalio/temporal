@@ -88,7 +88,6 @@ type (
 		MaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
 		CheckpointInterval                  dynamicconfig.DurationPropertyFn
 		CheckpointIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
-		MaxReaderCount                      dynamicconfig.IntPropertyFn
 		TaskMaxRetryCount                   dynamicconfig.IntPropertyFn
 	}
 )
