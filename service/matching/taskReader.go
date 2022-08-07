@@ -305,5 +305,5 @@ func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
 func (tr *taskReader) initContext(ctx context.Context) context.Context {
 	namespace, _ := tr.tlMgr.namespaceRegistry.GetNamespaceName(tr.tlMgr.taskQueueID.namespaceID)
 
-	return headers.SetCallerInfo(ctx, headers.NewCallerInfo(namespace.String(), headers.CallerTypeBackground, ""))
+	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
 }

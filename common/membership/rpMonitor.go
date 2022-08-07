@@ -86,7 +86,7 @@ func NewRingpopMonitor(
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	lifecycleCtx = headers.SetCallerInfo(
 		lifecycleCtx,
-		headers.NewCallerInfo(headers.CallerNameSystem, headers.CallerTypeBackground, ""),
+		headers.SystemBackgroundCallerInfo,
 	)
 
 	rpo := &ringpopMonitor{

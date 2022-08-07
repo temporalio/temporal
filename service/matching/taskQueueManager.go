@@ -628,7 +628,7 @@ func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFu
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
 
 	namespace, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(namespace.String(), headers.CallerTypeBackground, ""))
+	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
 
 	return ctx, cancel
 }

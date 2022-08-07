@@ -222,7 +222,7 @@ func (r *registry) Start() {
 	// initialize the cache by initial scan
 	ctx := headers.SetCallerInfo(
 		context.Background(),
-		headers.NewCallerInfo(headers.CallerNameSystem, headers.CallerTypeBackground, ""),
+		headers.SystemBackgroundCallerInfo,
 	)
 
 	err := r.refreshNamespaces(ctx)

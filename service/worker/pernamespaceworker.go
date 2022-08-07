@@ -341,7 +341,7 @@ func (w *perNamespaceWorker) startWorker(
 	}
 
 	var sdkoptions sdkworker.Options
-	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(ns.Name().String(), headers.CallerTypeBackground, ""))
+	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))
 	sdkoptions.Identity = fmt.Sprintf("server-worker@%d@%s@%s", os.Getpid(), w.wm.hostName, nsName)
 	// sdk default is 2, we increase it if we're supposed to run with more multiplicity.
 	// other defaults are already large enough.

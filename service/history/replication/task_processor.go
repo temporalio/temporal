@@ -268,7 +268,12 @@ func (p *taskProcessorImpl) pollProcessReplicationTasks() (retError error) {
 func (p *taskProcessorImpl) applyReplicationTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) error {
-	err := p.handleReplicationTask(replicationTask)
+	ctx := headers.SetCallerInfo(
+		context.Background(),
+		headers.SystemBackgroundCallerInfo,
+	)
+
+	err := p.handleReplicationTask(ctx, replicationTask)
 	if err == nil || p.isStopped() {
 		return err
 	}
@@ -283,7 +288,7 @@ func (p *taskProcessorImpl) applyReplicationTask(
 		p.logger.Error("failed to generate DLQ replication task", tag.Error(err))
 		return nil
 	}
-	if err := p.handleReplicationDLQTask(request); err != nil {
+	if err := p.handleReplicationDLQTask(ctx, request); err != nil {
 		return err
 	}
 	return nil
@@ -303,7 +308,7 @@ func (p *taskProcessorImpl) handleSyncShardStatus(
 	p.metricsClient.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteCounter)
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerNameSystem, headers.CallerTypeBackground, ""))
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
 	return p.historyEngine.SyncShardStatus(ctx, &historyservice.SyncShardStatusRequest{
 		SourceCluster: p.sourceCluster,
@@ -313,12 +318,13 @@ func (p *taskProcessorImpl) handleSyncShardStatus(
 }
 
 func (p *taskProcessorImpl) handleReplicationTask(
+	ctx context.Context,
 	replicationTask *replicationspb.ReplicationTask,
 ) error {
-	_ = p.rateLimiter.Wait(context.Background())
+	_ = p.rateLimiter.Wait(ctx)
 
 	operation := func() error {
-		scope, err := p.replicationTaskExecutor.Execute(replicationTask, false)
+		scope, err := p.replicationTaskExecutor.Execute(ctx, replicationTask, false)
 		p.emitTaskMetrics(scope, err)
 		return err
 	}
@@ -326,10 +332,10 @@ func (p *taskProcessorImpl) handleReplicationTask(
 }
 
 func (p *taskProcessorImpl) handleReplicationDLQTask(
+	ctx context.Context,
 	request *persistence.PutReplicationTaskToDLQRequest,
 ) error {
-
-	_ = p.rateLimiter.Wait(context.Background())
+	_ = p.rateLimiter.Wait(ctx)
 
 	p.logger.Info("enqueue replication task to DLQ",
 		tag.ShardID(p.shard.GetShardID()),
@@ -348,7 +354,7 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 	)
 	// The following is guaranteed to success or retry forever until processor is shutdown.
 	return backoff.ThrottleRetry(func() error {
-		err := p.shard.GetExecutionManager().PutReplicationTaskToDLQ(context.TODO(), request)
+		err := p.shard.GetExecutionManager().PutReplicationTaskToDLQ(ctx, request)
 		if err != nil {
 			p.logger.Error("failed to enqueue replication task to DLQ", tag.Error(err))
 			p.metricsClient.IncCounter(metrics.ReplicationTaskFetcherScope, metrics.ReplicationDLQFailed)

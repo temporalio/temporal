@@ -137,6 +137,7 @@ func newQueueBase(
 			scheduler,
 			rescheduler,
 			timeSource,
+			shard.GetNamespaceRegistry(),
 			logger,
 			options.TaskMaxRetryCount,
 			QueueTypeUnknown, // we don't care about queue type
@@ -351,6 +352,6 @@ func createCheckpointRetryPolicy() backoff.RetryPolicy {
 
 func newQueueIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), queueIOTimeout)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 	return ctx, cancel
 }

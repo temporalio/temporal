@@ -37,12 +37,20 @@ const (
 	CallerNameSystem = "system"
 )
 
+var (
+	SystemBackgroundCallerInfo CallerInfo = CallerInfo{
+		CallerName: CallerNameSystem,
+		CallerType: CallerTypeBackground,
+	}
+)
+
 type CallerInfo struct {
 	CallerName     string
 	CallerType     string
 	CallInitiation string
 }
 
+// NewCallerInfo creates a new CallerInfo
 func NewCallerInfo(
 	callerName string,
 	callerType string,
@@ -52,6 +60,18 @@ func NewCallerInfo(
 		CallerName:     callerName,
 		CallerType:     callerType,
 		CallInitiation: callInitiation,
+	}
+}
+
+// NewBackgroundCallerInfo creates a new CallerInfo with Background callerType
+// and empty callInitiation.
+// This is equivalent to NewCallerInfo(callerName, CallerTypeBackground, "")
+func NewBackgroundCallerInfo(
+	callerName string,
+) CallerInfo {
+	return CallerInfo{
+		CallerName: callerName,
+		CallerType: CallerTypeBackground,
 	}
 }
 

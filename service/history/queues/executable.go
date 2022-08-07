@@ -166,7 +166,7 @@ func (e *executableImpl) Execute() error {
 
 	ctx := metrics.AddMetricsContext(context.Background())
 	namespace, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(namespace.String(), headers.CallerTypeBackground, ""))
+	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
 
 	startTime := e.timeSource.Now()
 

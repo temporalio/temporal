@@ -2043,7 +2043,7 @@ func (s *ContextImpl) ensureMinContextTimeout(
 
 func (s *ContextImpl) newIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(s.lifecycleCtx, shardIOTimeout)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerNameSystem, headers.CallerTypeBackground, ""))
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
 	return ctx, cancel
 }

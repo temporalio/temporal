@@ -48,7 +48,7 @@ import (
 
 type (
 	TaskExecutor interface {
-		Execute(replicationTask *replicationspb.ReplicationTask, forceApply bool) (int, error)
+		Execute(ctx context.Context, replicationTask *replicationspb.ReplicationTask, forceApply bool) (int, error)
 	}
 
 	TaskExecutorParams struct {
@@ -101,6 +101,7 @@ func NewTaskExecutor(
 }
 
 func (e *taskExecutorImpl) Execute(
+	ctx context.Context,
 	replicationTask *replicationspb.ReplicationTask,
 	forceApply bool,
 ) (int, error) {
@@ -112,16 +113,16 @@ func (e *taskExecutorImpl) Execute(
 		scope = metrics.SyncShardTaskScope
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		scope = metrics.SyncActivityTaskScope
-		err = e.handleActivityTask(replicationTask, forceApply)
+		err = e.handleActivityTask(ctx, replicationTask, forceApply)
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
 		// Without kafka we should not have size limits so we don't necessary need this in the new replication scheme.
 		scope = metrics.HistoryMetadataReplicationTaskScope
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		scope = metrics.HistoryReplicationTaskScope
-		err = e.handleHistoryReplicationTask(replicationTask, forceApply)
+		err = e.handleHistoryReplicationTask(ctx, replicationTask, forceApply)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		scope = metrics.SyncWorkflowStateTaskScope
-		err = e.handleSyncWorkflowStateTask(replicationTask, forceApply)
+		err = e.handleSyncWorkflowStateTask(ctx, replicationTask, forceApply)
 	default:
 		e.logger.Error("Unknown task type.")
 		scope = metrics.ReplicatorScope
@@ -132,6 +133,7 @@ func (e *taskExecutorImpl) Execute(
 }
 
 func (e *taskExecutorImpl) handleActivityTask(
+	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) error {
@@ -161,7 +163,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 		LastWorkerIdentity: attr.LastWorkerIdentity,
 		VersionHistory:     attr.GetVersionHistory(),
 	}
-	ctx, cancel := e.newTaskContext(attr.NamespaceId)
+	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
 	defer cancel()
 
 	err = e.historyEngine.SyncActivity(ctx, request)
@@ -203,6 +205,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 }
 
 func (e *taskExecutorImpl) handleHistoryReplicationTask(
+	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) error {
@@ -227,7 +230,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		// new run events does not need version history since there is no prior events
 		NewRunEvents: attr.NewRunEvents,
 	}
-	ctx, cancel := e.newTaskContext(attr.NamespaceId)
+	ctx, cancel := e.newTaskContext(ctx, attr.NamespaceId)
 	defer cancel()
 
 	err = e.historyEngine.ReplicateEventsV2(ctx, request)
@@ -270,6 +273,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 }
 
 func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
+	ctx context.Context,
 	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) (retErr error) {
@@ -283,7 +287,7 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 		return err
 	}
 
-	ctx, cancel := e.newTaskContext(executionInfo.NamespaceId)
+	ctx, cancel := e.newTaskContext(ctx, executionInfo.NamespaceId)
 	defer cancel()
 
 	return e.historyEngine.ReplicateWorkflowState(ctx, &historyservice.ReplicateWorkflowStateRequest{
@@ -344,12 +348,13 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 }
 
 func (e *taskExecutorImpl) newTaskContext(
+	parentCtx context.Context,
 	namespaceID string,
 ) (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := context.WithTimeout(parentCtx, replicationTimeout)
 
 	namespace, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(namespaceID))
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(namespace.String(), headers.CallerTypeBackground, ""))
+	ctx = headers.SetCallerName(ctx, namespace.String())
 
 	return ctx, cancel
 }

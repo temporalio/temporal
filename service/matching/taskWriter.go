@@ -330,5 +330,5 @@ func (w *taskWriter) allocTaskIDBlock(ctx context.Context, prevBlockEnd int64) (
 func (w *taskWriter) initContext() context.Context {
 	namespace, _ := w.tlMgr.namespaceRegistry.GetNamespaceName(w.tlMgr.taskQueueID.namespaceID)
 
-	return headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(namespace.String(), headers.CallerTypeBackground, ""))
+	return headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(namespace.String()))
 }
