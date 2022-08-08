@@ -3284,6 +3284,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return errWaitForRefresh
 	}
 
+	// TODO: confirm retry is necessary here.
 	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
 	isWaitErr := func(e error) bool { return e == errWaitForRefresh }
 	err = backoff.ThrottleRetryContext(ctx, op, policy, isWaitErr)
