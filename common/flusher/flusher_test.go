@@ -26,14 +26,14 @@ package flusher
 
 import (
 	"context"
+	"math/rand"
 	"sync"
 	"testing"
+	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 )
 
@@ -41,12 +41,16 @@ type (
 	flusherSuite struct {
 		*require.Assertions
 		suite.Suite
-		controller *gomock.Controller
-		ctx        context.Context
 
-		capacity int
+		ctx context.Context
+	}
+
+	fakeTask struct {
+		id int64
+	}
+	fakeWriter struct {
 		sync.Mutex
-		flusher Flusher[int]
+		tasks []*fakeTask
 	}
 )
 
@@ -55,63 +59,273 @@ func TestFlusher(t *testing.T) {
 	suite.Run(t, fs)
 }
 
-func (fs *flusherSuite) SetupSuite() {
-	fs.Assertions = require.New(fs.T())
+func (s *flusherSuite) SetupSuite() {
+	rand.Seed(time.Now().UnixNano())
+
+	s.Assertions = require.New(s.T())
 }
 
-func (fs *flusherSuite) TearDownSuite() {
-	fs.controller.Finish()
+func (s *flusherSuite) TearDownSuite() {
+
 }
 
-func (fs *flusherSuite) SetupTest() {
-	fs.controller = gomock.NewController(fs.T())
-	fs.ctx = context.Background()
-	logger := log.NewTestLogger()
-	writer := NewNoopItemWriter[int](logger)
-	fs.capacity = 200
-	bufferCount := 2
-	flushDuration := 100
-
-	fs.flusher = NewFlusher[int](bufferCount, fs.capacity, flushDuration, writer, logger)
-	fs.flusher.Start()
+func (s *flusherSuite) SetupTest() {
+	s.ctx = context.Background()
 }
 
-func (fs *flusherSuite) TearDownTest() {
-	fs.controller.Finish()
+func (s *flusherSuite) TearDownTest() {
+
 }
 
-func (fs *flusherSuite) TestFlushTimer() {
-	var futArr [200]*future.FutureImpl[struct{}]
-	baseVal := 25
-	for i := 0; i < fs.capacity-160; i++ {
-		futArr[i] = fs.flusher.AddItemToBeFlushed(baseVal + i)
+func (s *flusherSuite) TestBuffer_Buffer() {
+	bufferCapacity := 2
+	numBuffer := 2
+	flushTimeout := time.Minute
+	writer := &fakeWriter{}
+	flushBuffer := NewFlusher[*fakeTask](
+		bufferCapacity,
+		numBuffer,
+		flushTimeout,
+		writer,
+		log.NewTestLogger(),
+	)
+
+	task := newFakeTask()
+	fut := flushBuffer.Buffer(task)
+	s.False(fut.Ready())
+
+	flushBuffer.Lock()
+	defer flushBuffer.Unlock()
+	s.Equal(1, len(flushBuffer.flushBuffer))
+	s.Equal(task, flushBuffer.flushBuffer[0].Item)
+	s.Equal(&flushBuffer.flushBuffer, flushBuffer.flushBufferPointer)
+	s.Equal(1, len(flushBuffer.freeBufferChan))
+	s.Equal(0, len(flushBuffer.fullBufferChan))
+
+	s.Equal([]*fakeTask{}, writer.Get())
+}
+
+func (s *flusherSuite) TestBuffer_Switch() {
+	bufferCapacity := 2
+	numBuffer := 2
+	flushTimeout := time.Minute
+	writer := &fakeWriter{}
+	flushBuffer := NewFlusher[*fakeTask](
+		bufferCapacity,
+		numBuffer,
+		flushTimeout,
+		writer,
+		log.NewTestLogger(),
+	)
+
+	task0 := newFakeTask()
+	task1 := newFakeTask()
+	task2 := newFakeTask()
+	fut0 := flushBuffer.Buffer(task0)
+	fut1 := flushBuffer.Buffer(task1)
+	fut2 := flushBuffer.Buffer(task2)
+	s.False(fut0.Ready())
+	s.False(fut1.Ready())
+	s.False(fut2.Ready())
+
+	flushBuffer.Lock()
+	defer flushBuffer.Unlock()
+	s.Equal(1, len(flushBuffer.flushBuffer))
+	s.Equal(task2, flushBuffer.flushBuffer[0].Item)
+	s.Equal(&flushBuffer.flushBuffer, flushBuffer.flushBufferPointer)
+	s.Equal(0, len(flushBuffer.freeBufferChan))
+	s.Equal(1, len(flushBuffer.fullBufferChan))
+	buffer := <-flushBuffer.fullBufferChan
+	s.Equal(task0, buffer[0].Item)
+	s.Equal(task1, buffer[1].Item)
+	s.Equal([]*fakeTask{}, writer.Get())
+}
+
+func (s *flusherSuite) TestBuffer_Full() {
+	bufferCapacity := 1
+	numBuffer := 2
+	flushTimeout := time.Minute
+	writer := &fakeWriter{}
+	flushBuffer := NewFlusher[*fakeTask](
+		bufferCapacity,
+		numBuffer,
+		flushTimeout,
+		writer,
+		log.NewTestLogger(),
+	)
+
+	task0 := newFakeTask()
+	task1 := newFakeTask()
+	task2 := newFakeTask()
+	fut0 := flushBuffer.Buffer(task0)
+	fut1 := flushBuffer.Buffer(task1)
+	fut2 := flushBuffer.Buffer(task2)
+	s.False(fut0.Ready())
+	s.False(fut1.Ready())
+	_, err := fut2.Get(s.ctx)
+	s.Equal(ErrFull, err)
+
+	flushBuffer.Lock()
+	defer flushBuffer.Unlock()
+	s.Equal(0, len(flushBuffer.flushBuffer))
+	s.Nil(flushBuffer.flushBufferPointer)
+	s.Equal(0, len(flushBuffer.freeBufferChan))
+	s.Equal(2, len(flushBuffer.fullBufferChan))
+	buffer := <-flushBuffer.fullBufferChan
+	s.Equal(task0, buffer[0].Item)
+	buffer = <-flushBuffer.fullBufferChan
+	s.Equal(task1, buffer[0].Item)
+	s.Equal([]*fakeTask{}, writer.Get())
+}
+
+func (s *flusherSuite) TestBuffer_Timer() {
+	bufferCapacity := 2
+	numBuffer := 2
+	flushTimeout := time.Millisecond
+	writer := &fakeWriter{}
+	flushBuffer := NewFlusher[*fakeTask](
+		bufferCapacity,
+		numBuffer,
+		flushTimeout,
+		writer,
+		log.NewTestLogger(),
+	)
+	flushBuffer.Start()
+	defer flushBuffer.Stop()
+
+	task := newFakeTask()
+	fut := flushBuffer.Buffer(task)
+	_, err := fut.Get(s.ctx)
+	s.NoError(err)
+
+	flushBuffer.Lock()
+	s.Equal(0, len(flushBuffer.flushBuffer))
+	s.Nil(flushBuffer.flushBufferPointer)
+	s.Equal(1, len(flushBuffer.freeBufferChan))
+	s.Equal(0, len(flushBuffer.fullBufferChan))
+	flushBuffer.Unlock()
+
+	s.Equal([]*fakeTask{task}, writer.Get())
+}
+
+func (s *flusherSuite) TestBuffer_Shutdown() {
+	bufferCapacity := 2
+	numBuffer := 2
+	flushTimeout := time.Millisecond
+	writer := &fakeWriter{}
+	flushBuffer := NewFlusher[*fakeTask](
+		bufferCapacity,
+		numBuffer,
+		flushTimeout,
+		writer,
+		log.NewTestLogger(),
+	)
+	flushBuffer.Start()
+
+	task0 := newFakeTask()
+	task1 := newFakeTask()
+	task2 := newFakeTask()
+	fut0 := flushBuffer.Buffer(task0)
+	fut1 := flushBuffer.Buffer(task1)
+	fut2 := flushBuffer.Buffer(task2)
+
+	flushBuffer.Stop()
+	_, err := fut0.Get(s.ctx)
+	s.Equal(ErrShutdown, err)
+	_, err = fut1.Get(s.ctx)
+	s.Equal(ErrShutdown, err)
+	_, err = fut2.Get(s.ctx)
+	s.Equal(ErrShutdown, err)
+
+	flushBuffer.Lock()
+	s.Nil(flushBuffer.flushBuffer)
+	s.Nil(flushBuffer.flushBufferPointer)
+	s.Equal(0, len(flushBuffer.freeBufferChan))
+	s.Equal(0, len(flushBuffer.fullBufferChan))
+	flushBuffer.Unlock()
+
+	s.Equal([]*fakeTask{}, writer.Get())
+}
+
+func (s *flusherSuite) TestBuffer_Concurrent() {
+	bufferCapacity := 128
+	numBuffer := 2
+	flushTimeout := 4 * time.Millisecond
+	writer := &fakeWriter{}
+	flushBuffer := NewFlusher[*fakeTask](
+		bufferCapacity,
+		numBuffer,
+		flushTimeout,
+		writer,
+		log.NewTestLogger(),
+	)
+	flushBuffer.Start()
+	defer flushBuffer.Stop()
+
+	numTaskProducer := bufferCapacity * 2
+	numTaskPerProducer := 64
+
+	startWaitGroup := sync.WaitGroup{}
+	endWaitGroup := sync.WaitGroup{}
+
+	startWaitGroup.Add(numTaskProducer)
+	endWaitGroup.Add(numTaskProducer)
+	for i := 0; i < numTaskProducer; i++ {
+		go func() {
+			startWaitGroup.Wait()
+			defer endWaitGroup.Done()
+
+			for i := 0; i < numTaskPerProducer; i++ {
+				task := newFakeTask()
+				for {
+					fut := flushBuffer.Buffer(task)
+					_, err := fut.Get(s.ctx)
+					if err != nil {
+						time.Sleep(time.Millisecond)
+					} else {
+						break
+					}
+				}
+			}
+		}()
+		startWaitGroup.Done()
 	}
-	for i := 0; i < fs.capacity-160; i++ {
-		_, err := futArr[i].Get(fs.ctx)
-		fs.NoError(err)
+	endWaitGroup.Wait()
+
+	flushBuffer.Lock()
+	s.Equal(0, len(flushBuffer.flushBuffer))
+	s.Nil(flushBuffer.flushBufferPointer)
+	s.Equal(1, len(flushBuffer.freeBufferChan))
+	s.Equal(0, len(flushBuffer.fullBufferChan))
+	flushBuffer.Unlock()
+
+	s.Equal(numTaskProducer*numTaskPerProducer, len(writer.Get()))
+}
+
+func (w *fakeWriter) Write(
+	tasks []*fakeTask,
+) error {
+	w.Lock()
+	defer w.Unlock()
+	w.tasks = append(w.tasks, tasks...)
+	return nil
+}
+
+func (w *fakeWriter) Get() []*fakeTask {
+	w.Lock()
+	defer w.Unlock()
+	tasks := w.tasks
+	w.tasks = nil
+
+	if tasks != nil {
+		return tasks
+	} else {
+		return []*fakeTask{}
 	}
 }
 
-func (fs *flusherSuite) TestBufferFullFlush() {
-	var futArr [200]*future.FutureImpl[struct{}]
-	baseVal := 25
-	for i := 0; i < fs.capacity; i++ {
-		futArr[i] = fs.flusher.AddItemToBeFlushed(baseVal + i)
-	}
-	for i := 0; i < fs.capacity; i++ {
-		_, err := futArr[i].Get(fs.ctx)
-		fs.NoError(err)
-	}
-}
-
-func (fs *flusherSuite) TestBufferPastCapacityFlush() {
-	var futArr [300]*future.FutureImpl[struct{}]
-	baseVal := 25
-	for i := 0; i < fs.capacity+100; i++ {
-		futArr[i] = fs.flusher.AddItemToBeFlushed(baseVal + i)
-	}
-	for i := 0; i < fs.capacity+100; i++ {
-		_, err := futArr[i].Get(fs.ctx)
-		fs.NoError(err)
+func newFakeTask() *fakeTask {
+	return &fakeTask{
+		id: rand.Int63(),
 	}
 }
