@@ -45,9 +45,9 @@ var (
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
 )
 
-type configValueMap map[string][]*constrainedValue
+type configValueMap map[string][]*ConstrainedValue
 
-type constrainedValue struct {
+type ConstrainedValue struct {
 	Value       interface{}
 	Constraints map[string]interface{}
 }
@@ -178,7 +178,7 @@ func (bc *basicClient) getValueWithFilters(
 	values := bc.values.Load().(configValueMap)
 	constrainedValues := values[keyName]
 
-	if defaultConstraints, ok := defaultValue.([]*constrainedValue); ok {
+	if defaultConstraints, ok := defaultValue.([]*ConstrainedValue); ok {
 		// if defaultValue is a list of constrained values, then one of them must have an empty
 		// constraint set
 		constrainedValues = append(slices.Clone(constrainedValues), defaultConstraints...)
@@ -205,7 +205,7 @@ func (bc *basicClient) getValueWithFilters(
 }
 
 // match will return true if the constraints matches the filters exactly
-func match(v *constrainedValue, filters map[Filter]interface{}) bool {
+func match(v *ConstrainedValue, filters map[Filter]interface{}) bool {
 	if len(v.Constraints) != len(filters) {
 		return false
 	}
@@ -242,7 +242,7 @@ func (fc *basicClient) logDiff(old configValueMap, new configValueMap) {
 	}
 }
 
-func (bc *basicClient) logConstraintsDiff(key string, oldValues []*constrainedValue, newValues []*constrainedValue) {
+func (bc *basicClient) logConstraintsDiff(key string, oldValues []*ConstrainedValue, newValues []*ConstrainedValue) {
 	for _, oldValue := range oldValues {
 		matchFound := false
 		for _, newValue := range newValues {
@@ -271,7 +271,7 @@ func (bc *basicClient) logConstraintsDiff(key string, oldValues []*constrainedVa
 	}
 }
 
-func (bc *basicClient) logValueDiff(key string, oldValue *constrainedValue, newValue *constrainedValue) {
+func (bc *basicClient) logValueDiff(key string, oldValue *ConstrainedValue, newValue *ConstrainedValue) {
 	logLine := &strings.Builder{}
 	logLine.Grow(128)
 	logLine.WriteString("dynamic config changed for the key: ")
@@ -283,7 +283,7 @@ func (bc *basicClient) logValueDiff(key string, oldValue *constrainedValue, newV
 	bc.logger.Info(logLine.String())
 }
 
-func (bc *basicClient) appendConstrainedValue(logLine *strings.Builder, value *constrainedValue) {
+func (bc *basicClient) appendConstrainedValue(logLine *strings.Builder, value *ConstrainedValue) {
 	if value == nil {
 		logLine.WriteString("nil")
 	} else {

@@ -323,12 +323,12 @@ func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
 
 func (s *fileBasedClientSuite) TestMatch() {
 	testCases := []struct {
-		v       *constrainedValue
+		v       *ConstrainedValue
 		filters map[Filter]interface{}
 		matched bool
 	}{
 		{
-			v: &constrainedValue{
+			v: &ConstrainedValue{
 				Constraints: map[string]interface{}{},
 			},
 			filters: map[Filter]interface{}{
@@ -337,14 +337,14 @@ func (s *fileBasedClientSuite) TestMatch() {
 			matched: false,
 		},
 		{
-			v: &constrainedValue{
+			v: &ConstrainedValue{
 				Constraints: map[string]interface{}{"some key": "some value"},
 			},
 			filters: map[Filter]interface{}{},
 			matched: false,
 		},
 		{
-			v: &constrainedValue{
+			v: &ConstrainedValue{
 				Constraints: map[string]interface{}{"namespace": "samples-namespace"},
 			},
 			filters: map[Filter]interface{}{
@@ -353,7 +353,7 @@ func (s *fileBasedClientSuite) TestMatch() {
 			matched: false,
 		},
 		{
-			v: &constrainedValue{
+			v: &ConstrainedValue{
 				Constraints: map[string]interface{}{
 					"namespace":     "samples-namespace",
 					"taskQueueName": "sample-task-queue",
@@ -366,7 +366,7 @@ func (s *fileBasedClientSuite) TestMatch() {
 			matched: true,
 		},
 		{
-			v: &constrainedValue{
+			v: &ConstrainedValue{
 				Constraints: map[string]interface{}{
 					"namespace":         "samples-namespace",
 					"some-other-filter": "sample-task-queue",
@@ -379,7 +379,7 @@ func (s *fileBasedClientSuite) TestMatch() {
 			matched: false,
 		},
 		{
-			v: &constrainedValue{
+			v: &ConstrainedValue{
 				Constraints: map[string]interface{}{
 					"namespace": "samples-namespace",
 				},

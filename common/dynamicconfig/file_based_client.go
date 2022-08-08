@@ -162,7 +162,7 @@ func (fc *fileBasedClient) update() error {
 	return err
 }
 
-func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue) error {
+func (fc *fileBasedClient) storeValues(newValues map[string][]*ConstrainedValue) error {
 	formattedNewValues := make(configValueMap, len(newValues))
 
 	// yaml will unmarshal map into map[interface{}]interface{} instead of map[string]interface{}

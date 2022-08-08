@@ -29,6 +29,7 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
 )
 
@@ -106,6 +107,19 @@ type (
 
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection) *Config {
+	defaultUpdateAckInterval := []*dynamicconfig.ConstrainedValue{
+		// Use a longer default interval for the per-namespace internal worker queues.
+		{
+			Constraints: map[string]any{
+				dynamicconfig.TaskQueueName.String(): primitives.PerNSWorkerTaskQueue,
+			},
+			Value: 5 * time.Minute,
+		},
+		// Default for everything else.
+		{
+			Value: 1 * time.Minute,
+		},
+	}
 	return &Config{
 		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.MatchingPersistenceMaxQPS, 3000),
 		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.MatchingPersistenceGlobalMaxQPS, 0),
@@ -114,7 +128,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		RPS:                                   dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
 		RangeSize:                             100000,
 		GetTasksBatchSize:                     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingGetTasksBatchSize, 1000),
-		UpdateAckInterval:                     dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingUpdateAckInterval, 1*time.Minute),
+		UpdateAckInterval:                     dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingUpdateAckInterval, defaultUpdateAckInterval),
 		IdleTaskqueueCheckInterval:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingIdleTaskqueueCheckInterval, 5*time.Minute),
 		MaxTaskqueueIdleTime:                  dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MaxTaskqueueIdleTime, 5*time.Minute),
 		LongPollExpirationInterval:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingLongPollExpirationInterval, time.Minute),
