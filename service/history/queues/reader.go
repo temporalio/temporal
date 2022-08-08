@@ -33,12 +33,17 @@ import (
 	"time"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
+)
+
+var (
+	throttleRetryDelay = 3 * time.Second
 )
 
 type (
@@ -88,6 +93,7 @@ type (
 		notifyCh      chan struct{}
 
 		throttleTimer *time.Timer
+		retrier       backoff.Retrier
 	}
 )
 
@@ -122,6 +128,11 @@ func NewReader(
 		slices:        sliceList,
 		nextReadSlice: sliceList.Front(),
 		notifyCh:      make(chan struct{}, 1),
+
+		retrier: backoff.NewRetrier(
+			common.CreateReadTaskRetryPolicy(),
+			backoff.SystemClock,
+		),
 	}
 }
 
@@ -312,14 +323,18 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	tasks, err := loadSlice.SelectTasks(r.options.BatchSize())
 	if err != nil {
 		r.logger.Error("Queue reader unable to retrieve tasks", tag.Error(err))
+		if common.IsResourceExhausted(err) {
+			r.pauseLocked(throttleRetryDelay)
+		} else {
+			r.pauseLocked(r.retrier.NextBackOff())
+		}
+		return
 	}
+	r.retrier.Reset()
 
 	for _, task := range tasks {
 		r.submit(task)
 	}
-
-	// TODO: in error case, we need some backoff
-	// do this together with the retry improvement for existing queue implementation
 
 	if loadSlice.MoreTasks() {
 		r.notify()
