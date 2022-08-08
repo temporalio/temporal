@@ -163,6 +163,76 @@ func (s *configSuite) TestGetDurationPropertyFilteredByTaskQueueInfo() {
 	s.Equal(time.Minute, value(namespace, taskQueue, 0))
 }
 
+func (s *configSuite) TestGetDurationPropertyStructuredDefaults() {
+	defaults := []*ConstrainedValue{
+		{
+			Constraints: map[string]any{
+				Namespace.String():     "ns2",
+				TaskQueueName.String(): "tq2",
+			},
+			Value: 2 * time.Minute,
+		},
+		{
+			Constraints: map[string]any{
+				TaskQueueName.String(): "tq2",
+			},
+			Value: 5 * time.Minute,
+		},
+		{
+			Value: 7 * time.Minute,
+		},
+	}
+	value := s.cln.GetDurationPropertyFilteredByTaskQueueInfo(testGetDurationPropertyStructuredDefaults, defaults)
+	s.Equal(7*time.Minute, value("ns1", "tq1", 0))
+	s.Equal(7*time.Minute, value("ns2", "tq1", 0))
+	s.Equal(5*time.Minute, value("ns1", "tq2", 0))
+	s.Equal(2*time.Minute, value("ns2", "tq2", 0))
+
+	// user-set values should take precedence. defaults are included below in the interleaved
+	// precedence order to make the test easier to read
+	values := maps.Clone(s.client.getValues())
+	values[strings.ToLower(testGetDurationPropertyStructuredDefaults)] = []*ConstrainedValue{
+		{
+			Constraints: map[string]any{
+				Namespace.String():     "ns2",
+				TaskQueueName.String(): "tq2",
+			},
+			Value: 2 * time.Second,
+		},
+		// {
+		//   Constraints: map[string]any{
+		//     Namespace.String():     "ns2",
+		//     TaskQueueName.String(): "tq2",
+		//   },
+		//   Value: 2 * time.Minute,
+		// },
+		// {
+		//   Constraints: map[string]any{
+		//     TaskQueueName.String(): "tq2",
+		//   },
+		//   Value: 5 * time.Minute,
+		// },
+		{
+			Constraints: map[string]any{
+				Namespace.String(): "ns1",
+			},
+			Value: 5 * time.Second,
+		},
+		{
+			Value: 7 * time.Second,
+		},
+		// {
+		//   Value: 7 * time.Minute,
+		// },
+	}
+	s.client.updateValues(values)
+
+	s.Equal(5*time.Second, value("ns1", "tq1", 0))
+	s.Equal(7*time.Second, value("ns2", "tq1", 0))
+	s.Equal(5*time.Minute, value("ns1", "tq2", 0))
+	s.Equal(2*time.Second, value("ns2", "tq2", 0))
+}
+
 func (s *configSuite) TestGetMapProperty() {
 	val := map[string]interface{}{
 		"testKey": 123,
