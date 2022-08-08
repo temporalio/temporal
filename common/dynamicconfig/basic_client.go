@@ -171,7 +171,7 @@ func (bc *basicClient) GetDurationValue(
 		}
 		return d, err
 	}
-	durationVal := defaultValue.(time.Duration)
+	durationVal, _ := defaultValue.(time.Duration)
 	return durationVal, errors.New("value not convertible to Duration")
 }
 
