@@ -202,7 +202,11 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_NamespaceOnly() {
 	cln := NewCollection(s.client, log.NewNoopLogger())
 	expectedValue := 1004
 	f := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
-	v := f("another-namespace", "other-test-tq", 0)
+	v := f("another-namespace", "test-tq", 0)
+	s.Equal(expectedValue, v)
+	expectedValue = 1005
+	f = cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
+	v = f("another-namespace", "other-test-tq", 0)
 	s.Equal(expectedValue, v)
 }
 

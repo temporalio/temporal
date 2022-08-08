@@ -98,7 +98,8 @@ func (bc *basicClient) GetIntValue(
 	if intVal, ok := val.(int); ok {
 		return intVal, err
 	}
-	return 0, errors.New("value type is not int")
+	intVal, _ := defaultValue.(int)
+	return intVal, errors.New("value type is not int")
 }
 
 func (bc *basicClient) GetFloatValue(
@@ -112,7 +113,8 @@ func (bc *basicClient) GetFloatValue(
 	} else if intVal, ok := val.(int); ok {
 		return float64(intVal), err
 	}
-	return 0, errors.New("value type is not float64")
+	floatVal, _ := defaultValue.(float64)
+	return floatVal, errors.New("value type is not float64")
 }
 
 func (bc *basicClient) GetBoolValue(
@@ -124,7 +126,8 @@ func (bc *basicClient) GetBoolValue(
 	if boolVal, ok := val.(bool); ok {
 		return boolVal, err
 	}
-	return false, errors.New("value type is not bool")
+	boolVal, _ := defaultValue.(bool)
+	return boolVal, errors.New("value type is not bool")
 }
 
 func (bc *basicClient) GetStringValue(
@@ -136,7 +139,8 @@ func (bc *basicClient) GetStringValue(
 	if stringVal, ok := val.(string); ok {
 		return stringVal, err
 	}
-	return "", errors.New("value type is not string")
+	stringVal, _ := defaultValue.(string)
+	return stringVal, errors.New("value type is not string")
 }
 
 func (bc *basicClient) GetMapValue(
@@ -148,7 +152,8 @@ func (bc *basicClient) GetMapValue(
 	if mapVal, ok := val.(map[string]any); ok {
 		return mapVal, err
 	}
-	return nil, errors.New("value type is not map")
+	mapVal, _ := defaultValue.(map[string]any)
+	return mapVal, errors.New("value type is not map")
 }
 
 func (bc *basicClient) GetDurationValue(
@@ -161,11 +166,13 @@ func (bc *basicClient) GetDurationValue(
 	case string:
 		d, parseErr := timestamp.ParseDurationDefaultDays(v)
 		if parseErr != nil {
-			return 0, fmt.Errorf("failed to parse duration: %v", parseErr)
+			durationVal, _ := defaultValue.(time.Duration)
+			return durationVal, fmt.Errorf("failed to parse duration: %v", parseErr)
 		}
 		return d, err
 	}
-	return 0, errors.New("value not convertible to Duration")
+	durationVal := defaultValue.(time.Duration)
+	return durationVal, errors.New("value not convertible to Duration")
 }
 
 func (bc *basicClient) getValueWithFilters(
