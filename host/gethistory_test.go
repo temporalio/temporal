@@ -69,11 +69,6 @@ func TestRawHistorySuite(t *testing.T) {
 	suite.Run(t, new(rawHistorySuite))
 }
 
-func Test(t *testing.T) {
-	flag.Parse()
-	suite.Run(t, new(integrationSuite))
-}
-
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	workflowID := "integration-get-workflow-history-events-long-poll-test-all"
 	workflowTypeName := "integration-get-workflow-history-events-long-poll-test-all-type"
@@ -413,7 +408,7 @@ func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           s.testRawHistoryNamespaceName,
+		Namespace:           s.namespace,
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -475,7 +470,7 @@ func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 
 	poller := &TaskPoller{
 		Engine:              s.engine,
-		Namespace:           s.testRawHistoryNamespaceName,
+		Namespace:           s.namespace,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -537,7 +532,7 @@ func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 
 	// here do a long pull (which return immediately with at least the WorkflowExecutionStarted)
 	start := time.Now().UTC()
-	blobs, token = getHistoryWithLongPoll(s.testRawHistoryNamespaceName, workflowID, token, true)
+	blobs, token = getHistoryWithLongPoll(s.namespace, workflowID, token, true)
 	events = convertBlob(blobs)
 	allEvents = append(allEvents, events...)
 	s.True(time.Now().UTC().Before(start.Add(time.Second * 5)))
@@ -551,7 +546,7 @@ func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask1))
 	})
 	start = time.Now().UTC()
-	blobs, token = getHistoryWithLongPoll(s.testRawHistoryNamespaceName, workflowID, token, true)
+	blobs, token = getHistoryWithLongPoll(s.namespace, workflowID, token, true)
 	events = convertBlob(blobs)
 	allEvents = append(allEvents, events...)
 	s.True(time.Now().UTC().After(start.Add(time.Second * 5)))
@@ -568,7 +563,7 @@ func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(errWorkflowTask2))
 	})
 	for token != nil {
-		blobs, token = getHistoryWithLongPoll(s.testRawHistoryNamespaceName, workflowID, token, true)
+		blobs, token = getHistoryWithLongPoll(s.namespace, workflowID, token, true)
 		events = convertBlob(blobs)
 		allEvents = append(allEvents, events...)
 	}
@@ -591,7 +586,7 @@ func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	allEvents = nil
 	token = nil
 	for {
-		blobs, token = getHistory(s.testRawHistoryNamespaceName, workflowID, token)
+		blobs, token = getHistory(s.namespace, workflowID, token)
 		events = convertBlob(blobs)
 		allEvents = append(allEvents, events...)
 		if token == nil {
