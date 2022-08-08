@@ -35,7 +35,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -231,7 +230,6 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	s.NotNil(response)
 	s.True(response.StartedTime.After(*expectedResponse.ScheduledTime))
 	expectedResponse.StartedTime = response.StartedTime
-	expectedResponse.Queries = make(map[string]*querypb.WorkflowQuery)
 	s.Equal(&expectedResponse, response)
 }
 
