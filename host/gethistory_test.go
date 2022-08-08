@@ -28,15 +28,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"flag"
+	"testing"
 	"time"
 
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"go.temporal.io/server/common/persistence/serialization"
-
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -45,10 +46,33 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
+
+type rawHistorySuite struct {
+	integrationSuite
+}
+
+func (s *rawHistorySuite) SetupSuite() {
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+		dynamicconfig.SendRawWorkflowHistory: true,
+	}
+	s.integrationSuite.SetupSuite()
+}
+
+func TestRawHistorySuite(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, new(rawHistorySuite))
+}
+
+func Test(t *testing.T) {
+	flag.Parse()
+	suite.Run(t, new(integrationSuite))
+}
 
 func (s *integrationSuite) TestGetWorkflowExecutionHistory_All() {
 	workflowID := "integration-get-workflow-history-events-long-poll-test-all"
@@ -375,7 +399,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_Close() {
 	s.Logger.Info("Done TestGetWorkflowExecutionHistory_Close")
 }
 
-func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
+func (s *rawHistorySuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 	workflowID := "integration-poll-for-workflow-raw-history-events-long-poll-test-all"
 	workflowTypeName := "integration-poll-for-workflow-raw-history-events-long-poll-test-all-type"
 	taskqueueName := "integration-poll-for-workflow-raw-history-events-long-poll-test-all-taskqueue"
