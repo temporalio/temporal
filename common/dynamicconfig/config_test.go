@@ -25,97 +25,31 @@
 package dynamicconfig
 
 import (
-	"errors"
-	"sync/atomic"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/log"
 )
 
 type inMemoryClient struct {
-	globalValues atomic.Value
+	*basicClient
 }
 
 func newInMemoryClient() *inMemoryClient {
-	var globalValues atomic.Value
-	globalValues.Store(make(map[Key]interface{}))
-	return &inMemoryClient{globalValues: globalValues}
+	return &inMemoryClient{
+		basicClient: newBasicClient(log.NewNoopLogger()),
+	}
 }
 
 func (mc *inMemoryClient) SetValue(key Key, value interface{}) {
-	v := mc.globalValues.Load().(map[Key]interface{})
-	v[key] = value
-	mc.globalValues.Store(v)
-}
-
-func (mc *inMemoryClient) GetValue(key Key, defaultValue interface{}) (interface{}, error) {
-	v := mc.globalValues.Load().(map[Key]interface{})
-	if val, ok := v[key]; ok {
-		return val, nil
-	}
-	return defaultValue, errors.New("unable to find key")
-}
-
-func (mc *inMemoryClient) GetValueWithFilters(
-	name Key, filters []map[Filter]interface{}, defaultValue interface{},
-) (interface{}, error) {
-	return mc.GetValue(name, defaultValue)
-}
-
-func (mc *inMemoryClient) GetIntValue(name Key, filters []map[Filter]interface{}, defaultValue int) (int, error) {
-	v := mc.globalValues.Load().(map[Key]interface{})
-	if val, ok := v[name]; ok {
-		return val.(int), nil
-	}
-	return defaultValue, errors.New("unable to find key")
-}
-
-func (mc *inMemoryClient) GetFloatValue(name Key, filters []map[Filter]interface{}, defaultValue float64) (float64, error) {
-	v := mc.globalValues.Load().(map[Key]interface{})
-	if val, ok := v[name]; ok {
-		return val.(float64), nil
-	}
-	return defaultValue, errors.New("unable to find key")
-}
-
-func (mc *inMemoryClient) GetBoolValue(name Key, filters []map[Filter]interface{}, defaultValue bool) (bool, error) {
-	v := mc.globalValues.Load().(map[Key]interface{})
-	if val, ok := v[name]; ok {
-		return val.(bool), nil
-	}
-	return defaultValue, errors.New("unable to find key")
-}
-
-func (mc *inMemoryClient) GetStringValue(name Key, filters []map[Filter]interface{}, defaultValue string) (string, error) {
-	v := mc.globalValues.Load().(map[Key]interface{})
-	if val, ok := v[name]; ok {
-		return val.(string), nil
-	}
-	return defaultValue, errors.New("unable to find key")
-}
-
-func (mc *inMemoryClient) GetMapValue(
-	name Key, filters []map[Filter]interface{}, defaultValue map[string]interface{},
-) (map[string]interface{}, error) {
-	v := mc.globalValues.Load().(map[Key]interface{})
-	if val, ok := v[name]; ok {
-		return val.(map[string]interface{}), nil
-	}
-	return defaultValue, errors.New("unable to find key")
-}
-
-func (mc *inMemoryClient) GetDurationValue(
-	name Key, filters []map[Filter]interface{}, defaultValue time.Duration,
-) (time.Duration, error) {
-	v := mc.globalValues.Load().(map[Key]interface{})
-	if val, ok := v[name]; ok {
-		return val.(time.Duration), nil
-	}
-	return defaultValue, errors.New("unable to find key")
+	values := maps.Clone(mc.getValues())
+	values[strings.ToLower(key.String())] = []*ConstrainedValue{{Value: value}}
+	mc.updateValues(values)
 }
 
 type configSuite struct {

@@ -70,8 +70,7 @@ func (bc *basicClient) getValues() configValueMap {
 }
 
 func (bc *basicClient) updateValues(newValues configValueMap) {
-	oldValues := bc.getValues()
-	bc.values.Store(newValues)
+	oldValues := bc.values.Swap(newValues).(configValueMap)
 	bc.logDiff(oldValues, newValues)
 }
 
@@ -175,7 +174,7 @@ func (bc *basicClient) getValueWithFilters(
 	defaultValue interface{},
 ) (interface{}, error) {
 	keyName := strings.ToLower(key.String())
-	values := bc.values.Load().(configValueMap)
+	values := bc.getValues()
 	constrainedValues := values[keyName]
 
 	if defaultConstraints, ok := defaultValue.([]*ConstrainedValue); ok {
