@@ -107,7 +107,7 @@ type (
 
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection) *Config {
-	defaultUpdateAckInterval := []*dynamicconfig.ConstrainedValue{
+	defaultUpdateAckInterval := []dynamicconfig.ConstrainedValue{
 		// Use a longer default interval for the per-namespace internal worker queues.
 		{
 			Constraints: map[string]any{

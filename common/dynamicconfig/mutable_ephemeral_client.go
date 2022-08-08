@@ -91,7 +91,7 @@ func Set(k Key, v interface{}, constrainers ...MutationConstraint) Mutation {
 		for _, cf := range constrainers {
 			cf(cv.Constraints)
 		}
-		m[kstr] = []*ConstrainedValue{&cv}
+		m[kstr] = []ConstrainedValue{cv}
 	}
 }
 
@@ -105,7 +105,7 @@ func Add(k Key, v interface{}, constrainers ...MutationConstraint) Mutation {
 		for _, cf := range constrainers {
 			cf(cv.Constraints)
 		}
-		m[kstr] = append(m[kstr], &cv)
+		m[kstr] = append(m[kstr], cv)
 	}
 }
 

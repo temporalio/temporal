@@ -48,7 +48,7 @@ func newInMemoryClient() *inMemoryClient {
 
 func (mc *inMemoryClient) SetValue(key Key, value interface{}) {
 	values := maps.Clone(mc.getValues())
-	values[strings.ToLower(key.String())] = []*ConstrainedValue{{Value: value}}
+	values[strings.ToLower(key.String())] = []ConstrainedValue{{Value: value}}
 	mc.updateValues(values)
 }
 
@@ -164,7 +164,7 @@ func (s *configSuite) TestGetDurationPropertyFilteredByTaskQueueInfo() {
 }
 
 func (s *configSuite) TestGetDurationPropertyStructuredDefaults() {
-	defaults := []*ConstrainedValue{
+	defaults := []ConstrainedValue{
 		{
 			Constraints: map[string]any{
 				Namespace.String():     "ns2",
@@ -191,7 +191,7 @@ func (s *configSuite) TestGetDurationPropertyStructuredDefaults() {
 	// user-set values should take precedence. defaults are included below in the interleaved
 	// precedence order to make the test easier to read
 	values := maps.Clone(s.client.getValues())
-	values[strings.ToLower(testGetDurationPropertyStructuredDefaults)] = []*ConstrainedValue{
+	values[strings.ToLower(testGetDurationPropertyStructuredDefaults)] = []ConstrainedValue{
 		{
 			Constraints: map[string]any{
 				Namespace.String():     "ns2",

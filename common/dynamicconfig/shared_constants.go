@@ -26,7 +26,7 @@ package dynamicconfig
 
 import "go.temporal.io/server/common/primitives"
 
-var defaultNumTaskQueuePartitions = []*ConstrainedValue{
+var defaultNumTaskQueuePartitions = []ConstrainedValue{
 	// The per-ns worker task queue in all namespaces should only have one partition, since
 	// we'll only run one worker per task queue.
 	{

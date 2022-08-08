@@ -45,7 +45,7 @@ var (
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
 )
 
-type configValueMap map[string][]*ConstrainedValue
+type configValueMap map[string][]ConstrainedValue
 
 type ConstrainedValue struct {
 	Value       interface{}
@@ -184,7 +184,7 @@ func (bc *basicClient) getValueWithFilters(
 	values := bc.getValues()
 	constrainedValues := values[keyName]
 
-	if defaultConstraints, ok := defaultValue.([]*ConstrainedValue); ok {
+	if defaultConstraints, ok := defaultValue.([]ConstrainedValue); ok {
 		// if defaultValue is a list of constrained values, then one of them must have an empty
 		// constraint set
 		constrainedValues = append(slices.Clone(constrainedValues), defaultConstraints...)
@@ -211,7 +211,7 @@ func (bc *basicClient) getValueWithFilters(
 }
 
 // match will return true if the constraints matches the filters exactly
-func match(v *ConstrainedValue, filters map[Filter]interface{}) bool {
+func match(v ConstrainedValue, filters map[Filter]interface{}) bool {
 	if len(v.Constraints) != len(filters) {
 		return false
 	}
@@ -230,7 +230,7 @@ func (fc *basicClient) logDiff(old configValueMap, new configValueMap) {
 		if !ok {
 			for _, newValue := range newValues {
 				// new key added
-				fc.logValueDiff(key, nil, newValue)
+				fc.logValueDiff(key, nil, &newValue)
 			}
 		} else {
 			// compare existing keys
@@ -242,25 +242,25 @@ func (fc *basicClient) logDiff(old configValueMap, new configValueMap) {
 	for key, oldValues := range old {
 		if _, ok := new[key]; !ok {
 			for _, oldValue := range oldValues {
-				fc.logValueDiff(key, oldValue, nil)
+				fc.logValueDiff(key, &oldValue, nil)
 			}
 		}
 	}
 }
 
-func (bc *basicClient) logConstraintsDiff(key string, oldValues []*ConstrainedValue, newValues []*ConstrainedValue) {
+func (bc *basicClient) logConstraintsDiff(key string, oldValues []ConstrainedValue, newValues []ConstrainedValue) {
 	for _, oldValue := range oldValues {
 		matchFound := false
 		for _, newValue := range newValues {
 			if reflect.DeepEqual(oldValue.Constraints, newValue.Constraints) {
 				matchFound = true
 				if !reflect.DeepEqual(oldValue.Value, newValue.Value) {
-					bc.logValueDiff(key, oldValue, newValue)
+					bc.logValueDiff(key, &oldValue, &newValue)
 				}
 			}
 		}
 		if !matchFound {
-			bc.logValueDiff(key, oldValue, nil)
+			bc.logValueDiff(key, &oldValue, nil)
 		}
 	}
 
@@ -272,7 +272,7 @@ func (bc *basicClient) logConstraintsDiff(key string, oldValues []*ConstrainedVa
 			}
 		}
 		if !matchFound {
-			bc.logValueDiff(key, nil, newValue)
+			bc.logValueDiff(key, nil, &newValue)
 		}
 	}
 }
