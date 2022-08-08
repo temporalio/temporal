@@ -49,6 +49,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/archiver"
@@ -481,7 +482,7 @@ func (s *Service) startArchiver() {
 func (s *Service) ensureSystemNamespaceExists(
 	ctx context.Context,
 ) {
-	_, err := s.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: common.SystemLocalNamespace})
+	_, err := s.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: primitives.SystemLocalNamespace})
 	switch err.(type) {
 	case nil:
 		// noop

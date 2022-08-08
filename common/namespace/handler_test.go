@@ -336,7 +336,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			namespaces[resp.Namespaces[0].NamespaceInfo.GetName()] = resp.Namespaces[0]
 		}
 	}
-	delete(namespaces, common.SystemLocalNamespace)
+	delete(namespaces, primitives.SystemLocalNamespace)
 	s.Equal(map[string]*workflowservice.DescribeNamespaceResponse{
 		namespace1: &workflowservice.DescribeNamespaceResponse{
 			NamespaceInfo: &namespacepb.NamespaceInfo{

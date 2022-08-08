@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -179,7 +178,7 @@ func (s *parentClosePolicyWorkflowSuite) TestProcessorActivity_RemoteCluster() {
 			request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*workflowservice.SignalWithStartWorkflowExecutionResponse, error) {
-			s.Equal(common.SystemLocalNamespace, request.Namespace)
+			s.Equal(primitives.SystemLocalNamespace, request.Namespace)
 			s.Equal(processorWFTypeName, request.WorkflowType.Name)
 			s.Equal(processorTaskQueueName, request.TaskQueue.Name)
 			s.Equal(workflowIDReusePolicy, request.WorkflowIdReusePolicy)

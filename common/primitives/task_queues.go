@@ -22,29 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package dynamicconfig
+package primitives
 
-import "go.temporal.io/server/common/primitives"
-
-var defaultNumTaskQueuePartitions = []*constrainedValue{
-	// The per-ns worker task queue in all namespaces should only have one partition, since
-	// we'll only run one worker per task queue.
-	{
-		Constraints: map[string]any{
-			TaskQueueName.String(): primitives.PerNSWorkerTaskQueue,
-		},
-		Value: 1,
-	},
-	// All task queues in the system namespace are relatively low-throughput, they only need
-	// one partition.
-	{
-		Constraints: map[string]any{
-			Namespace.String(): primitives.SystemLocalNamespace,
-		},
-		Value: 1,
-	},
-	// Default for everything else:
-	{
-		Value: 4,
-	},
-}
+// These are task queue names for internal task queues.
+const (
+	PerNSWorkerTaskQueue = "temporal-sys-per-ns-tq"
+)

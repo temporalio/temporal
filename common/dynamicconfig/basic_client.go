@@ -32,6 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/exp/slices"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -75,7 +77,7 @@ func (bc *basicClient) updateValues(newValues configValueMap) {
 
 func (bc *basicClient) GetValue(
 	name Key,
-	defaultValue interface{},
+	defaultValue any,
 ) (interface{}, error) {
 	return bc.getValueWithFilters(name, nil, defaultValue)
 }
@@ -91,105 +93,80 @@ func (bc *basicClient) GetValueWithFilters(
 func (bc *basicClient) GetIntValue(
 	name Key,
 	filters []map[Filter]interface{},
-	defaultValue int,
+	defaultValue any,
 ) (int, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
 	if intVal, ok := val.(int); ok {
-		return intVal, nil
+		return intVal, err
 	}
-	return defaultValue, errors.New("value type is not int")
+	return 0, errors.New("value type is not int")
 }
 
 func (bc *basicClient) GetFloatValue(
 	name Key,
 	filters []map[Filter]interface{},
-	defaultValue float64,
+	defaultValue any,
 ) (float64, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
 	if floatVal, ok := val.(float64); ok {
-		return floatVal, nil
+		return floatVal, err
 	} else if intVal, ok := val.(int); ok {
-		return float64(intVal), nil
+		return float64(intVal), err
 	}
-	return defaultValue, errors.New("value type is not float64")
+	return 0, errors.New("value type is not float64")
 }
 
 func (bc *basicClient) GetBoolValue(
 	name Key,
 	filters []map[Filter]interface{},
-	defaultValue bool,
+	defaultValue any,
 ) (bool, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
 	if boolVal, ok := val.(bool); ok {
-		return boolVal, nil
+		return boolVal, err
 	}
-	return defaultValue, errors.New("value type is not bool")
+	return false, errors.New("value type is not bool")
 }
 
 func (bc *basicClient) GetStringValue(
 	name Key,
 	filters []map[Filter]interface{},
-	defaultValue string,
+	defaultValue any,
 ) (string, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
 	if stringVal, ok := val.(string); ok {
-		return stringVal, nil
+		return stringVal, err
 	}
-	return defaultValue, errors.New("value type is not string")
+	return "", errors.New("value type is not string")
 }
 
 func (bc *basicClient) GetMapValue(
 	name Key,
 	filters []map[Filter]interface{},
-	defaultValue map[string]interface{},
-) (map[string]interface{}, error) {
+	defaultValue any,
+) (map[string]any, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
+	if mapVal, ok := val.(map[string]any); ok {
+		return mapVal, err
 	}
-	if mapVal, ok := val.(map[string]interface{}); ok {
-		return mapVal, nil
-	}
-	return defaultValue, errors.New("value type is not map")
+	return nil, errors.New("value type is not map")
 }
 
 func (bc *basicClient) GetDurationValue(
-	name Key, filters []map[Filter]interface{}, defaultValue time.Duration,
+	name Key, filters []map[Filter]interface{}, defaultValue any,
 ) (time.Duration, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
 	switch v := val.(type) {
 	case time.Duration:
-		return v, nil
+		return v, err
 	case string:
-		{
-			d, err := timestamp.ParseDurationDefaultDays(v)
-			if err != nil {
-				return defaultValue, fmt.Errorf("failed to parse duration: %v", err)
-			}
-			return d, nil
+		d, parseErr := timestamp.ParseDurationDefaultDays(v)
+		if parseErr != nil {
+			return 0, fmt.Errorf("failed to parse duration: %v", parseErr)
 		}
+		return d, err
 	}
-	return defaultValue, errors.New("value not convertible to Duration")
+	return 0, errors.New("value not convertible to Duration")
 }
 
 func (bc *basicClient) getValueWithFilters(
@@ -200,6 +177,13 @@ func (bc *basicClient) getValueWithFilters(
 	keyName := strings.ToLower(key.String())
 	values := bc.values.Load().(configValueMap)
 	constrainedValues := values[keyName]
+
+	if defaultConstraints, ok := defaultValue.([]*constrainedValue); ok {
+		// if defaultValue is a list of constrained values, then one of them must have an empty
+		// constraint set
+		constrainedValues = append(slices.Clone(constrainedValues), defaultConstraints...)
+	}
+
 	if constrainedValues == nil {
 		return defaultValue, errKeyNotPresent
 	}
