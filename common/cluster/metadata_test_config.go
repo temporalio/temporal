@@ -46,12 +46,12 @@ var (
 	TestAllClusterNames = []string{TestCurrentClusterName, TestAlternativeClusterName}
 	// TestAllClusterInfo is the same as above, just convenient for test mocking
 	TestAllClusterInfo = map[string]ClusterInformation{
-		TestCurrentClusterName: ClusterInformation{
+		TestCurrentClusterName: {
 			Enabled:                true,
 			InitialFailoverVersion: TestCurrentClusterInitialFailoverVersion,
 			RPCAddress:             TestCurrentClusterFrontendAddress,
 		},
-		TestAlternativeClusterName: ClusterInformation{
+		TestAlternativeClusterName: {
 			Enabled:                true,
 			InitialFailoverVersion: TestAlternativeClusterInitialFailoverVersion,
 			RPCAddress:             TestAlternativeClusterFrontendAddress,
@@ -62,7 +62,7 @@ var (
 	TestSingleDCAllClusterNames = []string{TestCurrentClusterName}
 	// TestSingleDCClusterInfo is the same as above, just convenient for test mocking
 	TestSingleDCClusterInfo = map[string]ClusterInformation{
-		TestCurrentClusterName: ClusterInformation{
+		TestCurrentClusterName: {
 			Enabled:                true,
 			InitialFailoverVersion: TestCurrentClusterInitialFailoverVersion,
 			RPCAddress:             TestCurrentClusterFrontendAddress,

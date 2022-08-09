@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log/tag"
@@ -262,8 +263,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	// Flush any buffered events before creating the workflow task, otherwise it will result in invalid IDs for transient
 	// workflow task and will cause in timeout processing to not work for transient workflow tasks
 	if m.ms.HasBufferedEvents() {
-		// if creating a workflow task and in the mean time events are flushed from buffered events
-		// than this workflow taks cannot be a transient workflow task.
+		// if creating a workflow task and in the meantime events are flushed from buffered events
+		// then this workflow task cannot be a transient workflow task.
 		m.ms.executionInfo.WorkflowTaskAttempt = 1
 		m.ms.updatePendingEventIDs(m.ms.hBuilder.FlushBufferToCurrentBatch())
 	} else if m.ms.executionInfo.WorkflowTaskAttempt > 1 {
@@ -689,41 +690,55 @@ func (m *workflowTaskStateMachine) GetWorkflowTaskInfo(
 func (m *workflowTaskStateMachine) CreateTransientWorkflowTaskEvents(
 	workflowTask *WorkflowTaskInfo,
 	identity string,
-) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: m.ms.executionInfo.TaskQueue,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
+) *historyspb.TransientWorkflowTaskInfo {
 
-	scheduledEvent := &historypb.HistoryEvent{
-		EventId:   workflowTask.ScheduledEventID,
-		EventTime: workflowTask.ScheduledTime,
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-		Version:   m.ms.currentVersion,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
-			WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-				TaskQueue:           taskQueue,
-				StartToCloseTimeout: workflowTask.WorkflowTaskTimeout,
-				Attempt:             workflowTask.Attempt,
+	var historySuffix []*historypb.HistoryEvent
+
+	var transientWorkflowTask *historyspb.TransientWorkflowTaskInfo
+	if workflowTask.Attempt > 1 {
+		// This workflowTask is retried from mutable state
+		// Also return schedule and started which are not written to history yet
+		scheduledEvent := &historypb.HistoryEvent{
+			EventId:   workflowTask.ScheduledEventID,
+			EventTime: workflowTask.ScheduledTime,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			Version:   m.ms.currentVersion,
+			Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
+				WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: m.ms.executionInfo.TaskQueue,
+						Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+					},
+					StartToCloseTimeout: workflowTask.WorkflowTaskTimeout,
+					Attempt:             workflowTask.Attempt,
+				},
 			},
-		},
-	}
+		}
 
-	startEvent := &historypb.HistoryEvent{
-		EventId:   workflowTask.StartedEventID,
-		EventTime: workflowTask.StartedTime,
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-		Version:   m.ms.currentVersion,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
-			WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
-				ScheduledEventId: workflowTask.ScheduledEventID,
-				Identity:         identity,
-				RequestId:        workflowTask.RequestID,
+		startedEvent := &historypb.HistoryEvent{
+			EventId:   workflowTask.StartedEventID,
+			EventTime: workflowTask.StartedTime,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			Version:   m.ms.currentVersion,
+			Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
+				WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
+					ScheduledEventId: workflowTask.ScheduledEventID,
+					Identity:         identity,
+					RequestId:        workflowTask.RequestID,
+				},
 			},
-		},
+		}
+
+		// TODO (mmcshane): remove population of ScheduledEvent and StartedEvent
+		// after v1.18 is released
+		transientWorkflowTask = &historyspb.TransientWorkflowTaskInfo{
+			ScheduledEvent: scheduledEvent,
+			StartedEvent:   startedEvent,
+			HistorySuffix:  append(historySuffix, scheduledEvent, startedEvent),
+		}
 	}
 
-	return scheduledEvent, startEvent
+	return transientWorkflowTask
 }
 
 func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *WorkflowTaskInfo {

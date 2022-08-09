@@ -279,6 +279,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 		},
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		gomock.Any(),
 		s.clusterName,
 		namespace.ID(timerTask.NamespaceID),
 		timerTask.WorkflowID,
@@ -507,6 +508,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 		},
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		gomock.Any(),
 		s.clusterName,
 		namespace.ID(timerTask.NamespaceID),
 		timerTask.WorkflowID,
@@ -850,6 +852,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 		},
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		gomock.Any(),
 		s.clusterName,
 		namespace.ID(timerTask.NamespaceID),
 		timerTask.WorkflowID,
@@ -1004,6 +1007,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 		},
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		gomock.Any(),
 		s.clusterName,
 		namespace.ID(timerTask.NamespaceID),
 		timerTask.WorkflowID,
@@ -1129,6 +1133,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 		},
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		gomock.Any(),
 		s.clusterName,
 		namespace.ID(timerTask.NamespaceID),
 		timerTask.WorkflowID,
@@ -1482,6 +1487,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 		Execution:   &execution,
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		gomock.Any(),
 		s.clusterName,
 		s.namespaceID,
 		execution.WorkflowId,

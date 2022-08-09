@@ -26,13 +26,19 @@ package persistence
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
+)
+
+const (
+	RateLimitDefaultToken = 1
 )
 
 var (
@@ -42,37 +48,37 @@ var (
 
 type (
 	shardRateLimitedPersistenceClient struct {
-		rateLimiter quotas.RateLimiter
+		rateLimiter quotas.RequestRateLimiter
 		persistence ShardManager
 		logger      log.Logger
 	}
 
 	executionRateLimitedPersistenceClient struct {
-		rateLimiter quotas.RateLimiter
+		rateLimiter quotas.RequestRateLimiter
 		persistence ExecutionManager
 		logger      log.Logger
 	}
 
 	taskRateLimitedPersistenceClient struct {
-		rateLimiter quotas.RateLimiter
+		rateLimiter quotas.RequestRateLimiter
 		persistence TaskManager
 		logger      log.Logger
 	}
 
 	metadataRateLimitedPersistenceClient struct {
-		rateLimiter quotas.RateLimiter
+		rateLimiter quotas.RequestRateLimiter
 		persistence MetadataManager
 		logger      log.Logger
 	}
 
 	clusterMetadataRateLimitedPersistenceClient struct {
-		rateLimiter quotas.RateLimiter
+		rateLimiter quotas.RequestRateLimiter
 		persistence ClusterMetadataManager
 		logger      log.Logger
 	}
 
 	queueRateLimitedPersistenceClient struct {
-		rateLimiter quotas.RateLimiter
+		rateLimiter quotas.RequestRateLimiter
 		persistence Queue
 		logger      log.Logger
 	}
@@ -86,7 +92,7 @@ var _ ClusterMetadataManager = (*clusterMetadataRateLimitedPersistenceClient)(ni
 var _ Queue = (*queueRateLimitedPersistenceClient)(nil)
 
 // NewShardPersistenceRateLimitedClient creates a client to manage shards
-func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter quotas.RateLimiter, logger log.Logger) ShardManager {
+func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) ShardManager {
 	return &shardRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -95,7 +101,7 @@ func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter 
 }
 
 // NewExecutionPersistenceRateLimitedClient creates a client to manage executions
-func NewExecutionPersistenceRateLimitedClient(persistence ExecutionManager, rateLimiter quotas.RateLimiter, logger log.Logger) ExecutionManager {
+func NewExecutionPersistenceRateLimitedClient(persistence ExecutionManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) ExecutionManager {
 	return &executionRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -104,7 +110,7 @@ func NewExecutionPersistenceRateLimitedClient(persistence ExecutionManager, rate
 }
 
 // NewTaskPersistenceRateLimitedClient creates a client to manage tasks
-func NewTaskPersistenceRateLimitedClient(persistence TaskManager, rateLimiter quotas.RateLimiter, logger log.Logger) TaskManager {
+func NewTaskPersistenceRateLimitedClient(persistence TaskManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) TaskManager {
 	return &taskRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -113,7 +119,7 @@ func NewTaskPersistenceRateLimitedClient(persistence TaskManager, rateLimiter qu
 }
 
 // NewMetadataPersistenceRateLimitedClient creates a MetadataManager client to manage metadata
-func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLimiter quotas.RateLimiter, logger log.Logger) MetadataManager {
+func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) MetadataManager {
 	return &metadataRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -122,7 +128,7 @@ func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLi
 }
 
 // NewClusterMetadataPersistenceRateLimitedClient creates a MetadataManager client to manage metadata
-func NewClusterMetadataPersistenceRateLimitedClient(persistence ClusterMetadataManager, rateLimiter quotas.RateLimiter, logger log.Logger) ClusterMetadataManager {
+func NewClusterMetadataPersistenceRateLimitedClient(persistence ClusterMetadataManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) ClusterMetadataManager {
 	return &clusterMetadataRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -131,7 +137,7 @@ func NewClusterMetadataPersistenceRateLimitedClient(persistence ClusterMetadataM
 }
 
 // NewQueuePersistenceRateLimitedClient creates a client to manage queue
-func NewQueuePersistenceRateLimitedClient(persistence Queue, rateLimiter quotas.RateLimiter, logger log.Logger) Queue {
+func NewQueuePersistenceRateLimitedClient(persistence Queue, rateLimiter quotas.RequestRateLimiter, logger log.Logger) Queue {
 	return &queueRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -147,7 +153,7 @@ func (p *shardRateLimitedPersistenceClient) GetOrCreateShard(
 	ctx context.Context,
 	request *GetOrCreateShardRequest,
 ) (*GetOrCreateShardResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetOrCreateShard", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -159,7 +165,7 @@ func (p *shardRateLimitedPersistenceClient) UpdateShard(
 	ctx context.Context,
 	request *UpdateShardRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "UpdateShard", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -171,7 +177,7 @@ func (p *shardRateLimitedPersistenceClient) AssertShardOwnership(
 	ctx context.Context,
 	request *AssertShardOwnershipRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "AssertShardOwnership", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -191,7 +197,7 @@ func (p *executionRateLimitedPersistenceClient) CreateWorkflowExecution(
 	ctx context.Context,
 	request *CreateWorkflowExecutionRequest,
 ) (*CreateWorkflowExecutionResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "CreateWorkflowExecution", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -203,7 +209,7 @@ func (p *executionRateLimitedPersistenceClient) GetWorkflowExecution(
 	ctx context.Context,
 	request *GetWorkflowExecutionRequest,
 ) (*GetWorkflowExecutionResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetWorkflowExecution", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -215,7 +221,7 @@ func (p *executionRateLimitedPersistenceClient) SetWorkflowExecution(
 	ctx context.Context,
 	request *SetWorkflowExecutionRequest,
 ) (*SetWorkflowExecutionResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "SetWorkflowExecution", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -227,7 +233,7 @@ func (p *executionRateLimitedPersistenceClient) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *UpdateWorkflowExecutionRequest,
 ) (*UpdateWorkflowExecutionResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "UpdateWorkflowExecution", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -239,7 +245,7 @@ func (p *executionRateLimitedPersistenceClient) ConflictResolveWorkflowExecution
 	ctx context.Context,
 	request *ConflictResolveWorkflowExecutionRequest,
 ) (*ConflictResolveWorkflowExecutionResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "ConflictResolveWorkflowExecution", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -251,7 +257,7 @@ func (p *executionRateLimitedPersistenceClient) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *DeleteWorkflowExecutionRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "DeleteWorkflowExecution", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -263,7 +269,7 @@ func (p *executionRateLimitedPersistenceClient) DeleteCurrentWorkflowExecution(
 	ctx context.Context,
 	request *DeleteCurrentWorkflowExecutionRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "DeleteCurrentWorkflowExecution", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -275,7 +281,7 @@ func (p *executionRateLimitedPersistenceClient) GetCurrentExecution(
 	ctx context.Context,
 	request *GetCurrentExecutionRequest,
 ) (*GetCurrentExecutionResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetCurrentExecution", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -287,7 +293,7 @@ func (p *executionRateLimitedPersistenceClient) ListConcreteExecutions(
 	ctx context.Context,
 	request *ListConcreteExecutionsRequest,
 ) (*ListConcreteExecutionsResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "ListConcreteExecutions", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -299,7 +305,7 @@ func (p *executionRateLimitedPersistenceClient) AddHistoryTasks(
 	ctx context.Context,
 	request *AddHistoryTasksRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "AddHistoryTasks", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -311,7 +317,7 @@ func (p *executionRateLimitedPersistenceClient) GetHistoryTask(
 	ctx context.Context,
 	request *GetHistoryTaskRequest,
 ) (*GetHistoryTaskResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetHistoryTask", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -323,7 +329,7 @@ func (p *executionRateLimitedPersistenceClient) GetHistoryTasks(
 	ctx context.Context,
 	request *GetHistoryTasksRequest,
 ) (*GetHistoryTasksResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetHistoryTasks", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -335,7 +341,7 @@ func (p *executionRateLimitedPersistenceClient) CompleteHistoryTask(
 	ctx context.Context,
 	request *CompleteHistoryTaskRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "CompleteHistoryTask", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -347,7 +353,7 @@ func (p *executionRateLimitedPersistenceClient) RangeCompleteHistoryTasks(
 	ctx context.Context,
 	request *RangeCompleteHistoryTasksRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "RangeCompleteHistoryTasks", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -359,7 +365,7 @@ func (p *executionRateLimitedPersistenceClient) PutReplicationTaskToDLQ(
 	ctx context.Context,
 	request *PutReplicationTaskToDLQRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "PutReplicationTaskToDLQ", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -370,7 +376,7 @@ func (p *executionRateLimitedPersistenceClient) GetReplicationTasksFromDLQ(
 	ctx context.Context,
 	request *GetReplicationTasksFromDLQRequest,
 ) (*GetHistoryTasksResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetReplicationTasksFromDLQ", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -381,7 +387,7 @@ func (p *executionRateLimitedPersistenceClient) DeleteReplicationTaskFromDLQ(
 	ctx context.Context,
 	request *DeleteReplicationTaskFromDLQRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "DeleteReplicationTaskFromDLQ", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -392,7 +398,7 @@ func (p *executionRateLimitedPersistenceClient) RangeDeleteReplicationTaskFromDL
 	ctx context.Context,
 	request *RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "RangeDeleteReplicationTaskFromDLQ", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -411,7 +417,7 @@ func (p *taskRateLimitedPersistenceClient) CreateTasks(
 	ctx context.Context,
 	request *CreateTasksRequest,
 ) (*CreateTasksResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "CreateTasks", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -423,7 +429,7 @@ func (p *taskRateLimitedPersistenceClient) GetTasks(
 	ctx context.Context,
 	request *GetTasksRequest,
 ) (*GetTasksResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetTasks", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -435,7 +441,7 @@ func (p *taskRateLimitedPersistenceClient) CompleteTask(
 	ctx context.Context,
 	request *CompleteTaskRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "CompleteTask", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -447,7 +453,7 @@ func (p *taskRateLimitedPersistenceClient) CompleteTasksLessThan(
 	ctx context.Context,
 	request *CompleteTasksLessThanRequest,
 ) (int, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "CompleteTasksLessThan", p.rateLimiter); !ok {
 		return 0, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.CompleteTasksLessThan(ctx, request)
@@ -457,7 +463,7 @@ func (p *taskRateLimitedPersistenceClient) CreateTaskQueue(
 	ctx context.Context,
 	request *CreateTaskQueueRequest,
 ) (*CreateTaskQueueResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "CreateTaskQueue", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.CreateTaskQueue(ctx, request)
@@ -467,7 +473,7 @@ func (p *taskRateLimitedPersistenceClient) UpdateTaskQueue(
 	ctx context.Context,
 	request *UpdateTaskQueueRequest,
 ) (*UpdateTaskQueueResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "UpdateTaskQueue", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.UpdateTaskQueue(ctx, request)
@@ -477,7 +483,7 @@ func (p *taskRateLimitedPersistenceClient) GetTaskQueue(
 	ctx context.Context,
 	request *GetTaskQueueRequest,
 ) (*GetTaskQueueResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetTaskQueue", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.GetTaskQueue(ctx, request)
@@ -487,7 +493,7 @@ func (p *taskRateLimitedPersistenceClient) ListTaskQueue(
 	ctx context.Context,
 	request *ListTaskQueueRequest,
 ) (*ListTaskQueueResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "ListTaskQueue", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.ListTaskQueue(ctx, request)
@@ -497,7 +503,7 @@ func (p *taskRateLimitedPersistenceClient) DeleteTaskQueue(
 	ctx context.Context,
 	request *DeleteTaskQueueRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "DeleteTaskQueue", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 	return p.persistence.DeleteTaskQueue(ctx, request)
@@ -515,7 +521,7 @@ func (p *metadataRateLimitedPersistenceClient) CreateNamespace(
 	ctx context.Context,
 	request *CreateNamespaceRequest,
 ) (*CreateNamespaceResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "CreateNamespace", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -527,7 +533,7 @@ func (p *metadataRateLimitedPersistenceClient) GetNamespace(
 	ctx context.Context,
 	request *GetNamespaceRequest,
 ) (*GetNamespaceResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetNamespace", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -539,7 +545,7 @@ func (p *metadataRateLimitedPersistenceClient) UpdateNamespace(
 	ctx context.Context,
 	request *UpdateNamespaceRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "UpdateNamespace", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -551,7 +557,7 @@ func (p *metadataRateLimitedPersistenceClient) RenameNamespace(
 	ctx context.Context,
 	request *RenameNamespaceRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "RenameNamespace", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -563,7 +569,7 @@ func (p *metadataRateLimitedPersistenceClient) DeleteNamespace(
 	ctx context.Context,
 	request *DeleteNamespaceRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "DeleteNamespace", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -575,7 +581,7 @@ func (p *metadataRateLimitedPersistenceClient) DeleteNamespaceByName(
 	ctx context.Context,
 	request *DeleteNamespaceByNameRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "DeleteNamespaceByName", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -587,7 +593,7 @@ func (p *metadataRateLimitedPersistenceClient) ListNamespaces(
 	ctx context.Context,
 	request *ListNamespacesRequest,
 ) (*ListNamespacesResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "ListNamespaces", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -598,12 +604,22 @@ func (p *metadataRateLimitedPersistenceClient) ListNamespaces(
 func (p *metadataRateLimitedPersistenceClient) GetMetadata(
 	ctx context.Context,
 ) (*GetMetadataResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetMetadata", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
 	response, err := p.persistence.GetMetadata(ctx)
 	return response, err
+}
+
+func (p *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(
+	ctx context.Context,
+	currentClusterName string,
+) error {
+	if ok := allow(ctx, "InitializeSystemNamespaces", p.rateLimiter); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	return p.persistence.InitializeSystemNamespaces(ctx, currentClusterName)
 }
 
 func (p *metadataRateLimitedPersistenceClient) Close() {
@@ -615,7 +631,7 @@ func (p *executionRateLimitedPersistenceClient) AppendHistoryNodes(
 	ctx context.Context,
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "AppendHistoryNodes", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.AppendHistoryNodes(ctx, request)
@@ -626,10 +642,22 @@ func (p *executionRateLimitedPersistenceClient) AppendRawHistoryNodes(
 	ctx context.Context,
 	request *AppendRawHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "AppendRawHistoryNodes", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return p.persistence.AppendRawHistoryNodes(ctx, request)
+}
+
+// NewHistoryBranch initializes a new history branch
+func (p *executionRateLimitedPersistenceClient) NewHistoryBranch(
+	ctx context.Context,
+	request *NewHistoryBranchRequest,
+) (*NewHistoryBranchResponse, error) {
+	if ok := allow(ctx, "NewHistoryBranch", p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	response, err := p.persistence.NewHistoryBranch(ctx, request)
+	return response, err
 }
 
 // ReadHistoryBranch returns history node data for a branch
@@ -637,19 +665,19 @@ func (p *executionRateLimitedPersistenceClient) ReadHistoryBranch(
 	ctx context.Context,
 	request *ReadHistoryBranchRequest,
 ) (*ReadHistoryBranchResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "ReadHistoryBranch", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	response, err := p.persistence.ReadHistoryBranch(ctx, request)
 	return response, err
 }
 
-// ReadHistoryBranch returns history node data for a branch
+// ReadHistoryBranchReverse returns history node data for a branch
 func (p *executionRateLimitedPersistenceClient) ReadHistoryBranchReverse(
 	ctx context.Context,
 	request *ReadHistoryBranchReverseRequest,
 ) (*ReadHistoryBranchReverseResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "ReadHistoryBranchReverse", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	response, err := p.persistence.ReadHistoryBranchReverse(ctx, request)
@@ -661,7 +689,7 @@ func (p *executionRateLimitedPersistenceClient) ReadHistoryBranchByBatch(
 	ctx context.Context,
 	request *ReadHistoryBranchRequest,
 ) (*ReadHistoryBranchByBatchResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "ReadHistoryBranchByBatch", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	response, err := p.persistence.ReadHistoryBranchByBatch(ctx, request)
@@ -673,7 +701,7 @@ func (p *executionRateLimitedPersistenceClient) ReadRawHistoryBranch(
 	ctx context.Context,
 	request *ReadHistoryBranchRequest,
 ) (*ReadRawHistoryBranchResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "ReadRawHistoryBranch", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	response, err := p.persistence.ReadRawHistoryBranch(ctx, request)
@@ -685,7 +713,7 @@ func (p *executionRateLimitedPersistenceClient) ForkHistoryBranch(
 	ctx context.Context,
 	request *ForkHistoryBranchRequest,
 ) (*ForkHistoryBranchResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "ForkHistoryBranch", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	response, err := p.persistence.ForkHistoryBranch(ctx, request)
@@ -697,7 +725,7 @@ func (p *executionRateLimitedPersistenceClient) DeleteHistoryBranch(
 	ctx context.Context,
 	request *DeleteHistoryBranchRequest,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "DeleteHistoryBranch", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 	err := p.persistence.DeleteHistoryBranch(ctx, request)
@@ -709,7 +737,7 @@ func (p *executionRateLimitedPersistenceClient) TrimHistoryBranch(
 	ctx context.Context,
 	request *TrimHistoryBranchRequest,
 ) (*TrimHistoryBranchResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "TrimHistoryBranch", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	resp, err := p.persistence.TrimHistoryBranch(ctx, request)
@@ -721,7 +749,7 @@ func (p *executionRateLimitedPersistenceClient) GetHistoryTree(
 	ctx context.Context,
 	request *GetHistoryTreeRequest,
 ) (*GetHistoryTreeResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetHistoryTree", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	response, err := p.persistence.GetHistoryTree(ctx, request)
@@ -732,7 +760,7 @@ func (p *executionRateLimitedPersistenceClient) GetAllHistoryTreeBranches(
 	ctx context.Context,
 	request *GetAllHistoryTreeBranchesRequest,
 ) (*GetAllHistoryTreeBranchesResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetAllHistoryTreeBranches", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	response, err := p.persistence.GetAllHistoryTreeBranches(ctx, request)
@@ -743,7 +771,7 @@ func (p *queueRateLimitedPersistenceClient) EnqueueMessage(
 	ctx context.Context,
 	blob commonpb.DataBlob,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "EnqueueMessage", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -755,7 +783,7 @@ func (p *queueRateLimitedPersistenceClient) ReadMessages(
 	lastMessageID int64,
 	maxCount int,
 ) ([]*QueueMessage, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "ReadMessages", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -766,7 +794,7 @@ func (p *queueRateLimitedPersistenceClient) UpdateAckLevel(
 	ctx context.Context,
 	metadata *InternalQueueMetadata,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "UpdateAckLevel", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -776,7 +804,7 @@ func (p *queueRateLimitedPersistenceClient) UpdateAckLevel(
 func (p *queueRateLimitedPersistenceClient) GetAckLevels(
 	ctx context.Context,
 ) (*InternalQueueMetadata, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetAckLevels", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -787,7 +815,7 @@ func (p *queueRateLimitedPersistenceClient) DeleteMessagesBefore(
 	ctx context.Context,
 	messageID int64,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "DeleteMessagesBefore", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -798,7 +826,7 @@ func (p *queueRateLimitedPersistenceClient) EnqueueMessageToDLQ(
 	ctx context.Context,
 	blob commonpb.DataBlob,
 ) (int64, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "EnqueueMessageToDLQ", p.rateLimiter); !ok {
 		return EmptyQueueMessageID, ErrPersistenceLimitExceeded
 	}
 
@@ -812,7 +840,7 @@ func (p *queueRateLimitedPersistenceClient) ReadMessagesFromDLQ(
 	pageSize int,
 	pageToken []byte,
 ) ([]*QueueMessage, []byte, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "ReadMessagesFromDLQ", p.rateLimiter); !ok {
 		return nil, nil, ErrPersistenceLimitExceeded
 	}
 
@@ -824,7 +852,7 @@ func (p *queueRateLimitedPersistenceClient) RangeDeleteMessagesFromDLQ(
 	firstMessageID int64,
 	lastMessageID int64,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "RangeDeleteMessagesFromDLQ", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -834,7 +862,7 @@ func (p *queueRateLimitedPersistenceClient) UpdateDLQAckLevel(
 	ctx context.Context,
 	metadata *InternalQueueMetadata,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "UpdateDLQAckLevel", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -844,7 +872,7 @@ func (p *queueRateLimitedPersistenceClient) UpdateDLQAckLevel(
 func (p *queueRateLimitedPersistenceClient) GetDLQAckLevels(
 	ctx context.Context,
 ) (*InternalQueueMetadata, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetDLQAckLevels", p.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -855,7 +883,7 @@ func (p *queueRateLimitedPersistenceClient) DeleteMessageFromDLQ(
 	ctx context.Context,
 	messageID int64,
 ) error {
-	if ok := p.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "DeleteMessageFromDLQ", p.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -885,7 +913,7 @@ func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMembers(
 	ctx context.Context,
 	request *GetClusterMembersRequest,
 ) (*GetClusterMembersResponse, error) {
-	if ok := c.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetClusterMembers", c.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return c.persistence.GetClusterMembers(ctx, request)
@@ -895,7 +923,7 @@ func (c *clusterMetadataRateLimitedPersistenceClient) UpsertClusterMembership(
 	ctx context.Context,
 	request *UpsertClusterMembershipRequest,
 ) error {
-	if ok := c.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "UpsertClusterMembership", c.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 	return c.persistence.UpsertClusterMembership(ctx, request)
@@ -905,7 +933,7 @@ func (c *clusterMetadataRateLimitedPersistenceClient) PruneClusterMembership(
 	ctx context.Context,
 	request *PruneClusterMembershipRequest,
 ) error {
-	if ok := c.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "PruneClusterMembership", c.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 	return c.persistence.PruneClusterMembership(ctx, request)
@@ -915,7 +943,7 @@ func (c *clusterMetadataRateLimitedPersistenceClient) ListClusterMetadata(
 	ctx context.Context,
 	request *ListClusterMetadataRequest,
 ) (*ListClusterMetadataResponse, error) {
-	if ok := c.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "ListClusterMetadata", c.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return c.persistence.ListClusterMetadata(ctx, request)
@@ -924,7 +952,7 @@ func (c *clusterMetadataRateLimitedPersistenceClient) ListClusterMetadata(
 func (c *clusterMetadataRateLimitedPersistenceClient) GetCurrentClusterMetadata(
 	ctx context.Context,
 ) (*GetClusterMetadataResponse, error) {
-	if ok := c.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetCurrentClusterMetadata", c.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return c.persistence.GetCurrentClusterMetadata(ctx)
@@ -934,7 +962,7 @@ func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMetadata(
 	ctx context.Context,
 	request *GetClusterMetadataRequest,
 ) (*GetClusterMetadataResponse, error) {
-	if ok := c.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "GetClusterMetadata", c.rateLimiter); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 	return c.persistence.GetClusterMetadata(ctx, request)
@@ -944,7 +972,7 @@ func (c *clusterMetadataRateLimitedPersistenceClient) SaveClusterMetadata(
 	ctx context.Context,
 	request *SaveClusterMetadataRequest,
 ) (bool, error) {
-	if ok := c.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "SaveClusterMetadata", c.rateLimiter); !ok {
 		return false, ErrPersistenceLimitExceeded
 	}
 	return c.persistence.SaveClusterMetadata(ctx, request)
@@ -954,18 +982,21 @@ func (c *clusterMetadataRateLimitedPersistenceClient) DeleteClusterMetadata(
 	ctx context.Context,
 	request *DeleteClusterMetadataRequest,
 ) error {
-	if ok := c.rateLimiter.Allow(); !ok {
+	if ok := allow(ctx, "DeleteClusterMetadata", c.rateLimiter); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 	return c.persistence.DeleteClusterMetadata(ctx, request)
 }
 
-func (c *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(
+func allow(
 	ctx context.Context,
-	currentClusterName string,
-) error {
-	if ok := c.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-	return c.persistence.InitializeSystemNamespaces(ctx, currentClusterName)
+	api string,
+	rateLimiter quotas.RequestRateLimiter,
+) bool {
+	return rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
+		api,
+		RateLimitDefaultToken,
+		"", // caller: currently not used when calculating priority
+		headers.GetCallerInfo(ctx).CallerType,
+	))
 }

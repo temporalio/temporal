@@ -31,6 +31,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/clock"
+
 	"google.golang.org/grpc/health"
 
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -160,6 +162,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
 		serialization.NewSerializer(),
+		clock.NewRealTimeSource(),
 	}
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
 	s.handler = NewAdminHandler(args)

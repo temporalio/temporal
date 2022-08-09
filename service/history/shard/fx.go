@@ -47,10 +47,10 @@ import (
 )
 
 var Module = fx.Options(
-	fx.Provide(ShardControllerProvider),
+	fx.Provide(ControllerProvider),
 )
 
-func ShardControllerProvider(
+func ControllerProvider(
 	config *configs.Config,
 	logger log.Logger,
 	throttledLogger resource.ThrottledLogger,
@@ -71,7 +71,7 @@ func ShardControllerProvider(
 	hostInfoProvider membership.HostInfoProvider,
 	engineFactory EngineFactory,
 	tracerProvider trace.TracerProvider,
-) *ControllerImpl {
+) Controller {
 	return &ControllerImpl{
 		status:                      common.DaemonStatusInitialized,
 		membershipUpdateCh:          make(chan *membership.ChangedEvent, 10),

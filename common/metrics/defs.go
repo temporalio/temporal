@@ -576,8 +576,6 @@ const (
 	AdminClientRebuildMutableStateScope
 	// AdminClientDescribeMutableStateScope tracks RPC calls to admin service
 	AdminClientDescribeMutableStateScope
-	// AdminClientGetWorkflowExecutionRawHistoryScope tracks RPC calls to admin service
-	AdminClientGetWorkflowExecutionRawHistoryScope
 	// AdminClientGetWorkflowExecutionRawHistoryV2Scope tracks RPC calls to admin service
 	AdminClientGetWorkflowExecutionRawHistoryV2Scope
 	// AdminClientDescribeClusterScope tracks RPC calls to admin service
@@ -737,6 +735,8 @@ const (
 	PersistenceAppendRawHistoryNodesScope
 	// PersistenceDeleteHistoryNodesScope tracks DeleteHistoryNodes calls made by service to persistence layer
 	PersistenceDeleteHistoryNodesScope
+	// PersistenceNewHistoryBranchScope tracks NewHistoryBranch calls made by service to persistence layer
+	PersistenceNewHistoryBranchScope
 	// PersistenceReadHistoryBranchScope tracks ReadHistoryBranch calls made by service to persistence layer
 	PersistenceReadHistoryBranchScope
 	// PersistenceReadHistoryBranchReverseScope tracks ReadHistoryBranchReverse calls made by service to persistence layer
@@ -810,10 +810,8 @@ const (
 	AdminGetSearchAttributesScope
 	// AdminRebuildMutableStateScope is the metric scope for admin.AdminRebuildMutableStateScope
 	AdminRebuildMutableStateScope
-	// AdminDescribeWorkflowExecutionScope is the metric scope for admin.AdminDescribeWorkflowExecutionScope
-	AdminDescribeWorkflowExecutionScope
-	// AdminGetWorkflowExecutionRawHistoryScope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
-	AdminGetWorkflowExecutionRawHistoryScope
+	// AdminDescribeMutableStateScope is the metric scope for admin.AdminDescribeMutableStateScope
+	AdminDescribeMutableStateScope
 	// AdminGetWorkflowExecutionRawHistoryV2Scope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
 	AdminGetWorkflowExecutionRawHistoryV2Scope
 	// AdminGetReplicationMessagesScope is the metric scope for admin.GetReplicationMessages
@@ -838,8 +836,8 @@ const (
 	AdminGetShardScope
 	// AdminListHistoryTasksScope is the metric scope for admin.ListHistoryTasksScope
 	AdminListHistoryTasksScope
-	// AdminReadDLQMessagesScope is the metric scope for admin.AdminReadDLQMessagesScope
-	AdminReadDLQMessagesScope
+	// AdminGetDLQMessagesScope is the metric scope for admin.AdminGetDLQMessagesScope
+	AdminGetDLQMessagesScope
 	// AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessagesScope
 	AdminPurgeDLQMessagesScope
 	// AdminMergeDLQMessagesScope is the metric scope for admin.AdminMergeDLQMessagesScope
@@ -869,6 +867,12 @@ const (
 	// OperatorListSearchAttributesScope is the metric scope for operator.ListSearchAttributes
 	OperatorListSearchAttributesScope
 	OperatorDeleteNamespaceScope
+	OperatorAddOrUpdateRemoteCluster
+	OperatorDeleteWorkflowExecution
+	OperatorDescribeCluster
+	OperatorListClusterMembers
+	OperatorListClusters
+	OperatorRemoveRemoteCluster
 
 	NumOperatorScopes
 )
@@ -1396,6 +1400,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceAppendHistoryNodesScope:         {operation: "AppendHistoryNodes"},
 		PersistenceAppendRawHistoryNodesScope:      {operation: "AppendRawHistoryNodes"},
 		PersistenceDeleteHistoryNodesScope:         {operation: "DeleteHistoryNodes"},
+		PersistenceNewHistoryBranchScope:           {operation: "NewHistoryBranch"},
 		PersistenceReadHistoryBranchScope:          {operation: "ReadHistoryBranch"},
 		PersistenceReadHistoryBranchReverseScope:   {operation: "ReadHistoryBranchReverse"},
 		PersistenceForkHistoryBranchScope:          {operation: "ForkHistoryBranch"},
@@ -1546,7 +1551,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientDescribeHistoryHostScope:              {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientRebuildMutableStateScope:              {operation: "AdminClientRebuildMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeMutableStateScope:             {operation: "AdminClientDescribeMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientGetWorkflowExecutionRawHistoryScope:   {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryV2Scope: {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeClusterScope:                  {operation: "AdminClientDescribeCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientListClustersScope:                     {operation: "AdminClientListClusters", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1651,39 +1655,46 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 	// Frontend Scope Names
 	Frontend: {
-		// Admin API scope co-locates with frontend
-		AdminRemoveTaskScope:                            {operation: "AdminRemoveTask"},
-		AdminCloseShardScope:                            {operation: "AdminCloseShard"},
-		AdminGetShardScope:                              {operation: "AdminGetShard"},
-		AdminListHistoryTasksScope:                      {operation: "AdminListHistoryTasks"},
-		AdminReadDLQMessagesScope:                       {operation: "AdminReadDLQMessages"},
-		AdminPurgeDLQMessagesScope:                      {operation: "AdminPurgeDLQMessages"},
-		AdminMergeDLQMessagesScope:                      {operation: "AdminMergeDLQMessages"},
-		AdminDescribeHistoryHostScope:                   {operation: "DescribeHistoryHost"},
-		AdminAddSearchAttributesScope:                   {operation: "AdminAddSearchAttributes"},
-		AdminRemoveSearchAttributesScope:                {operation: "AdminRemoveSearchAttributes"},
-		AdminGetSearchAttributesScope:                   {operation: "AdminGetSearchAttributes"},
-		AdminRebuildMutableStateScope:                   {operation: "AdminRebuildMutableState"},
-		AdminDescribeWorkflowExecutionScope:             {operation: "DescribeWorkflowExecution"},
-		AdminGetWorkflowExecutionRawHistoryScope:        {operation: "GetWorkflowExecutionRawHistory"},
-		AdminGetWorkflowExecutionRawHistoryV2Scope:      {operation: "GetWorkflowExecutionRawHistoryV2"},
-		AdminGetReplicationMessagesScope:                {operation: "GetReplicationMessages"},
-		AdminListClusterMembersScope:                    {operation: "AdminListClusterMembers"},
-		AdminGetNamespaceReplicationMessagesScope:       {operation: "GetNamespaceReplicationMessages"},
-		AdminGetDLQReplicationMessagesScope:             {operation: "AdminGetDLQReplicationMessages"},
-		AdminReapplyEventsScope:                         {operation: "ReapplyEvents"},
-		AdminRefreshWorkflowTasksScope:                  {operation: "RefreshWorkflowTasks"},
-		AdminResendReplicationTasksScope:                {operation: "ResendReplicationTasks"},
-		AdminGetTaskQueueTasksScope:                     {operation: "GetTaskQueueTasks"},
-		AdminDescribeClusterScope:                       {operation: "AdminDescribeCluster"},
-		AdminListClustersScope:                          {operation: "AdminListClusters"},
-		AdminAddOrUpdateRemoteClusterScope:              {operation: "AdminAddOrUpdateRemoteCluster"},
-		AdminRemoveRemoteClusterScope:                   {operation: "AdminRemoveRemoteCluster"},
-		AdminDeleteWorkflowExecutionScope:               {operation: "AdminDeleteWorkflowExecution"},
-		OperatorAddSearchAttributesScope:                {operation: "OperatorAddSearchAttributes"},
-		OperatorRemoveSearchAttributesScope:             {operation: "OperatorRemoveSearchAttributes"},
-		OperatorListSearchAttributesScope:               {operation: "OperatorListSearchAttributes"},
-		OperatorDeleteNamespaceScope:                    {operation: "OperatorDeleteNamespace"},
+		// AdminService API scope co-locates with frontend
+		AdminRemoveTaskScope:                       {operation: "AdminRemoveTask"},
+		AdminCloseShardScope:                       {operation: "AdminCloseShard"},
+		AdminGetShardScope:                         {operation: "AdminGetShard"},
+		AdminListHistoryTasksScope:                 {operation: "AdminListHistoryTasks"},
+		AdminGetDLQMessagesScope:                   {operation: "AdminGetDLQMessages"},
+		AdminPurgeDLQMessagesScope:                 {operation: "AdminPurgeDLQMessages"},
+		AdminMergeDLQMessagesScope:                 {operation: "AdminMergeDLQMessages"},
+		AdminDescribeHistoryHostScope:              {operation: "AdminDescribeHistoryHost"},
+		AdminAddSearchAttributesScope:              {operation: "AdminAddSearchAttributes"},
+		AdminRemoveSearchAttributesScope:           {operation: "AdminRemoveSearchAttributes"},
+		AdminGetSearchAttributesScope:              {operation: "AdminGetSearchAttributes"},
+		AdminRebuildMutableStateScope:              {operation: "AdminRebuildMutableState"},
+		AdminDescribeMutableStateScope:             {operation: "AdminDescribeMutableState"},
+		AdminGetWorkflowExecutionRawHistoryV2Scope: {operation: "AdminGetWorkflowExecutionRawHistoryV2"},
+		AdminGetReplicationMessagesScope:           {operation: "AdminGetReplicationMessages"},
+		AdminListClusterMembersScope:               {operation: "AdminListClusterMembers"},
+		AdminGetNamespaceReplicationMessagesScope:  {operation: "AdminGetNamespaceReplicationMessages"},
+		AdminGetDLQReplicationMessagesScope:        {operation: "AdminGetDLQReplicationMessages"},
+		AdminReapplyEventsScope:                    {operation: "AdminReapplyEvents"},
+		AdminRefreshWorkflowTasksScope:             {operation: "AdminRefreshWorkflowTasks"},
+		AdminResendReplicationTasksScope:           {operation: "AdminResendReplicationTasks"},
+		AdminGetTaskQueueTasksScope:                {operation: "AdminGetTaskQueueTasks"},
+		AdminDescribeClusterScope:                  {operation: "AdminDescribeCluster"},
+		AdminListClustersScope:                     {operation: "AdminListClusters"},
+		AdminAddOrUpdateRemoteClusterScope:         {operation: "AdminAddOrUpdateRemoteCluster"},
+		AdminRemoveRemoteClusterScope:              {operation: "AdminRemoveRemoteCluster"},
+		AdminDeleteWorkflowExecutionScope:          {operation: "AdminDeleteWorkflowExecution"},
+		// Operator Service API
+		OperatorAddSearchAttributesScope:    {operation: "OperatorAddSearchAttributes"},
+		OperatorRemoveSearchAttributesScope: {operation: "OperatorRemoveSearchAttributes"},
+		OperatorListSearchAttributesScope:   {operation: "OperatorListSearchAttributes"},
+		OperatorDeleteNamespaceScope:        {operation: "OperatorDeleteNamespace"},
+		OperatorAddOrUpdateRemoteCluster:    {operation: "OperatorAddOrUpdateRemoteCluster"},
+		OperatorDeleteWorkflowExecution:     {operation: "OperatorDeleteWorkflowExecution"},
+		OperatorDescribeCluster:             {operation: "OperatorDescribeCluster"},
+		OperatorListClusterMembers:          {operation: "OperatorListClusterMembers"},
+		OperatorListClusters:                {operation: "OperatorListClusters"},
+		OperatorRemoveRemoteCluster:         {operation: "OperatorRemoveRemoteCluster"},
+		// Workflow Service API
 		FrontendStartWorkflowExecutionScope:             {operation: "StartWorkflowExecution"},
 		FrontendPollWorkflowTaskQueueScope:              {operation: "PollWorkflowTaskQueue"},
 		FrontendPollActivityTaskQueueScope:              {operation: "PollActivityTaskQueue"},
@@ -2310,6 +2321,7 @@ const (
 	TaskWriteThrottlePerTaskQueueCounter
 	TaskWriteLatencyPerTaskQueue
 	TaskLagPerTaskQueueGauge
+	NoRecentPollerTasksPerTaskQueueCounter
 
 	NumMatchingMetrics
 )
@@ -2788,6 +2800,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskWriteThrottlePerTaskQueueCounter:      NewRollupCounterDef("task_write_throttle_count_per_tl", "task_write_throttle_count"),
 		TaskWriteLatencyPerTaskQueue:              NewRollupTimerDef("task_write_latency_per_tl", "task_write_latency"),
 		TaskLagPerTaskQueueGauge:                  NewGaugeDef("task_lag_per_tl"),
+		NoRecentPollerTasksPerTaskQueueCounter:    NewRollupCounterDef("no_poller_tasks_per_tl", "no_poller_tasks"),
 	},
 	Worker: {
 		ReplicatorMessages:                            NewCounterDef("replicator_messages"),

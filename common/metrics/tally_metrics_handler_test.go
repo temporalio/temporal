@@ -41,7 +41,7 @@ var defaultConfig = ClientConfig{
 		"workflowType": {},
 	},
 	Prefix:                     "",
-	PerUnitHistogramBoundaries: map[string][]float64{Dimensionless: {0, 10, 100}, Bytes: {1024, 2048}},
+	PerUnitHistogramBoundaries: map[string][]float64{Dimensionless: {0, 10, 100}, Bytes: {1024, 2048}, Milliseconds: {10, 500, 1000, 5000, 10000}},
 }
 
 func TestTallyScope(t *testing.T) {
@@ -68,7 +68,7 @@ func TestTallyScope(t *testing.T) {
 
 	assert.EqualValues(t, []time.Duration{
 		1248 * time.Millisecond,
-		1255 * time.Millisecond,
+		5255 * time.Millisecond,
 	}, timers["test.latency+"].Values())
 	assert.EqualValues(t, map[string]string{}, timers["test.latency+"].Tags())
 
@@ -92,7 +92,7 @@ func recordTallyMetrics(mp MetricsHandler) {
 	c.Record(8)
 	g.Record(-100, StringTag("location", "Mare Imbrium"))
 	d.Record(1248 * time.Millisecond)
-	d.Record(1255 * time.Millisecond)
+	d.Record(5255 * time.Millisecond)
 	h.Record(1234567)
 	t.Record(11, TaskQueueTag("__sticky__"))
 	e.Record(14, TaskQueueTag("filtered"))

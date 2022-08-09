@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/util"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -62,6 +63,22 @@ const (
 
 	// Fake Task ID to wrap a task for syncmatch
 	syncMatchTaskId = -137
+
+	ioTimeout = 5 * time.Second
+
+	// Threshold for counting a AddTask call as a no recent poller call
+	noPollerThreshold = time.Minute * 2
+)
+
+var (
+	// this retry policy is currenly only used for matching persistence operations
+	// that, if failed, the entire task queue needs to be reload
+	persistenceOperationRetryPolicy = func() backoff.RetryPolicy {
+		policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
+		policy.SetMaximumInterval(1 * time.Second)
+		policy.SetExpirationInterval(30 * time.Second)
+		return policy
+	}()
 )
 
 type (
@@ -265,8 +282,11 @@ func (c *taskQueueManagerImpl) Stop() {
 	// metadata. UpdateState would fail on the lease check, but don't even bother calling it.
 	ackLevel := c.taskAckManager.getAckLevel()
 	if ackLevel >= 0 {
-		c.db.UpdateState(context.TODO(), ackLevel)
-		c.taskGC.RunNow(context.TODO(), ackLevel)
+		ctx, cancel := newIOContext()
+		defer cancel()
+
+		c.db.UpdateState(ctx, ackLevel)
+		c.taskGC.RunNow(ctx, ackLevel)
 	}
 	c.liveness.Stop()
 	c.taskWriter.Stop()
@@ -292,37 +312,37 @@ func (c *taskQueueManagerImpl) AddTask(
 		c.liveness.markAlive(time.Now())
 	}
 
-	var syncMatch bool
-	err := executeWithRetry(ctx, func(_ context.Context) error {
-		taskInfo := params.taskInfo
+	if c.QueueID().IsRoot() && !c.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
+		// Only checks recent pollers in the root partition
+		c.metricScope.IncCounter(metrics.NoRecentPollerTasksPerTaskQueueCounter)
+	}
 
-		namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceId()))
-		if err != nil {
-			return err
+	taskInfo := params.taskInfo
+
+	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceId()))
+	if err != nil {
+		return false, err
+	}
+
+	if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
+		syncMatch, err := c.trySyncMatch(ctx, params)
+		if syncMatch {
+			return syncMatch, err
 		}
+	}
 
-		syncMatch = false
-		if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-			syncMatch, err = c.trySyncMatch(ctx, params)
-			if syncMatch {
-				return err
-			}
-		}
+	if params.forwardedFrom != "" {
+		// forwarded from child partition - only do sync match
+		// child partition will persist the task when sync match fails
+		return false, errRemoteSyncMatchFailed
+	}
 
-		if params.forwardedFrom != "" {
-			// forwarded from child partition - only do sync match
-			// child partition will persist the task when sync match fails
-			return errRemoteSyncMatchFailed
-		}
-
-		_, err = c.taskWriter.appendTask(params.execution, taskInfo)
-		c.signalIfFatal(err)
-		return err
-	})
-	if !syncMatch && err == nil {
+	_, err = c.taskWriter.appendTask(params.execution, taskInfo)
+	c.signalIfFatal(err)
+	if err == nil {
 		c.taskReader.Signal()
 	}
-	return syncMatch, err
+	return false, err
 }
 
 // GetTask blocks waiting for a task.
@@ -525,7 +545,11 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 	}
 
 	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
-	c.taskGC.Run(context.TODO(), ackLevel) // TODO: completeTaskFunc and task.finish() should take in a context
+
+	// TODO: completeTaskFunc and task.finish() should take in a context
+	ctx, cancel := newIOContext()
+	defer cancel()
+	c.taskGC.Run(ctx, ackLevel)
 }
 
 func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
@@ -604,4 +628,11 @@ func (c *taskQueueManagerImpl) QueueID() *taskQueueID {
 
 func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
 	return c.taskQueueKind
+}
+
+func newIOContext() (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
+	return ctx, cancel
 }

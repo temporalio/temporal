@@ -79,6 +79,9 @@ const (
 	EnableReadVisibilityFromES = "system.enableReadVisibilityFromES"
 	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
 	EnableReadFromSecondaryAdvancedVisibility = "system.enableReadFromSecondaryAdvancedVisibility"
+	// VisibilityDisableOrderByClause is the config to disable ORDERY BY clause for Elasticsearch
+	VisibilityDisableOrderByClause = "system.visibilityDisableOrderByClause"
+
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState = "system.historyArchivalState"
 	// EnableReadFromHistoryArchival is key for enabling reading history from archival store
@@ -148,6 +151,8 @@ const (
 	FrontendPersistenceMaxQPS = "frontend.persistenceMaxQPS"
 	// FrontendPersistenceGlobalMaxQPS is the max qps frontend cluster can query DB
 	FrontendPersistenceGlobalMaxQPS = "frontend.persistenceGlobalMaxQPS"
+	// FrontendEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in frontend persistence client
+	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
 	FrontendVisibilityMaxPageSize = "frontend.visibilityMaxPageSize"
 	// FrontendESIndexMaxResultWindow is ElasticSearch index setting max_result_window
@@ -242,6 +247,8 @@ const (
 	MatchingPersistenceMaxQPS = "matching.persistenceMaxQPS"
 	// MatchingPersistenceGlobalMaxQPS is the max qps matching cluster can query DB
 	MatchingPersistenceGlobalMaxQPS = "matching.persistenceGlobalMaxQPS"
+	// MatchingEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in matching persistence client
+	MatchingEnablePersistencePriorityRateLimiting = "matching.enablePersistencePriorityRateLimiting"
 	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task queue throttling
 	MatchingMinTaskThrottlingBurstSize = "matching.minTaskThrottlingBurstSize"
 	// MatchingGetTasksBatchSize is the maximum batch size to fetch from the task buffer
@@ -287,6 +294,8 @@ const (
 	HistoryPersistenceMaxQPS = "history.persistenceMaxQPS"
 	// HistoryPersistenceGlobalMaxQPS is the max qps history cluster can query DB
 	HistoryPersistenceGlobalMaxQPS = "history.persistenceGlobalMaxQPS"
+	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
+	HistoryEnablePersistencePriorityRateLimiting = "history.enablePersistencePriorityRateLimiting"
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
 	HistoryLongPollExpirationInterval = "history.longPollExpirationInterval"
 	// HistoryCacheInitialSize is initial size of history cache
@@ -323,9 +332,12 @@ const (
 	TimerTaskWorkerCount = "history.timerTaskWorkerCount"
 	// TimerTaskMaxRetryCount is max retry count for timer processor
 	TimerTaskMaxRetryCount = "history.timerTaskMaxRetryCount"
-	// TimerProcessorEnableSingleCursor indicates if only one timer processor should be started for both active and standby tasks
+	// TimerProcessorEnableSingleProcessor indicates if only one timer processor should be started for both active and standby tasks
 	// NOTE: this is an experimental flag for guarantee task execution and will be deprecated after multicursor solution is ready
-	TimerProcessorEnableSingleCursor = "history.timerProcessorEnableSingleCursor"
+	TimerProcessorEnableSingleProcessor = "history.timerProcessorEnableSingleProcessor"
+	// TimerProcessorEnableMultiCursor indicates if the new single processor multi-cursor timer processor implementation should be used
+	// NOTE: this flag only takes effect when history.timerProcessorEnablePriorityTaskScheduler is enabled.
+	TimerProcessorEnableMultiCursor = "history.timerProcessorEnableMultiCursor"
 	// TimerProcessorEnablePriorityTaskScheduler indicates whether host level priority task scheduler should be used for timer processor
 	TimerProcessorEnablePriorityTaskScheduler = "history.timerProcessorEnablePriorityTaskScheduler"
 	// TimerProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for timer processor
@@ -334,8 +346,6 @@ const (
 	TimerProcessorSchedulerQueueSize = "history.timerProcessorSchedulerQueueSize"
 	// TimerProcessorSchedulerRoundRobinWeights is the priority round robin weights for timer task scheduler
 	TimerProcessorSchedulerRoundRobinWeights = "history.timerProcessorSchedulerRoundRobinWeights"
-	// TimerProcessorCompleteTimerFailureRetryCount is retry count for timer processor complete timer operation
-	TimerProcessorCompleteTimerFailureRetryCount = "history.timerProcessorCompleteTimerFailureRetryCount"
 	// TimerProcessorUpdateAckInterval is update interval for timer processor
 	TimerProcessorUpdateAckInterval = "history.timerProcessorUpdateAckInterval"
 	// TimerProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
@@ -376,9 +386,12 @@ const (
 	TransferTaskWorkerCount = "history.transferTaskWorkerCount"
 	// TransferTaskMaxRetryCount is max times of retry for transferQueueProcessor
 	TransferTaskMaxRetryCount = "history.transferTaskMaxRetryCount"
-	// TransferProcessorEnableSingleCursor indicates if only one transfer processor should be started for both active and standby tasks
+	// TransferProcessorEnableSingleProcessor indicates if only one transfer processor should be started for both active and standby tasks
 	// NOTE: this is an experimental flag for guarantee task execution and will be deprecated after multicursor solution is ready
-	TransferProcessorEnableSingleCursor = "history.transferProcessorEnableSingleCursor"
+	TransferProcessorEnableSingleProcessor = "history.transferProcessorEnableSingleProcessor"
+	// TransferProcessorEnableMultiCursor indicates if the new single processor multi-cursor transfer processor implementation should be used
+	// NOTE: this flag only takes effect when history.transferProcessorEnablePriorityTaskScheduler is enabled.
+	TransferProcessorEnableMultiCursor = "history.transferProcessorEnableMultiCursor"
 	// TransferProcessorEnablePriorityTaskScheduler indicates whether host level priority task scheduler should be used for transferQueueProcessor
 	TransferProcessorEnablePriorityTaskScheduler = "history.transferProcessorEnablePriorityTaskScheduler"
 	// TransferProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for transferQueueProcessor
@@ -387,8 +400,6 @@ const (
 	TransferProcessorSchedulerQueueSize = "history.transferProcessorSchedulerQueueSize"
 	// TransferProcessorSchedulerRoundRobinWeights is the priority round robin weights for transfer task scheduler
 	TransferProcessorSchedulerRoundRobinWeights = "history.transferProcessorSchedulerRoundRobinWeights"
-	// TransferProcessorCompleteTransferFailureRetryCount is times of retry for failure
-	TransferProcessorCompleteTransferFailureRetryCount = "history.transferProcessorCompleteTransferFailureRetryCount"
 	// TransferProcessorUpdateShardTaskCount is update shard count for transferQueueProcessor
 	TransferProcessorUpdateShardTaskCount = "history.transferProcessorUpdateShardTaskCount"
 	// TransferProcessorMaxPollInterval max poll interval for transferQueueProcessor
@@ -412,8 +423,6 @@ const (
 	VisibilityTaskHighPriorityRPS = "history.visibilityTaskHighPriorityRPS"
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"
-	// VisibilityProcessorFailoverMaxPollRPS is max poll rate per second for visibilityQueueProcessor
-	VisibilityProcessorFailoverMaxPollRPS = "history.visibilityProcessorFailoverMaxPollRPS"
 	// VisibilityProcessorMaxPollRPS is max poll rate per second for visibilityQueueProcessor
 	VisibilityProcessorMaxPollRPS = "history.visibilityProcessorMaxPollRPS"
 	// VisibilityProcessorMaxPollHostRPS is max poll rate per second for all visibilityQueueProcessor on a host
@@ -422,6 +431,9 @@ const (
 	VisibilityTaskWorkerCount = "history.visibilityTaskWorkerCount"
 	// VisibilityTaskMaxRetryCount is max times of retry for visibilityQueueProcessor
 	VisibilityTaskMaxRetryCount = "history.visibilityTaskMaxRetryCount"
+	// VisibilityProcessorEnableMultiCursor indicates if the new single processor multi-cursor visibility processor implementation should be used
+	// NOTE: this flag only takes effect when history.visibilityProcessorEnablePriorityTaskScheduler is enabled.
+	VisibilityProcessorEnableMultiCursor = "history.visibilityProcessorEnableMultiCursor"
 	// VisibilityProcessorEnablePriorityTaskScheduler indicates whether host level priority task scheduler should be used for visibilityQueueProcessor
 	VisibilityProcessorEnablePriorityTaskScheduler = "history.visibilityProcessorEnablePriorityTaskScheduler"
 	// VisibilityProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for visibilityQueueProcessor
@@ -430,8 +442,6 @@ const (
 	VisibilityProcessorSchedulerQueueSize = "history.visibilityProcessorSchedulerQueueSize"
 	// VisibilityProcessorSchedulerRoundRobinWeights is the priority round robin weights for visibility task scheduler
 	VisibilityProcessorSchedulerRoundRobinWeights = "history.visibilityProcessorSchedulerRoundRobinWeights"
-	// VisibilityProcessorCompleteTaskFailureRetryCount is times of retry for failure
-	VisibilityProcessorCompleteTaskFailureRetryCount = "history.visibilityProcessorCompleteTaskFailureRetryCount"
 	// VisibilityProcessorMaxPollInterval max poll interval for visibilityQueueProcessor
 	VisibilityProcessorMaxPollInterval = "history.visibilityProcessorMaxPollInterval"
 	// VisibilityProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
@@ -562,6 +572,8 @@ const (
 	WorkerPersistenceMaxQPS = "worker.persistenceMaxQPS"
 	// WorkerPersistenceGlobalMaxQPS is the max qps worker cluster can query DB
 	WorkerPersistenceGlobalMaxQPS = "worker.persistenceGlobalMaxQPS"
+	// WorkerEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in worker persistence client
+	WorkerEnablePersistencePriorityRateLimiting = "worker.enablePersistencePriorityRateLimiting"
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
 	WorkerIndexerConcurrency = "worker.indexerConcurrency"
 	// WorkerESProcessorNumOfWorkers is num of workers for esProcessor
@@ -607,16 +619,16 @@ const (
 	HistoryScannerEnabled = "worker.historyScannerEnabled"
 	// ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner
 	ExecutionsScannerEnabled = "worker.executionsScannerEnabled"
-	// WorkerBatcherMaxConcurrentActivityExecutionSize indicates worker batcher max concurrent activity execution size
-	WorkerBatcherMaxConcurrentActivityExecutionSize = "worker.BatcherMaxConcurrentActivityExecutionSize"
-	// WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize indicates worker batcher max concurrent workflow execution size
-	WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize = "worker.BatcherMaxConcurrentWorkflowTaskExecutionSize"
-	// WorkerBatcherMaxConcurrentActivityTaskPollers indicates worker batcher max concurrent activity pollers
-	WorkerBatcherMaxConcurrentActivityTaskPollers = "worker.BatcherMaxConcurrentActivityTaskPollers"
-	// WorkerBatcherMaxConcurrentWorkflowTaskPollers indicates worker batcher max concurrent workflow pollers
-	WorkerBatcherMaxConcurrentWorkflowTaskPollers = "worker.BatcherMaxConcurrentWorkflowTaskPollers"
+	// HistoryScannerDataMinAge indicates the history scanner cleanup minimum age.
+	HistoryScannerDataMinAge = "worker.historyScannerDataMinAge"
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher = "worker.enableBatcher"
+	// EnableBatcherPerNamespaceWorker decides whether start batcher worker per namespace
+	EnableBatcherPerNamespaceWorker = "worker.enableBatcherPerNamespaceWorker"
+	// BatcherRPS controls number the rps of batch operations
+	BatcherRPS = "worker.batcherRPS"
+	// BatcherConcurrency controls the concurrency of one batch operation
+	BatcherConcurrency = "worker.batcherConcurrency"
 	// WorkerParentCloseMaxConcurrentActivityExecutionSize indicates worker parent close worker max concurrent activity execution size
 	WorkerParentCloseMaxConcurrentActivityExecutionSize = "worker.ParentCloseMaxConcurrentActivityExecutionSize"
 	// WorkerParentCloseMaxConcurrentWorkflowTaskExecutionSize indicates worker parent close worker max concurrent workflow execution size
@@ -625,10 +637,10 @@ const (
 	WorkerParentCloseMaxConcurrentActivityTaskPollers = "worker.ParentCloseMaxConcurrentActivityTaskPollers"
 	// WorkerParentCloseMaxConcurrentWorkflowTaskPollers indicates worker parent close worker max concurrent workflow pollers
 	WorkerParentCloseMaxConcurrentWorkflowTaskPollers = "worker.ParentCloseMaxConcurrentWorkflowTaskPollers"
+	// WorkerPerNamespaceWorkerCount controls number of per-ns (scheduler, batcher, etc.) workers to run per namespace
+	WorkerPerNamespaceWorkerCount = "worker.perNamespaceWorkerCount"
 	// WorkerEnableScheduler controls whether to start the worker for scheduled workflows
 	WorkerEnableScheduler = "worker.enableScheduler"
-	// WorkerSchedulerNumWorkers controls number of scheduler workers to run per namespace
-	WorkerSchedulerNumWorkers = "worker.schedulerNumWorkers"
 )
 
 // Filter represents a filter on the dynamic config key

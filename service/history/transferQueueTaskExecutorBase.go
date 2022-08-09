@@ -260,8 +260,19 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		return err
 	}
 
-	// Do not validate version here because DeleteExecutionTask transfer task is created only for
-	// explicit API call, and in this case execution needs to be deleted regardless of the version.
+	// If task version is EmptyVersion it means "don't check task version".
+	// This can happen when task was created from explicit user API call.
+	// Or the namespace is a local namespace which will not have version conflict.
+	if task.GetVersion() != common.EmptyVersion {
+		lastWriteVersion, err := mutableState.GetLastWriteVersion()
+		if err != nil {
+			return err
+		}
+		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
+		if !ok {
+			return nil
+		}
+	}
 
 	return t.workflowDeleteManager.DeleteWorkflowExecution(
 		ctx,

@@ -26,22 +26,25 @@ package matching
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/internal/goro"
 	"go.temporal.io/server/service/worker/scanner/taskqueue"
 )
 
 const (
-	taskReaderOfferThrottleWait = time.Second
+	taskReaderOfferThrottleWait  = time.Second
+	taskReaderThrottleRetryDelay = 3 * time.Second
 )
 
 type (
@@ -51,6 +54,10 @@ type (
 		notifyC    chan struct{}                          // Used as signal to notify pump of new tasks
 		tlMgr      *taskQueueManagerImpl
 		gorogrp    goro.Group
+
+		backoffTimerLock sync.Mutex
+		backoffTimer     *time.Timer
+		retrier          backoff.Retrier
 	}
 )
 
@@ -62,6 +69,10 @@ func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
 		// we always dequeue the head of the buffer and try to dispatch it to a poller
 		// so allocate one less than desired target buffer size
 		taskBuffer: make(chan *persistencespb.AllocatedTaskInfo, tlMgr.config.GetTasksBatchSize()-1),
+		retrier: backoff.NewRetrier(
+			common.CreateReadTaskRetryPolicy(),
+			backoff.SystemClock,
+		),
 	}
 }
 
@@ -102,6 +113,8 @@ func (tr *taskReader) Signal() {
 }
 
 func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
 dispatchLoop:
 	for {
 		select {
@@ -111,6 +124,14 @@ dispatchLoop:
 			}
 			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
 			for {
+				// We checked if the task was expired before putting it in the buffer, but it
+				// might have expired while it sat in the buffer, so we should check again.
+				if taskqueue.IsTaskExpired(taskInfo) {
+					task.finish(nil)
+					tr.scope().IncCounter(metrics.ExpiredTasksPerTaskQueueCounter)
+					// Don't try to set read level here because it may have been advanced already.
+					break
+				}
 				err := tr.tlMgr.DispatchTask(ctx, task)
 				if err == nil {
 					break
@@ -133,6 +154,8 @@ dispatchLoop:
 }
 
 func (tr *taskReader) getTasksPump(ctx context.Context) error {
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
 	if err := tr.tlMgr.WaitUntilInitialized(ctx); err != nil {
 		return err
 	}
@@ -155,13 +178,18 @@ Loop:
 			return nil
 
 		case <-tr.notifyC:
-			tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch()
+			tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch(ctx)
 			tr.tlMgr.signalIfFatal(err)
 			if err != nil {
-				tr.Signal() // re-enqueue the event
 				// TODO: Should we ever stop retrying on db errors?
+				if common.IsResourceExhausted(err) {
+					tr.backoff(taskReaderThrottleRetryDelay)
+				} else {
+					tr.backoff(tr.retrier.NextBackOff())
+				}
 				continue Loop
 			}
+			tr.retrier.Reset()
 
 			if len(tasks) == 0 {
 				tr.tlMgr.taskAckManager.setReadLevelAfterGap(readLevel)
@@ -178,7 +206,7 @@ Loop:
 			tr.Signal()
 
 		case <-updateAckTimer.C:
-			err := tr.persistAckLevel()
+			err := tr.persistAckLevel(ctx)
 			tr.tlMgr.signalIfFatal(err)
 			if err != nil {
 				tr.logger().Error("Persistent store operation failure",
@@ -192,13 +220,12 @@ Loop:
 	}
 }
 
-func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistencespb.AllocatedTaskInfo, error) {
-	var response *persistence.GetTasksResponse
-	var err error
-	err = executeWithRetry(context.TODO(), func(ctx context.Context) error {
-		response, err = tr.tlMgr.db.GetTasks(ctx, readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
-		return err
-	})
+func (tr *taskReader) getTaskBatchWithRange(
+	ctx context.Context,
+	readLevel int64,
+	maxReadLevel int64,
+) ([]*persistencespb.AllocatedTaskInfo, error) {
+	response, err := tr.tlMgr.db.GetTasks(ctx, readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +235,7 @@ func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64)
 // Returns a batch of tasks from persistence starting form current read level.
 // Also return a number that can be used to update readLevel
 // Also return a bool to indicate whether read is finished
-func (tr *taskReader) getTaskBatch() ([]*persistencespb.AllocatedTaskInfo, int64, bool, error) {
+func (tr *taskReader) getTaskBatch(ctx context.Context) ([]*persistencespb.AllocatedTaskInfo, int64, bool, error) {
 	var tasks []*persistencespb.AllocatedTaskInfo
 	readLevel := tr.tlMgr.taskAckManager.getReadLevel()
 	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
@@ -219,7 +246,7 @@ func (tr *taskReader) getTaskBatch() ([]*persistencespb.AllocatedTaskInfo, int64
 		if upper > maxReadLevel {
 			upper = maxReadLevel
 		}
-		tasks, err := tr.getTaskBatchWithRange(readLevel, upper)
+		tasks, err := tr.getTaskBatchWithRange(ctx, readLevel, upper)
 		if err != nil {
 			return nil, readLevel, true, err
 		}
@@ -264,10 +291,10 @@ func (tr *taskReader) addSingleTaskToBuffer(
 	}
 }
 
-func (tr *taskReader) persistAckLevel() error {
+func (tr *taskReader) persistAckLevel(ctx context.Context) error {
 	ackLevel := tr.tlMgr.taskAckManager.getAckLevel()
 	tr.emitTaskLagMetric(ackLevel)
-	return tr.tlMgr.db.UpdateState(context.TODO(), ackLevel)
+	return tr.tlMgr.db.UpdateState(ctx, ackLevel)
 }
 
 func (tr *taskReader) isTaskAddedRecently(lastAddTime time.Time) bool {
@@ -287,4 +314,19 @@ func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
 	// taskID in DB may not be continuous, especially when task list ownership changes.
 	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
 	tr.scope().UpdateGauge(metrics.TaskLagPerTaskQueueGauge, float64(maxReadLevel-ackLevel))
+}
+
+func (tr *taskReader) backoff(duration time.Duration) {
+	tr.backoffTimerLock.Lock()
+	defer tr.backoffTimerLock.Unlock()
+
+	if tr.backoffTimer == nil {
+		tr.backoffTimer = time.AfterFunc(duration, func() {
+			tr.backoffTimerLock.Lock()
+			defer tr.backoffTimerLock.Unlock()
+
+			tr.Signal() // re-enqueue the event
+			tr.backoffTimer = nil
+		})
+	}
 }

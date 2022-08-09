@@ -527,6 +527,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
 	newMutableState, err := api.CreateMutableState(
+		ctx,
 		t.shard,
 		mutableState.GetNamespaceEntry(),
 		newRunID,
@@ -591,10 +592,9 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	now := t.shard.GetTimeSource().Now()
 	err = context.UpdateWorkflowExecutionAsActive(ctx, now)
 	if err != nil {
-		if shard.IsShardOwnershipLostError(err) {
+		if shard.IsShardOwnershipLostError(err) && t.queueProcessor != nil {
 			// Shard is stolen.  Stop timer processing to reduce duplicates
 			t.queueProcessor.Stop()
-			return err
 		}
 		return err
 	}

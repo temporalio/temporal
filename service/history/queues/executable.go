@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -154,12 +155,14 @@ func (e *executableImpl) Execute() error {
 
 	// this filter should also contain the logic for overriding
 	// results from task allocator (force executing some standby task types)
-	e.shouldProcess = e.filter(e.Task)
-	if !e.shouldProcess {
-		return nil
+	if e.filter != nil {
+		if e.shouldProcess = e.filter(e.Task); !e.shouldProcess {
+			return nil
+		}
 	}
 
 	ctx := metrics.AddMetricsContext(context.Background())
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
 	startTime := e.timeSource.Now()
 
 	var err error

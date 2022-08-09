@@ -139,7 +139,7 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 		return nil
 	}
 
-	ratelimiter := a.getOrCreateRateLimiter(executable.GetNamespaceID())
+	ratelimiter := a.getOrCreateRateLimiter(namespaceName)
 	if !ratelimiter.Allow() {
 		executable.SetPriority(tasks.PriorityMedium)
 

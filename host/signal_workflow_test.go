@@ -1519,7 +1519,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 		Identity:              identity,
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 	}
-	ctx, _ := rpc.NewContextWithTimeoutAndHeaders(5 * time.Second)
+	ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(5 * time.Second)
 	resp, err := s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
 	s.Error(err)
@@ -1528,7 +1528,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 
 	// test policy WorkflowIdReusePolicyAllowDuplicateFailedOnly
 	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY
-	ctx, _ = rpc.NewContextWithTimeoutAndHeaders(5 * time.Second)
+	ctx, _ = rpc.NewContextWithTimeoutAndVersionHeaders(5 * time.Second)
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.Nil(resp)
 	s.Error(err)
@@ -1537,7 +1537,7 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 
 	// test policy WorkflowIdReusePolicyAllowDuplicate
 	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
-	ctx, _ = rpc.NewContextWithTimeoutAndHeaders(5 * time.Second)
+	ctx, _ = rpc.NewContextWithTimeoutAndVersionHeaders(5 * time.Second)
 	resp, err = s.engine.SignalWithStartWorkflowExecution(ctx, sRequest)
 	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())

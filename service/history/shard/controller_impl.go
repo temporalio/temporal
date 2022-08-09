@@ -27,6 +27,7 @@ package shard
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -90,6 +91,8 @@ type (
 		tracer                      trace.Tracer
 	}
 )
+
+var _ Controller = (*ControllerImpl)(nil)
 
 func (c *ControllerImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
@@ -376,8 +379,11 @@ func (c *ControllerImpl) acquireShards() {
 	}
 
 	// Submit tasks to the channel.
+	numShards := c.config.NumberOfShards
+	randomStartOffset := rand.Int31n(numShards)
 LoopSubmit:
-	for shardID := int32(1); shardID <= c.config.NumberOfShards; shardID++ {
+	for index := int32(0); index < numShards; index++ {
+		shardID := (index+randomStartOffset)%numShards + 1
 		select {
 		case <-c.shutdownCh:
 			break LoopSubmit
@@ -389,7 +395,10 @@ LoopSubmit:
 	// Wait until all shards are processed.
 	wg.Wait()
 
-	c.metricsScope.UpdateGauge(metrics.NumShardsGauge, float64(c.NumShards()))
+	c.RLock()
+	numOfOwnedShards := len(c.historyShards)
+	c.RUnlock()
+	c.metricsScope.UpdateGauge(metrics.NumShardsGauge, float64(numOfOwnedShards))
 }
 
 func (c *ControllerImpl) doShutdown() {
@@ -402,20 +411,14 @@ func (c *ControllerImpl) doShutdown() {
 	c.historyShards = nil
 }
 
-func (c *ControllerImpl) NumShards() int {
-	c.RLock()
-	defer c.RUnlock()
-	return len(c.historyShards)
-}
-
 func (c *ControllerImpl) ShardIDs() []int32 {
 	c.RLock()
-	ids := []int32{}
+	defer c.RUnlock()
+
+	ids := make([]int32, 0, len(c.historyShards))
 	for id := range c.historyShards {
-		id32 := int32(id)
-		ids = append(ids, id32)
+		ids = append(ids, id)
 	}
-	c.RUnlock()
 	return ids
 }
 

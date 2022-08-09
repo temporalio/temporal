@@ -25,6 +25,7 @@
 package service
 
 import (
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common"
@@ -37,6 +38,26 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/telemetry"
 )
+
+type (
+	PersistenceRateLimitingParams struct {
+		fx.Out
+
+		PersistenceMaxQps    persistenceClient.PersistenceMaxQps
+		PriorityRateLimiting persistenceClient.PriorityRateLimiting
+	}
+)
+
+func NewPersistenceRateLimitingParams(
+	maxQps dynamicconfig.IntPropertyFn,
+	globalMaxQps dynamicconfig.IntPropertyFn,
+	priorityRateLimiting dynamicconfig.BoolPropertyFn,
+) PersistenceRateLimitingParams {
+	return PersistenceRateLimitingParams{
+		PersistenceMaxQps:    PersistenceMaxQpsFn(maxQps, globalMaxQps),
+		PriorityRateLimiting: persistenceClient.PriorityRateLimiting(priorityRateLimiting),
+	}
+}
 
 func PersistenceMaxQpsFn(
 	maxQps dynamicconfig.IntPropertyFn,
@@ -60,6 +81,7 @@ func PersistenceMaxQpsFn(
 func GrpcServerOptionsProvider(
 	logger log.Logger,
 	rpcFactory common.RPCFactory,
+	retryableInterceptor *interceptor.RetryableInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	tracingInterceptor telemetry.ServerTraceInterceptor,
@@ -77,6 +99,7 @@ func GrpcServerOptionsProvider(
 			grpc.UnaryServerInterceptor(tracingInterceptor),
 			metrics.NewServerMetricsContextInjectorInterceptor(),
 			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
+			retryableInterceptor.Intercept,
 			telemetryInterceptor.Intercept,
 			rateLimitInterceptor.Intercept,
 		),

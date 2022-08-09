@@ -27,9 +27,7 @@ package queues
 import (
 	"fmt"
 
-	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/tasks"
-	"golang.org/x/exp/maps"
 )
 
 type (
@@ -47,6 +45,8 @@ type (
 		MergeWithSlice(Slice) []Slice
 		ShrinkRange()
 		SelectTasks(int) ([]Executable, error)
+		MoreTasks() bool
+		Clear()
 	}
 
 	ExecutableInitializer func(tasks.Task) Executable
@@ -60,8 +60,7 @@ type (
 		scope     Scope
 		iterators []Iterator
 
-		// TODO: make task tracking a separate component
-		outstandingExecutables map[tasks.Key]Executable
+		*executableTracker
 	}
 )
 
@@ -71,13 +70,13 @@ func NewSlice(
 	scope Scope,
 ) *SliceImpl {
 	return &SliceImpl{
-		paginationFnProvider:   paginationFnProvider,
-		executableInitializer:  executableInitializer,
-		scope:                  scope,
-		outstandingExecutables: make(map[tasks.Key]Executable),
+		paginationFnProvider:  paginationFnProvider,
+		executableInitializer: executableInitializer,
+		scope:                 scope,
 		iterators: []Iterator{
 			NewIterator(paginationFnProvider, scope.Range),
 		},
+		executableTracker: newExecutableTracker(),
 	}
 }
 
@@ -102,7 +101,7 @@ func (s *SliceImpl) SplitByRange(key tasks.Key) (left Slice, right Slice) {
 func (s *SliceImpl) splitByRange(key tasks.Key) (left *SliceImpl, right *SliceImpl) {
 
 	leftScope, rightScope := s.scope.SplitByRange(key)
-	leftExecutables, rightExecutables := s.splitExecutables(leftScope, rightScope)
+	leftTaskTracker, rightTaskTracker := s.executableTracker.split(leftScope, rightScope)
 
 	leftIterators := make([]Iterator, 0, len(s.iterators)/2)
 	rightIterators := make([]Iterator, 0, len(s.iterators)/2)
@@ -123,30 +122,17 @@ func (s *SliceImpl) splitByRange(key tasks.Key) (left *SliceImpl, right *SliceIm
 		rightIterators = append(rightIterators, rightIter)
 	}
 
-	left = &SliceImpl{
-		paginationFnProvider:   s.paginationFnProvider,
-		executableInitializer:  s.executableInitializer,
-		scope:                  leftScope,
-		outstandingExecutables: leftExecutables,
-		iterators:              leftIterators,
-	}
-	right = &SliceImpl{
-		paginationFnProvider:   s.paginationFnProvider,
-		executableInitializer:  s.executableInitializer,
-		scope:                  rightScope,
-		outstandingExecutables: rightExecutables,
-		iterators:              rightIterators,
-	}
-
 	s.destroy()
-	return left, right
+
+	return s.newSlice(leftScope, leftIterators, leftTaskTracker),
+		s.newSlice(rightScope, rightIterators, rightTaskTracker)
 }
 
 func (s *SliceImpl) SplitByPredicate(predicate tasks.Predicate) (pass Slice, fail Slice) {
 	s.stateSanityCheck()
 
 	passScope, failScope := s.scope.SplitByPredicate(predicate)
-	passExecutables, failExecutables := s.splitExecutables(passScope, failScope)
+	passTaskTracker, failTaskTracker := s.executableTracker.split(passScope, failScope)
 
 	passIterators := make([]Iterator, 0, len(s.iterators))
 	failIterators := make([]Iterator, 0, len(s.iterators))
@@ -156,44 +142,10 @@ func (s *SliceImpl) SplitByPredicate(predicate tasks.Predicate) (pass Slice, fai
 		failIterators = append(failIterators, iter.Remaining())
 	}
 
-	pass = &SliceImpl{
-		paginationFnProvider:   s.paginationFnProvider,
-		executableInitializer:  s.executableInitializer,
-		scope:                  passScope,
-		outstandingExecutables: passExecutables,
-		iterators:              passIterators,
-	}
-	fail = &SliceImpl{
-		paginationFnProvider:   s.paginationFnProvider,
-		executableInitializer:  s.executableInitializer,
-		scope:                  failScope,
-		outstandingExecutables: failExecutables,
-		iterators:              failIterators,
-	}
-
 	s.destroy()
-	return pass, fail
-}
 
-func (s *SliceImpl) splitExecutables(
-	thisScope Scope,
-	thatScope Scope,
-) (map[tasks.Key]Executable, map[tasks.Key]Executable) {
-	thisExecutable := s.outstandingExecutables
-	thatExecutables := make(map[tasks.Key]Executable, len(s.outstandingExecutables)/2)
-	for key, executable := range s.outstandingExecutables {
-		if thisScope.Contains(executable) {
-			continue
-		}
-
-		if !thatScope.Contains(executable) {
-			panic(fmt.Sprintf("Queue slice encountered task doesn't belong to its scope, scope: %v, task: %v, task type: %v",
-				s.scope, executable.GetTask(), executable.GetType()))
-		}
-		delete(thisExecutable, key)
-		thatExecutables[key] = executable
-	}
-	return thisExecutable, thatExecutables
+	return s.newSlice(passScope, passIterators, passTaskTracker),
+		s.newSlice(failScope, failIterators, failTaskTracker)
 }
 
 func (s *SliceImpl) CanMergeWithSlice(slice Slice) bool {
@@ -251,43 +203,31 @@ func (s *SliceImpl) MergeWithSlice(slice Slice) []Slice {
 }
 
 func (s *SliceImpl) mergeByRange(incomingSlice *SliceImpl) *SliceImpl {
-	mergedSlice := &SliceImpl{
-		paginationFnProvider:   s.paginationFnProvider,
-		executableInitializer:  s.executableInitializer,
-		scope:                  s.scope.MergeByRange(incomingSlice.scope),
-		outstandingExecutables: s.mergeExecutables(incomingSlice),
-		iterators:              s.mergeIterators(incomingSlice),
-	}
+	mergedTaskTracker := s.executableTracker.merge(incomingSlice.executableTracker)
+	mergedIterators := s.mergeIterators(incomingSlice)
 
 	s.destroy()
 	incomingSlice.destroy()
 
-	return mergedSlice
+	return s.newSlice(
+		s.scope.MergeByRange(incomingSlice.scope),
+		mergedIterators,
+		mergedTaskTracker,
+	)
 }
 
 func (s *SliceImpl) mergeByPredicate(incomingSlice *SliceImpl) *SliceImpl {
-	mergedSlice := &SliceImpl{
-		paginationFnProvider:   s.paginationFnProvider,
-		executableInitializer:  s.executableInitializer,
-		scope:                  s.scope.MergeByPredicate(incomingSlice.scope),
-		outstandingExecutables: s.mergeExecutables(incomingSlice),
-		iterators:              s.mergeIterators(incomingSlice),
-	}
+	mergedTaskTracker := s.executableTracker.merge(incomingSlice.executableTracker)
+	mergedIterators := s.mergeIterators(incomingSlice)
 
 	s.destroy()
 	incomingSlice.destroy()
 
-	return mergedSlice
-}
-
-func (s *SliceImpl) mergeExecutables(incomingSlice *SliceImpl) map[tasks.Key]Executable {
-	thisExecutables := s.outstandingExecutables
-	thatExecutables := incomingSlice.outstandingExecutables
-	if len(thisExecutables) < len(thatExecutables) {
-		thisExecutables, thatExecutables = thatExecutables, thisExecutables
-	}
-	maps.Copy(thisExecutables, thatExecutables)
-	return thisExecutables
+	return s.newSlice(
+		s.scope.MergeByPredicate(incomingSlice.scope),
+		mergedIterators,
+		mergedTaskTracker,
+	)
 }
 
 func (s *SliceImpl) mergeIterators(incomingSlice *SliceImpl) []Iterator {
@@ -339,15 +279,7 @@ func (s *SliceImpl) appendIterator(
 func (s *SliceImpl) ShrinkRange() {
 	s.stateSanityCheck()
 
-	minPendingTaskKey := tasks.MaximumKey
-	for key := range s.outstandingExecutables {
-		if s.outstandingExecutables[key].State() == ctasks.TaskStateAcked {
-			delete(s.outstandingExecutables, key)
-			continue
-		}
-
-		minPendingTaskKey = tasks.MinKey(minPendingTaskKey, key)
-	}
+	minPendingTaskKey := s.executableTracker.shrink()
 
 	minIteratorKey := tasks.MaximumKey
 	if len(s.iterators) != 0 {
@@ -378,6 +310,11 @@ func (s *SliceImpl) SelectTasks(batchSize int) ([]Executable, error) {
 			task, err := s.iterators[0].Next()
 			if err != nil {
 				s.iterators[0] = s.iterators[0].Remaining()
+				if len(executables) != 0 {
+					// NOTE: we must return the executables here
+					// MoreTasks() will return true so queue reader will try to load again
+					return executables, nil
+				}
 				return nil, err
 			}
 
@@ -392,7 +329,7 @@ func (s *SliceImpl) SelectTasks(batchSize int) ([]Executable, error) {
 			}
 
 			executable := s.executableInitializer(task)
-			s.outstandingExecutables[taskKey] = executable
+			s.executableTracker.add(executable)
 			executables = append(executables, executable)
 		} else {
 			s.iterators = s.iterators[1:]
@@ -402,15 +339,46 @@ func (s *SliceImpl) SelectTasks(batchSize int) ([]Executable, error) {
 	return executables, nil
 }
 
+func (s *SliceImpl) MoreTasks() bool {
+	s.stateSanityCheck()
+
+	return len(s.iterators) != 0
+}
+
+func (s *SliceImpl) Clear() {
+	s.stateSanityCheck()
+
+	s.ShrinkRange()
+
+	s.iterators = []Iterator{
+		NewIterator(s.paginationFnProvider, s.scope.Range),
+	}
+	s.executableTracker.clear()
+}
+
 func (s *SliceImpl) destroy() {
 	s.destroyed = true
 	s.iterators = nil
-	s.outstandingExecutables = nil
+	s.executableTracker = nil
 }
 
 func (s *SliceImpl) stateSanityCheck() {
 	if s.destroyed {
 		panic("Can not invoke method on destroyed queue slice")
+	}
+}
+
+func (s *SliceImpl) newSlice(
+	scope Scope,
+	iterators []Iterator,
+	tracker *executableTracker,
+) *SliceImpl {
+	return &SliceImpl{
+		paginationFnProvider:  s.paginationFnProvider,
+		executableInitializer: s.executableInitializer,
+		scope:                 scope,
+		iterators:             iterators,
+		executableTracker:     tracker,
 	}
 }
 

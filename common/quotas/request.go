@@ -26,9 +26,10 @@ package quotas
 
 type (
 	Request struct {
-		API    string
-		Token  int
-		Caller string
+		API        string
+		Token      int
+		Caller     string
+		CallerType string
 	}
 )
 
@@ -36,10 +37,12 @@ func NewRequest(
 	api string,
 	token int,
 	caller string,
+	callerType string,
 ) Request {
 	return Request{
-		API:    api,
-		Token:  token,
-		Caller: caller,
+		API:        api,
+		Token:      token,
+		Caller:     caller,
+		CallerType: callerType,
 	}
 }

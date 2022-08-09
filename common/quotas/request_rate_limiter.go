@@ -35,6 +35,9 @@ type (
 	// RequestRateLimiterFn returns generate a namespace specific rate limiter
 	RequestRateLimiterFn func(req Request) RequestRateLimiter
 
+	// RequestPriorityFn returns a priority for the given Request
+	RequestPriorityFn func(req Request) int
+
 	// RequestRateLimiter corresponds to basic rate limiting functionality.
 	RequestRateLimiter interface {
 		// Allow attempts to allow a request to go through. The method returns

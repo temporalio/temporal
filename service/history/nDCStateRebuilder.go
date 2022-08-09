@@ -228,6 +228,7 @@ func (r *nDCStateRebuilderImpl) applyEvents(
 ) error {
 
 	_, err := stateBuilder.ApplyEvents(
+		context.Background(),
 		namespace.ID(workflowKey.NamespaceID),
 		requestID,
 		commonpb.WorkflowExecution{

@@ -55,10 +55,11 @@ import (
 
 // Config represents configuration for frontend service
 type Config struct {
-	NumHistoryShards        int32
-	ESIndexName             string
-	PersistenceMaxQPS       dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS dynamicconfig.IntPropertyFn
+	NumHistoryShards                      int32
+	ESIndexName                           string
+	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
+	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 
 	StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 	StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
@@ -68,6 +69,7 @@ type Config struct {
 	EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ESIndexMaxResultWindow                    dynamicconfig.IntPropertyFn
+	VisibilityDisableOrderByClause            dynamicconfig.BoolPropertyFn
 
 	HistoryMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RPS                                    dynamicconfig.IntPropertyFn
@@ -149,10 +151,11 @@ type Config struct {
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName string, enableReadFromES bool) *Config {
 	return &Config{
-		NumHistoryShards:        numHistoryShards,
-		ESIndexName:             esIndexName,
-		PersistenceMaxQPS:       dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
-		PersistenceGlobalMaxQPS: dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
+		NumHistoryShards:                      numHistoryShards,
+		ESIndexName:                           esIndexName,
+		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
+		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
+		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.FrontendEnablePersistencePriorityRateLimiting, true),
 
 		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
 		StandardVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
@@ -162,6 +165,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
 		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
 		ESIndexMaxResultWindow:                    dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
+		VisibilityDisableOrderByClause:            dc.GetBoolProperty(dynamicconfig.VisibilityDisableOrderByClause, false),
 
 		HistoryMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                    dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),

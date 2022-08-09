@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/clock"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
@@ -179,6 +181,7 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
+		clock.NewRealTimeSource(),
 	)
 }
 
@@ -317,7 +320,7 @@ func (s *workflowHandlerSuite) TestTransientTaskInjection() {
 						WorkflowId: "wfid:" + s.T().Name(),
 						RunId:      "1",
 					},
-					WorkflowTaskInfo: &tc.taskInfo,
+					TransientWorkflowTask: &tc.taskInfo,
 				},
 				nil,
 			)
@@ -1960,6 +1963,4 @@ func TestContextNearDeadline(t *testing.T) {
 	ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*500)
 	assert.True(t, contextNearDeadline(ctx, longPollTailRoom))
 	assert.False(t, contextNearDeadline(ctx, time.Millisecond))
-
-	assert.False(t, common.IsServiceTransientError(errContextNearDeadline))
 }

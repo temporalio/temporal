@@ -25,6 +25,8 @@
 package workflow
 
 import (
+	"context"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -78,6 +80,7 @@ func ScheduleWorkflowTask(
 }
 
 func RetryWorkflow(
+	ctx context.Context,
 	mutableState MutableState,
 	eventBatchFirstEventID int64,
 	parentNamespace namespace.Name,
@@ -95,6 +98,7 @@ func RetryWorkflow(
 	}
 
 	_, newMutableState, err := mutableState.AddContinueAsNewEvent(
+		ctx,
 		eventBatchFirstEventID,
 		common.EmptyEventID,
 		parentNamespace,

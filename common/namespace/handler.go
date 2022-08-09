@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -88,7 +89,12 @@ type (
 		archivalMetadata       archiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
 		supportsSchedules      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		timeSource             clock.TimeSource
 	}
+)
+
+const (
+	maxReplicationHistorySize = 10
 )
 
 var ErrInvalidNamespaceStateUpdate = serviceerror.NewInvalidArgument("invalid namespace state update")
@@ -104,6 +110,7 @@ func NewHandler(
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
 	supportsSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	timeSource clock.TimeSource,
 ) *HandlerImpl {
 	return &HandlerImpl{
 		maxBadBinaryCount:      maxBadBinaryCount,
@@ -115,6 +122,7 @@ func NewHandler(
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
 		supportsSchedules:      supportsSchedules,
+		timeSource:             timeSource,
 	}
 }
 
@@ -139,7 +147,8 @@ func (d *HandlerImpl) RegisterNamespace(
 
 	if err := validateRetentionDuration(
 		timestamp.DurationValue(registerRequest.WorkflowExecutionRetentionPeriod),
-		registerRequest.IsGlobalNamespace); err != nil {
+		registerRequest.IsGlobalNamespace,
+	); err != nil {
 		return nil, err
 	}
 
@@ -385,6 +394,7 @@ func (d *HandlerImpl) UpdateNamespace(
 	info := getResponse.Namespace.Info
 	config := getResponse.Namespace.Config
 	replicationConfig := getResponse.Namespace.ReplicationConfig
+	failoverHistory := getResponse.Namespace.ReplicationConfig.FailoverHistory
 	configVersion := getResponse.Namespace.ConfigVersion
 	failoverVersion := getResponse.Namespace.FailoverVersion
 	failoverNotificationVersion := getResponse.Namespace.FailoverNotificationVersion
@@ -465,7 +475,10 @@ func (d *HandlerImpl) UpdateNamespace(
 			configurationChanged = true
 
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionTtl()
-			if err := validateRetentionDuration(timestamp.DurationValue(config.Retention), isGlobalNamespace); err != nil {
+			if err := validateRetentionDuration(
+				timestamp.DurationValue(config.Retention),
+				isGlobalNamespace,
+			); err != nil {
 				return nil, err
 			}
 		}
@@ -550,10 +563,6 @@ func (d *HandlerImpl) UpdateNamespace(
 	if configurationChanged && activeClusterChanged && isGlobalNamespace {
 		return nil, errCannotDoNamespaceFailoverAndUpdate
 	} else if configurationChanged || activeClusterChanged || needsNamespacePromotion {
-		// set the versions
-		if configurationChanged {
-			configVersion++
-		}
 		if (needsNamespacePromotion || activeClusterChanged) && isGlobalNamespace {
 			failoverVersion = d.clusterMetadata.GetNextFailoverVersion(
 				replicationConfig.ActiveClusterName,
@@ -561,7 +570,23 @@ func (d *HandlerImpl) UpdateNamespace(
 			)
 			failoverNotificationVersion = notificationVersion
 		}
+		// set the versions
+		if configurationChanged {
+			configVersion++
+		}
 
+		if configurationChanged || activeClusterChanged {
+			// N.B., it should be sufficient to check only for activeClusterChanged. In order to be defensive, we also
+			// check for configurationChanged. If nothing needs to be updated this will be a no-op.
+			failoverHistory = d.maybeUpdateFailoverHistory(
+				failoverHistory,
+				updateRequest.ReplicationConfig,
+				getResponse.Namespace,
+				failoverVersion,
+			)
+		}
+
+		replicationConfig.FailoverHistory = failoverHistory
 		updateReq := &persistence.UpdateNamespaceRequest{
 			Namespace: &persistencespb.NamespaceDetail{
 				Info:                        info,
@@ -795,14 +820,59 @@ func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 	return archiver.ValidateURI(URI)
 }
 
+// maybeUpdateFailoverHistory adds an entry if the Namespace is becoming active in a new cluster.
+func (d *HandlerImpl) maybeUpdateFailoverHistory(
+	failoverHistory []*persistencespb.FailoverStatus,
+	updateReplicationConfig *replicationpb.NamespaceReplicationConfig,
+	namespaceDetail *persistencespb.NamespaceDetail,
+	newFailoverVersion int64,
+) []*persistencespb.FailoverStatus {
+	d.logger.Debug(
+		"maybeUpdateFailoverHistory",
+		tag.NewAnyTag("failoverHistory", failoverHistory),
+		tag.NewAnyTag("updateReplConfig", updateReplicationConfig),
+		tag.NewAnyTag("namespaceDetail", namespaceDetail),
+	)
+	if updateReplicationConfig == nil {
+		d.logger.Debug("updateReplicationConfig was nil")
+		return failoverHistory
+	}
+	desiredReplicationState := updateReplicationConfig.State
+	if desiredReplicationState == enumspb.REPLICATION_STATE_UNSPECIFIED {
+		desiredReplicationState = namespaceDetail.ReplicationConfig.State
+	}
+	// N.B., UNSPECIFIED is the same as NORMAL
+	if desiredReplicationState != enumspb.REPLICATION_STATE_NORMAL &&
+		desiredReplicationState != enumspb.REPLICATION_STATE_UNSPECIFIED {
+		d.logger.Debug("Replication state not NORMAL", tag.NewAnyTag("state", updateReplicationConfig.State))
+		return failoverHistory
+	}
+	lastFailoverVersion := int64(-1)
+	if l := len(namespaceDetail.ReplicationConfig.FailoverHistory); l > 0 {
+		lastFailoverVersion = namespaceDetail.ReplicationConfig.FailoverHistory[l-1].FailoverVersion
+	}
+	if lastFailoverVersion != newFailoverVersion {
+		now := d.timeSource.Now()
+		failoverHistory = append(
+			failoverHistory, &persistencespb.FailoverStatus{
+				FailoverTime:    &now,
+				FailoverVersion: newFailoverVersion,
+			},
+		)
+	}
+	if l := len(failoverHistory); l > maxReplicationHistorySize {
+		failoverHistory = failoverHistory[l-maxReplicationHistorySize : l]
+	}
+	return failoverHistory
+}
+
 // validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
 func validateRetentionDuration(retention time.Duration, isGlobalNamespace bool) error {
 	min := MinRetentionLocal
-	max := common.MaxWorkflowRetentionPeriod
 	if isGlobalNamespace {
 		min = MinRetentionGlobal
 	}
-	if retention < min || retention > max {
+	if retention < min {
 		return errInvalidRetentionPeriod
 	}
 	return nil
@@ -815,14 +885,24 @@ func validateReplicationStateUpdate(existingNamespace *persistence.GetNamespaceR
 		return nil // no change
 	}
 
-	nsState := existingNamespace.Namespace.Info.State
-	if nsState != enumspb.NAMESPACE_STATE_REGISTERED {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("update ReplicationState is only supported when namespace is in %s state, current state: %s", enumspb.NAMESPACE_STATE_REGISTERED.String(), nsState.String()))
+	if existingNamespace.Namespace.Info.State != enumspb.NAMESPACE_STATE_REGISTERED {
+		return serviceerror.NewInvalidArgument(
+			fmt.Sprintf(
+				"update ReplicationState is only supported when namespace is in %s state, current state: %s",
+				enumspb.NAMESPACE_STATE_REGISTERED.String(),
+				existingNamespace.Namespace.Info.State.String(),
+			),
+		)
 	}
 
 	if nsUpdateRequest.ReplicationConfig.State == enumspb.REPLICATION_STATE_HANDOVER {
 		if !existingNamespace.IsGlobalNamespace {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s can only be set for global namespace", enumspb.REPLICATION_STATE_HANDOVER))
+			return serviceerror.NewInvalidArgument(
+				fmt.Sprintf(
+					"%s can only be set for global namespace",
+					enumspb.REPLICATION_STATE_HANDOVER,
+				),
+			)
 		}
 		// verify namespace has more than 1 replication clusters
 		replicationClusterCount := len(existingNamespace.Namespace.ReplicationConfig.Clusters)

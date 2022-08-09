@@ -47,10 +47,6 @@ var _ MetricsHandler = (*tallyMetricsHandler)(nil)
 func NewTallyMetricsHandler(cfg ClientConfig, scope tally.Scope) *tallyMetricsHandler {
 	perUnitBuckets := make(map[MetricUnit]tally.Buckets)
 
-	if cfg.PerUnitHistogramBoundaries == nil {
-		setDefaultPerUnitHistogramBoundaries(&cfg)
-	}
-
 	for unit, boundariesList := range cfg.PerUnitHistogramBoundaries {
 		perUnitBuckets[MetricUnit(unit)] = tally.ValueBuckets(boundariesList)
 	}

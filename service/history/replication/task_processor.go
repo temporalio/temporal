@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -123,6 +124,7 @@ func NewTaskProcessor(
 	taskRetryPolicy.SetMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID))
 	taskRetryPolicy.SetExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
 
+	// TODO: define separate set of configs for dlq retry
 	dlqRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID))
 	dlqRetryPolicy.SetBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID))
 	dlqRetryPolicy.SetMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID))
@@ -302,6 +304,8 @@ func (p *taskProcessorImpl) handleSyncShardStatus(
 	p.metricsClient.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteCounter)
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
 	return p.historyEngine.SyncShardStatus(ctx, &historyservice.SyncShardStatusRequest{
 		SourceCluster: p.sourceCluster,
 		ShardId:       p.shard.GetShardID(),
