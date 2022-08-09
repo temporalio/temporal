@@ -245,6 +245,7 @@ func (s *flusherSuite) TestBuffer_Shutdown() {
 	flushBuffer.Lock()
 	s.Nil(flushBuffer.flushBuffer)
 	s.Nil(flushBuffer.flushBufferPointer)
+	// should not test the len of flushBuffer.freeBufferChan since this buffer is managed async-ly
 	s.Equal(0, len(flushBuffer.fullBufferChan))
 	flushBuffer.Unlock()
 
