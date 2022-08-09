@@ -142,10 +142,10 @@ func (s *esCrossDCTestSuite) SetupSuite() {
 	// Wait for cluster metadata to refresh new added clusters
 	time.Sleep(time.Millisecond * 200)
 
-	s.esClient = host.CreateESClient(s.Suite, s.clusterConfigs[0].ESConfig, s.logger)
-	host.PutIndexTemplate(s.Suite, s.esClient, fmt.Sprintf("../testdata/es_%s_index_template.json", s.clusterConfigs[0].ESConfig.Version), "test-visibility-template")
-	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
-	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
+	s.esClient = host.CreateESClient(&s.Suite, s.clusterConfigs[0].ESConfig, s.logger)
+	host.PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("../testdata/es_%s_index_template.json", s.clusterConfigs[0].ESConfig.Version), "test-visibility-template")
+	host.CreateIndex(&s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
+	host.CreateIndex(&s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
 
 	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
@@ -159,8 +159,8 @@ func (s *esCrossDCTestSuite) SetupTest() {
 func (s *esCrossDCTestSuite) TearDownSuite() {
 	s.cluster1.TearDownCluster()
 	s.cluster2.TearDownCluster()
-	host.DeleteIndex(s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
-	host.DeleteIndex(s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
+	host.DeleteIndex(&s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
+	host.DeleteIndex(&s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
 }
 
 func (s *esCrossDCTestSuite) TestSearchAttributes() {

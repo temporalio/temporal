@@ -42,6 +42,7 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -160,11 +161,11 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 }
 
 func (s *IntegrationBase) tearDownSuite() {
-	s.Require().NoError(s.deleteNamespace(s.namespace))
-	s.Require().NoError(s.deleteNamespace(s.testRawHistoryNamespaceName))
-	s.Require().NoError(s.deleteNamespace(s.foreignNamespace))
+	s.Require().NoError(s.markNamespaceAsDeleted(s.namespace))
+	s.Require().NoError(s.markNamespaceAsDeleted(s.testRawHistoryNamespaceName))
+	s.Require().NoError(s.markNamespaceAsDeleted(s.foreignNamespace))
 	if s.archivalNamespace != "" {
-		s.Require().NoError(s.deleteNamespace(s.archivalNamespace))
+		s.Require().NoError(s.markNamespaceAsDeleted(s.archivalNamespace))
 	}
 
 	if s.testCluster != nil {
@@ -199,7 +200,7 @@ func (s *IntegrationBase) registerNamespace(
 	return err
 }
 
-func (s *IntegrationBase) deleteNamespace(
+func (s *IntegrationBase) markNamespaceAsDeleted(
 	namespace string,
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(10000 * time.Second)

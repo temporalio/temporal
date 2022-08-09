@@ -82,16 +82,16 @@ type elasticsearchIntegrationSuite struct {
 // This cluster use customized threshold for history config
 func (s *elasticsearchIntegrationSuite) SetupSuite() {
 	s.setupSuite("testdata/integration_elasticsearch_cluster.yaml")
-	s.esClient = CreateESClient(s.Suite, s.testClusterConfig.ESConfig, s.Logger)
-	PutIndexTemplate(s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.testClusterConfig.ESConfig.Version), "test-visibility-template")
+	s.esClient = CreateESClient(&s.Suite, s.testClusterConfig.ESConfig, s.Logger)
+	PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.testClusterConfig.ESConfig.Version), "test-visibility-template")
 	indexName := s.testClusterConfig.ESConfig.GetVisibilityIndex()
-	CreateIndex(s.Suite, s.esClient, indexName)
+	CreateIndex(&s.Suite, s.esClient, indexName)
 	s.putIndexSettings(indexName, defaultTestValueOfESIndexMaxResultWindow)
 }
 
 func (s *elasticsearchIntegrationSuite) TearDownSuite() {
 	s.tearDownSuite()
-	DeleteIndex(s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
+	DeleteIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
 }
 
 func (s *elasticsearchIntegrationSuite) SetupTest() {

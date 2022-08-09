@@ -56,7 +56,8 @@ var _ Logger = (*zapLogger)(nil)
 // NewTestLogger returns a logger at debug level and log into STDERR
 func NewTestLogger() *zapLogger {
 	return NewZapLogger(BuildZapLogger(Config{
-		Level: "debug",
+		// Uncomment next line of you need debug level logging in tests.
+		// Level: "debug",
 	}))
 }
 
