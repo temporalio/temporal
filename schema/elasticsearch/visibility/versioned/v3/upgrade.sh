@@ -45,7 +45,7 @@ else
     REPLY="y"
 fi
 if [ "${REPLY}" = "y" ]; then
-    curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${es_endpoint}/${ES_VIS_INDEX_V1}${doc_type}/_mapping" -H "Content-Type: application/json" --data-binary "$new_mapping" | jq
+    curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${es_endpoint}/${ES_VIS_INDEX_V1}/_mapping" -H "Content-Type: application/json" --data-binary "$new_mapping" | jq
     # Wait for mapping changes to go through.
     until curl --silent --user "${ES_USER}":"${ES_PWD}" "${es_endpoint}/_cluster/health/${ES_VIS_INDEX_V1}" | jq --exit-status '.status=="green" | .'; do
         echo "Waiting for Elasticsearch index ${ES_VIS_INDEX_V1} become green."
