@@ -82,3 +82,14 @@ func setMetadataType(p *commonpb.Payload, t enumspb.IndexedValueType) {
 	}
 	p.Metadata[MetadataType] = []byte(tString)
 }
+
+// This may mutate saPtr and *saPtr
+func AddSearchAttribute(saPtr **commonpb.SearchAttributes, key string, value *commonpb.Payload) {
+	if *saPtr == nil {
+		*saPtr = &commonpb.SearchAttributes{}
+	}
+	if (*saPtr).IndexedFields == nil {
+		(*saPtr).IndexedFields = make(map[string]*commonpb.Payload)
+	}
+	(*saPtr).IndexedFields[key] = value
+}

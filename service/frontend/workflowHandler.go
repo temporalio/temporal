@@ -3105,7 +3105,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 	// Add namespace division
-	wh.addSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
+	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
 	// Create StartWorkflowExecutionRequest
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:             request.Namespace,
@@ -4525,17 +4525,6 @@ func (wh *WorkflowHandler) cleanScheduleSearchAttributes(searchAttributes *commo
 		return nil
 	}
 	return searchAttributes
-}
-
-// This may mutate saPtr and *saPtr
-func (wh *WorkflowHandler) addSearchAttribute(saPtr **commonpb.SearchAttributes, key string, value *commonpb.Payload) {
-	if *saPtr == nil {
-		*saPtr = &commonpb.SearchAttributes{}
-	}
-	if (*saPtr).IndexedFields == nil {
-		(*saPtr).IndexedFields = make(map[string]*commonpb.Payload)
-	}
-	(*saPtr).IndexedFields[key] = value
 }
 
 // This mutates memo
