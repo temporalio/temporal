@@ -140,7 +140,7 @@ func (f *flusherImpl[T]) Stop() {
 FreeBufferLoop:
 	for {
 		select {
-		case _ = <-f.freeBufferChan:
+		case <-f.freeBufferChan:
 			// noop
 		default:
 			break FreeBufferLoop
