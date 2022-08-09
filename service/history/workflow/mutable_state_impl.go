@@ -429,7 +429,7 @@ func (e *MutableStateImpl) SetHistoryTree(
 	initialBranch, err := e.shard.GetExecutionManager().NewHistoryBranch(
 		ctx,
 		&persistence.NewHistoryBranchRequest{
-			TreeId: treeID,
+			TreeID: treeID,
 		},
 	)
 	if err != nil {

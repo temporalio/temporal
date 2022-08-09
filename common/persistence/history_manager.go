@@ -532,10 +532,17 @@ func (m *executionManagerImpl) NewHistoryBranch(
 	request *NewHistoryBranchRequest,
 ) (*NewHistoryBranchResponse, error) {
 
-	resp := &NewHistoryBranchResponse{}
-	var err error
-	resp.BranchToken, err = NewHistoryBranchToken(request.TreeId)
-	return resp, err
+	req := &NewHistoryBranchRequest{
+		TreeID: request.TreeID,
+	}
+	resp, err := m.persistence.NewHistoryBranch(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &NewHistoryBranchResponse{
+		BranchToken: resp.BranchToken,
+	}, nil
 }
 
 // ReadHistoryBranchByBatch returns history node data for a branch by batch
