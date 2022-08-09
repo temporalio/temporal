@@ -285,6 +285,8 @@ const (
 	MatchingForwarderMaxChildrenPerNode = "matching.forwarderMaxChildrenPerNode"
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
+	// MatchingUseOldRouting is whether to use old task queue routing (name only) instead of namespace+name+type.
+	MatchingUseOldRouting = "matching.useOldRouting"
 
 	// key for history
 

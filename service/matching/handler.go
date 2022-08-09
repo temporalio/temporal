@@ -347,6 +347,11 @@ func (h *Handler) ListTaskQueuePartitions(
 		h.logger,
 	)
 
+	// default to workflow, for backwards-compatibility
+	if request.TaskQueueType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+		request.TaskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	}
+
 	response, err := h.engine.ListTaskQueuePartitions(hCtx, request)
 	return response, err
 }

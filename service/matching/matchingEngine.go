@@ -649,35 +649,33 @@ func (e *matchingEngineImpl) ListTaskQueuePartitions(
 	hCtx *handlerContext,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
 ) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
-	activityTaskQueueInfo, err := e.listTaskQueuePartitions(request, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	taskQueueInfo, err := e.listTaskQueuePartitions(request)
 	if err != nil {
 		return nil, err
 	}
-	workflowTaskQueueInfo, err := e.listTaskQueuePartitions(request, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	if err != nil {
-		return nil, err
-	}
-	resp := matchingservice.ListTaskQueuePartitionsResponse{
-		ActivityTaskQueuePartitions: activityTaskQueueInfo,
-		WorkflowTaskQueuePartitions: workflowTaskQueueInfo,
+	var resp matchingservice.ListTaskQueuePartitionsResponse
+	switch request.TaskQueueType {
+	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
+		resp.ActivityTaskQueuePartitions = taskQueueInfo
+	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
+		resp.WorkflowTaskQueuePartitions = taskQueueInfo
 	}
 	return &resp, nil
 }
 
-func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.ListTaskQueuePartitionsRequest, taskQueueType enumspb.TaskQueueType) ([]*taskqueuepb.TaskQueuePartitionMetadata, error) {
+func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.ListTaskQueuePartitionsRequest) ([]*taskqueuepb.TaskQueuePartitionMetadata, error) {
 	partitions, err := e.getAllPartitions(
 		namespace.Name(request.GetNamespace()),
 		*request.TaskQueue,
-		taskQueueType,
+		request.TaskQueueType,
 	)
-
 	if err != nil {
 		return nil, err
 	}
 
 	partitionHostInfo := make([]*taskqueuepb.TaskQueuePartitionMetadata, len(partitions))
 	for i, partition := range partitions {
-		host, err := e.getHostInfo(partition)
+		host, err := e.getHostInfo(request.NamespaceId, partition, request.TaskQueueType)
 		if err != nil {
 			return nil, err
 		}
@@ -743,8 +741,11 @@ func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
 	}, nil
 }
 
-func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
-	host, err := e.keyResolver.Lookup(partitionKey)
+func (e *matchingEngineImpl) getHostInfo(namespaceID string, partitionKey string, taskQueueType enumspb.TaskQueueType) (string, error) {
+	// TODO: this duplicates logic in client/matching/client.go. we should really just move
+	// all of ListTaskQueuePartitions to frontend and get rid of all of this logic in matching.
+	key := fmt.Sprintf("%s:%s:%d", namespaceID, partitionKey, int(taskQueueType))
+	host, err := e.keyResolver.Lookup(key)
 	if err != nil {
 		return "", err
 	}
@@ -761,7 +762,7 @@ func (e *matchingEngineImpl) getAllPartitions(
 	if err != nil {
 		return partitionKeys, err
 	}
-	taskQueueID, err := newTaskQueueID(namespaceID, taskQueue.GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	taskQueueID, err := newTaskQueueID(namespaceID, taskQueue.GetName(), taskQueueType)
 	if err != nil {
 		return partitionKeys, err
 	}

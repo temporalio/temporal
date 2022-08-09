@@ -29,6 +29,8 @@ package matching
 import (
 	"context"
 
+	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"google.golang.org/grpc"
 )
@@ -39,7 +41,7 @@ func (c *clientImpl) CancelOutstandingPoll(
 	opts ...grpc.CallOption,
 ) (*matchingservice.CancelOutstandingPollResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetTaskQueue().GetName())
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), request.GetTaskQueue(), request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +56,7 @@ func (c *clientImpl) DescribeTaskQueue(
 	opts ...grpc.CallOption,
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetDescRequest().GetTaskQueue().GetName())
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), request.GetDescRequest().GetTaskQueue(), request.GetDescRequest().GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +71,7 @@ func (c *clientImpl) GetWorkerBuildIdOrdering(
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetRequest().GetTaskQueue())
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetRequest().GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +86,7 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetTaskQueue().GetName())
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), request.GetTaskQueue(), request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +101,7 @@ func (c *clientImpl) RespondQueryTaskCompleted(
 	opts ...grpc.CallOption,
 ) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetTaskQueue().GetName())
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), request.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +116,7 @@ func (c *clientImpl) UpdateWorkerBuildIdOrdering(
 	opts ...grpc.CallOption,
 ) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetRequest().GetTaskQueue())
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetRequest().GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}

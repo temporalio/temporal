@@ -2981,19 +2981,36 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 		return nil, err
 	}
 
-	matchingResponse, err := wh.matchingClient.ListTaskQueuePartitions(ctx, &matchingservice.ListTaskQueuePartitionsRequest{
-		Namespace: request.GetNamespace(),
-		TaskQueue: request.TaskQueue,
-	})
-
-	if matchingResponse == nil {
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
 		return nil, err
 	}
 
-	return &workflowservice.ListTaskQueuePartitionsResponse{
-		ActivityTaskQueuePartitions: matchingResponse.ActivityTaskQueuePartitions,
-		WorkflowTaskQueuePartitions: matchingResponse.WorkflowTaskQueuePartitions,
-	}, err
+	var resp workflowservice.ListTaskQueuePartitionsResponse
+
+	matchingResponse, err := wh.matchingClient.ListTaskQueuePartitions(ctx, &matchingservice.ListTaskQueuePartitionsRequest{
+		Namespace:     request.GetNamespace(),
+		NamespaceId:   namespaceID.String(),
+		TaskQueue:     request.TaskQueue,
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	})
+	if matchingResponse == nil || err != nil {
+		return nil, err
+	}
+	resp.WorkflowTaskQueuePartitions = matchingResponse.WorkflowTaskQueuePartitions
+
+	matchingResponse, err = wh.matchingClient.ListTaskQueuePartitions(ctx, &matchingservice.ListTaskQueuePartitionsRequest{
+		Namespace:     request.GetNamespace(),
+		NamespaceId:   namespaceID.String(),
+		TaskQueue:     request.TaskQueue,
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+	})
+	if matchingResponse == nil || err != nil {
+		return nil, err
+	}
+	resp.ActivityTaskQueuePartitions = matchingResponse.ActivityTaskQueuePartitions
+
+	return &resp, nil
 }
 
 // Creates a new schedule.
