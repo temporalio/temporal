@@ -30,7 +30,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
@@ -374,16 +373,10 @@ func newTimerTaskScheduler(
 	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
-	return queues.NewScheduler(
-		queues.NewNoopPriorityAssigner(),
-		queues.SchedulerOptions{
-			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-				WorkerCount: config.TimerTaskWorkerCount,
-				QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
-			},
-			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
-				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TimerProcessorSchedulerRoundRobinWeights(), logger),
-			},
+	return queues.NewFIFOScheduler(
+		queues.FIFOSchedulerOptions{
+			WorkerCount: config.TimerTaskWorkerCount,
+			QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
 		},
 		metricProvider,
 		logger,

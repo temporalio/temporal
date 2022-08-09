@@ -31,9 +31,9 @@ import (
 )
 
 var DefaultTaskPriorityWeight = map[tasks.Priority]int{
-	tasks.PriorityHigh:   900,
-	tasks.PriorityMedium: 50,
-	tasks.PriorityLow:    25,
+	tasks.PriorityHigh:   10,
+	tasks.PriorityMedium: 2,
+	tasks.PriorityLow:    1,
 }
 
 func ConvertWeightsToDynamicConfigValue(

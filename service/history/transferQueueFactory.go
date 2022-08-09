@@ -34,9 +34,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -70,25 +68,20 @@ func NewTransferQueueFactory(
 ) queues.Factory {
 	var scheduler queues.Scheduler
 	if params.Config.TransferProcessorEnablePriorityTaskScheduler() {
-		scheduler = queues.NewScheduler(
+		scheduler = queues.NewNamespacePriorityScheduler(
 			queues.NewPriorityAssigner(
 				params.ClusterMetadata.GetCurrentClusterName(),
 				params.NamespaceRegistry,
 				queues.PriorityAssignerOptions{
-					HighPriorityRPS:       params.Config.TransferTaskHighPriorityRPS,
 					CriticalRetryAttempts: params.Config.TransferTaskMaxRetryCount,
 				},
 				params.MetricsHandler,
 			),
-			queues.SchedulerOptions{
-				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-					WorkerCount: params.Config.TransferProcessorSchedulerWorkerCount,
-					QueueSize:   params.Config.TransferProcessorSchedulerQueueSize(),
-				},
-				InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
-					PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(params.Config.TransferProcessorSchedulerRoundRobinWeights(), params.Logger),
-				},
+			queues.NamespacePrioritySchedulerOptions{
+				WorkerCount:      params.Config.TransferProcessorSchedulerWorkerCount,
+				NamespaceWeights: params.Config.TransferProcessorSchedulerRoundRobinWeights,
 			},
+			params.NamespaceRegistry,
 			params.MetricsHandler,
 			params.Logger,
 		)

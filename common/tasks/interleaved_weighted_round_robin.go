@@ -34,18 +34,19 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
-var _ Scheduler = (*InterleavedWeightedRoundRobinScheduler)(nil)
+var _ Scheduler[Task] = (*InterleavedWeightedRoundRobinScheduler[Task, struct{}])(nil)
 
 type (
 	// InterleavedWeightedRoundRobinSchedulerOptions is the config for
 	// interleaved weighted round robin scheduler
-	InterleavedWeightedRoundRobinSchedulerOptions struct {
-		PriorityToWeight map[Priority]int
+	InterleavedWeightedRoundRobinSchedulerOptions[T Task, K comparable] struct {
+		TaskToChannelKey   func(T) K
+		ChannelKeyToWeight func(K) int
 	}
 
 	// InterleavedWeightedRoundRobinScheduler is a round robin scheduler implementation
 	// ref: https://en.wikipedia.org/wiki/Weighted_round_robin#Interleaved_WRR
-	InterleavedWeightedRoundRobinScheduler struct {
+	InterleavedWeightedRoundRobinScheduler[T Task, K comparable] struct {
 		status int32
 
 		processor       Processor
@@ -55,10 +56,13 @@ type (
 		notifyChan   chan struct{}
 		shutdownChan chan struct{}
 
+		options InterleavedWeightedRoundRobinSchedulerOptions[T, K]
+
 		numInflightTask int64
+
 		sync.RWMutex
-		priorityToWeight     map[Priority]int
-		weightToTaskChannels map[int]*WeightedChannel
+		weightedChannels map[K]*WeightedChannel[T]
+
 		// precalculated / flattened task chan according to weight
 		// e.g. if
 		// priorityToWeight := map[Priority]int{
@@ -72,32 +76,33 @@ type (
 	}
 )
 
-func NewInterleavedWeightedRoundRobinScheduler(
-	option InterleavedWeightedRoundRobinSchedulerOptions,
+func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
+	options InterleavedWeightedRoundRobinSchedulerOptions[T, K],
 	processor Processor,
 	metricsProvider metrics.MetricsHandler,
 	logger log.Logger,
-) *InterleavedWeightedRoundRobinScheduler {
+) *InterleavedWeightedRoundRobinScheduler[T, K] {
 	iwrrChannels := atomic.Value{}
-	iwrrChannels.Store([]*WeightedChannel{})
-	return &InterleavedWeightedRoundRobinScheduler{
+	iwrrChannels.Store([]*WeightedChannel[T]{})
+	return &InterleavedWeightedRoundRobinScheduler[T, K]{
 		status: common.DaemonStatusInitialized,
 
 		processor:       processor,
 		metricsProvider: metricsProvider.WithTags(metrics.OperationTag(OperationTaskScheduler)),
 		logger:          logger,
 
+		options: options,
+
 		notifyChan:   make(chan struct{}, 1),
 		shutdownChan: make(chan struct{}),
 
-		numInflightTask:      0,
-		priorityToWeight:     option.PriorityToWeight,
-		weightToTaskChannels: make(map[int]*WeightedChannel),
-		iwrrChannels:         iwrrChannels,
+		numInflightTask:  0,
+		weightedChannels: make(map[K]*WeightedChannel[T]),
+		iwrrChannels:     iwrrChannels,
 	}
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) Start() {
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&s.status,
 		common.DaemonStatusInitialized,
@@ -113,7 +118,7 @@ func (s *InterleavedWeightedRoundRobinScheduler) Start() {
 	s.logger.Info("interleaved weighted round robin task scheduler started")
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) Stop() {
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&s.status,
 		common.DaemonStatusStarted,
@@ -131,8 +136,8 @@ func (s *InterleavedWeightedRoundRobinScheduler) Stop() {
 	s.logger.Info("interleaved weighted round robin task scheduler stopped")
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) Submit(
-	task PriorityTask,
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Submit(
+	task T,
 ) {
 	numTasks := atomic.AddInt64(&s.numInflightTask, 1)
 	if numTasks == 1 {
@@ -140,14 +145,14 @@ func (s *InterleavedWeightedRoundRobinScheduler) Submit(
 		return
 	}
 
-	// there are tasks pending dispatching, need to respect task priorities
-	channel := s.getOrCreateTaskChannel(s.priorityToWeight[task.GetPriority()])
+	// there are tasks pending dispatching, need to respect round roubin weight
+	channel := s.getOrCreateTaskChannel(s.options.TaskToChannelKey(task))
 	channel.Chan() <- task
 	s.notifyDispatcher()
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) TrySubmit(
-	task PriorityTask,
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) TrySubmit(
+	task T,
 ) bool {
 	numTasks := atomic.AddInt64(&s.numInflightTask, 1)
 	if numTasks == 1 {
@@ -155,8 +160,8 @@ func (s *InterleavedWeightedRoundRobinScheduler) TrySubmit(
 		return true
 	}
 
-	// there are tasks pending dispatching, need to respect task priorities
-	channel := s.getOrCreateTaskChannel(s.priorityToWeight[task.GetPriority()])
+	// there are tasks pending dispatching, need to respect round roubin weight
+	channel := s.getOrCreateTaskChannel(s.options.TaskToChannelKey(task))
 	select {
 	case channel.Chan() <- task:
 		s.notifyDispatcher()
@@ -167,7 +172,7 @@ func (s *InterleavedWeightedRoundRobinScheduler) TrySubmit(
 	}
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) eventLoop() {
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) eventLoop() {
 	for {
 		select {
 		case <-s.notifyChan:
@@ -178,11 +183,11 @@ func (s *InterleavedWeightedRoundRobinScheduler) eventLoop() {
 	}
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) getOrCreateTaskChannel(
-	weight int,
-) *WeightedChannel {
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
+	channelKey K,
+) *WeightedChannel[T] {
 	s.RLock()
-	channel, ok := s.weightToTaskChannels[weight]
+	channel, ok := s.weightedChannels[channelKey]
 	if ok {
 		s.RUnlock()
 		return channel
@@ -192,21 +197,22 @@ func (s *InterleavedWeightedRoundRobinScheduler) getOrCreateTaskChannel(
 	s.Lock()
 	defer s.Unlock()
 
-	channel, ok = s.weightToTaskChannels[weight]
+	channel, ok = s.weightedChannels[channelKey]
 	if ok {
 		return channel
 	}
 
-	channel = NewWeightedChannel(weight, WeightedChannelDefaultSize)
-	s.weightToTaskChannels[weight] = channel
+	weight := s.options.ChannelKeyToWeight(channelKey)
+	channel = NewWeightedChannel[T](weight, WeightedChannelDefaultSize)
+	s.weightedChannels[channelKey] = channel
 
-	weightedChannels := make(WeightedChannels, 0, len(s.weightToTaskChannels))
-	for _, weightedChan := range s.weightToTaskChannels {
+	weightedChannels := make(WeightedChannels[T], 0, len(s.weightedChannels))
+	for _, weightedChan := range s.weightedChannels {
 		weightedChannels = append(weightedChannels, weightedChan)
 	}
 	sort.Sort(weightedChannels)
 
-	iwrrChannels := make([]*WeightedChannel, 0, len(weightedChannels))
+	iwrrChannels := make([]*WeightedChannel[T], 0, len(weightedChannels))
 	maxWeight := weightedChannels[len(weightedChannels)-1].Weight()
 	for round := maxWeight - 1; round > -1; round-- {
 		for index := len(weightedChannels) - 1; index > -1 && weightedChannels[index].Weight() > round; index-- {
@@ -218,11 +224,11 @@ func (s *InterleavedWeightedRoundRobinScheduler) getOrCreateTaskChannel(
 	return channel
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) channels() []*WeightedChannel {
-	return s.iwrrChannels.Load().([]*WeightedChannel)
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) channels() []*WeightedChannel[T] {
+	return s.iwrrChannels.Load().([]*WeightedChannel[T])
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) notifyDispatcher() {
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) notifyDispatcher() {
 	if s.isStopped() {
 		s.rescheduleTasks()
 		return
@@ -234,15 +240,15 @@ func (s *InterleavedWeightedRoundRobinScheduler) notifyDispatcher() {
 	}
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) dispatchTasksWithWeight() {
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) dispatchTasksWithWeight() {
 	for s.hasRemainingTasks() {
 		weightedChannels := s.channels()
 		s.doDispatchTasksWithWeight(weightedChannels)
 	}
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) doDispatchTasksWithWeight(
-	channels []*WeightedChannel,
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTasksWithWeight(
+	channels []*WeightedChannel[T],
 ) {
 	numTasks := int64(0)
 LoopDispatch:
@@ -258,25 +264,25 @@ LoopDispatch:
 	atomic.AddInt64(&s.numInflightTask, -numTasks)
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) doDispatchTasksDirectly(
-	task PriorityTask,
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTasksDirectly(
+	task T,
 ) {
 	s.processor.Submit(task)
 	atomic.AddInt64(&s.numInflightTask, -1)
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) hasRemainingTasks() bool {
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) hasRemainingTasks() bool {
 	numTasks := atomic.LoadInt64(&s.numInflightTask)
 	return numTasks > 0
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) rescheduleTasks() {
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) rescheduleTasks() {
 	s.RLock()
 	defer s.RUnlock()
 
 	numTasks := int64(0)
 DrainLoop:
-	for _, channel := range s.weightToTaskChannels {
+	for _, channel := range s.weightedChannels {
 		for {
 			select {
 			case task := <-channel.Chan():
@@ -290,6 +296,6 @@ DrainLoop:
 	atomic.AddInt64(&s.numInflightTask, -numTasks)
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) isStopped() bool {
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) isStopped() bool {
 	return atomic.LoadInt32(&s.status) == common.DaemonStatusStopped
 }

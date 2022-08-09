@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
-	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -361,16 +360,10 @@ func newVisibilityTaskScheduler(
 	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
-	return queues.NewScheduler(
-		queues.NewNoopPriorityAssigner(),
-		queues.SchedulerOptions{
-			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-				WorkerCount: config.VisibilityTaskWorkerCount,
-				QueueSize:   config.VisibilityTaskBatchSize(),
-			},
-			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
-				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.VisibilityProcessorSchedulerRoundRobinWeights(), logger),
-			},
+	return queues.NewFIFOScheduler(
+		queues.FIFOSchedulerOptions{
+			WorkerCount: config.VisibilityTaskWorkerCount,
+			QueueSize:   config.VisibilityTaskBatchSize(),
 		},
 		metricProvider,
 		logger,

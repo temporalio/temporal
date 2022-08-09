@@ -91,8 +91,7 @@ type Config struct {
 	TimerProcessorEnableMultiCursor                  dynamicconfig.BoolPropertyFn
 	TimerProcessorEnablePriorityTaskScheduler        dynamicconfig.BoolPropertyFn
 	TimerProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
-	TimerProcessorSchedulerQueueSize                 dynamicconfig.IntPropertyFn
-	TimerProcessorSchedulerRoundRobinWeights         dynamicconfig.MapPropertyFn
+	TimerProcessorSchedulerRoundRobinWeights         dynamicconfig.MapPropertyFnWithNamespaceFilter
 	TimerProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
 	TimerProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 	TimerProcessorCompleteTimerInterval              dynamicconfig.DurationPropertyFn
@@ -116,8 +115,7 @@ type Config struct {
 	TransferProcessorEnableMultiCursor                  dynamicconfig.BoolPropertyFn
 	TransferProcessorEnablePriorityTaskScheduler        dynamicconfig.BoolPropertyFn
 	TransferProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
-	TransferProcessorSchedulerQueueSize                 dynamicconfig.IntPropertyFn
-	TransferProcessorSchedulerRoundRobinWeights         dynamicconfig.MapPropertyFn
+	TransferProcessorSchedulerRoundRobinWeights         dynamicconfig.MapPropertyFnWithNamespaceFilter
 	TransferProcessorFailoverMaxPollRPS                 dynamicconfig.IntPropertyFn
 	TransferProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
 	TransferProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
@@ -239,8 +237,7 @@ type Config struct {
 	VisibilityProcessorEnableMultiCursor                  dynamicconfig.BoolPropertyFn
 	VisibilityProcessorEnablePriorityTaskScheduler        dynamicconfig.BoolPropertyFn
 	VisibilityProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
-	VisibilityProcessorSchedulerQueueSize                 dynamicconfig.IntPropertyFn
-	VisibilityProcessorSchedulerRoundRobinWeights         dynamicconfig.MapPropertyFn
+	VisibilityProcessorSchedulerRoundRobinWeights         dynamicconfig.MapPropertyFnWithNamespaceFilter
 	VisibilityProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
 	VisibilityProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
 	VisibilityProcessorMaxPollInterval                    dynamicconfig.DurationPropertyFn
@@ -308,7 +305,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		StandbyTaskMissingEventsResendDelay:  dc.GetDurationProperty(dynamicconfig.StandbyTaskMissingEventsResendDelay, 10*time.Minute),
 		StandbyTaskMissingEventsDiscardDelay: dc.GetDurationProperty(dynamicconfig.StandbyTaskMissingEventsDiscardDelay, 15*time.Minute),
 
-		TimerTaskHighPriorityRPS:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TimerTaskHighPriorityRPS, 500),
 		TimerTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
 		TimerTaskWorkerCount:                             dc.GetIntProperty(dynamicconfig.TimerTaskWorkerCount, 10),
 		TimerTaskMaxRetryCount:                           dc.GetIntProperty(dynamicconfig.TimerTaskMaxRetryCount, 20),
@@ -316,8 +312,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TimerProcessorEnableMultiCursor:                  dc.GetBoolProperty(dynamicconfig.TimerProcessorEnableMultiCursor, false),
 		TimerProcessorEnablePriorityTaskScheduler:        dc.GetBoolProperty(dynamicconfig.TimerProcessorEnablePriorityTaskScheduler, false),
 		TimerProcessorSchedulerWorkerCount:               dc.GetIntProperty(dynamicconfig.TimerProcessorSchedulerWorkerCount, 200),
-		TimerProcessorSchedulerQueueSize:                 dc.GetIntProperty(dynamicconfig.TimerProcessorSchedulerQueueSize, 10),
-		TimerProcessorSchedulerRoundRobinWeights:         dc.GetMapProperty(dynamicconfig.TimerProcessorSchedulerRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultTaskPriorityWeight)),
+		TimerProcessorSchedulerRoundRobinWeights:         dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.TimerProcessorSchedulerRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultTaskPriorityWeight)),
 		TimerProcessorUpdateAckInterval:                  dc.GetDurationProperty(dynamicconfig.TimerProcessorUpdateAckInterval, 30*time.Second),
 		TimerProcessorUpdateAckIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.TimerProcessorUpdateAckIntervalJitterCoefficient, 0.15),
 		TimerProcessorCompleteTimerInterval:              dc.GetDurationProperty(dynamicconfig.TimerProcessorCompleteTimerInterval, 60*time.Second),
@@ -332,7 +327,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TimerProcessorHistoryArchivalSizeLimit:           dc.GetIntProperty(dynamicconfig.TimerProcessorHistoryArchivalSizeLimit, 500*1024),
 		TimerProcessorArchivalTimeLimit:                  dc.GetDurationProperty(dynamicconfig.TimerProcessorArchivalTimeLimit, 1*time.Second),
 
-		TransferTaskHighPriorityRPS:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TransferTaskHighPriorityRPS, 500),
 		TransferTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TransferTaskBatchSize, 100),
 		TransferTaskWorkerCount:                             dc.GetIntProperty(dynamicconfig.TransferTaskWorkerCount, 10),
 		TransferTaskMaxRetryCount:                           dc.GetIntProperty(dynamicconfig.TransferTaskMaxRetryCount, 20),
@@ -340,8 +334,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TransferProcessorEnableMultiCursor:                  dc.GetBoolProperty(dynamicconfig.TransferProcessorEnableMultiCursor, false),
 		TransferProcessorEnablePriorityTaskScheduler:        dc.GetBoolProperty(dynamicconfig.TransferProcessorEnablePriorityTaskScheduler, false),
 		TransferProcessorSchedulerWorkerCount:               dc.GetIntProperty(dynamicconfig.TransferProcessorSchedulerWorkerCount, 200),
-		TransferProcessorSchedulerQueueSize:                 dc.GetIntProperty(dynamicconfig.TransferProcessorSchedulerQueueSize, 10),
-		TransferProcessorSchedulerRoundRobinWeights:         dc.GetMapProperty(dynamicconfig.TransferProcessorSchedulerRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultTaskPriorityWeight)),
+		TransferProcessorSchedulerRoundRobinWeights:         dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.TransferProcessorSchedulerRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultTaskPriorityWeight)),
 		TransferProcessorFailoverMaxPollRPS:                 dc.GetIntProperty(dynamicconfig.TransferProcessorFailoverMaxPollRPS, 1),
 		TransferProcessorMaxPollRPS:                         dc.GetIntProperty(dynamicconfig.TransferProcessorMaxPollRPS, 20),
 		TransferProcessorMaxPollHostRPS:                     dc.GetIntProperty(dynamicconfig.TransferProcessorMaxPollHostRPS, 0),
@@ -428,7 +421,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		SkipReapplicationByNamespaceID: dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.SkipReapplicationByNamespaceID, false),
 
 		// ===== Visibility related =====
-		VisibilityTaskHighPriorityRPS:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.VisibilityTaskHighPriorityRPS, 500),
 		VisibilityTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.VisibilityTaskBatchSize, 100),
 		VisibilityProcessorMaxPollRPS:                         dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxPollRPS, 20),
 		VisibilityProcessorMaxPollHostRPS:                     dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxPollHostRPS, 0),
@@ -437,8 +429,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		VisibilityProcessorEnableMultiCursor:                  dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnableMultiCursor, false),
 		VisibilityProcessorEnablePriorityTaskScheduler:        dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnablePriorityTaskScheduler, false),
 		VisibilityProcessorSchedulerWorkerCount:               dc.GetIntProperty(dynamicconfig.VisibilityProcessorSchedulerWorkerCount, 200),
-		VisibilityProcessorSchedulerQueueSize:                 dc.GetIntProperty(dynamicconfig.VisibilityProcessorSchedulerQueueSize, 10),
-		VisibilityProcessorSchedulerRoundRobinWeights:         dc.GetMapProperty(dynamicconfig.VisibilityProcessorSchedulerRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultTaskPriorityWeight)),
+		VisibilityProcessorSchedulerRoundRobinWeights:         dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityProcessorSchedulerRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultTaskPriorityWeight)),
 		VisibilityProcessorMaxPollInterval:                    dc.GetDurationProperty(dynamicconfig.VisibilityProcessorMaxPollInterval, 1*time.Minute),
 		VisibilityProcessorMaxPollIntervalJitterCoefficient:   dc.GetFloat64Property(dynamicconfig.VisibilityProcessorMaxPollIntervalJitterCoefficient, 0.15),
 		VisibilityProcessorUpdateAckInterval:                  dc.GetDurationProperty(dynamicconfig.VisibilityProcessorUpdateAckInterval, 30*time.Second),

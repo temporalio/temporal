@@ -28,10 +28,17 @@ package queues
 
 import (
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/configs"
+)
+
+const (
+	defaultParallelProcessorQueueSize = 10
 )
 
 type (
@@ -46,29 +53,52 @@ type (
 		TrySubmit(Executable) (bool, error)
 	}
 
-	SchedulerOptions struct {
-		tasks.ParallelProcessorOptions
-		tasks.InterleavedWeightedRoundRobinSchedulerOptions
+	NamespacePrioritySchedulerOptions struct {
+		WorkerCount      dynamicconfig.IntPropertyFn
+		NamespaceWeights dynamicconfig.MapPropertyFnWithNamespaceFilter
 	}
 
-	schedulerImpl struct {
+	NamespacePrioritySchedulerImpl struct {
 		priorityAssigner PriorityAssigner
-		wRRScheduler     tasks.Scheduler
+		wRRScheduler     tasks.Scheduler[Executable]
+	}
+
+	taskChannelKey struct {
+		namespaceID string
+		priority    tasks.Priority
 	}
 )
 
-func NewScheduler(
+func NewNamespacePriorityScheduler(
 	priorityAssigner PriorityAssigner,
-	options SchedulerOptions,
+	options NamespacePrioritySchedulerOptions,
+	namespaceRegistry namespace.Registry,
 	metricsProvider metrics.MetricsHandler,
 	logger log.Logger,
-) *schedulerImpl {
-	return &schedulerImpl{
+) *NamespacePrioritySchedulerImpl {
+	return &NamespacePrioritySchedulerImpl{
 		priorityAssigner: priorityAssigner,
 		wRRScheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
-			options.InterleavedWeightedRoundRobinSchedulerOptions,
+			tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, taskChannelKey]{
+				TaskToChannelKey: func(e Executable) taskChannelKey {
+					return taskChannelKey{
+						namespaceID: e.GetNamespaceID(),
+						priority:    e.GetPriority(),
+					}
+				},
+				ChannelKeyToWeight: func(key taskChannelKey) int {
+					namespaceName, _ := namespaceRegistry.GetNamespaceName(namespace.ID(key.namespaceID))
+					return configs.ConvertDynamicConfigValueToWeights(
+						options.NamespaceWeights(namespaceName.String()),
+						logger,
+					)[key.priority]
+				},
+			},
 			tasks.NewParallelProcessor(
-				&options.ParallelProcessorOptions,
+				&tasks.ParallelProcessorOptions{
+					QueueSize:   defaultParallelProcessorQueueSize,
+					WorkerCount: options.WorkerCount,
+				},
 				metricsProvider,
 				logger,
 			),
@@ -78,15 +108,15 @@ func NewScheduler(
 	}
 }
 
-func (s *schedulerImpl) Start() {
+func (s *NamespacePrioritySchedulerImpl) Start() {
 	s.wRRScheduler.Start()
 }
 
-func (s *schedulerImpl) Stop() {
+func (s *NamespacePrioritySchedulerImpl) Stop() {
 	s.wRRScheduler.Stop()
 }
 
-func (s *schedulerImpl) Submit(
+func (s *NamespacePrioritySchedulerImpl) Submit(
 	executable Executable,
 ) error {
 	if err := s.priorityAssigner.Assign(executable); err != nil {
@@ -98,7 +128,7 @@ func (s *schedulerImpl) Submit(
 	return nil
 }
 
-func (s *schedulerImpl) TrySubmit(
+func (s *NamespacePrioritySchedulerImpl) TrySubmit(
 	executable Executable,
 ) (bool, error) {
 	if err := s.priorityAssigner.Assign(executable); err != nil {

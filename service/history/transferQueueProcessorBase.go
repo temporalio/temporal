@@ -32,8 +32,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -114,16 +112,10 @@ func newTransferTaskScheduler(
 	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
-	return queues.NewScheduler(
-		queues.NewNoopPriorityAssigner(),
-		queues.SchedulerOptions{
-			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-				WorkerCount: config.TransferTaskWorkerCount,
-				QueueSize:   config.TransferTaskBatchSize(),
-			},
-			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
-				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TransferProcessorSchedulerRoundRobinWeights(), logger),
-			},
+	return queues.NewFIFOScheduler(
+		queues.FIFOSchedulerOptions{
+			WorkerCount: config.TransferTaskWorkerCount,
+			QueueSize:   config.TransferTaskBatchSize(),
 		},
 		metricProvider,
 		logger,
