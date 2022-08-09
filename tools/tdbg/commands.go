@@ -34,6 +34,7 @@ import (
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/history/v1"
@@ -52,7 +53,10 @@ func AdminShowWorkflow(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	wid := c.String(FlagWorkflowID)
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
 	rid := c.String(FlagRunID)
 	startEventId := c.Int64(FlagMinEventID)
 	endEventId := c.Int64(FlagMaxEventID)
@@ -161,7 +165,10 @@ func describeMutableState(c *cli.Context) (*adminservice.DescribeMutableStateRes
 	if err != nil {
 		return nil, err
 	}
-	wid := c.String(FlagWorkflowID)
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return nil, err
+	}
 	rid := c.String(FlagRunID)
 
 	ctx, cancel := newContext(c)
@@ -231,7 +238,10 @@ func AdminDeleteWorkflow(c *cli.Context) error {
 // AdminGetShardID get shardID
 func AdminGetShardID(c *cli.Context) error {
 	namespaceID := c.String(FlagNamespaceID)
-	wid := c.String(FlagWorkflowID)
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
 	numberOfShards := int32(c.Int(FlagNumberOfShards))
 
 	if numberOfShards <= 0 {
@@ -495,7 +505,10 @@ func AdminRefreshWorkflowTasks(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	wid := c.String(FlagWorkflowID)
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
 	rid := c.String(FlagRunID)
 
 	ctx, cancel := newContext(c)
@@ -512,6 +525,38 @@ func AdminRefreshWorkflowTasks(c *cli.Context) error {
 		return fmt.Errorf("unable to refresh Workflow Task: %s", err)
 	} else {
 		fmt.Println("Refresh workflow task succeeded.")
+	}
+	return nil
+}
+
+// AdminRebuildMutableState rebuild a workflow mutable state using persisted history events
+func AdminRebuildMutableState(c *cli.Context) error {
+	adminClient := cFactory.AdminClient(c)
+
+	namespace, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
+	rid := c.String(FlagRunID)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err = adminClient.RebuildMutableState(ctx, &adminservice.RebuildMutableStateRequest{
+		Namespace: namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("rebuild mutable state failed: %s", err)
+	} else {
+		fmt.Println("rebuild mutable state succeeded.")
 	}
 	return nil
 }

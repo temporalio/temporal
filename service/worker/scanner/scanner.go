@@ -69,6 +69,9 @@ type (
 		HistoryScannerEnabled dynamicconfig.BoolPropertyFn
 		// ExecutionsScannerEnabled indicates if executions scanner should be started as part of scanner
 		ExecutionsScannerEnabled dynamicconfig.BoolPropertyFn
+		// HistoryScannerDataMinAge indicates the cleanup threshold of history branch data
+		// Only clean up history branches that older than this threshold
+		HistoryScannerDataMinAge dynamicconfig.DurationPropertyFn
 	}
 
 	// scannerContext is the context object that get's

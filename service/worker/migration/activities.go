@@ -38,8 +38,6 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -241,26 +239,21 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 
 func (a *activities) generateWorkflowReplicationTask(ctx context.Context, wKey definition.WorkflowKey) error {
 	// will generate replication task
-	op := func(ctx context.Context) error {
-		var err error
-		ctx1, cancel := context.WithTimeout(ctx, time.Second*10)
-		defer cancel()
-		_, err = a.historyClient.GenerateLastHistoryReplicationTasks(ctx1, &historyservice.GenerateLastHistoryReplicationTasksRequest{
-			NamespaceId: wKey.NamespaceID,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: wKey.WorkflowID,
-				RunId:      wKey.RunID,
-			},
-		})
-		return err
-	}
+	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
 
-	err := backoff.ThrottleRetryContext(ctx, op, historyServiceRetryPolicy, common.IsServiceTransientError)
+	_, err := a.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
+		NamespaceId: wKey.NamespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wKey.WorkflowID,
+			RunId:      wKey.RunID,
+		},
+	})
+
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// ignore NotFound error
 		return nil
 	}
-
 	return err
 }
 

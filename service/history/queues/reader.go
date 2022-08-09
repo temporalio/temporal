@@ -27,17 +27,23 @@ package queues
 import (
 	"container/list"
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
+)
+
+var (
+	throttleRetryDelay = 3 * time.Second
 )
 
 type (
@@ -87,13 +93,12 @@ type (
 		notifyCh      chan struct{}
 
 		throttleTimer *time.Timer
+		retrier       backoff.Retrier
 	}
 )
 
 func NewReader(
-	paginationFnProvider PaginationFnProvider,
-	executableInitializer ExecutableInitializer,
-	scopes []Scope,
+	slices []Slice,
 	options *ReaderOptions,
 	scheduler Scheduler,
 	rescheduler Rescheduler,
@@ -103,13 +108,9 @@ func NewReader(
 	metricsHandler metrics.MetricsHandler,
 ) *ReaderImpl {
 
-	slices := list.New()
-	for _, scope := range scopes {
-		slices.PushBack(NewSlice(
-			paginationFnProvider,
-			executableInitializer,
-			scope,
-		))
+	sliceList := list.New()
+	for _, slice := range slices {
+		sliceList.PushBack(slice)
 	}
 
 	return &ReaderImpl{
@@ -124,9 +125,14 @@ func NewReader(
 		status:     common.DaemonStatusInitialized,
 		shutdownCh: make(chan struct{}),
 
-		slices:        slices,
-		nextReadSlice: slices.Front(),
+		slices:        sliceList,
+		nextReadSlice: sliceList.Front(),
 		notifyCh:      make(chan struct{}, 1),
+
+		retrier: backoff.NewRetrier(
+			common.CreateReadTaskRetryPolicy(),
+			backoff.SystemClock,
+		),
 	}
 }
 
@@ -210,6 +216,8 @@ func (r *ReaderImpl) SplitSlices(splitter SliceSplitter) {
 }
 
 func (r *ReaderImpl) MergeSlices(incomingSlices ...Slice) {
+	validateSlicesOrderedDisjoint(incomingSlices)
+
 	r.Lock()
 	defer r.Unlock()
 
@@ -315,14 +323,18 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	tasks, err := loadSlice.SelectTasks(r.options.BatchSize())
 	if err != nil {
 		r.logger.Error("Queue reader unable to retrieve tasks", tag.Error(err))
+		if common.IsResourceExhausted(err) {
+			r.pauseLocked(throttleRetryDelay)
+		} else {
+			r.pauseLocked(r.retrier.NextBackOff())
+		}
+		return
 	}
+	r.retrier.Reset()
 
 	for _, task := range tasks {
 		r.submit(task)
 	}
-
-	// TODO: in error case, we need some backoff
-	// do this together with the retry improvement for existing queue implementation
 
 	if loadSlice.MoreTasks() {
 		r.notify()
@@ -413,5 +425,24 @@ func appendSlice(
 	slices.Remove(lastElement)
 	for _, mergedSlice := range mergedSlices {
 		slices.PushBack(mergedSlice)
+	}
+}
+
+func validateSlicesOrderedDisjoint(
+	slices []Slice,
+) {
+	if len(slices) <= 1 {
+		return
+	}
+
+	for idx, slice := range slices[:len(slices)-1] {
+		nextSlice := slices[idx+1]
+		if slice.Scope().Range.ExclusiveMax.CompareTo(nextSlice.Scope().Range.InclusiveMin) > 0 {
+			panic(fmt.Sprintf(
+				"Found overlapping incoming slices, left slice range: %v, right slice range: %v",
+				slice.Scope().Range,
+				nextSlice.Scope().Range,
+			))
+		}
 	}
 }

@@ -125,7 +125,7 @@ func (s *sliceSuite) TestSplitByPredicate() {
 	passSlice, failSlice := slice.SplitByPredicate(splitPredicate)
 	s.Equal(r, passSlice.Scope().Range)
 	s.Equal(r, failSlice.Scope().Range)
-	s.True(predicates.And[tasks.Task](slice.scope.Predicate, splitPredicate).Equals(passSlice.Scope().Predicate))
+	s.True(tasks.AndPredicates(slice.scope.Predicate, splitPredicate).Equals(passSlice.Scope().Predicate))
 	s.True(predicates.And(slice.scope.Predicate, predicates.Not[tasks.Task](splitPredicate)).Equals(failSlice.Scope().Predicate))
 
 	s.validateSliceState(passSlice.(*SliceImpl))
@@ -343,7 +343,7 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 			mockTasks := make([]tasks.Task, 0, numTasks)
 			for i := 0; i != numTasks; i++ {
 				mockTask := tasks.NewMockTask(s.controller)
-				key := NewRandomKeyInRange(r)
+				key := NewRandomKeyInRange(paginationRange)
 				mockTask.EXPECT().GetKey().Return(key).AnyTimes()
 
 				namespaceID := namespaceIDs[rand.Intn(len(namespaceIDs))]
@@ -381,7 +381,7 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 	}
 }
 
-func (s *sliceSuite) TestSelectTasks_Error() {
+func (s *sliceSuite) TestSelectTasks_Error_NoLoadedTasks() {
 	r := NewRandomRange()
 	predicate := predicates.Universal[tasks.Task]()
 
@@ -397,7 +397,7 @@ func (s *sliceSuite) TestSelectTasks_Error() {
 			mockTasks := make([]tasks.Task, 0, numTasks)
 			for i := 0; i != numTasks; i++ {
 				mockTask := tasks.NewMockTask(s.controller)
-				key := NewRandomKeyInRange(r)
+				key := NewRandomKeyInRange(paginationRange)
 				mockTask.EXPECT().GetKey().Return(key).AnyTimes()
 				mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
 				mockTasks = append(mockTasks, mockTask)
@@ -419,6 +419,46 @@ func (s *sliceSuite) TestSelectTasks_Error() {
 	s.NoError(err)
 	s.Len(executables, numTasks)
 	s.Empty(slice.iterators)
+}
+
+func (s *sliceSuite) TestSelectTasks_Error_WithLoadedTasks() {
+	r := NewRandomRange()
+	predicate := predicates.Universal[tasks.Task]()
+
+	numTasks := 20
+	loadErr := false
+	paginationFnProvider := func(paginationRange Range) collection.PaginationFn[tasks.Task] {
+		return func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+			defer func() {
+				loadErr = !loadErr
+			}()
+
+			if loadErr {
+				return nil, nil, errors.New("some random load task error")
+			}
+
+			mockTasks := make([]tasks.Task, 0, numTasks)
+			for i := 0; i != numTasks; i++ {
+				mockTask := tasks.NewMockTask(s.controller)
+				key := NewRandomKeyInRange(paginationRange)
+				mockTask.EXPECT().GetKey().Return(key).AnyTimes()
+				mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+				mockTasks = append(mockTasks, mockTask)
+			}
+
+			slices.SortFunc(mockTasks, func(a, b tasks.Task) bool {
+				return a.GetKey().CompareTo(b.GetKey()) < 0
+			})
+
+			return mockTasks, []byte{1, 2, 3}, nil
+		}
+	}
+
+	slice := NewSlice(paginationFnProvider, s.executableInitializer, NewScope(r, predicate))
+	executables, err := slice.SelectTasks(100)
+	s.NoError(err)
+	s.Len(executables, numTasks)
+	s.True(slice.MoreTasks())
 }
 
 func (s *sliceSuite) TestMoreTasks() {
@@ -500,7 +540,7 @@ func (s *sliceSuite) validateMergedSlice(
 		containedByCurrent := currentSlice.scope.Range.ContainsRange(mergedSlice.Scope().Range)
 		containedByIncoming := incomingSlice.scope.Range.ContainsRange(mergedSlice.Scope().Range)
 		if containedByCurrent && containedByIncoming {
-			s.True(predicates.Or(
+			s.True(tasks.OrPredicates(
 				currentSlice.scope.Predicate,
 				incomingSlice.scope.Predicate,
 			).Equals(mergedSlice.Scope().Predicate))

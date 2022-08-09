@@ -408,6 +408,7 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 
 	// use state builder for workflow mutable state mutation
 	_, err = stateBuilder.ApplyEvents(
+		ctx,
 		task.getNamespaceID(),
 		requestID,
 		*task.getExecution(),
@@ -512,6 +513,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
 	newMutableState, err := stateBuilder.ApplyEvents(
+		ctx,
 		task.getNamespaceID(),
 		requestID,
 		*task.getExecution(),
@@ -772,6 +774,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
 	_, err := stateBuilder.ApplyEvents(
+		ctx,
 		task.getNamespaceID(),
 		requestID,
 		*task.getExecution(),

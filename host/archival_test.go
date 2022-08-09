@@ -50,7 +50,7 @@ import (
 )
 
 const (
-	retryLimit       = 20
+	retryLimit       = 40
 	retryBackoffTime = 500 * time.Millisecond
 )
 

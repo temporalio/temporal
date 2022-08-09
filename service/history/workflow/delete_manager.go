@@ -35,7 +35,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -51,9 +50,30 @@ import (
 
 type (
 	DeleteManager interface {
-		AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, ms MutableState, transferQueueAckLevel int64, visibilityQueueAckLevel int64) error
-		DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, forceDeleteFromOpenVisibility bool) error
-		DeleteWorkflowExecutionByRetention(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState) error
+		AddDeleteWorkflowExecutionTask(
+			ctx context.Context,
+			nsID namespace.ID,
+			we commonpb.WorkflowExecution,
+			ms MutableState,
+			transferQueueAckLevel int64,
+			visibilityQueueAckLevel int64,
+			workflowClosedVersion int64,
+		) error
+		DeleteWorkflowExecution(
+			ctx context.Context,
+			nsID namespace.ID,
+			we commonpb.WorkflowExecution,
+			weCtx Context,
+			ms MutableState,
+			forceDeleteFromOpenVisibility bool,
+		) error
+		DeleteWorkflowExecutionByRetention(
+			ctx context.Context,
+			nsID namespace.ID,
+			we commonpb.WorkflowExecution,
+			weCtx Context,
+			ms MutableState,
+		) error
 	}
 
 	DeleteManagerImpl struct {
@@ -94,6 +114,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	ms MutableState,
 	transferQueueAckLevel int64,
 	visibilityQueueAckLevel int64,
+	workflowClosedVersion int64,
 ) error {
 
 	// In active cluster, create `DeleteWorkflowExecutionTask` only if workflow is closed successfully
@@ -123,6 +144,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 		return err
 	}
 
+	deleteTask.Version = workflowClosedVersion
 	return m.shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 		ShardID: m.shard.GetShardID(),
 		// RangeID is set by shard
@@ -192,17 +214,15 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		return err
 	}
 
-	shouldDeleteHistory := true
 	if archiveIfEnabled {
-		shouldDeleteHistory, err = m.archiveWorkflowIfEnabled(ctx, namespaceID, we, currentBranchToken, weCtx, ms, scope)
+		isArchived, err := m.archiveWorkflowIfEnabled(ctx, namespaceID, we, currentBranchToken, weCtx, ms, scope)
 		if err != nil {
 			return err
 		}
-	}
-
-	if !shouldDeleteHistory {
-		// currentBranchToken == nil means don't delete history.
-		currentBranchToken = nil
+		if isArchived {
+			// Don't delete workflow data. The workflow data will be deleted after history archived.
+			return nil
+		}
 	}
 
 	// These two fields are needed for cassandra standard visibility.
@@ -221,24 +241,16 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		}
 	}
 
-	op := func(ctx context.Context) error {
-		return m.shard.DeleteWorkflowExecution(
-			ctx,
-			definition.WorkflowKey{
-				NamespaceID: namespaceID.String(),
-				WorkflowID:  we.GetWorkflowId(),
-				RunID:       we.GetRunId(),
-			},
-			currentBranchToken,
-			startTime,
-			closeTime,
-		)
-	}
-	if err = backoff.ThrottleRetryContext(
+	if err := m.shard.DeleteWorkflowExecution(
 		ctx,
-		op,
-		PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
+		definition.WorkflowKey{
+			NamespaceID: namespaceID.String(),
+			WorkflowID:  we.GetWorkflowId(),
+			RunID:       we.GetRunId(),
+		},
+		currentBranchToken,
+		startTime,
+		closeTime,
 	); err != nil {
 		return err
 	}
@@ -258,7 +270,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	weCtx Context,
 	ms MutableState,
 	scope metrics.Scope,
-) (bool, error) {
+) (isArchived bool, err error) {
 
 	namespaceRegistryEntry := ms.GetNamespaceEntry()
 
@@ -268,7 +280,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 
 	// TODO: @ycyang once archival backfill is in place cluster:paused && namespace:enabled should be a nop rather than a delete
 	if !archiveHistory {
-		return true, nil
+		return false, nil
 	}
 
 	closeFailoverVersion, err := ms.GetLastWriteVersion()
@@ -311,16 +323,11 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	if err != nil {
 		return false, err
 	}
-
-	var deleteHistory bool
 	if resp.HistoryArchivedInline {
 		scope.IncCounter(metrics.WorkflowCleanupDeleteHistoryInlineCount)
-		deleteHistory = true
 	} else {
 		scope.IncCounter(metrics.WorkflowCleanupArchiveCount)
-		// Don't delete workflow history if it wasn't achieve inline because archival workflow will need it.
-		deleteHistory = false
 	}
 
-	return deleteHistory, nil
+	return true, nil
 }

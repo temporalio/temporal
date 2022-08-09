@@ -36,8 +36,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -207,7 +205,7 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
 	if execution.GetRunId() == "" {
-		response, err := c.getCurrentExecutionWithRetry(ctx, &persistence.GetCurrentExecutionRequest{
+		response, err := c.shard.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
 			ShardID:     c.shard.GetShardID(),
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  execution.GetWorkflowId(),
@@ -222,25 +220,4 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 		return serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	}
 	return nil
-}
-
-func (c *CacheImpl) getCurrentExecutionWithRetry(
-	ctx context.Context,
-	request *persistence.GetCurrentExecutionRequest,
-) (*persistence.GetCurrentExecutionResponse, error) {
-
-	var response *persistence.GetCurrentExecutionResponse
-	op := func(ctx context.Context) error {
-		var err error
-		response, err = c.shard.GetCurrentExecution(ctx, request)
-
-		return err
-	}
-
-	err := backoff.ThrottleRetryContext(ctx, op, PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
 }

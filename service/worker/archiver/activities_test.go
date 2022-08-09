@@ -29,6 +29,10 @@ import (
 	"errors"
 	"testing"
 
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
@@ -74,6 +78,7 @@ type activitiesSuite struct {
 	archiverProvider   *provider.MockArchiverProvider
 	historyArchiver    *carchiver.MockHistoryArchiver
 	visibilityArchiver *carchiver.MockVisibilityArchiver
+	historyClient      *historyservicemock.MockHistoryServiceClient
 }
 
 func TestActivitiesSuite(t *testing.T) {
@@ -92,6 +97,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.visibilityArchiver = carchiver.NewMockVisibilityArchiver(s.controller)
 	s.metricsScope.EXPECT().StartTimer(metrics.ServiceLatency).Return(metrics.NoopStopwatch).MinTimes(0)
 	s.metricsScope.EXPECT().RecordTimer(gomock.Any(), gomock.Any()).MinTimes(0)
+	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 }
 
 func (s *activitiesSuite) TearDownTest() {
@@ -247,17 +253,26 @@ func (s *activitiesSuite) TestUploadHistory_Success() {
 func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryableError() {
 	s.metricsClient.EXPECT().Scope(metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverNonRetryableErrorCount)
-	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(errPersistenceNonRetryable)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
 		MetricsClient:    s.metricsClient,
 		HistoryV2Manager: s.mockExecutionMgr,
+		HistoryClient:    s.historyClient,
 	}
 	env := s.NewTestActivityEnvironment()
 	s.registerWorkflows(env)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
+	s.historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: testNamespaceID,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+			RunId:      testRunID,
+		},
+		WorkflowVersion:    testCloseFailoverVersion,
+		ClosedWorkflowOnly: true,
+	}).Return(nil, errPersistenceNonRetryable)
 	request := ArchiveRequest{
 		NamespaceID:          testNamespaceID,
 		Namespace:            testNamespace,

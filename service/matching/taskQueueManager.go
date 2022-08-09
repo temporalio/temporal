@@ -70,6 +70,17 @@ const (
 	noPollerThreshold = time.Minute * 2
 )
 
+var (
+	// this retry policy is currenly only used for matching persistence operations
+	// that, if failed, the entire task queue needs to be reload
+	persistenceOperationRetryPolicy = func() backoff.RetryPolicy {
+		policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
+		policy.SetMaximumInterval(1 * time.Second)
+		policy.SetExpirationInterval(30 * time.Second)
+		return policy
+	}()
+)
+
 type (
 	taskQueueManagerOpt func(*taskQueueManagerImpl)
 
@@ -306,37 +317,32 @@ func (c *taskQueueManagerImpl) AddTask(
 		c.metricScope.IncCounter(metrics.NoRecentPollerTasksPerTaskQueueCounter)
 	}
 
-	var syncMatch bool
-	err := executeWithRetry(ctx, func(_ context.Context) error {
-		taskInfo := params.taskInfo
+	taskInfo := params.taskInfo
 
-		namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceId()))
-		if err != nil {
-			return err
+	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceId()))
+	if err != nil {
+		return false, err
+	}
+
+	if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
+		syncMatch, err := c.trySyncMatch(ctx, params)
+		if syncMatch {
+			return syncMatch, err
 		}
+	}
 
-		syncMatch = false
-		if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-			syncMatch, err = c.trySyncMatch(ctx, params)
-			if syncMatch {
-				return err
-			}
-		}
+	if params.forwardedFrom != "" {
+		// forwarded from child partition - only do sync match
+		// child partition will persist the task when sync match fails
+		return false, errRemoteSyncMatchFailed
+	}
 
-		if params.forwardedFrom != "" {
-			// forwarded from child partition - only do sync match
-			// child partition will persist the task when sync match fails
-			return errRemoteSyncMatchFailed
-		}
-
-		_, err = c.taskWriter.appendTask(params.execution, taskInfo)
-		c.signalIfFatal(err)
-		return err
-	})
-	if !syncMatch && err == nil {
+	_, err = c.taskWriter.appendTask(params.execution, taskInfo)
+	c.signalIfFatal(err)
+	if err == nil {
 		c.taskReader.Signal()
 	}
-	return syncMatch, err
+	return false, err
 }
 
 // GetTask blocks waiting for a task.
