@@ -23,10 +23,7 @@
 // THE SOFTWARE.
 
 //go:build esintegration
-// +build esintegration
 
-// to run locally, make sure Elasticsearch is running,
-// then run cmd `go test -v ./host -run TestElasticsearchIntegrationSuite -tags esintegration`
 package host
 
 import (

@@ -23,10 +23,7 @@
 // THE SOFTWARE.
 
 //go:build !race && esintegration
-// +build !race,esintegration
 
-// to run locally, make sure Elasticsearch is running,
-// then run cmd `go test -v ./host/xdc -run TestESCrossDCTestSuite -tags esintegration`
 package xdc
 
 import (
