@@ -137,13 +137,14 @@ func (f *flusherImpl[T]) Stop() {
 	f.cancel(f.flushBuffer)
 	f.flushBuffer = nil
 	f.stopTimerLocked()
-Loop:
+
+FullBufferLoop:
 	for {
 		select {
 		case buffer := <-f.fullBufferChan:
 			f.cancel(buffer)
 		default:
-			break Loop
+			break FullBufferLoop
 		}
 	}
 }
@@ -157,6 +158,15 @@ Loop:
 			freeBuffer := fullBuffer[:0]
 			f.freeBufferChan <- freeBuffer
 		case <-f.shutdownChan.Channel():
+		FreeBufferLoop:
+			for {
+				select {
+				case _ = <-f.freeBufferChan:
+					// noop
+				default:
+					break FreeBufferLoop
+				}
+			}
 			f.Stop()
 			break Loop
 		}

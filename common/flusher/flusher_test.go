@@ -229,11 +229,16 @@ func (s *flusherSuite) TestBuffer_Shutdown() {
 	fut1 := flushBuffer.Buffer(task1)
 	fut2 := flushBuffer.Buffer(task2)
 
+	flushedTasks := []*fakeTask{}
 	flushBuffer.Stop()
 	_, err := fut0.Get(s.ctx)
-	s.Equal(ErrShutdown, err)
+	if err == nil {
+		flushedTasks = append(flushedTasks, task0)
+	}
 	_, err = fut1.Get(s.ctx)
-	s.Equal(ErrShutdown, err)
+	if err == nil {
+		flushedTasks = append(flushedTasks, task1)
+	}
 	_, err = fut2.Get(s.ctx)
 	s.Equal(ErrShutdown, err)
 
@@ -244,7 +249,7 @@ func (s *flusherSuite) TestBuffer_Shutdown() {
 	s.Equal(0, len(flushBuffer.fullBufferChan))
 	flushBuffer.Unlock()
 
-	s.Equal([]*fakeTask{}, writer.Get())
+	s.Equal(flushedTasks, writer.Get())
 }
 
 func (s *flusherSuite) TestBuffer_Concurrent() {
