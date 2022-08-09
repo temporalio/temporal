@@ -164,14 +164,16 @@ func (s *cassandraErrorsSuite) TestExtractShardOwnershipLostError_Failed() {
 	err := extractShardOwnershipLostError(map[string]interface{}{}, rand.Int31(), rangeID)
 	s.NoError(err)
 
+	t := rowTypeExecution
 	err = extractShardOwnershipLostError(map[string]interface{}{
-		"type":     rowTypeExecution,
+		"type":     &t,
 		"range_id": rangeID,
 	}, rand.Int31(), rangeID)
 	s.NoError(err)
 
+	t = rowTypeShard
 	err = extractShardOwnershipLostError(map[string]interface{}{
-		"type":     rowTypeShard,
+		"type":     &t,
 		"range_id": rangeID,
 	}, rand.Int31(), rangeID)
 	s.NoError(err)
@@ -179,8 +181,9 @@ func (s *cassandraErrorsSuite) TestExtractShardOwnershipLostError_Failed() {
 
 func (s *cassandraErrorsSuite) TestExtractShardOwnershipLostError_Success() {
 	rangeID := int64(1234)
+	t := rowTypeShard
 	record := map[string]interface{}{
-		"type":     rowTypeShard,
+		"type":     &t,
 		"range_id": rangeID,
 	}
 
@@ -195,22 +198,25 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Failed() 
 	err := extractCurrentWorkflowConflictError(map[string]interface{}{}, uuid.New().String())
 	s.NoError(err)
 
+	t := rowTypeShard
 	err = extractCurrentWorkflowConflictError(map[string]interface{}{
-		"type":           rowTypeShard,
+		"type":           &t,
 		"run_id":         gocql.UUID(runID),
 		"current_run_id": gocql.UUID(currentRunID),
 	}, uuid.New().String())
 	s.NoError(err)
 
+	t = rowTypeExecution
 	err = extractCurrentWorkflowConflictError(map[string]interface{}{
-		"type":           rowTypeExecution,
+		"type":           &t,
 		"run_id":         gocql.UUID([16]byte{}),
 		"current_run_id": gocql.UUID(currentRunID),
 	}, uuid.New().String())
 	s.NoError(err)
 
+	t = rowTypeExecution
 	err = extractCurrentWorkflowConflictError(map[string]interface{}{
-		"type":           rowTypeExecution,
+		"type":           &t,
 		"run_id":         gocql.UUID(runID),
 		"current_run_id": gocql.UUID(currentRunID),
 	}, currentRunID.String())
@@ -223,8 +229,9 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 	workflowState := &persistencespb.WorkflowExecutionState{}
 	blob, err := serialization.WorkflowExecutionStateToBlob(workflowState)
 	s.NoError(err)
+	t := rowTypeExecution
 	record := map[string]interface{}{
-		"type":                        rowTypeExecution,
+		"type":                        &t,
 		"run_id":                      gocql.UUID(runID),
 		"current_run_id":              gocql.UUID(currentRunID),
 		"execution_state":             blob.Data,
@@ -243,22 +250,25 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed() {
 	err := extractWorkflowConflictError(map[string]interface{}{}, runID.String(), dbVersion, rand.Int63())
 	s.NoError(err)
 
+	t := rowTypeShard
 	err = extractWorkflowConflictError(map[string]interface{}{
-		"type":              rowTypeShard,
+		"type":              &t,
 		"run_id":            gocql.UUID(runID),
 		"db_record_version": dbVersion,
 	}, runID.String(), dbVersion+1, rand.Int63())
 	s.NoError(err)
 
+	t = rowTypeExecution
 	err = extractWorkflowConflictError(map[string]interface{}{
-		"type":              rowTypeExecution,
+		"type":              &t,
 		"run_id":            gocql.UUID([16]byte{}),
 		"db_record_version": dbVersion,
 	}, runID.String(), dbVersion+1, rand.Int63())
 	s.NoError(err)
 
+	t = rowTypeExecution
 	err = extractWorkflowConflictError(map[string]interface{}{
-		"type":              rowTypeExecution,
+		"type":              &t,
 		"run_id":            gocql.UUID(runID),
 		"db_record_version": dbVersion,
 	}, runID.String(), dbVersion, rand.Int63())
@@ -268,8 +278,9 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed() {
 func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Success() {
 	runID := uuid.New()
 	dbVersion := rand.Int63() + 1
+	t := rowTypeExecution
 	record := map[string]interface{}{
-		"type":              rowTypeExecution,
+		"type":              &t,
 		"run_id":            gocql.UUID(runID),
 		"db_record_version": dbVersion,
 	}
@@ -286,22 +297,25 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed_NextEvent
 	err := extractWorkflowConflictError(map[string]interface{}{}, runID.String(), 0, nextEventID)
 	s.NoError(err)
 
+	t := rowTypeShard
 	err = extractWorkflowConflictError(map[string]interface{}{
-		"type":          rowTypeShard,
+		"type":          &t,
 		"run_id":        gocql.UUID(runID),
 		"next_event_id": nextEventID + 1,
 	}, runID.String(), 0, nextEventID)
 	s.NoError(err)
 
+	t = rowTypeExecution
 	err = extractWorkflowConflictError(map[string]interface{}{
-		"type":          rowTypeExecution,
+		"type":          &t,
 		"run_id":        gocql.UUID([16]byte{}),
 		"next_event_id": nextEventID + 1,
 	}, runID.String(), 0, nextEventID)
 	s.NoError(err)
 
+	t = rowTypeExecution
 	err = extractWorkflowConflictError(map[string]interface{}{
-		"type":          rowTypeExecution,
+		"type":          &t,
 		"run_id":        gocql.UUID(runID),
 		"next_event_id": nextEventID,
 	}, runID.String(), 0, nextEventID)
@@ -312,8 +326,9 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed_NextEvent
 func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Success_NextEventID() {
 	runID := uuid.New()
 	nextEventID := int64(1234)
+	t := rowTypeExecution
 	record := map[string]interface{}{
-		"type":          rowTypeExecution,
+		"type":          &t,
 		"run_id":        gocql.UUID(runID),
 		"next_event_id": nextEventID,
 	}

@@ -25,17 +25,14 @@
 package session
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 
 	"go.temporal.io/server/common/config"
-	SQLAuth "go.temporal.io/server/common/persistence/sql/sqlplugin/auth"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -65,26 +62,6 @@ func NewSession(
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
 ) (*Session, error) {
-	if cfg.AuthPlugin != nil && cfg.AuthPlugin.Plugin != "" {
-		authPlugin, err := SQLAuth.LookupPlugin(cfg.AuthPlugin.Plugin)
-		if err != nil {
-			return nil, err
-		}
-
-		timeout := cfg.AuthPlugin.Timeout
-		if timeout == 0 {
-			timeout = time.Duration(time.Second * 10)
-		}
-
-		ctx, cancel := context.WithTimeout(context.TODO(), timeout)
-		defer cancel()
-
-		cfg, err = authPlugin.GetConfig(ctx, cfg)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	db, err := createConnection(cfg, resolver)
 	if err != nil {
 		return nil, err

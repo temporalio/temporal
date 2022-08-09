@@ -166,10 +166,6 @@ type (
 
 var _ Context = (*ContextImpl)(nil)
 
-var (
-	PersistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
-)
-
 func NewContext(
 	shard shard.Context,
 	workflowKey definition.WorkflowKey,
@@ -271,7 +267,7 @@ func (c *ContextImpl) LoadWorkflowExecution(ctx context.Context) (MutableState, 
 	}
 
 	if c.MutableState == nil {
-		response, err := getWorkflowExecutionWithRetry(ctx, c.shard, &persistence.GetWorkflowExecutionRequest{
+		response, err := getWorkflowExecution(ctx, c.shard, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     c.shard.GetShardID(),
 			NamespaceID: c.workflowKey.NamespaceID,
 			WorkflowID:  c.workflowKey.WorkflowID,
@@ -357,7 +353,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		NewWorkflowEvents:   newWorkflowEvents,
 	}
 
-	resp, err := createWorkflowExecutionWithRetry(
+	resp, err := createWorkflowExecution(
 		ctx,
 		c.shard,
 		createRequest,
@@ -367,7 +363,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	}
 	c.SetHistorySize(int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff))
 
-	engine, err := c.shard.GetEngine()
+	engine, err := c.shard.GetEngine(ctx)
 	if err != nil {
 		return err
 	}
@@ -826,7 +822,7 @@ func (c *ContextImpl) ReapplyEvents(
 
 	activeCluster := namespaceEntry.ActiveClusterName()
 	if activeCluster == c.shard.GetClusterMetadata().GetCurrentClusterName() {
-		engine, err := c.shard.GetEngine()
+		engine, err := c.shard.GetEngine(ctx)
 		if err != nil {
 			return err
 		}
@@ -855,7 +851,7 @@ func (c *ContextImpl) ReapplyEvents(
 	if sourceCluster == nil {
 		return serviceerror.NewInternal(fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster))
 	}
-	ctx2, cancel2 := rpc.NewContextWithTimeoutAndHeaders(defaultRemoteCallTimeout)
+	ctx2, cancel2 := rpc.NewContextWithTimeoutAndVersionHeaders(defaultRemoteCallTimeout)
 	defer cancel2()
 	_, err = sourceCluster.ReapplyEvents(
 		ctx2,

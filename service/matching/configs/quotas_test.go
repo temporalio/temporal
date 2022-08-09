@@ -30,6 +30,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/exp/slices"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 )
@@ -60,11 +61,16 @@ func (s *quotasSuite) TearDownTest() {
 }
 
 func (s *quotasSuite) TestAPIToPriorityMapping() {
-	mapping := make(map[int]struct{})
 	for _, priority := range APIToPriority {
-		mapping[priority] = struct{}{}
+		index := slices.Index(APIPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
 	}
-	s.Equal(mapping, APIPriorities)
+}
+
+func (s *quotasSuite) TestAPIPrioritiesOrdered() {
+	for idx := range APIPrioritiesOrdered[1:] {
+		s.True(APIPrioritiesOrdered[idx] < APIPrioritiesOrdered[idx+1])
+	}
 }
 
 func (s *quotasSuite) TestAPIs() {

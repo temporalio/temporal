@@ -40,7 +40,7 @@ type (
 		TaskID              int64
 		TargetNamespaceID   string
 		TargetWorkflowID    string
-		InitiatedID         int64
+		InitiatedEventID    int64
 		Version             int64
 	}
 )

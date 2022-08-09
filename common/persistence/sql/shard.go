@@ -70,7 +70,6 @@ func (m *sqlShardStore) GetOrCreateShard(
 			ShardInfo: persistence.NewDataBlob(row.Data, row.DataEncoding),
 		}, nil
 	case sql.ErrNoRows:
-		break
 	default:
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetOrCreateShard: failed to get ShardID %v. Error: %v", request.ShardID, err))
 	}
@@ -80,6 +79,9 @@ func (m *sqlShardStore) GetOrCreateShard(
 	}
 
 	rangeID, shardInfo, err := request.CreateShardInfo()
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetOrCreateShard: failed to encode shard info for ShardID %v. Error: %v", request.ShardID, err))
+	}
 	row = &sqlplugin.ShardsRow{
 		ShardID:      request.ShardID,
 		RangeID:      rangeID,

@@ -44,9 +44,6 @@ new_mapping='
     },
     "TemporalSchedulePaused": {
       "type": "boolean"
-    },
-    "TemporalScheduleInfoJSON": {
-      "type": "keyword"
     }
   }
 }

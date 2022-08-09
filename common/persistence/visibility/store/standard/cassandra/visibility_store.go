@@ -474,7 +474,7 @@ func (v *visibilityStore) DeleteWorkflowExecution(
 		panic("Cassandra visibility store: DeleteWorkflowExecution: both StartTime and CloseTime are nil")
 	}
 
-	if err := query.Consistency(v.lowConslevel).Exec(); err != nil {
+	if err := query.Exec(); err != nil {
 		return gocql.ConvertError("DeleteWorkflowExecution", err)
 	}
 	return nil

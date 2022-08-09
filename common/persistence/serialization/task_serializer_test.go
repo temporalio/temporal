@@ -83,7 +83,7 @@ func (s *taskSerializerSuite) TestTransferWorkflowTask() {
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		TaskQueue:           shuffle.String("random task queue name"),
-		ScheduleID:          rand.Int63(),
+		ScheduledEventID:    rand.Int63(),
 		Version:             rand.Int63(),
 	}
 
@@ -96,7 +96,7 @@ func (s *taskSerializerSuite) TestTransferActivityTask() {
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		TaskQueue:           shuffle.String("random task queue name"),
-		ScheduleID:          rand.Int63(),
+		ScheduledEventID:    rand.Int63(),
 		Version:             rand.Int63(),
 	}
 
@@ -112,7 +112,7 @@ func (s *taskSerializerSuite) TestTransferRequestCancelTask() {
 		TargetWorkflowID:        uuid.New().String(),
 		TargetRunID:             uuid.New().String(),
 		TargetChildWorkflowOnly: rand.Int63()%2 == 0,
-		InitiatedID:             rand.Int63(),
+		InitiatedEventID:        rand.Int63(),
 		Version:                 rand.Int63(),
 	}
 
@@ -128,7 +128,7 @@ func (s *taskSerializerSuite) TestTransferSignalTask() {
 		TargetWorkflowID:        uuid.New().String(),
 		TargetRunID:             uuid.New().String(),
 		TargetChildWorkflowOnly: rand.Int63()%2 == 0,
-		InitiatedID:             rand.Int63(),
+		InitiatedEventID:        rand.Int63(),
 		Version:                 rand.Int63(),
 	}
 
@@ -142,7 +142,7 @@ func (s *taskSerializerSuite) TestTransferChildWorkflowTask() {
 		TaskID:              rand.Int63(),
 		TargetNamespaceID:   uuid.New().String(),
 		TargetWorkflowID:    uuid.New().String(),
-		InitiatedID:         rand.Int63(),
+		InitiatedEventID:    rand.Int63(),
 		Version:             rand.Int63(),
 	}
 
@@ -309,7 +309,7 @@ func (s *taskSerializerSuite) TestReplicateActivityTask() {
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
-		ScheduledID:         rand.Int63(),
+		ScheduledEventID:    rand.Int63(),
 	}
 
 	s.assertEqualTasks(replicateActivityTask)

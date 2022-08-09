@@ -37,7 +37,6 @@ import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
 
-// TODO: remove this dependency
 import "temporal/api/workflowservice/v1/request_response.proto";
 
 message PollWorkflowTaskQueueRequest {
@@ -58,7 +57,7 @@ message PollWorkflowTaskQueueResponse {
     int64 backlog_count_hint = 8;
     bool sticky_execution_enabled = 9;
     temporal.api.query.v1.WorkflowQuery query = 10;
-    temporal.server.api.history.v1.TransientWorkflowTaskInfo workflow_task_info = 11;
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_workflow_task = 11;
     temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 12;
     reserved 13;
     bytes branch_token = 14;
@@ -101,7 +100,7 @@ message AddWorkflowTaskRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 3;
-    int64 schedule_id = 4;
+    int64 scheduled_event_id = 4;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration schedule_to_start_timeout = 5 [(gogoproto.stdduration) = true];
@@ -119,7 +118,7 @@ message AddActivityTaskRequest {
     // TODO: remove after 1.17 release.
     string source_namespace_id = 3;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 4;
-    int64 schedule_id = 5;
+    int64 scheduled_event_id = 5;
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "to" is used to indicate interval. --)
     google.protobuf.Duration schedule_to_start_timeout = 6 [(gogoproto.stdduration) = true];
@@ -182,3 +181,22 @@ message ListTaskQueuePartitionsResponse {
     repeated temporal.api.taskqueue.v1.TaskQueuePartitionMetadata activity_task_queue_partitions = 1;
     repeated temporal.api.taskqueue.v1.TaskQueuePartitionMetadata workflow_task_queue_partitions = 2;
 }
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest doesn't follow Google API format --)
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest RPC doesn't follow Google API format. --)
+message UpdateWorkerBuildIdOrderingRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.UpdateWorkerBuildIdOrderingRequest request = 2;
+}
+message UpdateWorkerBuildIdOrderingResponse {}
+
+message GetWorkerBuildIdOrderingRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.GetWorkerBuildIdOrderingRequest request = 2;
+}
+message GetWorkerBuildIdOrderingResponse {
+    temporal.api.workflowservice.v1.GetWorkerBuildIdOrderingResponse response = 1;
+}
+

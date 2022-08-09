@@ -45,7 +45,6 @@ import (
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -75,7 +74,6 @@ type (
 		s3cli     s3iface.S3API
 		// only set in test code
 		historyIterator archiver.HistoryIterator
-		config          *config.S3Archiver
 	}
 
 	getHistoryToken struct {
@@ -164,7 +162,7 @@ func (h *historyArchiver) Archive(
 		historyIterator = loadHistoryIterator(ctx, request, h.container.ExecutionManager, featureCatalog, &progress)
 	}
 	for historyIterator.HasNext() {
-		historyBlob, err := getNextHistoryBlob(ctx, historyIterator)
+		historyBlob, err := historyIterator.Next()
 		if err != nil {
 			if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 				// workflow history no longer exists, may due to duplicated archival signal
@@ -358,24 +356,6 @@ func (h *historyArchiver) ValidateURI(URI archiver.URI) error {
 		return err
 	}
 	return bucketExists(context.TODO(), h.s3cli, URI)
-}
-
-func getNextHistoryBlob(ctx context.Context, historyIterator archiver.HistoryIterator) (*archiverspb.HistoryBlob, error) {
-	historyBlob, err := historyIterator.Next()
-	op := func() error {
-		historyBlob, err = historyIterator.Next()
-		return err
-	}
-	for err != nil {
-		if !common.IsPersistenceTransientError(err) {
-			return nil, err
-		}
-		if contextExpired(ctx) {
-			return nil, archiver.ErrContextTimeout
-		}
-		err = backoff.Retry(op, common.CreatePersistenceRetryPolicy(), common.IsPersistenceTransientError)
-	}
-	return historyBlob, nil
 }
 
 func (h *historyArchiver) getHighestVersion(ctx context.Context, URI archiver.URI, request *archiver.GetHistoryRequest) (*int64, error) {

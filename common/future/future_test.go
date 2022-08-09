@@ -57,7 +57,7 @@ func BenchmarkFutureAvailable(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		future := futures[n]
 		future.Set(nil, nil)
-		_, _ = future.Get(ctx) //nolint:errcheck
+		_, _ = future.Get(ctx)
 	}
 }
 
@@ -68,7 +68,7 @@ func BenchmarkFutureGet(b *testing.B) {
 	future.Set(nil, nil)
 	ctx := context.Background()
 	for n := 0; n < b.N; n++ {
-		_, _ = future.Get(ctx) //nolint:errcheck
+		_, _ = future.Get(ctx)
 	}
 }
 
@@ -78,7 +78,7 @@ func BenchmarkFutureReady(b *testing.B) {
 	future := NewFuture[interface{}]()
 	future.Set(nil, nil)
 	for n := 0; n < b.N; n++ {
-		_ = future.Ready() //nolint:errcheck
+		_ = future.Ready()
 	}
 }
 

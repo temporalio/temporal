@@ -59,15 +59,15 @@ func (m *MockRescheduler) EXPECT() *MockReschedulerMockRecorder {
 }
 
 // Add mocks base method.
-func (m *MockRescheduler) Add(task Executable, backoff time.Duration) {
+func (m *MockRescheduler) Add(task Executable, rescheduleTime time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Add", task, backoff)
+	m.ctrl.Call(m, "Add", task, rescheduleTime)
 }
 
 // Add indicates an expected call of Add.
-func (mr *MockReschedulerMockRecorder) Add(task, backoff interface{}) *gomock.Call {
+func (mr *MockReschedulerMockRecorder) Add(task, rescheduleTime interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockRescheduler)(nil).Add), task, backoff)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockRescheduler)(nil).Add), task, rescheduleTime)
 }
 
 // Len mocks base method.
@@ -84,14 +84,26 @@ func (mr *MockReschedulerMockRecorder) Len() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Len", reflect.TypeOf((*MockRescheduler)(nil).Len))
 }
 
-// Reschedule mocks base method.
-func (m *MockRescheduler) Reschedule(targetRescheduleSize int) {
+// Start mocks base method.
+func (m *MockRescheduler) Start() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Reschedule", targetRescheduleSize)
+	m.ctrl.Call(m, "Start")
 }
 
-// Reschedule indicates an expected call of Reschedule.
-func (mr *MockReschedulerMockRecorder) Reschedule(targetRescheduleSize interface{}) *gomock.Call {
+// Start indicates an expected call of Start.
+func (mr *MockReschedulerMockRecorder) Start() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reschedule", reflect.TypeOf((*MockRescheduler)(nil).Reschedule), targetRescheduleSize)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockRescheduler)(nil).Start))
+}
+
+// Stop mocks base method.
+func (m *MockRescheduler) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MockReschedulerMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockRescheduler)(nil).Stop))
 }

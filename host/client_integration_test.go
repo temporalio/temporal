@@ -41,7 +41,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
@@ -50,7 +49,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"
 )
@@ -95,7 +93,7 @@ func (s *clientIntegrationSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 
-	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.hostPort,
 		Namespace: s.namespace,
 	})
@@ -243,7 +241,7 @@ func testDataConverterWorkflow(ctx workflow.Context, tl string) (string, error) 
 }
 
 func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataConverter converter.DataConverter) (sdkclient.Client, worker.Worker) {
-	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
+	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:      s.hostPort,
 		Namespace:     s.namespace,
 		DataConverter: dataConverter,
@@ -277,7 +275,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
 	defer cancel()
 	s.worker.RegisterWorkflow(testDataConverterWorkflow)
 	s.worker.RegisterActivity(testActivity)
@@ -313,7 +311,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
 	defer cancel()
 
 	s.worker.RegisterWorkflow(testDataConverterWorkflow)
@@ -421,7 +419,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: time.Minute,
 	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
 	defer cancel()
 	s.worker.RegisterWorkflow(testParentWorkflow)
 	s.worker.RegisterWorkflow(testChildWorkflow)
@@ -960,16 +958,17 @@ func (s *clientIntegrationSuite) Test_BufferedQuery() {
 	s.NoError(err)
 }
 
-func (s *clientIntegrationSuite) printHistory(workflowID string, runID string) {
-	iter := s.sdkClient.GetWorkflowHistory(context.Background(), workflowID, runID, false, 0)
-	history := &historypb.History{}
-	for iter.HasNext() {
-		event, err := iter.Next()
-		s.NoError(err)
-		history.Events = append(history.Events, event)
-	}
-	common.PrettyPrintHistory(history, s.Logger)
-}
+// Uncomment if you need to debug history.
+// func (s *clientIntegrationSuite) printHistory(workflowID string, runID string) {
+// 	iter := s.sdkClient.GetWorkflowHistory(context.Background(), workflowID, runID, false, 0)
+// 	history := &historypb.History{}
+// 	for iter.HasNext() {
+// 		event, err := iter.Next()
+// 		s.NoError(err)
+// 		history.Events = append(history.Events, event)
+// 	}
+// 	common.PrettyPrintHistory(history, s.Logger)
+// }
 
 func (s *clientIntegrationSuite) assertHistory(wid, rid string, expected []enumspb.EventType) {
 	iter := s.sdkClient.GetWorkflowHistory(context.Background(), wid, rid, false, 0)

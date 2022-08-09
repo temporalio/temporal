@@ -45,7 +45,7 @@ func hash(i interface{}) uint64 {
 	var b bytes.Buffer
 	// please make sure encoder is deterministic (especially when encoding map objects)
 	// use json not gob here as json will sort map keys, while gob is non-deterministic
-	json.NewEncoder(&b).Encode(i) //nolint:errcheck
+	_ = json.NewEncoder(&b).Encode(i)
 	return farm.Fingerprint64(b.Bytes())
 }
 

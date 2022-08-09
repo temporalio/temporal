@@ -27,18 +27,29 @@ package temporal
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.temporal.io/server/service/history/replication"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	otelresource "go.opentelemetry.io/otel/sdk/resource"
+	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
 
 	"github.com/pborman/uuid"
 
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/telemetry"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
@@ -115,13 +126,13 @@ type (
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                  log.Logger
 		ClientFactoryProvider   client.FactoryProvider
-		ServerReporter          metrics.Reporter
 		MetricsClient           metrics.Client
 		DynamicConfigClient     dynamicconfig.Client
 		DynamicConfigCollection *dynamicconfig.Collection
 		TLSConfigProvider       encryption.TLSConfigProvider
 		EsConfig                *esclient.Config
 		EsClient                esclient.Client
+		MetricsHandler          metrics.MetricsHandler
 	}
 )
 
@@ -131,6 +142,7 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 		ServerFxImplModule,
 		fx.Supply(opts),
 		fx.Provide(ServerOptionsProvider),
+		TraceExportModule,
 
 		fx.Provide(PersistenceFactoryProvider),
 		fx.Provide(HistoryServiceProvider),
@@ -140,7 +152,7 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 
 		fx.Provide(ApplyClusterMetadataConfigProvider),
 		fx.Invoke(ServerLifetimeHooks),
-		fx.NopLogger,
+		FxLogAdapter,
 	)
 	s := &ServerFx{
 		app,
@@ -180,20 +192,14 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		clientFactoryProvider = client.NewFactoryProvider()
 	}
 
-	// ServerReporter
-	serverReporter := so.metricsReporter
-	if serverReporter == nil {
-		if so.config.Global.Metrics == nil {
-			logger.Warn("no metrics config provided, using noop reporter")
-			serverReporter = metrics.NoopReporter
-		} else {
-			handler := metrics.MetricHandlerFromConfig(logger, so.config.Global.Metrics)
-			serverReporter = metrics.NewEventsReporter(handler)
-		}
+	// MetricsHandler
+	provider := so.metricProvider
+	if provider == nil {
+		provider = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
 	}
 
 	// MetricsClient
-	var metricsClient metrics.Client = metrics.NewEventsClient(serverReporter.MetricProvider(), metrics.Server)
+	var metricsClient metrics.Client = metrics.NewClient(provider, metrics.Server)
 
 	// DynamicConfigClient
 	dcClient := so.dynamicConfigClient
@@ -268,13 +274,13 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 
 		Logger:                  logger,
 		ClientFactoryProvider:   clientFactoryProvider,
-		ServerReporter:          serverReporter,
 		MetricsClient:           metricsClient,
 		DynamicConfigClient:     dcClient,
 		DynamicConfigCollection: dynamicconfig.NewCollection(dcClient, logger),
 		TLSConfigProvider:       tlsConfigProvider,
 		EsConfig:                esConfig,
 		EsClient:                esClient,
+		MetricsHandler:          provider,
 	}, nil
 }
 
@@ -311,7 +317,7 @@ type (
 		Logger                     log.Logger
 		NamespaceLogger            resource.NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
-		ServerReporter             metrics.Reporter
+		MetricsHandler             metrics.MetricsHandler
 		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
 		TlsConfigProvider          encryption.TLSConfigProvider
@@ -326,6 +332,8 @@ type (
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
+		SpanExporters              []otelsdktrace.SpanExporter
+		InstanceID                 resource.InstanceID `optional:"true"`
 	}
 )
 
@@ -367,15 +375,17 @@ func HistoryServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
+		fx.Supply(params.SpanExporters),
+		ServiceTracingModule,
 		resource.DefaultOptions,
-		history.QueueProcessorModule,
+		history.QueueModule,
 		history.Module,
 		replication.Module,
-		fx.NopLogger,
+		FxLogAdapter,
 	)
 
 	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
@@ -425,12 +435,14 @@ func MatchingServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
+		fx.Supply(params.SpanExporters),
+		ServiceTracingModule,
 		resource.DefaultOptions,
 		matching.Module,
-		fx.NopLogger,
+		FxLogAdapter,
 	)
 
 	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
@@ -480,13 +492,15 @@ func FrontendServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
+		fx.Supply(params.SpanExporters),
+		ServiceTracingModule,
 		resource.DefaultOptions,
 		frontend.Module,
-		fx.NopLogger,
+		FxLogAdapter,
 	)
 
 	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
@@ -536,12 +550,14 @@ func WorkerServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
+		fx.Supply(params.SpanExporters),
+		ServiceTracingModule,
 		resource.DefaultOptions,
 		worker.Module,
-		fx.NopLogger,
+		FxLogAdapter,
 	)
 
 	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
@@ -578,12 +594,13 @@ func ApplyClusterMetadataConfigProvider(
 		nil,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
-		DataStoreFactory:  dataStoreFactory,
-		Cfg:               &config.Persistence,
-		PersistenceMaxQPS: nil,
-		ClusterName:       persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
-		MetricsClient:     nil,
-		Logger:            logger,
+		DataStoreFactory:     dataStoreFactory,
+		Cfg:                  &config.Persistence,
+		PersistenceMaxQPS:    nil,
+		PriorityRateLimiting: nil,
+		ClusterName:          persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
+		MetricsClient:        nil,
+		Logger:               logger,
 	})
 	defer factory.Close()
 
@@ -759,4 +776,259 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
 	}
 	return nil
+}
+
+// TraceExportModule holds process-global telemetry fx state defining the set of
+// OTEL trace/span exporters used by tracing instrumentation. The following
+// types can be overriden/augmented with fx.Replace/fx.Decorate:
+//
+// - []go.opentelemetry.io/otel/sdk/trace.SpanExporter
+var TraceExportModule = fx.Options(
+	fx.Invoke(func(log log.Logger) {
+		otel.SetErrorHandler(otel.ErrorHandlerFunc(
+			func(err error) {
+				log.Warn("OTEL error", tag.Error(err), tag.ErrorType(err))
+			}),
+		)
+	}),
+
+	fx.Provide(func(lc fx.Lifecycle, c *config.Config) ([]otelsdktrace.SpanExporter, error) {
+		exporters, err := c.ExporterConfig.SpanExporters()
+		if err != nil {
+			return nil, err
+		}
+		lc.Append(fx.Hook{
+			OnStart: startAll(exporters),
+			OnStop:  shutdownAll(exporters),
+		})
+		return exporters, nil
+	}),
+)
+
+// ServiceTracingModule holds per-service (i.e. frontend/history/matching/worker) fx
+// state. The following types can be overriden with fx.Replace/fx.Decorate:
+//
+// - []go.opentelemetry.io/otel/sdk/trace.BatchSpanProcessorOption
+//   default: empty slice
+// - []go.opentelemetry.io/otel/sdk/trace.SpanProcessor
+//   default: wrap each otelsdktrace.SpanExporter with otelsdktrace.NewBatchSpanProcessor
+// - *go.opentelemetry.io/otel/sdk/resource.Resource
+//   default: resource.Default() augmented with the supplied serviceName
+// - []go.opentelemetry.io/otel/sdk/trace.TracerProviderOption
+//   default: the provided resource.Resource and each of the otelsdktrace.SpanExporter
+// - go.opentelemetry.io/otel/trace.TracerProvider
+//   default: otelsdktrace.NewTracerProvider with each of the otelsdktrace.TracerProviderOption
+// - go.opentelemetry.io/otel/ppropagation.TextMapPropagator
+//   default: propagation.TraceContext{}
+// - telemetry.ServerTraceInterceptor
+// - telemetry.ClientTraceInterceptor
+var ServiceTracingModule = fx.Options(
+	fx.Supply([]otelsdktrace.BatchSpanProcessorOption{}),
+	fx.Provide(
+		fx.Annotate(
+			func(exps []otelsdktrace.SpanExporter, opts []otelsdktrace.BatchSpanProcessorOption) []otelsdktrace.SpanProcessor {
+				sps := make([]otelsdktrace.SpanProcessor, 0, len(exps))
+				for _, exp := range exps {
+					sps = append(sps, otelsdktrace.NewBatchSpanProcessor(exp, opts...))
+				}
+				return sps
+			},
+			fx.ParamTags(`optional:"true"`, ``),
+		),
+	),
+	fx.Provide(
+		fx.Annotate(
+			func(rsn resource.ServiceName, rsi resource.InstanceID) (*otelresource.Resource, error) {
+				serviceName := string(rsn)
+				if !strings.HasPrefix(serviceName, "io.temporal.") {
+					serviceName = fmt.Sprintf("io.temporal.%s", serviceName)
+				}
+				attrs := []attribute.KeyValue{
+					semconv.ServiceNameKey.String(serviceName),
+					semconv.ServiceVersionKey.String(headers.ServerVersion),
+				}
+				if rsi != "" {
+					attrs = append(attrs, semconv.ServiceInstanceIDKey.String(string(rsi)))
+				}
+				return otelresource.New(context.Background(),
+					otelresource.WithProcess(),
+					otelresource.WithOS(),
+					otelresource.WithHost(),
+					otelresource.WithContainer(),
+					otelresource.WithAttributes(attrs...),
+				)
+			},
+			fx.ParamTags(``, `optional:"true"`),
+		),
+	),
+	fx.Provide(
+		func(r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) []otelsdktrace.TracerProviderOption {
+			opts := make([]otelsdktrace.TracerProviderOption, 0, len(sps)+1)
+			opts = append(opts, otelsdktrace.WithResource(r))
+			for _, sp := range sps {
+				opts = append(opts, otelsdktrace.WithSpanProcessor(sp))
+			}
+			return opts
+		},
+	),
+	fx.Provide(func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
+		tp := otelsdktrace.NewTracerProvider(opts...)
+		lc.Append(fx.Hook{OnStop: tp.Shutdown})
+		return tp
+	}),
+	// Haven't had use for baggage propagation yet
+	fx.Provide(func() propagation.TextMapPropagator { return propagation.TraceContext{} }),
+	fx.Provide(telemetry.NewServerTraceInterceptor),
+	fx.Provide(telemetry.NewClientTraceInterceptor),
+)
+
+func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
+	type starter interface{ Start(context.Context) error }
+	return func(ctx context.Context) error {
+		for _, e := range exporters {
+			if starter, ok := e.(starter); ok {
+				err := starter.Start(ctx)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+}
+
+func shutdownAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		for _, e := range exporters {
+			err := e.Shutdown(ctx)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+var FxLogAdapter = fx.WithLogger(func(logger log.Logger) fxevent.Logger {
+	return &fxLogAdapter{logger: logger}
+})
+
+type fxLogAdapter struct {
+	logger log.Logger
+}
+
+func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
+	switch e := e.(type) {
+	case *fxevent.OnStartExecuting:
+		l.logger.Debug("OnStart hook executing",
+			tag.ComponentFX,
+			tag.NewStringTag("callee", e.FunctionName),
+			tag.NewStringTag("caller", e.CallerName),
+		)
+	case *fxevent.OnStartExecuted:
+		if e.Err != nil {
+			l.logger.Error("OnStart hook failed",
+				tag.ComponentFX,
+				tag.NewStringTag("callee", e.FunctionName),
+				tag.NewStringTag("caller", e.CallerName),
+				tag.Error(e.Err),
+			)
+		} else {
+			l.logger.Debug("OnStart hook executed",
+				tag.ComponentFX,
+				tag.NewStringTag("callee", e.FunctionName),
+				tag.NewStringTag("caller", e.CallerName),
+				tag.NewStringTag("runtime", e.Runtime.String()),
+			)
+		}
+	case *fxevent.OnStopExecuting:
+		l.logger.Debug("OnStop hook executing",
+			tag.ComponentFX,
+			tag.NewStringTag("callee", e.FunctionName),
+			tag.NewStringTag("caller", e.CallerName),
+		)
+	case *fxevent.OnStopExecuted:
+		if e.Err != nil {
+			l.logger.Error("OnStop hook failed",
+				tag.ComponentFX,
+				tag.NewStringTag("callee", e.FunctionName),
+				tag.NewStringTag("caller", e.CallerName),
+				tag.Error(e.Err),
+			)
+		} else {
+			l.logger.Debug("OnStop hook executed",
+				tag.ComponentFX,
+				tag.NewStringTag("callee", e.FunctionName),
+				tag.NewStringTag("caller", e.CallerName),
+				tag.NewStringTag("runtime", e.Runtime.String()),
+			)
+		}
+	case *fxevent.Supplied:
+		if e.Err != nil {
+			l.logger.Error("supplied",
+				tag.ComponentFX,
+				tag.NewStringTag("type", e.TypeName),
+				tag.NewStringTag("module", e.ModuleName),
+				tag.Error(e.Err))
+		}
+	case *fxevent.Provided:
+		if e.Err != nil {
+			l.logger.Error("error encountered while applying options",
+				tag.ComponentFX,
+				tag.NewStringTag("module", e.ModuleName),
+				tag.Error(e.Err))
+		}
+	case *fxevent.Decorated:
+		if e.Err != nil {
+			l.logger.Error("error encountered while applying options",
+				tag.ComponentFX,
+				tag.NewStringTag("module", e.ModuleName),
+				tag.Error(e.Err))
+		}
+	case *fxevent.Invoking:
+		// Do not log stack as it will make logs hard to read.
+		l.logger.Debug("invoking",
+			tag.ComponentFX,
+			tag.NewStringTag("function", e.FunctionName),
+			tag.NewStringTag("module", e.ModuleName),
+		)
+	case *fxevent.Invoked:
+		if e.Err != nil {
+			l.logger.Error("invoke failed",
+				tag.ComponentFX,
+				tag.Error(e.Err),
+				tag.NewStringTag("stack", e.Trace),
+				tag.NewStringTag("function", e.FunctionName),
+				tag.NewStringTag("module", e.ModuleName),
+			)
+		}
+	case *fxevent.Stopping:
+		l.logger.Info("received signal",
+			tag.ComponentFX,
+			tag.NewStringTag("signal", e.Signal.String()))
+	case *fxevent.Stopped:
+		if e.Err != nil {
+			l.logger.Error("stop failed", tag.ComponentFX, tag.Error(e.Err))
+		}
+	case *fxevent.RollingBack:
+		l.logger.Error("start failed, rolling back", tag.ComponentFX, tag.Error(e.StartErr))
+	case *fxevent.RolledBack:
+		if e.Err != nil {
+			l.logger.Error("rollback failed", tag.ComponentFX, tag.Error(e.Err))
+		}
+	case *fxevent.Started:
+		if e.Err != nil {
+			l.logger.Error("start failed", tag.ComponentFX, tag.Error(e.Err))
+		} else {
+			l.logger.Debug("started", tag.ComponentFX)
+		}
+	case *fxevent.LoggerInitialized:
+		if e.Err != nil {
+			l.logger.Error("custom logger initialization failed", tag.ComponentFX, tag.Error(e.Err))
+		} else {
+			l.logger.Debug("initialized custom fxevent.Logger",
+				tag.ComponentFX,
+				tag.NewStringTag("function", e.ConstructorName))
+		}
+	}
 }

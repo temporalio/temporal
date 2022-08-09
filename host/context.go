@@ -33,6 +33,6 @@ import (
 
 // NewContext create new context with default timeout 90 seconds.
 func NewContext() context.Context {
-	ctx, _ := rpc.NewContextWithTimeoutAndHeaders(90 * time.Second)
+	ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(90 * time.Second)
 	return ctx
 }

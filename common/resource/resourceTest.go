@@ -142,6 +142,7 @@ func NewTest(
 	taskMgr := persistence.NewMockTaskManager(controller)
 	shardMgr := persistence.NewMockShardManager(controller)
 	executionMgr := persistence.NewMockExecutionManager(controller)
+	executionMgr.EXPECT().NewHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.NewHistoryBranchResponse{BranchToken: []byte{1, 2, 3}}, nil).AnyTimes()
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
 	namespaceReplicationQueue.EXPECT().Start().AnyTimes()
 	namespaceReplicationQueue.EXPECT().Stop().AnyTimes()
@@ -164,8 +165,8 @@ func NewTest(
 	membershipMonitor.EXPECT().GetResolver(common.WorkerServiceName).Return(workerServiceResolver, nil).AnyTimes()
 
 	scope := tally.NewTestScope("test", nil)
-	metricClient := metrics.NewEventsClient(
-		metrics.NewEventsMetricProvider(metrics.NewTallyMetricHandler(logger, scope, metrics.ClientConfig{}, nil)),
+	metricClient := metrics.NewClient(
+		metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope),
 		serviceMetricsIndex,
 	)
 

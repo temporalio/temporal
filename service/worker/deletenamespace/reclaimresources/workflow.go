@@ -152,6 +152,18 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 		return result, fmt.Errorf("%w: IsAdvancedVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
+	if isAdvancedVisibility {
+		ctx4 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+		var executionsCount int64
+		err = workflow.ExecuteLocalActivity(ctx4, a.CountExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsCount)
+		if err != nil {
+			return result, fmt.Errorf("%w: CountExecutionsAdvVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		}
+		if executionsCount == 0 {
+			return result, nil
+		}
+	}
+
 	ctx2 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
 	ctx2 = workflow.WithWorkflowID(ctx2, fmt.Sprintf("%s/%s", deleteexecutions.WorkflowName, params.Namespace))
 	var der deleteexecutions.DeleteExecutionsResult
@@ -175,15 +187,15 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 		if stderrors.As(err, &appErr) {
 			switch appErr.Type() {
 			case errors.ExecutionsStillExistErrType, errors.NoProgressErrType, errors.NotDeletedExecutionsStillExistErrType:
+				var notDeletedCount int
 				var counterTag tag.ZapTag
 				if appErr.HasDetails() {
-					var notDeletedCount int
 					_ = appErr.Details(&notDeletedCount)
 					counterTag = tag.Counter(notDeletedCount)
 				}
 				logger.Info("Unable to delete workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), counterTag)
 				// appErr is not retryable. Convert it to retryable for the server to retry.
-				return result, temporal.NewApplicationError(appErr.Message(), appErr.Type(), appErr.Details())
+				return result, temporal.NewApplicationError(appErr.Message(), appErr.Type(), notDeletedCount)
 			}
 		}
 		return result, fmt.Errorf("%w: EnsureNoExecutionsActivity: %v", errors.ErrUnableToExecuteActivity, err)

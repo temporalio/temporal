@@ -150,7 +150,7 @@ func (s *ackManagerSuite) TestNotifyNewTasks_Initialized() {
 
 func (s *ackManagerSuite) TestTaskIDRange_NotInitialized() {
 	s.replicationAckManager.sanityCheckTime = time.Time{}
-	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID
+	expectMaxTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).Prev().TaskID
 	expectMinTaskID := expectMaxTaskID - 100
 	s.replicationAckManager.maxTaskID = convert.Int64Ptr(expectMinTaskID - 100)
 
@@ -165,8 +165,8 @@ func (s *ackManagerSuite) TestTaskIDRange_Initialized_UseHighestReplicationTaskI
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(2 * time.Minute)
 	s.replicationAckManager.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 100
-	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 50
+	expectMinTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 50
 	s.replicationAckManager.maxTaskID = convert.Int64Ptr(expectMaxTaskID)
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
@@ -180,8 +180,8 @@ func (s *ackManagerSuite) TestTaskIDRange_Initialized_NoHighestReplicationTaskID
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(2 * time.Minute)
 	s.replicationAckManager.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 100
-	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID
+	expectMinTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).Prev().TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).Prev().TaskID
 	s.replicationAckManager.maxTaskID = nil
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
@@ -195,9 +195,9 @@ func (s *ackManagerSuite) TestTaskIDRange_Initialized_UseHighestTransferTaskID()
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(-2 * time.Minute)
 	s.replicationAckManager.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 100
-	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID
-	s.replicationAckManager.maxTaskID = convert.Int64Ptr(s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 50)
+	expectMinTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).Prev().TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).Prev().TaskID
+	s.replicationAckManager.maxTaskID = convert.Int64Ptr(s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 50)
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
 	s.Equal(expectMinTaskID, minTaskID)
@@ -212,7 +212,7 @@ func (s *ackManagerSuite) TestSyncActivity_WorkflowMissing() {
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	scheduleID := int64(144)
+	scheduledEventID := int64(144)
 	version := int64(288)
 	taskID := int64(1444)
 	task := &tasks.SyncActivityTask{
@@ -224,7 +224,7 @@ func (s *ackManagerSuite) TestSyncActivity_WorkflowMissing() {
 		VisibilityTimestamp: time.Now().UTC(),
 		TaskID:              taskID,
 		Version:             version,
-		ScheduledID:         scheduleID,
+		ScheduledEventID:    scheduledEventID,
 	}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
@@ -256,7 +256,7 @@ func (s *ackManagerSuite) TestSyncActivity_WorkflowCompleted() {
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	scheduleID := int64(144)
+	scheduledEventID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &tasks.SyncActivityTask{
@@ -268,7 +268,7 @@ func (s *ackManagerSuite) TestSyncActivity_WorkflowCompleted() {
 		VisibilityTimestamp: time.Now().UTC(),
 		TaskID:              taskID,
 		Version:             version,
-		ScheduledID:         scheduleID,
+		ScheduledEventID:    scheduledEventID,
 	}
 
 	context, release, _ := s.replicationAckManager.historyCache.GetOrCreateWorkflowExecution(
@@ -308,7 +308,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityCompleted() {
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	scheduleID := int64(144)
+	scheduledEventID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
 	task := &tasks.SyncActivityTask{
@@ -320,7 +320,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityCompleted() {
 		VisibilityTimestamp: time.Now().UTC(),
 		TaskID:              taskID,
 		Version:             version,
-		ScheduledID:         scheduleID,
+		ScheduledEventID:    scheduledEventID,
 	}
 
 	context, release, _ := s.replicationAckManager.historyCache.GetOrCreateWorkflowExecution(
@@ -337,7 +337,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityCompleted() {
 	release(nil)
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(nil, false).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
@@ -362,7 +362,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRetry() {
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	scheduleID := int64(144)
+	scheduledEventID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
 	taskTimestamp := time.Now().UTC()
@@ -375,7 +375,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRetry() {
 		VisibilityTimestamp: taskTimestamp,
 		TaskID:              taskID,
 		Version:             version,
-		ScheduledID:         scheduleID,
+		ScheduledEventID:    scheduledEventID,
 	}
 
 	context, release, _ := s.replicationAckManager.historyCache.GetOrCreateWorkflowExecution(
@@ -392,20 +392,20 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRetry() {
 	release(nil)
 
 	activityVersion := int64(333)
-	activityScheduleID := scheduleID
+	activityScheduledEventID := scheduledEventID
 	activityScheduledTime := time.Now().UTC()
-	activityStartedID := common.EmptyEventID
+	activityStartedEventID := common.EmptyEventID
 	activityAttempt := int32(16384)
 	activityDetails := payloads.EncodeString("some random activity progress")
 	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistencespb.ActivityInfo{
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
 		Version:                 activityVersion,
-		ScheduleId:              activityScheduleID,
+		ScheduledEventId:        activityScheduledEventID,
 		ScheduledTime:           &activityScheduledTime,
-		StartedId:               activityStartedID,
+		StartedEventId:          activityStartedEventID,
 		StartedTime:             nil,
 		LastHeartbeatUpdateTime: nil,
 		LastHeartbeatDetails:    activityDetails,
@@ -417,7 +417,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRetry() {
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
 			{
-				EventId: scheduleID,
+				EventId: scheduledEventID,
 				Version: 333,
 			},
 		},
@@ -453,9 +453,9 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRetry() {
 				WorkflowId:         workflowID,
 				RunId:              runID,
 				Version:            activityVersion,
-				ScheduledId:        activityScheduleID,
+				ScheduledEventId:   activityScheduledEventID,
 				ScheduledTime:      &activityScheduledTime,
-				StartedId:          activityStartedID,
+				StartedEventId:     activityStartedEventID,
 				StartedTime:        nil,
 				LastHeartbeatTime:  nil,
 				Details:            activityDetails,
@@ -475,7 +475,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRunning() {
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
-	scheduleID := int64(144)
+	scheduledEventID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
 	taskTimestamp := time.Now().UTC()
@@ -488,7 +488,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRunning() {
 		VisibilityTimestamp: taskTimestamp,
 		TaskID:              taskID,
 		Version:             version,
-		ScheduledID:         scheduleID,
+		ScheduledEventID:    scheduledEventID,
 	}
 
 	context, release, _ := s.replicationAckManager.historyCache.GetOrCreateWorkflowExecution(
@@ -505,9 +505,9 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRunning() {
 	release(nil)
 
 	activityVersion := int64(333)
-	activityScheduleID := scheduleID
+	activityScheduledEventID := scheduledEventID
 	activityScheduledTime := timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC))
-	activityStartedID := activityScheduleID + 1
+	activityStartedEventID := activityScheduledEventID + 1
 	activityStartedTime := activityScheduledTime.Add(time.Minute)
 	activityHeartbeatTime := activityStartedTime.Add(time.Minute)
 	activityAttempt := int32(16384)
@@ -516,11 +516,11 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRunning() {
 	activityLastWorkerIdentity := "some random worker identity"
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistencespb.ActivityInfo{
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(&persistencespb.ActivityInfo{
 		Version:                 activityVersion,
-		ScheduleId:              activityScheduleID,
+		ScheduledEventId:        activityScheduledEventID,
 		ScheduledTime:           activityScheduledTime,
-		StartedId:               activityStartedID,
+		StartedEventId:          activityStartedEventID,
 		StartedTime:             &activityStartedTime,
 		LastHeartbeatUpdateTime: &activityHeartbeatTime,
 		LastHeartbeatDetails:    activityDetails,
@@ -532,7 +532,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRunning() {
 		BranchToken: []byte{},
 		Items: []*historyspb.VersionHistoryItem{
 			{
-				EventId: scheduleID,
+				EventId: scheduledEventID,
 				Version: 333,
 			},
 		},
@@ -568,9 +568,9 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRunning() {
 				WorkflowId:         workflowID,
 				RunId:              runID,
 				Version:            activityVersion,
-				ScheduledId:        activityScheduleID,
+				ScheduledEventId:   activityScheduledEventID,
 				ScheduledTime:      activityScheduledTime,
-				StartedId:          activityStartedID,
+				StartedEventId:     activityStartedEventID,
 				StartedTime:        &activityStartedTime,
 				LastHeartbeatTime:  &activityHeartbeatTime,
 				Details:            activityDetails,
@@ -582,4 +582,27 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRunning() {
 		},
 		VisibilityTime: timestamp.TimePtr(taskTimestamp),
 	}, result)
+}
+
+func (s *ackManagerSuite) Test_GetMaxTaskInfo() {
+	now := time.Now()
+	taskSet := []tasks.Task{
+		&tasks.HistoryReplicationTask{
+			TaskID:              1,
+			VisibilityTimestamp: now,
+		},
+		&tasks.HistoryReplicationTask{
+			TaskID:              6,
+			VisibilityTimestamp: now.Add(time.Second),
+		},
+		&tasks.HistoryReplicationTask{
+			TaskID:              3,
+			VisibilityTimestamp: now.Add(time.Hour),
+		},
+	}
+	s.replicationAckManager.NotifyNewTasks(taskSet)
+
+	maxTaskID, maxVisibilityTimestamp := s.replicationAckManager.GetMaxTaskInfo()
+	s.Equal(int64(6), maxTaskID)
+	s.Equal(now.Add(time.Hour), maxVisibilityTimestamp)
 }

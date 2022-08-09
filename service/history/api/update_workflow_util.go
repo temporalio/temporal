@@ -27,13 +27,8 @@ package api
 import (
 	"context"
 
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
-)
-
-const (
-	conditionalRetryCount = 5
 )
 
 func UpdateWorkflowWithNew(
@@ -44,81 +39,53 @@ func UpdateWorkflowWithNew(
 	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
 ) (retError error) {
 
-UpdateHistoryLoop:
-	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
-		// conduct caller action
-		postActions, err := action(workflowContext)
-		if err != nil {
-			if err == consts.ErrStaleState {
-				// Handler detected that cached workflow mutable could potentially be stale
-				// Reload workflow execution history
-				workflowContext.GetContext().Clear()
-				if attempt != conditionalRetryCount {
-					_, err = workflowContext.ReloadMutableState(ctx)
-					if err != nil {
-						return err
-					}
-				}
-				continue UpdateHistoryLoop
-			}
-
-			// Returned error back to the caller
-			return err
-		}
-		if postActions.Noop {
-			return nil
-		}
-
-		mutableState := workflowContext.GetMutableState()
-		if postActions.CreateWorkflowTask {
-			// Create a transfer task to schedule a workflow task
-			if !mutableState.HasPendingWorkflowTask() {
-				if _, err := mutableState.AddWorkflowTaskScheduledEvent(
-					false,
-				); err != nil {
-					return err
-				}
-			}
-		}
-
-		if newWorkflowFn != nil {
-			var newContext workflow.Context
-			var newMutableState workflow.MutableState
-			newContext, newMutableState, err = newWorkflowFn()
-			if err != nil {
-				return err
-			}
-			lastWriteVersion, err := mutableState.GetLastWriteVersion()
-			if err != nil {
-				return err
-			}
-			if err = NewWorkflowVersionCheck(shard, lastWriteVersion, newMutableState); err != nil {
-				return err
-			}
-
-			err = workflowContext.GetContext().UpdateWorkflowExecutionWithNewAsActive(
-				ctx,
-				shard.GetTimeSource().Now(),
-				newContext,
-				newMutableState,
-			)
-		} else {
-			err = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
-				ctx,
-				shard.GetTimeSource().Now(),
-			)
-		}
-
-		if err == consts.ErrConflict {
-			if attempt != conditionalRetryCount {
-				_, err = workflowContext.ReloadMutableState(ctx)
-				if err != nil {
-					return err
-				}
-			}
-			continue UpdateHistoryLoop
-		}
+	// conduct caller action
+	postActions, err := action(workflowContext)
+	if err != nil {
 		return err
 	}
-	return consts.ErrMaxAttemptsExceeded
+	if postActions.Noop {
+		return nil
+	}
+
+	mutableState := workflowContext.GetMutableState()
+	if postActions.CreateWorkflowTask {
+		// Create a transfer task to schedule a workflow task
+		if !mutableState.HasPendingWorkflowTask() {
+			if _, err := mutableState.AddWorkflowTaskScheduledEvent(
+				false,
+			); err != nil {
+				return err
+			}
+		}
+	}
+
+	var updateErr error
+	if newWorkflowFn != nil {
+		newContext, newMutableState, err := newWorkflowFn()
+		if err != nil {
+			return err
+		}
+		lastWriteVersion, err := mutableState.GetLastWriteVersion()
+		if err != nil {
+			return err
+		}
+		if err = NewWorkflowVersionCheck(shard, lastWriteVersion, newMutableState); err != nil {
+			return err
+		}
+
+		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionWithNewAsActive(
+			ctx,
+			shard.GetTimeSource().Now(),
+			newContext,
+			newMutableState,
+		)
+	} else {
+		updateErr = workflowContext.GetContext().UpdateWorkflowExecutionAsActive(
+			ctx,
+			shard.GetTimeSource().Now(),
+		)
+	}
+
+	return updateErr
 }

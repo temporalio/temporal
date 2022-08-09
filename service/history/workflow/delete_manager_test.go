@@ -129,7 +129,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 			RunID:       tests.RunID,
 		},
 		[]byte{22, 8, 78},
-		int64(1),
 		nil,
 		&closeTime,
 	).Return(nil)
@@ -141,7 +140,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		we,
 		mockWeCtx,
 		mockMutableState,
-		1,
 		false,
 	)
 	s.NoError(err)
@@ -168,7 +166,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 			RunID:       tests.RunID,
 		},
 		[]byte{22, 8, 78},
-		int64(1),
 		nil,
 		&closeTime,
 	).Return(serviceerror.NewInternal("test error"))
@@ -179,7 +176,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		we,
 		mockWeCtx,
 		mockMutableState,
-		1,
 		false,
 	)
 	s.Error(err)
@@ -204,7 +200,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 			RunID:       tests.RunID,
 		},
 		[]byte{22, 8, 78},
-		int64(1),
 		&now,
 		nil,
 	).Return(nil)
@@ -216,7 +211,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		we,
 		mockWeCtx,
 		mockMutableState,
-		1,
 		true,
 	)
 	s.NoError(err)
@@ -245,6 +239,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		1000,
 		1001,
+		0,
 	)
 	s.NoError(err)
 
@@ -260,6 +255,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		1000,
 		1001,
+		0,
 	)
 	s.NoError(err)
 
@@ -275,6 +271,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		1000,
 		1001,
+		0,
 	)
 	s.NoError(err)
 
@@ -292,6 +289,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		200,
 		201,
+		0,
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
 
@@ -307,6 +305,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		1000,
 		1000,
+		0,
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
 
@@ -324,6 +323,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		999,
 		1001,
+		0,
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
 
@@ -341,6 +341,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		999,
 		1001,
+		0,
 	)
 	s.NoError(err)
 
@@ -358,6 +359,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		mockMutableState,
 		999,
 		1000,
+		0,
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
 }
@@ -372,9 +374,9 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockMutableState := NewMockMutableState(s.controller)
 
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
-	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED}).Times(0)
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(&closeTime, nil)
+	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(&closeTime, nil).Times(0)
 
 	// ====================== Archival mocks =======================================
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
@@ -414,11 +416,10 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 			RunID:       tests.RunID,
 		},
 		nil,
-		int64(1),
 		nil,
 		&closeTime,
-	).Return(nil)
-	mockWeCtx.EXPECT().Clear()
+	).Return(nil).Times(0)
+	mockWeCtx.EXPECT().Clear().Times(0)
 
 	err := s.deleteManager.DeleteWorkflowExecutionByRetention(
 		context.Background(),
@@ -426,7 +427,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 		we,
 		mockWeCtx,
 		mockMutableState,
-		1,
 	)
 	s.NoError(err)
 }
@@ -476,7 +476,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 		we,
 		mockWeCtx,
 		mockMutableState,
-		1,
 	)
 	s.Error(err)
 }

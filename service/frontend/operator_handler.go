@@ -34,23 +34,22 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
+	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
-
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/searchattribute"
 )
 
 var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
@@ -60,7 +59,6 @@ type (
 	OperatorHandlerImpl struct {
 		status int32
 
-		healthStatus      int32
 		logger            log.Logger
 		config            *Config
 		esConfig          *esclient.Config
@@ -135,8 +133,6 @@ func (h *OperatorHandlerImpl) Stop() {
 }
 
 func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *operatorservice.AddSearchAttributesRequest) (_ *operatorservice.AddSearchAttributesResponse, retError error) {
-	const endpointName = "AddSearchAttributes"
-
 	defer log.CapturePanic(h.logger, &retError)
 
 	scope, sw := h.startRequestProfile(metrics.OperatorAddSearchAttributesScope)
@@ -144,29 +140,29 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 
 	// validate request
 	if request == nil {
-		return nil, h.error(errRequestNotSet, scope, endpointName)
+		return nil, errRequestNotSet
 	}
 
 	if len(request.GetSearchAttributes()) == 0 {
-		return nil, h.error(errSearchAttributesNotSet, scope, endpointName)
+		return nil, errSearchAttributesNotSet
 	}
 
 	indexName := h.esConfig.GetVisibilityIndex()
 
 	currentSearchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
 	if err != nil {
-		return nil, h.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err)), scope, endpointName)
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
 	for saName, saType := range request.GetSearchAttributes() {
 		if searchattribute.IsReserved(saName) {
-			return nil, h.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeIsReservedMessage, saName)), scope, endpointName)
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeIsReservedMessage, saName))
 		}
 		if currentSearchAttributes.IsDefined(saName) {
-			return nil, h.error(serviceerror.NewAlreadyExist(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName)), scope, endpointName)
+			return nil, serviceerror.NewAlreadyExist(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName))
 		}
 		if _, ok := enumspb.IndexedValueType_name[int32(saType)]; !ok {
-			return nil, h.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errUnknownSearchAttributeTypeMessage, saType)), scope, endpointName)
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnknownSearchAttributeTypeMessage, saType))
 		}
 	}
 
@@ -188,7 +184,7 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 		wfParams,
 	)
 	if err != nil {
-		return nil, h.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, addsearchattributes.WorkflowName, err)), scope, endpointName)
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, addsearchattributes.WorkflowName, err))
 	}
 
 	// Wait for workflow to complete.
@@ -196,7 +192,7 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 	if err != nil {
 		scope.IncCounter(metrics.AddSearchAttributesWorkflowFailuresCount)
 		execution := &commonpb.WorkflowExecution{WorkflowId: addsearchattributes.WorkflowName, RunId: run.GetRunID()}
-		return nil, h.error(serviceerror.NewSystemWorkflow(execution, err), scope, endpointName)
+		return nil, serviceerror.NewSystemWorkflow(execution, err)
 	}
 	scope.IncCounter(metrics.AddSearchAttributesWorkflowSuccessCount)
 
@@ -204,62 +200,49 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 }
 
 func (h *OperatorHandlerImpl) RemoveSearchAttributes(ctx context.Context, request *operatorservice.RemoveSearchAttributesRequest) (_ *operatorservice.RemoveSearchAttributesResponse, retError error) {
-	const endpointName = "RemoveSearchAttributes"
-
 	defer log.CapturePanic(h.logger, &retError)
-
-	scope, sw := h.startRequestProfile(metrics.OperatorRemoveSearchAttributesScope)
-	defer sw.Stop()
 
 	// validate request
 	if request == nil {
-		return nil, h.error(errRequestNotSet, scope, endpointName)
+		return nil, errRequestNotSet
 	}
 
 	if len(request.GetSearchAttributes()) == 0 {
-		return nil, h.error(errSearchAttributesNotSet, scope, endpointName)
+		return nil, errSearchAttributesNotSet
 	}
 
 	indexName := h.esConfig.GetVisibilityIndex()
 
 	currentSearchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
 	if err != nil {
-		return nil, h.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err)), scope, endpointName)
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
-	newCustomSearchAttributes := map[string]enumspb.IndexedValueType{}
-	for saName, saType := range currentSearchAttributes.Custom() {
-		newCustomSearchAttributes[saName] = saType
-	}
+	newCustomSearchAttributes := maps.Clone(currentSearchAttributes.Custom())
 
 	for _, saName := range request.GetSearchAttributes() {
 		if !currentSearchAttributes.IsDefined(saName) {
-			return nil, h.error(serviceerror.NewNotFound(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName)), scope, endpointName)
+			return nil, serviceerror.NewNotFound(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName))
 		}
 		if _, ok := newCustomSearchAttributes[saName]; !ok {
-			return nil, h.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToRemoveNonCustomSearchAttributesMessage, saName)), scope, endpointName)
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToRemoveNonCustomSearchAttributesMessage, saName))
 		}
 		delete(newCustomSearchAttributes, saName)
 	}
 
 	err = h.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
 	if err != nil {
-		return nil, h.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err)), scope, endpointName)
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err))
 	}
 
 	return &operatorservice.RemoveSearchAttributesResponse{}, nil
 }
 
 func (h *OperatorHandlerImpl) ListSearchAttributes(ctx context.Context, request *operatorservice.ListSearchAttributesRequest) (_ *operatorservice.ListSearchAttributesResponse, retError error) {
-	const endpointName = "ListSearchAttributes"
-
 	defer log.CapturePanic(h.logger, &retError)
 
-	scope, sw := h.startRequestProfile(metrics.OperatorListSearchAttributesScope)
-	defer sw.Stop()
-
 	if request == nil {
-		return nil, h.error(errRequestNotSet, scope, endpointName)
+		return nil, errRequestNotSet
 	}
 
 	indexName := h.esConfig.GetVisibilityIndex()
@@ -269,13 +252,13 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(ctx context.Context, request 
 	if h.esClient != nil {
 		esMapping, lastErr = h.esClient.GetMapping(ctx, indexName)
 		if lastErr != nil {
-			lastErr = h.error(serviceerror.NewUnavailable(fmt.Sprintf("unable to get mapping from Elasticsearch: %v", lastErr)), scope, endpointName)
+			lastErr = serviceerror.NewUnavailable(fmt.Sprintf("unable to get mapping from Elasticsearch: %v", lastErr))
 		}
 	}
 
 	searchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
 	if err != nil {
-		lastErr = h.error(serviceerror.NewUnavailable(fmt.Sprintf("unable to read custom search attributes: %v", err)), scope, endpointName)
+		lastErr = serviceerror.NewUnavailable(fmt.Sprintf("unable to read custom search attributes: %v", err))
 	}
 
 	if lastErr != nil {
@@ -290,8 +273,6 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(ctx context.Context, request 
 }
 
 func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *operatorservice.DeleteNamespaceRequest) (_ *operatorservice.DeleteNamespaceResponse, retError error) {
-	const endpointName = "DeleteNamespace"
-
 	defer log.CapturePanic(h.logger, &retError)
 
 	scope, sw := h.startRequestProfile(metrics.OperatorDeleteNamespaceScope)
@@ -299,11 +280,11 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 
 	// validate request
 	if request == nil {
-		return nil, h.error(errRequestNotSet, scope, endpointName)
+		return nil, errRequestNotSet
 	}
 
-	if request.GetNamespace() == "" {
-		return nil, h.error(errNamespaceNotSet, scope, endpointName)
+	if request.GetNamespace() == common.SystemLocalNamespace {
+		return nil, errUnableDeleteSystemNamespace
 	}
 
 	// Execute workflow.
@@ -326,7 +307,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 		wfParams,
 	)
 	if err != nil {
-		return nil, h.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, deletenamespace.WorkflowName, err)), scope, endpointName)
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, deletenamespace.WorkflowName, err))
 	}
 
 	// Wait for workflow to complete.
@@ -335,7 +316,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 	if err != nil {
 		scope.IncCounter(metrics.DeleteNamespaceWorkflowFailuresCount)
 		execution := &commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}
-		return nil, h.error(serviceerror.NewSystemWorkflow(execution, err), scope, endpointName)
+		return nil, serviceerror.NewSystemWorkflow(execution, err)
 	}
 	scope.IncCounter(metrics.DeleteNamespaceWorkflowSuccessCount)
 
@@ -363,8 +344,10 @@ func (h *OperatorHandlerImpl) DeleteWorkflowExecution(ctx context.Context, reque
 	}
 
 	_, err = h.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
-		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: request.GetWorkflowExecution(),
+		NamespaceId:        namespaceID.String(),
+		WorkflowExecution:  request.GetWorkflowExecution(),
+		WorkflowVersion:    common.EmptyVersion,
+		ClosedWorkflowOnly: false,
 	})
 	if err != nil {
 		return nil, err
@@ -373,30 +356,46 @@ func (h *OperatorHandlerImpl) DeleteWorkflowExecution(ctx context.Context, reque
 	return &operatorservice.DeleteWorkflowExecutionResponse{}, nil
 }
 
+// AddOrUpdateRemoteCluster adds or updates the connection config to a remote cluster.
+func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
+	ctx context.Context,
+	request *operatorservice.AddOrUpdateRemoteClusterRequest,
+) (_ *operatorservice.AddOrUpdateRemoteClusterResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
+func (h *OperatorHandlerImpl) RemoveRemoteCluster(
+	ctx context.Context,
+	request *operatorservice.RemoveRemoteClusterRequest,
+) (_ *operatorservice.RemoveRemoteClusterResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
+func (h *OperatorHandlerImpl) DescribeCluster(
+	ctx context.Context,
+	request *operatorservice.DescribeClusterRequest,
+) (_ *operatorservice.DescribeClusterResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
+func (h *OperatorHandlerImpl) ListClusters(
+	ctx context.Context,
+	request *operatorservice.ListClustersRequest,
+) (_ *operatorservice.ListClustersResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
+func (h *OperatorHandlerImpl) ListClusterMembers(
+	ctx context.Context,
+	request *operatorservice.ListClusterMembersRequest,
+) (_ *operatorservice.ListClusterMembersResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+}
+
 // startRequestProfile initiates recording of request metrics
 func (h *OperatorHandlerImpl) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
 	metricsScope := h.metricsClient.Scope(scope)
 	sw := metricsScope.StartTimer(metrics.ServiceLatency)
 	metricsScope.IncCounter(metrics.ServiceRequests)
 	return metricsScope, sw
-}
-
-func (h *OperatorHandlerImpl) error(err error, scope metrics.Scope, endpointName string) error {
-	scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ServiceFailuresWithType)
-
-	switch err := err.(type) {
-	case *serviceerror.Unavailable:
-		h.logger.Error("Unavailable error.", tag.Error(err), tag.Endpoint(endpointName))
-		scope.IncCounter(metrics.ServiceFailures)
-	case *serviceerror.InvalidArgument:
-		scope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
-	case *serviceerror.ResourceExhausted:
-		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)
-	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
-	default:
-		h.logger.Error("Unknown error.", tag.Error(err), tag.Endpoint(endpointName))
-		scope.IncCounter(metrics.ServiceFailures)
-	}
-
-	return err
 }

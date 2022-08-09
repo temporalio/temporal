@@ -44,8 +44,8 @@ const (
 
 // RuntimeMetricsReporter A struct containing the state of the RuntimeMetricsReporter.
 type RuntimeMetricsReporter struct {
-	provider          MetricProvider
-	buildInfoProvider MetricProvider
+	provider          MetricsHandler
+	buildInfoProvider MetricsHandler
 	reportInterval    time.Duration
 	started           int32
 	quit              chan struct{}
@@ -56,7 +56,7 @@ type RuntimeMetricsReporter struct {
 
 // NewRuntimeMetricsReporter Creates a new RuntimeMetricsReporter.
 func NewRuntimeMetricsReporter(
-	provider MetricProvider,
+	provider MetricsHandler,
 	reportInterval time.Duration,
 	logger log.Logger,
 	instanceID string,
@@ -89,32 +89,32 @@ func (r *RuntimeMetricsReporter) report() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
-	r.provider.Gauge(NumGoRoutinesGauge, nil).Record(float64(runtime.NumGoroutine()))
-	r.provider.Gauge(GoMaxProcsGauge, nil).Record(float64(runtime.GOMAXPROCS(0)))
-	r.provider.Gauge(MemoryAllocatedGauge, nil).Record(float64(memStats.Alloc))
-	r.provider.Gauge(MemoryHeapGauge, nil).Record(float64(memStats.HeapAlloc))
-	r.provider.Gauge(MemoryHeapIdleGauge, nil).Record(float64(memStats.HeapIdle))
-	r.provider.Gauge(MemoryHeapInuseGauge, nil).Record(float64(memStats.HeapInuse))
-	r.provider.Gauge(MemoryStackGauge, nil).Record(float64(memStats.StackInuse))
+	r.provider.Gauge(NumGoRoutinesGauge).Record(float64(runtime.NumGoroutine()))
+	r.provider.Gauge(GoMaxProcsGauge).Record(float64(runtime.GOMAXPROCS(0)))
+	r.provider.Gauge(MemoryAllocatedGauge).Record(float64(memStats.Alloc))
+	r.provider.Gauge(MemoryHeapGauge).Record(float64(memStats.HeapAlloc))
+	r.provider.Gauge(MemoryHeapIdleGauge).Record(float64(memStats.HeapIdle))
+	r.provider.Gauge(MemoryHeapInuseGauge).Record(float64(memStats.HeapInuse))
+	r.provider.Gauge(MemoryStackGauge).Record(float64(memStats.StackInuse))
 
 	// memStats.NumGC is a perpetually incrementing counter (unless it wraps at 2^32)
 	num := memStats.NumGC
 	lastNum := atomic.SwapUint32(&r.lastNumGC, num) // reset for the next iteration
 	if delta := num - lastNum; delta > 0 {
-		r.provider.Histogram(NumGCCounter, nil).Record(int64(delta))
+		r.provider.Histogram(NumGCCounter, Bytes).Record(int64(delta))
 		if delta > 255 {
 			// too many GCs happened, the timestamps buffer got wrapped around. Report only the last 256
 			lastNum = num - 256
 		}
 		for i := lastNum; i != num; i++ {
 			pause := memStats.PauseNs[i%256]
-			r.provider.Timer(GcPauseMsTimer, nil).Record(time.Duration(pause))
+			r.provider.Timer(GcPauseMsTimer).Record(time.Duration(pause))
 		}
 	}
 
 	// report build info
-	r.buildInfoProvider.Gauge(buildInfoMetricName, nil).Record(1.0)
-	r.buildInfoProvider.Gauge(buildAgeMetricName, nil).Record(float64(time.Since(r.buildTime)))
+	r.buildInfoProvider.Gauge(buildInfoMetricName).Record(1.0)
+	r.buildInfoProvider.Gauge(buildAgeMetricName).Record(float64(time.Since(r.buildTime)))
 }
 
 // Start Starts the reporter thread that periodically emits metrics.

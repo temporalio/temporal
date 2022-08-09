@@ -26,13 +26,14 @@ package matching
 
 import (
 	"context"
-	"sort"
 	"sync"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
+	"golang.org/x/exp/maps"
 )
 
 const (
@@ -82,7 +83,7 @@ func (t *dbTaskReaderImpl) taskIterator(
 	ctx context.Context,
 	maxTaskID int64,
 ) collection.Iterator[*persistencespb.AllocatedTaskInfo] {
-	return collection.NewPagingIterator[*persistencespb.AllocatedTaskInfo](
+	return collection.NewPagingIterator(
 		t.getPaginationFn(ctx, maxTaskID),
 	)
 }
@@ -109,11 +110,8 @@ func (t *dbTaskReaderImpl) moveAckedTaskID() int64 {
 	t.Lock()
 	defer t.Unlock()
 
-	taskIDs := make(taskIDs, 0, len(t.tasks))
-	for taskID := range t.tasks {
-		taskIDs = append(taskIDs, taskID)
-	}
-	sort.Sort(taskIDs)
+	taskIDs := maps.Keys(t.tasks)
+	util.SortSlice(taskIDs)
 
 	for _, taskID := range taskIDs {
 		if !t.tasks[taskID] {

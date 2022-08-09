@@ -30,7 +30,6 @@ var (
 	errInvalidTaskToken                                   = serviceerror.NewInvalidArgument("Invalid TaskToken.")
 	errTaskQueueNotSet                                    = serviceerror.NewInvalidArgument("TaskQueue is not set on request.")
 	errExecutionNotSet                                    = serviceerror.NewInvalidArgument("Execution is not set on request.")
-	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace is not set on request.")
 	errWorkflowIDNotSet                                   = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
 	errActivityIDNotSet                                   = serviceerror.NewInvalidArgument("ActivityId is not set on request.")
 	errSignalNameNotSet                                   = serviceerror.NewInvalidArgument("SignalName is not set on request.")
@@ -74,6 +73,7 @@ var (
 	errCronNotAllowed                                     = serviceerror.NewInvalidArgument("Scheduled workflow must not contain CronSchedule")
 	errIDReusePolicyNotAllowed                            = serviceerror.NewInvalidArgument("Scheduled workflow must not contain WorkflowIDReusePolicy")
 	errShuttingDown                                       = serviceerror.NewUnavailable("Shutting down")
+	errUnableDeleteSystemNamespace                        = serviceerror.NewInvalidArgument("Unable to delete system namespace.")
 
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
 

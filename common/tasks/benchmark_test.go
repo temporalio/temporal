@@ -45,21 +45,24 @@ var (
 	_ PriorityTask = (*noopTask)(nil)
 )
 
-func BenchmarkInterleavedWeightedRoundRobinScheduler(b *testing.B) {
-	priorityToWeight := map[Priority]int{
+var (
+	benchmarkPriorityToWeight = map[Priority]int{
 		0: 5,
 		1: 3,
 		2: 2,
 		3: 1,
 	}
+)
+
+func BenchmarkInterleavedWeightedRoundRobinScheduler_Sequential(b *testing.B) {
 	logger := log.NewTestLogger()
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions{
-			PriorityToWeight: priorityToWeight,
+			PriorityToWeight: benchmarkPriorityToWeight,
 		},
 		&noopProcessor{},
-		metrics.NoopClient,
+		metrics.NoopMetricsHandler,
 		logger,
 	)
 	scheduler.Start()
@@ -77,6 +80,34 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler(b *testing.B) {
 	waitGroup.Wait()
 }
 
+func BenchmarkInterleavedWeightedRoundRobinScheduler_Parallel(b *testing.B) {
+	logger := log.NewTestLogger()
+
+	scheduler := NewInterleavedWeightedRoundRobinScheduler(
+		InterleavedWeightedRoundRobinSchedulerOptions{
+			PriorityToWeight: benchmarkPriorityToWeight,
+		},
+		&noopProcessor{},
+		metrics.NoopMetricsHandler,
+		logger,
+	)
+	scheduler.Start()
+	defer scheduler.Stop()
+
+	waitGroup := &sync.WaitGroup{}
+	waitGroup.Add(b.N)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			scheduler.Submit(&noopTask{WaitGroup: waitGroup})
+		}
+	})
+	waitGroup.Wait()
+}
+
 func (n *noopProcessor) Start()           {}
 func (n *noopProcessor) Stop()            {}
 func (n *noopProcessor) Submit(task Task) { task.Ack() }
@@ -85,6 +116,7 @@ func (n *noopTask) Execute() error                   { panic("implement me") }
 func (n *noopTask) HandleErr(err error) error        { panic("implement me") }
 func (n *noopTask) IsRetryableError(err error) bool  { panic("implement me") }
 func (n *noopTask) RetryPolicy() backoff.RetryPolicy { panic("implement me") }
+func (n *noopTask) Cancel()                          { panic("implement me") }
 func (n *noopTask) Ack()                             { n.Done() }
 func (n *noopTask) Nack(err error)                   { panic("implement me") }
 func (n *noopTask) Reschedule()                      { panic("implement me") }

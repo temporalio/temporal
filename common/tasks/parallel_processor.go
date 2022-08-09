@@ -53,8 +53,8 @@ type (
 		status  int32
 		options *ParallelProcessorOptions
 
-		metricsScope metrics.Scope
-		logger       log.Logger
+		metricsProvider metrics.MetricsHandler
+		logger          log.Logger
 
 		tasksChan        chan Task
 		shutdownChan     chan struct{}
@@ -66,15 +66,15 @@ type (
 // NewParallelProcessor creates a new ParallelProcessor
 func NewParallelProcessor(
 	options *ParallelProcessorOptions,
-	metricsClient metrics.Client,
+	metricsProvider metrics.MetricsHandler,
 	logger log.Logger,
 ) *ParallelProcessor {
 	return &ParallelProcessor{
 		status:  common.DaemonStatusInitialized,
 		options: options,
 
-		logger:       logger,
-		metricsScope: metricsClient.Scope(metrics.ParallelTaskProcessingScope),
+		logger:          logger,
+		metricsProvider: metricsProvider.WithTags(metrics.OperationTag(OperationParallelTaskProcessing)),
 
 		tasksChan:    make(chan Task, options.QueueSize),
 		shutdownChan: make(chan struct{}),
@@ -120,7 +120,6 @@ func (p *ParallelProcessor) Stop() {
 }
 
 func (p *ParallelProcessor) Submit(task Task) {
-
 	p.tasksChan <- task
 	if p.isStopped() {
 		p.drainTasks()
@@ -215,7 +214,7 @@ func (p *ParallelProcessor) executeTask(
 		return !p.isStopped() && task.IsRetryableError(err)
 	}
 
-	if err := backoff.Retry(operation, task.RetryPolicy(), isRetryable); err != nil {
+	if err := backoff.ThrottleRetry(operation, task.RetryPolicy(), isRetryable); err != nil {
 		if p.isStopped() {
 			task.Reschedule()
 			return

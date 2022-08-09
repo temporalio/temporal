@@ -31,17 +31,41 @@ import (
 	"go.temporal.io/server/common/headers"
 )
 
+type (
+	valueCopyCtx struct {
+		context.Context
+
+		valueCtx context.Context
+	}
+)
+
+func (c *valueCopyCtx) Value(key any) any {
+	if value := c.Context.Value(key); value != nil {
+		return value
+	}
+
+	return c.valueCtx.Value(key)
+}
+
+// CopyContextValues copies values in source Context to destination Context.
+func CopyContextValues(dst context.Context, src context.Context) context.Context {
+	return &valueCopyCtx{
+		Context:  dst,
+		valueCtx: src,
+	}
+}
+
 // NewContextWithTimeout creates context with timeout.
 func NewContextWithTimeout(timeout time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), timeout)
 }
 
-// NewContextWithTimeoutAndHeaders creates context with timeout and version headers.
-func NewContextWithTimeoutAndHeaders(timeout time.Duration) (context.Context, context.CancelFunc) {
+// NewContextWithTimeoutAndVersionHeaders creates context with timeout and version headers.
+func NewContextWithTimeoutAndVersionHeaders(timeout time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(headers.SetVersions(context.Background()), timeout)
 }
 
-// NewContextFromParentWithTimeoutAndHeaders creates context from parent context with timeout and version headers.
-func NewContextFromParentWithTimeoutAndHeaders(parentCtx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+// NewContextFromParentWithTimeoutAndVersionHeaders creates context from parent context with timeout and version headers.
+func NewContextFromParentWithTimeoutAndVersionHeaders(parentCtx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(headers.SetVersions(parentCtx), timeout)
 }

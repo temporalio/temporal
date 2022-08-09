@@ -77,7 +77,8 @@ func (i *RateLimitInterceptor) Intercept(
 	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		methodName,
 		token,
-		"", // this interceptor layer does not throttle based on caller
+		"", // this interceptor layer does not throttle based on caller name
+		"", // this interceptor layer does not throttle based on caller type
 	)) {
 		return nil, RateLimitServerBusy
 	}

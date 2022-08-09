@@ -25,6 +25,7 @@
 package workflow
 
 import (
+	"context"
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -45,7 +46,7 @@ func TestLocalMutableState(
 
 	msBuilder := NewMutableState(shard, eventsCache, logger, ns, time.Now().UTC())
 	msBuilder.GetExecutionInfo().ExecutionTime = msBuilder.GetExecutionInfo().StartTime
-	_ = msBuilder.SetHistoryTree(runID)
+	_ = msBuilder.SetHistoryTree(context.Background(), runID)
 
 	return msBuilder
 }
@@ -61,7 +62,7 @@ func TestGlobalMutableState(
 	msBuilder := NewMutableState(shard, eventsCache, logger, tests.GlobalNamespaceEntry, time.Now().UTC())
 	msBuilder.GetExecutionInfo().ExecutionTime = msBuilder.GetExecutionInfo().StartTime
 	_ = msBuilder.UpdateCurrentVersion(version, false)
-	_ = msBuilder.SetHistoryTree(runID)
+	_ = msBuilder.SetHistoryTree(context.Background(), runID)
 
 	return msBuilder
 }

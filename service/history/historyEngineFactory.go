@@ -25,12 +25,14 @@
 package history
 
 import (
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
@@ -53,9 +55,10 @@ type (
 		NewCacheFn                      workflow.NewCacheFn
 		ArchivalClient                  archiver.Client
 		EventSerializer                 serialization.Serializer
-		QueueProcessorFactories         []queues.ProcessorFactory `group:"queueProcessorFactory"`
+		QueueFactories                  []queues.Factory `group:"queueFactory"`
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
+		TracerProvider                  trace.TracerProvider
 	}
 
 	historyEngineFactory struct {
@@ -64,21 +67,25 @@ type (
 )
 
 func (f *historyEngineFactory) CreateEngine(
-	context shard.Context,
+	shard shard.Context,
 ) shard.Engine {
+	workflowCache := f.NewCacheFn(shard)
+	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, workflowCache)
 	return NewEngineWithShardContext(
-		context,
+		shard,
 		f.ClientBean,
 		f.MatchingClient,
 		f.SdkClientFactory,
 		f.EventNotifier,
 		f.Config,
 		f.RawMatchingClient,
-		f.NewCacheFn,
+		workflowCache,
 		f.ArchivalClient,
 		f.EventSerializer,
-		f.QueueProcessorFactories,
+		f.QueueFactories,
 		f.ReplicationTaskFetcherFactory,
 		f.ReplicationTaskExecutorProvider,
+		workflowConsistencyChecker,
+		f.TracerProvider,
 	)
 }

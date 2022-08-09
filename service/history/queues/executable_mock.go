@@ -91,6 +91,18 @@ func (mr *MockExecutableMockRecorder) Attempt() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Attempt", reflect.TypeOf((*MockExecutable)(nil).Attempt))
 }
 
+// Cancel mocks base method.
+func (m *MockExecutable) Cancel() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Cancel")
+}
+
+// Cancel indicates an expected call of Cancel.
+func (mr *MockExecutableMockRecorder) Cancel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cancel", reflect.TypeOf((*MockExecutable)(nil).Cancel))
+}
+
 // Execute mocks base method.
 func (m *MockExecutable) Execute() error {
 	m.ctrl.T.Helper()
@@ -439,10 +451,10 @@ func (m *MockExecutor) EXPECT() *MockExecutorMockRecorder {
 }
 
 // Execute mocks base method.
-func (m *MockExecutor) Execute(arg0 context.Context, arg1 Executable) (metrics.Scope, error) {
+func (m *MockExecutor) Execute(arg0 context.Context, arg1 Executable) (metrics.MetricsHandler, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", arg0, arg1)
-	ret0, _ := ret[0].(metrics.Scope)
+	ret0, _ := ret[0].(metrics.MetricsHandler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

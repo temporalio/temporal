@@ -30,6 +30,7 @@ import (
 	"time"
 
 	historypb "go.temporal.io/api/history/v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/events"
 
@@ -40,6 +41,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -70,10 +72,9 @@ type (
 		mockExecutionManager  *persistence.MockExecutionManager
 		logger                log.Logger
 
-		namespaceID namespace.ID
-		workflowID  string
-		runID       string
-		now         time.Time
+		workflowID string
+		runID      string
+		now        time.Time
 
 		historyReplicator *nDCHistoryReplicatorImpl
 	}
@@ -88,7 +89,7 @@ func (s *nDCHistoryReplicatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	//s.mockTaskRefresher = workflow.NewMockTaskRefresher(s.controller)
+	// s.mockTaskRefresher = workflow.NewMockTaskRefresher(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -128,6 +129,12 @@ func (s *nDCHistoryReplicatorSuite) TearDownTest() {
 func (s *nDCHistoryReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 	namespaceID := uuid.New()
 	namespaceName := "namespaceName"
+	historyBranch, err := serialization.HistoryBranchToBlob(&persistencespb.HistoryBranch{
+		TreeId:    uuid.New(),
+		BranchId:  uuid.New(),
+		Ancestors: nil,
+	})
+	s.NoError(err)
 	request := &historyservice.ReplicateWorkflowStateRequest{
 		WorkflowState: &persistencespb.WorkflowMutableState{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
@@ -137,7 +144,7 @@ func (s *nDCHistoryReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 					CurrentVersionHistoryIndex: 0,
 					Histories: []*historyspb.VersionHistory{
 						{
-							BranchToken: []byte{123},
+							BranchToken: historyBranch.GetData(),
 							Items: []*historyspb.VersionHistoryItem{
 								{
 									EventId: int64(100),
@@ -188,6 +195,7 @@ func (s *nDCHistoryReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		&adminservice.GetWorkflowExecutionRawHistoryV2Response{},
 		nil,
 	)
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("test"))
 	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
 	fakeStartHistory := &historypb.HistoryEvent{
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
@@ -195,7 +203,161 @@ func (s *nDCHistoryReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		},
 	}
 	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
-	err := s.historyReplicator.ApplyWorkflowState(context.Background(), request)
+	err = s.historyReplicator.ApplyWorkflowState(context.Background(), request)
+	s.NoError(err)
+}
+
+func (s *nDCHistoryReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
+	namespaceID := uuid.New()
+	namespaceName := "namespaceName"
+	historyBranch, err := serialization.HistoryBranchToBlob(&persistencespb.HistoryBranch{
+		TreeId:   uuid.New(),
+		BranchId: uuid.New(),
+		Ancestors: []*persistencespb.HistoryBranchRange{
+			{
+				BranchId:    uuid.New(),
+				BeginNodeId: 1,
+				EndNodeId:   3,
+			},
+			{
+				BranchId:    uuid.New(),
+				BeginNodeId: 3,
+				EndNodeId:   4,
+			},
+		},
+	})
+	s.NoError(err)
+	request := &historyservice.ReplicateWorkflowStateRequest{
+		WorkflowState: &persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				WorkflowId:  s.workflowID,
+				NamespaceId: namespaceID,
+				VersionHistories: &historyspb.VersionHistories{
+					CurrentVersionHistoryIndex: 0,
+					Histories: []*historyspb.VersionHistory{
+						{
+							BranchToken: historyBranch.GetData(),
+							Items: []*historyspb.VersionHistoryItem{
+								{
+									EventId: int64(100),
+									Version: int64(100),
+								},
+							},
+						},
+					},
+				},
+			},
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				RunId:  s.runID,
+				State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			},
+		},
+		RemoteCluster: "test",
+	}
+	we := commonpb.WorkflowExecution{
+		WorkflowId: s.workflowID,
+		RunId:      s.runID,
+	}
+	mockWeCtx := workflow.NewMockContext(s.controller)
+	s.mockHistoryCache.EXPECT().GetOrCreateWorkflowExecution(
+		gomock.Any(),
+		namespace.ID(namespaceID),
+		we,
+		workflow.CallerTypeTask,
+	).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
+	mockWeCtx.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
+		gomock.Any(),
+		persistence.CreateWorkflowModeBrandNew,
+		"",
+		int64(0),
+		gomock.Any(),
+		gomock.Any(),
+		[]*persistence.WorkflowEvents{},
+	).Return(nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: namespaceName},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil).AnyTimes()
+	expectedHistory := []*historypb.History{
+		{
+			Events: []*historypb.HistoryEvent{
+				{
+					EventId: 1,
+				},
+				{
+					EventId: 2,
+				},
+			},
+		},
+		{
+			Events: []*historypb.HistoryEvent{
+				{
+					EventId: 3,
+				},
+			},
+		},
+		{
+			Events: []*historypb.HistoryEvent{
+				{
+					EventId: 4,
+				},
+			},
+		},
+		{
+			Events: []*historypb.HistoryEvent{
+				{
+					EventId: 5,
+				},
+				{
+					EventId: 6,
+				},
+			},
+		},
+	}
+	serializer := serialization.NewSerializer()
+	var historyBlobs []*commonpb.DataBlob
+	var nodeIds []int64
+	for _, history := range expectedHistory {
+		blob, err := serializer.SerializeEvents(history.GetEvents(), enumspb.ENCODING_TYPE_PROTO3)
+		s.NoError(err)
+		historyBlobs = append(historyBlobs, blob)
+		nodeIds = append(nodeIds, history.GetEvents()[0].GetEventId())
+	}
+	s.mockRemoteAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), gomock.Any()).Return(
+		&adminservice.GetWorkflowExecutionRawHistoryV2Response{
+			HistoryBatches: historyBlobs,
+			HistoryNodeIds: nodeIds,
+		},
+		nil,
+	)
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchByBatchResponse{
+		History: []*historypb.History{
+			{
+				Events: []*historypb.HistoryEvent{
+					{
+						EventId: 1,
+					},
+					{
+						EventId: 2,
+					},
+				},
+			},
+		},
+	}, nil)
+	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), gomock.Any()).Return(nil, nil).Times(3)
+	fakeStartHistory := &historypb.HistoryEvent{
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
+		},
+	}
+	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
+	err = s.historyReplicator.ApplyWorkflowState(context.Background(), request)
 	s.NoError(err)
 }
 

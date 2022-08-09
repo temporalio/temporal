@@ -898,6 +898,21 @@ func (p *executionPersistenceClient) AppendRawHistoryNodes(
 	return resp, err
 }
 
+// NewHistoryBranch initializes a new history branch
+func (p *executionPersistenceClient) NewHistoryBranch(
+	ctx context.Context,
+	request *NewHistoryBranchRequest,
+) (*NewHistoryBranchResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceNewHistoryBranchScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceNewHistoryBranchScope, metrics.PersistenceLatency)
+	response, err := p.persistence.NewHistoryBranch(ctx, request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceNewHistoryBranchScope, err)
+	}
+	return response, err
+}
+
 // ReadHistoryBranch returns history node data for a branch
 func (p *executionPersistenceClient) ReadHistoryBranch(
 	ctx context.Context,
@@ -1395,7 +1410,7 @@ func (c *metadataPersistenceClient) InitializeSystemNamespaces(
 }
 
 func (p *metricEmitter) updateErrorMetric(scope int, err error) {
-	p.metricClient.Scope(scope, metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.PersistenceFailures)
+	p.metricClient.Scope(scope, metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.PersistenceErrorWithType)
 
 	switch err.(type) {
 	case *ShardAlreadyExistError:
@@ -1410,6 +1425,7 @@ func (p *metricEmitter) updateErrorMetric(scope int, err error) {
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
 	case *TimeoutError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	case *serviceerror.InvalidArgument:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBadRequestCounter)
 	case *serviceerror.NamespaceAlreadyExists:
@@ -1418,7 +1434,9 @@ func (p *metricEmitter) updateErrorMetric(scope int, err error) {
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
 	case *serviceerror.ResourceExhausted:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
 		p.logger.Error("Operation failed with internal error.", tag.Error(err), tag.MetricScope(scope))
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	}
 }

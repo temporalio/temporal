@@ -27,9 +27,12 @@ package shard
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -47,6 +50,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 )
 
@@ -75,7 +79,7 @@ type (
 		historyClient               historyservice.HistoryServiceClient
 		historyServiceResolver      membership.ServiceResolver
 		metricsClient               metrics.Client
-		metricsReporter             metrics.Reporter
+		metricsHandler              metrics.MetricsHandler
 		payloadSerializer           serialization.Serializer
 		timeSource                  clock.TimeSource
 		namespaceRegistry           namespace.Registry
@@ -84,8 +88,11 @@ type (
 		clusterMetadata             cluster.Metadata
 		archivalMetadata            archiver.ArchivalMetadata
 		hostInfoProvider            membership.HostInfoProvider
+		tracer                      trace.Tracer
 	}
 )
+
+var _ Controller = (*ControllerImpl)(nil)
 
 func (c *ControllerImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
@@ -146,17 +153,21 @@ func (c *ControllerImpl) Status() int32 {
 	return atomic.LoadInt32(&c.status)
 }
 
+// GetShardByID returns a shard context for the given namespace and workflow.
+// The shard context may not have acquired a rangeid lease yet.
+// Callers can use GetEngine on the shard to block on rangeid lease acquisition.
 func (c *ControllerImpl) GetShardByNamespaceWorkflow(
-	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 ) (Context, error) {
 	shardID := c.config.GetShardID(namespaceID, workflowID)
-	return c.GetShardByID(ctx, shardID)
+	return c.GetShardByID(shardID)
 }
 
+// GetShardByID returns a shard context for the given shard id.
+// The shard context may not have acquired a rangeid lease yet.
+// Callers can use GetEngine on the shard to block on rangeid lease acquisition.
 func (c *ControllerImpl) GetShardByID(
-	ctx context.Context,
 	shardID int32,
 ) (Context, error) {
 	sw := c.metricsScope.StartTimer(metrics.GetEngineForShardLatency)
@@ -193,6 +204,9 @@ func (c *ControllerImpl) shardClosedCallback(shard *ContextImpl) {
 	shard.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardContext, tag.Number(newNumShards))
 }
 
+// getOrCreateShardContext returns a shard context for the given shard ID, creating a new one
+// if necessary. If a shard context is created, it will initialize in the background.
+// This function won't block on rangeid lease acquisition.
 func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, error) {
 	c.RLock()
 	if shard, ok := c.historyShards[shardID]; ok {
@@ -243,7 +257,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 		c.clientBean,
 		c.historyClient,
 		c.metricsClient,
-		c.metricsReporter,
+		c.metricsHandler,
 		c.payloadSerializer,
 		c.timeSource,
 		c.namespaceRegistry,
@@ -321,7 +335,31 @@ func (c *ControllerImpl) acquireShards() {
 	sw := c.metricsScope.StartTimer(metrics.AcquireShardsLatency)
 	defer sw.Stop()
 
-	concurrency := common.MaxInt(c.config.AcquireShardConcurrency(), 1)
+	tryAcquire := func(shardID int32) {
+		info, err := c.historyServiceResolver.Lookup(convert.Int32ToString(shardID))
+		if err != nil {
+			c.contextTaggedLogger.Error("Error looking up host for shardID", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
+			return
+		}
+		if info.Identity() != c.hostInfoProvider.HostInfo().Identity() {
+			// current host is not owner of shard, unload it if it is already loaded.
+			c.CloseShardByID(shardID)
+			return
+		}
+		shard, err := c.GetShardByID(shardID)
+		if err != nil {
+			c.metricsScope.IncCounter(metrics.GetEngineForShardErrorCounter)
+			c.contextTaggedLogger.Error("Unable to create history shard context", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
+			return
+		}
+		// Wait up to 1s for the shard to acquire the rangeid lock.
+		// After 1s we will move on but the shard will continue trying in the background.
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		_, _ = shard.GetEngine(ctx)
+	}
+
+	concurrency := util.Max(c.config.AcquireShardConcurrency(), 1)
 	shardActionCh := make(chan int32, c.config.NumberOfShards)
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
@@ -334,31 +372,18 @@ func (c *ControllerImpl) acquireShards() {
 				case <-c.shutdownCh:
 					return
 				default:
-					if info, err := c.historyServiceResolver.Lookup(
-						convert.Int32ToString(shardID),
-					); err != nil {
-						c.contextTaggedLogger.Error("Error looking up host for shardID", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
-					} else {
-						if info.Identity() == c.hostInfoProvider.HostInfo().Identity() {
-							ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-							if _, err := c.GetShardByID(ctx, shardID); err != nil {
-								c.metricsScope.IncCounter(metrics.GetEngineForShardErrorCounter)
-								c.contextTaggedLogger.Error("Unable to create history shard context", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
-							}
-							cancel()
-						} else {
-							// current host is not owner of shard, unload it if it is already loaded.
-							c.CloseShardByID(shardID)
-						}
-					}
+					tryAcquire(shardID)
 				}
 			}
 		}()
 	}
 
 	// Submit tasks to the channel.
+	numShards := c.config.NumberOfShards
+	randomStartOffset := rand.Int31n(numShards)
 LoopSubmit:
-	for shardID := int32(1); shardID <= c.config.NumberOfShards; shardID++ {
+	for index := int32(0); index < numShards; index++ {
+		shardID := (index+randomStartOffset)%numShards + 1
 		select {
 		case <-c.shutdownCh:
 			break LoopSubmit
@@ -370,7 +395,10 @@ LoopSubmit:
 	// Wait until all shards are processed.
 	wg.Wait()
 
-	c.metricsScope.UpdateGauge(metrics.NumShardsGauge, float64(c.NumShards()))
+	c.RLock()
+	numOfOwnedShards := len(c.historyShards)
+	c.RUnlock()
+	c.metricsScope.UpdateGauge(metrics.NumShardsGauge, float64(numOfOwnedShards))
 }
 
 func (c *ControllerImpl) doShutdown() {
@@ -383,20 +411,14 @@ func (c *ControllerImpl) doShutdown() {
 	c.historyShards = nil
 }
 
-func (c *ControllerImpl) NumShards() int {
-	c.RLock()
-	defer c.RUnlock()
-	return len(c.historyShards)
-}
-
 func (c *ControllerImpl) ShardIDs() []int32 {
 	c.RLock()
-	ids := []int32{}
+	defer c.RUnlock()
+
+	ids := make([]int32, 0, len(c.historyShards))
 	for id := range c.historyShards {
-		id32 := int32(id)
-		ids = append(ids, id32)
+		ids = append(ids, id)
 	}
-	c.RUnlock()
 	return ids
 }
 

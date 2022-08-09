@@ -46,8 +46,6 @@ import (
 
 // TODO merge the initialization with existing persistence setup
 const (
-	testMySQLClusterName = "temporal_mysql_cluster"
-
 	testMySQLUser               = "temporal"
 	testMySQLPassword           = "temporal"
 	testMySQLConnectionProtocol = "tcp"

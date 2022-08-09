@@ -42,17 +42,18 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/tasks"
 )
 
 const (
@@ -89,8 +90,6 @@ type (
 		taskRetryPolicy backoff.RetryPolicy
 		dlqRetryPolicy  backoff.RetryPolicy
 
-		// send side
-		minTxAckedTaskID int64
 		// recv side
 		maxRxProcessedTaskID    int64
 		maxRxProcessedTimestamp time.Time
@@ -125,6 +124,7 @@ func NewTaskProcessor(
 	taskRetryPolicy.SetMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID))
 	taskRetryPolicy.SetExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
 
+	// TODO: define separate set of configs for dlq retry
 	dlqRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID))
 	dlqRetryPolicy.SetBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID))
 	dlqRetryPolicy.SetMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID))
@@ -153,7 +153,6 @@ func NewTaskProcessor(
 		requestChan:          replicationTaskFetcher.getRequestChan(),
 		syncShardChan:        make(chan *replicationspb.SyncShardStatus, 1),
 		shutdownChan:         make(chan struct{}),
-		minTxAckedTaskID:     persistence.EmptyQueueMessageID,
 		maxRxProcessedTaskID: persistence.EmptyQueueMessageID,
 		maxRxReceivedTaskID:  persistence.EmptyQueueMessageID,
 	}
@@ -190,19 +189,11 @@ func (p *taskProcessorImpl) Stop() {
 }
 
 func (p *taskProcessorImpl) eventLoop() {
-	shardID := p.shard.GetShardID()
-
 	syncShardTimer := time.NewTimer(backoff.JitDuration(
 		p.config.ShardSyncMinInterval(),
 		p.config.ShardSyncTimerJitterCoefficient(),
 	))
 	defer syncShardTimer.Stop()
-
-	cleanupTimer := time.NewTimer(backoff.JitDuration(
-		p.config.ReplicationTaskProcessorCleanupInterval(shardID),
-		p.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
-	))
-	defer cleanupTimer.Stop()
 
 	replicationTimer := time.NewTimer(0)
 	defer replicationTimer.Stop()
@@ -220,16 +211,6 @@ func (p *taskProcessorImpl) eventLoop() {
 			syncShardTimer.Reset(backoff.JitDuration(
 				p.config.ShardSyncMinInterval(),
 				p.config.ShardSyncTimerJitterCoefficient(),
-			))
-
-		case <-cleanupTimer.C:
-			if err := p.cleanupReplicationTasks(); err != nil {
-				p.logger.Error("Failed to clean up replication messages.", tag.Error(err))
-				p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupFailure)
-			}
-			cleanupTimer.Reset(backoff.JitDuration(
-				p.config.ReplicationTaskProcessorCleanupInterval(shardID),
-				p.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
 			))
 
 		case <-p.shutdownChan:
@@ -323,6 +304,8 @@ func (p *taskProcessorImpl) handleSyncShardStatus(
 	p.metricsClient.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteCounter)
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
 	return p.historyEngine.SyncShardStatus(ctx, &historyservice.SyncShardStatusRequest{
 		SourceCluster: p.sourceCluster,
 		ShardId:       p.shard.GetShardID(),
@@ -340,7 +323,7 @@ func (p *taskProcessorImpl) handleReplicationTask(
 		p.emitTaskMetrics(scope, err)
 		return err
 	}
-	return backoff.Retry(operation, p.taskRetryPolicy, p.isRetryableError)
+	return backoff.ThrottleRetry(operation, p.taskRetryPolicy, p.isRetryableError)
 }
 
 func (p *taskProcessorImpl) handleReplicationDLQTask(
@@ -365,7 +348,7 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 		float64(request.TaskInfo.GetTaskId()),
 	)
 	// The following is guaranteed to success or retry forever until processor is shutdown.
-	return backoff.Retry(func() error {
+	return backoff.ThrottleRetry(func() error {
 		err := p.shard.GetExecutionManager().PutReplicationTaskToDLQ(context.TODO(), request)
 		if err != nil {
 			p.logger.Error("failed to enqueue replication task to DLQ", tag.Error(err))
@@ -385,13 +368,13 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistencespb.ReplicationTaskInfo{
-				NamespaceId: taskAttributes.GetNamespaceId(),
-				WorkflowId:  taskAttributes.GetWorkflowId(),
-				RunId:       taskAttributes.GetRunId(),
-				TaskId:      replicationTask.GetSourceTaskId(),
-				TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-				ScheduledId: taskAttributes.GetScheduledId(),
-				Version:     taskAttributes.GetVersion(),
+				NamespaceId:      taskAttributes.GetNamespaceId(),
+				WorkflowId:       taskAttributes.GetWorkflowId(),
+				RunId:            taskAttributes.GetRunId(),
+				TaskId:           replicationTask.GetSourceTaskId(),
+				TaskType:         enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+				ScheduledEventId: taskAttributes.GetScheduledEventId(),
+				Version:          taskAttributes.GetVersion(),
 			},
 		}, nil
 
@@ -427,8 +410,34 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 			},
 		}, nil
 
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
+		taskAttributes := replicationTask.GetSyncWorkflowStateTaskAttributes()
+		executionInfo := taskAttributes.GetWorkflowState().GetExecutionInfo()
+		executionState := taskAttributes.GetWorkflowState().GetExecutionState()
+		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
+		if err != nil {
+			return nil, err
+		}
+		lastItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return nil, err
+		}
+
+		return &persistence.PutReplicationTaskToDLQRequest{
+			ShardID:           p.shard.GetShardID(),
+			SourceClusterName: p.sourceCluster,
+			TaskInfo: &persistencespb.ReplicationTaskInfo{
+				NamespaceId: executionInfo.GetNamespaceId(),
+				WorkflowId:  executionInfo.GetWorkflowId(),
+				RunId:       executionState.GetRunId(),
+				TaskId:      replicationTask.GetSourceTaskId(),
+				TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+				Version:     lastItem.GetVersion(),
+			},
+		}, nil
+
 	default:
-		return nil, fmt.Errorf("unknown replication task type")
+		return nil, fmt.Errorf("unknown replication task type: %v", replicationTask.TaskType)
 	}
 }
 
@@ -473,48 +482,6 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 	case <-p.shutdownChan:
 		return nil, nil, nil
 	}
-}
-
-func (p *taskProcessorImpl) cleanupReplicationTasks() error {
-
-	clusterMetadata := p.shard.GetClusterMetadata()
-	currentCluster := clusterMetadata.GetCurrentClusterName()
-	var minAckedTaskID *int64
-	for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
-		if !clusterInfo.Enabled || clusterName == currentCluster {
-			continue
-		}
-
-		ackLevel := p.shard.GetQueueClusterAckLevel(tasks.CategoryReplication, clusterName).TaskID
-		if minAckedTaskID == nil || ackLevel < *minAckedTaskID {
-			minAckedTaskID = &ackLevel
-		}
-	}
-	if minAckedTaskID == nil || *minAckedTaskID <= p.minTxAckedTaskID {
-		return nil
-	}
-
-	p.logger.Debug("cleaning up replication task queue", tag.ReadLevel(*minAckedTaskID))
-	p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupCount)
-	p.metricsClient.Scope(
-		metrics.ReplicationTaskFetcherScope,
-		metrics.TargetClusterTag(p.currentCluster),
-	).RecordDistribution(
-		metrics.ReplicationTasksLag,
-		int(p.shard.GetQueueMaxReadLevel(tasks.CategoryReplication, currentCluster).TaskID-*minAckedTaskID),
-	)
-	err := p.shard.GetExecutionManager().RangeCompleteHistoryTasks(
-		context.TODO(),
-		&persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:             p.shard.GetShardID(),
-			TaskCategory:        tasks.CategoryReplication,
-			ExclusiveMaxTaskKey: tasks.NewImmediateKey(*minAckedTaskID + 1),
-		},
-	)
-	if err == nil {
-		p.minTxAckedTaskID = *minAckedTaskID
-	}
-	return err
 }
 
 func (p *taskProcessorImpl) emitTaskMetrics(scope int, err error) {

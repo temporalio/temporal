@@ -25,19 +25,16 @@
 package history
 
 import (
-	"sort"
 	"sync"
 
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
+	"golang.org/x/exp/maps"
 )
 
 type (
@@ -123,15 +120,7 @@ func (a *queueAckMgrImpl) readQueueTasks() ([]queues.Executable, bool, error) {
 	readLevel := a.readLevel
 	a.RUnlock()
 
-	var tasks []tasks.Task
-	var morePage bool
-	op := func() error {
-		var err error
-		tasks, morePage, err = a.processor.readTasks(readLevel)
-		return err
-	}
-
-	err := backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	tasks, morePage, err := a.processor.readTasks(readLevel)
 	if err != nil {
 		return nil, false, err
 	}
@@ -193,11 +182,8 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() error {
 
 	// task ID is not sequential, meaning there are a ton of missing chunks,
 	// so to optimize the performance, a sort is required
-	var taskIDs []int64
-	for k := range a.outstandingExecutables {
-		taskIDs = append(taskIDs, k)
-	}
-	sort.Slice(taskIDs, func(i, j int) bool { return taskIDs[i] < taskIDs[j] })
+	taskIDs := maps.Keys(a.outstandingExecutables)
+	util.SortSlice(taskIDs)
 
 	pendingTasks := len(taskIDs)
 	if pendingTasks > warnPendingTasks {

@@ -76,8 +76,6 @@ const (
 // disregarded.
 // #nosec
 const (
-	// SystemGlobalNamespace is global namespace name for temporal system workflows running globally
-	SystemGlobalNamespace = "temporal-system-global"
 	// SystemLocalNamespace is namespace name for temporal system workflows running in local cluster
 	SystemLocalNamespace = "temporal-system"
 	// SystemNamespaceID is namespace id for all temporal system workflows
@@ -93,10 +91,6 @@ const (
 	// CriticalLongPollTimeout is a threshold for the context timeout passed into long poll API,
 	// below which a warning will be logged
 	CriticalLongPollTimeout = time.Second * 20
-	// MaxWorkflowRetentionPeriod is the maximum of workflow retention when registering namespace
-	// !!! Do NOT simply decrease this number, because it is being used by history scavenger to avoid race condition against history archival.
-	// Check more details in history scanner(scavenger)
-	MaxWorkflowRetentionPeriod = 30 * time.Hour * 24
 )
 
 const (

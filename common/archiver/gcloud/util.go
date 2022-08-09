@@ -25,7 +25,6 @@
 package gcloud
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,11 +47,6 @@ import (
 func encode(message proto.Message) ([]byte, error) {
 	encoder := codec.NewJSONPBEncoder()
 	return encoder.Encode(message)
-}
-
-func constructHistoryFilename(namespaceID, workflowID, runID string, version int64) string {
-	combinedHash := constructHistoryFilenamePrefix(namespaceID, workflowID, runID)
-	return fmt.Sprintf("%s_%v.history", combinedHash, version)
 }
 
 func constructHistoryFilenameMultipart(namespaceID, workflowID, runID string, version int64, partNumber int) string {
@@ -92,15 +86,6 @@ func hash(s string) (result string) {
 		return fmt.Sprintf("%v", farm.Fingerprint64([]byte(s)))
 	}
 	return
-}
-
-func contextExpired(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-		return false
-	}
 }
 
 func deserializeGetHistoryToken(bytes []byte) (*getHistoryToken, error) {

@@ -199,6 +199,6 @@ func ContextCounterGet(ctx context.Context, name string) (int64, bool) {
 		return 0, false
 	}
 
-	result, _ := metricsCtx.CountersInt[name]
+	result := metricsCtx.CountersInt[name]
 	return result, true
 }

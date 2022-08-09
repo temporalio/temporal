@@ -178,7 +178,7 @@ func getTransferTaskEventIDAndRetryable(
 	retryable := true
 
 	if task, ok := transferTask.(*tasks.WorkflowTask); ok {
-		retryable = !(executionInfo.WorkflowTaskScheduleId == task.ScheduleID && executionInfo.WorkflowTaskAttempt > 1)
+		retryable = !(executionInfo.WorkflowTaskScheduledEventId == task.ScheduledEventID && executionInfo.WorkflowTaskAttempt > 1)
 	}
 
 	return eventID, retryable
@@ -192,7 +192,7 @@ func getTimerTaskEventIDAndRetryable(
 	retryable := true
 
 	if task, ok := timerTask.(*tasks.WorkflowTaskTimeoutTask); ok {
-		retryable = !(executionInfo.WorkflowTaskScheduleId == task.EventID && executionInfo.WorkflowTaskAttempt > 1)
+		retryable = !(executionInfo.WorkflowTaskScheduledEventId == task.EventID && executionInfo.WorkflowTaskAttempt > 1)
 	}
 
 	return eventID, retryable

@@ -129,14 +129,14 @@ func (v *mutableStateIDValidator) validateTimer(
 ) []MutableStateValidationResult {
 	var results []MutableStateValidationResult
 	for _, timer := range timerInfos {
-		if v.validateID(timer.StartedId, lastEventID) {
+		if v.validateID(timer.StartedEventId, lastEventID) {
 			continue
 		}
 		results = append(results, MutableStateValidationResult{
 			failureType: mutableStateTimerIDFailureType,
 			failureDetails: fmt.Sprintf(
 				"TimerEventID: %d is not less than last event ID: %d",
-				timer.StartedId,
+				timer.StartedEventId,
 				lastEventID,
 			),
 		})

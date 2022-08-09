@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 )
 
 func Tags(
@@ -78,19 +77,19 @@ func GetTransferTaskEventID(
 	eventID := int64(0)
 	switch task := transferTask.(type) {
 	case *ActivityTask:
-		eventID = task.ScheduleID
+		eventID = task.ScheduledEventID
 	case *WorkflowTask:
-		eventID = task.ScheduleID
+		eventID = task.ScheduledEventID
 	case *CloseExecutionTask:
 		eventID = common.FirstEventID
 	case *DeleteExecutionTask:
 		eventID = common.FirstEventID
 	case *CancelExecutionTask:
-		eventID = task.InitiatedID
+		eventID = task.InitiatedEventID
 	case *SignalExecutionTask:
-		eventID = task.InitiatedID
+		eventID = task.InitiatedEventID
 	case *StartChildExecutionTask:
-		eventID = task.InitiatedID
+		eventID = task.InitiatedEventID
 	case *ResetWorkflowTask:
 		eventID = common.FirstEventID
 	case *fakeTask:
@@ -127,113 +126,4 @@ func GetTimerTaskEventID(
 		panic(serviceerror.NewInternal("unknown timer task"))
 	}
 	return eventID
-}
-
-func GetActiveTransferTaskMetricsScope(
-	task Task,
-) int {
-	switch task.(type) {
-	case *ActivityTask:
-		return metrics.TransferActiveTaskActivityScope
-	case *WorkflowTask:
-		return metrics.TransferActiveTaskWorkflowTaskScope
-	case *CloseExecutionTask:
-		return metrics.TransferActiveTaskCloseExecutionScope
-	case *CancelExecutionTask:
-		return metrics.TransferActiveTaskCancelExecutionScope
-	case *SignalExecutionTask:
-		return metrics.TransferActiveTaskSignalExecutionScope
-	case *StartChildExecutionTask:
-		return metrics.TransferActiveTaskStartChildExecutionScope
-	case *ResetWorkflowTask:
-		return metrics.TransferActiveTaskResetWorkflowScope
-	default:
-		return metrics.TransferActiveQueueProcessorScope
-	}
-}
-
-func GetStandbyTransferTaskMetricsScope(
-	task Task,
-) int {
-	switch task.(type) {
-	case *ActivityTask:
-		return metrics.TransferStandbyTaskActivityScope
-	case *WorkflowTask:
-		return metrics.TransferStandbyTaskWorkflowTaskScope
-	case *CloseExecutionTask:
-		return metrics.TransferStandbyTaskCloseExecutionScope
-	case *CancelExecutionTask:
-		return metrics.TransferStandbyTaskCancelExecutionScope
-	case *SignalExecutionTask:
-		return metrics.TransferStandbyTaskSignalExecutionScope
-	case *StartChildExecutionTask:
-		return metrics.TransferStandbyTaskStartChildExecutionScope
-	case *ResetWorkflowTask:
-		return metrics.TransferStandbyTaskResetWorkflowScope
-	default:
-		return metrics.TransferStandbyQueueProcessorScope
-	}
-}
-
-func GetActiveTimerTaskMetricScope(
-	task Task,
-) int {
-	switch task.(type) {
-	case *WorkflowTaskTimeoutTask:
-		return metrics.TimerActiveTaskWorkflowTaskTimeoutScope
-	case *ActivityTimeoutTask:
-		return metrics.TimerActiveTaskActivityTimeoutScope
-	case *UserTimerTask:
-		return metrics.TimerActiveTaskUserTimerScope
-	case *WorkflowTimeoutTask:
-		return metrics.TimerActiveTaskWorkflowTimeoutScope
-	case *DeleteHistoryEventTask:
-		return metrics.TimerActiveTaskDeleteHistoryEventScope
-	case *ActivityRetryTimerTask:
-		return metrics.TimerActiveTaskActivityRetryTimerScope
-	case *WorkflowBackoffTimerTask:
-		return metrics.TimerActiveTaskWorkflowBackoffTimerScope
-	default:
-		return metrics.TimerActiveQueueProcessorScope
-	}
-}
-
-func GetStandbyTimerTaskMetricScope(
-	task Task,
-) int {
-	switch task.(type) {
-	case *WorkflowTaskTimeoutTask:
-		return metrics.TimerStandbyTaskWorkflowTaskTimeoutScope
-	case *ActivityTimeoutTask:
-		return metrics.TimerStandbyTaskActivityTimeoutScope
-	case *UserTimerTask:
-		return metrics.TimerStandbyTaskUserTimerScope
-	case *WorkflowTimeoutTask:
-		return metrics.TimerStandbyTaskWorkflowTimeoutScope
-	case *DeleteHistoryEventTask:
-		return metrics.TimerStandbyTaskDeleteHistoryEventScope
-	case *ActivityRetryTimerTask:
-		return metrics.TimerStandbyTaskActivityRetryTimerScope
-	case *WorkflowBackoffTimerTask:
-		return metrics.TimerStandbyTaskWorkflowBackoffTimerScope
-	default:
-		return metrics.TimerStandbyQueueProcessorScope
-	}
-}
-
-func GetVisibilityTaskMetricsScope(
-	task Task,
-) int {
-	switch task.(type) {
-	case *StartExecutionVisibilityTask:
-		return metrics.VisibilityTaskStartExecutionScope
-	case *UpsertExecutionVisibilityTask:
-		return metrics.VisibilityTaskUpsertExecutionScope
-	case *CloseExecutionVisibilityTask:
-		return metrics.VisibilityTaskCloseExecutionScope
-	case *DeleteExecutionVisibilityTask:
-		return metrics.VisibilityTaskDeleteExecutionScope
-	default:
-		return metrics.VisibilityQueueProcessorScope
-	}
 }

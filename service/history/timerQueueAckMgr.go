@@ -25,23 +25,23 @@
 package history
 
 import (
-	"context"
 	"math"
 	"sort"
 	"sync"
 	"time"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"golang.org/x/exp/maps"
 )
 
 var (
@@ -176,8 +176,8 @@ func (t *timerQueueAckMgrImpl) getFinishedChan() <-chan struct{} {
 
 func (t *timerQueueAckMgrImpl) readTimerTasks() ([]queues.Executable, *time.Time, bool, error) {
 	if t.maxQueryLevel == t.minQueryLevel {
-		t.maxQueryLevel = t.shard.GetQueueMaxReadLevel(tasks.CategoryTimer, t.clusterName).FireTime
-		t.maxQueryLevel = common.MaxTime(t.minQueryLevel, t.maxQueryLevel)
+		t.maxQueryLevel = t.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, t.clusterName).FireTime
+		t.maxQueryLevel = util.MaxTime(t.minQueryLevel, t.maxQueryLevel)
 	}
 	minQueryLevel := t.minQueryLevel
 	maxQueryLevel := t.maxQueryLevel
@@ -298,10 +298,7 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() error {
 
 	// Timer Sequence IDs can have holes in the middle. So we sort the map to get the order to
 	// check. TODO: we can maintain a sorted slice as well.
-	var sequenceIDs tasks.Keys
-	for k := range t.outstandingExecutables {
-		sequenceIDs = append(sequenceIDs, k)
-	}
+	sequenceIDs := tasks.Keys(maps.Keys(t.outstandingExecutables))
 	sort.Sort(sequenceIDs)
 
 	pendingTasks := len(sequenceIDs)
@@ -353,6 +350,9 @@ MoveAckLevelLoop:
 // this function does not take cluster name as parameter, due to we only have one timer queue on Cassandra
 // all timer tasks are in this queue and filter will be applied.
 func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestamp time.Time, batchSize int, pageToken []byte) ([]tasks.Task, []byte, error) {
+	ctx, cancel := newQueueIOContext()
+	defer cancel()
+
 	request := &persistence.GetHistoryTasksRequest{
 		ShardID:             t.shard.GetShardID(),
 		TaskCategory:        tasks.CategoryTimer,
@@ -361,7 +361,7 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 		BatchSize:           batchSize,
 		NextPageToken:       pageToken,
 	}
-	response, err := t.executionMgr.GetHistoryTasks(context.TODO(), request)
+	response, err := t.executionMgr.GetHistoryTasks(ctx, request)
 	if err != nil {
 		return nil, nil, err
 	}

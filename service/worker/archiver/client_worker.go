@@ -28,6 +28,8 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/api/historyservice/v1"
+
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -35,6 +37,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -64,6 +67,7 @@ type (
 		NamespaceCache   namespace.Registry
 		Config           *Config
 		ArchiverProvider provider.ArchiverProvider
+		HistoryClient    historyservice.HistoryServiceClient
 	}
 
 	// Config for ClientWorker
@@ -106,6 +110,7 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 	globalMetricsClient = container.MetricsClient
 	globalConfig = container.Config
 	actCtx := context.WithValue(context.Background(), bootstrapContainerKey, container)
+	actCtx = headers.SetCallerInfo(actCtx, headers.NewCallerInfo(headers.CallerTypeBackground))
 
 	sdkClient := container.SdkClientFactory.GetSystemClient(container.Logger)
 	wo := worker.Options{

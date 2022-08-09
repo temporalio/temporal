@@ -27,8 +27,8 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
-	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -47,6 +47,7 @@ import (
 type (
 	MutableStateRebuilder interface {
 		ApplyEvents(
+			ctx context.Context,
 			namespaceID namespace.ID,
 			requestID string,
 			execution commonpb.WorkflowExecution,
@@ -88,6 +89,7 @@ func NewMutableStateRebuilder(
 }
 
 func (b *MutableStateRebuilderImpl) ApplyEvents(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	requestID string,
 	execution commonpb.WorkflowExecution,
@@ -172,6 +174,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := b.mutableState.SetHistoryTree(
+				ctx,
 				execution.GetRunId(),
 			); err != nil {
 				return nil, err
@@ -179,12 +182,12 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED:
 			attributes := event.GetWorkflowTaskScheduledEventAttributes()
-			// use Timestamp.TimeValue(event.GetEventTime()) as WorkflowTaskOriginalScheduledTimestamp, because the heartbeat is not happening here.
+			// use event.GetEventTime() as WorkflowTaskOriginalScheduledTimestamp, because the heartbeat is not happening here.
 			workflowTask, err := b.mutableState.ReplicateWorkflowTaskScheduledEvent(
 				event.GetVersion(),
 				event.GetEventId(),
 				attributes.TaskQueue,
-				int32(timestamp.DurationValue(attributes.GetStartToCloseTimeout()).Seconds()),
+				attributes.GetStartToCloseTimeout(),
 				attributes.GetAttempt(),
 				event.GetEventTime(),
 				event.GetEventTime(),
@@ -198,7 +201,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			// NOTE: at the beginning of the loop, stickyness is cleared
 			if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 				timestamp.TimeValue(event.GetEventTime()),
-				workflowTask.ScheduleID,
+				workflowTask.ScheduledEventID,
 			); err != nil {
 				return nil, err
 			}
@@ -219,7 +222,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateStartWorkflowTaskTasks(
 				timestamp.TimeValue(event.GetEventTime()),
-				workflowTask.ScheduleID,
+				workflowTask.ScheduledEventID,
 			); err != nil {
 				return nil, err
 			}
@@ -250,7 +253,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				// NOTE: at the beginning of the loop, stickyness is cleared
 				if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 					timestamp.TimeValue(event.GetEventTime()),
-					workflowTask.ScheduleID,
+					workflowTask.ScheduledEventID,
 				); err != nil {
 					return nil, err
 				}
@@ -273,7 +276,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				// NOTE: at the beginning of the loop, stickyness is cleared
 				if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
 					timestamp.TimeValue(event.GetEventTime()),
-					workflowTask.ScheduleID,
+					workflowTask.ScheduledEventID,
 				); err != nil {
 					return nil, err
 				}
@@ -609,6 +612,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 					RunId:      newRunID,
 				}
 				_, err := newRunStateBuilder.ApplyEvents(
+					ctx,
 					namespaceID,
 					uuid.New(),
 					newExecution,
@@ -635,6 +639,11 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				return nil, err
 			}
 
+		case enumspb.EVENT_TYPE_WORKFLOW_UPDATE_ACCEPTED,
+			enumspb.EVENT_TYPE_WORKFLOW_UPDATE_REQUESTED,
+			enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED:
+			return nil, serviceerror.NewUnimplemented("Workflow Update rebuild not implemented")
+
 		default:
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))
 		}
@@ -657,11 +666,4 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	b.mutableState.SetHistoryBuilder(NewImmutableHistoryBuilder(history))
 
 	return newRunMutableStateBuilder, nil
-}
-
-func (b *MutableStateRebuilderImpl) unixNanoToTime(
-	unixNano int64,
-) time.Time {
-
-	return time.Unix(0, unixNano).UTC()
 }

@@ -1,4 +1,5 @@
 // The MIT License
+
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
@@ -24,10 +25,6 @@
 
 package metrics
 
-import (
-	"github.com/uber-go/tally/v4"
-)
-
 // types used/defined by the package
 type (
 	// MetricName is the name of the metric
@@ -40,11 +37,9 @@ type (
 
 	// metricDefinition contains the definition for a metric
 	metricDefinition struct {
-		// nolint
-		metricType       MetricType    // metric type
-		metricName       MetricName    // metric name
-		metricRollupName MetricName    // optional. if non-empty, this name must be used for rolled-up version of this metric
-		buckets          tally.Buckets // buckets if we are emitting histograms
+		metricType       MetricType // metric type
+		metricName       MetricName // metric name
+		metricRollupName MetricName // optional. if non-empty, this name must be used for rolled-up version of this metric
 		unit             MetricUnit
 	}
 
@@ -375,6 +370,8 @@ const (
 	HistoryClientRemoveSignalMutableStateScope
 	// HistoryClientTerminateWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientTerminateWorkflowExecutionScope
+	// HistoryClientUpdateWorkflowScope tracks RPC calls to history service
+	HistoryClientUpdateWorkflowScope
 	// HistoryClientDeleteWorkflowExecutionScope tracks RPC calls to history service
 	HistoryClientDeleteWorkflowExecutionScope
 	// HistoryClientResetWorkflowExecutionScope tracks RPC calls to history service
@@ -415,6 +412,24 @@ const (
 	HistoryClientGetReplicationStatusScope
 	// HistoryClientDeleteWorkflowVisibilityRecordScope tracks RPC calls to history service
 	HistoryClientDeleteWorkflowVisibilityRecordScope
+	// HistoryClientCloseShardScope tracks RPC calls to history service
+	HistoryClientCloseShardScope
+	// HistoryClientDescribeMutableStateScope tracks RPC calls to history service
+	HistoryClientDescribeMutableStateScope
+	// HistoryClientGetDLQReplicationMessagesScope tracks RPC calls to history service
+	HistoryClientGetDLQReplicationMessagesScope
+	// HistoryClientGetShardScope tracks RPC calls to history service
+	HistoryClientGetShardScope
+	// HistoryClientRebuildMutableStateScope tracks RPC calls to history service
+	HistoryClientRebuildMutableStateScope
+	// HistoryClientRemoveTaskScope tracks RPC calls to history service
+	HistoryClientRemoveTaskScope
+	// HistoryClientVerifyFirstWorkflowTaskScheduledScope tracks RPC calls to history service
+	HistoryClientVerifyFirstWorkflowTaskScheduledScope
+	// HistoryClientDescribeHistoryHostScope tracks RPC calls to history service
+	HistoryClientDescribeHistoryHostScope
+	// HistoryClientGetReplicationMessagesScope tracks RPC calls to history service
+	HistoryClientGetReplicationMessagesScope
 	// MatchingClientPollWorkflowTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollWorkflowTaskQueueScope
 	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service
@@ -433,6 +448,10 @@ const (
 	MatchingClientDescribeTaskQueueScope
 	// MatchingClientListTaskQueuePartitionsScope tracks RPC calls to matching service
 	MatchingClientListTaskQueuePartitionsScope
+	// MatchingClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to matching service
+	MatchingClientUpdateWorkerBuildIdOrderingScope
+	// MatchingGetBuildIdOrdering tracks RPC calls to matching service
+	MatchingClientGetWorkerBuildIdOrderingScope
 	// FrontendClientDeprecateNamespaceScope tracks RPC calls to frontend service
 	FrontendClientDeprecateNamespaceScope
 	// FrontendClientDescribeNamespaceScope tracks RPC calls to frontend service
@@ -511,14 +530,6 @@ const (
 	FrontendClientCountWorkflowExecutionsScope
 	// FrontendClientGetSearchAttributesScope tracks RPC calls to frontend service
 	FrontendClientGetSearchAttributesScope
-	// FrontendClientGetReplicationTasksScope tracks RPC calls to frontend service
-	FrontendClientGetReplicationTasksScope
-	// FrontendClientGetNamespaceReplicationTasksScope tracks RPC calls to frontend service
-	FrontendClientGetNamespaceReplicationTasksScope
-	// FrontendClientGetDLQReplicationTasksScope tracks RPC calls to frontend service
-	FrontendClientGetDLQReplicationTasksScope
-	// FrontendClientReapplyEventsScope tracks RPC calls to frontend service
-	FrontendClientReapplyEventsScope
 	// FrontendClientGetClusterInfoScope tracks RPC calls to frontend
 	FrontendClientGetClusterInfoScope
 	// FrontendClientGetSystemInfoScope tracks RPC calls to frontend
@@ -539,6 +550,12 @@ const (
 	FrontendClientDeleteScheduleScope
 	// FrontendClientListSchedulesScope tracks RPC calls to frontend service
 	FrontendClientListSchedulesScope
+	// FrontendClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to frontend service
+	FrontendClientUpdateWorkerBuildIdOrderingScope
+	// FrontendClientUpdateWorkflowScope tracks RPC calls to frontend service
+	FrontendClientUpdateWorkflowScope
+	// FrontendClientGetWorkerBuildIdOrderingScope tracks RPC calls to frontend service
+	FrontendClientGetWorkerBuildIdOrderingScope
 	// AdminClientAddSearchAttributesScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributesScope
 	// AdminClientRemoveSearchAttributesScope tracks RPC calls to admin service
@@ -551,14 +568,14 @@ const (
 	AdminClientGetShardScope
 	// AdminClientListHistoryTasksScope tracks RPC calls to admin service
 	AdminClientListHistoryTasksScope
+	// AdminClientRemoveTaskScope tracks RPC calls to admin service
+	AdminClientRemoveTaskScope
 	// AdminClientDescribeHistoryHostScope tracks RPC calls to admin service
 	AdminClientDescribeHistoryHostScope
 	// AdminClientRebuildMutableStateScope tracks RPC calls to admin service
 	AdminClientRebuildMutableStateScope
 	// AdminClientDescribeMutableStateScope tracks RPC calls to admin service
 	AdminClientDescribeMutableStateScope
-	// AdminClientGetWorkflowExecutionRawHistoryScope tracks RPC calls to admin service
-	AdminClientGetWorkflowExecutionRawHistoryScope
 	// AdminClientGetWorkflowExecutionRawHistoryV2Scope tracks RPC calls to admin service
 	AdminClientGetWorkflowExecutionRawHistoryV2Scope
 	// AdminClientDescribeClusterScope tracks RPC calls to admin service
@@ -571,6 +588,14 @@ const (
 	AdminClientAddOrUpdateRemoteClusterScope
 	// AdminClientRemoveRemoteClusterScope tracks RPC calls to admin service
 	AdminClientRemoveRemoteClusterScope
+	// AdminClientGetReplicationMessagesScope tracks RPC calls to admin service
+	AdminClientGetReplicationMessagesScope
+	// AdminClientGetNamespaceReplicationMessagesScope tracks RPC calls to admin service
+	AdminClientGetNamespaceReplicationMessagesScope
+	// AdminClientGetDLQReplicationMessagesScope tracks RPC calls to admin service
+	AdminClientGetDLQReplicationMessagesScope
+	// AdminClientReapplyEventsScope tracks RPC calls to admin service
+	AdminClientReapplyEventsScope
 	// AdminClientGetDLQMessagesScope tracks RPC calls to admin service
 	AdminClientGetDLQMessagesScope
 	// AdminClientPurgeDLQMessagesScope tracks RPC calls to admin service
@@ -679,6 +704,12 @@ const (
 	DCRedirectionDeleteScheduleScope
 	// DCRedirectionListSchedulesScope tracks RPC calls for dc redirection
 	DCRedirectionListSchedulesScope
+	// DCRedirectionUpdateWorkerBuildIdOrderingScope tracks RPC calls for dc redirection
+	DCRedirectionUpdateWorkerBuildIdOrderingScope
+	// DCRedirectionGetWorkerBuildIdOrderingScope tracks RPC calls for dc redirection
+	DCRedirectionGetWorkerBuildIdOrderingScope
+	// DCRedirectionUpdateWorkflowScope tracks RPC calls for dc redirection
+	DCRedirectionUpdateWorkflowScope
 
 	// MessagingClientPublishScope tracks Publish calls made by service to messaging layer
 	MessagingClientPublishScope
@@ -704,6 +735,8 @@ const (
 	PersistenceAppendRawHistoryNodesScope
 	// PersistenceDeleteHistoryNodesScope tracks DeleteHistoryNodes calls made by service to persistence layer
 	PersistenceDeleteHistoryNodesScope
+	// PersistenceNewHistoryBranchScope tracks NewHistoryBranch calls made by service to persistence layer
+	PersistenceNewHistoryBranchScope
 	// PersistenceReadHistoryBranchScope tracks ReadHistoryBranch calls made by service to persistence layer
 	PersistenceReadHistoryBranchScope
 	// PersistenceReadHistoryBranchReverseScope tracks ReadHistoryBranchReverse calls made by service to persistence layer
@@ -777,10 +810,8 @@ const (
 	AdminGetSearchAttributesScope
 	// AdminRebuildMutableStateScope is the metric scope for admin.AdminRebuildMutableStateScope
 	AdminRebuildMutableStateScope
-	// AdminDescribeWorkflowExecutionScope is the metric scope for admin.AdminDescribeWorkflowExecutionScope
-	AdminDescribeWorkflowExecutionScope
-	// AdminGetWorkflowExecutionRawHistoryScope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
-	AdminGetWorkflowExecutionRawHistoryScope
+	// AdminDescribeMutableStateScope is the metric scope for admin.AdminDescribeMutableStateScope
+	AdminDescribeMutableStateScope
 	// AdminGetWorkflowExecutionRawHistoryV2Scope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
 	AdminGetWorkflowExecutionRawHistoryV2Scope
 	// AdminGetReplicationMessagesScope is the metric scope for admin.GetReplicationMessages
@@ -805,8 +836,8 @@ const (
 	AdminGetShardScope
 	// AdminListHistoryTasksScope is the metric scope for admin.ListHistoryTasksScope
 	AdminListHistoryTasksScope
-	// AdminReadDLQMessagesScope is the metric scope for admin.AdminReadDLQMessagesScope
-	AdminReadDLQMessagesScope
+	// AdminGetDLQMessagesScope is the metric scope for admin.AdminGetDLQMessagesScope
+	AdminGetDLQMessagesScope
 	// AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessagesScope
 	AdminPurgeDLQMessagesScope
 	// AdminMergeDLQMessagesScope is the metric scope for admin.AdminMergeDLQMessagesScope
@@ -836,6 +867,12 @@ const (
 	// OperatorListSearchAttributesScope is the metric scope for operator.ListSearchAttributes
 	OperatorListSearchAttributesScope
 	OperatorDeleteNamespaceScope
+	OperatorAddOrUpdateRemoteCluster
+	OperatorDeleteWorkflowExecution
+	OperatorDescribeCluster
+	OperatorListClusterMembers
+	OperatorListClusters
+	OperatorRemoveRemoteCluster
 
 	NumOperatorScopes
 )
@@ -942,6 +979,12 @@ const (
 	FrontendDeleteScheduleScope
 	// FrontendListSchedulesScope is the metric scope for frontend.ListSchedulesScope
 	FrontendListSchedulesScope
+	// FrontendUpdateWorkerBuildIdOrderingScope is the metric scope for frontend.UpdateWorkerBuildIdOrderingScope
+	FrontendUpdateWorkerBuildIdOrderingScope
+	// FrontendGetWorkerBuildIdOrderingScope is the metric scope for frontend.GetWorkerBuildIdOrderingScope
+	FrontendGetWorkerBuildIdOrderingScope
+	// FrontendUpdateWorkflowScope is the metric scope for frontend.UpdateWorkflow
+	FrontendUpdateWorkflowScope
 
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope
@@ -1041,6 +1084,8 @@ const (
 	HistoryDescribeHistoryHost
 	// HistoryDeleteWorkflowVisibilityRecordScope is the scope used by delete workflow visibility record API
 	HistoryDeleteWorkflowVisibilityRecordScope
+	// HistoryUpdateWorkflowScope is the scope used by update workflow API
+	HistoryUpdateWorkflowScope
 	// TaskPriorityAssignerScope is the scope used by all metric emitted by task priority assigner
 	TaskPriorityAssignerScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -1201,6 +1246,10 @@ const (
 	MatchingDescribeTaskQueueScope
 	// MatchingListTaskQueuePartitionsScope tracks ListTaskQueuePartitions API calls received by service
 	MatchingListTaskQueuePartitionsScope
+	// MatchingUpdateWorkerBuildIdOrderingScope tracks UpdateWorkerBuildIdOrdering API calls received by service
+	MatchingUpdateWorkerBuildIdOrderingScope
+	// MatchingGetWorkerBuildIdOrderingScope tracks GetWorkerBuildIdOrdering API calls received by service
+	MatchingGetWorkerBuildIdOrderingScope
 
 	NumMatchingScopes
 )
@@ -1351,6 +1400,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceAppendHistoryNodesScope:         {operation: "AppendHistoryNodes"},
 		PersistenceAppendRawHistoryNodesScope:      {operation: "AppendRawHistoryNodes"},
 		PersistenceDeleteHistoryNodesScope:         {operation: "DeleteHistoryNodes"},
+		PersistenceNewHistoryBranchScope:           {operation: "NewHistoryBranch"},
 		PersistenceReadHistoryBranchScope:          {operation: "ReadHistoryBranch"},
 		PersistenceReadHistoryBranchReverseScope:   {operation: "ReadHistoryBranchReverse"},
 		PersistenceForkHistoryBranchScope:          {operation: "ForkHistoryBranch"},
@@ -1399,6 +1449,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientSignalWithStartWorkflowExecutionScope:       {operation: "HistoryClientSignalWithStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRemoveSignalMutableStateScope:               {operation: "HistoryClientRemoveSignalMutableStateScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientTerminateWorkflowExecutionScope:             {operation: "HistoryClientTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientUpdateWorkflowScope:                         {operation: "HistoryClientUpdateWorkflow", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientDeleteWorkflowExecutionScope:                {operation: "HistoryClientDeleteWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientResetWorkflowExecutionScope:                 {operation: "HistoryClientResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientScheduleWorkflowTaskScope:                   {operation: "HistoryClientScheduleWorkflowTask", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
@@ -1419,16 +1470,27 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientGenerateLastHistoryReplicationTasksScope:    {operation: "HistoryClientGenerateLastHistoryReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGetReplicationStatusScope:                   {operation: "HistoryClientGetReplicationStatusScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientDeleteWorkflowVisibilityRecordScope:         {operation: "HistoryClientDeleteWorkflowVisibilityRecordScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientCloseShardScope:                             {operation: "HistoryClientCloseShardScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientDescribeMutableStateScope:                   {operation: "HistoryClientDescribeMutableStateScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientGetDLQReplicationMessagesScope:              {operation: "HistoryClientGetDLQReplicationMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientGetShardScope:                               {operation: "HistoryClientGetShardScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRebuildMutableStateScope:                    {operation: "HistoryClientRebuildMutableStateScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientRemoveTaskScope:                             {operation: "HistoryClientRemoveTaskScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientVerifyFirstWorkflowTaskScheduledScope:       {operation: "HistoryClientVerifyFirstWorkflowTaskScheduledScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientDescribeHistoryHostScope:                    {operation: "HistoryClientDescribeHistoryHostScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientGetReplicationMessagesScope:                 {operation: "HistoryClientGetReplicationMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 
-		MatchingClientPollWorkflowTaskQueueScope:     {operation: "MatchingClientPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientPollActivityTaskQueueScope:     {operation: "MatchingClientPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientAddActivityTaskScope:           {operation: "MatchingClientAddActivityTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientAddWorkflowTaskScope:           {operation: "MatchingClientAddWorkflowTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientQueryWorkflowScope:             {operation: "MatchingClientQueryWorkflow", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientRespondQueryTaskCompletedScope: {operation: "MatchingClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientCancelOutstandingPollScope:     {operation: "MatchingClientCancelOutstandingPoll", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientDescribeTaskQueueScope:         {operation: "MatchingClientDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientListTaskQueuePartitionsScope:   {operation: "MatchingClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientPollWorkflowTaskQueueScope:       {operation: "MatchingClientPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientPollActivityTaskQueueScope:       {operation: "MatchingClientPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientAddActivityTaskScope:             {operation: "MatchingClientAddActivityTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientAddWorkflowTaskScope:             {operation: "MatchingClientAddWorkflowTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientQueryWorkflowScope:               {operation: "MatchingClientQueryWorkflow", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientRespondQueryTaskCompletedScope:   {operation: "MatchingClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientCancelOutstandingPollScope:       {operation: "MatchingClientCancelOutstandingPoll", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientDescribeTaskQueueScope:           {operation: "MatchingClientDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientListTaskQueuePartitionsScope:     {operation: "MatchingClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientUpdateWorkerBuildIdOrderingScope: {operation: "MatchingClientUpdateWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientGetWorkerBuildIdOrderingScope:    {operation: "MatchingClientGetWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 
 		FrontendClientDeprecateNamespaceScope:                 {operation: "FrontendClientDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeNamespaceScope:                  {operation: "FrontendClientDescribeNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1469,10 +1531,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientScanWorkflowExecutionsScope:             {operation: "FrontendClientScanWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientCountWorkflowExecutionsScope:            {operation: "FrontendClientCountWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetSearchAttributesScope:                {operation: "FrontendClientGetSearchAttributes", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetReplicationTasksScope:                {operation: "FrontendClientGetReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetNamespaceReplicationTasksScope:       {operation: "FrontendClientGetNamespaceReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientGetDLQReplicationTasksScope:             {operation: "FrontendClientGetDLQReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		FrontendClientReapplyEventsScope:                      {operation: "FrontendClientReapplyEventsScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetClusterInfoScope:                     {operation: "FrontendClientGetClusterInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetSystemInfoScope:                      {operation: "FrontendClientGetSystemInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListTaskQueuePartitionsScope:            {operation: "FrontendClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1483,6 +1541,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientListScheduleMatchingTimesScope:          {operation: "FrontendClientListScheduleMatchingTimes", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDeleteScheduleScope:                     {operation: "FrontendClientDeleteSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListSchedulesScope:                      {operation: "FrontendClientListSchedules", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientUpdateWorkerBuildIdOrderingScope:        {operation: "FrontendClientUpdateWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetWorkerBuildIdOrderingScope:           {operation: "FrontendClientGetWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientUpdateWorkflowScope:                     {operation: "FrontendClientUpdateWorkflow", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 
 		AdminClientAddSearchAttributesScope:              {operation: "AdminClientAddSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientRemoveSearchAttributesScope:           {operation: "AdminClientRemoveSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1490,7 +1551,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientDescribeHistoryHostScope:              {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientRebuildMutableStateScope:              {operation: "AdminClientRebuildMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeMutableStateScope:             {operation: "AdminClientDescribeMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientGetWorkflowExecutionRawHistoryScope:   {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryV2Scope: {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeClusterScope:                  {operation: "AdminClientDescribeCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientListClustersScope:                     {operation: "AdminClientListClusters", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1503,6 +1563,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientCloseShardScope:                       {operation: "AdminClientCloseShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetShardScope:                         {operation: "AdminClientGetShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientListHistoryTasksScope:                 {operation: "AdminClientListHistoryTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientRemoveTaskScope:                       {operation: "AdminClientRemoveTask", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetReplicationMessagesScope:           {operation: "AdminClientGetReplicationMessagesScope", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetNamespaceReplicationMessagesScope:  {operation: "AdminClientGetNamespaceReplicationMessagesScope", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetDLQReplicationMessagesScope:        {operation: "AdminClientGetDLQReplicationMessagesScope", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientReapplyEventsScope:                    {operation: "AdminClientReapplyEventsScope", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetDLQMessagesScope:                   {operation: "AdminClientGetDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientPurgeDLQMessagesScope:                 {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientMergeDLQMessagesScope:                 {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1555,6 +1620,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionListScheduleMatchingTimesScope:          {operation: "DCRedirectionListScheduleMatchingTimes", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDeleteScheduleScope:                     {operation: "DCRedirectionDeleteSchedule", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListSchedulesScope:                      {operation: "DCRedirectionListSchedules", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionUpdateWorkerBuildIdOrderingScope:        {operation: "DCRedirectionUpdateWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionGetWorkerBuildIdOrderingScope:           {operation: "DCRedirectionGetWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionUpdateWorkflowScope:                     {operation: "DCRedirectionUpdateWorkflow", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 
 		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
 		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},
@@ -1587,39 +1655,46 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 	// Frontend Scope Names
 	Frontend: {
-		// Admin API scope co-locates with with frontend
-		AdminRemoveTaskScope:                            {operation: "AdminRemoveTask"},
-		AdminCloseShardScope:                            {operation: "AdminCloseShard"},
-		AdminGetShardScope:                              {operation: "AdminGetShard"},
-		AdminListHistoryTasksScope:                      {operation: "AdminListHistoryTasks"},
-		AdminReadDLQMessagesScope:                       {operation: "AdminReadDLQMessages"},
-		AdminPurgeDLQMessagesScope:                      {operation: "AdminPurgeDLQMessages"},
-		AdminMergeDLQMessagesScope:                      {operation: "AdminMergeDLQMessages"},
-		AdminDescribeHistoryHostScope:                   {operation: "DescribeHistoryHost"},
-		AdminAddSearchAttributesScope:                   {operation: "AdminAddSearchAttributes"},
-		AdminRemoveSearchAttributesScope:                {operation: "AdminRemoveSearchAttributes"},
-		AdminGetSearchAttributesScope:                   {operation: "AdminGetSearchAttributes"},
-		AdminRebuildMutableStateScope:                   {operation: "AdminRebuildMutableState"},
-		AdminDescribeWorkflowExecutionScope:             {operation: "DescribeWorkflowExecution"},
-		AdminGetWorkflowExecutionRawHistoryScope:        {operation: "GetWorkflowExecutionRawHistory"},
-		AdminGetWorkflowExecutionRawHistoryV2Scope:      {operation: "GetWorkflowExecutionRawHistoryV2"},
-		AdminGetReplicationMessagesScope:                {operation: "GetReplicationMessages"},
-		AdminListClusterMembersScope:                    {operation: "AdminListClusterMembers"},
-		AdminGetNamespaceReplicationMessagesScope:       {operation: "GetNamespaceReplicationMessages"},
-		AdminGetDLQReplicationMessagesScope:             {operation: "AdminGetDLQReplicationMessages"},
-		AdminReapplyEventsScope:                         {operation: "ReapplyEvents"},
-		AdminRefreshWorkflowTasksScope:                  {operation: "RefreshWorkflowTasks"},
-		AdminResendReplicationTasksScope:                {operation: "ResendReplicationTasks"},
-		AdminGetTaskQueueTasksScope:                     {operation: "GetTaskQueueTasks"},
-		AdminDescribeClusterScope:                       {operation: "AdminDescribeCluster"},
-		AdminListClustersScope:                          {operation: "AdminListClusters"},
-		AdminAddOrUpdateRemoteClusterScope:              {operation: "AdminAddOrUpdateRemoteCluster"},
-		AdminRemoveRemoteClusterScope:                   {operation: "AdminRemoveRemoteCluster"},
-		AdminDeleteWorkflowExecutionScope:               {operation: "AdminDeleteWorkflowExecution"},
-		OperatorAddSearchAttributesScope:                {operation: "OperatorAddSearchAttributes"},
-		OperatorRemoveSearchAttributesScope:             {operation: "OperatorRemoveSearchAttributes"},
-		OperatorListSearchAttributesScope:               {operation: "OperatorListSearchAttributes"},
-		OperatorDeleteNamespaceScope:                    {operation: "OperatorDeleteNamespace"},
+		// AdminService API scope co-locates with frontend
+		AdminRemoveTaskScope:                       {operation: "AdminRemoveTask"},
+		AdminCloseShardScope:                       {operation: "AdminCloseShard"},
+		AdminGetShardScope:                         {operation: "AdminGetShard"},
+		AdminListHistoryTasksScope:                 {operation: "AdminListHistoryTasks"},
+		AdminGetDLQMessagesScope:                   {operation: "AdminGetDLQMessages"},
+		AdminPurgeDLQMessagesScope:                 {operation: "AdminPurgeDLQMessages"},
+		AdminMergeDLQMessagesScope:                 {operation: "AdminMergeDLQMessages"},
+		AdminDescribeHistoryHostScope:              {operation: "AdminDescribeHistoryHost"},
+		AdminAddSearchAttributesScope:              {operation: "AdminAddSearchAttributes"},
+		AdminRemoveSearchAttributesScope:           {operation: "AdminRemoveSearchAttributes"},
+		AdminGetSearchAttributesScope:              {operation: "AdminGetSearchAttributes"},
+		AdminRebuildMutableStateScope:              {operation: "AdminRebuildMutableState"},
+		AdminDescribeMutableStateScope:             {operation: "AdminDescribeMutableState"},
+		AdminGetWorkflowExecutionRawHistoryV2Scope: {operation: "AdminGetWorkflowExecutionRawHistoryV2"},
+		AdminGetReplicationMessagesScope:           {operation: "AdminGetReplicationMessages"},
+		AdminListClusterMembersScope:               {operation: "AdminListClusterMembers"},
+		AdminGetNamespaceReplicationMessagesScope:  {operation: "AdminGetNamespaceReplicationMessages"},
+		AdminGetDLQReplicationMessagesScope:        {operation: "AdminGetDLQReplicationMessages"},
+		AdminReapplyEventsScope:                    {operation: "AdminReapplyEvents"},
+		AdminRefreshWorkflowTasksScope:             {operation: "AdminRefreshWorkflowTasks"},
+		AdminResendReplicationTasksScope:           {operation: "AdminResendReplicationTasks"},
+		AdminGetTaskQueueTasksScope:                {operation: "AdminGetTaskQueueTasks"},
+		AdminDescribeClusterScope:                  {operation: "AdminDescribeCluster"},
+		AdminListClustersScope:                     {operation: "AdminListClusters"},
+		AdminAddOrUpdateRemoteClusterScope:         {operation: "AdminAddOrUpdateRemoteCluster"},
+		AdminRemoveRemoteClusterScope:              {operation: "AdminRemoveRemoteCluster"},
+		AdminDeleteWorkflowExecutionScope:          {operation: "AdminDeleteWorkflowExecution"},
+		// Operator Service API
+		OperatorAddSearchAttributesScope:    {operation: "OperatorAddSearchAttributes"},
+		OperatorRemoveSearchAttributesScope: {operation: "OperatorRemoveSearchAttributes"},
+		OperatorListSearchAttributesScope:   {operation: "OperatorListSearchAttributes"},
+		OperatorDeleteNamespaceScope:        {operation: "OperatorDeleteNamespace"},
+		OperatorAddOrUpdateRemoteCluster:    {operation: "OperatorAddOrUpdateRemoteCluster"},
+		OperatorDeleteWorkflowExecution:     {operation: "OperatorDeleteWorkflowExecution"},
+		OperatorDescribeCluster:             {operation: "OperatorDescribeCluster"},
+		OperatorListClusterMembers:          {operation: "OperatorListClusterMembers"},
+		OperatorListClusters:                {operation: "OperatorListClusters"},
+		OperatorRemoveRemoteCluster:         {operation: "OperatorRemoveRemoteCluster"},
+		// Workflow Service API
 		FrontendStartWorkflowExecutionScope:             {operation: "StartWorkflowExecution"},
 		FrontendPollWorkflowTaskQueueScope:              {operation: "PollWorkflowTaskQueue"},
 		FrontendPollActivityTaskQueueScope:              {operation: "PollActivityTaskQueue"},
@@ -1670,8 +1745,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendListScheduleMatchingTimesScope:          {operation: "ListScheduleMatchingTimes"},
 		FrontendDeleteScheduleScope:                     {operation: "DeleteSchedule"},
 		FrontendListSchedulesScope:                      {operation: "ListSchedules"},
+		FrontendUpdateWorkerBuildIdOrderingScope:        {operation: "UpdateWorkerBuildIdOrdering"},
+		FrontendGetWorkerBuildIdOrderingScope:           {operation: "GetWorkerBuildIdOrdering"},
 		VersionCheckScope:                               {operation: "VersionCheck"},
 		AuthorizationScope:                              {operation: "Authorization"},
+		FrontendUpdateWorkflowScope:                     {operation: "UpdateWorkflow"},
 	},
 	// History Scope Names
 	History: {
@@ -1723,6 +1801,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryReapplyEvents:                               {operation: "ReapplyEvents"},
 		HistoryDescribeHistoryHost:                         {operation: "DescribeHistoryHost"},
 		HistoryDeleteWorkflowVisibilityRecordScope:         {operation: "DeleteWorkflowVisibilityRecord"},
+		HistoryUpdateWorkflowScope:                         {operation: "UpdateWorkflow"},
 
 		TaskPriorityAssignerScope:                   {operation: "TaskPriorityAssigner"},
 		TransferQueueProcessorScope:                 {operation: "TransferQueueProcessor"},
@@ -1795,17 +1874,19 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 	// Matching Scope Names
 	Matching: {
-		MatchingPollWorkflowTaskQueueScope:     {operation: "PollWorkflowTaskQueue"},
-		MatchingPollActivityTaskQueueScope:     {operation: "PollActivityTaskQueue"},
-		MatchingAddActivityTaskScope:           {operation: "AddActivityTask"},
-		MatchingAddWorkflowTaskScope:           {operation: "AddWorkflowTask"},
-		MatchingTaskQueueMgrScope:              {operation: "TaskQueueMgr"},
-		MatchingEngineScope:                    {operation: "MatchingEngine"},
-		MatchingQueryWorkflowScope:             {operation: "QueryWorkflow"},
-		MatchingRespondQueryTaskCompletedScope: {operation: "RespondQueryTaskCompleted"},
-		MatchingCancelOutstandingPollScope:     {operation: "CancelOutstandingPoll"},
-		MatchingDescribeTaskQueueScope:         {operation: "DescribeTaskQueue"},
-		MatchingListTaskQueuePartitionsScope:   {operation: "ListTaskQueuePartitions"},
+		MatchingPollWorkflowTaskQueueScope:       {operation: "PollWorkflowTaskQueue"},
+		MatchingPollActivityTaskQueueScope:       {operation: "PollActivityTaskQueue"},
+		MatchingAddActivityTaskScope:             {operation: "AddActivityTask"},
+		MatchingAddWorkflowTaskScope:             {operation: "AddWorkflowTask"},
+		MatchingTaskQueueMgrScope:                {operation: "TaskQueueMgr"},
+		MatchingEngineScope:                      {operation: "MatchingEngine"},
+		MatchingQueryWorkflowScope:               {operation: "QueryWorkflow"},
+		MatchingRespondQueryTaskCompletedScope:   {operation: "RespondQueryTaskCompleted"},
+		MatchingCancelOutstandingPollScope:       {operation: "CancelOutstandingPoll"},
+		MatchingDescribeTaskQueueScope:           {operation: "DescribeTaskQueue"},
+		MatchingListTaskQueuePartitionsScope:     {operation: "ListTaskQueuePartitions"},
+		MatchingUpdateWorkerBuildIdOrderingScope: {operation: "UpdateWorkerBuildIdOrdering"},
+		MatchingGetWorkerBuildIdOrderingScope:    {operation: "GetWorkerBuildIdOrdering"},
 	},
 	// Worker Scope Names
 	Worker: {
@@ -1848,7 +1929,7 @@ const (
 	ServiceRequests = iota
 	ServicePendingRequests
 	ServiceFailures
-	ServiceFailuresWithType
+	ServiceErrorWithType
 	ServiceCriticalFailures
 	ServiceLatency
 	ServiceLatencyNoUserLatency
@@ -1875,6 +1956,7 @@ const (
 
 	PersistenceRequests
 	PersistenceFailures
+	PersistenceErrorWithType
 	PersistenceLatency
 	PersistenceErrShardExistsCounter
 	PersistenceErrShardOwnershipLostCounter
@@ -2050,6 +2132,7 @@ const (
 	CommandTypeContinueAsNewCounter
 	CommandTypeSignalExternalWorkflowCounter
 	CommandTypeUpsertWorkflowSearchAttributesCounter
+	ActivityEagerExecutionCounter
 	EmptyCompletionCommandsCounter
 	MultipleCompletionCommandsCounter
 	FailedWorkflowTasksCounter
@@ -2238,6 +2321,7 @@ const (
 	TaskWriteThrottlePerTaskQueueCounter
 	TaskWriteLatencyPerTaskQueue
 	TaskLagPerTaskQueueGauge
+	NoRecentPollerTasksPerTaskQueueCounter
 
 	NumMatchingMetrics
 )
@@ -2307,6 +2391,7 @@ const (
 	RenameNamespaceFailuresCount
 	ReadNamespaceFailuresCount
 	ListExecutionsFailuresCount
+	CountExecutionsFailuresCount
 	DeleteExecutionFailuresCount
 	DeleteExecutionNotFoundCount
 	RateLimiterFailuresCount
@@ -2345,7 +2430,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceRequests:                                     NewCounterDef("service_requests"),
 		ServicePendingRequests:                              NewGaugeDef("service_pending_requests"),
 		ServiceFailures:                                     NewCounterDef("service_errors"),
-		ServiceFailuresWithType:                             NewCounterDef("service_errors_with_type"),
+		ServiceErrorWithType:                                NewCounterDef("service_error_with_type"),
 		ServiceCriticalFailures:                             NewCounterDef("service_errors_critical"),
 		ServiceLatency:                                      NewTimerDef("service_latency"),
 		ServiceLatencyNoUserLatency:                         NewTimerDef("service_latency_nouserlatency"),
@@ -2370,6 +2455,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ActionCounter:                                       NewCounterDef("action"),
 		PersistenceRequests:                                 NewCounterDef("persistence_requests"),
 		PersistenceFailures:                                 NewCounterDef("persistence_errors"),
+		PersistenceErrorWithType:                            NewCounterDef("persistence_error_with_type"),
 		PersistenceLatency:                                  NewTimerDef("persistence_latency"),
 		PersistenceErrShardExistsCounter:                    NewCounterDef("persistence_errors_shard_exists"),
 		PersistenceErrShardOwnershipLostCounter:             NewCounterDef("persistence_errors_shard_ownership_lost"),
@@ -2531,6 +2617,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CommandTypeSignalExternalWorkflowCounter:          NewCounterDef("signal_external_workflow_command"),
 		CommandTypeUpsertWorkflowSearchAttributesCounter:  NewCounterDef("upsert_workflow_search_attributes_command"),
 		CommandTypeChildWorkflowCounter:                   NewCounterDef("child_workflow_command"),
+		ActivityEagerExecutionCounter:                     NewCounterDef("activity_eager_execution"),
 		EmptyCompletionCommandsCounter:                    NewCounterDef("empty_completion_commands"),
 		MultipleCompletionCommandsCounter:                 NewCounterDef("multiple_completion_commands"),
 		FailedWorkflowTasksCounter:                        NewCounterDef("failed_workflow_tasks"),
@@ -2713,6 +2800,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskWriteThrottlePerTaskQueueCounter:      NewRollupCounterDef("task_write_throttle_count_per_tl", "task_write_throttle_count"),
 		TaskWriteLatencyPerTaskQueue:              NewRollupTimerDef("task_write_latency_per_tl", "task_write_latency"),
 		TaskLagPerTaskQueueGauge:                  NewGaugeDef("task_lag_per_tl"),
+		NoRecentPollerTasksPerTaskQueueCounter:    NewRollupCounterDef("no_poller_tasks_per_tl", "no_poller_tasks"),
 	},
 	Worker: {
 		ReplicatorMessages:                            NewCounterDef("replicator_messages"),
@@ -2778,6 +2866,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		RenameNamespaceFailuresCount: NewCounterDef("rename_namespace_failures"),
 		ReadNamespaceFailuresCount:   NewCounterDef("read_namespace_failures"),
 		ListExecutionsFailuresCount:  NewCounterDef("list_executions_failures"),
+		CountExecutionsFailuresCount: NewCounterDef("count_executions_failures"),
 		DeleteExecutionFailuresCount: NewCounterDef("delete_execution_failures"),
 		DeleteExecutionNotFoundCount: NewCounterDef("delete_execution_not_found"),
 		RateLimiterFailuresCount:     NewCounterDef("rate_limiter_failures"),

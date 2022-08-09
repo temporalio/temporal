@@ -25,7 +25,6 @@
 package history
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -36,6 +35,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -51,9 +51,7 @@ import (
 	"go.temporal.io/server/service/worker/archiver"
 )
 
-var (
-	errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
-)
+var errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
 
 type (
 	timeNow                 func() time.Time
@@ -65,6 +63,7 @@ type (
 		shard                      shard.Context
 		taskAllocator              taskAllocator
 		config                     *configs.Config
+		metricProvider             metrics.MetricsHandler
 		metricsClient              metrics.Client
 		workflowCache              workflow.Cache
 		scheduler                  queues.Scheduler
@@ -90,11 +89,12 @@ func newTimerQueueProcessor(
 	clientBean client.Bean,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
+	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
-) queues.Processor {
+) queues.Queue {
 
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
-		shard.GetConfig().TimerProcessorEnableSingleCursor()
+		shard.GetConfig().TimerProcessorEnableSingleProcessor()
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
@@ -114,6 +114,7 @@ func newTimerQueueProcessor(
 		shard:                 shard,
 		taskAllocator:         taskAllocator,
 		config:                config,
+		metricProvider:        metricProvider,
 		metricsClient:         shard.GetMetricsClient(),
 		workflowCache:         workflowCache,
 		scheduler:             scheduler,
@@ -138,11 +139,11 @@ func newTimerQueueProcessor(
 				config.TimerProcessorMaxPollRPS,
 			),
 			logger,
+			metricProvider,
 			singleProcessor,
 		),
 		standbyTimerProcessors: make(map[string]*timerQueueStandbyProcessorImpl),
 	}
-
 }
 
 func (t *timerQueueProcessorImpl) Start() {
@@ -181,7 +182,6 @@ func (t *timerQueueProcessorImpl) NotifyNewTasks(
 	clusterName string,
 	timerTasks []tasks.Task,
 ) {
-
 	if clusterName == t.currentClusterName || t.singleProcessor {
 		t.activeTimerProcessor.notifyNewTimers(timerTasks)
 		return
@@ -249,6 +249,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 			t.config.TimerProcessorFailoverMaxPollRPS,
 		),
 		t.logger,
+		t.metricProvider,
 	)
 
 	// NOTE: READ REF BEFORE MODIFICATION
@@ -285,29 +286,37 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 
 	timer := time.NewTimer(t.config.TimerProcessorCompleteTimerInterval())
 	defer timer.Stop()
+
+	completeTaskRetryPolicy := common.CreateCompleteTaskRetryPolicy()
+
 	for {
 		select {
 		case <-t.shutdownChan:
-			// before shutdown, make sure the ack level is up to date
-			t.completeTimers() //nolint:errcheck
+			// before shutdown, make sure the ack level is up-to-date
+			if err := t.completeTimers(); err != nil {
+				t.logger.Error("Failed to complete timer task", tag.Error(err))
+			}
 			return
 		case <-timer.C:
-		CompleteLoop:
-			for attempt := 1; attempt <= t.config.TimerProcessorCompleteTimerFailureRetryCount(); attempt++ {
+			if err := backoff.ThrottleRetry(func() error {
 				err := t.completeTimers()
 				if err != nil {
-					t.logger.Info("Failed to complete timers.", tag.Error(err))
-					if err == shard.ErrShardClosed {
-						// shard is unloaded, timer processor should quit as well
-						go t.Stop()
-						return
-					}
-					backoff := time.Duration((attempt - 1) * 100)
-					time.Sleep(backoff * time.Millisecond)
-				} else {
-					break CompleteLoop
+					t.logger.Info("Failed to complete timer task", tag.Error(err))
 				}
+				return err
+			}, completeTaskRetryPolicy, func(err error) bool {
+				select {
+				case <-t.shutdownChan:
+					return false
+				default:
+				}
+				return err != shard.ErrShardClosed
+			}); err == shard.ErrShardClosed {
+				// shard is unloaded, timer processor should quit as well
+				go t.Stop()
+				return
 			}
+
 			timer.Reset(t.config.TimerProcessorCompleteTimerInterval())
 		}
 	}
@@ -342,7 +351,10 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel.FireTime.Before(upperAckLevel.FireTime) {
-		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
+		ctx, cancel := newQueueIOContext()
+		defer cancel()
+
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             t.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryTimer,
 			InclusiveMinTaskKey: tasks.NewKey(lowerAckLevel.FireTime, 0),
@@ -399,6 +411,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 					t.config.TimerProcessorMaxPollRPS,
 				),
 				t.logger,
+				t.metricProvider,
 			)
 			processor.Start()
 			t.standbyTimerProcessors[clusterName] = processor

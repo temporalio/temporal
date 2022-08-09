@@ -36,32 +36,6 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-type nullStatsReporter struct{}
-
-func (r nullStatsReporter) Capabilities() tally.Capabilities {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) Flush() {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) AllocateCounter(name string, tags map[string]string) tally.CachedCount {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) AllocateGauge(name string, tags map[string]string) tally.CachedGauge {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) AllocateTimer(name string, tags map[string]string) tally.CachedTimer {
-	panic("implement me")
-}
-
-func (r nullStatsReporter) AllocateHistogram(name string, tags map[string]string, buckets tally.Buckets) tally.CachedHistogram {
-	panic("implement me")
-}
-
 type MetricsSuite struct {
 	*require.Assertions
 	suite.Suite
@@ -113,6 +87,42 @@ func (s *MetricsSuite) TestPrometheus() {
 	s.NotNil(scope)
 }
 
+func (s *MetricsSuite) TestPrometheusWithSanitizeOptions() {
+	validChars := &ValidCharacters{
+		Ranges: []SanitizeRange{
+			{
+				StartRange: "a",
+				EndRange:   "z",
+			},
+			{
+				StartRange: "A",
+				EndRange:   "Z",
+			},
+			{
+				StartRange: "0",
+				EndRange:   "9",
+			},
+		},
+		SafeCharacters: "-",
+	}
+
+	prom := &PrometheusConfig{
+		OnError:       "panic",
+		TimerType:     "histogram",
+		ListenAddress: "127.0.0.1:0",
+		SanitizeOptions: &SanitizeOptions{
+			NameCharacters:       validChars,
+			KeyCharacters:        validChars,
+			ValueCharacters:      validChars,
+			ReplacementCharacter: "_",
+		},
+	}
+	config := new(Config)
+	config.Prometheus = prom
+	scope := NewScope(log.NewNoopLogger(), config)
+	s.NotNil(scope)
+}
+
 func (s *MetricsSuite) TestNoop() {
 	config := &Config{}
 	scope := NewScope(log.NewNoopLogger(), config)
@@ -127,21 +137,20 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 
 	customizedBoundaries := map[string][]float64{
 		Dimensionless: {1},
-		"notDefine":   {1},
 		Milliseconds:  defaultPerUnitHistogramBoundaries[Milliseconds],
 		Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
 	}
 	testCases := []histogramTest{
 		{
-			nil,
-			defaultPerUnitHistogramBoundaries,
+			input:        nil,
+			expectResult: defaultPerUnitHistogramBoundaries,
 		},
 		{
-			map[string][]float64{
-				Dimensionless: {1},
-				"notDefine":   {1},
+			input: map[string][]float64{
+				UnitNameDimensionless: {1},
+				"notDefine":           {1},
 			},
-			customizedBoundaries,
+			expectResult: customizedBoundaries,
 		},
 	}
 

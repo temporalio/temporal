@@ -27,17 +27,12 @@ package sql
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
-)
-
-const (
-	executionTimeout = 8 * time.Second
 )
 
 type (

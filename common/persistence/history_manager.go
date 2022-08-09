@@ -59,7 +59,7 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 
 	if request.ForkNodeID <= 1 {
 		return nil, &InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf("ForkNodeID must be > 1"),
+			Msg: "ForkNodeID must be > 1",
 		}
 	}
 
@@ -350,7 +350,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 
 	if len(request.Events) == 0 {
 		return nil, &InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf("events to be appended cannot be empty"),
+			Msg: "events to be appended cannot be empty",
 		}
 	}
 	sortAncestors(branch.Ancestors)
@@ -361,18 +361,18 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 
 	if nodeID <= 0 {
 		return nil, &InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf("eventID cannot be less than 1"),
+			Msg: "eventID cannot be less than 1",
 		}
 	}
 	for _, e := range request.Events {
 		if e.Version != version {
 			return nil, &InvalidPersistenceRequestError{
-				Msg: fmt.Sprintf("event version must be the same inside a batch"),
+				Msg: "event version must be the same inside a batch",
 			}
 		}
 		if e.EventId != lastID+1 {
 			return nil, &InvalidPersistenceRequestError{
-				Msg: fmt.Sprintf("event ID must be continous"),
+				Msg: "event ID must be continous",
 			}
 		}
 		lastID++
@@ -419,7 +419,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 
 	if nodeID < GetBeginNodeID(branch) {
 		return nil, &InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
+			Msg: "cannot append to ancestors' nodes",
 		}
 	}
 
@@ -436,7 +436,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 
 	if len(request.History.Data) == 0 {
 		return nil, &InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf("events to be appended cannot be empty"),
+			Msg: "events to be appended cannot be empty",
 		}
 	}
 	sortAncestors(branch.Ancestors)
@@ -444,7 +444,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 	nodeID := request.NodeID
 	if nodeID <= 0 {
 		return nil, &InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf("eventID cannot be less than 1"),
+			Msg: "eventID cannot be less than 1",
 		}
 	}
 	// nodeID will be the first eventID
@@ -484,7 +484,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 
 	if nodeID < GetBeginNodeID(branch) {
 		return nil, &InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
+			Msg: "cannot append to ancestors' nodes",
 		}
 	}
 
@@ -525,6 +525,17 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 	return &AppendHistoryNodesResponse{
 		Size: len(request.History.Data),
 	}, err
+}
+
+func (m *executionManagerImpl) NewHistoryBranch(
+	ctx context.Context,
+	request *NewHistoryBranchRequest,
+) (*NewHistoryBranchResponse, error) {
+
+	resp := &NewHistoryBranchResponse{}
+	var err error
+	resp.BranchToken, err = NewHistoryBranchToken(request.TreeId)
+	return resp, err
 }
 
 // ReadHistoryBranchByBatch returns history node data for a branch by batch
@@ -934,7 +945,7 @@ func (m *executionManagerImpl) readHistoryBranch(
 		}
 		if len(events) == 0 {
 			m.logger.Error("Empty events in a batch")
-			return nil, nil, nil, nil, dataSize, serviceerror.NewDataLoss(fmt.Sprintf("corrupted history event batch, empty events"))
+			return nil, nil, nil, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, empty events")
 		}
 
 		firstEvent := events[0]           // first
@@ -992,7 +1003,7 @@ func (m *executionManagerImpl) readHistoryBranchReverse(
 		}
 		if len(events) == 0 {
 			m.logger.Error("Empty events in a batch")
-			return nil, nil, nil, dataSize, serviceerror.NewDataLoss(fmt.Sprintf("corrupted history event batch, empty events"))
+			return nil, nil, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, empty events")
 		}
 
 		firstEvent := events[0]           // first
@@ -1059,9 +1070,9 @@ func (m *executionManagerImpl) filterHistoryNodes(
 
 		switch {
 		case node.NodeID < lastNodeID:
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("corrupted data, nodeID cannot decrease"))
+			return nil, serviceerror.NewUnavailable("corrupted data, nodeID cannot decrease")
 		case node.NodeID == lastNodeID:
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"))
+			return nil, serviceerror.NewUnavailable("corrupted data, same nodeID must have smaller txnID")
 		default: // row.NodeID > lastNodeID:
 			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
 			lastTransactionID = node.TransactionID
@@ -1088,7 +1099,7 @@ func (m *executionManagerImpl) filterHistoryNodesReverse(
 
 		switch {
 		case node.NodeID > lastNodeID:
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("corrupted data, nodeID cannot decrease"))
+			return nil, serviceerror.NewUnavailable("corrupted data, nodeID cannot decrease")
 		default:
 			lastTransactionID = node.PrevTransactionID
 			lastNodeID = node.NodeID

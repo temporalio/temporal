@@ -73,7 +73,6 @@ var (
 	testLatestTime   = time.Unix(0, 2547596872371000000).UTC()
 	testWorkflowType = "test-wf-type"
 	testWorkflowID   = "test-wid"
-	testRunID        = "1601da05-4db9-4eeb-89e4-da99481bdfc9"
 	testStatus       = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 
 	testSearchResult = &elastic.SearchResult{
@@ -85,7 +84,6 @@ var (
 	filterClose             = fmt.Sprintf("must_not:map[term:map[ExecutionStatus:%s]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String())
 	filterByType            = fmt.Sprintf("map[term:map[WorkflowType:%s]", testWorkflowType)
 	filterByWID             = fmt.Sprintf("map[term:map[WorkflowId:%s]", testWorkflowID)
-	filterByRunID           = fmt.Sprintf("map[term:map[RunId:%s]", testRunID)
 	filterByExecutionStatus = fmt.Sprintf("map[term:map[ExecutionStatus:%s]", testStatus.String())
 )
 
@@ -108,13 +106,23 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	esProcessorAckTimeout := dynamicconfig.GetDurationPropertyFn(1 * time.Minute)
+	visibilityDisableOrderByClause := dynamicconfig.GetBoolPropertyFn(false)
 
 	s.controller = gomock.NewController(s.T())
 	s.mockMetricsClient = metrics.NewMockClient(s.controller)
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClientV7(s.controller)
 	s.mockSearchAttributesMapper = searchattribute.NewMockMapper(s.controller)
-	s.visibilityStore = NewVisibilityStore(s.mockESClient, testIndex, searchattribute.NewTestProvider(), nil, s.mockProcessor, esProcessorAckTimeout, s.mockMetricsClient)
+	s.visibilityStore = NewVisibilityStore(
+		s.mockESClient,
+		testIndex,
+		searchattribute.NewTestProvider(),
+		nil,
+		s.mockProcessor,
+		esProcessorAckTimeout,
+		visibilityDisableOrderByClause,
+		s.mockMetricsClient,
+	)
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {
@@ -302,7 +310,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: []interface{}{json.Number("1528358645123456789"), "qwe"},
 		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 
 	// test request latestTime overflow
@@ -316,7 +324,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: []interface{}{json.Number("1528358645123456789"), "qwe"},
 		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 	request = createTestRequest() // revert
 
@@ -330,7 +338,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: nil,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 
 	// test for additional boolQuery
@@ -344,7 +352,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: nil,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 
 	// test for search after
@@ -361,7 +369,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: token.SearchAfter,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 	request = createTestRequest() // revert
 
@@ -376,7 +384,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		PageSize:    testPageSize,
 		SearchAfter: nil,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 }
 
@@ -401,7 +409,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		SearchAfter: nil,
 		PointInTime: nil,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorter,
+		Sorter:      defaultSorterV7,
 	}, p)
 	request.Query = ""
 
@@ -428,6 +436,45 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	p, err = s.visibilityStore.buildSearchParametersV2(request)
 	s.Nil(p)
 	s.Error(err)
+	request.Query = ""
+}
+
+func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
+	request := &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID: testNamespaceID,
+		Namespace:   testNamespace,
+		PageSize:    testPageSize,
+	}
+
+	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String())
+
+	// disable ORDER BY clause
+	s.visibilityStore.disableOrderByClause = dynamicconfig.GetBoolPropertyFn(true)
+
+	// test valid query
+	request.Query = `WorkflowId="guid-2208"`
+	filterQuery := elastic.NewBoolQuery().Filter(elastic.NewMatchQuery(searchattribute.WorkflowID, "guid-2208"))
+	boolQuery := elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery)
+	p, err := s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(&client.SearchParameters{
+		Index:       testIndex,
+		Query:       boolQuery,
+		SearchAfter: nil,
+		PointInTime: nil,
+		PageSize:    testPageSize,
+		Sorter:      defaultSorterV7,
+	}, p)
+	request.Query = ""
+
+	// test invalid query with ORDER BY
+	request.Query = `ORDER BY WorkflowId`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.Nil(p)
+	s.Error(err)
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.EqualError(err, "ORDER BY clause is not supported")
 	request.Query = ""
 }
 
@@ -531,7 +578,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 	s.Equal(`[{"StartTime":{"order":"desc"}},{"CloseTime":{"order":"asc"}}]`, s.sorterToJSON(srt))
 
 	query = `order by CustomTextField desc`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 	s.Equal(err.(*serviceerror.InvalidArgument).Error(), "invalid query: unable to convert 'order by' column name: unable to sort by field of Text type, use field of type Keyword")
@@ -581,14 +628,14 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 	s.Nil(srt)
 
 	query = `CustomKeywordField = 'pid'`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "mapper error")
 
 	query = `AliasForUnknownField = 'pid'`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "invalid query: unable to convert filter expression: unable to convert left part of comparison expression: invalid search attribute: AliasForUnknownField")
@@ -606,13 +653,13 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 	s.Equal(`[{"CustomKeywordField":{"order":"asc"}}]`, s.sorterToJSON(srt))
 
 	query = `order by CustomKeywordField asc`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "mapper error")
 
 	query = `order by AliasForUnknownField asc`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "invalid query: unable to convert 'order by' column name: invalid search attribute: AliasForUnknownField")
@@ -634,7 +681,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper_Error() {
 	s.Nil(srt)
 
 	query = `ProductId = 'pid'`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgumentErr)
@@ -647,7 +694,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper_Error() {
 	s.Equal(`[{"ExecutionTime":{"order":"asc"}}]`, s.sorterToJSON(srt))
 
 	query = `order by CustomIntField asc`
-	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
+	_, _, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.EqualError(err, "mapper error")

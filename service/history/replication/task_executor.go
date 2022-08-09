@@ -31,9 +31,11 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -148,9 +150,9 @@ func (e *taskExecutorImpl) handleActivityTask(
 		WorkflowId:         attr.WorkflowId,
 		RunId:              attr.RunId,
 		Version:            attr.Version,
-		ScheduledId:        attr.ScheduledId,
+		ScheduledEventId:   attr.ScheduledEventId,
 		ScheduledTime:      attr.ScheduledTime,
-		StartedId:          attr.StartedId,
+		StartedEventId:     attr.StartedEventId,
 		StartedTime:        attr.StartedTime,
 		LastHeartbeatTime:  attr.LastHeartbeatTime,
 		Details:            attr.Details,
@@ -159,7 +161,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 		LastWorkerIdentity: attr.LastWorkerIdentity,
 		VersionHistory:     attr.GetVersionHistory(),
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := e.newTaskContext(task.TaskType, attr.NamespaceId)
 	defer cancel()
 
 	err = e.historyEngine.SyncActivity(ctx, request)
@@ -173,6 +175,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 		defer stopwatch.Stop()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+			ctx,
 			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
 			retryErr.WorkflowId,
@@ -224,7 +227,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		// new run events does not need version history since there is no prior events
 		NewRunEvents: attr.NewRunEvents,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := e.newTaskContext(task.TaskType, attr.NamespaceId)
 	defer cancel()
 
 	err = e.historyEngine.ReplicateEventsV2(ctx, request)
@@ -238,6 +241,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		defer resendStopWatch.Stop()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+			ctx,
 			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
 			retryErr.WorkflowId,
@@ -279,7 +283,7 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx, cancel := e.newTaskContext(task.TaskType, executionInfo.NamespaceId)
 	defer cancel()
 
 	return e.historyEngine.ReplicateWorkflowState(ctx, &historyservice.ReplicateWorkflowStateRequest{
@@ -328,10 +332,6 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 	if err != nil {
 		return err
 	}
-	lastWriteVersion, err := mutableState.GetLastWriteVersion()
-	if err != nil {
-		return err
-	}
 
 	return e.deleteManager.DeleteWorkflowExecution(
 		ctx,
@@ -339,7 +339,16 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		ex,
 		wfCtx,
 		mutableState,
-		lastWriteVersion,
 		false,
 	)
+}
+
+func (e *taskExecutorImpl) newTaskContext(
+	taskType enumsspb.ReplicationTaskType,
+	namespaceID string,
+) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
+	return ctx, cancel
 }

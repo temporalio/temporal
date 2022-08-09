@@ -28,11 +28,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -46,53 +46,55 @@ import (
 
 type (
 	visibilityQueueTaskExecutor struct {
-		shard         shard.Context
-		cache         workflow.Cache
-		logger        log.Logger
-		visibilityMgr manager.VisibilityManager
+		shard          shard.Context
+		cache          workflow.Cache
+		logger         log.Logger
+		metricProvider metrics.MetricsHandler
+		visibilityMgr  manager.VisibilityManager
 	}
 )
 
-var (
-	errUnknownVisibilityTask = serviceerror.NewInternal("unknown visibility task")
-)
+var errUnknownVisibilityTask = serviceerror.NewInternal("unknown visibility task")
 
 func newVisibilityQueueTaskExecutor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
+	metricProvider metrics.MetricsHandler,
 ) *visibilityQueueTaskExecutor {
 	return &visibilityQueueTaskExecutor{
-		shard:         shard,
-		cache:         workflowCache,
-		logger:        logger,
-		visibilityMgr: visibilityMgr,
+		shard:          shard,
+		cache:          workflowCache,
+		logger:         logger,
+		metricProvider: metricProvider,
+		visibilityMgr:  visibilityMgr,
 	}
 }
 
 func (t *visibilityQueueTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.Scope, error) {
-
+) (metrics.MetricsHandler, error) {
 	task := executable.GetTask()
-	scope := t.shard.GetMetricsClient().Scope(
-		tasks.GetVisibilityTaskMetricsScope(task),
+	taskType := queues.GetVisibilityTaskTypeTagValue(task)
+	metricsProvider := t.metricProvider.WithTags(
 		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType), // for backward compatibility
 	)
 
 	switch task := task.(type) {
 	case *tasks.StartExecutionVisibilityTask:
-		return scope, t.processStartExecution(ctx, task)
+		return metricsProvider, t.processStartExecution(ctx, task)
 	case *tasks.UpsertExecutionVisibilityTask:
-		return scope, t.processUpsertExecution(ctx, task)
+		return metricsProvider, t.processUpsertExecution(ctx, task)
 	case *tasks.CloseExecutionVisibilityTask:
-		return scope, t.processCloseExecution(ctx, task)
+		return metricsProvider, t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionVisibilityTask:
-		return scope, t.processDeleteExecution(ctx, task)
+		return metricsProvider, t.processDeleteExecution(ctx, task)
 	default:
-		return scope, errUnknownVisibilityTask
+		return metricsProvider, errUnknownVisibilityTask
 	}
 }
 
@@ -232,7 +234,6 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 	visibilityMemo *commonpb.Memo,
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
-
 	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -275,7 +276,6 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 	visibilityMemo *commonpb.Memo,
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
-
 	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -390,7 +390,6 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	taskQueue string,
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
-
 	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -440,7 +439,6 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 func getWorkflowMemo(
 	memoFields map[string]*commonpb.Payload,
 ) *commonpb.Memo {
-
 	if memoFields == nil {
 		return nil
 	}
@@ -450,14 +448,13 @@ func getWorkflowMemo(
 func copyMemo(
 	memoFields map[string]*commonpb.Payload,
 ) map[string]*commonpb.Payload {
-
 	if memoFields == nil {
 		return nil
 	}
 
 	result := make(map[string]*commonpb.Payload)
 	for k, v := range memoFields {
-		result[k] = proto.Clone(v).(*commonpb.Payload)
+		result[k] = common.CloneProto(v)
 	}
 	return result
 }
@@ -465,7 +462,6 @@ func copyMemo(
 func getSearchAttributes(
 	indexedFields map[string]*commonpb.Payload,
 ) *commonpb.SearchAttributes {
-
 	if indexedFields == nil {
 		return nil
 	}
@@ -475,14 +471,13 @@ func getSearchAttributes(
 func copySearchAttributes(
 	input map[string]*commonpb.Payload,
 ) map[string]*commonpb.Payload {
-
 	if input == nil {
 		return nil
 	}
 
 	result := make(map[string]*commonpb.Payload)
 	for k, v := range input {
-		result[k] = proto.Clone(v).(*commonpb.Payload)
+		result[k] = common.CloneProto(v)
 	}
 	return result
 }

@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/translator"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -68,15 +69,15 @@ func NewCassandraCluster(
 	}
 	if cfg.TLS != nil && cfg.TLS.Enabled {
 		if cfg.TLS.CertData != "" && cfg.TLS.CertFile != "" {
-			return nil, errors.New("Cannot specify both certData and certFile properties")
+			return nil, errors.New("only one of certData or certFile properties should be specified")
 		}
 
 		if cfg.TLS.KeyData != "" && cfg.TLS.KeyFile != "" {
-			return nil, errors.New("Cannot specify both keyData and keyFile properties")
+			return nil, errors.New("only one of keyData or keyFile properties should be specified")
 		}
 
 		if cfg.TLS.CaData != "" && cfg.TLS.CaFile != "" {
-			return nil, errors.New("Cannot specify both caData and caFile properties")
+			return nil, errors.New("only one of caData or caFile properties should be specified")
 		}
 
 		cluster.SslOpts = &gocql.SslOptions{
@@ -158,18 +159,19 @@ func NewCassandraCluster(
 	}
 
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
-	return cluster, nil
-}
 
-// regionHostFilter returns a gocql host filter for the given region name
-func regionHostFilter(region string) gocql.HostFilter {
-	return gocql.HostFilterFunc(func(host *gocql.HostInfo) bool {
-		applicationRegion := region
-		if len(host.DataCenter()) < 3 {
-			return false
+	if cfg.AddressTranslator != nil && cfg.AddressTranslator.Translator != "" {
+		addressTranslator, err := translator.LookupTranslator(cfg.AddressTranslator.Translator)
+		if err != nil {
+			return nil, err
 		}
-		return host.DataCenter()[:3] == applicationRegion
-	})
+		cluster.AddressTranslator, err = addressTranslator.GetTranslator(&cfg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return cluster, nil
 }
 
 // parseHosts returns parses a list of hosts separated by comma

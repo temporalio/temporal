@@ -34,28 +34,28 @@ import (
 
 type (
 	MetricsHandler struct {
-		provider metrics.MetricProvider
+		provider metrics.MetricsHandler
 	}
 
 	metricsCounter struct {
 		name     string
-		provider metrics.MetricProvider
+		provider metrics.MetricsHandler
 	}
 
 	metricsGauge struct {
 		name     string
-		provider metrics.MetricProvider
+		provider metrics.MetricsHandler
 	}
 
 	metricsTimer struct {
 		name     string
-		provider metrics.MetricProvider
+		provider metrics.MetricsHandler
 	}
 )
 
 var _ sdkclient.MetricsHandler = &MetricsHandler{}
 
-func NewMetricHandler(provider metrics.MetricProvider) *MetricsHandler {
+func NewMetricsHandler(provider metrics.MetricsHandler) *MetricsHandler {
 	return &MetricsHandler{provider: provider}
 }
 
@@ -65,7 +65,7 @@ func (m *MetricsHandler) WithTags(tags map[string]string) sdkclient.MetricsHandl
 		t = append(t, metrics.StringTag(k, v))
 	}
 
-	return NewMetricHandler(m.provider.WithTags(t...))
+	return NewMetricsHandler(m.provider.WithTags(t...))
 }
 
 func (m *MetricsHandler) Counter(name string) sdkclient.MetricsCounter {
@@ -81,13 +81,13 @@ func (m *MetricsHandler) Timer(name string) sdkclient.MetricsTimer {
 }
 
 func (m metricsCounter) Inc(i int64) {
-	m.provider.Counter(m.name, nil).Record(i)
+	m.provider.Counter(m.name).Record(i)
 }
 
 func (m metricsGauge) Update(f float64) {
-	m.provider.Gauge(m.name, nil).Record(f)
+	m.provider.Gauge(m.name).Record(f)
 }
 
 func (m metricsTimer) Record(duration time.Duration) {
-	m.provider.Timer(m.name, nil).Record(duration)
+	m.provider.Timer(m.name).Record(duration)
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -89,11 +90,9 @@ func TestVisibilityQueueTaskExecutorSuite(t *testing.T) {
 }
 
 func (s *visibilityQueueTaskExecutorSuite) SetupSuite() {
-
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TearDownSuite() {
-
 }
 
 func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
@@ -114,7 +113,8 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: 1,
 				RangeId: 1,
-			}},
+			},
+		},
 		config,
 	)
 	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
@@ -163,6 +163,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		s.workflowCache,
 		s.mockVisibilityMgr,
 		s.logger,
+		metrics.NoopMetricsHandler,
 	)
 }
 
@@ -172,7 +173,6 @@ func (s *visibilityQueueTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
-
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
@@ -212,10 +212,10 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 	)
 	s.Nil(err)
 
-	di := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	taskID := int64(59)
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
@@ -240,7 +240,6 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask() {
-
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
@@ -270,7 +269,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 	s.Nil(err)
 
 	taskID := int64(59)
-	di := addWorkflowTaskScheduledEvent(mutableState)
+	wt := addWorkflowTaskScheduledEvent(mutableState)
 
 	visibilityTask := &tasks.StartExecutionVisibilityTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -283,7 +282,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 		TaskID:              taskID,
 	}
 
-	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, wt.Version)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionStarted(
 		gomock.Any(),
@@ -295,7 +294,6 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttributes() {
-
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
@@ -321,7 +319,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 	s.NoError(err)
 
 	taskID := int64(59)
-	di := addWorkflowTaskScheduledEvent(mutableState)
+	wt := addWorkflowTaskScheduledEvent(mutableState)
 
 	visibilityTask := &tasks.UpsertExecutionVisibilityTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -333,7 +331,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 		TaskID:  taskID,
 	}
 
-	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, wt.ScheduledEventID, wt.Version)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.EXPECT().UpsertWorkflowExecution(
 		gomock.Any(),
@@ -349,16 +347,15 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 	startEvent *historypb.HistoryEvent,
 	task *tasks.StartExecutionVisibilityTask,
 	mutableState workflow.MutableState,
-	backoffSeconds time.Duration,
+	backoff time.Duration,
 	taskQueueName string,
 ) *manager.RecordWorkflowExecutionStartedRequest {
-
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: task.WorkflowID,
 		RunId:      task.RunID,
 	}
 	executionInfo := mutableState.GetExecutionInfo()
-	executionTimestamp := timestamp.TimeValue(startEvent.GetEventTime()).Add(backoffSeconds)
+	executionTimestamp := timestamp.TimeValue(startEvent.GetEventTime()).Add(backoff)
 
 	return &manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
@@ -382,7 +379,6 @@ func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowSearchAttributesR
 	mutableState workflow.MutableState,
 	taskQueueName string,
 ) *manager.UpsertWorkflowExecutionRequest {
-
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: task.WorkflowID,
 		RunId:      task.RunID,
@@ -410,7 +406,6 @@ func (s *visibilityQueueTaskExecutorSuite) createPersistenceMutableState(
 	lastEventID int64,
 	lastEventVersion int64,
 ) *persistencespb.WorkflowMutableState {
-
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().GetVersionHistories())
 	s.NoError(err)
 	err = versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(

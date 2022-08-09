@@ -89,6 +89,7 @@ func (s *clientSuite) TestUpload() {
 	mockWriter.EXPECT().Close().Return(nil)
 
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
 	err = storageWrapper.Upload(ctx, URI, "myfile.history", []byte("{}"))
 	s.Require().NoError(err)
 }
@@ -110,6 +111,7 @@ func (s *clientSuite) TestUploadWriterCloseError() {
 	mockWriter.EXPECT().Close().Return(errors.New("Not Found"))
 
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
 	err = storageWrapper.Upload(ctx, URI, "myfile.history", []byte("{}"))
 	s.Require().EqualError(err, "Not Found")
 }
@@ -216,6 +218,7 @@ func (s *clientSuite) TestGet() {
 	mockReader.EXPECT().Close().Return(nil)
 
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
 	_, err = storageWrapper.Get(ctx, URI, "myfile.history")
 	s.Require().NoError(err)
 }
@@ -252,6 +255,7 @@ func (s *clientSuite) TestQuery() {
 
 	var fileNames []string
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
 	fileNames, err = storageWrapper.Query(ctx, URI, "7478875943689868082123907395549832634615673687049942026838")
 	s.Require().NoError(err)
 	s.Equal(strings.Join(fileNames, ", "), "fileName_01")
@@ -288,6 +292,7 @@ func (s *clientSuite) TestQueryWithFilter() {
 
 	var fileNames []string
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
 	fileNames, _, _, err = storageWrapper.QueryWithFilters(ctx, URI, "closeTimeout_2020-02-27T09:42:28Z", 0, 0, []connector.Precondition{newWorkflowIDPrecondition("4418294404690464320")})
 
 	s.Require().NoError(err)

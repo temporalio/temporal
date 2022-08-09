@@ -61,17 +61,17 @@ func (m *MockTaskGenerator) EXPECT() *MockTaskGeneratorMockRecorder {
 }
 
 // GenerateActivityRetryTasks mocks base method.
-func (m *MockTaskGenerator) GenerateActivityRetryTasks(activityScheduleID int64) error {
+func (m *MockTaskGenerator) GenerateActivityRetryTasks(activityScheduledEventID int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateActivityRetryTasks", activityScheduleID)
+	ret := m.ctrl.Call(m, "GenerateActivityRetryTasks", activityScheduledEventID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateActivityRetryTasks indicates an expected call of GenerateActivityRetryTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateActivityRetryTasks(activityScheduleID interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateActivityRetryTasks(activityScheduledEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityRetryTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityRetryTasks), activityScheduleID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityRetryTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityRetryTasks), activityScheduledEventID)
 }
 
 // GenerateActivityTasks mocks base method.
@@ -203,17 +203,17 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateRequestCancelExternalTasks(now,
 }
 
 // GenerateScheduleWorkflowTaskTasks mocks base method.
-func (m *MockTaskGenerator) GenerateScheduleWorkflowTaskTasks(now time.Time, workflowTaskScheduleID int64) error {
+func (m *MockTaskGenerator) GenerateScheduleWorkflowTaskTasks(now time.Time, workflowTaskScheduledEventID int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateScheduleWorkflowTaskTasks", now, workflowTaskScheduleID)
+	ret := m.ctrl.Call(m, "GenerateScheduleWorkflowTaskTasks", now, workflowTaskScheduledEventID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateScheduleWorkflowTaskTasks indicates an expected call of GenerateScheduleWorkflowTaskTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateScheduleWorkflowTaskTasks(now, workflowTaskScheduleID interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateScheduleWorkflowTaskTasks(now, workflowTaskScheduledEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateScheduleWorkflowTaskTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateScheduleWorkflowTaskTasks), now, workflowTaskScheduleID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateScheduleWorkflowTaskTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateScheduleWorkflowTaskTasks), now, workflowTaskScheduledEventID)
 }
 
 // GenerateSignalExternalTasks mocks base method.
@@ -231,17 +231,17 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateSignalExternalTasks(now, event 
 }
 
 // GenerateStartWorkflowTaskTasks mocks base method.
-func (m *MockTaskGenerator) GenerateStartWorkflowTaskTasks(now time.Time, workflowTaskScheduleID int64) error {
+func (m *MockTaskGenerator) GenerateStartWorkflowTaskTasks(now time.Time, workflowTaskScheduledEventID int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateStartWorkflowTaskTasks", now, workflowTaskScheduleID)
+	ret := m.ctrl.Call(m, "GenerateStartWorkflowTaskTasks", now, workflowTaskScheduledEventID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateStartWorkflowTaskTasks indicates an expected call of GenerateStartWorkflowTaskTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateStartWorkflowTaskTasks(now, workflowTaskScheduleID interface{}) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateStartWorkflowTaskTasks(now, workflowTaskScheduledEventID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateStartWorkflowTaskTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateStartWorkflowTaskTasks), now, workflowTaskScheduleID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateStartWorkflowTaskTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateStartWorkflowTaskTasks), now, workflowTaskScheduledEventID)
 }
 
 // GenerateUserTimerTasks mocks base method.

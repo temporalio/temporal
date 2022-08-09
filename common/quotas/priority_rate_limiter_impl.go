@@ -34,7 +34,7 @@ import (
 type (
 	// PriorityRateLimiterImpl is a wrapper around the golang rate limiter
 	PriorityRateLimiterImpl struct {
-		apiToPriority          map[string]int
+		requestPriorityFn      RequestPriorityFn
 		priorityToRateLimiters map[int]RateLimiter
 
 		// priority value 0 means highest priority
@@ -49,7 +49,7 @@ var _ RequestRateLimiter = (*PriorityRateLimiterImpl)(nil)
 // NewPriorityRateLimiter returns a new rate limiter that can handle dynamic
 // configuration updates
 func NewPriorityRateLimiter(
-	apiToPriority map[string]int,
+	requestPriorityFn RequestPriorityFn,
 	priorityToRateLimiters map[int]RateLimiter,
 ) *PriorityRateLimiterImpl {
 	priorities := make([]int, 0, len(priorityToRateLimiters))
@@ -66,15 +66,8 @@ func NewPriorityRateLimiter(
 		rateLimiters = append(rateLimiters, priorityToRateLimiters[priority])
 	}
 
-	// sanity check priority within apiToPriority appears in priorityToRateLimiters
-	for _, priority := range apiToPriority {
-		if _, ok := priorityToRateLimiters[priority]; !ok {
-			panic("API to priority & priority to rate limiter does not match")
-		}
-	}
-
 	return &PriorityRateLimiterImpl{
-		apiToPriority:          apiToPriority,
+		requestPriorityFn:      requestPriorityFn,
 		priorityToRateLimiters: priorityToRateLimiters,
 
 		priorityToIndex: priorityToIndex,
@@ -161,10 +154,9 @@ func (p *PriorityRateLimiterImpl) Wait(
 func (p *PriorityRateLimiterImpl) getRateLimiters(
 	request Request,
 ) (RateLimiter, []RateLimiter) {
-	priority, ok := p.apiToPriority[request.API]
-	if !ok {
-		// if API not assigned a priority use the lowest priority
-		return p.rateLimiters[len(p.rateLimiters)-1], nil
+	priority := p.requestPriorityFn(request)
+	if _, ok := p.priorityToRateLimiters[priority]; !ok {
+		panic("Request to priority & priority to rate limiter does not match")
 	}
 
 	rateLimiterIndex := p.priorityToIndex[priority]

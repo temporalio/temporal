@@ -33,6 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -172,13 +173,8 @@ func (a *activities) UpdateClusterMetadataActivity(ctx context.Context, params W
 		return fmt.Errorf("%w: %v", ErrUnableToGetSearchAttributes, err)
 	}
 
-	newCustomSearchAttributes := map[string]enumspb.IndexedValueType{}
-	for saName, saType := range oldSearchAttributes.Custom() {
-		newCustomSearchAttributes[saName] = saType
-	}
-	for saName, saType := range params.CustomAttributesToAdd {
-		newCustomSearchAttributes[saName] = saType
-	}
+	newCustomSearchAttributes := maps.Clone(oldSearchAttributes.Custom())
+	maps.Copy(newCustomSearchAttributes, params.CustomAttributesToAdd)
 	err = a.saManager.SaveSearchAttributes(ctx, params.IndexName, newCustomSearchAttributes)
 	if err != nil {
 		a.logger.Info("Unable to save search attributes to cluster metadata.", tag.ESIndex(params.IndexName), tag.Error(err))

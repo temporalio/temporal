@@ -232,8 +232,8 @@ func (r *nDCWorkflowImpl) failWorkflowTask(
 	}
 
 	if _, err := r.mutableState.AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduleID,
-		workflowTask.StartedID,
+		workflowTask.ScheduledEventID,
+		workflowTask.StartedEventID,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
 		consts.IdentityHistoryService,

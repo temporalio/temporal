@@ -1972,14 +1972,15 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.Equal(2, lastAttemptCount)
 }
 
-func (s *integrationClustersTestSuite) printHistory(frontendClient workflowservice.WorkflowServiceClient, namespace, workflowID, runID string) {
-	events := s.getHistory(frontendClient, namespace, &commonpb.WorkflowExecution{
-		WorkflowId: workflowID,
-		RunId:      runID,
-	})
-	history := &historypb.History{Events: events}
-	common.PrettyPrintHistory(history, s.logger)
-}
+// Uncomment if you need to debug history.
+// func (s *integrationClustersTestSuite) printHistory(frontendClient workflowservice.WorkflowServiceClient, namespace, workflowID, runID string) {
+// 	events := s.getHistory(frontendClient, namespace, &commonpb.WorkflowExecution{
+// 		WorkflowId: workflowID,
+// 		RunId:      runID,
+// 	})
+// 	history := &historypb.History{Events: events}
+// 	common.PrettyPrintHistory(history, s.logger)
+// }
 
 func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -2233,10 +2234,11 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	s.NoError(err)
 
 	// start force-replicate wf
-	sysClient, err := sdkclient.NewClient(sdkclient.Options{
+	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: "temporal-system",
 	})
+	s.NoError(err)
 	workflowID4 := "force-replication-wf-4"
 	run4, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 workflowID4,
@@ -2278,7 +2280,7 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	s.Equal(clusterName[1], nsResp2.ReplicationConfig.ActiveClusterName)
 
 	// verify all wf in ns is now available in cluster2
-	client2, err := sdkclient.NewClient(sdkclient.Options{
+	client2, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster2.GetHost().FrontendGRPCAddress(),
 		Namespace: namespace,
 	})
@@ -2349,10 +2351,11 @@ func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	s.Equal(2, len(nsResp.ReplicationConfig.Clusters))
 
 	// Start force-replicate wf
-	sysClient, err := sdkclient.NewClient(sdkclient.Options{
+	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
 		Namespace: "temporal-system",
 	})
+	s.NoError(err)
 	forceReplicationWorkflowID := "force-replication-wf"
 	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
 		ID:                 forceReplicationWorkflowID,
@@ -2417,6 +2420,111 @@ func (s *integrationClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	descResp, err := client2.DescribeWorkflowExecution(testCtx, workflowID, resetResp.GetRunId())
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().Status)
+}
+
+func (s *integrationClustersTestSuite) TestForceMigration_ResetWorkflow() {
+	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	namespace := "force-replication" + common.GenerateRandomString(5)
+	s.registerNamespace(namespace, true)
+
+	taskqueue := "integration-force-replication-reset-task-queue"
+	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
+
+	testWorkflowFn := func(ctx workflow.Context) error {
+		return nil
+	}
+
+	worker1.RegisterWorkflow(testWorkflowFn)
+	worker1.Start()
+
+	// Start wf1
+	workflowID := "force-replication-test-reset-wf-1"
+	run1, err := client1.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
+		ID:                 workflowID,
+		TaskQueue:          taskqueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, testWorkflowFn)
+
+	s.NoError(err)
+	s.NotEmpty(run1.GetRunID())
+	s.logger.Info("start wf1", tag.WorkflowRunID(run1.GetRunID()))
+	// wait until wf1 complete
+	err = run1.Get(testCtx, nil)
+	s.NoError(err)
+
+	resp, err := client1.ResetWorkflowExecution(testCtx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      run1.GetRunID(),
+		},
+		Reason:                    "test",
+		WorkflowTaskFinishEventId: 3,
+		RequestId:                 uuid.New(),
+	})
+	s.NoError(err)
+	resetRun := client1.GetWorkflow(testCtx, workflowID, resp.GetRunId())
+	err = resetRun.Get(testCtx, nil)
+	s.NoError(err)
+
+	frontendClient1 := s.cluster1.GetFrontendClient()
+	// Update ns to have 2 clusters
+	_, err = frontendClient1.UpdateNamespace(testCtx, &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespace,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: clusterReplicationConfig,
+		},
+	})
+	s.NoError(err)
+
+	// Wait for ns cache to pick up the change
+	time.Sleep(cacheRefreshInterval)
+
+	nsResp, err := frontendClient1.DescribeNamespace(testCtx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	})
+	s.NoError(err)
+	s.True(nsResp.IsGlobalNamespace)
+	s.Equal(2, len(nsResp.ReplicationConfig.Clusters))
+
+	// Start force-replicate wf
+	sysClient, err := sdkclient.Dial(sdkclient.Options{
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
+		Namespace: "temporal-system",
+	})
+	s.NoError(err)
+	forceReplicationWorkflowID := "force-replication-wf"
+	sysWfRun, err := sysClient.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
+		ID:                 forceReplicationWorkflowID,
+		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, "force-replication", migration.ForceReplicationParams{
+		Namespace:  namespace,
+		OverallRps: 10,
+	})
+	s.NoError(err)
+	err = sysWfRun.Get(testCtx, nil)
+	s.NoError(err)
+
+	// Verify all wf in ns is now available in cluster2
+	client2, _ := s.newClientAndWorker(s.cluster2.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker2")
+	verifyHistory := func(wfID string, runID string) {
+		iter1 := client1.GetWorkflowHistory(testCtx, wfID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		iter2 := client2.GetWorkflowHistory(testCtx, wfID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		for iter1.HasNext() && iter2.HasNext() {
+			event1, err := iter1.Next()
+			s.NoError(err)
+			event2, err := iter2.Next()
+			s.NoError(err)
+			s.Equal(event1, event2)
+		}
+		s.False(iter1.HasNext())
+		s.False(iter2.HasNext())
+	}
+	verifyHistory(workflowID, run1.GetRunID())
+	verifyHistory(workflowID, resp.GetRunId())
 }
 
 func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
@@ -2495,7 +2603,7 @@ func (s *integrationClustersTestSuite) registerNamespace(namespace string, isGlo
 }
 
 func (s *integrationClustersTestSuite) newClientAndWorker(hostport, namespace, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
-	sdkClient1, err := sdkclient.NewClient(sdkclient.Options{
+	sdkClient1, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  hostport,
 		Namespace: namespace,
 	})

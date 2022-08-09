@@ -34,10 +34,13 @@ import (
 
 	"github.com/uber/tchannel-go"
 	"go.uber.org/fx"
+	"golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
+	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -69,8 +72,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
-	"go.temporal.io/server/service/worker/archiver"
-	"go.temporal.io/server/service/worker/replicator"
+	"go.temporal.io/server/temporal"
 )
 
 // Temporal hosts all of temporal services in one process
@@ -105,6 +107,7 @@ type (
 		frontendClient                   workflowservice.WorkflowServiceClient
 		operatorClient                   operatorservice.OperatorServiceClient
 		historyClient                    historyservice.HistoryServiceClient
+		dynamicClient                    *dynamicClient
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
 		persistenceConfig                config.Persistence
@@ -117,8 +120,6 @@ type (
 		shutdownCh                       chan struct{}
 		shutdownWG                       sync.WaitGroup
 		clusterNo                        int // cluster number
-		replicator                       *replicator.Replicator
-		clientWorker                     archiver.ClientWorker
 		archiverMetadata                 carchiver.ArchivalMetadata
 		archiverProvider                 provider.ArchiverProvider
 		historyConfig                    *HistoryConfig
@@ -127,6 +128,7 @@ type (
 		workerConfig                     *WorkerConfig
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
+		spanExporters                    []otelsdktrace.SpanExporter
 	}
 
 	// HistoryConfig contains configs for history service
@@ -158,12 +160,18 @@ type (
 		WorkerConfig                     *WorkerConfig
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
+		SpanExporters                    []otelsdktrace.SpanExporter
+		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 	}
 )
 
 // NewTemporal returns an instance that hosts full temporal in one process
 func NewTemporal(params *TemporalParams) *temporalImpl {
-	return &temporalImpl{
+	integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
+	for k, v := range params.DynamicConfigOverrides {
+		integrationClient.OverrideValue(k, v)
+	}
+	impl := &temporalImpl{
 		logger:                           params.Logger,
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
 		persistenceConfig:                params.PersistenceConfig,
@@ -183,7 +191,11 @@ func NewTemporal(params *TemporalParams) *temporalImpl {
 		workerConfig:                     params.WorkerConfig,
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
+		spanExporters:                    params.SpanExporters,
+		dynamicClient:                    integrationClient,
 	}
+	impl.overrideHistoryDynamicConfig(integrationClient)
+	return impl
 }
 
 func (c *temporalImpl) enableWorker() bool {
@@ -398,7 +410,6 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
@@ -414,9 +425,10 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 			return sdk.NewClientFactory(
 				c.FrontendGRPCAddress(),
 				nil,
-				sdk.NewMetricHandler(metrics.NewEventsMetricProvider(metrics.NoopMetricHandler)),
+				sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
 			)
 		}),
+		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
 		fx.Provide(func() authorization.Authorizer { return nil }),
 		fx.Provide(func() authorization.ClaimMapper { return nil }),
@@ -428,13 +440,15 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
+		fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
+		fx.Supply(c.spanExporters),
+		temporal.ServiceTracingModule,
 		frontend.Module,
 		fx.Populate(&frontendService, &clientBean, &namespaceRegistry),
-		fx.NopLogger,
+		temporal.FxLogAdapter,
 	)
 	err = feApp.Err()
 	if err != nil {
@@ -471,9 +485,6 @@ func (c *temporalImpl) startHistory(
 	serviceName := common.HistoryServiceName
 	membershipPorts := c.HistoryServiceAddress(2)
 	for i, grpcPort := range c.HistoryServiceAddress(3) {
-		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
-		c.overrideHistoryDynamicConfig(integrationClient)
-
 		persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
@@ -495,10 +506,9 @@ func (c *temporalImpl) startHistory(
 		app := fx.New(
 			fx.Supply(
 				stoppedCh,
-				integrationClient,
 				persistenceConfig,
 			),
-			fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
+			fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 			fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() resource.ThrottledLogger { return c.logger }),
@@ -513,7 +523,7 @@ func (c *temporalImpl) startHistory(
 				return sdk.NewClientFactory(
 					c.FrontendGRPCAddress(),
 					nil,
-					sdk.NewMetricHandler(metrics.NewEventsMetricProvider(metrics.NoopMetricHandler)),
+					sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
 				)
 			}),
 			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
@@ -523,16 +533,19 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-			fx.Provide(func() dynamicconfig.Client { return integrationClient }),
+			fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
 			fx.Provide(func() log.Logger { return c.logger }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(workflow.NewTaskGeneratorProvider),
-			history.QueueProcessorModule,
+			fx.Supply(c.spanExporters),
+			temporal.ServiceTracingModule,
+			history.QueueModule,
 			history.Module,
 			replication.Module,
 			fx.Populate(&historyService, &clientBean, &namespaceRegistry),
-			fx.NopLogger)
+			temporal.FxLogAdapter,
+		)
 		err = app.Err()
 		if err != nil {
 			c.logger.Fatal("unable to construct history service", tag.Error(err))
@@ -586,7 +599,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
 		fx.Provide(func() common.RPCFactory { return rpcFactory }),
@@ -601,11 +614,13 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
+		fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
+		fx.Supply(c.spanExporters),
+		temporal.ServiceTracingModule,
 		matching.Module,
 		fx.Populate(&matchingService, &clientBean, &namespaceRegistry),
-		fx.NopLogger,
+		temporal.FxLogAdapter,
 	)
 	err = app.Err()
 	if err != nil {
@@ -650,10 +665,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		FailoverVersionIncrement: c.clusterMetadataConfig.FailoverVersionIncrement,
 		MasterClusterName:        c.clusterMetadataConfig.MasterClusterName,
 		CurrentClusterName:       c.clusterMetadataConfig.CurrentClusterName,
-		ClusterInformation:       make(map[string]cluster.ClusterInformation),
-	}
-	for k, v := range c.clusterMetadataConfig.ClusterInformation {
-		clusterConfigCopy.ClusterInformation[k] = v
+		ClusterInformation:       maps.Clone(c.clusterMetadataConfig.ClusterInformation),
 	}
 	if c.workerConfig.EnableReplicator {
 		clusterConfigCopy.EnableGlobalNamespace = true
@@ -663,13 +675,18 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	var workerService *worker.Service
 	var clientBean client.Bean
 	var namespaceRegistry namespace.Registry
-
+	clientConfig := &config.Config{
+		PublicClient: config.PublicClient{
+			HostPort: c.FrontendGRPCAddress(),
+		},
+	}
 	app := fx.New(
 		fx.Supply(
 			stoppedCh,
 			persistenceConfig,
+			clientConfig,
 		),
-		fx.Provide(func() metrics.Reporter { return metrics.NoopReporter }),
+		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
@@ -684,7 +701,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 			return sdk.NewClientFactory(
 				c.FrontendGRPCAddress(),
 				nil,
-				sdk.NewMetricHandler(metrics.NewEventsMetricProvider(metrics.NoopMetricHandler)),
+				sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
 			)
 		}),
 		fx.Provide(func() sdk.WorkerFactory { return sdk.NewWorkerFactory() }),
@@ -693,14 +710,15 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
+		fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
-
+		fx.Supply(c.spanExporters),
+		temporal.ServiceTracingModule,
 		worker.Module,
 		fx.Populate(&workerService, &clientBean, &namespaceRegistry),
-		fx.NopLogger,
+		temporal.FxLogAdapter,
 	)
 	err = app.Err()
 	if err != nil {
@@ -789,7 +807,6 @@ type rpcFactoryImpl struct {
 	sync.RWMutex
 	listener       net.Listener
 	ringpopChannel *tchannel.Channel
-	serverCfg      config.GroupTLS
 }
 
 func (c *rpcFactoryImpl) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {

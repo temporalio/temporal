@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/clock"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
@@ -49,6 +51,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/payload"
@@ -178,6 +181,7 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
+		clock.NewRealTimeSource(),
 	)
 }
 
@@ -243,6 +247,92 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
 	s.Equal(errListNotAllowed, err)
+}
+
+func (s *workflowHandlerSuite) TestTransientTaskInjection() {
+	cfg := s.newConfig()
+	baseEvents := []*historypb.HistoryEvent{
+		&historypb.HistoryEvent{EventId: 1},
+		&historypb.HistoryEvent{EventId: 2},
+	}
+
+	// Needed to execute test but not relevant
+	s.mockSearchAttributesProvider.EXPECT().
+		GetSearchAttributes(cfg.ESIndexName, false).
+		Return(searchattribute.NameTypeMap{}, nil).
+		AnyTimes()
+
+	// Install a test namespace into mock namespace registry
+	ns := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Id:   s.testNamespaceID.String(),
+			Name: s.testNamespace.String(),
+		},
+		&persistencespb.NamespaceConfig{},
+		"target-cluster:not-relevant-to-this-test",
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.testNamespace).Return(ns, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(ns, nil).AnyTimes()
+
+	// History read will return a base set of non-transient events from baseEvents above
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).
+		Return(&persistence.ReadHistoryBranchResponse{HistoryEvents: baseEvents}, nil).
+		AnyTimes()
+
+	pollRequest := workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.testNamespace.String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: "taskqueue:" + s.T().Name()},
+	}
+
+	for _, tc := range []struct {
+		name           string
+		taskInfo       historyspb.TransientWorkflowTaskInfo
+		transientCount int
+	}{
+		{
+			name: "Legacy",
+			taskInfo: historyspb.TransientWorkflowTaskInfo{
+				ScheduledEvent: &historypb.HistoryEvent{EventId: 3},
+				StartedEvent:   &historypb.HistoryEvent{EventId: 4},
+			},
+			transientCount: 2,
+		},
+		{
+			name: "HistorySuffix",
+			taskInfo: historyspb.TransientWorkflowTaskInfo{
+				HistorySuffix: []*historypb.HistoryEvent{
+					&historypb.HistoryEvent{EventId: 3},
+					&historypb.HistoryEvent{EventId: 4},
+					&historypb.HistoryEvent{EventId: 5},
+					&historypb.HistoryEvent{EventId: 6},
+				},
+			},
+			transientCount: 4,
+		},
+	} {
+		s.Run(tc.name, func() {
+			ctx, cancel := context.WithTimeout(context.TODO(), 1*time.Minute)
+			defer cancel()
+			s.mockMatchingClient.EXPECT().PollWorkflowTaskQueue(ctx, gomock.Any()).Return(
+				&matchingservice.PollWorkflowTaskQueueResponse{
+					NextEventId: int64(len(baseEvents) + 1),
+					WorkflowExecution: &commonpb.WorkflowExecution{
+						WorkflowId: "wfid:" + s.T().Name(),
+						RunId:      "1",
+					},
+					TransientWorkflowTask: &tc.taskInfo,
+				},
+				nil,
+			)
+
+			wh := s.getWorkflowHandler(cfg)
+			pollResp, err := wh.PollWorkflowTaskQueue(ctx, &pollRequest)
+
+			s.NoError(err)
+			events := pollResp.GetHistory().GetEvents()
+			s.Len(events, len(baseEvents)+tc.transientCount)
+		})
+	}
 }
 
 func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
@@ -1873,6 +1963,4 @@ func TestContextNearDeadline(t *testing.T) {
 	ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*500)
 	assert.True(t, contextNearDeadline(ctx, longPollTailRoom))
 	assert.False(t, contextNearDeadline(ctx, time.Millisecond))
-
-	assert.False(t, common.IsServiceTransientError(errContextNearDeadline))
 }

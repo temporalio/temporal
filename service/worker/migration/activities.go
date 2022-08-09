@@ -36,9 +36,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
+
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -120,7 +119,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 			// Caught up to the last checked IDs, and within allowed lagging range
 			if clusterInfo.AckedTaskId >= waitRequest.WaitForTaskIds[shard.ShardId] &&
 				(shard.MaxReplicationTaskId-clusterInfo.AckedTaskId <= waitRequest.AllowedLaggingTasks ||
-					shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime) <= waitRequest.AllowedLagging) {
+					shard.MaxReplicationTaskVisibilityTime.Sub(*clusterInfo.AckedTaskVisibilityTime) <= waitRequest.AllowedLagging) {
 				readyShardCount++
 				continue
 			}
@@ -240,28 +239,21 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 
 func (a *activities) generateWorkflowReplicationTask(ctx context.Context, wKey definition.WorkflowKey) error {
 	// will generate replication task
-	op := func(ctx context.Context) error {
-		var err error
-		ctx1, cancel := context.WithTimeout(ctx, time.Second*10)
-		defer cancel()
-		_, err = a.historyClient.GenerateLastHistoryReplicationTasks(ctx1, &historyservice.GenerateLastHistoryReplicationTasksRequest{
-			NamespaceId: wKey.NamespaceID,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: wKey.WorkflowID,
-				RunId:      wKey.RunID,
-			},
-		})
-		return err
-	}
+	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
 
-	err := backoff.RetryContext(ctx, op, historyServiceRetryPolicy, common.IsServiceTransientError)
-	if err != nil {
-		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
-			// ignore NotFound error
-			return nil
-		}
-	}
+	_, err := a.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
+		NamespaceId: wKey.NamespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wKey.WorkflowID,
+			RunId:      wKey.RunID,
+		},
+	})
 
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+		// ignore NotFound error
+		return nil
+	}
 	return err
 }
 

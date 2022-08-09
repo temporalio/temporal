@@ -2,6 +2,7 @@
 
 .idea/
 .vscode/settings.json
+.vscode
 *.code-workspace
 .DS_Store
 .coverage
@@ -18,6 +19,10 @@
 # Executables produced by temporal repo
 /temporal-*
 /tctl*
+/tdbg
+
+# Build info
+/build
 
 # Buf proto image
 /proto/image.bin
@@ -28,3 +33,5 @@
 # Fossa
 .fossa.yml
 
+# direnv
+.envrc

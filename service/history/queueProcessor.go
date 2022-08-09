@@ -46,16 +46,14 @@ import (
 type (
 	// QueueProcessorOptions is options passed to queue processor implementation
 	QueueProcessorOptions struct {
-		BatchSize                           dynamicconfig.IntPropertyFn
-		MaxPollInterval                     dynamicconfig.DurationPropertyFn
-		MaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
-		UpdateAckInterval                   dynamicconfig.DurationPropertyFn
-		UpdateAckIntervalJitterCoefficient  dynamicconfig.FloatPropertyFn
-		RescheduleInterval                  dynamicconfig.DurationPropertyFn
-		RescheduleIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
-		MaxReschdulerSize                   dynamicconfig.IntPropertyFn
-		PollBackoffInterval                 dynamicconfig.DurationPropertyFn
-		MetricScope                         int
+		BatchSize                          dynamicconfig.IntPropertyFn
+		MaxPollInterval                    dynamicconfig.DurationPropertyFn
+		MaxPollIntervalJitterCoefficient   dynamicconfig.FloatPropertyFn
+		UpdateAckInterval                  dynamicconfig.DurationPropertyFn
+		UpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+		MaxReschdulerSize                  dynamicconfig.IntPropertyFn
+		PollBackoffInterval                dynamicconfig.DurationPropertyFn
+		MetricScope                        int
 	}
 
 	queueProcessorBase struct {
@@ -71,8 +69,10 @@ type (
 		scheduler    queues.Scheduler
 		rescheduler  queues.Rescheduler
 
-		lastPollTime time.Time
-		backoffTimer *time.Timer
+		lastPollTime     time.Time
+		backoffTimerLock sync.Mutex
+		backoffTimer     *time.Timer
+		readTaskRetrier  backoff.Retrier
 
 		notifyCh   chan struct{}
 		status     int32
@@ -82,7 +82,7 @@ type (
 )
 
 var (
-	loadQueueTaskThrottleRetryDelay = 5 * time.Second
+	loadQueueTaskThrottleRetryDelay = 3 * time.Second
 )
 
 func newQueueProcessorBase(
@@ -113,8 +113,12 @@ func newQueueProcessorBase(
 		metricsScope: metricsScope,
 		ackMgr:       queueAckMgr,
 		lastPollTime: time.Time{},
-		scheduler:    scheduler,
-		rescheduler:  rescheduler,
+		readTaskRetrier: backoff.NewRetrier(
+			common.CreateReadTaskRetryPolicy(),
+			backoff.SystemClock,
+		),
+		scheduler:   scheduler,
+		rescheduler: rescheduler,
 	}
 
 	return p
@@ -128,6 +132,8 @@ func (p *queueProcessorBase) Start() {
 	p.logger.Info("", tag.LifeCycleStarting, tag.ComponentTransferQueue)
 	defer p.logger.Info("", tag.LifeCycleStarted, tag.ComponentTransferQueue)
 
+	p.rescheduler.Start()
+
 	p.shutdownWG.Add(1)
 	p.notifyNewTask()
 	go p.processorPump()
@@ -140,6 +146,8 @@ func (p *queueProcessorBase) Stop() {
 
 	p.logger.Info("", tag.LifeCycleStopping, tag.ComponentTransferQueue)
 	defer p.logger.Info("", tag.LifeCycleStopped, tag.ComponentTransferQueue)
+
+	p.rescheduler.Stop()
 
 	close(p.shutdownCh)
 
@@ -171,17 +179,19 @@ func (p *queueProcessorBase) processorPump() {
 	))
 	defer updateAckTimer.Stop()
 
-	rescheduleTimer := time.NewTimer(backoff.JitDuration(
-		p.options.RescheduleInterval(),
-		p.options.RescheduleIntervalJitterCoefficient(),
-	))
-	defer rescheduleTimer.Stop()
-
-processorPumpLoop:
+eventLoop:
 	for {
+		// prioritize shutdown
 		select {
 		case <-p.shutdownCh:
-			break processorPumpLoop
+			break eventLoop
+		default:
+			// noop
+		}
+
+		select {
+		case <-p.shutdownCh:
+			break eventLoop
 		case <-p.ackMgr.getFinishedChan():
 			// use a separate gorouting since the caller hold the shutdownWG
 			go p.Stop()
@@ -203,14 +213,8 @@ processorPumpLoop:
 			if err := p.ackMgr.updateQueueAckLevel(); err == shard.ErrShardClosed {
 				// shard is no longer owned by this instance, bail out
 				go p.Stop()
-				break processorPumpLoop
+				break eventLoop
 			}
-		case <-rescheduleTimer.C:
-			p.rescheduler.Reschedule(0) // reschedule all
-			rescheduleTimer.Reset(backoff.JitDuration(
-				p.options.RescheduleInterval(),
-				p.options.RescheduleIntervalJitterCoefficient(),
-			))
 		}
 	}
 
@@ -218,27 +222,31 @@ processorPumpLoop:
 }
 
 func (p *queueProcessorBase) processBatch() {
+	ctx, cancel := context.WithTimeout(context.Background(), loadQueueTaskThrottleRetryDelay)
+	if err := p.rateLimiter.Wait(ctx); err != nil {
+		deadline, _ := ctx.Deadline()
+		p.throttle(deadline.Sub(p.timeSource.Now()))
+		cancel()
+		return
+	}
+	cancel()
 
 	if !p.verifyReschedulerSize() {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), loadQueueTaskThrottleRetryDelay)
-	if err := p.rateLimiter.Wait(ctx); err != nil {
-		cancel()
-		p.notifyNewTask() // re-enqueue the event
-		return
-	}
-	cancel()
-
 	p.lastPollTime = p.timeSource.Now()
 	tasks, more, err := p.ackMgr.readQueueTasks()
-
 	if err != nil {
-		p.logger.Warn("Processor unable to retrieve tasks", tag.Error(err))
-		p.notifyNewTask() // re-enqueue the event
+		p.logger.Error("Processor unable to retrieve tasks", tag.Error(err))
+		if common.IsResourceExhausted(err) {
+			p.throttle(loadQueueTaskThrottleRetryDelay)
+		} else {
+			p.throttle(p.readTaskRetrier.NextBackOff())
+		}
 		return
 	}
+	p.readTaskRetrier.Reset()
 
 	if len(tasks) == 0 {
 		return
@@ -261,25 +269,26 @@ func (p *queueProcessorBase) processBatch() {
 }
 
 func (p *queueProcessorBase) verifyReschedulerSize() bool {
-	length := p.rescheduler.Len()
-	maxLength := p.options.MaxReschdulerSize()
-	buffer := p.options.BatchSize() * 2
-	if length+buffer > maxLength {
-		p.rescheduler.Reschedule(length + buffer - maxLength)
+	passed := p.rescheduler.Len() < p.options.MaxReschdulerSize()
+	if !passed {
+		p.throttle(p.options.PollBackoffInterval())
 	}
+	return passed
+}
 
-	passed := p.rescheduler.Len() < maxLength
-	if passed && p.backoffTimer != nil {
-		p.backoffTimer.Stop()
-		p.backoffTimer = nil
-	}
-	if !passed && p.backoffTimer == nil {
-		p.backoffTimer = time.AfterFunc(p.options.PollBackoffInterval(), func() {
+func (p *queueProcessorBase) throttle(duration time.Duration) {
+	p.backoffTimerLock.Lock()
+	defer p.backoffTimerLock.Unlock()
+
+	if p.backoffTimer == nil {
+		p.backoffTimer = time.AfterFunc(duration, func() {
+			p.backoffTimerLock.Lock()
+			defer p.backoffTimerLock.Unlock()
+
 			p.notifyNewTask() // re-enqueue the event
+			p.backoffTimer = nil
 		})
 	}
-
-	return passed
 }
 
 func (p *queueProcessorBase) submitTask(

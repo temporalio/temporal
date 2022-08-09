@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 )
@@ -73,15 +74,17 @@ var Module = fx.Options(
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
+	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
+	fx.Provide(CallerInfoInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
-	fx.Provide(PersistenceMaxQpsProvider),
+	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
 	fx.Provide(func(so []grpc.ServerOption) *grpc.Server { return grpc.NewServer(so...) }),
 	fx.Provide(healthServerProvider),
@@ -105,7 +108,7 @@ func NewServiceProvider(
 	visibilityMgr manager.VisibilityManager,
 	logger resource.SnTaggedLogger,
 	grpcListener net.Listener,
-	metricsScope metrics.UserScope,
+	metricsHandler metrics.MetricsHandler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 ) *Service {
 	return NewService(
@@ -119,7 +122,7 @@ func NewServiceProvider(
 		visibilityMgr,
 		logger,
 		grpcListener,
-		metricsScope,
+		metricsHandler,
 		faultInjectionDataStoreFactory,
 	)
 }
@@ -133,8 +136,11 @@ func GrpcServerOptionsProvider(
 	namespaceCountLimiterInterceptor *interceptor.NamespaceCountLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
+	retryableInterceptor *interceptor.RetryableInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	traceInterceptor telemetry.ServerTraceInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
+	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
 	audienceGetter authorization.JWTAudienceMapper,
@@ -145,7 +151,7 @@ func GrpcServerOptionsProvider(
 		MinTime:             serviceConfig.KeepAliveMinTime(),
 		PermitWithoutStream: serviceConfig.KeepAlivePermitWithoutStream(),
 	}
-	var kp = keepalive.ServerParameters{
+	kp := keepalive.ServerParameters{
 		MaxConnectionIdle:     serviceConfig.KeepAliveMaxConnectionIdle(),
 		MaxConnectionAge:      serviceConfig.KeepAliveMaxConnectionAge(),
 		MaxConnectionAgeGrace: serviceConfig.KeepAliveMaxConnectionAgeGrace(),
@@ -159,12 +165,14 @@ func GrpcServerOptionsProvider(
 	interceptors := []grpc.UnaryServerInterceptor{
 		namespaceLogInterceptor.Intercept,
 		rpc.ServiceErrorInterceptor,
+		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
+		retryableInterceptor.Intercept,
 		telemetryInterceptor.Intercept,
 		namespaceValidatorInterceptor.Intercept,
-		rateLimitInterceptor.Intercept,
-		namespaceRateLimiterInterceptor.Intercept,
 		namespaceCountLimiterInterceptor.Intercept,
+		namespaceRateLimiterInterceptor.Intercept,
+		rateLimitInterceptor.Intercept,
 		authorization.NewAuthorizationInterceptor(
 			claimMapper,
 			authorizer,
@@ -173,6 +181,7 @@ func GrpcServerOptionsProvider(
 			audienceGetter,
 		),
 		sdkVersionInterceptor.Intercept,
+		callerInfoInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		interceptors = append(interceptors, customInterceptors...)
@@ -210,6 +219,13 @@ func NamespaceLogInterceptorProvider(
 	return interceptor.NewNamespaceLogInterceptor(
 		namespaceRegistry,
 		namespaceLogger)
+}
+
+func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
+	return interceptor.NewRetryableInterceptor(
+		common.CreateFrontendHandlerRetryPolicy(),
+		common.IsServiceHandlerRetryableError,
+	)
 }
 
 func TelemetryInterceptorProvider(
@@ -300,10 +316,20 @@ func SDKVersionInterceptorProvider() *interceptor.SDKVersionInterceptor {
 	return interceptor.NewSDKVersionInterceptor()
 }
 
-func PersistenceMaxQpsProvider(
+func CallerInfoInterceptorProvider(
+	namespaceRegistry namespace.Registry,
+) *interceptor.CallerInfoInterceptor {
+	return interceptor.NewCallerInfoInterceptor(namespaceRegistry)
+}
+
+func PersistenceRateLimitingParamsProvider(
 	serviceConfig *Config,
-) persistenceClient.PersistenceMaxQps {
-	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS)
+) service.PersistenceRateLimitingParams {
+	return service.NewPersistenceRateLimitingParams(
+		serviceConfig.PersistenceMaxQPS,
+		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.EnablePersistencePriorityRateLimiting,
+	)
 }
 
 func VisibilityManagerProvider(
@@ -334,6 +360,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
 		dynamicconfig.GetBoolPropertyFn(false), // frontend visibility never write
+		serviceConfig.VisibilityDisableOrderByClause,
 		metricsClient,
 		logger,
 	)
@@ -385,6 +412,7 @@ func AdminHandlerProvider(
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
 	eventSerializer serialization.Serializer,
+	timeSource clock.TimeSource,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -413,6 +441,7 @@ func AdminHandlerProvider(
 		archivalMetadata,
 		healthServer,
 		eventSerializer,
+		timeSource,
 	}
 	return NewAdminHandler(args)
 }
@@ -490,6 +519,7 @@ func HandlerProvider(
 		clusterMetadata,
 		archivalMetadata,
 		healthServer,
+		timeSource,
 	)
 	handler := NewDCRedirectionHandler(wfHandler, dcRedirectionPolicy, logger, clientBean, metricsClient, timeSource, namespaceRegistry, clusterMetadata)
 	return handler

@@ -25,6 +25,7 @@
 package shard
 
 import (
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -42,13 +43,14 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 )
 
 var Module = fx.Options(
-	fx.Provide(ShardControllerProvider),
+	fx.Provide(ControllerProvider),
 )
 
-func ShardControllerProvider(
+func ControllerProvider(
 	config *configs.Config,
 	logger log.Logger,
 	throttledLogger resource.ThrottledLogger,
@@ -58,7 +60,7 @@ func ShardControllerProvider(
 	historyClient historyservice.HistoryServiceClient,
 	historyServiceResolver membership.ServiceResolver,
 	metricsClient metrics.Client,
-	metricsReporter metrics.Reporter,
+	metricsHandler metrics.MetricsHandler,
 	payloadSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
@@ -68,7 +70,8 @@ func ShardControllerProvider(
 	archivalMetadata archiver.ArchivalMetadata,
 	hostInfoProvider membership.HostInfoProvider,
 	engineFactory EngineFactory,
-) *ControllerImpl {
+	tracerProvider trace.TracerProvider,
+) Controller {
 	return &ControllerImpl{
 		status:                      common.DaemonStatusInitialized,
 		membershipUpdateCh:          make(chan *membership.ChangedEvent, 10),
@@ -85,7 +88,7 @@ func ShardControllerProvider(
 		historyClient:               historyClient,
 		historyServiceResolver:      historyServiceResolver,
 		metricsClient:               metricsClient,
-		metricsReporter:             metricsReporter,
+		metricsHandler:              metricsHandler,
 		payloadSerializer:           payloadSerializer,
 		timeSource:                  timeSource,
 		namespaceRegistry:           namespaceRegistry,
@@ -95,5 +98,6 @@ func ShardControllerProvider(
 		archivalMetadata:            archivalMetadata,
 		hostInfoProvider:            hostInfoProvider,
 		engineFactory:               engineFactory,
+		tracer:                      tracerProvider.Tracer(consts.LibraryName),
 	}
 }

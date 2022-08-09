@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pborman/uuid"
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -46,7 +47,6 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
@@ -64,7 +64,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
@@ -97,7 +96,8 @@ type (
 		clusterMetadata               cluster.Metadata
 		archivalMetadata              archiver.ArchivalMetadata
 		hostInfoProvider              membership.HostInfoProvider
-		controller                    *shard.ControllerImpl
+		controller                    shard.Controller
+		tracer                        trace.Tracer
 	}
 
 	NewHandlerArgs struct {
@@ -119,9 +119,10 @@ type (
 		ClusterMetadata               cluster.Metadata
 		ArchivalMetadata              archiver.ArchivalMetadata
 		HostInfoProvider              membership.HostInfoProvider
-		ShardController               *shard.ControllerImpl
+		ShardController               shard.Controller
 		EventNotifier                 events.Notifier
 		ReplicationTaskFetcherFactory replication.TaskFetcherFactory
+		TracerProvider                trace.TracerProvider
 	}
 )
 
@@ -140,7 +141,6 @@ var (
 	errSourceClusterNotSet     = serviceerror.NewInvalidArgument("Source Cluster not set on request.")
 	errShardIDNotSet           = serviceerror.NewInvalidArgument("ShardId not set on request.")
 	errTimestampNotSet         = serviceerror.NewInvalidArgument("Timestamp not set on request.")
-	errInvalidTaskType         = serviceerror.NewInvalidArgument("Invalid task type")
 
 	errDeserializeTaskTokenMessage = "Error to deserialize task token. Error: %v."
 
@@ -228,11 +228,11 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 	}
 	workflowID := taskToken.GetWorkflowId()
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -257,11 +257,11 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -293,17 +293,17 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 		return nil, h.convertError(errTaskQueueNotSet)
 	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		h.logger.Error("RecordWorkflowTaskStarted failed.",
 			tag.Error(err),
 			tag.WorkflowID(request.WorkflowExecution.GetWorkflowId()),
 			tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
-			tag.WorkflowScheduleID(request.GetScheduleId()),
+			tag.WorkflowScheduledEventID(request.GetScheduledEventId()),
 		)
 		return nil, h.convertError(err)
 	}
@@ -341,11 +341,11 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 	}
 	workflowID := taskToken.GetWorkflowId()
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -380,11 +380,11 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	}
 	workflowID := taskToken.GetWorkflowId()
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -419,11 +419,11 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	}
 	workflowID := taskToken.GetWorkflowId()
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -456,7 +456,7 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
 		tag.WorkflowRunID(token.GetRunId()),
-		tag.WorkflowScheduleID(token.GetScheduleId()))
+		tag.WorkflowScheduledEventID(token.GetScheduledEventId()))
 
 	err0 = validateTaskToken(token)
 	if err0 != nil {
@@ -464,11 +464,11 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 	}
 	workflowID := token.GetWorkflowId()
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -501,7 +501,7 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
 		tag.WorkflowRunID(token.GetRunId()),
-		tag.WorkflowScheduleID(token.GetScheduleId()))
+		tag.WorkflowScheduledEventID(token.GetScheduledEventId()))
 
 	err0 = validateTaskToken(token)
 	if err0 != nil {
@@ -509,11 +509,11 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 	}
 	workflowID := token.GetWorkflowId()
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -538,11 +538,11 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 
 	startRequest := request.StartRequest
 	workflowID := startRequest.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -564,25 +564,16 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 	h.startWG.Wait()
 
 	itemsInCacheByIDCount, itemsInCacheByNameCount := h.namespaceRegistry.GetCacheSize()
-	status := ""
-	switch h.controller.Status() {
-	case common.DaemonStatusInitialized:
-		status = "initialized"
-	case common.DaemonStatusStarted:
-		status = "started"
-	case common.DaemonStatusStopped:
-		status = "stopped"
-	}
 
+	ownedShardIDs := h.controller.ShardIDs()
 	resp := &historyservice.DescribeHistoryHostResponse{
-		ShardsNumber: int32(h.controller.NumShards()),
-		ShardIds:     h.controller.ShardIDs(),
+		ShardsNumber: int32(len(ownedShardIDs)),
+		ShardIds:     ownedShardIDs,
 		NamespaceCache: &namespacespb.NamespaceCacheInfo{
 			ItemsInCacheByIdCount:   itemsInCacheByIDCount,
 			ItemsInCacheByNameCount: itemsInCacheByNameCount,
 		},
-		ShardControllerStatus: status,
-		Address:               h.hostInfoProvider.HostInfo().GetAddress(),
+		Address: h.hostInfoProvider.HostInfo().GetAddress(),
 	}
 	return resp, nil
 }
@@ -660,11 +651,11 @@ func (h *Handler) RebuildMutableState(ctx context.Context, request *historyservi
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -694,11 +685,11 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -726,11 +717,11 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -758,11 +749,11 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 
 	workflowExecution := request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -790,11 +781,11 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 
 	workflowExecution := request.Request.Execution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -828,11 +819,11 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 		tag.WorkflowRunID(cancelRequest.WorkflowExecution.GetRunId()))
 
 	workflowID := cancelRequest.WorkflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -862,11 +853,11 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 
 	workflowExecution := request.SignalRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -899,11 +890,11 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 
 	signalWithStartRequest := request.SignalWithStartRequest
 	workflowID := signalWithStartRequest.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -956,11 +947,11 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -990,11 +981,11 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 
 	workflowExecution := request.TerminateRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1022,11 +1013,11 @@ func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historys
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1056,11 +1047,11 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 
 	workflowExecution := request.ResetRequest.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1088,24 +1079,16 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 	}
 
 	workflowID := request.GetRequest().GetExecution().GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
 
-	var resp *historyservice.QueryWorkflowResponse
-	err2 := backoff.RetryContext(ctx, func(ctx context.Context) error {
-		var err error
-		resp, err = engine.QueryWorkflow(ctx, request)
-		return err
-	}, common.CreateHistoryServiceRetryPolicy(), func(err error) bool {
-		return err == consts.ErrBufferedQueryCleared
-	})
-
+	resp, err2 := engine.QueryWorkflow(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
@@ -1136,11 +1119,11 @@ func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyserv
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1175,11 +1158,11 @@ func (h *Handler) VerifyFirstWorkflowTaskScheduled(
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1213,11 +1196,11 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1250,11 +1233,11 @@ func (h *Handler) VerifyChildExecutionCompletionRecorded(
 		return nil, h.convertError(errWorkflowExecutionNotSet)
 	}
 
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, request.ParentExecution.GetWorkflowId())
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, request.ParentExecution.GetWorkflowId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1286,11 +1269,11 @@ func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyserv
 	}
 
 	workflowID := request.Execution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1323,11 +1306,11 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1361,11 +1344,11 @@ func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.S
 		return nil, h.convertError(errTimestampNotSet)
 	}
 
-	shardContext, err := h.controller.GetShardByID(ctx, request.GetShardId())
+	shardContext, err := h.controller.GetShardByID(request.GetShardId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1405,11 +1388,11 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 	}
 
 	workflowID := request.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1442,12 +1425,12 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 		go func(token *replicationspb.ReplicationToken) {
 			defer wg.Done()
 
-			shardContext, err := h.controller.GetShardByID(ctx, token.GetShardId())
+			shardContext, err := h.controller.GetShardByID(token.GetShardId())
 			if err != nil {
 				h.logger.Warn("History engine not found for shard", tag.Error(err))
 				return
 			}
-			engine, err := shardContext.GetEngineWithContext(ctx)
+			engine, err := shardContext.GetEngine(ctx)
 			if err != nil {
 				h.logger.Warn("History engine not found for shard", tag.Error(err))
 				return
@@ -1518,7 +1501,6 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 		}
 
 		shardContext, err := h.controller.GetShardByNamespaceWorkflow(
-			ctx,
 			namespace.ID(taskInfos[0].GetNamespaceId()),
 			taskInfos[0].GetWorkflowId(),
 		)
@@ -1526,7 +1508,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 			h.logger.Warn("History engine not found for workflow ID.", tag.Error(err))
 			return
 		}
-		engine, err := shardContext.GetEngineWithContext(ctx)
+		engine, err := shardContext.GetEngine(ctx)
 		if err != nil {
 			h.logger.Warn("History engine not found for workflow ID.", tag.Error(err))
 			return
@@ -1572,11 +1554,11 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	workflowID := request.GetRequest().GetWorkflowExecution().GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1611,11 +1593,11 @@ func (h *Handler) GetDLQMessages(ctx context.Context, request *historyservice.Ge
 		return nil, errShuttingDown
 	}
 
-	shardContext, err := h.controller.GetShardByID(ctx, request.GetShardId())
+	shardContext, err := h.controller.GetShardByID(request.GetShardId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1637,11 +1619,11 @@ func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.
 		return nil, errShuttingDown
 	}
 
-	shardContext, err := h.controller.GetShardByID(ctx, request.GetShardId())
+	shardContext, err := h.controller.GetShardByID(request.GetShardId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1662,11 +1644,11 @@ func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.
 		return nil, errShuttingDown
 	}
 
-	shardContext, err := h.controller.GetShardByID(ctx, request.GetShardId())
+	shardContext, err := h.controller.GetShardByID(request.GetShardId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1691,11 +1673,11 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	execution := request.GetRequest().GetExecution()
 	workflowID := execution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1730,11 +1712,11 @@ func (h *Handler) GenerateLastHistoryReplicationTasks(
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	workflowID := request.GetExecution().GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngineWithContext(ctx)
+	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1765,11 +1747,11 @@ func (h *Handler) GetReplicationStatus(
 
 	resp := &historyservice.GetReplicationStatusResponse{}
 	for _, shardID := range h.controller.ShardIDs() {
-		shardContext, err := h.controller.GetShardByID(ctx, shardID)
+		shardContext, err := h.controller.GetShardByID(shardID)
 		if err != nil {
 			return nil, h.convertError(err)
 		}
-		engine, err := shardContext.GetEngineWithContext(ctx)
+		engine, err := shardContext.GetEngine(ctx)
 		if err != nil {
 			return nil, h.convertError(err)
 		}
@@ -1830,6 +1812,33 @@ func (h *Handler) DeleteWorkflowVisibilityRecord(
 	}
 
 	return &historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil
+}
+
+func (h *Handler) UpdateWorkflow(
+	ctx context.Context,
+	request *historyservice.UpdateWorkflowRequest,
+) (_ *historyservice.UpdateWorkflowResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetRequest().GetWorkflowExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.UpdateWorkflow(ctx, request)
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

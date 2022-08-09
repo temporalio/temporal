@@ -28,6 +28,8 @@ import (
 	"context"
 	"net"
 
+	"go.temporal.io/server/api/historyservice/v1"
+
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
@@ -51,7 +53,9 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -64,13 +68,14 @@ var Module = fx.Options(
 	shard.Module,
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
+	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
-	fx.Provide(PersistenceMaxQpsProvider),
+	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
 	fx.Provide(ArchivalClientProvider),
@@ -88,7 +93,7 @@ func ServiceProvider(
 	logger resource.SnTaggedLogger,
 	grpcListener net.Listener,
 	membershipMonitor membership.Monitor,
-	userScope metrics.UserScope,
+	metricsHandler metrics.MetricsHandler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 ) *Service {
 	return NewService(
@@ -99,7 +104,7 @@ func ServiceProvider(
 		logger,
 		grpcListener,
 		membershipMonitor,
-		userScope,
+		metricsHandler,
 		faultInjectionDataStoreFactory,
 	)
 }
@@ -131,6 +136,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		controller:                    args.ShardController,
 		eventNotifier:                 args.EventNotifier,
 		replicationTaskFetcherFactory: args.ReplicationTaskFetcherFactory,
+		tracer:                        args.TracerProvider.Tracer(consts.LibraryName),
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -159,6 +165,13 @@ func ConfigProvider(
 
 func ThrottledLoggerRpsFnProvider(serviceConfig *configs.Config) resource.ThrottledLoggerRpsFn {
 	return func() float64 { return float64(serviceConfig.ThrottledLogRPS()) }
+}
+
+func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
+	return interceptor.NewRetryableInterceptor(
+		common.CreateHistoryHandlerRetryPolicy(),
+		api.IsRetryableError,
+	)
 }
 
 func TelemetryInterceptorProvider(
@@ -196,10 +209,14 @@ func ESProcessorConfigProvider(
 	}
 }
 
-func PersistenceMaxQpsProvider(
+func PersistenceRateLimitingParamsProvider(
 	serviceConfig *configs.Config,
-) persistenceClient.PersistenceMaxQps {
-	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS)
+) service.PersistenceRateLimitingParams {
+	return service.NewPersistenceRateLimitingParams(
+		serviceConfig.PersistenceMaxQPS,
+		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.EnablePersistencePriorityRateLimiting,
+	)
 }
 
 func VisibilityManagerProvider(
@@ -231,6 +248,7 @@ func VisibilityManagerProvider(
 		serviceConfig.AdvancedVisibilityWritingMode,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
 		serviceConfig.EnableWriteToSecondaryAdvancedVisibility,
+		dynamicconfig.GetBoolPropertyFn(false), // history visibility never read
 		metricsClient,
 		logger,
 	)
@@ -254,6 +272,7 @@ func ArchivalClientProvider(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
+	historyClient historyservice.HistoryServiceClient,
 ) warchiver.Client {
 	return warchiver.NewClient(
 		metricsClient,
@@ -262,6 +281,7 @@ func ArchivalClientProvider(
 		config.NumArchiveSystemWorkflows,
 		config.ArchiveRequestRPS,
 		archiverProvider,
+		historyClient,
 	)
 }
 

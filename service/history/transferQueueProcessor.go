@@ -25,7 +25,6 @@
 package history
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -36,6 +35,8 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -51,9 +52,7 @@ import (
 	"go.temporal.io/server/service/worker/archiver"
 )
 
-var (
-	errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
-)
+var errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
 
 type (
 	taskFilter func(task tasks.Task) bool
@@ -67,6 +66,7 @@ type (
 		sdkClientFactory          sdk.ClientFactory
 		taskAllocator             taskAllocator
 		config                    *configs.Config
+		metricProvider            metrics.MetricsHandler
 		metricsClient             metrics.Client
 		clientBean                client.Bean
 		matchingClient            matchingservice.MatchingServiceClient
@@ -93,11 +93,12 @@ func newTransferQueueProcessor(
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
+	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
-) queues.Processor {
+) queues.Queue {
 
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
-		shard.GetConfig().TransferProcessorEnableSingleCursor()
+		shard.GetConfig().TransferProcessorEnableSingleProcessor()
 
 	logger := log.With(shard.GetLogger(), tag.ComponentTransferQueue)
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
@@ -113,6 +114,7 @@ func newTransferQueueProcessor(
 		sdkClientFactory:   sdkClientFactory,
 		taskAllocator:      taskAllocator,
 		config:             config,
+		metricProvider:     metricProvider,
 		metricsClient:      shard.GetMetricsClient(),
 		clientBean:         clientBean,
 		matchingClient:     matchingClient,
@@ -137,6 +139,7 @@ func newTransferQueueProcessor(
 				config.TransferProcessorMaxPollRPS,
 			),
 			logger,
+			metricProvider,
 			singleProcessor,
 		),
 		standbyTaskProcessors: make(map[string]*transferQueueStandbyProcessorImpl),
@@ -177,7 +180,6 @@ func (t *transferQueueProcessorImpl) NotifyNewTasks(
 	clusterName string,
 	transferTasks []tasks.Task,
 ) {
-
 	if clusterName == t.currentClusterName || t.singleProcessor {
 		// we will ignore the current time passed in, since the active processor process task immediately
 		if len(transferTasks) != 0 {
@@ -243,6 +245,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 			t.config.TransferProcessorFailoverMaxPollRPS,
 		),
 		t.logger,
+		t.metricProvider,
 	)
 
 	// NOTE: READ REF BEFORE MODIFICATION
@@ -278,32 +281,36 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 	timer := time.NewTimer(t.config.TransferProcessorCompleteTransferInterval())
 	defer timer.Stop()
 
+	completeTaskRetryPolicy := common.CreateCompleteTaskRetryPolicy()
+
 	for {
 		select {
 		case <-t.shutdownChan:
 			// before shutdown, make sure the ack level is up to date
-			err := t.completeTransfer()
-			if err != nil {
-				t.logger.Error("Error complete transfer task", tag.Error(err))
+			if err := t.completeTransfer(); err != nil {
+				t.logger.Error("Failed to complete transfer task", tag.Error(err))
 			}
 			return
 		case <-timer.C:
-		CompleteLoop:
-			for attempt := 1; attempt <= t.config.TransferProcessorCompleteTransferFailureRetryCount(); attempt++ {
+			if err := backoff.ThrottleRetry(func() error {
 				err := t.completeTransfer()
 				if err != nil {
 					t.logger.Info("Failed to complete transfer task", tag.Error(err))
-					if err == shard.ErrShardClosed {
-						// shard closed, trigger shutdown and bail out
-						t.Stop()
-						return
-					}
-					backoff := time.Duration((attempt - 1) * 100)
-					time.Sleep(backoff * time.Millisecond)
-				} else {
-					break CompleteLoop
 				}
+				return err
+			}, completeTaskRetryPolicy, func(err error) bool {
+				select {
+				case <-t.shutdownChan:
+					return false
+				default:
+				}
+				return err != shard.ErrShardClosed
+			}); err == shard.ErrShardClosed {
+				// shard is unloaded, transfer processor should quit as well
+				t.Stop()
+				return
 			}
+
 			timer.Reset(t.config.TransferProcessorCompleteTransferInterval())
 		}
 	}
@@ -338,7 +345,10 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel < upperAckLevel {
-		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
+		ctx, cancel := newQueueIOContext()
+		defer cancel()
+
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             t.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryTransfer,
 			InclusiveMinTaskKey: tasks.NewImmediateKey(lowerAckLevel + 1),
@@ -394,6 +404,7 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 					t.config.TransferProcessorMaxPollRPS,
 				),
 				t.logger,
+				t.metricProvider,
 				t.matchingClient,
 			)
 			processor.Start()

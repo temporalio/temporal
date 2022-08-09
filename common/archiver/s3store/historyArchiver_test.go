@@ -77,7 +77,6 @@ type historyArchiverSuite struct {
 	suite.Suite
 	s3cli              *mocks.MockS3API
 	container          *archiver.HistoryBootstrapContainer
-	logger             log.Logger
 	testArchivalURI    archiver.URI
 	historyBatchesV1   []*archiverspb.HistoryBlob
 	historyBatchesV100 []*archiverspb.HistoryBlob

@@ -61,11 +61,11 @@ type (
 		Consistency              string
 		TLS                      *auth.TLS
 		DisableInitialHostLookup bool
+		AddressTranslator        *config.CassandraAddressTranslator
 	}
 )
 
-var errNoHosts = errors.New("Cassandra Hosts list is empty or malformed")
-var errGetSchemaVersion = errors.New("Failed to get current schema version from cassandra")
+var errGetSchemaVersion = errors.New("unable to get current schema version from cassandra")
 
 const (
 	defaultTimeout = 30 // Timeout in seconds
@@ -143,6 +143,7 @@ func (cfg *CQLClientConfig) toCassandraConfig() *config.Cassandra {
 				Consistency: cfg.Consistency,
 			},
 		},
+		AddressTranslator: cfg.AddressTranslator,
 	}
 
 	return &cassandraConfig

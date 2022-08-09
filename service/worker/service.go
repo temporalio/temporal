@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/archiver"
-	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 	"go.temporal.io/server/service/worker/replicator"
 	"go.temporal.io/server/service/worker/scanner"
@@ -86,7 +85,7 @@ type (
 
 		membershipMonitor membership.Monitor
 
-		userMetricsScope metrics.UserScope
+		metricsHandler metrics.MetricsHandler
 
 		status           int32
 		stopC            chan struct{}
@@ -100,15 +99,16 @@ type (
 
 	// Config contains all the service config for worker
 	Config struct {
-		ArchiverConfig                *archiver.Config
-		ScannerCfg                    *scanner.Config
-		ParentCloseCfg                *parentclosepolicy.Config
-		BatcherCfg                    *batcher.Config
-		ThrottledLogRPS               dynamicconfig.IntPropertyFn
-		PersistenceMaxQPS             dynamicconfig.IntPropertyFn
-		PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
-		EnableBatcher                 dynamicconfig.BoolPropertyFn
-		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
+		ArchiverConfig                        *archiver.Config
+		ScannerCfg                            *scanner.Config
+		ParentCloseCfg                        *parentclosepolicy.Config
+		ThrottledLogRPS                       dynamicconfig.IntPropertyFn
+		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
+		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
+		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
+		EnableBatcher                         dynamicconfig.BoolPropertyFn
+		EnableParentClosePolicyWorker         dynamicconfig.BoolPropertyFn
+		PerNamespaceWorkerCount               dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 		StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
 		StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
@@ -116,6 +116,7 @@ type (
 		AdvancedVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
 		EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		VisibilityDisableOrderByClause            dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -135,7 +136,7 @@ func NewService(
 	persistenceBean persistenceClient.Bean,
 	membershipMonitor membership.Monitor,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-	metricsScope metrics.UserScope,
+	metricsHandler metrics.MetricsHandler,
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
@@ -167,7 +168,7 @@ func NewService(
 		membershipMonitor:         membershipMonitor,
 		archiverProvider:          archiverProvider,
 		namespaceReplicationQueue: namespaceReplicationQueue,
-		userMetricsScope:          metricsScope,
+		metricsHandler:            metricsHandler,
 		metadataManager:           metadataManager,
 		taskManager:               taskManager,
 		historyClient:             historyClient,
@@ -212,24 +213,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				archiver.MaxArchivalIterationTimeout(),
 			),
 		},
-		BatcherCfg: &batcher.Config{
-			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
-				dynamicconfig.WorkerBatcherMaxConcurrentActivityExecutionSize,
-				1000,
-			),
-			MaxConcurrentWorkflowTaskExecutionSize: dc.GetIntProperty(
-				dynamicconfig.WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize,
-				1000,
-			),
-			MaxConcurrentActivityTaskPollers: dc.GetIntProperty(
-				dynamicconfig.WorkerBatcherMaxConcurrentActivityTaskPollers,
-				4,
-			),
-			MaxConcurrentWorkflowTaskPollers: dc.GetIntProperty(
-				dynamicconfig.WorkerBatcherMaxConcurrentWorkflowTaskPollers,
-				4,
-			),
-		},
+
 		ParentCloseCfg: &parentclosepolicy.Config{
 			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
 				dynamicconfig.WorkerParentCloseMaxConcurrentActivityExecutionSize,
@@ -287,14 +271,18 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				dynamicconfig.ExecutionsScannerEnabled,
 				false,
 			),
+			HistoryScannerDataMinAge: dc.GetDurationProperty(
+				dynamicconfig.HistoryScannerDataMinAge,
+				90*24*time.Hour,
+			),
 		},
-		EnableBatcher: dc.GetBoolProperty(
-			dynamicconfig.EnableBatcher,
-			true,
-		),
 		EnableParentClosePolicyWorker: dc.GetBoolProperty(
 			dynamicconfig.EnableParentClosePolicyWorker,
 			true,
+		),
+		PerNamespaceWorkerCount: dc.GetIntPropertyFilteredByNamespace(
+			dynamicconfig.WorkerPerNamespaceWorkerCount,
+			1,
 		),
 		ThrottledLogRPS: dc.GetIntProperty(
 			dynamicconfig.WorkerThrottledLogRPS,
@@ -308,6 +296,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 			dynamicconfig.WorkerPersistenceGlobalMaxQPS,
 			0,
 		),
+		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(
+			dynamicconfig.WorkerEnablePersistencePriorityRateLimiting,
+			true,
+		),
 
 		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
 		StandardVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
@@ -315,6 +307,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 		AdvancedVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
 		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
 		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
+		VisibilityDisableOrderByClause:            dc.GetBoolProperty(dynamicconfig.VisibilityDisableOrderByClause, false),
 	}
 	return config
 }
@@ -334,8 +327,7 @@ func (s *Service) Start() {
 		tag.ComponentWorker,
 	)
 
-	// todo: introduce proper counter (same in resource.go)
-	s.userMetricsScope.AddCounter(metrics.RestartCount, 1)
+	s.metricsHandler.Counter(metrics.RestartCount).Record(1)
 
 	s.clusterMetadata.Start()
 	s.membershipMonitor.Start()
@@ -362,9 +354,6 @@ func (s *Service) Start() {
 	}
 	if s.archivalMetadata.GetHistoryConfig().ClusterConfiguredForArchival() {
 		s.startArchiver()
-	}
-	if s.config.EnableBatcher() {
-		s.startBatcher()
 	}
 	if s.config.EnableParentClosePolicyWorker() {
 		s.startParentClosePolicyProcessor()
@@ -430,19 +419,6 @@ func (s *Service) startParentClosePolicyProcessor() {
 	}
 }
 
-func (s *Service) startBatcher() {
-	if err := batcher.New(
-		s.config.BatcherCfg,
-		s.metricsClient,
-		s.logger,
-		s.sdkClientFactory).Start(); err != nil {
-		s.logger.Fatal(
-			"error starting batcher",
-			tag.Error(err),
-		)
-	}
-}
-
 func (s *Service) startScanner() {
 	sc := scanner.New(
 		s.logger,
@@ -481,6 +457,7 @@ func (s *Service) startReplicator() {
 }
 
 func (s *Service) startArchiver() {
+	historyClient := s.clientBean.GetHistoryClient()
 	bc := &archiver.BootstrapContainer{
 		MetricsClient:    s.metricsClient,
 		Logger:           s.logger,
@@ -489,6 +466,7 @@ func (s *Service) startArchiver() {
 		Config:           s.config.ArchiverConfig,
 		ArchiverProvider: s.archiverProvider,
 		SdkClientFactory: s.sdkClientFactory,
+		HistoryClient:    historyClient,
 	}
 	clientWorker := archiver.NewClientWorker(bc)
 	if err := clientWorker.Start(); err != nil {

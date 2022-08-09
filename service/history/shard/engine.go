@@ -86,6 +86,7 @@ type (
 		RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution commonpb.WorkflowExecution) error
 		GenerateLastHistoryReplicationTasks(ctx context.Context, request *historyservice.GenerateLastHistoryReplicationTasksRequest) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error)
 		GetReplicationStatus(ctx context.Context, request *historyservice.GetReplicationStatusRequest) (*historyservice.ShardReplicationStatus, error)
+		UpdateWorkflow(ctx context.Context, request *historyservice.UpdateWorkflowRequest) (*historyservice.UpdateWorkflowResponse, error)
 
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTasks(clusterName string, tasks map[tasks.Category][]tasks.Task)

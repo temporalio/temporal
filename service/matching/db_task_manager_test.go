@@ -224,7 +224,7 @@ func (s *dbTaskManagerSuite) TestBufferAndWriteTask_Ready() {
 	taskInfo := &persistencespb.TaskInfo{}
 	taskWriterErr := serviceerror.NewInternal("random error")
 	s.taskWriter.EXPECT().appendTask(taskInfo).Return(
-		future.NewReadyFuture[struct{}](struct{}{}, taskWriterErr),
+		future.NewReadyFuture(struct{}{}, taskWriterErr),
 	)
 	fut := s.dbTaskManager.BufferAndWriteTask(taskInfo)
 	_, err := fut.Get(context.Background())
@@ -246,12 +246,12 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadSuccess_Expired() {
 	allocatedTaskInfo := &persistencespb.AllocatedTaskInfo{
 		TaskId: s.lastAllocatedTaskID + 100,
 		Data: &persistencespb.TaskInfo{
-			NamespaceId: uuid.New().String(),
-			WorkflowId:  uuid.New().String(),
-			RunId:       uuid.New().String(),
-			ScheduleId:  rand.Int63(),
-			CreateTime:  timestamp.TimePtr(time.Now().UTC()),
-			ExpiryTime:  timestamp.TimePtr(time.Now().UTC().Add(-time.Minute)),
+			NamespaceId:      uuid.New().String(),
+			WorkflowId:       uuid.New().String(),
+			RunId:            uuid.New().String(),
+			ScheduledEventId: rand.Int63(),
+			CreateTime:       timestamp.TimePtr(time.Now().UTC()),
+			ExpiryTime:       timestamp.TimePtr(time.Now().UTC().Add(-time.Minute)),
 		},
 	}
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID)
@@ -285,12 +285,12 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadSuccess_Dispatch() {
 	allocatedTaskInfo := &persistencespb.AllocatedTaskInfo{
 		TaskId: s.lastAllocatedTaskID + 100,
 		Data: &persistencespb.TaskInfo{
-			NamespaceId: uuid.New().String(),
-			WorkflowId:  uuid.New().String(),
-			RunId:       uuid.New().String(),
-			ScheduleId:  rand.Int63(),
-			CreateTime:  timestamp.TimePtr(time.Now().UTC()),
-			ExpiryTime:  timestamp.TimePtr(time.Unix(0, 0)),
+			NamespaceId:      uuid.New().String(),
+			WorkflowId:       uuid.New().String(),
+			RunId:            uuid.New().String(),
+			ScheduledEventId: rand.Int63(),
+			CreateTime:       timestamp.TimePtr(time.Now().UTC()),
+			ExpiryTime:       timestamp.TimePtr(time.Unix(0, 0)),
 		},
 	}
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID)
@@ -324,12 +324,15 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadFailure() {
 	))
 
 	s.dbTaskManager.readAndDispatchTasks(context.Background())
+	timer := time.NewTimer(s.dbTaskManager.dispatchRetrier.NextBackOff())
 	select {
 	case <-s.dbTaskManager.dispatchChan:
 		// noop
-	default:
+	case <-timer.C:
 		s.Fail("dispatch channel should contain one signal")
 	}
+
+	timer.Stop()
 }
 
 func (s *dbTaskManagerSuite) TestUpdateAckTaskID() {

@@ -30,8 +30,6 @@ import (
 	"time"
 
 	"github.com/uber-go/tally/v4"
-
-	"go.temporal.io/server/common/log"
 )
 
 type (
@@ -90,41 +88,11 @@ type (
 		// information to metrics
 		Tagged(tags ...Tag) Scope
 	}
-
-	// UserScope is an interface for reporting metrics by user code
-	// Deprecated
-	UserScope interface {
-		// IncCounter increments a counter metric
-		IncCounter(counter string)
-		// AddCounter adds delta to the counter metric
-		AddCounter(counter string, delta int64)
-		// StartTimer starts a timer for the given metric name.
-		// Time will be recorded when stopwatch is stopped.
-		StartTimer(timer string) Stopwatch
-		// RecordTimer records a timer for the given metric name
-		RecordTimer(timer string, d time.Duration)
-		// RecordDistribution records a distribution (wrapper on top of timer) for the given
-		// metric name
-		RecordDistribution(id string, unit MetricUnit, d int)
-		// UpdateGauge reports Gauge type absolute value metric
-		UpdateGauge(gauge string, value float64)
-		// Tagged returns a new scope with added and/or overriden tags values that can be used
-		// to provide additional information to metrics
-		Tagged(tags map[string]string) UserScope
-	}
-
-	// Reporter is an interface for base constructor for metrics client.
-	// Deprecated
-	Reporter interface {
-		MetricProvider() MetricProvider
-		Stop(logger log.Logger)
-		UserScope() UserScope
-	}
 )
 
 var sanitizer = tally.NewSanitizer(tally.SanitizeOptions{
-	NameCharacters:       tally.ValidCharacters{tally.AlphanumericRange, tally.UnderscoreCharacters},
-	KeyCharacters:        tally.ValidCharacters{tally.AlphanumericRange, tally.UnderscoreCharacters},
-	ValueCharacters:      tally.ValidCharacters{tally.AlphanumericRange, tally.UnderscoreCharacters},
+	NameCharacters:       tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
+	KeyCharacters:        tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
+	ValueCharacters:      tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
 	ReplacementCharacter: '_',
 })
