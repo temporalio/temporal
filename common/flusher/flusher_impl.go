@@ -241,7 +241,6 @@ func (f *flusherImpl[T]) Buffer(item T) future.Future[struct{}] {
 
 func (f *flusherImpl[T]) appendLocked(flushItem FlushItem[T]) {
 	if len(f.flushBuffer) == 0 { // start timer if it's first Item insertion
-		f.stopTimerLocked()
 		f.startTimerLocked()
 	}
 	f.flushBuffer = append(f.flushBuffer, flushItem)
