@@ -3104,6 +3104,8 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	if err != nil {
 		return nil, err
 	}
+	// Add namespace division
+	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
 	// Create StartWorkflowExecutionRequest
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:             request.Namespace,
@@ -3595,6 +3597,7 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{
 			NamespaceID:       namespaceID,
 			Namespace:         namespaceName,
+			NamespaceDivision: scheduler.NamespaceDivision,
 			PageSize:          int(request.GetMaximumPageSize()),
 			NextPageToken:     request.NextPageToken,
 			EarliestStartTime: minTime,

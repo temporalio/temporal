@@ -49,6 +49,8 @@ const (
 	BatcherNamespace      = "BatcherNamespace"
 	BatcherUser           = "BatcherUser"
 
+	TemporalNamespaceDivision = "TemporalNamespaceDivision"
+
 	// These fields are not in Elasticsearch mappings definition and therefore are not indexed.
 	MemoEncoding      = "MemoEncoding"
 	Memo              = "Memo"
@@ -92,6 +94,7 @@ var (
 		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
 		TemporalScheduleInfoJSON:   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
 	// reserved are internal field names that can't be used as search attribute names.
