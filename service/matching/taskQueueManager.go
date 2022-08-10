@@ -33,6 +33,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	uberatomic "go.uber.org/atomic"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -158,7 +160,7 @@ type (
 
 	metadataPoller struct {
 		// Ensures that we launch the goroutine for polling for updates only one time
-		running           atomic.Bool
+		running           *uberatomic.Bool
 		pollIntervalCfgFn dynamicconfig.DurationPropertyFn
 		stopChan          chan struct{}
 		tqMgr             *taskQueueManagerImpl
@@ -223,6 +225,7 @@ func newTaskQueueManager(
 		initializedError:     future.NewFuture[struct{}](),
 		metadataInitialFetch: future.NewFuture[struct{}](),
 		metadataPoller: metadataPoller{
+			running:           uberatomic.NewBool(false),
 			pollIntervalCfgFn: e.config.MetadataPollFrequency,
 			stopChan:          make(chan struct{}),
 		},
