@@ -226,7 +226,21 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 		})
 		var notFound *serviceerror.NamespaceNotFound
 		if errors.As(err, &notFound) {
-			return nil
+			_, err0 := s.frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: "ns_name_los_angeles",
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "wf_id_0",
+				},
+			})
+			_, err99 := s.frontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: "ns_name_los_angeles",
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: "wf_id_99",
+				},
+			})
+			if errors.As(err0, &notFound) && errors.As(err99, &notFound) {
+				return nil
+			}
 		}
 		return errors.New("namespace still exists")
 	}
