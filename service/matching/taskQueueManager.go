@@ -497,16 +497,16 @@ func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator
 			}
 			wg.Done()
 		}(i)
-		wg.Wait()
 	}
+	wg.Wait()
 	return nil
 }
 
 func (c *taskQueueManagerImpl) InvalidateMetadata(request *matchingservice.InvalidateTaskQueueMetadataRequest) error {
 	if request.GetVersioningData() != nil {
-		if c.taskQueueID.IsRoot() {
+		if c.taskQueueID.IsRoot() && c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			// Should never happen. Root partitions do not get their versioning data invalidated.
-			c.logger.Warn("A root partition was told to invalidate its versioning data, this should not happen")
+			c.logger.Warn("A root workflow partition was told to invalidate its versioning data, this should not happen")
 			return nil
 		}
 		c.db.setVersioningDataForNonRootPartition(request.GetVersioningData())

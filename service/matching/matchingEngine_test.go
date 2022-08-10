@@ -1966,6 +1966,42 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.Equal(mkVerId("99.5"), lastNode.GetVersion())
 }
 
+func (s *matchingEngineSuite) TestActivityQueueMetadataAlsoInvalidatedOnInvalidate() {
+	// Overwrite the matching mock - we expect one and only one fetch call here, after the activity queue is invalidated
+	mockMatch := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+	mockMatch.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.GetTaskQueueMetadataResponse{}, nil).
+		Times(1)
+	s.matchingEngine.matchingClient = mockMatch
+
+	namespaceID := namespace.ID(uuid.New())
+	tq := "tupac"
+
+	res, err := s.matchingEngine.GetWorkerBuildIdOrdering(s.handlerContext, &matchingservice.GetWorkerBuildIdOrderingRequest{
+		NamespaceId: namespaceID.String(),
+		Request: &workflowservice.GetWorkerBuildIdOrderingRequest{
+			Namespace: namespaceID.String(),
+			TaskQueue: tq,
+			MaxDepth:  0,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(res)
+
+	// Force the activity queue to be loaded (invalidate won't load it)
+	actTqId := newTestTaskQueueID(namespaceID, tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	ttqm, err := s.matchingEngine.getTaskQueueManager(context.Background(), actTqId, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	s.NoError(err)
+	s.NotNil(ttqm)
+
+	_, err = s.matchingEngine.InvalidateTaskQueueMetadata(s.handlerContext, &matchingservice.InvalidateTaskQueueMetadataRequest{
+		NamespaceId:    namespaceID.String(),
+		TaskQueue:      tq,
+		VersioningData: &persistencespb.VersioningData{CurrentDefault: mkVerIdNode("hi")},
+	})
+	s.NoError(err)
+}
+
 func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
 	activityTypeName := "activity1"
 	activityID := "activityId1"
