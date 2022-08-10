@@ -89,8 +89,8 @@ const (
 	retryTaskProcessingInitialInterval = 50 * time.Millisecond
 	retryTaskProcessingMaxAttempts     = 1
 
-	rescheduleTaskRetryInitialInterval    = 3 * time.Second
-	rescheduleTaskRetryBackoffCoefficient = 1.05
+	rescheduleTaskRetryInitialInterval    = 1 * time.Second
+	rescheduleTaskRetryBackoffCoefficient = 1.1
 	rescheduleTaskRetryMaxInterval        = 3 * time.Minute
 
 	sdkClientFactoryRetryInitialInterval    = 200 * time.Millisecond
