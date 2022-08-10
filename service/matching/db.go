@@ -65,8 +65,10 @@ type (
 	}
 )
 
-var errVersioningDataNotPresentOnPartition = errors.New("versioning data not present on non-root partition")
-var errVersioningDataNoMutateNonRoot = errors.New("cannot mutate versioning data on non-root task queue")
+var (
+	errVersioningDataNotPresentOnPartition = errors.New("versioning data not present on non-root partition")
+	errVersioningDataNoMutateNonRoot       = errors.New("cannot mutate versioning data on non-root task queue")
+)
 
 // newTaskQueueDB returns an instance of an object that represents
 // persistence view of a taskQueue. All mutations / reads to taskQueues

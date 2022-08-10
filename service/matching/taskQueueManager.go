@@ -158,9 +158,10 @@ type (
 
 	metadataPoller struct {
 		// Ensures that we launch the goroutine for polling for updates only one time
-		launched          sync.Once
+		running           atomic.Bool
 		pollIntervalCfgFn dynamicconfig.DurationPropertyFn
 		stopChan          chan struct{}
+		tqMgr             *taskQueueManagerImpl
 	}
 )
 
@@ -222,11 +223,11 @@ func newTaskQueueManager(
 		initializedError:     future.NewFuture[struct{}](),
 		metadataInitialFetch: future.NewFuture[struct{}](),
 		metadataPoller: metadataPoller{
-			launched:          sync.Once{},
 			pollIntervalCfgFn: e.config.MetadataPollFrequency,
 			stopChan:          make(chan struct{}),
 		},
 	}
+	tlMgr.metadataPoller.tqMgr = tlMgr
 
 	tlMgr.liveness = newLiveness(
 		clock.NewRealTimeSource(),
@@ -474,28 +475,29 @@ func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator
 	if err != nil {
 		return err
 	}
+	if !c.taskQueueID.IsRoot() {
+		return nil
+	}
 	// If this is the root partition, notify partitions that they should fetch changed data from us.
-	if c.taskQueueID.IsRoot() {
-		numParts := util.Max(c.config.NumReadPartitions(), c.config.NumWritePartitions())
-		wg := &sync.WaitGroup{}
-		for i := 1; i < numParts; i++ {
-			wg.Add(1)
-			go func(i int) {
-				tq := c.taskQueueID.mkName(i)
-				_, err := c.matchingClient.InvalidateTaskQueueMetadata(ctx,
-					&matchingservice.InvalidateTaskQueueMetadataRequest{
-						NamespaceId:    c.taskQueueID.namespaceID.String(),
-						TaskQueue:      tq,
-						VersioningData: newDat,
-					})
-				if err != nil {
-					c.logger.Warn("Failed to notify sub-partition of invalidated versioning data",
-						tag.WorkflowTaskQueueName(tq), tag.Error(err))
-				}
-				wg.Done()
-			}(i)
-			wg.Wait()
-		}
+	numParts := util.Max(c.config.NumReadPartitions(), c.config.NumWritePartitions())
+	wg := &sync.WaitGroup{}
+	for i := 1; i < numParts; i++ {
+		wg.Add(1)
+		go func(i int) {
+			tq := c.taskQueueID.mkName(i)
+			_, err := c.matchingClient.InvalidateTaskQueueMetadata(ctx,
+				&matchingservice.InvalidateTaskQueueMetadataRequest{
+					NamespaceId:    c.taskQueueID.namespaceID.String(),
+					TaskQueue:      tq,
+					VersioningData: newDat,
+				})
+			if err != nil {
+				c.logger.Warn("Failed to notify sub-partition of invalidated versioning data",
+					tag.WorkflowTaskQueueName(tq), tag.Error(err))
+			}
+			wg.Done()
+		}(i)
+		wg.Wait()
 	}
 	return nil
 }
@@ -504,12 +506,11 @@ func (c *taskQueueManagerImpl) InvalidateMetadata(request *matchingservice.Inval
 	if request.GetVersioningData() != nil {
 		if c.taskQueueID.IsRoot() {
 			// Should never happen. Root partitions do not get their versioning data invalidated.
-			c.logger.Warn("A root partition was told to invalidate its versioning data, this should not happen",
-				tag.WorkflowTaskQueueName(c.taskQueueID.name))
+			c.logger.Warn("A root partition was told to invalidate its versioning data, this should not happen")
 			return nil
 		}
 		c.db.setVersioningDataForNonRootPartition(request.GetVersioningData())
-		c.startMetadataPollerIfUnstarted()
+		c.metadataPoller.StartIfUnstarted()
 	}
 	return nil
 }
@@ -751,7 +752,7 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 	}
 	// We want to start the poller as long as the root partition has any kind of data (or fetching hasn't worked)
 	if res.GetMatchedReqHash() || res.GetVersioningData() != nil || err != nil {
-		c.startMetadataPollerIfUnstarted()
+		c.metadataPoller.StartIfUnstarted()
 	}
 	if err != nil {
 		return nil, err
@@ -759,43 +760,44 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 	return res.GetVersioningData(), nil
 }
 
-func (c *taskQueueManagerImpl) startMetadataPollerIfUnstarted() {
-	c.metadataPoller.StartIfUnstarted(func() bool {
-		dat, err := c.fetchMetadataFromRootPartition(context.TODO())
-		if dat == nil && err == nil {
-			// Can stop polling since there is no versioning data. Loop will be restarted if we
-			// are told to invalidate the data, or we attempt to fetch it via GetVersioningData.
-			return true
-		}
-		return false
-	})
-}
-
 // StartIfUnstarted starts the poller if it's not already started. The passed in function is called repeatedly
 // and if it returns true, the poller will shut down, at which point it may be started again.
-func (mp *metadataPoller) StartIfUnstarted(pollFn func() bool) {
-	mp.launched.Do(func() {
-		go func() {
-			ticker := time.NewTicker(mp.pollIntervalCfgFn())
-			defer ticker.Stop()
+func (mp *metadataPoller) StartIfUnstarted() {
+	if mp.running.Load() {
+		return
+	}
+	go mp.pollLoop()
+}
 
-			for {
-				select {
-				case <-mp.stopChan:
-					return
-				case <-ticker.C:
-					// In case the interval has changed
-					ticker.Reset(mp.pollIntervalCfgFn())
-					shouldDie := pollFn()
-					if shouldDie {
-						mp.launched = sync.Once{}
-						return
-					}
-				}
+func (mp *metadataPoller) pollLoop() {
+	mp.running.Store(true)
+	ticker := time.NewTicker(mp.pollIntervalCfgFn())
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-mp.stopChan:
+			return
+		case <-ticker.C:
+			// In case the interval has changed
+			ticker.Reset(mp.pollIntervalCfgFn())
+			shouldDie := mp.pollFn()
+			if shouldDie {
+				mp.running.Store(false)
+				return
 			}
+		}
+	}
+}
 
-		}()
-	})
+func (mp *metadataPoller) pollFn() bool {
+	dat, err := mp.tqMgr.fetchMetadataFromRootPartition(context.TODO())
+	if dat == nil && err == nil {
+		// Can stop polling since there is no versioning data. Loop will be restarted if we
+		// are told to invalidate the data, or we attempt to fetch it via GetVersioningData.
+		return true
+	}
+	return false
 }
 
 func (mp *metadataPoller) Stop() {

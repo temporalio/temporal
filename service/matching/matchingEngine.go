@@ -757,7 +757,7 @@ func (e *matchingEngineImpl) InvalidateTaskQueueMetadata(
 	}
 	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, false)
 	if tqMgr == nil && err == nil {
-		// Nothing to do here
+		// Task queue is not currently loaded, so nothing to do here
 		return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
 	}
 	if err != nil {
