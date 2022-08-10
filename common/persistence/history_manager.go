@@ -527,22 +527,13 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 	}, err
 }
 
+// NewHistoryBranch initializes a new history branch
 func (m *executionManagerImpl) NewHistoryBranch(
 	ctx context.Context,
 	request *NewHistoryBranchRequest,
 ) (*NewHistoryBranchResponse, error) {
 
-	req := &NewHistoryBranchRequest{
-		TreeID: request.TreeID,
-	}
-	resp, err := m.persistence.NewHistoryBranch(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	return &NewHistoryBranchResponse{
-		BranchToken: resp.BranchToken,
-	}, nil
+	return m.persistence.NewHistoryBranch(ctx, request)
 }
 
 // ReadHistoryBranchByBatch returns history node data for a branch by batch
