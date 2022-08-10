@@ -26,23 +26,25 @@ package matching
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/internal/goro"
 	"go.temporal.io/server/service/worker/scanner/taskqueue"
 )
 
 const (
-	taskReaderOfferThrottleWait = time.Second
+	taskReaderOfferThrottleWait  = time.Second
+	taskReaderThrottleRetryDelay = 3 * time.Second
 )
 
 type (
@@ -52,6 +54,10 @@ type (
 		notifyC    chan struct{}                          // Used as signal to notify pump of new tasks
 		tlMgr      *taskQueueManagerImpl
 		gorogrp    goro.Group
+
+		backoffTimerLock sync.Mutex
+		backoffTimer     *time.Timer
+		retrier          backoff.Retrier
 	}
 )
 
@@ -63,6 +69,10 @@ func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
 		// we always dequeue the head of the buffer and try to dispatch it to a poller
 		// so allocate one less than desired target buffer size
 		taskBuffer: make(chan *persistencespb.AllocatedTaskInfo, tlMgr.config.GetTasksBatchSize()-1),
+		retrier: backoff.NewRetrier(
+			common.CreateReadTaskRetryPolicy(),
+			backoff.SystemClock,
+		),
 	}
 }
 
@@ -171,10 +181,15 @@ Loop:
 			tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch(ctx)
 			tr.tlMgr.signalIfFatal(err)
 			if err != nil {
-				tr.Signal() // re-enqueue the event
 				// TODO: Should we ever stop retrying on db errors?
+				if common.IsResourceExhausted(err) {
+					tr.backoff(taskReaderThrottleRetryDelay)
+				} else {
+					tr.backoff(tr.retrier.NextBackOff())
+				}
 				continue Loop
 			}
+			tr.retrier.Reset()
 
 			if len(tasks) == 0 {
 				tr.tlMgr.taskAckManager.setReadLevelAfterGap(readLevel)
@@ -205,13 +220,12 @@ Loop:
 	}
 }
 
-func (tr *taskReader) getTaskBatchWithRange(ctx context.Context, readLevel int64, maxReadLevel int64) ([]*persistencespb.AllocatedTaskInfo, error) {
-	var response *persistence.GetTasksResponse
-	var err error
-	err = executeWithRetry(ctx, func(ctx context.Context) error {
-		response, err = tr.tlMgr.db.GetTasks(ctx, readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
-		return err
-	})
+func (tr *taskReader) getTaskBatchWithRange(
+	ctx context.Context,
+	readLevel int64,
+	maxReadLevel int64,
+) ([]*persistencespb.AllocatedTaskInfo, error) {
+	response, err := tr.tlMgr.db.GetTasks(ctx, readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
 	if err != nil {
 		return nil, err
 	}
@@ -300,4 +314,19 @@ func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
 	// taskID in DB may not be continuous, especially when task list ownership changes.
 	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
 	tr.scope().UpdateGauge(metrics.TaskLagPerTaskQueueGauge, float64(maxReadLevel-ackLevel))
+}
+
+func (tr *taskReader) backoff(duration time.Duration) {
+	tr.backoffTimerLock.Lock()
+	defer tr.backoffTimerLock.Unlock()
+
+	if tr.backoffTimer == nil {
+		tr.backoffTimer = time.AfterFunc(duration, func() {
+			tr.backoffTimerLock.Lock()
+			defer tr.backoffTimerLock.Unlock()
+
+			tr.Signal() // re-enqueue the event
+			tr.backoffTimer = nil
+		})
+	}
 }

@@ -1737,10 +1737,10 @@ func (e *MutableStateImpl) ReplicateWorkflowTaskStartedEvent(
 	return e.workflowTaskManager.ReplicateWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID, startedEventID, requestID, timestamp)
 }
 
-func (e *MutableStateImpl) CreateTransientWorkflowTaskEvents(
+func (e *MutableStateImpl) CreateTransientWorkflowTask(
 	workflowTask *WorkflowTaskInfo,
 	identity string,
-) (*historypb.HistoryEvent, *historypb.HistoryEvent) {
+) *historyspb.TransientWorkflowTaskInfo {
 	return e.workflowTaskManager.CreateTransientWorkflowTaskEvents(workflowTask, identity)
 }
 

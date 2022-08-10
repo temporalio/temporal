@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -652,14 +651,14 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStartedResponse(
-	msBuilder workflow.MutableState,
+	ms workflow.MutableState,
 	workflowTask *workflow.WorkflowTaskInfo,
 	identity string,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 
 	response := &historyservice.RecordWorkflowTaskStartedResponse{}
-	response.WorkflowType = msBuilder.GetWorkflowType()
-	executionInfo := msBuilder.GetExecutionInfo()
+	response.WorkflowType = ms.GetWorkflowType()
+	executionInfo := ms.GetExecutionInfo()
 	if executionInfo.LastWorkflowTaskStartedEventId != common.EmptyEventID {
 		response.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
 	}
@@ -668,8 +667,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	// before it was started.
 	response.ScheduledEventId = workflowTask.ScheduledEventID
 	response.StartedEventId = workflowTask.StartedEventID
-	response.StickyExecutionEnabled = msBuilder.IsStickyTaskQueueEnabled()
-	response.NextEventId = msBuilder.GetNextEventID()
+	response.StickyExecutionEnabled = ms.IsStickyTaskQueueEnabled()
+	response.NextEventId = ms.GetNextEventID()
 	response.Attempt = workflowTask.Attempt
 	response.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
 		Name: executionInfo.TaskQueue,
@@ -678,35 +677,27 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	response.ScheduledTime = workflowTask.ScheduledTime
 	response.StartedTime = workflowTask.StartedTime
 
-	if workflowTask.Attempt > 1 {
-		// This workflowTask is retried from mutable state
-		// Also return schedule and started which are not written to history yet
-		scheduledEvent, startedEvent := msBuilder.CreateTransientWorkflowTaskEvents(workflowTask, identity)
-		response.TransientWorkflowTask = &historyspb.TransientWorkflowTaskInfo{}
+	response.TransientWorkflowTask = ms.CreateTransientWorkflowTask(workflowTask, identity)
 
-		// TODO (mmcshane): remove population of ScheduledEvent and StartedEvent
-		// after v1.18 is released
-		response.TransientWorkflowTask.ScheduledEvent = scheduledEvent
-		response.TransientWorkflowTask.StartedEvent = startedEvent
-		response.TransientWorkflowTask.HistorySuffix = []*historypb.HistoryEvent{scheduledEvent, startedEvent}
-	}
-	currentBranchToken, err := msBuilder.GetCurrentBranchToken()
+	currentBranchToken, err := ms.GetCurrentBranchToken()
 	if err != nil {
 		return nil, err
 	}
 	response.BranchToken = currentBranchToken
 
-	qr := msBuilder.GetQueryRegistry()
-	buffered := qr.GetBufferedIDs()
-	queries := make(map[string]*querypb.WorkflowQuery)
-	for _, id := range buffered {
-		input, err := qr.GetQueryInput(id)
-		if err != nil {
-			continue
+	qr := ms.GetQueryRegistry()
+	bufferedQueryIDs := qr.GetBufferedIDs()
+	if len(bufferedQueryIDs) > 0 {
+		response.Queries = make(map[string]*querypb.WorkflowQuery, len(bufferedQueryIDs))
+		for _, bufferedQueryID := range bufferedQueryIDs {
+			input, err := qr.GetQueryInput(bufferedQueryID)
+			if err != nil {
+				continue
+			}
+			response.Queries[bufferedQueryID] = input
 		}
-		queries[id] = input
 	}
-	response.Queries = queries
+
 	return response, nil
 }
 

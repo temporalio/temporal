@@ -3104,6 +3104,8 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	if err != nil {
 		return nil, err
 	}
+	// Add namespace division
+	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
 	// Create StartWorkflowExecutionRequest
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:             request.Namespace,
@@ -3284,6 +3286,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return errWaitForRefresh
 	}
 
+	// TODO: confirm retry is necessary here.
 	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
 	isWaitErr := func(e error) bool { return e == errWaitForRefresh }
 	err = backoff.ThrottleRetryContext(ctx, op, policy, isWaitErr)
@@ -3594,6 +3597,7 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{
 			NamespaceID:       namespaceID,
 			Namespace:         namespaceName,
+			NamespaceDivision: scheduler.NamespaceDivision,
 			PageSize:          int(request.GetMaximumPageSize()),
 			NextPageToken:     request.NextPageToken,
 			EarliestStartTime: minTime,

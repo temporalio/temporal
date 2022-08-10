@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -78,6 +80,10 @@ type (
 		dispatchChan chan struct{}
 		startupChan  chan struct{}
 		shutdownChan chan struct{}
+
+		dispatchBackoffTimerLock sync.Mutex
+		dispatchBackoffTimer     *time.Timer
+		dispatchRetrier          backoff.Retrier
 
 		taskQueueOwnership        dbTaskQueueOwnership
 		taskReader                dbTaskReader
@@ -130,6 +136,11 @@ func newDBTaskManager(
 		dispatchChan: make(chan struct{}, 1),
 		startupChan:  make(chan struct{}),
 		shutdownChan: make(chan struct{}),
+
+		dispatchRetrier: backoff.NewRetrier(
+			common.CreateReadTaskRetryPolicy(),
+			backoff.SystemClock,
+		),
 
 		taskQueueOwnership:        nil,
 		taskWriter:                nil,
@@ -283,11 +294,11 @@ func (d *dbTaskManager) BufferAndWriteTask(
 	select {
 	case <-d.startupChan:
 		if d.isStopped() {
-			return future.NewReadyFuture[struct{}](struct{}{}, errDBTaskManagerNotReady)
+			return future.NewReadyFuture(struct{}{}, errDBTaskManagerNotReady)
 		}
 		return d.taskWriter.appendTask(task)
 	default:
-		return future.NewReadyFuture[struct{}](struct{}{}, errDBTaskManagerNotReady)
+		return future.NewReadyFuture(struct{}{}, errDBTaskManagerNotReady)
 	}
 }
 
@@ -299,7 +310,11 @@ func (d *dbTaskManager) readAndDispatchTasks(
 		task, err := iter.Next()
 		if err != nil {
 			d.logger.Error("dbTaskManager encountered error when fetching tasks", tag.Error(err))
-			d.signalDispatch()
+			if common.IsResourceExhausted(err) {
+				d.backoffDispatch(taskReaderThrottleRetryDelay)
+			} else {
+				d.backoffDispatch(d.dispatchRetrier.NextBackOff())
+			}
 			return
 		}
 
@@ -395,4 +410,19 @@ func (d *dbTaskManager) finishTask(
 		return
 	}
 	d.taskReader.ackTask(info.TaskId)
+}
+
+func (d *dbTaskManager) backoffDispatch(duration time.Duration) {
+	d.dispatchBackoffTimerLock.Lock()
+	defer d.dispatchBackoffTimerLock.Unlock()
+
+	if d.dispatchBackoffTimer == nil {
+		d.dispatchBackoffTimer = time.AfterFunc(duration, func() {
+			d.dispatchBackoffTimerLock.Lock()
+			defer d.dispatchBackoffTimerLock.Unlock()
+
+			d.signalDispatch() // re-enqueue the event
+			d.dispatchBackoffTimer = nil
+		})
+	}
 }

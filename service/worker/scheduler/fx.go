@@ -39,7 +39,8 @@ import (
 )
 
 const (
-	WorkflowType = "temporal-sys-scheduler-workflow"
+	WorkflowType      = "temporal-sys-scheduler-workflow"
+	NamespaceDivision = "TemporalScheduler"
 )
 
 type (

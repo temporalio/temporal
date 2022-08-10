@@ -83,7 +83,7 @@ func (t *dbTaskReaderImpl) taskIterator(
 	ctx context.Context,
 	maxTaskID int64,
 ) collection.Iterator[*persistencespb.AllocatedTaskInfo] {
-	return collection.NewPagingIterator[*persistencespb.AllocatedTaskInfo](
+	return collection.NewPagingIterator(
 		t.getPaginationFn(ctx, maxTaskID),
 	)
 }
