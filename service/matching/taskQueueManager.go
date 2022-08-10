@@ -720,9 +720,9 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartitionOnInit(ctx context.
 // fetchMetadataFromRootPartition fetches metadata from root partition iff this partition is not a root partition.
 // Returns the fetched data, if fetching was necessary and successful.
 func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Context) (*persistencespb.VersioningData, error) {
-	// Nothing to do if we are the root partition
+	// Nothing to do if we are the root partition of a workflow queue, since we should own the data.
 	// (for versioning - any later added metadata may need to not abort so early)
-	if c.taskQueueID.IsRoot() {
+	if c.taskQueueID.IsRoot() && c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return nil, nil
 	}
 

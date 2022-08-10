@@ -532,6 +532,9 @@ func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartitionOnInit(t *tes
 		})
 	subTq.Start()
 	require.NoError(t, subTq.WaitUntilInitialized(ctx))
+	verDat, err := subTq.GetVersioningData(ctx)
+	require.NoError(t, err)
+	require.Equal(t, data, verDat)
 	subTq.Stop()
 }
 
@@ -759,4 +762,55 @@ func TestFetchingVersioningDataErrorsIfNeverFetchedFromRootSuccessfully(t *testi
 		require.Error(t, err)
 		time.Sleep(time.Millisecond * 2)
 	}
+}
+
+func TestActivityQueueGetsVersioningDataFromWorkflowQueue(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+
+	data := &persistencespb.VersioningData{
+		CurrentDefault: mkVerIdNode("0"),
+	}
+	asResp := &matchingservice.GetTaskQueueMetadataResponse{
+		VersioningDataResp: &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
+			VersioningData: data,
+		},
+	}
+
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId.taskType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
+	actTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
+		func(tqm *taskQueueManagerImpl) {
+			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
+				Return(asResp, nil).Times(1)
+			tqm.matchingClient = mockMatchingClient
+		})
+	actTq.Start()
+	require.NoError(t, actTq.WaitUntilInitialized(ctx))
+
+	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 1)
+	require.NoError(t, err)
+	tqCfg = defaultTqmTestOpts(controller)
+	tqCfg.tqId = subTqId
+	actTqPart := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg,
+		func(tqm *taskQueueManagerImpl) {
+			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+			mockMatchingClient.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
+				Return(asResp, nil).Times(1)
+			tqm.matchingClient = mockMatchingClient
+		})
+	actTqPart.Start()
+	require.NoError(t, actTqPart.WaitUntilInitialized(ctx))
+
+	verDat, err := actTq.GetVersioningData(ctx)
+	require.NoError(t, err)
+	require.Equal(t, data, verDat)
+	verDat, err = actTqPart.GetVersioningData(ctx)
+	require.NoError(t, err)
+	require.Equal(t, data, verDat)
+
+	actTq.Stop()
+	actTqPart.Stop()
 }

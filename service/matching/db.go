@@ -74,10 +74,10 @@ var errVersioningDataNoMutateNonRoot = errors.New("cannot mutate versioning data
 //
 // This class will serialize writes to persistence that do condition updates. There are
 // two reasons for doing this:
-// - To work around known Cassandra issue where concurrent LWT to the same partition cause timeout errors
-// - To provide the guarantee that there is only writer who updates taskQueue in persistence at any given point in time
-//   This guarantee makes some of the other code simpler and there is no impact to perf because updates to taskqueue are
-//   spread out and happen in background routines
+//   - To work around known Cassandra issue where concurrent LWT to the same partition cause timeout errors
+//   - To provide the guarantee that there is only writer who updates taskQueue in persistence at any given point in time
+//     This guarantee makes some of the other code simpler and there is no impact to perf because updates to taskqueue are
+//     spread out and happen in background routines
 func newTaskQueueDB(store persistence.TaskManager, namespaceID namespace.ID, taskQueue *taskQueueID, kind enumspb.TaskQueueKind, logger log.Logger) *taskQueueDB {
 	return &taskQueueDB{
 		namespaceID:   namespaceID,
@@ -295,7 +295,7 @@ func (db *taskQueueDB) getVersioningDataLocked(
 		return db.versioningData, nil
 	}
 
-	if !db.taskQueue.IsRoot() {
+	if !db.taskQueue.IsRoot() || db.taskQueue.taskType != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return nil, errVersioningDataNotPresentOnPartition
 	}
 
