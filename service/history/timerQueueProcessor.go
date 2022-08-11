@@ -310,8 +310,8 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 					return false
 				default:
 				}
-				return err != shard.ErrShardClosed
-			}); err == shard.ErrShardClosed {
+				return !shard.IsShardOwnershipLostError(err)
+			}); shard.IsShardOwnershipLostError(err) {
 				// shard is unloaded, timer processor should quit as well
 				go t.Stop()
 				return

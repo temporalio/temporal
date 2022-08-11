@@ -157,9 +157,6 @@ type (
 var _ Context = (*ContextImpl)(nil)
 
 var (
-	// ErrShardClosed is returned when shard is closed and a req cannot be processed
-	ErrShardClosed = serviceerror.NewUnavailable("shard closed")
-
 	// ErrShardStatusUnknown means we're not sure if we have the shard lock or not. This may be returned
 	// during short windows at initialization and if we've lost the connection to the database.
 	ErrShardStatusUnknown = serviceerror.NewUnavailable("shard status unknown")
@@ -1129,7 +1126,7 @@ func (s *ContextImpl) errorByState() error {
 	case contextStateAcquired:
 		return nil
 	case contextStateStopping, contextStateStopped:
-		return ErrShardClosed
+		return s.newShardClosedErrorWithShardID()
 	default:
 		panic("invalid state")
 	}
@@ -1810,7 +1807,7 @@ func (s *ContextImpl) acquireShard() {
 
 	op := func() error {
 		if !s.isValid() {
-			return ErrShardClosed
+			return s.newShardClosedErrorWithShardID()
 		}
 
 		// Initial load of shard metadata
@@ -2036,6 +2033,14 @@ func (s *ContextImpl) newIOContext() (context.Context, context.CancelFunc) {
 	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
 
 	return ctx, cancel
+}
+
+// newShardClosedErrorWithShardID when shard is closed and a req cannot be processed
+func (s *ContextImpl) newShardClosedErrorWithShardID() *persistence.ShardOwnershipLostError {
+	return &persistence.ShardOwnershipLostError{
+		ShardID: s.shardID, // immutable
+		Msg:     "shard closed",
+	}
 }
 
 func OperationPossiblySucceeded(err error) bool {
