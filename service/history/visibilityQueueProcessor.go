@@ -25,7 +25,6 @@
 package history
 
 import (
-	"errors"
 	"sync/atomic"
 	"time"
 
@@ -268,7 +267,7 @@ func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
 				}
 
 				t.logger.Info("Failed to complete visibility task", tag.Error(err))
-				if errors.Is(err, shard.ErrShardClosed) {
+				if shard.IsShardOwnershipLostError(err) {
 					// shard closed, trigger shutdown and bail out
 					t.Stop()
 					return

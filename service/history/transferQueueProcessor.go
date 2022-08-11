@@ -293,7 +293,7 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 				err := t.completeTransfer()
 				if err != nil {
 					t.logger.Info("Failed to complete transfer task", tag.Error(err))
-					if err == shard.ErrShardClosed {
+					if shard.IsShardOwnershipLostError(err) {
 						// shard closed, trigger shutdown and bail out
 						t.Stop()
 						return

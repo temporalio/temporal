@@ -296,7 +296,7 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 				err := t.completeTimers()
 				if err != nil {
 					t.logger.Info("Failed to complete timers.", tag.Error(err))
-					if err == shard.ErrShardClosed {
+					if shard.IsShardOwnershipLostError(err) {
 						// shard is unloaded, timer processor should quit as well
 						go t.Stop()
 						return

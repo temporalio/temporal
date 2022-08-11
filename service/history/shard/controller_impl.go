@@ -288,9 +288,10 @@ func (c *ControllerImpl) removeShard(shardID int32, expected *ContextImpl) (*Con
 // ControllerImpl. It is responsible for acquiring /
 // releasing shards in response to any event that can
 // change the shard ownership. These events are
-//   a. Ring membership change
-//   b. Periodic ticker
-//   c. ShardOwnershipLostError and subsequent ShardClosedEvents from engine
+//
+//	a. Ring membership change
+//	b. Periodic ticker
+//	c. ShardOwnershipLostError and subsequent ShardClosedEvents from engine
 func (c *ControllerImpl) shardManagementPump() {
 	defer c.shutdownWG.Done()
 
@@ -401,12 +402,10 @@ func (c *ControllerImpl) ShardIDs() []int32 {
 }
 
 func IsShardOwnershipLostError(err error) bool {
-	if err == ErrShardClosed {
-		return true
-	}
-
 	switch err.(type) {
 	case *persistence.ShardOwnershipLostError:
+		return true
+	case *serviceerrors.ShardOwnershipLost:
 		return true
 	}
 
