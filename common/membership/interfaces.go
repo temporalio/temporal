@@ -98,6 +98,8 @@ type (
 		MemberCount() int
 		// Members returns all host addresses in hashring for any particular role
 		Members() []*HostInfo
+		// Requests to rebuild the hash ring
+		RequestRefresh()
 	}
 
 	HostInfoProvider interface {

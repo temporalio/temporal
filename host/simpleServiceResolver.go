@@ -66,3 +66,6 @@ func (s *simpleResolver) MemberCount() int {
 func (s *simpleResolver) Members() []*membership.HostInfo {
 	return s.hosts
 }
+
+func (s *simpleResolver) RequestRefresh() {
+}
