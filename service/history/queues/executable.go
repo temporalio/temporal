@@ -77,7 +77,8 @@ var (
 	schedulerRetryPolicy = common.CreateTaskProcessingRetryPolicy()
 	// reschedulePolicy is the policy for determine reschedule backoff duration
 	// across multiple submissions to scheduler
-	reschedulePolicy = common.CreateTaskReschedulePolicy()
+	reschedulePolicy             = common.CreateTaskReschedulePolicy()
+	taskNotReadyReschedulePolicy = common.CreateTaskNotReadyReschedulePolicy()
 )
 
 const (
@@ -314,7 +315,7 @@ func (e *executableImpl) Nack(err error) {
 	}
 
 	if !submitted {
-		e.rescheduler.Add(e, e.rescheduleTime(e.Attempt()))
+		e.rescheduler.Add(e, e.rescheduleTime(err, e.Attempt()))
 	}
 }
 
@@ -323,7 +324,7 @@ func (e *executableImpl) Reschedule() {
 		return
 	}
 
-	e.rescheduler.Add(e, e.rescheduleTime(e.Attempt()))
+	e.rescheduler.Add(e, e.rescheduleTime(nil, e.Attempt()))
 }
 
 func (e *executableImpl) State() ctasks.State {
@@ -384,8 +385,19 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 	return err != consts.ErrTaskRetry
 }
 
-func (e *executableImpl) rescheduleTime(attempt int) time.Time {
-	// elapsedTime (the first parameter) is not relevant here since reschedule policy
-	// has no expiration interval.
+func (e *executableImpl) rescheduleTime(
+	err error,
+	attempt int,
+) time.Time {
+	// elapsedTime (the first parameter in ComputeNextDelay) is not relevant here
+	// since reschedule policy has no expiration interval.
+
+	if err == consts.ErrTaskRetry {
+		// using a different reschedule policy to slow down retry
+		// as the error means mutable state is not ready to handle the task,
+		// need to wait for replication.
+		e.timeSource.Now().Add(taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt))
+	}
+
 	return e.timeSource.Now().Add(reschedulePolicy.ComputeNextDelay(0, attempt))
 }
