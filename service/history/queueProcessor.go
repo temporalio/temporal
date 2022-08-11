@@ -210,7 +210,7 @@ eventLoop:
 				p.options.UpdateAckInterval(),
 				p.options.UpdateAckIntervalJitterCoefficient(),
 			))
-			if err := p.ackMgr.updateQueueAckLevel(); err == shard.ErrShardClosed {
+			if err := p.ackMgr.updateQueueAckLevel(); shard.IsShardOwnershipLostError(err) {
 				// shard is no longer owned by this instance, bail out
 				go p.Stop()
 				break eventLoop
