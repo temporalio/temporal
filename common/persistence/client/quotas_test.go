@@ -71,6 +71,15 @@ func (s *quotasSuite) TestAPIPriorityOverrideMapping() {
 	}
 }
 
+func (s *quotasSuite) TestPriorityRatePercentageMapping() {
+	for _, priority := range RequestPrioritiesOrdered {
+		percentage, ok := PriorityRatePercentage[priority]
+		s.True(ok)
+		s.LessOrEqual(percentage, 1.0)
+		s.GreaterOrEqual(percentage, 0.0)
+	}
+}
+
 func (s *quotasSuite) TestRequestPrioritiesOrdered() {
 	for idx := range RequestPrioritiesOrdered[1:] {
 		s.True(RequestPrioritiesOrdered[idx] < RequestPrioritiesOrdered[idx+1])

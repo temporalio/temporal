@@ -32,26 +32,45 @@ import (
 var (
 	CallerTypePriority = map[string]int{
 		headers.CallerTypeAPI:        0,
-		headers.CallerTypeBackground: 1,
+		headers.CallerTypeBackground: 2,
 	}
 
 	APIPriorityOverride = map[string]int{
 		"GetOrCreateShard": 0,
 		"UpdateShard":      0,
 
-		// this is a preprequisite for checkpoint queue process progress
+		// This is a preprequisite for checkpoint queue process progress
 		"RangeCompleteHistoryTasks": 0,
+
+		// Task resource isolation assumes task can always be loaded.
+		// When one namespace has high load, all task processing goroutines
+		// may be busy and consumes all persistence request tokens, preventing
+		// tasks for other namespaces to be loaded. So give task loading a higher
+		// priority than other background requests.
+		// NOTE: we also don't want task loading to consume all persistence request tokens,
+		// and blocks all other operations. This is done by limiting the total rps allow
+		// for this priority.
+		// TODO: exclude certain task type from this override, like replication.
+		"GetHistoryTasks": 1,
 	}
 
-	RequestPrioritiesOrdered = []int{0, 1}
+	RequestPrioritiesOrdered = []int{0, 1, 2}
+
+	PriorityRatePercentage = map[int]float64{
+		0: 1.0,
+		1: 0.8,
+		2: 1.0,
+	}
 )
 
 func NewPriorityRateLimiter(
-	rateFn quotas.RateFn,
+	maxQps PersistenceMaxQps,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
 	for priority := range RequestPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewDefaultOutgoingRateLimiter(rateFn)
+		rateLimiters[priority] = quotas.NewDefaultOutgoingRateLimiter(
+			func() float64 { return float64(maxQps()) * PriorityRatePercentage[priority] },
+		)
 	}
 
 	return quotas.NewPriorityRateLimiter(
@@ -72,14 +91,16 @@ func NewPriorityRateLimiter(
 }
 
 func NewNoopPriorityRateLimiter(
-	rateFn quotas.RateFn,
+	maxQps PersistenceMaxQps,
 ) quotas.RequestRateLimiter {
 	priority := RequestPrioritiesOrdered[0]
 
 	return quotas.NewPriorityRateLimiter(
 		func(_ quotas.Request) int { return priority },
 		map[int]quotas.RateLimiter{
-			priority: quotas.NewDefaultOutgoingRateLimiter(rateFn),
+			priority: quotas.NewDefaultOutgoingRateLimiter(
+				func() float64 { return float64(maxQps()) },
+			),
 		},
 	)
 }
