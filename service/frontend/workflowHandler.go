@@ -28,7 +28,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"strings"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -3784,22 +3783,10 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	default:
 		identity = "user-start-batcher"
 	}
-	query := request.VisibilityQuery
-	if !strings.Contains(query, searchattribute.ExecutionStatus) {
-		var prefix string
-		if len(query) > 0 {
-			prefix = " AND"
-		}
-		query += fmt.Sprintf(
-			"%s %s = '%s'",
-			prefix,
-			searchattribute.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
-		)
-	}
+
 	input := &batcher.BatchParams{
 		Namespace:       request.Namespace,
-		Query:           request.VisibilityQuery, //TODO
+		Query:           request.VisibilityQuery,
 		Reason:          reason,
 		BatchType:       operationType,
 		TerminateParams: batcher.TerminateParams{},
@@ -3947,7 +3934,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		failureOpsCount = int64(hbd.ErrorCount)
 	}
 	return &workflowservice.DescribeBatchOperationResponse{
-		// TODO: add identity and operator
+		// TODO: add identity
 		OperationType:          operationType,
 		JobId:                  executionInfo.Execution.GetWorkflowId(),
 		State:                  operationState,
