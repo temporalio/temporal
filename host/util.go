@@ -35,14 +35,14 @@ import (
 )
 
 // CreateESClient create ElasticSearch client for test
-func CreateESClient(s suite.Suite, config *esclient.Config, logger log.Logger) esclient.IntegrationTestsClient {
+func CreateESClient(s *suite.Suite, config *esclient.Config, logger log.Logger) esclient.IntegrationTestsClient {
 	client, err := esclient.NewIntegrationTestsClient(config, logger)
 	s.Require().NoError(err)
 	return client
 }
 
 // PutIndexTemplate put index template for test
-func PutIndexTemplate(s suite.Suite, esClient esclient.IntegrationTestsClient, templateConfigFile, templateName string) {
+func PutIndexTemplate(s *suite.Suite, esClient esclient.IntegrationTestsClient, templateConfigFile, templateName string) {
 	// This function is used exclusively in tests. Excluding it from security checks.
 	// #nosec
 	template, err := os.ReadFile(templateConfigFile)
@@ -53,7 +53,7 @@ func PutIndexTemplate(s suite.Suite, esClient esclient.IntegrationTestsClient, t
 }
 
 // CreateIndex create test index
-func CreateIndex(s suite.Suite, esClient esclient.IntegrationTestsClient, indexName string) {
+func CreateIndex(s *suite.Suite, esClient esclient.IntegrationTestsClient, indexName string) {
 	exists, err := esClient.IndexExists(context.Background(), indexName)
 	s.Require().NoError(err)
 	if exists {
@@ -68,7 +68,7 @@ func CreateIndex(s suite.Suite, esClient esclient.IntegrationTestsClient, indexN
 }
 
 // DeleteIndex delete test index
-func DeleteIndex(s suite.Suite, esClient esclient.IntegrationTestsClient, indexName string) {
+func DeleteIndex(s *suite.Suite, esClient esclient.IntegrationTestsClient, indexName string) {
 	acknowledged, err := esClient.DeleteIndex(context.Background(), indexName)
 	s.NoError(err)
 	s.True(acknowledged)
