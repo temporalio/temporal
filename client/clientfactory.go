@@ -177,7 +177,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		longPollTimeout,
 		common.NewClientCache(keyResolver, clientProvider),
 		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig),
-		cf.dynConfig.GetBoolProperty(dynamicconfig.MatchingUseOldRouting, false),
+		cf.dynConfig.GetBoolProperty(dynamicconfig.MatchingUseOldRouting, true),
 	)
 
 	if cf.metricsClient != nil {
