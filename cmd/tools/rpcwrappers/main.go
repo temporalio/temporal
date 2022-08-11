@@ -173,7 +173,8 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	switch t.Name() {
 	case "GetWorkerBuildIdOrderingRequest",
 		"UpdateWorkerBuildIdOrderingRequest",
-		"RespondQueryTaskCompletedRequest":
+		"RespondQueryTaskCompletedRequest",
+		"ListTaskQueuePartitionsRequest":
 		tqtPath = "enumspb.TASK_QUEUE_TYPE_WORKFLOW"
 	default:
 		tqtPath = pathToField(t, "TaskQueueType", "request", 2)

@@ -86,7 +86,7 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	opts ...grpc.CallOption,
 ) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), request.GetTaskQueue(), request.GetTaskQueueType())
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), request.GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
