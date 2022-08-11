@@ -478,28 +478,32 @@ func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator
 	if err != nil {
 		return err
 	}
-	if !c.taskQueueID.IsRoot() {
-		return nil
-	}
-	// If this is the root partition, notify partitions that they should fetch changed data from us.
+	// We will have errored already if this was not the root workflow partition.
+	// Now notify partitions that they should fetch changed data from us
 	numParts := util.Max(c.config.NumReadPartitions(), c.config.NumWritePartitions())
 	wg := &sync.WaitGroup{}
-	for i := 1; i < numParts; i++ {
-		wg.Add(1)
-		go func(i int) {
-			tq := c.taskQueueID.mkName(i)
-			_, err := c.matchingClient.InvalidateTaskQueueMetadata(ctx,
-				&matchingservice.InvalidateTaskQueueMetadataRequest{
-					NamespaceId:    c.taskQueueID.namespaceID.String(),
-					TaskQueue:      tq,
-					VersioningData: newDat,
-				})
-			if err != nil {
-				c.logger.Warn("Failed to notify sub-partition of invalidated versioning data",
-					tag.WorkflowTaskQueueName(tq), tag.Error(err))
+	for i := 0; i < numParts; i++ {
+		for _, tqt := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+			if i == 0 && tqt == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+				continue // Root workflow partition owns the data, skip it.
 			}
-			wg.Done()
-		}(i)
+			wg.Add(1)
+			go func(i int, tqt enumspb.TaskQueueType) {
+				tq := c.taskQueueID.mkName(i)
+				_, err := c.matchingClient.InvalidateTaskQueueMetadata(ctx,
+					&matchingservice.InvalidateTaskQueueMetadataRequest{
+						NamespaceId:    c.taskQueueID.namespaceID.String(),
+						TaskQueue:      tq,
+						TaskQueueType:  tqt,
+						VersioningData: newDat,
+					})
+				if err != nil {
+					c.logger.Warn("Failed to notify sub-partition of invalidated versioning data",
+						tag.WorkflowTaskQueueName(tq), tag.Error(err))
+				}
+				wg.Done()
+			}(i, tqt)
+		}
 	}
 	wg.Wait()
 	return nil
@@ -774,6 +778,7 @@ func (mp *metadataPoller) StartIfUnstarted() {
 
 func (mp *metadataPoller) pollLoop() {
 	mp.running.Store(true)
+	defer mp.running.Store(false)
 	ticker := time.NewTicker(mp.pollIntervalCfgFn())
 	defer ticker.Stop()
 
@@ -784,23 +789,14 @@ func (mp *metadataPoller) pollLoop() {
 		case <-ticker.C:
 			// In case the interval has changed
 			ticker.Reset(mp.pollIntervalCfgFn())
-			shouldDie := mp.pollFn()
-			if shouldDie {
-				mp.running.Store(false)
+			dat, err := mp.tqMgr.fetchMetadataFromRootPartition(context.TODO())
+			if dat == nil && err == nil {
+				// Can stop polling since there is no versioning data. Loop will be restarted if we
+				// are told to invalidate the data, or we attempt to fetch it via GetVersioningData.
 				return
 			}
 		}
 	}
-}
-
-func (mp *metadataPoller) pollFn() bool {
-	dat, err := mp.tqMgr.fetchMetadataFromRootPartition(context.TODO())
-	if dat == nil && err == nil {
-		// Can stop polling since there is no versioning data. Loop will be restarted if we
-		// are told to invalidate the data, or we attempt to fetch it via GetVersioningData.
-		return true
-	}
-	return false
 }
 
 func (mp *metadataPoller) Stop() {

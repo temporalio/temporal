@@ -749,35 +749,22 @@ func (e *matchingEngineImpl) InvalidateTaskQueueMetadata(
 	hCtx *handlerContext,
 	req *matchingservice.InvalidateTaskQueueMetadataRequest,
 ) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
-	namespaceID := namespace.ID(req.GetNamespaceId())
-	taskQueueName := req.GetTaskQueue()
-
-	// Invalidation matters for everything that isn't the root partition workflow type, since they are caching data
-	// which they fetch from that queue.
-	for _, tqt := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
-		taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, tqt)
-		if err != nil {
-			return nil, err
-		}
-		if tqt == enumspb.TASK_QUEUE_TYPE_WORKFLOW && taskQueue.IsRoot() {
-			// We never invalidate the root partition for workflow type since it owns the data
-			continue
-		}
-		tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, false)
-		if tqMgr == nil && err == nil {
-			// Task queue is not currently loaded, so nothing to do here
-			continue
-		} else {
-			if err != nil {
-				return nil, err
-			}
-			err = tqMgr.InvalidateMetadata(req)
-			if err != nil {
-				return nil, err
-			}
-		}
+	taskQueue, err := newTaskQueueID(namespace.ID(req.GetNamespaceId()), req.GetTaskQueue(), req.GetTaskQueueType())
+	if err != nil {
+		return nil, err
 	}
-
+	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, false)
+	if tqMgr == nil && err == nil {
+		// Task queue is not currently loaded, so nothing to do here
+		return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	err = tqMgr.InvalidateMetadata(req)
+	if err != nil {
+		return nil, err
+	}
 	return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
 }
 

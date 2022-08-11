@@ -66,8 +66,8 @@ type (
 )
 
 var (
-	errVersioningDataNotPresentOnPartition = errors.New("versioning data not present on non-root partition")
-	errVersioningDataNoMutateNonRoot       = errors.New("cannot mutate versioning data on non-root task queue")
+	errVersioningDataNotPresentOnPartition = errors.New("versioning data is only present on root workflow partition")
+	errVersioningDataNoMutateNonRoot       = errors.New("can only mutate versioning data on root workflow task queue")
 )
 
 // newTaskQueueDB returns an instance of an object that represents
@@ -319,7 +319,7 @@ func (db *taskQueueDB) getVersioningDataLocked(
 //
 // On success returns a pointer to the updated data (which must not be mutated).
 func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) (*persistencespb.VersioningData, error) {
-	if !db.taskQueue.IsRoot() {
+	if !db.taskQueue.IsRoot() || db.taskQueue.taskType != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return nil, errVersioningDataNoMutateNonRoot
 	}
 	db.Lock()

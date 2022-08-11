@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"sync/atomic"
 	"testing"
@@ -577,6 +578,18 @@ func TestTaskQueueSubParitionSendsCurrentHashOfVersioningDataWhenFetching(t *tes
 	require.NoError(t, err)
 }
 
+type invalidateMatcher struct {
+	matchesTaskQType enumspb.TaskQueueType
+}
+
+func (m invalidateMatcher) Matches(x interface{}) bool {
+	v, ok := x.(*matchingservice.InvalidateTaskQueueMetadataRequest)
+	return ok && v.GetTaskQueueType() == m.matchesTaskQType
+}
+func (m invalidateMatcher) String() string {
+	return fmt.Sprintf("%#v", m)
+}
+
 func TestTaskQueueRootPartitionNotifiesChildrenOfInvalidation(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
@@ -585,9 +598,15 @@ func TestTaskQueueRootPartitionNotifiesChildrenOfInvalidation(t *testing.T) {
 	rootTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTqmTestOpts(controller),
 		func(tqm *taskQueueManagerImpl) {
 			mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
-			mockMatchingClient.EXPECT().InvalidateTaskQueueMetadata(gomock.Any(), gomock.Any()).
+			mockMatchingClient.EXPECT().InvalidateTaskQueueMetadata(
+				gomock.Any(), invalidateMatcher{matchesTaskQType: enumspb.TASK_QUEUE_TYPE_WORKFLOW}).
 				Return(&matchingservice.InvalidateTaskQueueMetadataResponse{}, nil).
 				Times(tqm.config.NumReadPartitions() - 1)
+			mockMatchingClient.EXPECT().InvalidateTaskQueueMetadata(
+				gomock.Any(), invalidateMatcher{matchesTaskQType: enumspb.TASK_QUEUE_TYPE_ACTIVITY}).
+				Return(&matchingservice.InvalidateTaskQueueMetadataResponse{}, nil).
+				// Not minus 1 here because root activity partition gets invalidated
+				Times(tqm.config.NumReadPartitions())
 			tqm.matchingClient = mockMatchingClient
 		})
 
@@ -813,4 +832,28 @@ func TestActivityQueueGetsVersioningDataFromWorkflowQueue(t *testing.T) {
 
 	actTq.Stop()
 	actTqPart.Stop()
+}
+
+func TestMutateOnNonRootFails(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+	ctx := context.Background()
+
+	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 1)
+	require.NoError(t, err)
+	tqCfg := defaultTqmTestOpts(controller)
+	tqCfg.tqId = subTqId
+	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	err = subTq.MutateVersioningData(ctx, func(data *persistencespb.VersioningData) error { return nil })
+	require.Error(t, err)
+	require.ErrorIs(t, err, errVersioningDataNoMutateNonRoot)
+
+	actTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0)
+	require.NoError(t, err)
+	actTqCfg := defaultTqmTestOpts(controller)
+	actTqCfg.tqId = actTqId
+	actTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, actTqCfg)
+	err = actTq.MutateVersioningData(ctx, func(data *persistencespb.VersioningData) error { return nil })
+	require.Error(t, err)
+	require.ErrorIs(t, err, errVersioningDataNoMutateNonRoot)
 }

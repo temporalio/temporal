@@ -1966,7 +1966,7 @@ func (s *matchingEngineSuite) TestGetVersioningData() {
 	s.Equal(mkVerId("99.5"), lastNode.GetVersion())
 }
 
-func (s *matchingEngineSuite) TestActivityQueueMetadataAlsoInvalidatedOnInvalidate() {
+func (s *matchingEngineSuite) TestActivityQueueMetadataInvalidate() {
 	// Overwrite the matching mock - we expect one and only one fetch call here, after the activity queue is invalidated
 	mockMatch := matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	mockMatch.EXPECT().GetTaskQueueMetadata(gomock.Any(), gomock.Any()).
@@ -1988,7 +1988,8 @@ func (s *matchingEngineSuite) TestActivityQueueMetadataAlsoInvalidatedOnInvalida
 	s.NoError(err)
 	s.NotNil(res)
 
-	// Force the activity queue to be loaded (invalidate won't load it)
+	// Force the activity queue to be loaded (invalidate won't load it - so we have to load it for invalidate to care
+	// about fetching)
 	actTqId := newTestTaskQueueID(namespaceID, tq, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	ttqm, err := s.matchingEngine.getTaskQueueManager(context.Background(), actTqId, enumspb.TASK_QUEUE_KIND_NORMAL, true)
 	s.NoError(err)
@@ -1997,6 +1998,7 @@ func (s *matchingEngineSuite) TestActivityQueueMetadataAlsoInvalidatedOnInvalida
 	_, err = s.matchingEngine.InvalidateTaskQueueMetadata(s.handlerContext, &matchingservice.InvalidateTaskQueueMetadataRequest{
 		NamespaceId:    namespaceID.String(),
 		TaskQueue:      tq,
+		TaskQueueType:  enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		VersioningData: &persistencespb.VersioningData{CurrentDefault: mkVerIdNode("hi")},
 	})
 	s.NoError(err)
