@@ -711,7 +711,13 @@ func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version in
 
 // persistence helper
 func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID string) ([]byte, error) {
-	return p.NewHistoryBranchToken(treeID)
+	resp, err := s.ExecutionManager.NewHistoryBranch(s.ctx, &p.NewHistoryBranchRequest{
+		TreeID: treeID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.BranchToken, nil
 }
 
 // persistence helper
