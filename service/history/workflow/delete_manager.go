@@ -214,17 +214,6 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		return err
 	}
 
-	if archiveIfEnabled {
-		isArchived, err := m.archiveWorkflowIfEnabled(ctx, namespaceID, we, currentBranchToken, weCtx, ms, scope)
-		if err != nil {
-			return err
-		}
-		if isArchived {
-			// Don't delete workflow data. The workflow data will be deleted after history archived.
-			return nil
-		}
-	}
-
 	// These two fields are needed for cassandra standard visibility.
 	// TODO (alex): Remove them when cassandra standard visibility is removed.
 	var startTime *time.Time
@@ -238,6 +227,26 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		closeTime, err = ms.GetWorkflowCloseTime(ctx)
 		if err != nil {
 			return err
+		}
+	}
+
+	// NOTE: old versions (before server version 1.17.3) of archival workflow will delete workflow history directly
+	// after archiving history. But getting workflow close time requires workflow close event (for workflows closed by
+	// server version before 1.17), so this step needs to be done after getting workflow close time.
+	if archiveIfEnabled {
+		deletionPromised, err := m.archiveWorkflowIfEnabled(ctx, namespaceID, we, currentBranchToken, weCtx, ms, scope)
+		if err != nil {
+			return err
+		}
+		if deletionPromised {
+			// Don't delete workflow data. The workflow data will be deleted after history archived.
+			// if we proceed to delete mutable state, then history scavanger may kick in and
+			// delete history before history archival is done.
+
+			// HOWEVER, when rolling out this change, we don't know if worker is running an old version of the
+			// archival workflow (before 1.17.3), which will only delete workflow history. To prevent this from
+			// happening, worker role must be deployed first.
+			return nil
 		}
 	}
 
@@ -270,7 +279,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	weCtx Context,
 	ms MutableState,
 	scope metrics.Scope,
-) (isArchived bool, err error) {
+) (deletionPromised bool, err error) {
 
 	namespaceRegistryEntry := ms.GetNamespaceEntry()
 
@@ -329,5 +338,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 		scope.IncCounter(metrics.WorkflowCleanupArchiveCount)
 	}
 
-	return true, nil
+	// inline archival don't perform deletion
+	// only archival through archival workflow will
+	return !resp.HistoryArchivedInline, nil
 }
