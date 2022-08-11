@@ -29,9 +29,6 @@ import (
 	"errors"
 	"testing"
 
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/historyservicemock/v1"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -60,7 +57,6 @@ type clientSuite struct {
 	metricsScope       *metrics.MockScope
 	sdkClientFactory   *sdk.MockClientFactory
 	sdkClient          *mocks.Client
-	historyClient      *historyservicemock.MockHistoryServiceClient
 	client             *client
 }
 
@@ -81,7 +77,6 @@ func (s *clientSuite) SetupTest() {
 	s.sdkClient = &mocks.Client{}
 	s.sdkClientFactory = sdk.NewMockClientFactory(s.controller)
 	s.sdkClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(s.sdkClient).AnyTimes()
-	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.client = NewClient(
 		s.metricsClient,
 		log.NewNoopLogger(),
@@ -89,7 +84,6 @@ func (s *clientSuite) SetupTest() {
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
 		s.archiverProvider,
-		s.historyClient,
 	).(*client)
 }
 
@@ -166,8 +160,6 @@ func (s *clientSuite) TestArchiveHistoryInlineSuccess() {
 	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
-	s.historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
 			HistoryURI: "test:///history/archival",
@@ -258,8 +250,6 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistorySuccess() {
 	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil)
 	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil)
 	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	s.historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
 	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error"))
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
@@ -317,8 +307,6 @@ func (s *clientSuite) TestArchiveInline_VisibilitySuccess_HistorySuccess() {
 	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil)
 	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil)
 	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	s.historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
 	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
