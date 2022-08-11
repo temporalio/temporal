@@ -35,14 +35,10 @@ var defaultNumTaskQueuePartitions = []ConstrainedValue{
 		},
 		Value: 1,
 	},
-	// All task queues in the system namespace are relatively low-throughput, they only need
-	// one partition.
-	{
-		Constraints: map[string]any{
-			Namespace.String(): primitives.SystemLocalNamespace,
-		},
-		Value: 1,
-	},
+
+	// TODO: After we have a solution for ensuring no tasks are lost, add a constraint here for
+	// all task queues in SystemLocalNamespace to have one partition.
+
 	// Default for everything else:
 	{
 		Value: 4,
