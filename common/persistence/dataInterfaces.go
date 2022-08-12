@@ -740,7 +740,30 @@ type (
 		NodeID int64
 	}
 
+	ParseHistoryBranchInfoRequest struct {
+		// The branch token to parse the branch info from
+		BranchToken []byte
+	}
+
+	ParseHistoryBranchInfoResponse struct {
+		// The branch info parsed from the branch token
+		BranchInfo *persistencespb.HistoryBranch
+	}
+
+	UpdateHistoryBranchInfoRequest struct {
+		// The original branch token
+		BranchToken []byte
+		// The branch info to update with
+		BranchInfo *persistencespb.HistoryBranch
+	}
+
+	UpdateHistoryBranchInfoResponse struct {
+		// The newly updated branch token
+		BranchToken []byte
+	}
+
 	NewHistoryBranchRequest struct {
+		// The tree ID for the new branch token
 		TreeID string
 	}
 
@@ -1060,6 +1083,10 @@ type (
 		AppendHistoryNodes(ctx context.Context, request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// AppendRawHistoryNodes add a node of raw histories to history node table
 		AppendRawHistoryNodes(ctx context.Context, request *AppendRawHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
+		// ParseHistoryBranchInfo parses the history branch for branch information
+		ParseHistoryBranchInfo(ctx context.Context, request *ParseHistoryBranchInfoRequest) (*ParseHistoryBranchInfoResponse, error)
+		// UpdateHistoryBranchInfo updates the history branch with branch information
+		UpdateHistoryBranchInfo(ctx context.Context, request *UpdateHistoryBranchInfoRequest) (*UpdateHistoryBranchInfoResponse, error)
 		// NewHistoryBranch initializes a new history branch
 		NewHistoryBranch(ctx context.Context, request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
@@ -1194,6 +1221,26 @@ func UnixMilliseconds(t time.Time) int64 {
 		return 0
 	}
 	return unixNano / int64(time.Millisecond)
+}
+
+func ParseHistoryBranchToken(branchToken []byte) (*persistencespb.HistoryBranch, error) {
+	return serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+}
+
+func UpdateHistoryBranchToken(branchToken []byte, branchInfo *persistencespb.HistoryBranch) ([]byte, error) {
+	bi, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	if err != nil {
+		return nil, err
+	}
+	bi.TreeId = branchInfo.TreeId
+	bi.BranchId = branchInfo.BranchId
+	bi.Ancestors = branchInfo.Ancestors
+
+	blob, err := serialization.HistoryBranchToBlob(bi)
+	if err != nil {
+		return nil, err
+	}
+	return blob.Data, nil
 }
 
 // NewHistoryBranchToken return a new branch token

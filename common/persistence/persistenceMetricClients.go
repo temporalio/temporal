@@ -898,6 +898,36 @@ func (p *executionPersistenceClient) AppendRawHistoryNodes(
 	return resp, err
 }
 
+// ParseHistoryBranchInfo parses the history branch for branch information
+func (p *executionPersistenceClient) ParseHistoryBranchInfo(
+	ctx context.Context,
+	request *ParseHistoryBranchInfoRequest,
+) (*ParseHistoryBranchInfoResponse, error) {
+
+	branchInfo, err := ParseHistoryBranchToken(request.BranchToken)
+	if err != nil {
+		return nil, err
+	}
+	return &ParseHistoryBranchInfoResponse{
+		BranchInfo: branchInfo,
+	}, nil
+}
+
+// UpdateHistoryBranchInfo updates the history branch with branch information
+func (p *executionPersistenceClient) UpdateHistoryBranchInfo(
+	ctx context.Context,
+	request *UpdateHistoryBranchInfoRequest,
+) (*UpdateHistoryBranchInfoResponse, error) {
+
+	branchToken, err := UpdateHistoryBranchToken(request.BranchToken, request.BranchInfo)
+	if err != nil {
+		return nil, err
+	}
+	return &UpdateHistoryBranchInfoResponse{
+		BranchToken: branchToken,
+	}, nil
+}
+
 // NewHistoryBranch initializes a new history branch
 func (p *executionPersistenceClient) NewHistoryBranch(
 	ctx context.Context,

@@ -141,6 +141,10 @@ type (
 		AppendHistoryNodes(ctx context.Context, request *InternalAppendHistoryNodesRequest) error
 		// DeleteHistoryNodes delete a node from history node table
 		DeleteHistoryNodes(ctx context.Context, request *InternalDeleteHistoryNodesRequest) error
+		// ParseHistoryBranchInfo parses the history branch for branch information
+		ParseHistoryBranchInfo(ctx context.Context, request *ParseHistoryBranchInfoRequest) (*ParseHistoryBranchInfoResponse, error)
+		// UpdateHistoryBranchInfo updates the history branch with branch information
+		UpdateHistoryBranchInfo(ctx context.Context, request *UpdateHistoryBranchInfoRequest) (*UpdateHistoryBranchInfoResponse, error)
 		// NewHistoryBranch initializes a new history branch
 		NewHistoryBranch(ctx context.Context, request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
