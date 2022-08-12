@@ -155,9 +155,9 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 		return errors.New("namespace still exists")
 	}
 
-	namespaceExistsPolicy := backoff.NewExponentialRetryPolicy(time.Second)
-	namespaceExistsPolicy.SetBackoffCoefficient(1)
-	namespaceExistsPolicy.SetExpirationInterval(30 * time.Second)
+	namespaceExistsPolicy := backoff.NewExponentialRetryPolicy(time.Second).
+		WithBackoffCoefficient(1).
+		WithExpirationInterval(30 * time.Second)
 
 	err = backoff.ThrottleRetry(namespaceExistsOp, namespaceExistsPolicy, func(_ error) bool { return true })
 	s.NoError(err)
@@ -245,9 +245,9 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 		return errors.New("namespace still exists")
 	}
 
-	namespaceExistsPolicy := backoff.NewExponentialRetryPolicy(time.Second)
-	namespaceExistsPolicy.SetBackoffCoefficient(1)
-	namespaceExistsPolicy.SetExpirationInterval(30 * time.Second)
+	namespaceExistsPolicy := backoff.NewExponentialRetryPolicy(time.Second).
+		WithBackoffCoefficient(1).
+		WithExpirationInterval(30 * time.Second)
 
 	err = backoff.ThrottleRetry(namespaceExistsOp, namespaceExistsPolicy, func(_ error) bool { return true })
 	s.NoError(err)
