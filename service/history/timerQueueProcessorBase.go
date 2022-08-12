@@ -282,7 +282,7 @@ eventLoop:
 				t.config.TimerProcessorUpdateAckInterval(),
 				t.config.TimerProcessorUpdateAckIntervalJitterCoefficient(),
 			))
-			if err := t.timerQueueAckMgr.updateAckLevel(); err == shard.ErrShardClosed {
+			if err := t.timerQueueAckMgr.updateAckLevel(); shard.IsShardOwnershipLostError(err) {
 				// shard is closed, shutdown timerQProcessor and bail out
 				go t.Stop()
 				return err

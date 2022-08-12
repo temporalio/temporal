@@ -86,12 +86,16 @@ const (
 	completeTaskRetryMaxInterval     = 1 * time.Second
 	completeTaskRetryMaxAttempts     = 10
 
-	retryTaskProcessingInitialInterval = 50 * time.Millisecond
-	retryTaskProcessingMaxAttempts     = 1
+	taskProcessingRetryInitialInterval = 50 * time.Millisecond
+	taskProcessingRetryMaxAttempts     = 1
 
-	rescheduleTaskRetryInitialInterval    = 3 * time.Second
-	rescheduleTaskRetryBackoffCoefficient = 1.05
-	rescheduleTaskRetryMaxInterval        = 3 * time.Minute
+	taskRescheduleInitialInterval    = 1 * time.Second
+	taskRescheduleBackoffCoefficient = 1.1
+	taskRescheduleMaxInterval        = 3 * time.Minute
+
+	taskNotReadyRescheduleInitialInterval    = 3 * time.Second
+	taskNotReadyRescheduleBackoffCoefficient = 1.5
+	taskNotReadyRescheduleMaxInterval        = 3 * time.Minute
 
 	sdkClientFactoryRetryInitialInterval    = 200 * time.Millisecond
 	sdkClientFactoryRetryMaxInterval        = 5 * time.Second
@@ -212,16 +216,30 @@ func CreateCompleteTaskRetryPolicy() backoff.RetryPolicy {
 
 // CreateTaskProcessingRetryPolicy creates a retry policy for task processing
 func CreateTaskProcessingRetryPolicy() backoff.RetryPolicy {
-	return backoff.NewExponentialRetryPolicy(retryTaskProcessingInitialInterval).
-		WithMaximumAttempts(retryTaskProcessingMaxAttempts)
+	policy := backoff.NewExponentialRetryPolicy(taskProcessingRetryInitialInterval).
+		WithMaximumAttempts(taskProcessingRetryMaxAttempts)
+
+	return policy
 }
 
-// CreateTaskReschedulePolicy creates a retry policy for task processing
+// CreateTaskReschedulePolicy creates a retry policy for rescheduling task with errors not equal to ErrTaskRetry
 func CreateTaskReschedulePolicy() backoff.RetryPolicy {
-	return backoff.NewExponentialRetryPolicy(rescheduleTaskRetryInitialInterval).
-		WithBackoffCoefficient(rescheduleTaskRetryBackoffCoefficient).
-		WithMaximumInterval(rescheduleTaskRetryMaxInterval).
+	policy := backoff.NewExponentialRetryPolicy(taskRescheduleInitialInterval).
+		WithBackoffCoefficient(taskRescheduleBackoffCoefficient).
+		WithMaximumInterval(taskRescheduleMaxInterval).
 		WithExpirationInterval(backoff.NoInterval)
+
+	return policy
+}
+
+// CreateTaskNotReadyReschedulePolicy creates a retry policy for rescheduling task with ErrTaskRetry
+func CreateTaskNotReadyReschedulePolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(taskNotReadyRescheduleInitialInterval).
+		WithBackoffCoefficient(taskNotReadyRescheduleBackoffCoefficient).
+		WithMaximumInterval(taskNotReadyRescheduleMaxInterval).
+		WithExpirationInterval(backoff.NoInterval)
+
+	return policy
 }
 
 // CreateSdkClientFactoryRetryPolicy creates a retry policy to handle SdkClientFactory NewClient when frontend service is not ready
