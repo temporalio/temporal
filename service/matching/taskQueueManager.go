@@ -75,12 +75,9 @@ const (
 var (
 	// this retry policy is currenly only used for matching persistence operations
 	// that, if failed, the entire task queue needs to be reload
-	persistenceOperationRetryPolicy = func() backoff.RetryPolicy {
-		policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
-		policy.SetMaximumInterval(1 * time.Second)
-		policy.SetExpirationInterval(30 * time.Second)
-		return policy
-	}()
+	persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
+		WithMaximumInterval(1 * time.Second).
+		WithExpirationInterval(30 * time.Second)
 )
 
 type (
