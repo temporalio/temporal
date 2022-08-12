@@ -86,17 +86,23 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 			continue
 		}
 
-		adminClient := factory.NewAdminClientWithTimeout(
+		adminClient, err := factory.NewAdminClientWithTimeout(
 			info.RPCAddress,
 			admin.DefaultTimeout,
 			admin.DefaultLargeTimeout,
 		)
+		if err != nil {
+			return nil, err
+		}
 
-		remoteFrontendClient := factory.NewFrontendClientWithTimeout(
+		remoteFrontendClient, err := factory.NewFrontendClientWithTimeout(
 			info.RPCAddress,
 			frontend.DefaultTimeout,
 			frontend.DefaultLongPollTimeout,
 		)
+		if err != nil {
+			return nil, err
+		}
 
 		remoteAdminClients[clusterName] = adminClient
 		remoteFrontendClients[clusterName] = remoteFrontendClient
@@ -169,31 +175,37 @@ func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) (adminservice.Admi
 	h.remoteAdminClientsLock.RLock()
 	client, ok := h.remoteAdminClients[cluster]
 	h.remoteAdminClientsLock.RUnlock()
+	if ok {
+		return client, nil
+	}
 
-	if !ok {
-		clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[cluster]
-		if !clusterFound {
-			return nil, &serviceerror.Unavailable{
-				Message: fmt.Sprintf(
-					"Unknown cluster name: %v with given cluster information map: %v.",
-					cluster,
-					clusterInfo,
-				),
-			}
-		}
-
-		h.remoteAdminClientsLock.Lock()
-		defer h.remoteAdminClientsLock.Unlock()
-		client, ok = h.remoteAdminClients[cluster]
-		if !ok {
-			client = h.factory.NewAdminClientWithTimeout(
-				clusterInfo.RPCAddress,
-				admin.DefaultTimeout,
-				admin.DefaultLargeTimeout,
-			)
-			h.setRemoteAdminClientLocked(cluster, client)
+	clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[cluster]
+	if !clusterFound {
+		return nil, &serviceerror.Unavailable{
+			Message: fmt.Sprintf(
+				"Unknown cluster name: %v with given cluster information map: %v.",
+				cluster,
+				clusterInfo,
+			),
 		}
 	}
+
+	h.remoteAdminClientsLock.Lock()
+	defer h.remoteAdminClientsLock.Unlock()
+	client, ok = h.remoteAdminClients[cluster]
+	if ok {
+		return client, nil
+	}
+
+	client, err := h.factory.NewAdminClientWithTimeout(
+		clusterInfo.RPCAddress,
+		admin.DefaultTimeout,
+		admin.DefaultLargeTimeout,
+	)
+	if err != nil {
+		return nil, err
+	}
+	h.setRemoteAdminClientLocked(cluster, client)
 	return client, nil
 }
 
@@ -211,31 +223,37 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) (workflowservic
 	h.remoteFrontendClientsLock.RLock()
 	client, ok := h.remoteFrontendClients[cluster]
 	h.remoteFrontendClientsLock.RUnlock()
+	if ok {
+		return client, nil
+	}
 
-	if !ok {
-		clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[cluster]
-		if !clusterFound {
-			return nil, &serviceerror.Unavailable{
-				Message: fmt.Sprintf(
-					"Unknown cluster name: %v with given cluster information map: %v.",
-					cluster,
-					clusterInfo,
-				),
-			}
-		}
-
-		h.remoteFrontendClientsLock.Lock()
-		defer h.remoteFrontendClientsLock.Unlock()
-		client, ok = h.remoteFrontendClients[cluster]
-		if !ok {
-			client = h.factory.NewFrontendClientWithTimeout(
-				clusterInfo.RPCAddress,
-				frontend.DefaultTimeout,
-				frontend.DefaultLongPollTimeout,
-			)
-			h.setRemoteFrontendClientLocked(cluster, client)
+	clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[cluster]
+	if !clusterFound {
+		return nil, &serviceerror.Unavailable{
+			Message: fmt.Sprintf(
+				"Unknown cluster name: %v with given cluster information map: %v.",
+				cluster,
+				clusterInfo,
+			),
 		}
 	}
+
+	h.remoteFrontendClientsLock.Lock()
+	defer h.remoteFrontendClientsLock.Unlock()
+	client, ok = h.remoteFrontendClients[cluster]
+	if ok {
+		return client, nil
+	}
+
+	client, err := h.factory.NewFrontendClientWithTimeout(
+		clusterInfo.RPCAddress,
+		frontend.DefaultTimeout,
+		frontend.DefaultLongPollTimeout,
+	)
+	if err != nil {
+		return nil, err
+	}
+	h.setRemoteFrontendClientLocked(cluster, client)
 	return client, nil
 }
 

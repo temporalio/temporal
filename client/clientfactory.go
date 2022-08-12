@@ -46,10 +46,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
-const (
-	constClientKey = "const-client-key"
-)
-
 type (
 	// Factory can be used to create RPC clients for temporal services
 	Factory interface {
@@ -59,8 +55,8 @@ type (
 
 		NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error)
 		NewMatchingClientWithTimeout(namespaceIDToName NamespaceIDToNameFunc, timeout time.Duration, longPollTimeout time.Duration) (matchingservice.MatchingServiceClient, error)
-		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) workflowservice.WorkflowServiceClient
-		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) adminservice.AdminServiceClient
+		NewFrontendClientWithTimeout(rpcAddress string, timeout time.Duration, longPollTimeout time.Duration) (workflowservice.WorkflowServiceClient, error)
+		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) (adminservice.AdminServiceClient, error)
 	}
 
 	// FactoryProvider can be used to provide a customized client Factory implementation.
@@ -94,9 +90,6 @@ type (
 
 	serviceKeyResolverImpl struct {
 		resolver membership.ServiceResolver
-	}
-
-	constKeyResolverImpl struct {
 	}
 )
 
@@ -135,7 +128,7 @@ func (cf *rpcClientFactory) NewMatchingClient(namespaceIDToName NamespaceIDToNam
 }
 
 func (cf *rpcClientFactory) NewFrontendClient(rpcAddress string) (workflowservice.WorkflowServiceClient, error) {
-	return cf.NewFrontendClientWithTimeout(rpcAddress, frontend.DefaultTimeout, frontend.DefaultLongPollTimeout), nil
+	return cf.NewFrontendClientWithTimeout(rpcAddress, frontend.DefaultTimeout, frontend.DefaultLongPollTimeout)
 }
 
 func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error) {
@@ -143,8 +136,8 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	if err != nil {
 		return nil, err
 	}
-
 	keyResolver := newServiceKeyResolver(resolver)
+
 	clientProvider := func(clientKey string) (interface{}, error) {
 		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
 		return historyservice.NewHistoryServiceClient(connection), nil
@@ -166,8 +159,8 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	if err != nil {
 		return nil, err
 	}
-
 	keyResolver := newServiceKeyResolver(resolver)
+
 	clientProvider := func(clientKey string) (interface{}, error) {
 		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
 		return matchingservice.NewMatchingServiceClient(connection), nil
@@ -190,8 +183,13 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 	rpcAddress string,
 	timeout time.Duration,
 	longPollTimeout time.Duration,
-) workflowservice.WorkflowServiceClient {
-	keyResolver := newConstKeyResolver()
+) (workflowservice.WorkflowServiceClient, error) {
+	resolver, err := cf.monitor.GetResolver(common.FrontendServiceName)
+	if err != nil {
+		return nil, err
+	}
+	keyResolver := newServiceKeyResolver(resolver)
+
 	clientProvider := func(clientKey string) (interface{}, error) {
 		connection := cf.rpcFactory.CreateFrontendGRPCConnection(rpcAddress)
 		return workflowservice.NewWorkflowServiceClient(connection), nil
@@ -200,15 +198,20 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 	if cf.metricsClient != nil {
 		client = frontend.NewMetricClient(client, cf.metricsClient, cf.throttledLogger)
 	}
-	return client
+	return client, nil
 }
 
 func (cf *rpcClientFactory) NewAdminClientWithTimeout(
 	rpcAddress string,
 	timeout time.Duration,
 	largeTimeout time.Duration,
-) adminservice.AdminServiceClient {
-	keyResolver := newConstKeyResolver()
+) (adminservice.AdminServiceClient, error) {
+	resolver, err := cf.monitor.GetResolver(common.FrontendServiceName)
+	if err != nil {
+		return nil, err
+	}
+	keyResolver := newServiceKeyResolver(resolver)
+
 	clientProvider := func(clientKey string) (interface{}, error) {
 		connection := cf.rpcFactory.CreateFrontendGRPCConnection(rpcAddress)
 		return adminservice.NewAdminServiceClient(connection), nil
@@ -218,17 +221,13 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeout(
 	if cf.metricsClient != nil {
 		client = admin.NewMetricClient(client, cf.metricsClient, cf.throttledLogger)
 	}
-	return client
+	return client, nil
 }
 
 func newServiceKeyResolver(resolver membership.ServiceResolver) *serviceKeyResolverImpl {
 	return &serviceKeyResolverImpl{
 		resolver: resolver,
 	}
-}
-
-func newConstKeyResolver() *constKeyResolverImpl {
-	return &constKeyResolverImpl{}
 }
 
 func (r *serviceKeyResolverImpl) Lookup(key string) (string, error) {
@@ -247,12 +246,4 @@ func (r *serviceKeyResolverImpl) GetAllAddresses() ([]string, error) {
 	}
 
 	return all, nil
-}
-
-func (r *constKeyResolverImpl) Lookup(_ string) (string, error) {
-	return constClientKey, nil
-}
-
-func (r *constKeyResolverImpl) GetAllAddresses() ([]string, error) {
-	return []string{constClientKey}, nil
 }

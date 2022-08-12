@@ -68,11 +68,12 @@ func (m *MockFactory) EXPECT() *MockFactoryMockRecorder {
 }
 
 // NewAdminClientWithTimeout mocks base method.
-func (m *MockFactory) NewAdminClientWithTimeout(rpcAddress string, timeout, largeTimeout time.Duration) v10.AdminServiceClient {
+func (m *MockFactory) NewAdminClientWithTimeout(rpcAddress string, timeout, largeTimeout time.Duration) (v10.AdminServiceClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewAdminClientWithTimeout", rpcAddress, timeout, largeTimeout)
 	ret0, _ := ret[0].(v10.AdminServiceClient)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // NewAdminClientWithTimeout indicates an expected call of NewAdminClientWithTimeout.
@@ -97,11 +98,12 @@ func (mr *MockFactoryMockRecorder) NewFrontendClient(rpcAddress interface{}) *go
 }
 
 // NewFrontendClientWithTimeout mocks base method.
-func (m *MockFactory) NewFrontendClientWithTimeout(rpcAddress string, timeout, longPollTimeout time.Duration) v1.WorkflowServiceClient {
+func (m *MockFactory) NewFrontendClientWithTimeout(rpcAddress string, timeout, longPollTimeout time.Duration) (v1.WorkflowServiceClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewFrontendClientWithTimeout", rpcAddress, timeout, longPollTimeout)
 	ret0, _ := ret[0].(v1.WorkflowServiceClient)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // NewFrontendClientWithTimeout indicates an expected call of NewFrontendClientWithTimeout.
