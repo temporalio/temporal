@@ -63,6 +63,21 @@ func (c *clientImpl) DescribeTaskQueue(
 	return client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *clientImpl) GetTaskQueueMetadata(
+	ctx context.Context,
+	request *matchingservice.GetTaskQueueMetadataRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GetTaskQueueMetadataResponse, error) {
+
+	client, err := c.getClientForTaskqueue(request.GetTaskQueue())
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetTaskQueueMetadata(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetWorkerBuildIdOrdering(
 	ctx context.Context,
 	request *matchingservice.GetWorkerBuildIdOrderingRequest,
@@ -76,6 +91,21 @@ func (c *clientImpl) GetWorkerBuildIdOrdering(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+}
+
+func (c *clientImpl) InvalidateTaskQueueMetadata(
+	ctx context.Context,
+	request *matchingservice.InvalidateTaskQueueMetadataRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
+
+	client, err := c.getClientForTaskqueue(request.GetTaskQueue())
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.InvalidateTaskQueueMetadata(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListTaskQueuePartitions(
