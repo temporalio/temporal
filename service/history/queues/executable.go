@@ -76,13 +76,14 @@ var (
 	schedulerRetryPolicy = common.CreateTaskProcessingRetryPolicy()
 	// reschedulePolicy is the policy for determine reschedule backoff duration
 	// across multiple submissions to scheduler
-	reschedulePolicy = common.CreateTaskReschedulePolicy()
+	reschedulePolicy             = common.CreateTaskReschedulePolicy()
+	taskNotReadyReschedulePolicy = common.CreateTaskNotReadyReschedulePolicy()
 )
 
 const (
 	// resubmitMaxAttempts is the max number of attempts we may skip rescheduler when a task is Nacked.
 	// check the comment in shouldResubmitOnNack() for more details
-	resubmitMaxAttempts = 20
+	resubmitMaxAttempts = 10
 )
 
 type (
@@ -235,7 +236,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 }
 
 func (e *executableImpl) IsRetryableError(err error) bool {
-	// this determines if the executable should be retried within one submission to scheduler
+	// this determines if the executable should be retried when hold the worker goroutine
 
 	if shard.IsShardOwnershipLostError(err) {
 		return false
@@ -287,12 +288,12 @@ func (e *executableImpl) Nack(err error) {
 	}
 
 	if !submitted {
-		e.Reschedule()
+		e.rescheduler.Add(e, e.rescheduleTime(err, e.Attempt()))
 	}
 }
 
 func (e *executableImpl) Reschedule() {
-	e.rescheduler.Add(e, e.rescheduleTime(e.Attempt()))
+	e.rescheduler.Add(e, e.rescheduleTime(nil, e.Attempt()))
 }
 
 func (e *executableImpl) State() ctasks.State {
@@ -339,20 +340,33 @@ func (e *executableImpl) QueueType() QueueType {
 }
 
 func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
-	// this is an optimization for skipping rescheduler and retry the task sooner
-	// this can be useful for errors like unable to get workflow lock, which doesn't
-	// have to backoff for a long time and wait for the periodic rescheduling.
+	// this is an optimization for skipping rescheduler and retry the task sooner.
+	// this is useful for errors like workflow busy, which doesn't have to wait for
+	// the longer rescheduling backoff.
 	if e.Attempt() > resubmitMaxAttempts {
 		return false
 	}
 
-	return err == consts.ErrWorkflowBusy ||
-		common.IsContextDeadlineExceededErr(err) ||
-		e.IsRetryableError(err)
+	if shard.IsShardOwnershipLostError(err) {
+		return false
+	}
+
+	return err != consts.ErrTaskRetry
 }
 
-func (e *executableImpl) rescheduleTime(attempt int) time.Time {
-	// elapsedTime (the first parameter) is not relevant here since reschedule policy
-	// has no expiration interval.
+func (e *executableImpl) rescheduleTime(
+	err error,
+	attempt int,
+) time.Time {
+	// elapsedTime (the first parameter in ComputeNextDelay) is not relevant here
+	// since reschedule policy has no expiration interval.
+
+	if err == consts.ErrTaskRetry {
+		// using a different reschedule policy to slow down retry
+		// as the error means mutable state is not ready to handle the task,
+		// need to wait for replication.
+		e.timeSource.Now().Add(taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt))
+	}
+
 	return e.timeSource.Now().Add(reschedulePolicy.ComputeNextDelay(0, attempt))
 }
