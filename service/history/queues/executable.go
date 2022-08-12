@@ -373,7 +373,7 @@ func (e *executableImpl) QueueType() QueueType {
 func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 	// this is an optimization for skipping rescheduler and retry the task sooner
 	// this can be useful for errors like unable to get workflow lock, which doesn't
-	// have to backoff for a long time and wait for the periodic rescheduling.
+	// have to backoff for a long time and wait for the longer rescheduling backoff.
 	if e.Attempt() > resubmitMaxAttempts {
 		return false
 	}
