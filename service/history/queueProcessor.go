@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -57,17 +56,16 @@ type (
 	}
 
 	queueProcessorBase struct {
-		clusterName  string
-		shard        shard.Context
-		timeSource   clock.TimeSource
-		options      *QueueProcessorOptions
-		processor    processor
-		logger       log.Logger
-		metricsScope metrics.Scope
-		rateLimiter  quotas.RateLimiter // Read rate limiter
-		ackMgr       queueAckMgr
-		scheduler    queues.Scheduler
-		rescheduler  queues.Rescheduler
+		clusterName string
+		shard       shard.Context
+		timeSource  clock.TimeSource
+		options     *QueueProcessorOptions
+		processor   processor
+		logger      log.Logger
+		rateLimiter quotas.RateLimiter // Read rate limiter
+		ackMgr      queueAckMgr
+		scheduler   queues.Scheduler
+		rescheduler queues.Rescheduler
 
 		lastPollTime     time.Time
 		backoffTimerLock sync.Mutex
@@ -96,7 +94,6 @@ func newQueueProcessorBase(
 	rescheduler queues.Rescheduler,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricsScope metrics.Scope,
 ) *queueProcessorBase {
 
 	p := &queueProcessorBase{
@@ -110,7 +107,6 @@ func newQueueProcessorBase(
 		notifyCh:     make(chan struct{}, 1),
 		shutdownCh:   make(chan struct{}),
 		logger:       logger,
-		metricsScope: metricsScope,
 		ackMgr:       queueAckMgr,
 		lastPollTime: time.Time{},
 		readTaskRetrier: backoff.NewRetrier(

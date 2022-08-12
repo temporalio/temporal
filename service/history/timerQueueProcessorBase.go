@@ -66,7 +66,6 @@ type (
 		config           *configs.Config
 		logger           log.Logger
 		metricsClient    metrics.Client
-		metricsScope     metrics.Scope
 		timerProcessor   timerProcessor
 		timerQueueAckMgr timerQueueAckMgr
 		timerGate        timer.Gate
@@ -95,7 +94,6 @@ func newTimerQueueProcessorBase(
 	rescheduler queues.Rescheduler,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricsScope metrics.Scope,
 ) *timerQueueProcessorBase {
 	logger = log.With(logger, tag.ComponentTimerQueue)
 	config := shard.GetConfig()
@@ -111,7 +109,6 @@ func newTimerQueueProcessorBase(
 		config:           config,
 		logger:           logger,
 		metricsClient:    shard.GetMetricsClient(),
-		metricsScope:     metricsScope,
 		timerQueueAckMgr: timerQueueAckMgr,
 		timerGate:        timerGate,
 		timeSource:       shard.GetTimeSource(),
