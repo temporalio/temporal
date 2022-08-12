@@ -341,9 +341,9 @@ func (p *queueBase) checkpoint() {
 }
 
 func createCheckpointRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	policy.SetMaximumInterval(5 * time.Second)
-	policy.SetExpirationInterval(backoff.NoInterval)
+	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond).
+		WithMaximumInterval(5 * time.Second).
+		WithExpirationInterval(backoff.NoInterval)
 
 	return policy
 }

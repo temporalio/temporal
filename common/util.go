@@ -154,104 +154,81 @@ func AwaitWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
 
 // CreatePersistenceClientRetryPolicy creates a retry policy for calls to persistence
 func CreatePersistenceClientRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(persistenceClientRetryInitialInterval)
-	policy.SetMaximumAttempts(persistenceClientRetryMaxAttempts)
-
-	return policy
+	return backoff.NewExponentialRetryPolicy(persistenceClientRetryInitialInterval).
+		WithMaximumAttempts(persistenceClientRetryMaxAttempts)
 }
 
 // CreateFrontendClientRetryPolicy creates a retry policy for calls to frontend service
 func CreateFrontendClientRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(frontendClientRetryInitialInterval)
-	policy.SetMaximumAttempts(frontendClientRetryMaxAttempts)
-
-	return policy
+	return backoff.NewExponentialRetryPolicy(frontendClientRetryInitialInterval).
+		WithMaximumAttempts(frontendClientRetryMaxAttempts)
 }
 
 // CreateHistoryClientRetryPolicy creates a retry policy for calls to history service
 func CreateHistoryClientRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(historyClientRetryInitialInterval)
-	policy.SetMaximumAttempts(historyClientRetryMaxAttempts)
+	return backoff.NewExponentialRetryPolicy(historyClientRetryInitialInterval).
+		WithMaximumAttempts(historyClientRetryMaxAttempts)
 
-	return policy
 }
 
 // CreateMatchingClientRetryPolicy creates a retry policy for calls to matching service
 func CreateMatchingClientRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(matchingClientRetryInitialInterval)
-	policy.SetMaximumAttempts(matchingClientRetryMaxAttempts)
-
-	return policy
+	return backoff.NewExponentialRetryPolicy(matchingClientRetryInitialInterval).
+		WithMaximumAttempts(matchingClientRetryMaxAttempts)
 }
 
 // CreateFrontendHandlerRetryPolicy creates a retry policy for calls to frontend service
 func CreateFrontendHandlerRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(frontendHandlerRetryInitialInterval)
-	policy.SetMaximumInterval(frontendHandlerRetryMaxInterval)
-	policy.SetMaximumAttempts(frontendHandlerRetryMaxAttempts)
-
-	return policy
+	return backoff.NewExponentialRetryPolicy(frontendHandlerRetryInitialInterval).
+		WithMaximumInterval(frontendHandlerRetryMaxInterval).
+		WithMaximumAttempts(frontendHandlerRetryMaxAttempts)
 }
 
 // CreateHistoryHandlerRetryPolicy creates a retry policy for calls to history service
 func CreateHistoryHandlerRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(historyHandlerRetryInitialInterval)
-	policy.SetMaximumAttempts(historyHandlerRetryMaxAttempts)
-
-	return policy
+	return backoff.NewExponentialRetryPolicy(historyHandlerRetryInitialInterval).
+		WithMaximumAttempts(historyHandlerRetryMaxAttempts)
 }
 
 // CreateMatchingHandlerRetryPolicy creates a retry policy for calls to matching service
 func CreateMatchingHandlerRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(matchingHandlerRetryInitialInterval)
-	policy.SetMaximumAttempts(matchingHandlerRetryMaxAttempts)
-
-	return policy
+	return backoff.NewExponentialRetryPolicy(matchingHandlerRetryInitialInterval).
+		WithMaximumAttempts(matchingHandlerRetryMaxAttempts)
 }
 
 // CreateReadTaskRetryPolicy creates a retry policy for loading background tasks
 func CreateReadTaskRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(readTaskRetryInitialInterval)
-	policy.SetMaximumInterval(readTaskRetryMaxInterval)
-	policy.SetExpirationInterval(readTaskRetryExpirationInterval)
-
-	return policy
+	return backoff.NewExponentialRetryPolicy(readTaskRetryInitialInterval).
+		WithMaximumInterval(readTaskRetryMaxInterval).
+		WithExpirationInterval(readTaskRetryExpirationInterval)
 }
 
 // CreateCompleteTaskRetryPolicy creates a retry policy for completing background tasks
 func CreateCompleteTaskRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(completeTaskRetryInitialInterval)
-	policy.SetMaximumInterval(completeTaskRetryMaxInterval)
-	policy.SetMaximumAttempts(completeTaskRetryMaxAttempts)
-
-	return policy
+	return backoff.NewExponentialRetryPolicy(completeTaskRetryInitialInterval).
+		WithMaximumInterval(completeTaskRetryMaxInterval).
+		WithMaximumAttempts(completeTaskRetryMaxAttempts)
 }
 
 // CreateTaskProcessingRetryPolicy creates a retry policy for task processing
 func CreateTaskProcessingRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(retryTaskProcessingInitialInterval)
-	policy.SetMaximumAttempts(retryTaskProcessingMaxAttempts)
-
-	return policy
+	return backoff.NewExponentialRetryPolicy(retryTaskProcessingInitialInterval).
+		WithMaximumAttempts(retryTaskProcessingMaxAttempts)
 }
 
 // CreateTaskReschedulePolicy creates a retry policy for task processing
 func CreateTaskReschedulePolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(rescheduleTaskRetryInitialInterval)
-	policy.SetBackoffCoefficient(rescheduleTaskRetryBackoffCoefficient)
-	policy.SetMaximumInterval(rescheduleTaskRetryMaxInterval)
-	policy.SetExpirationInterval(backoff.NoInterval)
-
-	return policy
+	return backoff.NewExponentialRetryPolicy(rescheduleTaskRetryInitialInterval).
+		WithBackoffCoefficient(rescheduleTaskRetryBackoffCoefficient).
+		WithMaximumInterval(rescheduleTaskRetryMaxInterval).
+		WithExpirationInterval(backoff.NoInterval)
 }
 
 // CreateSdkClientFactoryRetryPolicy creates a retry policy to handle SdkClientFactory NewClient when frontend service is not ready
 func CreateSdkClientFactoryRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(sdkClientFactoryRetryInitialInterval)
-	policy.SetMaximumInterval(sdkClientFactoryRetryMaxInterval)
-	policy.SetExpirationInterval(sdkClientFactoryRetryExpirationInterval)
-
-	return policy
+	return backoff.NewExponentialRetryPolicy(sdkClientFactoryRetryInitialInterval).
+		WithMaximumInterval(sdkClientFactoryRetryMaxInterval).
+		WithExpirationInterval(sdkClientFactoryRetryExpirationInterval)
 }
 
 // IsPersistenceTransientError checks if the error is a transient persistence error

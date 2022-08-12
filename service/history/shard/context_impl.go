@@ -1802,8 +1802,8 @@ func (s *ContextImpl) acquireShard() {
 	// lifecycleCtx. The persistence operations called here use lifecycleCtx as their context,
 	// so if we were blocked in any of them, they should return immediately with a context
 	// canceled error.
-	policy := backoff.NewExponentialRetryPolicy(1 * time.Second)
-	policy.SetExpirationInterval(5 * time.Minute)
+	policy := backoff.NewExponentialRetryPolicy(1 * time.Second).
+		WithExpirationInterval(5 * time.Minute)
 
 	// Remember this value across attempts
 	ownershipChanged := false
