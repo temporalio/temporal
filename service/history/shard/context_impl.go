@@ -2004,6 +2004,12 @@ func (s *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
 	return s.archivalMetadata
 }
 
+// newDetachedContext creates a detached context with the same deadline
+// and values from the given context. Detached context won't be affected
+// if the context it bases on is cancelled.
+// Use this to perform operations that should not be interrupted by caller
+// cancellation. E.g. workflow operations that, if interrupted, could result in
+// shard renewal or even ownership lost.
 func (s *ContextImpl) newDetachedContext(
 	ctx context.Context,
 ) (context.Context, context.CancelFunc, error) {
