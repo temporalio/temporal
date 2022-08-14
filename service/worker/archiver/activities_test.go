@@ -30,6 +30,7 @@ import (
 	"testing"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 
@@ -61,8 +62,6 @@ const (
 
 var (
 	testBranchToken = []byte{1, 2, 3}
-
-	errPersistenceNonRetryable = errors.New("persistence non-retryable error")
 )
 
 type activitiesSuite struct {
@@ -250,7 +249,46 @@ func (s *activitiesSuite) TestUploadHistory_Success() {
 	s.NoError(err)
 }
 
-func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryableError() {
+func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_RetryableError() {
+	s.metricsClient.EXPECT().Scope(metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
+	container := &BootstrapContainer{
+		Logger:           s.logger,
+		MetricsClient:    s.metricsClient,
+		HistoryV2Manager: s.mockExecutionMgr,
+		HistoryClient:    s.historyClient,
+	}
+	env := s.NewTestActivityEnvironment()
+	s.registerWorkflows(env)
+	env.SetWorkerOptions(worker.Options{
+		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
+	})
+
+	errNotReady := &serviceerror.WorkflowNotReady{Message: "workflow not ready"}
+	s.historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: testNamespaceID,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+			RunId:      testRunID,
+		},
+		WorkflowVersion:    testCloseFailoverVersion,
+		ClosedWorkflowOnly: true,
+	}).Return(nil, errNotReady)
+	request := ArchiveRequest{
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
+		WorkflowID:           testWorkflowID,
+		RunID:                testRunID,
+		BranchToken:          testBranchToken,
+		NextEventID:          testNextEventID,
+		CloseFailoverVersion: testCloseFailoverVersion,
+		HistoryURI:           testArchivalURI,
+	}
+	_, err := env.ExecuteActivity(deleteHistoryActivity, request)
+	s.Equal(errNotReady.Error(), errors.Unwrap(err).Error())
+	s.NotEqual(errDeleteNonRetryable.Error(), errors.Unwrap(err).Error())
+}
+
+func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_NonRetryableError() {
 	s.metricsClient.EXPECT().Scope(metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverNonRetryableErrorCount)
 	container := &BootstrapContainer{
@@ -272,7 +310,7 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryabl
 		},
 		WorkflowVersion:    testCloseFailoverVersion,
 		ClosedWorkflowOnly: true,
-	}).Return(nil, errPersistenceNonRetryable)
+	}).Return(nil, &serviceerror.NotFound{})
 	request := ArchiveRequest{
 		NamespaceID:          testNamespaceID,
 		Namespace:            testNamespace,

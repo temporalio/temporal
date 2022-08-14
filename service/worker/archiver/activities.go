@@ -124,8 +124,10 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		return nil
 	}
 	logger := tagLoggerWithHistoryRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
-	logger.Error("failed to delete history events", tag.Error(err))
-	if !common.IsPersistenceTransientError(err) {
+	logger.Error("failed to delete workflow execution", tag.Error(err))
+	if !common.IsServiceTransientError(err) &&
+		!common.IsContextDeadlineExceededErr(err) &&
+		!common.IsContextCanceledErr(err) {
 		return errDeleteNonRetryable
 	}
 	return err
