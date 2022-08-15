@@ -510,12 +510,6 @@ type (
 		ShardID int32
 	}
 
-	// InternalForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
-	InternalForkHistoryBranchResponse struct {
-		// branchInfo to represent the new branch
-		NewBranchInfo *persistencespb.HistoryBranch
-	}
-
 	// InternalDeleteHistoryNodesRequest is used to remove a history node
 	InternalDeleteHistoryNodesRequest struct {
 		// Used in sharded data stores to identify which shard to use

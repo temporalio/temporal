@@ -1228,7 +1228,7 @@ func ParseHistoryBranchToken(branchToken []byte) (*persistencespb.HistoryBranch,
 }
 
 func UpdateHistoryBranchToken(branchToken []byte, branchInfo *persistencespb.HistoryBranch) ([]byte, error) {
-	bi, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	bi, err := ParseHistoryBranchToken(branchToken)
 	if err != nil {
 		return nil, err
 	}

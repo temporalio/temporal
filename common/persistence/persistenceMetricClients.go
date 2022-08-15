@@ -903,14 +903,14 @@ func (p *executionPersistenceClient) ParseHistoryBranchInfo(
 	ctx context.Context,
 	request *ParseHistoryBranchInfoRequest,
 ) (*ParseHistoryBranchInfoResponse, error) {
-
-	branchInfo, err := ParseHistoryBranchToken(request.BranchToken)
+	p.metricClient.IncCounter(metrics.PersistenceParseHistoryBranchInfoScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceParseHistoryBranchInfoScope, metrics.PersistenceLatency)
+	resp, err := p.persistence.ParseHistoryBranchInfo(ctx, request)
+	sw.Stop()
 	if err != nil {
-		return nil, err
+		p.updateErrorMetric(metrics.PersistenceParseHistoryBranchInfoScope, err)
 	}
-	return &ParseHistoryBranchInfoResponse{
-		BranchInfo: branchInfo,
-	}, nil
+	return resp, err
 }
 
 // UpdateHistoryBranchInfo updates the history branch with branch information
@@ -918,14 +918,14 @@ func (p *executionPersistenceClient) UpdateHistoryBranchInfo(
 	ctx context.Context,
 	request *UpdateHistoryBranchInfoRequest,
 ) (*UpdateHistoryBranchInfoResponse, error) {
-
-	branchToken, err := UpdateHistoryBranchToken(request.BranchToken, request.BranchInfo)
+	p.metricClient.IncCounter(metrics.PersistenceUpdateHistoryBranchInfoScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateHistoryBranchInfoScope, metrics.PersistenceLatency)
+	resp, err := p.persistence.UpdateHistoryBranchInfo(ctx, request)
+	sw.Stop()
 	if err != nil {
-		return nil, err
+		p.updateErrorMetric(metrics.PersistenceUpdateHistoryBranchInfoScope, err)
 	}
-	return &UpdateHistoryBranchInfoResponse{
-		BranchToken: branchToken,
-	}, nil
+	return resp, err
 }
 
 // NewHistoryBranch initializes a new history branch

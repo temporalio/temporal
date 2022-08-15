@@ -653,14 +653,10 @@ func (p *executionRateLimitedPersistenceClient) ParseHistoryBranchInfo(
 	ctx context.Context,
 	request *ParseHistoryBranchInfoRequest,
 ) (*ParseHistoryBranchInfoResponse, error) {
-
-	branchInfo, err := ParseHistoryBranchToken(request.BranchToken)
-	if err != nil {
-		return nil, err
+	if ok := allow(ctx, "ParseHistoryBranchInfo", p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
 	}
-	return &ParseHistoryBranchInfoResponse{
-		BranchInfo: branchInfo,
-	}, nil
+	return p.persistence.ParseHistoryBranchInfo(ctx, request)
 }
 
 // UpdateHistoryBranchInfo updates the history branch with branch information
@@ -668,14 +664,10 @@ func (p *executionRateLimitedPersistenceClient) UpdateHistoryBranchInfo(
 	ctx context.Context,
 	request *UpdateHistoryBranchInfoRequest,
 ) (*UpdateHistoryBranchInfoResponse, error) {
-
-	branchToken, err := UpdateHistoryBranchToken(request.BranchToken, request.BranchInfo)
-	if err != nil {
-		return nil, err
+	if ok := allow(ctx, "UpdateHistoryBranchInfo", p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
 	}
-	return &UpdateHistoryBranchInfoResponse{
-		BranchToken: branchToken,
-	}, nil
+	return p.persistence.UpdateHistoryBranchInfo(ctx, request)
 }
 
 // NewHistoryBranch initializes a new history branch

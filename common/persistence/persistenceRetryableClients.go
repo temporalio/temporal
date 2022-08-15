@@ -478,14 +478,15 @@ func (p *executionRetryablePersistenceClient) ParseHistoryBranchInfo(
 	ctx context.Context,
 	request *ParseHistoryBranchInfoRequest,
 ) (*ParseHistoryBranchInfoResponse, error) {
-
-	branchInfo, err := ParseHistoryBranchToken(request.BranchToken)
-	if err != nil {
-		return nil, err
+	var response *ParseHistoryBranchInfoResponse
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.ParseHistoryBranchInfo(ctx, request)
+		return err
 	}
-	return &ParseHistoryBranchInfoResponse{
-		BranchInfo: branchInfo,
-	}, nil
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
 }
 
 // UpdateHistoryBranchInfo updates the history branch with branch information
@@ -493,14 +494,15 @@ func (p *executionRetryablePersistenceClient) UpdateHistoryBranchInfo(
 	ctx context.Context,
 	request *UpdateHistoryBranchInfoRequest,
 ) (*UpdateHistoryBranchInfoResponse, error) {
-
-	branchToken, err := UpdateHistoryBranchToken(request.BranchToken, request.BranchInfo)
-	if err != nil {
-		return nil, err
+	var response *UpdateHistoryBranchInfoResponse
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.UpdateHistoryBranchInfo(ctx, request)
+		return err
 	}
-	return &UpdateHistoryBranchInfoResponse{
-		BranchToken: branchToken,
-	}, nil
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
 }
 
 // NewHistoryBranch initializes a new history branch
