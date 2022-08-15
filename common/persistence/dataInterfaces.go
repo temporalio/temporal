@@ -1224,6 +1224,7 @@ func UnixMilliseconds(t time.Time) int64 {
 }
 
 func ParseHistoryBranchToken(branchToken []byte) (*persistencespb.HistoryBranch, error) {
+	// TODO: instead of always using the implementation from the serialization package, this should be injected
 	return serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 }
 
@@ -1236,6 +1237,7 @@ func UpdateHistoryBranchToken(branchToken []byte, branchInfo *persistencespb.His
 	bi.BranchId = branchInfo.BranchId
 	bi.Ancestors = branchInfo.Ancestors
 
+	// TODO: instead of always using the implementation from the serialization package, this should be injected
 	blob, err := serialization.HistoryBranchToBlob(bi)
 	if err != nil {
 		return nil, err
@@ -1251,6 +1253,7 @@ func NewHistoryBranchToken(treeID string) ([]byte, error) {
 		BranchId:  branchID,
 		Ancestors: []*persistencespb.HistoryBranchRange{},
 	}
+	// TODO: instead of always using the implementation from the serialization package, this should be injected
 	datablob, err := serialization.HistoryBranchToBlob(bi)
 	if err != nil {
 		return nil, err
@@ -1266,6 +1269,7 @@ func NewHistoryBranchTokenByBranchID(treeID, branchID string) ([]byte, error) {
 		BranchId:  branchID,
 		Ancestors: []*persistencespb.HistoryBranchRange{},
 	}
+	// TODO: instead of always using the implementation from the serialization package, this should be injected
 	datablob, err := serialization.HistoryBranchToBlob(bi)
 	if err != nil {
 		return nil, err
