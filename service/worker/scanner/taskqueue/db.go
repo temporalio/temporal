@@ -35,7 +35,11 @@ import (
 	p "go.temporal.io/server/common/persistence"
 )
 
-var retryForeverPolicy = newRetryForeverPolicy()
+var (
+	retryForeverPolicy = backoff.NewExponentialRetryPolicy(250 * time.Millisecond).
+		WithExpirationInterval(backoff.NoInterval).
+		WithMaximumInterval(30 * time.Second)
+)
 
 func (s *Scavenger) completeTasks(key *p.TaskQueueKey, exclusiveMaxTaskID int64, limit int) (int, error) {
 	var n int
@@ -102,13 +106,6 @@ func (s *Scavenger) deleteTaskQueue(key *p.TaskQueueKey, rangeID int64) error {
 
 func (s *Scavenger) retryForever(op func() error) error {
 	return backoff.ThrottleRetry(op, retryForeverPolicy, s.isRetryable)
-}
-
-func newRetryForeverPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(250 * time.Millisecond)
-	policy.SetExpirationInterval(backoff.NoInterval)
-	policy.SetMaximumInterval(30 * time.Second)
-	return policy
 }
 
 func (s *Scavenger) isRetryable(err error) bool {

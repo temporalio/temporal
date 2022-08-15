@@ -285,6 +285,8 @@ const (
 	MatchingForwarderMaxChildrenPerNode = "matching.forwarderMaxChildrenPerNode"
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
+	// MatchingMetadataPollFrequency is how often non-root partitions will poll the root partition for fresh metadata
+	MatchingMetadataPollFrequency = "matching.metadataPollFrequency"
 
 	// key for history
 

@@ -43,6 +43,7 @@ type (
 		index                   string
 		searchAttributesTypeMap searchattribute.NameTypeMap
 		searchAttributesMapper  searchattribute.Mapper
+		seenNamespaceDivision   bool
 	}
 	valuesInterceptor struct{}
 )
@@ -84,6 +85,10 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 		if fieldType == enumspb.INDEXED_VALUE_TYPE_TEXT {
 			return "", query.NewConverterError("unable to sort by field of %s type, use field of type %s", enumspb.INDEXED_VALUE_TYPE_TEXT.String(), enumspb.INDEXED_VALUE_TYPE_KEYWORD.String())
 		}
+	}
+
+	if fieldName == searchattribute.TemporalNamespaceDivision && usage == query.FieldNameFilter {
+		ni.seenNamespaceDivision = true
 	}
 
 	return fieldName, nil

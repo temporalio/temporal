@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
@@ -62,11 +63,12 @@ type (
 		shutdownCh chan struct{}
 		shutdownWG sync.WaitGroup
 
-		category    tasks.Category
-		options     *Options
-		rescheduler Rescheduler
-		timeSource  clock.TimeSource
-		logger      log.Logger
+		category       tasks.Category
+		options        *Options
+		rescheduler    Rescheduler
+		timeSource     clock.TimeSource
+		logger         log.Logger
+		metricsHandler metrics.MetricsHandler
 
 		paginationFnProvider  PaginationFnProvider
 		executableInitializer ExecutableInitializer
@@ -176,11 +178,12 @@ func newQueueBase(
 		status:     common.DaemonStatusInitialized,
 		shutdownCh: make(chan struct{}),
 
-		category:    category,
-		options:     options,
-		rescheduler: rescheduler,
-		timeSource:  shard.GetTimeSource(),
-		logger:      logger,
+		category:       category,
+		options:        options,
+		rescheduler:    rescheduler,
+		timeSource:     shard.GetTimeSource(),
+		logger:         logger,
+		metricsHandler: metricsHandler,
 
 		paginationFnProvider:  paginationFnProvider,
 		executableInitializer: executableInitializer,
@@ -312,6 +315,8 @@ func (p *queueBase) checkpoint() {
 	// Otherwise, if state is updated first, later deletion fails and shard get reloaded
 	// some tasks will never be deleted.
 	if newInclusiveLowWatermark != tasks.MaximumKey && newInclusiveLowWatermark.CompareTo(p.inclusiveLowWatermark) > 0 {
+		p.metricsHandler.Counter(TaskBatchCompleteCounter).Record(1)
+
 		persistenceMinTaskKey := p.inclusiveLowWatermark
 		persistenceMaxTaskKey := newInclusiveLowWatermark
 		if p.category.Type() == tasks.CategoryTypeScheduled {
@@ -328,22 +333,29 @@ func (p *queueBase) checkpoint() {
 			InclusiveMinTaskKey: persistenceMinTaskKey,
 			ExclusiveMaxTaskKey: persistenceMaxTaskKey,
 		}); err != nil {
+			p.logger.Error("Error range completing queue task", tag.Error(err))
 			return
 		}
 
 		p.inclusiveLowWatermark = newInclusiveLowWatermark
 	}
 
+	p.metricsHandler.Counter(AckLevelUpdateCounter).Record(1)
+	// p.metricsHandler.Histogram(PendingTasksCounter, metrics.Dimensionless).Record(int64(p.monitor.GetPendingTasksCount()))
 	err = p.shard.UpdateQueueState(p.category, ToPersistenceQueueState(&queueState{
 		readerScopes:                 readerScopes,
 		exclusiveReaderHighWatermark: p.nonReadableScope.Range.InclusiveMin,
 	}))
+	if err != nil {
+		p.metricsHandler.Counter(AckLevelUpdateFailedCounter).Record(1)
+		p.logger.Error("Error updating queue state", tag.Error(err), tag.OperationFailed)
+	}
 }
 
 func createCheckpointRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	policy.SetMaximumInterval(5 * time.Second)
-	policy.SetExpirationInterval(backoff.NoInterval)
+	policy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond).
+		WithMaximumInterval(5 * time.Second).
+		WithExpirationInterval(backoff.NoInterval)
 
 	return policy
 }

@@ -140,6 +140,26 @@ func (mr *MockMatchingServiceClientMockRecorder) DescribeTaskQueue(ctx, in inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueue", reflect.TypeOf((*MockMatchingServiceClient)(nil).DescribeTaskQueue), varargs...)
 }
 
+// GetTaskQueueMetadata mocks base method.
+func (m *MockMatchingServiceClient) GetTaskQueueMetadata(ctx context.Context, in *matchingservice.GetTaskQueueMetadataRequest, opts ...grpc.CallOption) (*matchingservice.GetTaskQueueMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetTaskQueueMetadata", varargs...)
+	ret0, _ := ret[0].(*matchingservice.GetTaskQueueMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueueMetadata indicates an expected call of GetTaskQueueMetadata.
+func (mr *MockMatchingServiceClientMockRecorder) GetTaskQueueMetadata(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueMetadata", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetTaskQueueMetadata), varargs...)
+}
+
 // GetWorkerBuildIdOrdering mocks base method.
 func (m *MockMatchingServiceClient) GetWorkerBuildIdOrdering(ctx context.Context, in *matchingservice.GetWorkerBuildIdOrderingRequest, opts ...grpc.CallOption) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
 	m.ctrl.T.Helper()
@@ -158,6 +178,26 @@ func (mr *MockMatchingServiceClientMockRecorder) GetWorkerBuildIdOrdering(ctx, i
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdOrdering", reflect.TypeOf((*MockMatchingServiceClient)(nil).GetWorkerBuildIdOrdering), varargs...)
+}
+
+// InvalidateTaskQueueMetadata mocks base method.
+func (m *MockMatchingServiceClient) InvalidateTaskQueueMetadata(ctx context.Context, in *matchingservice.InvalidateTaskQueueMetadataRequest, opts ...grpc.CallOption) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "InvalidateTaskQueueMetadata", varargs...)
+	ret0, _ := ret[0].(*matchingservice.InvalidateTaskQueueMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// InvalidateTaskQueueMetadata indicates an expected call of InvalidateTaskQueueMetadata.
+func (mr *MockMatchingServiceClientMockRecorder) InvalidateTaskQueueMetadata(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvalidateTaskQueueMetadata", reflect.TypeOf((*MockMatchingServiceClient)(nil).InvalidateTaskQueueMetadata), varargs...)
 }
 
 // ListTaskQueuePartitions mocks base method.
@@ -363,6 +403,21 @@ func (mr *MockMatchingServiceServerMockRecorder) DescribeTaskQueue(arg0, arg1 in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueue", reflect.TypeOf((*MockMatchingServiceServer)(nil).DescribeTaskQueue), arg0, arg1)
 }
 
+// GetTaskQueueMetadata mocks base method.
+func (m *MockMatchingServiceServer) GetTaskQueueMetadata(arg0 context.Context, arg1 *matchingservice.GetTaskQueueMetadataRequest) (*matchingservice.GetTaskQueueMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTaskQueueMetadata", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.GetTaskQueueMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueueMetadata indicates an expected call of GetTaskQueueMetadata.
+func (mr *MockMatchingServiceServerMockRecorder) GetTaskQueueMetadata(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueMetadata", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetTaskQueueMetadata), arg0, arg1)
+}
+
 // GetWorkerBuildIdOrdering mocks base method.
 func (m *MockMatchingServiceServer) GetWorkerBuildIdOrdering(arg0 context.Context, arg1 *matchingservice.GetWorkerBuildIdOrderingRequest) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
 	m.ctrl.T.Helper()
@@ -376,6 +431,21 @@ func (m *MockMatchingServiceServer) GetWorkerBuildIdOrdering(arg0 context.Contex
 func (mr *MockMatchingServiceServerMockRecorder) GetWorkerBuildIdOrdering(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkerBuildIdOrdering", reflect.TypeOf((*MockMatchingServiceServer)(nil).GetWorkerBuildIdOrdering), arg0, arg1)
+}
+
+// InvalidateTaskQueueMetadata mocks base method.
+func (m *MockMatchingServiceServer) InvalidateTaskQueueMetadata(arg0 context.Context, arg1 *matchingservice.InvalidateTaskQueueMetadataRequest) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InvalidateTaskQueueMetadata", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.InvalidateTaskQueueMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// InvalidateTaskQueueMetadata indicates an expected call of InvalidateTaskQueueMetadata.
+func (mr *MockMatchingServiceServerMockRecorder) InvalidateTaskQueueMetadata(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvalidateTaskQueueMetadata", reflect.TypeOf((*MockMatchingServiceServer)(nil).InvalidateTaskQueueMetadata), arg0, arg1)
 }
 
 // ListTaskQueuePartitions mocks base method.

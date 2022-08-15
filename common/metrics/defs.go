@@ -450,8 +450,12 @@ const (
 	MatchingClientListTaskQueuePartitionsScope
 	// MatchingClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to matching service
 	MatchingClientUpdateWorkerBuildIdOrderingScope
-	// MatchingGetBuildIdOrdering tracks RPC calls to matching service
+	// MatchingGetWorkerBuildIdOrderingScope tracks RPC calls to matching service
 	MatchingClientGetWorkerBuildIdOrderingScope
+	// MatchingClientInvalidateTaskQueueMetadataScope tracks RPC calls to matching service
+	MatchingClientInvalidateTaskQueueMetadataScope
+	// MatchingClientGetTaskQueueMetadataScope tracks RPC calls to matching service
+	MatchingClientGetTaskQueueMetadataScope
 	// FrontendClientDeprecateNamespaceScope tracks RPC calls to frontend service
 	FrontendClientDeprecateNamespaceScope
 	// FrontendClientDescribeNamespaceScope tracks RPC calls to frontend service
@@ -1250,6 +1254,10 @@ const (
 	MatchingUpdateWorkerBuildIdOrderingScope
 	// MatchingGetWorkerBuildIdOrderingScope tracks GetWorkerBuildIdOrdering API calls received by service
 	MatchingGetWorkerBuildIdOrderingScope
+	// MatchingInvalidateTaskQueueMetadataScope tracks GetWorkerBuildIdOrdering API calls received by service
+	MatchingInvalidateTaskQueueMetadataScope
+	// MatchingGetTaskQueueMetadataScope tracks GetWorkerBuildIdOrdering API calls received by service
+	MatchingGetTaskQueueMetadataScope
 
 	NumMatchingScopes
 )
@@ -1491,6 +1499,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingClientListTaskQueuePartitionsScope:     {operation: "MatchingClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientUpdateWorkerBuildIdOrderingScope: {operation: "MatchingClientUpdateWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientGetWorkerBuildIdOrderingScope:    {operation: "MatchingClientGetWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientInvalidateTaskQueueMetadataScope: {operation: "MatchingClientInvalidateTaskQueueMetadata", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientGetTaskQueueMetadataScope:        {operation: "MatchingClientGetTaskQueueMetadata", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 
 		FrontendClientDeprecateNamespaceScope:                 {operation: "FrontendClientDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeNamespaceScope:                  {operation: "FrontendClientDescribeNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1887,6 +1897,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingListTaskQueuePartitionsScope:     {operation: "ListTaskQueuePartitions"},
 		MatchingUpdateWorkerBuildIdOrderingScope: {operation: "UpdateWorkerBuildIdOrdering"},
 		MatchingGetWorkerBuildIdOrderingScope:    {operation: "GetWorkerBuildIdOrdering"},
+		MatchingInvalidateTaskQueueMetadataScope: {operation: "InvalidateTaskQueueMetadata"},
+		MatchingGetTaskQueueMetadataScope:        {operation: "GetTaskQueueMetadata"},
 	},
 	// Worker Scope Names
 	Worker: {

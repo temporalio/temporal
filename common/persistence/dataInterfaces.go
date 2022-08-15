@@ -741,7 +741,7 @@ type (
 	}
 
 	NewHistoryBranchRequest struct {
-		TreeId string
+		TreeID string
 	}
 
 	NewHistoryBranchResponse struct {
