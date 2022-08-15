@@ -60,7 +60,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
-		if err != nil && err.Error() == errUploadNonRetryable.Error() {
+		if err == errUploadNonRetryable {
 			scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 		}
 	}()
@@ -102,7 +102,7 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
-		if err != nil && err.Error() == errDeleteNonRetryable.Error() {
+		if err == errDeleteNonRetryable {
 			scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 		}
 	}()
@@ -138,7 +138,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
-		if err != nil && err.Error() == errArchiveVisibilityNonRetryable.Error() {
+		if err == errArchiveVisibilityNonRetryable {
 			scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 		}
 	}()
