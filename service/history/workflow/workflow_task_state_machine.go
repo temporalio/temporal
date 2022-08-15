@@ -815,9 +815,9 @@ func (m *workflowTaskStateMachine) getStartToCloseTimeout(
 		return defaultTimeout
 	}
 
-	policy := backoff.NewExponentialRetryPolicy(workflowTaskRetryInitialInterval)
-	policy.SetMaximumInterval(m.ms.shard.GetConfig().WorkflowTaskRetryMaxInterval())
-	policy.SetExpirationInterval(backoff.NoInterval)
+	policy := backoff.NewExponentialRetryPolicy(workflowTaskRetryInitialInterval).
+		WithMaximumInterval(m.ms.shard.GetConfig().WorkflowTaskRetryMaxInterval()).
+		WithExpirationInterval(backoff.NoInterval)
 	startToCloseTimeout := *defaultTimeout + policy.ComputeNextDelay(0, int(attempt)-workflowTaskRetryBackoffMinAttempts)
 	return &startToCloseTimeout
 }

@@ -124,9 +124,9 @@ func (w *taskWriter) Stop() {
 }
 
 func (w *taskWriter) initReadWriteState(ctx context.Context) error {
-	retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second)
-	retryForever.SetMaximumInterval(10 * time.Second)
-	retryForever.SetExpirationInterval(backoff.NoInterval)
+	retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second).
+		WithMaximumInterval(10 * time.Second).
+		WithExpirationInterval(backoff.NoInterval)
 
 	state, err := w.renewLeaseWithRetry(
 		ctx, retryForever, common.IsPersistenceTransientError)

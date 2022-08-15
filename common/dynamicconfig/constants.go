@@ -289,6 +289,8 @@ const (
 	MatchingForwarderMaxChildrenPerNode = "matching.forwarderMaxChildrenPerNode"
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
+	// MatchingMetadataPollFrequency is how often non-root partitions will poll the root partition for fresh metadata
+	MatchingMetadataPollFrequency = "matching.metadataPollFrequency"
 
 	// key for history
 
@@ -352,8 +354,6 @@ const (
 	TimerProcessorSchedulerQueueSize = "history.timerProcessorSchedulerQueueSize"
 	// TimerProcessorSchedulerRoundRobinWeights is the priority round robin weights for timer task scheduler
 	TimerProcessorSchedulerRoundRobinWeights = "history.timerProcessorSchedulerRoundRobinWeights"
-	// TimerProcessorCompleteTimerFailureRetryCount is retry count for timer processor complete timer operation
-	TimerProcessorCompleteTimerFailureRetryCount = "history.timerProcessorCompleteTimerFailureRetryCount"
 	// TimerProcessorUpdateAckInterval is update interval for timer processor
 	TimerProcessorUpdateAckInterval = "history.timerProcessorUpdateAckInterval"
 	// TimerProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
@@ -408,8 +408,6 @@ const (
 	TransferProcessorSchedulerQueueSize = "history.transferProcessorSchedulerQueueSize"
 	// TransferProcessorSchedulerRoundRobinWeights is the priority round robin weights for transfer task scheduler
 	TransferProcessorSchedulerRoundRobinWeights = "history.transferProcessorSchedulerRoundRobinWeights"
-	// TransferProcessorCompleteTransferFailureRetryCount is times of retry for failure
-	TransferProcessorCompleteTransferFailureRetryCount = "history.transferProcessorCompleteTransferFailureRetryCount"
 	// TransferProcessorUpdateShardTaskCount is update shard count for transferQueueProcessor
 	TransferProcessorUpdateShardTaskCount = "history.transferProcessorUpdateShardTaskCount"
 	// TransferProcessorMaxPollInterval max poll interval for transferQueueProcessor
@@ -452,8 +450,6 @@ const (
 	VisibilityProcessorSchedulerQueueSize = "history.visibilityProcessorSchedulerQueueSize"
 	// VisibilityProcessorSchedulerRoundRobinWeights is the priority round robin weights for visibility task scheduler
 	VisibilityProcessorSchedulerRoundRobinWeights = "history.visibilityProcessorSchedulerRoundRobinWeights"
-	// VisibilityProcessorCompleteTaskFailureRetryCount is times of retry for failure
-	VisibilityProcessorCompleteTaskFailureRetryCount = "history.visibilityProcessorCompleteTaskFailureRetryCount"
 	// VisibilityProcessorMaxPollInterval max poll interval for visibilityQueueProcessor
 	VisibilityProcessorMaxPollInterval = "history.visibilityProcessorMaxPollInterval"
 	// VisibilityProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient

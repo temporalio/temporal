@@ -25,19 +25,25 @@
 package authorization
 
 var readOnlyNamespaceAPI = map[string]struct{}{
-	"DescribeNamespace":              {},
-	"GetWorkflowExecutionHistory":    {},
-	"ListOpenWorkflowExecutions":     {},
-	"ListClosedWorkflowExecutions":   {},
-	"ListWorkflowExecutions":         {},
-	"ListArchivedWorkflowExecutions": {},
-	"ScanWorkflowExecutions":         {},
-	"CountWorkflowExecutions":        {},
-	"QueryWorkflow":                  {},
-	"DescribeWorkflowExecution":      {},
-	"DescribeTaskQueue":              {},
-	"GetSystemInfo":                  {},
-	"ListTaskQueuePartitions":        {},
+	"DescribeNamespace":                  {},
+	"GetWorkflowExecutionHistory":        {},
+	"GetWorkflowExecutionHistoryReverse": {},
+	"ListOpenWorkflowExecutions":         {},
+	"ListClosedWorkflowExecutions":       {},
+	"ListWorkflowExecutions":             {},
+	"ListArchivedWorkflowExecutions":     {},
+	"ScanWorkflowExecutions":             {},
+	"CountWorkflowExecutions":            {},
+	"QueryWorkflow":                      {},
+	"DescribeWorkflowExecution":          {},
+	"DescribeTaskQueue":                  {},
+	"GetSystemInfo":                      {},
+	"ListTaskQueuePartitions":            {},
+	"DescribeSchedule":                   {},
+	"ListSchedules":                      {},
+	"ListScheduleMatchingTimes":          {},
+	"DescribeBatchOperation":             {},
+	"ListBatchOperations":                {},
 }
 
 var readOnlyGlobalAPI = map[string]struct{}{

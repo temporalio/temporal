@@ -623,6 +623,12 @@ func (s *visibilityStore) buildSearchParameters(
 
 	boolQuery.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String()))
 
+	if request.NamespaceDivision == "" {
+		boolQuery.MustNot(elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision))
+	} else {
+		boolQuery.Filter(elastic.NewTermQuery(searchattribute.TemporalNamespaceDivision, request.NamespaceDivision))
+	}
+
 	if !request.EarliestStartTime.IsZero() || !request.LatestStartTime.IsZero() {
 		var rangeQuery *elastic.RangeQuery
 		if overStartTime {
@@ -691,6 +697,7 @@ func (s *visibilityStore) buildSearchParametersV2(
 
 	return params, nil
 }
+
 func (s *visibilityStore) convertQuery(
 	namespace namespace.Name,
 	namespaceID namespace.ID,
@@ -700,10 +707,8 @@ func (s *visibilityStore) convertQuery(
 	if err != nil {
 		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
-	queryConverter := newQueryConverter(
-		newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapper),
-		NewValuesInterceptor(),
-	)
+	nameInterceptor := newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapper)
+	queryConverter := newQueryConverter(nameInterceptor, NewValuesInterceptor())
 	requestQuery, fieldSorts, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
@@ -716,6 +721,13 @@ func (s *visibilityStore) convertQuery(
 
 	// Create new bool query because request query might have only "should" (="or") queries.
 	namespaceFilterQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.NamespaceID, namespaceID.String()))
+
+	// If the query did not explicitly filter on TemporalNamespaceDivision somehow, then add a
+	// "must not exist" (i.e. "is null") query for it.
+	if !nameInterceptor.seenNamespaceDivision {
+		namespaceFilterQuery.MustNot(elastic.NewExistsQuery(searchattribute.TemporalNamespaceDivision))
+	}
+
 	if requestQuery != nil {
 		namespaceFilterQuery.Filter(requestQuery)
 	}

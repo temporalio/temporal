@@ -119,3 +119,23 @@ func TestInvalidTaskqueueNames(t *testing.T) {
 		})
 	}
 }
+
+func TestTaskQueueCreateNameWIthPartition(t *testing.T) {
+	testCases := []struct {
+		name   string
+		part   int
+		output string
+	}{
+		{"foo", 0, "foo"},
+		{"foo", 1, "/_sys/foo/1"},
+		{"foo", 2, "/_sys/foo/2"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name+"#"+strconv.Itoa(tc.part), func(t *testing.T) {
+			tn, err := NewTaskQueueNameWithPartition(tc.name, tc.part)
+			require.NoError(t, err)
+			require.Equal(t, tc.output, tn.name)
+		})
+	}
+}

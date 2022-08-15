@@ -25,7 +25,6 @@
 package gcloud
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -87,15 +86,6 @@ func hash(s string) (result string) {
 		return fmt.Sprintf("%v", farm.Fingerprint64([]byte(s)))
 	}
 	return
-}
-
-func contextExpired(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-		return false
-	}
 }
 
 func deserializeGetHistoryToken(bytes []byte) (*getHistoryToken, error) {

@@ -57,6 +57,7 @@ type (
 		ForwarderMaxRatePerSecond    dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		ForwarderMaxChildrenPerNode  dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		MaxVersionGraphSize          dynamicconfig.IntPropertyFn
+		MetadataPollFrequency        dynamicconfig.DurationPropertyFn
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -133,6 +134,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		ForwarderMaxChildrenPerNode:           dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
 		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0),
 		MaxVersionGraphSize:                   dc.GetIntProperty(dynamicconfig.VersionGraphNodeLimit, 1000),
+		MetadataPollFrequency:                 dc.GetDurationProperty(dynamicconfig.MatchingMetadataPollFrequency, 5*time.Minute),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1000),

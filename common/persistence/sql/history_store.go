@@ -159,6 +159,20 @@ func (m *sqlExecutionStore) DeleteHistoryNodes(
 	return nil
 }
 
+// NewHistoryBranch initializes a new history branch
+func (m *sqlExecutionStore) NewHistoryBranch(
+	ctx context.Context,
+	request *p.NewHistoryBranchRequest,
+) (*p.NewHistoryBranchResponse, error) {
+	branchToken, err := p.NewHistoryBranchToken(request.TreeID)
+	if err != nil {
+		return nil, err
+	}
+	return &p.NewHistoryBranchResponse{
+		BranchToken: branchToken,
+	}, nil
+}
+
 // ReadHistoryBranch returns history node data for a branch
 func (m *sqlExecutionStore) ReadHistoryBranch(
 	ctx context.Context,

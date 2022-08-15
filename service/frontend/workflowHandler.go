@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -3016,8 +3017,9 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, errSchedulesNotAllowed
 	}
 
-	// a schedule id is a workflow id so validate it the same way
-	if err := wh.validateWorkflowID(request.ScheduleId); err != nil {
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
+
+	if err := wh.validateWorkflowID(workflowID); err != nil {
 		return nil, err
 	}
 
@@ -3104,10 +3106,12 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	if err != nil {
 		return nil, err
 	}
+	// Add namespace division
+	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
 	// Create StartWorkflowExecutionRequest
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:             request.Namespace,
-		WorkflowId:            request.ScheduleId,
+		WorkflowId:            workflowID,
 		WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
 		TaskQueue:             &taskqueuepb.TaskQueue{Name: workercommon.PerNSWorkerTaskQueue},
 		Input:                 inputPayload,
@@ -3154,7 +3158,8 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return nil, err
 	}
 
-	execution := &commonpb.WorkflowExecution{WorkflowId: request.ScheduleId}
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
+	execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
 
 	// first describe to get memo and search attributes
 	describeResponse, err := wh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
@@ -3284,6 +3289,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return errWaitForRefresh
 	}
 
+	// TODO: confirm retry is necessary here.
 	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
 	isWaitErr := func(e error) bool { return e == errWaitForRefresh }
 	err = backoff.ThrottleRetryContext(ctx, op, policy, isWaitErr)
@@ -3318,6 +3324,8 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, errRequestIDTooLong
 	}
 
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
+
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -3341,7 +3349,7 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID.String(),
-		request.GetScheduleId(),
+		workflowID,
 		"", // don't have runid yet
 		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
@@ -3354,7 +3362,7 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		NamespaceId: namespaceID.String(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         request.Namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: request.ScheduleId},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 			SignalName:        scheduler.SignalNameUpdate,
 			Input:             inputPayloads,
 			Identity:          request.Identity,
@@ -3392,6 +3400,8 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, errRequestIDTooLong
 	}
 
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
+
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -3414,7 +3424,7 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID.String(),
-		request.GetScheduleId(),
+		workflowID,
 		"", // don't have runid yet
 		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
@@ -3427,7 +3437,7 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		NamespaceId: namespaceID.String(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         request.Namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: request.ScheduleId},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 			SignalName:        scheduler.SignalNamePatch,
 			Input:             inputPayloads,
 			Identity:          request.Identity,
@@ -3461,6 +3471,8 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		return nil, errSchedulesNotAllowed
 	}
 
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
+
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -3478,7 +3490,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID.String(),
-		request.ScheduleId,
+		workflowID,
 		"",
 		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
@@ -3490,7 +3502,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		NamespaceId: namespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
 			Namespace: request.Namespace,
-			Execution: &commonpb.WorkflowExecution{WorkflowId: request.ScheduleId},
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 			Query: &querypb.WorkflowQuery{
 				QueryType: scheduler.QueryNameListMatchingTimes,
 				QueryArgs: queryPayload,
@@ -3531,6 +3543,8 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		return nil, errSchedulesNotAllowed
 	}
 
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
+
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -3540,7 +3554,7 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		NamespaceId: namespaceID.String(),
 		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 			Namespace:         request.Namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: request.ScheduleId},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 			Reason:            "terminated by DeleteSchedule",
 			Identity:          request.Identity,
 		},
@@ -3594,6 +3608,7 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{
 			NamespaceID:       namespaceID,
 			Namespace:         namespaceName,
+			NamespaceDivision: scheduler.NamespaceDivision,
 			PageSize:          int(request.GetMaximumPageSize()),
 			NextPageToken:     request.NextPageToken,
 			EarliestStartTime: minTime,
@@ -3611,8 +3626,10 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 		info := wh.decodeScheduleListInfo(searchAttributes)
 		searchAttributes = wh.cleanScheduleSearchAttributes(searchAttributes)
 		memo := wh.cleanScheduleMemo(ex.GetMemo())
+		workflowID := ex.GetExecution().GetWorkflowId()
+		scheduleID := strings.TrimPrefix(workflowID, scheduler.WorkflowIDPrefix)
 		schedules[i] = &schedpb.ScheduleListEntry{
-			ScheduleId:       ex.GetExecution().GetWorkflowId(),
+			ScheduleId:       scheduleID,
 			Memo:             memo,
 			SearchAttributes: searchAttributes,
 			Info:             info,

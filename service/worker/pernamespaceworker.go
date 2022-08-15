@@ -322,9 +322,9 @@ func (w *perNamespaceWorker) refresh(ns *namespace.Namespace) {
 		w.componentSet = componentSet
 		return nil
 	}
-	policy := backoff.NewExponentialRetryPolicy(w.wm.initialRetry)
-	policy.SetMaximumInterval(1 * time.Minute)
-	policy.SetExpirationInterval(backoff.NoInterval)
+	policy := backoff.NewExponentialRetryPolicy(w.wm.initialRetry).
+		WithMaximumInterval(1 * time.Minute).
+		WithExpirationInterval(backoff.NoInterval)
 	backoff.ThrottleRetry(op, policy, nil)
 }
 

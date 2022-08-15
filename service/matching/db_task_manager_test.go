@@ -224,7 +224,7 @@ func (s *dbTaskManagerSuite) TestBufferAndWriteTask_Ready() {
 	taskInfo := &persistencespb.TaskInfo{}
 	taskWriterErr := serviceerror.NewInternal("random error")
 	s.taskWriter.EXPECT().appendTask(taskInfo).Return(
-		future.NewReadyFuture[struct{}](struct{}{}, taskWriterErr),
+		future.NewReadyFuture(struct{}{}, taskWriterErr),
 	)
 	fut := s.dbTaskManager.BufferAndWriteTask(taskInfo)
 	_, err := fut.Get(context.Background())
@@ -324,12 +324,15 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadFailure() {
 	))
 
 	s.dbTaskManager.readAndDispatchTasks(context.Background())
+	timer := time.NewTimer(s.dbTaskManager.dispatchRetrier.NextBackOff())
 	select {
 	case <-s.dbTaskManager.dispatchChan:
 		// noop
-	default:
+	case <-timer.C:
 		s.Fail("dispatch channel should contain one signal")
 	}
+
+	timer.Stop()
 }
 
 func (s *dbTaskManagerSuite) TestUpdateAckTaskID() {

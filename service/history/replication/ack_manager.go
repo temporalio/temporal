@@ -96,9 +96,9 @@ func NewAckManager(
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 
-	retryPolicy := backoff.NewExponentialRetryPolicy(200 * time.Millisecond)
-	retryPolicy.SetMaximumAttempts(5)
-	retryPolicy.SetBackoffCoefficient(1)
+	retryPolicy := backoff.NewExponentialRetryPolicy(200 * time.Millisecond).
+		WithMaximumAttempts(5).
+		WithBackoffCoefficient(1)
 
 	return &ackMgrImpl{
 		currentClusterName: currentClusterName,
@@ -172,7 +172,7 @@ func (p *ackMgrImpl) GetTask(
 
 	switch taskInfo.TaskType {
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
-		return p.taskInfoToTask(ctx, &tasks.SyncActivityTask{
+		return p.toReplicationTask(ctx, &tasks.SyncActivityTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				taskInfo.GetNamespaceId(),
 				taskInfo.GetWorkflowId(),
@@ -184,7 +184,7 @@ func (p *ackMgrImpl) GetTask(
 			ScheduledEventID:    taskInfo.ScheduledEventId,
 		})
 	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-		return p.taskInfoToTask(ctx, &tasks.HistoryReplicationTask{
+		return p.toReplicationTask(ctx, &tasks.HistoryReplicationTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				taskInfo.GetNamespaceId(),
 				taskInfo.GetWorkflowId(),
@@ -197,7 +197,7 @@ func (p *ackMgrImpl) GetTask(
 			NextEventID:         taskInfo.NextEventId,
 		})
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
-		return p.taskInfoToTask(ctx, &tasks.SyncWorkflowStateTask{
+		return p.toReplicationTask(ctx, &tasks.SyncWorkflowStateTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				taskInfo.GetNamespaceId(),
 				taskInfo.GetWorkflowId(),
@@ -288,10 +288,7 @@ func (p *ackMgrImpl) getTasks(
 
 		token = response.NextPageToken
 		for _, task := range response.Tasks {
-			if replicationTask, err := p.taskInfoToTask(
-				ctx,
-				task,
-			); err != nil {
+			if replicationTask, err := p.toReplicationTask(ctx, task); err != nil {
 				return nil, 0, err
 			} else if replicationTask != nil {
 				replicationTasks = append(replicationTasks, replicationTask)
@@ -314,23 +311,6 @@ func (p *ackMgrImpl) getTasks(
 		return nil, maxTaskID, nil
 	}
 	return replicationTasks, replicationTasks[len(replicationTasks)-1].GetSourceTaskId(), nil
-}
-
-func (p *ackMgrImpl) taskInfoToTask(
-	ctx context.Context,
-	task tasks.Task,
-) (*replicationspb.ReplicationTask, error) {
-	var replicationTask *replicationspb.ReplicationTask
-	op := func(ctx context.Context) error {
-		var err error
-		replicationTask, err = p.toReplicationTask(ctx, task)
-		return err
-	}
-
-	if err := backoff.ThrottleRetryContext(ctx, op, p.retryPolicy, common.IsPersistenceTransientError); err != nil {
-		return nil, err
-	}
-	return replicationTask, nil
 }
 
 func (p *ackMgrImpl) taskIDsRange(

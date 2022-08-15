@@ -118,17 +118,18 @@ func NewTaskProcessor(
 	eventSerializer serialization.Serializer,
 ) TaskProcessor {
 	shardID := shard.GetShardID()
-	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID))
-	taskRetryPolicy.SetBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID))
-	taskRetryPolicy.SetMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID))
-	taskRetryPolicy.SetMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID))
-	taskRetryPolicy.SetExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
+	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID)).
+		WithBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID)).
+		WithMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID)).
+		WithMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID)).
+		WithExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
 
-	dlqRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID))
-	dlqRetryPolicy.SetBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID))
-	dlqRetryPolicy.SetMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID))
-	dlqRetryPolicy.SetMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID))
-	dlqRetryPolicy.SetExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
+	// TODO: define separate set of configs for dlq retry
+	dlqRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID)).
+		WithBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID)).
+		WithMaximumInterval(config.ReplicationTaskProcessorErrorRetryMaxInterval(shardID)).
+		WithMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID)).
+		WithExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
 
 	return &taskProcessorImpl{
 		currentCluster:          shard.GetClusterMetadata().GetCurrentClusterName(),

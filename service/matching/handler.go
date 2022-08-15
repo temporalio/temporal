@@ -367,11 +367,10 @@ func (h *Handler) UpdateWorkerBuildIdOrdering(
 		metrics.MatchingUpdateWorkerBuildIdOrderingScope,
 	)
 
-	response, err := h.engine.UpdateWorkerBuildIdOrdering(hCtx, request)
-	return response, err
+	return h.engine.UpdateWorkerBuildIdOrdering(hCtx, request)
 }
 
-// UpdateWorkerBuildIdOrdering allows changing the worker versioning graph for a task queue
+// GetWorkerBuildIdOrdering fetches the worker versioning graph for a task queue
 func (h *Handler) GetWorkerBuildIdOrdering(
 	ctx context.Context,
 	request *matchingservice.GetWorkerBuildIdOrderingRequest,
@@ -387,8 +386,44 @@ func (h *Handler) GetWorkerBuildIdOrdering(
 		metrics.MatchingGetWorkerBuildIdOrderingScope,
 	)
 
-	response, err := h.engine.GetWorkerBuildIdOrdering(hCtx, request)
-	return response, err
+	return h.engine.GetWorkerBuildIdOrdering(hCtx, request)
+}
+
+// InvalidateTaskQueueMetadata notifies a task queue that some data has changed, and should be invalidated/refreshed
+func (h *Handler) InvalidateTaskQueueMetadata(
+	ctx context.Context,
+	request *matchingservice.InvalidateTaskQueueMetadataRequest,
+) (_ *matchingservice.InvalidateTaskQueueMetadataResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	hCtx := h.newHandlerContext(
+		ctx,
+		namespace.ID(request.GetNamespaceId()),
+		&taskqueuepb.TaskQueue{
+			Name: request.GetTaskQueue(),
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		metrics.MatchingInvalidateTaskQueueMetadataScope,
+	)
+
+	return h.engine.InvalidateTaskQueueMetadata(hCtx, request)
+}
+
+func (h *Handler) GetTaskQueueMetadata(
+	ctx context.Context,
+	request *matchingservice.GetTaskQueueMetadataRequest,
+) (_ *matchingservice.GetTaskQueueMetadataResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	hCtx := h.newHandlerContext(
+		ctx,
+		namespace.ID(request.GetNamespaceId()),
+		&taskqueuepb.TaskQueue{
+			Name: request.GetTaskQueue(),
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		metrics.MatchingGetTaskQueueMetadataScope,
+	)
+
+	return h.engine.GetTaskQueueMetadata(hCtx, request)
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {

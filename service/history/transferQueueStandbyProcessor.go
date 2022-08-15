@@ -188,7 +188,6 @@ func newTransferQueueStandbyProcessor(
 		rescheduler,
 		rateLimiter,
 		logger,
-		shard.GetMetricsClient().Scope(metrics.TransferStandbyQueueProcessorScope),
 	)
 
 	processor.queueAckMgr = queueAckMgr

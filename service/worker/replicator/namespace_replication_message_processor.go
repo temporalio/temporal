@@ -65,9 +65,9 @@ func newNamespaceReplicationMessageProcessor(
 	serviceResolver membership.ServiceResolver,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 ) *namespaceReplicationMessageProcessor {
-	retryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait)
-	retryPolicy.SetBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient)
-	retryPolicy.SetMaximumAttempts(taskProcessorErrorRetryMaxAttampts)
+	retryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait).
+		WithBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient).
+		WithMaximumAttempts(taskProcessorErrorRetryMaxAttampts)
 
 	return &namespaceReplicationMessageProcessor{
 		hostInfo:                  hostInfo,
