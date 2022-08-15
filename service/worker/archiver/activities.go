@@ -60,12 +60,8 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
-		if err != nil {
-			if err.Error() == errUploadNonRetryable.Error() {
-				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
-			} else {
-				err = temporal.NewApplicationError(err.Error(), "", nil)
-			}
+		if err != nil && err.Error() == errUploadNonRetryable.Error() {
+			scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 		}
 	}()
 	logger := tagLoggerWithHistoryRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
@@ -106,12 +102,8 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
-		if err != nil {
-			if err.Error() == errDeleteNonRetryable.Error() {
-				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
-			} else {
-				err = temporal.NewApplicationError(err.Error(), "", nil)
-			}
+		if err != nil && err.Error() == errDeleteNonRetryable.Error() {
+			scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 		}
 	}()
 	_, err = container.HistoryClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
@@ -146,12 +138,8 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
-		if err != nil {
-			if err.Error() == errArchiveVisibilityNonRetryable.Error() {
-				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
-			} else {
-				err = temporal.NewApplicationError(err.Error(), "", nil)
-			}
+		if err != nil && err.Error() == errArchiveVisibilityNonRetryable.Error() {
+			scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 		}
 	}()
 	logger := tagLoggerWithVisibilityRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
