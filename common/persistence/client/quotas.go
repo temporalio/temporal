@@ -35,7 +35,7 @@ var (
 		headers.CallerTypeBackground: 2,
 	}
 
-	APITypeCallInitiationPriorityOverride = map[string]int{
+	APITypeCallOriginPriorityOverride = map[string]int{
 		"StartWorkflowExecution":           0,
 		"SignalWithStartWorkflowExecution": 0,
 		"SignalWorkflowExecution":          0,
@@ -92,7 +92,7 @@ func newPriorityRateLimiter(
 		func(req quotas.Request) int {
 			switch req.CallerType {
 			case headers.CallerTypeAPI:
-				if priority, ok := APITypeCallInitiationPriorityOverride[req.Initiation]; ok {
+				if priority, ok := APITypeCallOriginPriorityOverride[req.Initiation]; ok {
 					return priority
 				}
 				return CallerTypeDefaultPriority[req.CallerType]

@@ -44,27 +44,38 @@ var (
 	}
 )
 
-type CallerInfo struct {
-	CallerName     string
-	CallerType     string
-	CallInitiation string
-}
+type (
+	CallerInfo struct {
+		// CallerName is the name of the caller.
+		// It can either user namespace name or
+		// the predefined CallerNameSystem.
+		CallerName string
+
+		// CallerType indicates if the call originates from
+		// user API calls or from system background operations.
+		CallerType string
+
+		// CallOrigin is the first API method name in the call chain.
+		// Currently, it is only specified when CallerType is CallerTypeAPI
+		CallOrigin string
+	}
+)
 
 // NewCallerInfo creates a new CallerInfo
 func NewCallerInfo(
 	callerName string,
 	callerType string,
-	callInitiation string,
+	callOrigin string,
 ) CallerInfo {
 	return CallerInfo{
-		CallerName:     callerName,
-		CallerType:     callerType,
-		CallInitiation: callInitiation,
+		CallerName: callerName,
+		CallerType: callerType,
+		CallOrigin: callOrigin,
 	}
 }
 
 // NewBackgroundCallerInfo creates a new CallerInfo with Background callerType
-// and empty callInitiation.
+// and empty callOrigin.
 // This is equivalent to NewCallerInfo(callerName, CallerTypeBackground, "")
 func NewBackgroundCallerInfo(
 	callerName string,
@@ -75,7 +86,7 @@ func NewBackgroundCallerInfo(
 	}
 }
 
-// SetCallerInfo sets callerName, callerType and callInitiation in the context.
+// SetCallerInfo sets callerName, callerType and CcllOrigin in the context.
 // Existing values will be overwritten if new value is not empty.
 // TODO: consider only set the caller info to golang context instead of grpc metadata
 // and propagate to grpc outgoing context upon making an rpc call
@@ -84,9 +95,9 @@ func SetCallerInfo(
 	info CallerInfo,
 ) context.Context {
 	return setIncomingMD(ctx, map[string]string{
-		callerNameHeaderName:     info.CallerName,
-		callerTypeHeaderName:     info.CallerType,
-		callInitiationHeaderName: info.CallInitiation,
+		callerNameHeaderName: info.CallerName,
+		callerTypeHeaderName: info.CallerType,
+		callOriginHeaderName: info.CallOrigin,
 	})
 }
 
@@ -108,13 +119,13 @@ func SetCallerType(
 	return setIncomingMD(ctx, map[string]string{callerTypeHeaderName: callerType})
 }
 
-// SetCallInitiation set call initiation in the context.
-// Existing call initiation will be overwritten if exists and new call initiation is not empty.
-func SetCallInitiation(
+// SetOrigin set call origin in the context.
+// Existing call origin will be overwritten if exists and new call origin is not empty.
+func SetOrigin(
 	ctx context.Context,
-	callInitiation string,
+	callOrigin string,
 ) context.Context {
-	return setIncomingMD(ctx, map[string]string{callInitiationHeaderName: callInitiation})
+	return setIncomingMD(ctx, map[string]string{callOriginHeaderName: callOrigin})
 }
 
 func setIncomingMD(
@@ -140,10 +151,10 @@ func setIncomingMD(
 func GetCallerInfo(
 	ctx context.Context,
 ) CallerInfo {
-	values := GetValues(ctx, callerNameHeaderName, callerTypeHeaderName, callInitiationHeaderName)
+	values := GetValues(ctx, callerNameHeaderName, callerTypeHeaderName, callOriginHeaderName)
 	return CallerInfo{
-		CallerName:     values[0],
-		CallerType:     values[1],
-		CallInitiation: values[2],
+		CallerName: values[0],
+		CallerType: values[1],
+		CallOrigin: values[2],
 	}
 }

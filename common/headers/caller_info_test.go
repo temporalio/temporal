@@ -85,24 +85,24 @@ func (s *callerInfoSuite) TestSetCallerType() {
 	s.Equal(CallerTypeAPI, info.CallerType)
 }
 
-func (s *callerInfoSuite) TestSetCallInitiation() {
+func (s *callerInfoSuite) TestSetCallOrigin() {
 	ctx := context.Background()
 	info := GetCallerInfo(ctx)
-	s.Empty(info.CallInitiation)
+	s.Empty(info.CallOrigin)
 
 	initiation := "method name"
-	ctx = SetCallInitiation(ctx, initiation)
+	ctx = SetOrigin(ctx, initiation)
 	info = GetCallerInfo(ctx)
-	s.Equal(initiation, info.CallInitiation)
+	s.Equal(initiation, info.CallOrigin)
 
-	ctx = SetCallInitiation(ctx, "")
+	ctx = SetOrigin(ctx, "")
 	info = GetCallerInfo(ctx)
-	s.Equal(initiation, info.CallInitiation)
+	s.Equal(initiation, info.CallOrigin)
 
-	newCallInitiation := "another method name"
-	ctx = SetCallInitiation(ctx, newCallInitiation)
+	newCallOrigin := "another method name"
+	ctx = SetOrigin(ctx, newCallOrigin)
 	info = GetCallerInfo(ctx)
-	s.Equal(newCallInitiation, info.CallInitiation)
+	s.Equal(newCallOrigin, info.CallOrigin)
 }
 
 func (s *callerInfoSuite) TestSetCallerInfo_PreserveOtherValues() {
@@ -110,63 +110,63 @@ func (s *callerInfoSuite) TestSetCallerInfo_PreserveOtherValues() {
 	existingValue := "value"
 	callerName := "callerName"
 	callerType := CallerTypeAPI
-	callInitiation := "methodName"
+	callOrigin := "methodName"
 
 	ctx := metadata.NewIncomingContext(
 		context.Background(),
 		metadata.Pairs(existingKey, existingValue),
 	)
 
-	ctx = SetCallerInfo(ctx, NewCallerInfo(callerName, callerType, callInitiation))
+	ctx = SetCallerInfo(ctx, NewCallerInfo(callerName, callerType, callOrigin))
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	s.True(ok)
 	s.Equal(existingValue, md.Get(existingKey)[0])
 	s.Equal(callerName, md.Get(callerNameHeaderName)[0])
 	s.Equal(callerType, md.Get(callerTypeHeaderName)[0])
-	s.Equal(callInitiation, md.Get(callInitiationHeaderName)[0])
+	s.Equal(callOrigin, md.Get(callOriginHeaderName)[0])
 	s.Len(md, 4)
 }
 
 func (s *callerInfoSuite) TestSetCallerInfo_NoExistingCallerInfo() {
 	callerName := CallerNameSystem
 	callerType := CallerTypeAPI
-	callInitiation := "methodName"
+	callOrigin := "methodName"
 
 	ctx := SetCallerInfo(context.Background(), CallerInfo{
-		CallerName:     callerName,
-		CallerType:     callerType,
-		CallInitiation: callInitiation,
+		CallerName: callerName,
+		CallerType: callerType,
+		CallOrigin: callOrigin,
 	})
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	s.True(ok)
 	s.Equal(callerName, md.Get(callerNameHeaderName)[0])
 	s.Equal(callerType, md.Get(callerTypeHeaderName)[0])
-	s.Equal(callInitiation, md.Get(callInitiationHeaderName)[0])
+	s.Equal(callOrigin, md.Get(callOriginHeaderName)[0])
 	s.Len(md, 3)
 }
 
 func (s *callerInfoSuite) TestSetCallerInfo_WithExistingCallerInfo() {
 	callerName := CallerNameSystem
 	callerType := CallerTypeBackground
-	callInitiation := "methodName"
+	callOrigin := "methodName"
 
 	ctx := SetCallerName(context.Background(), callerName)
 	ctx = SetCallerType(ctx, CallerTypeAPI)
-	ctx = SetCallInitiation(ctx, callInitiation)
+	ctx = SetOrigin(ctx, callOrigin)
 
 	ctx = SetCallerInfo(ctx, CallerInfo{
-		CallerName:     "",
-		CallerType:     callerType,
-		CallInitiation: "",
+		CallerName: "",
+		CallerType: callerType,
+		CallOrigin: "",
 	})
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	s.True(ok)
 	s.Equal(callerName, md.Get(callerNameHeaderName)[0])
 	s.Equal(callerType, md.Get(callerTypeHeaderName)[0])
-	s.Equal(callInitiation, md.Get(callInitiationHeaderName)[0])
+	s.Equal(callOrigin, md.Get(callOriginHeaderName)[0])
 	s.Len(md, 3)
 }
 
@@ -184,6 +184,6 @@ func (s *callerInfoSuite) TestSetCallerInfo_WithPartialCallerInfo() {
 	s.True(ok)
 	s.Equal(callerName, md.Get(callerNameHeaderName)[0])
 	s.Equal(callerType, md.Get(callerTypeHeaderName)[0])
-	s.Empty(md.Get(callInitiationHeaderName))
+	s.Empty(md.Get(callOriginHeaderName))
 	s.Len(md, 2)
 }

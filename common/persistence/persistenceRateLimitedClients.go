@@ -999,6 +999,6 @@ func allow(
 		RateLimitDefaultToken,
 		callerInfo.CallerName,
 		callerInfo.CallerType,
-		callerInfo.CallInitiation,
+		callerInfo.CallOrigin,
 	))
 }

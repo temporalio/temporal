@@ -197,56 +197,56 @@ func (s *callerInfoSuite) TestIntercept_CallerType() {
 	}
 }
 
-func (s *callerInfoSuite) TestIntercept_CallInitiation() {
+func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 	method := "startWorkflowExecutionRequest"
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/temporal/" + method,
 	}
 
 	testCases := []struct {
-		setupIncomingCtx       func() context.Context
-		request                interface{}
-		expectedCallInitiation string
+		setupIncomingCtx   func() context.Context
+		request            interface{}
+		expectedCallOrigin string
 	}{
 		{
 			// test context with no caller info
 			setupIncomingCtx: func() context.Context {
 				return context.Background()
 			},
-			request:                &workflowservice.StartWorkflowExecutionRequest{},
-			expectedCallInitiation: method,
+			request:            &workflowservice.StartWorkflowExecutionRequest{},
+			expectedCallOrigin: method,
 		},
 		{
 			// test context with api caller type but no call initiation
 			setupIncomingCtx: func() context.Context {
 				return headers.SetCallerName(context.Background(), "test-namespace")
 			},
-			request:                &workflowservice.StartWorkflowExecutionRequest{},
-			expectedCallInitiation: method,
+			request:            &workflowservice.StartWorkflowExecutionRequest{},
+			expectedCallOrigin: method,
 		},
 		{
 			// test context with background caller type but no call initiation
 			setupIncomingCtx: func() context.Context {
 				return headers.SetCallerInfo(context.Background(), headers.SystemBackgroundCallerInfo)
 			},
-			request:                &workflowservice.StartWorkflowExecutionRequest{},
-			expectedCallInitiation: "",
+			request:            &workflowservice.StartWorkflowExecutionRequest{},
+			expectedCallOrigin: "",
 		},
 		{
 			// test context with call initiation
 			setupIncomingCtx: func() context.Context {
-				return headers.SetCallInitiation(context.Background(), "test-method")
+				return headers.SetOrigin(context.Background(), "test-method")
 			},
-			request:                &workflowservice.StartWorkflowExecutionRequest{},
-			expectedCallInitiation: "test-method",
+			request:            &workflowservice.StartWorkflowExecutionRequest{},
+			expectedCallOrigin: "test-method",
 		},
 		{
 			// test context with empty call initiation
 			setupIncomingCtx: func() context.Context {
-				return headers.SetCallInitiation(context.Background(), "")
+				return headers.SetOrigin(context.Background(), "")
 			},
-			request:                &workflowservice.StartWorkflowExecutionRequest{},
-			expectedCallInitiation: method,
+			request:            &workflowservice.StartWorkflowExecutionRequest{},
+			expectedCallOrigin: method,
 		},
 	}
 
@@ -264,7 +264,7 @@ func (s *callerInfoSuite) TestIntercept_CallInitiation() {
 			},
 		)
 
-		actualCallInitiation := headers.GetCallerInfo(resultingCtx).CallInitiation
-		s.Equal(testCase.expectedCallInitiation, actualCallInitiation)
+		actualCallOrigin := headers.GetCallerInfo(resultingCtx).CallOrigin
+		s.Equal(testCase.expectedCallOrigin, actualCallOrigin)
 	}
 }

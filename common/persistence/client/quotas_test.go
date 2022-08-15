@@ -67,8 +67,8 @@ func (s *quotasSuite) TestCallerTypeDefaultPriorityMapping() {
 	}
 }
 
-func (s *quotasSuite) TestAPITypeCallInitiationPriorityOverrideMapping() {
-	for _, priority := range APITypeCallInitiationPriorityOverride {
+func (s *quotasSuite) TestAPITypeCallOriginPriorityOverrideMapping() {
+	for _, priority := range APITypeCallOriginPriorityOverride {
 		index := slices.Index(RequestPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}
@@ -87,7 +87,7 @@ func (s *quotasSuite) TestRequestPrioritiesOrdered() {
 	}
 }
 
-func (s *quotasSuite) TestCallInitationDefined() {
+func (s *quotasSuite) TestCallOriginDefined() {
 	var service workflowservice.WorkflowServiceServer
 	t := reflect.TypeOf(&service).Elem()
 	definedAPIs := make(map[string]struct{}, t.NumMethod())
@@ -95,7 +95,7 @@ func (s *quotasSuite) TestCallInitationDefined() {
 		definedAPIs[t.Method(i).Name] = struct{}{}
 	}
 
-	for api := range APITypeCallInitiationPriorityOverride {
+	for api := range APITypeCallOriginPriorityOverride {
 		_, ok := definedAPIs[api]
 		s.True(ok)
 	}

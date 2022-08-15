@@ -66,9 +66,9 @@ func (i *CallerInfoInterceptor) Intercept(
 		updateInfo = true
 	}
 	if callerInfo.CallerType == headers.CallerTypeAPI &&
-		callerInfo.CallInitiation == "" {
+		callerInfo.CallOrigin == "" {
 		_, method := splitMethodName(info.FullMethod)
-		callerInfo.CallInitiation = method
+		callerInfo.CallOrigin = method
 		updateInfo = true
 	}
 

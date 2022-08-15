@@ -37,9 +37,9 @@ const (
 	SupportedFeaturesHeaderName       = "supported-features"
 	SupportedFeaturesHeaderDelim      = ","
 
-	callerNameHeaderName     = "caller-name"
-	callerTypeHeaderName     = "caller-type"
-	callInitiationHeaderName = "call-initiation"
+	callerNameHeaderName = "caller-name"
+	callerTypeHeaderName = "caller-type"
+	callOriginHeaderName = "call-initiation"
 )
 
 var (
@@ -51,7 +51,7 @@ var (
 		SupportedFeaturesHeaderName,
 		callerNameHeaderName,
 		callerTypeHeaderName,
-		callInitiationHeaderName,
+		callOriginHeaderName,
 	}
 )
 
