@@ -47,10 +47,6 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 )
 
-const (
-	maxShards = 16
-)
-
 type (
 	ExecutionMutableStateSuite struct {
 		suite.Suite
@@ -90,7 +86,8 @@ func NewExecutionMutableStateSuite(
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 		),
-		Logger: logger,
+		Logger:  logger,
+		ShardID: 1,
 	}
 }
 
@@ -106,7 +103,7 @@ func (s *ExecutionMutableStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), time.Second*30)
 
-	s.ShardID = 1 + rand.Int31n(maxShards)
+	s.ShardID = 1 + s.ShardID
 	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID: s.ShardID,
 		InitialShardInfo: &persistencespb.ShardInfo{
