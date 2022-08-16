@@ -152,6 +152,7 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 
 	mockStateBuilder := workflow.NewMockMutableStateRebuilder(s.controller)
 	mockStateBuilder.EXPECT().ApplyEvents(
+		context.Background(),
 		s.namespaceID,
 		requestID,
 		commonpb.WorkflowExecution{

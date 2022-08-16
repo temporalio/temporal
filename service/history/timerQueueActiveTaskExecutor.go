@@ -527,6 +527,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
 	newMutableState, err := api.CreateMutableState(
+		ctx,
 		t.shard,
 		mutableState.GetNamespaceEntry(),
 		newRunID,

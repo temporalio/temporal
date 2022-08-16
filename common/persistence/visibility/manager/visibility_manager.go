@@ -101,6 +101,7 @@ type (
 	ListWorkflowExecutionsRequest struct {
 		NamespaceID       namespace.ID
 		Namespace         namespace.Name // namespace.Name is not persisted.
+		NamespaceDivision string
 		EarliestStartTime time.Time
 		LatestStartTime   time.Time
 		// Maximum number of workflow executions per page

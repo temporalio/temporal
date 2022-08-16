@@ -158,6 +158,9 @@ func (s *Scavenger) loadTasks(
 			return err
 		}
 
+		// Heartbeat to prevent heartbeat timeout.
+		s.heartbeat(ctx)
+
 		task := s.filterTask(item)
 		if task == nil {
 			continue

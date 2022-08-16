@@ -201,6 +201,7 @@ func newTransferQueueActiveProcessor(
 				scheduler,
 				rescheduler,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
 				config.TransferTaskMaxRetryCount,
 				queueType,
@@ -220,7 +221,6 @@ func newTransferQueueActiveProcessor(
 		rescheduler,
 		rateLimiter,
 		logger,
-		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
@@ -337,6 +337,7 @@ func newTransferQueueFailoverProcessor(
 				scheduler,
 				rescheduler,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
 				shard.GetConfig().TransferTaskMaxRetryCount,
 				queues.QueueTypeActiveTransfer,
@@ -356,7 +357,6 @@ func newTransferQueueFailoverProcessor(
 		rescheduler,
 		rateLimiter,
 		logger,
-		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase

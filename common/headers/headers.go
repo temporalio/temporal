@@ -37,7 +37,9 @@ const (
 	SupportedFeaturesHeaderName       = "supported-features"
 	SupportedFeaturesHeaderDelim      = ","
 
+	callerNameHeaderName = "caller-name"
 	callerTypeHeaderName = "caller-type"
+	callOriginHeaderName = "call-initiation"
 )
 
 var (
@@ -47,7 +49,9 @@ var (
 		ClientVersionHeaderName,
 		SupportedServerVersionsHeaderName,
 		SupportedFeaturesHeaderName,
+		callerNameHeaderName,
 		callerTypeHeaderName,
+		callOriginHeaderName,
 	}
 )
 

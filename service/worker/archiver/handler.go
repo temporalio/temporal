@@ -167,7 +167,7 @@ func (h *handler) handleHistoryRequest(ctx workflow.Context, request *ArchiveReq
 	localActCtx := workflow.WithLocalActivityOptions(ctx, lao)
 	err = workflow.ExecuteLocalActivity(localActCtx, deleteHistoryActivity, *request).Get(localActCtx, nil)
 	if err != nil {
-		logger.Error("deleting history failed, this means zombie histories are left", tag.Error(err))
+		logger.Error("deleting workflow execution failed all retires, skip workflow deletion", tag.Error(err))
 		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteFailedAllRetriesCount)
 	} else {
 		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount)

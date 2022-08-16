@@ -41,7 +41,9 @@ const (
 )
 
 var (
-	throttleRetryPolicy = createThrottleRetryPolicy()
+	throttleRetryPolicy = NewExponentialRetryPolicy(throttleRetryInitialInterval).
+		WithMaximumInterval(throttleRetryMaxInterval).
+		WithExpirationInterval(throttleRetryExpirationInterval)
 )
 
 type (
@@ -227,12 +229,4 @@ func IgnoreErrors(errorsToExclude []error) func(error) bool {
 
 		return true
 	}
-}
-
-func createThrottleRetryPolicy() RetryPolicy {
-	policy := NewExponentialRetryPolicy(throttleRetryInitialInterval)
-	policy.SetMaximumInterval(throttleRetryMaxInterval)
-	policy.SetExpirationInterval(throttleRetryExpirationInterval)
-
-	return policy
 }

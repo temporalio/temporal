@@ -257,7 +257,6 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	s.NotNil(response)
 	s.True(response.StartedTime.After(*expectedResponse.ScheduledTime))
 	expectedResponse.StartedTime = response.StartedTime
-	expectedResponse.Queries = make(map[string]*querypb.WorkflowQuery)
 	s.Equal(&expectedResponse, response)
 }
 
@@ -778,7 +777,7 @@ func (s *engine2Suite) createExecutionStartedStateWithParent(
 	if startWorkflowTask {
 		addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, tl, identity)
 	}
-	_ = msBuilder.SetHistoryTree(we.GetRunId())
+	_ = msBuilder.SetHistoryTree(context.Background(), we.GetRunId())
 	versionHistory, _ := versionhistory.GetCurrentVersionHistory(
 		msBuilder.GetExecutionInfo().VersionHistories,
 	)

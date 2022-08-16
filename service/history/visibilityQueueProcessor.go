@@ -25,10 +25,11 @@
 package history
 
 import (
-	"errors"
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -166,6 +167,7 @@ func newVisibilityQueueProcessor(
 				scheduler,
 				rescheduler,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
 				shard.GetConfig().VisibilityTaskMaxRetryCount,
 				queues.QueueTypeVisibility,
@@ -188,7 +190,6 @@ func newVisibilityQueueProcessor(
 			config.VisibilityProcessorMaxPollRPS,
 		),
 		logger,
-		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),
 	)
 	retProcessor.queueAckMgr = queueAckMgr
 	retProcessor.queueProcessorBase = queueProcessorBase
@@ -252,31 +253,36 @@ func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
 	timer := time.NewTimer(t.config.VisibilityProcessorCompleteTaskInterval())
 	defer timer.Stop()
 
+	completeTaskRetryPolicy := common.CreateCompleteTaskRetryPolicy()
+
 	for {
 		select {
 		case <-t.shutdownChan:
 			// before shutdown, make sure the ack level is up to date
-			err := t.completeTask()
-			if err != nil {
-				t.logger.Error("Error complete visibility task", tag.Error(err))
+			if err := t.completeTask(); err != nil {
+				t.logger.Error("Failed to complete visibility task", tag.Error(err))
 			}
 			return
 		case <-timer.C:
-			for attempt := 1; attempt <= t.config.VisibilityProcessorCompleteTaskFailureRetryCount(); attempt++ {
+			if err := backoff.ThrottleRetry(func() error {
 				err := t.completeTask()
-				if err == nil {
-					break
+				if err != nil {
+					t.logger.Info("Failed to complete transfer task", tag.Error(err))
 				}
-
-				t.logger.Info("Failed to complete visibility task", tag.Error(err))
-				if errors.Is(err, shard.ErrShardClosed) {
-					// shard closed, trigger shutdown and bail out
-					t.Stop()
-					return
+				return err
+			}, completeTaskRetryPolicy, func(err error) bool {
+				select {
+				case <-t.shutdownChan:
+					return false
+				default:
 				}
-				backoff := time.Duration((attempt-1)*100) * time.Millisecond
-				time.Sleep(backoff)
+				return !shard.IsShardOwnershipLostError(err)
+			}); shard.IsShardOwnershipLostError(err) {
+				// shard closed, trigger shutdown and bail out
+				t.Stop()
+				return
 			}
+
 			timer.Reset(t.config.VisibilityProcessorCompleteTaskInterval())
 		}
 	}

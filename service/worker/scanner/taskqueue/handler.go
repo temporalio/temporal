@@ -34,7 +34,6 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/worker/scanner/executor"
-	// taskqueuepb "go.temporal.io/api/taskqueue/v1"
 )
 
 type handlerStatus = executor.TaskStatus
@@ -69,7 +68,7 @@ func (s *Scavenger) deleteHandler(key *p.TaskQueueKey, state *taskQueueState) ha
 	defer func() { s.deleteHandlerLog(key, state, nProcessed, nDeleted, err) }()
 
 	for nProcessed < maxTasksPerJob {
-		resp, err1 := s.getTasks(key, taskBatchSize)
+		resp, err1 := s.getTasks(s.lifecycleCtx, key, taskBatchSize)
 		if err1 != nil {
 			err = err1
 			return handlerStatusErr
@@ -89,7 +88,7 @@ func (s *Scavenger) deleteHandler(key *p.TaskQueueKey, state *taskQueueState) ha
 		}
 
 		lastTaskID := resp.Tasks[nTasks-1].GetTaskId()
-		if _, err = s.completeTasks(key, lastTaskID+1, nTasks); err != nil {
+		if _, err = s.completeTasks(s.lifecycleCtx, key, lastTaskID+1, nTasks); err != nil {
 			return handlerStatusErr
 		}
 
@@ -121,7 +120,7 @@ func (s *Scavenger) tryDeleteTaskQueue(key *p.TaskQueueKey, state *taskQueueStat
 	//     of idle timeout). If any new host has to take ownership of this at this time, it can only
 	//     do so by updating the rangeID
 	//   - deleteTaskQueue is a conditional delete where condition is the rangeID
-	if err := s.deleteTaskQueue(key, state.rangeID); err != nil {
+	if err := s.deleteTaskQueue(s.lifecycleCtx, key, state.rangeID); err != nil {
 		s.logger.Error("deleteTaskQueue error", tag.Error(err))
 		return
 	}
