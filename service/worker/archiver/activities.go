@@ -28,6 +28,7 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
@@ -61,11 +62,8 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
-		if err != nil {
-			if err.Error() == errUploadNonRetryable.Error() {
-				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
-			}
-			err = temporal.NewNonRetryableApplicationError(err.Error(), "", nil)
+		if err == errUploadNonRetryable {
+			scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 		}
 	}()
 	logger := tagLoggerWithHistoryRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
@@ -107,11 +105,8 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
-		if err != nil {
-			if err.Error() == errDeleteNonRetryable.Error() {
-				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
-			}
-			err = temporal.NewNonRetryableApplicationError(err.Error(), "", nil)
+		if err == errDeleteNonRetryable {
+			scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 		}
 	}()
 	_, err = container.HistoryClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
@@ -126,9 +121,15 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	if err == nil {
 		return nil
 	}
-	logger := tagLoggerWithHistoryRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
-	logger.Error("failed to delete history events", tag.Error(err))
-	if !common.IsPersistenceTransientError(err) {
+
+	if _, ok := err.(*serviceerror.WorkflowNotReady); !ok {
+		logger := tagLoggerWithHistoryRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
+		logger.Error("failed to delete workflow execution", tag.Error(err))
+	}
+
+	if !common.IsServiceTransientError(err) &&
+		!common.IsContextDeadlineExceededErr(err) &&
+		!common.IsContextCanceledErr(err) {
 		return errDeleteNonRetryable
 	}
 	return err
@@ -141,11 +142,8 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 	sw := scope.StartTimer(metrics.ServiceLatency)
 	defer func() {
 		sw.Stop()
-		if err != nil {
-			if err.Error() == errArchiveVisibilityNonRetryable.Error() {
-				scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
-			}
-			err = temporal.NewNonRetryableApplicationError(err.Error(), "", nil)
+		if err == errArchiveVisibilityNonRetryable {
+			scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
 		}
 	}()
 	logger := tagLoggerWithVisibilityRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
