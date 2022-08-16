@@ -166,7 +166,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	// this magically figures out how to get a MatchingServiceClient from a request
 	t := reqType.Elem() // we know it's a pointer
 
-	nsIDpath := pathToField(t, "NamespaceId", "request", 1)
+	nsIDPath := pathToField(t, "NamespaceId", "request", 1)
 	tqPath, tqField := findNestedField(t, "TaskQueue", "request", 2)
 
 	var tqtPath string
@@ -174,19 +174,20 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	case "GetWorkerBuildIdOrderingRequest",
 		"UpdateWorkerBuildIdOrderingRequest",
 		"RespondQueryTaskCompletedRequest",
-		"ListTaskQueuePartitionsRequest":
+		"ListTaskQueuePartitionsRequest",
+		"GetTaskQueueMetadataRequest":
 		tqtPath = "enumspb.TASK_QUEUE_TYPE_WORKFLOW"
 	default:
 		tqtPath = pathToField(t, "TaskQueueType", "request", 2)
 	}
 
-	if nsIDpath != "" && tqPath != "" && tqField != nil && tqtPath != "" {
+	if nsIDPath != "" && tqPath != "" && tqField != nil && tqtPath != "" {
 		// Some task queue fields are full messages, some are just strings
 		isTaskQueueMessage := tqField.Type == reflect.TypeOf((*taskqueue.TaskQueue)(nil))
 		if !isTaskQueueMessage {
 			tqPath = fmt.Sprintf("&taskqueuepb.TaskQueue{Name: %s}", tqPath)
 		}
-		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsIDpath, tqPath, tqtPath)
+		return fmt.Sprintf("client, err := c.getClientForTaskqueue(%s, %s, %s)", nsIDPath, tqPath, tqtPath)
 	}
 
 	panic("I don't know how to get a client from a " + t.String())

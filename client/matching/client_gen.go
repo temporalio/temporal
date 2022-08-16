@@ -71,7 +71,7 @@ func (c *clientImpl) GetTaskQueueMetadata(
 	opts ...grpc.CallOption,
 ) (*matchingservice.GetTaskQueueMetadataResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetTaskQueue())
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (c *clientImpl) InvalidateTaskQueueMetadata(
 	opts ...grpc.CallOption,
 ) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
 
-	client, err := c.getClientForTaskqueue(request.GetTaskQueue())
+	client, err := c.getClientForTaskqueue(request.GetNamespaceId(), &taskqueuepb.TaskQueue{Name: request.GetTaskQueue()}, request.GetTaskQueueType())
 	if err != nil {
 		return nil, err
 	}
