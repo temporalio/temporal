@@ -3781,7 +3781,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		reason = op.CancellationOperation.Reason
 		operationType = batcher.BatchTypeCancel
 	default:
-		identity = "user-start-batcher"
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
 	}
 
 	input := &batcher.BatchParams{
@@ -3850,24 +3850,15 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errRequestNotSet
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	terminateReq := &historyservice.TerminateWorkflowExecutionRequest{
-		NamespaceId: namespaceID.String(),
-		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
-			Namespace: request.GetNamespace(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: request.GetJobId(),
-			},
-			Reason:   "request.GetReason()",   // TODO
-			Identity: "request.GetIdentity()", // TODO
+	terminateReq := &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: request.GetNamespace(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: request.GetJobId(),
 		},
-		ChildWorkflowOnly: false,
+		Reason:   "request.GetReason()",   // TODO
+		Identity: "request.GetIdentity()", // TODO
 	}
-	_, err = wh.historyClient.TerminateWorkflowExecution(ctx, terminateReq)
+	_, err := wh.TerminateWorkflowExecution(ctx, terminateReq)
 	if err != nil {
 		return nil, err
 	}
@@ -3903,10 +3894,15 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 	if err != nil {
 		return nil, err
 	}
+
 	executionInfo := resp.GetWorkflowExecutionInfo()
 	operationState := getBatchOperationState(executionInfo.GetStatus())
 	typePayload := resp.GetWorkflowExecutionInfo().Memo.GetFields()[batcher.BatchOperationTypeMemo]
-	operationTypeString := payload.ToString(typePayload)
+	var operationTypeString string
+	err = payload.Decode(typePayload, &operationTypeString)
+	if err != nil {
+		return nil, err
+	}
 	var operationType enumspb.BatchOperationType
 	switch operationTypeString {
 	case batcher.BatchTypeCancel:
