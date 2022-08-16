@@ -259,7 +259,7 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 	defer cancel()
 
 	err := r.shard.GetExecutionManager().RangeCompleteHistoryTasks(

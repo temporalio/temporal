@@ -418,5 +418,5 @@ func (s *visibilityQueueTaskExecutorSuite) createPersistenceMutableState(
 func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 	task tasks.Task,
 ) queues.Executable {
-	return queues.NewExecutable(task, nil, s.visibilityQueueTaskExecutor, nil, nil, s.mockShard.GetTimeSource(), nil, nil, queues.QueueTypeVisibility, nil)
+	return queues.NewExecutable(task, nil, s.visibilityQueueTaskExecutor, nil, nil, s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeVisibility, nil)
 }

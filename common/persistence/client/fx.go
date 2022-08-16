@@ -37,20 +37,22 @@ import (
 )
 
 type (
-	PersistenceMaxQps    dynamicconfig.IntPropertyFn
-	PriorityRateLimiting dynamicconfig.BoolPropertyFn
-	ClusterName          string
+	PersistenceMaxQps          dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnablePriorityRateLimiting dynamicconfig.BoolPropertyFn
+	ClusterName                string
 
 	NewFactoryParams struct {
 		fx.In
 
-		DataStoreFactory     DataStoreFactory
-		Cfg                  *config.Persistence
-		PersistenceMaxQPS    PersistenceMaxQps
-		PriorityRateLimiting PriorityRateLimiting
-		ClusterName          ClusterName
-		MetricsClient        metrics.Client
-		Logger               log.Logger
+		DataStoreFactory           DataStoreFactory
+		Cfg                        *config.Persistence
+		PersistenceMaxQPS          PersistenceMaxQps
+		PersistenceNamespaceMaxQPS PersistenceNamespaceMaxQps
+		EnablePriorityRateLimiting EnablePriorityRateLimiting
+		ClusterName                ClusterName
+		MetricsClient              metrics.Client
+		Logger                     log.Logger
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -71,12 +73,10 @@ func FactoryProvider(
 ) Factory {
 	var requestRatelimiter quotas.RequestRateLimiter
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
-		rateFn := func() float64 { return float64(params.PersistenceMaxQPS()) }
-
-		if params.PriorityRateLimiting != nil && params.PriorityRateLimiting() {
-			requestRatelimiter = NewPriorityRateLimiter(rateFn)
+		if params.EnablePriorityRateLimiting != nil && params.EnablePriorityRateLimiting() {
+			requestRatelimiter = NewPriorityRateLimiter(params.PersistenceNamespaceMaxQPS, params.PersistenceMaxQPS)
 		} else {
-			requestRatelimiter = NewNoopPriorityRateLimiter(rateFn)
+			requestRatelimiter = NewNoopPriorityRateLimiter(params.PersistenceMaxQPS)
 		}
 	}
 

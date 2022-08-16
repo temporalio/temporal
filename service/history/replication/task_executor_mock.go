@@ -29,6 +29,7 @@
 package replication
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -59,16 +60,16 @@ func (m *MockTaskExecutor) EXPECT() *MockTaskExecutorMockRecorder {
 }
 
 // Execute mocks base method.
-func (m *MockTaskExecutor) Execute(replicationTask *repication.ReplicationTask, forceApply bool) (int, error) {
+func (m *MockTaskExecutor) Execute(ctx context.Context, replicationTask *repication.ReplicationTask, forceApply bool) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Execute", replicationTask, forceApply)
+	ret := m.ctrl.Call(m, "Execute", ctx, replicationTask, forceApply)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Execute indicates an expected call of Execute.
-func (mr *MockTaskExecutorMockRecorder) Execute(replicationTask, forceApply interface{}) *gomock.Call {
+func (mr *MockTaskExecutorMockRecorder) Execute(ctx, replicationTask, forceApply interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockTaskExecutor)(nil).Execute), replicationTask, forceApply)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockTaskExecutor)(nil).Execute), ctx, replicationTask, forceApply)
 }

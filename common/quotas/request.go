@@ -30,6 +30,7 @@ type (
 		Token      int
 		Caller     string
 		CallerType string
+		Initiation string
 	}
 )
 
@@ -38,11 +39,13 @@ func NewRequest(
 	token int,
 	caller string,
 	callerType string,
+	initiation string,
 ) Request {
 	return Request{
 		API:        api,
 		Token:      token,
 		Caller:     caller,
 		CallerType: callerType,
+		Initiation: initiation,
 	}
 }

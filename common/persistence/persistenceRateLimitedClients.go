@@ -1015,10 +1015,12 @@ func allow(
 	api string,
 	rateLimiter quotas.RequestRateLimiter,
 ) bool {
+	callerInfo := headers.GetCallerInfo(ctx)
 	return rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		api,
 		RateLimitDefaultToken,
-		"", // caller: currently not used when calculating priority
-		headers.GetCallerInfo(ctx).CallerType,
+		callerInfo.CallerName,
+		callerInfo.CallerType,
+		callerInfo.CallOrigin,
 	))
 }
