@@ -209,7 +209,8 @@ eventLoop:
 			))
 			if err := p.ackMgr.updateQueueAckLevel(); shard.IsShardOwnershipLostError(err) {
 				// shard is no longer owned by this instance, bail out
-				go p.Stop()
+				// stop the entire queue processor, not just processor base.
+				go p.queueProcessor.Stop()
 				break eventLoop
 			}
 		}

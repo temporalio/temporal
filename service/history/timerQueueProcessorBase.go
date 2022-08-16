@@ -282,7 +282,8 @@ eventLoop:
 			))
 			if err := t.timerQueueAckMgr.updateAckLevel(); shard.IsShardOwnershipLostError(err) {
 				// shard is closed, shutdown timerQProcessor and bail out
-				go t.Stop()
+				// stop the entire timer queue processor, not just processor base.
+				go t.timerProcessor.Stop()
 				return err
 			}
 		case <-t.newTimerCh:
