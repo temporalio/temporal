@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -54,14 +55,23 @@ import (
 )
 
 type rawHistorySuite struct {
-	integrationSuite
+	*require.Assertions
+	IntegrationBase
 }
 
 func (s *rawHistorySuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
 		dynamicconfig.SendRawWorkflowHistory: true,
 	}
-	s.integrationSuite.SetupSuite()
+	s.setupSuite("testdata/integration_test_cluster.yaml")
+}
+
+func (s *rawHistorySuite) TearDownSuite() {
+	s.tearDownSuite()
+}
+
+func (s *rawHistorySuite) SetupTest() {
+	s.Assertions = require.New(s.T())
 }
 
 func TestRawHistorySuite(t *testing.T) {
