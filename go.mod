@@ -2,10 +2,6 @@ module go.temporal.io/server
 
 go 1.18
 
-replace go.opentelemetry.io/contrib/instrumentation/github.com/gocql/gocql/otelgocql => github.com/temporalio/opentelemetry-go-contrib/instrumentation/github.com/gocql/gocql/otelgocql v0.32.1-0.20220715172623-ee0fd100b5cb
-
-replace go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc => github.com/temporalio/opentelemetry-go-contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.32.1-0.20220715172623-ee0fd100b5cb
-
 require (
 	cloud.google.com/go/storage v1.23.0
 	github.com/aws/aws-sdk-go v1.44.41
@@ -147,4 +143,9 @@ require (
 	modernc.org/opt v0.1.3 // indirect
 	modernc.org/strutil v1.1.1 // indirect
 	modernc.org/token v1.0.0 // indirect
+)
+
+replace (
+	go.opentelemetry.io/contrib/instrumentation/github.com/gocql/gocql/otelgocql => github.com/temporalio/opentelemetry-go-contrib/instrumentation/github.com/gocql/gocql/otelgocql v0.32.1-0.20220715172623-ee0fd100b5cb
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc => github.com/temporalio/opentelemetry-go-contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.32.1-0.20220715172623-ee0fd100b5cb
 )
