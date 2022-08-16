@@ -57,17 +57,17 @@ type (
 	}
 
 	queueProcessorBase struct {
-		clusterName  string
-		shard        shard.Context
-		timeSource   clock.TimeSource
-		options      *QueueProcessorOptions
+		clusterName    string
+		shard          shard.Context
+		timeSource     clock.TimeSource
+		options        *QueueProcessorOptions
 		queueProcessor common.Daemon
-		logger       log.Logger
-		metricsScope metrics.Scope
-		rateLimiter  quotas.RateLimiter // Read rate limiter
-		ackMgr       queueAckMgr
-		scheduler    queues.Scheduler
-		rescheduler  queues.Rescheduler
+		logger         log.Logger
+		metricsScope   metrics.Scope
+		rateLimiter    quotas.RateLimiter // Read rate limiter
+		ackMgr         queueAckMgr
+		scheduler      queues.Scheduler
+		rescheduler    queues.Rescheduler
 
 		lastPollTime     time.Time
 		backoffTimerLock sync.Mutex
@@ -110,7 +110,7 @@ func newQueueProcessorBase(
 		notifyCh:       make(chan struct{}, 1),
 		shutdownCh:     make(chan struct{}),
 		logger:         logger,
-		metricsScope: metricsScope,
+		metricsScope:   metricsScope,
 		ackMgr:         queueAckMgr,
 		lastPollTime:   time.Time{},
 		readTaskRetrier: backoff.NewRetrier(
