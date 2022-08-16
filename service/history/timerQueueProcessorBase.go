@@ -66,7 +66,7 @@ type (
 		config           *configs.Config
 		logger           log.Logger
 		metricsClient    metrics.Client
-		timerProcessor   timerProcessor
+		timerProcessor   common.Daemon
 		timerQueueAckMgr timerQueueAckMgr
 		timerGate        timer.Gate
 		timeSource       clock.TimeSource
@@ -87,7 +87,7 @@ func newTimerQueueProcessorBase(
 	scope int,
 	shard shard.Context,
 	workflowCache workflow.Cache,
-	timerProcessor timerProcessor,
+	timerProcessor common.Daemon,
 	timerQueueAckMgr timerQueueAckMgr,
 	timerGate timer.Gate,
 	scheduler queues.Scheduler,
@@ -250,7 +250,8 @@ eventLoop:
 			// timer queue ack manager indicate that all task scanned
 			// are finished and no more tasks
 			// use a separate goroutine since the caller hold the shutdownWG
-			go t.Stop()
+			// stop the entire timer queue processor, not just processor base.
+			go t.timerProcessor.Stop()
 			return nil
 		case <-t.timerGate.FireChan():
 			nextFireTime, err := t.readAndFanoutTimerTasks()
@@ -281,7 +282,8 @@ eventLoop:
 			))
 			if err := t.timerQueueAckMgr.updateAckLevel(); shard.IsShardOwnershipLostError(err) {
 				// shard is closed, shutdown timerQProcessor and bail out
-				go t.Stop()
+				// stop the entire timer queue processor, not just processor base.
+				go t.timerProcessor.Stop()
 				return err
 			}
 		case <-t.newTimerCh:
