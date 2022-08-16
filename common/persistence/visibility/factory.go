@@ -25,6 +25,7 @@
 package visibility
 
 import (
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -63,6 +64,7 @@ func NewManager(
 
 	metricsClient metrics.Client,
 	logger log.Logger,
+	tracerProvider trace.TracerProvider,
 ) (manager.VisibilityManager, error) {
 	stdVisibilityManager, err := NewStandardManager(
 		persistenceCfg,
@@ -71,6 +73,7 @@ func NewManager(
 		standardVisibilityPersistenceMaxWriteQPS,
 		metricsClient,
 		logger,
+		tracerProvider,
 	)
 	if err != nil {
 		return nil, err
@@ -163,12 +166,15 @@ func NewStandardManager(
 
 	metricsClient metrics.Client,
 	logger log.Logger,
+	tracerProvider trace.TracerProvider,
 ) (manager.VisibilityManager, error) {
 
 	stdVisibilityStore, err := newStandardVisibilityStore(
 		persistenceCfg,
 		persistenceResolver,
-		logger)
+		logger,
+		tracerProvider,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -253,6 +259,7 @@ func newStandardVisibilityStore(
 	persistenceCfg config.Persistence,
 	persistenceResolver resolver.ServiceResolver,
 	logger log.Logger,
+	tracerProvider trace.TracerProvider,
 ) (store.VisibilityStore, error) {
 	// If standard visibility is not configured.
 	if persistenceCfg.VisibilityStore == "" {
@@ -267,7 +274,7 @@ func newStandardVisibilityStore(
 	)
 	switch {
 	case visibilityStoreCfg.Cassandra != nil:
-		store, err = cassandra.NewVisibilityStore(*visibilityStoreCfg.Cassandra, persistenceResolver, logger)
+		store, err = cassandra.NewVisibilityStore(*visibilityStoreCfg.Cassandra, persistenceResolver, logger, tracerProvider)
 	case visibilityStoreCfg.SQL != nil:
 		store, err = sql.NewSQLVisibilityStore(*visibilityStoreCfg.SQL, persistenceResolver, logger)
 	}

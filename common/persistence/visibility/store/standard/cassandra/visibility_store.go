@@ -28,6 +28,7 @@ import (
 	"context"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/config"
@@ -135,8 +136,9 @@ func NewVisibilityStore(
 	cfg config.Cassandra,
 	r resolver.ServiceResolver,
 	logger log.Logger,
+	tracerProvider trace.TracerProvider,
 ) (*visibilityStore, error) {
-	session, err := gocql.NewSession(cfg, r, logger)
+	session, err := gocql.NewSession(context.Background(), cfg, r, logger, tracerProvider)
 	if err != nil {
 		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
 	}

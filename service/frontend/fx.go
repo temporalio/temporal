@@ -28,6 +28,7 @@ import (
 	"context"
 	"net"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -343,6 +344,7 @@ func VisibilityManagerProvider(
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapper searchattribute.Mapper,
 	saProvider searchattribute.Provider,
+	tracerProvider trace.TracerProvider,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -364,6 +366,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityDisableOrderByClause,
 		metricsClient,
 		logger,
+		tracerProvider,
 	)
 }
 

@@ -592,6 +592,7 @@ func ApplyClusterMetadataConfigProvider(
 		customDataStoreFactory,
 		logger,
 		nil,
+		otel.GetTracerProvider(),
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
@@ -864,6 +865,9 @@ var ServiceTracingModule = fx.Options(
 	),
 	fx.Provide(
 		func(r *otelresource.Resource, sps []otelsdktrace.SpanProcessor) []otelsdktrace.TracerProviderOption {
+			if len(sps) == 0 {
+				return make([]otelsdktrace.TracerProviderOption, 0)
+			}
 			opts := make([]otelsdktrace.TracerProviderOption, 0, len(sps)+1)
 			opts = append(opts, otelsdktrace.WithResource(r))
 			for _, sp := range sps {
@@ -872,16 +876,32 @@ var ServiceTracingModule = fx.Options(
 			return opts
 		},
 	),
-	fx.Provide(func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
-		tp := otelsdktrace.NewTracerProvider(opts...)
-		lc.Append(fx.Hook{OnStop: tp.Shutdown})
-		return tp
-	}),
+	fx.Provide(
+		func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
+			tp := trace.NewNoopTracerProvider()
+			if len(opts) > 0 {
+				sdktp := otelsdktrace.NewTracerProvider(opts...)
+				lc.Append(fx.Hook{OnStop: bestEffortHookFn(sdktp.Shutdown)})
+				tp = sdktp
+			}
+			return tp
+		},
+	),
 	// Haven't had use for baggage propagation yet
 	fx.Provide(func() propagation.TextMapPropagator { return propagation.TraceContext{} }),
 	fx.Provide(telemetry.NewServerTraceInterceptor),
 	fx.Provide(telemetry.NewClientTraceInterceptor),
 )
+
+// bestEffortHookFn wraps an fx hook function so as to discard any returned
+// error. This is useful in situations where runnning a hook function is
+// desirable but errors should not prevent control flow from proceeding.
+func bestEffortHookFn(hookFn func(ctx context.Context) error) func(context.Context) error {
+	return func(ctx context.Context) error {
+		_ = hookFn(ctx)
+		return nil
+	}
+}
 
 func startAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context) error {
 	type starter interface{ Start(context.Context) error }
