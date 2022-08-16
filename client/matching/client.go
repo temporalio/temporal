@@ -29,13 +29,16 @@ package matching
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -53,6 +56,7 @@ type clientImpl struct {
 	longPollTimeout time.Duration
 	clients         common.ClientCache
 	loadBalancer    LoadBalancer
+	useOldRouting   dynamicconfig.BoolPropertyFn
 }
 
 // NewClient creates a new history service gRPC client
@@ -61,12 +65,14 @@ func NewClient(
 	longPollTimeout time.Duration,
 	clients common.ClientCache,
 	lb LoadBalancer,
+	useOldRouting dynamicconfig.BoolPropertyFn,
 ) matchingservice.MatchingServiceClient {
 	return &clientImpl{
 		timeout:         timeout,
 		longPollTimeout: longPollTimeout,
 		clients:         clients,
 		loadBalancer:    lb,
+		useOldRouting:   useOldRouting,
 	}
 }
 
@@ -81,7 +87,11 @@ func (c *clientImpl) AddActivityTask(
 		request.GetForwardedSource(),
 	)
 	request.TaskQueue.Name = partition
-	client, err := c.getClientForTaskqueue(partition)
+	client, err := c.getClientForTaskqueue(
+		request.NamespaceId,
+		request.TaskQueue,
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +111,11 @@ func (c *clientImpl) AddWorkflowTask(
 		request.GetForwardedSource(),
 	)
 	request.TaskQueue.Name = partition
-	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
+	client, err := c.getClientForTaskqueue(
+		request.NamespaceId,
+		request.TaskQueue,
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +135,11 @@ func (c *clientImpl) PollActivityTaskQueue(
 		request.GetForwardedSource(),
 	)
 	request.PollRequest.TaskQueue.Name = partition
-	client, err := c.getClientForTaskqueue(request.PollRequest.TaskQueue.GetName())
+	client, err := c.getClientForTaskqueue(
+		request.NamespaceId,
+		request.PollRequest.TaskQueue,
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +159,11 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 		request.GetForwardedSource(),
 	)
 	request.PollRequest.TaskQueue.Name = partition
-	client, err := c.getClientForTaskqueue(request.PollRequest.TaskQueue.GetName())
+	client, err := c.getClientForTaskqueue(
+		request.NamespaceId,
+		request.PollRequest.TaskQueue,
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +180,11 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice
 		request.GetForwardedSource(),
 	)
 	request.TaskQueue.Name = partition
-	client, err := c.getClientForTaskqueue(request.TaskQueue.GetName())
+	client, err := c.getClientForTaskqueue(
+		request.NamespaceId,
+		request.TaskQueue,
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +201,17 @@ func (c *clientImpl) createLongPollContext(parent context.Context) (context.Cont
 	return context.WithTimeout(parent, c.longPollTimeout)
 }
 
-func (c *clientImpl) getClientForTaskqueue(key string) (matchingservice.MatchingServiceClient, error) {
+func (c *clientImpl) getClientForTaskqueue(
+	namespaceID string,
+	taskQueue *taskqueuepb.TaskQueue,
+	taskQueueType enumspb.TaskQueueType,
+) (matchingservice.MatchingServiceClient, error) {
+	var key string
+	if c.useOldRouting() {
+		key = taskQueue.Name
+	} else {
+		key = fmt.Sprintf("%s:%s:%d", namespaceID, taskQueue.Name, int(taskQueueType))
+	}
 	client, err := c.clients.GetClientForKey(key)
 	if err != nil {
 		return nil, err

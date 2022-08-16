@@ -2982,9 +2982,15 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 		return nil, err
 	}
 
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
 	matchingResponse, err := wh.matchingClient.ListTaskQueuePartitions(ctx, &matchingservice.ListTaskQueuePartitionsRequest{
-		Namespace: request.GetNamespace(),
-		TaskQueue: request.TaskQueue,
+		NamespaceId: namespaceID.String(),
+		Namespace:   request.GetNamespace(),
+		TaskQueue:   request.TaskQueue,
 	})
 
 	if matchingResponse == nil {
