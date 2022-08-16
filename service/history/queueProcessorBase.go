@@ -56,16 +56,16 @@ type (
 	}
 
 	queueProcessorBase struct {
-		clusterName string
-		shard       shard.Context
-		timeSource  clock.TimeSource
-		options     *QueueProcessorOptions
-		processor   processor
-		logger      log.Logger
-		rateLimiter quotas.RateLimiter // Read rate limiter
-		ackMgr      queueAckMgr
-		scheduler   queues.Scheduler
-		rescheduler queues.Rescheduler
+		clusterName    string
+		shard          shard.Context
+		timeSource     clock.TimeSource
+		options        *QueueProcessorOptions
+		queueProcessor common.Daemon
+		logger         log.Logger
+		rateLimiter    quotas.RateLimiter // Read rate limiter
+		ackMgr         queueAckMgr
+		scheduler      queues.Scheduler
+		rescheduler    queues.Rescheduler
 
 		lastPollTime     time.Time
 		backoffTimerLock sync.Mutex
@@ -87,7 +87,7 @@ func newQueueProcessorBase(
 	clusterName string,
 	shard shard.Context,
 	options *QueueProcessorOptions,
-	processor processor,
+	queueProcessor common.Daemon,
 	queueAckMgr queueAckMgr,
 	historyCache workflow.Cache,
 	scheduler queues.Scheduler,
@@ -97,18 +97,18 @@ func newQueueProcessorBase(
 ) *queueProcessorBase {
 
 	p := &queueProcessorBase{
-		clusterName:  clusterName,
-		shard:        shard,
-		timeSource:   shard.GetTimeSource(),
-		options:      options,
-		processor:    processor,
-		rateLimiter:  rateLimiter,
-		status:       common.DaemonStatusInitialized,
-		notifyCh:     make(chan struct{}, 1),
-		shutdownCh:   make(chan struct{}),
-		logger:       logger,
-		ackMgr:       queueAckMgr,
-		lastPollTime: time.Time{},
+		clusterName:    clusterName,
+		shard:          shard,
+		timeSource:     shard.GetTimeSource(),
+		options:        options,
+		queueProcessor: queueProcessor,
+		rateLimiter:    rateLimiter,
+		status:         common.DaemonStatusInitialized,
+		notifyCh:       make(chan struct{}, 1),
+		shutdownCh:     make(chan struct{}),
+		logger:         logger,
+		ackMgr:         queueAckMgr,
+		lastPollTime:   time.Time{},
 		readTaskRetrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
 			backoff.SystemClock,
@@ -190,7 +190,8 @@ eventLoop:
 			break eventLoop
 		case <-p.ackMgr.getFinishedChan():
 			// use a separate gorouting since the caller hold the shutdownWG
-			go p.Stop()
+			// stop the entire queue processor, not just processor base.
+			go p.queueProcessor.Stop()
 		case <-p.notifyCh:
 			p.processBatch()
 		case <-pollTimer.C:
