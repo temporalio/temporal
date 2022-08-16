@@ -85,7 +85,6 @@ func newTimerQueueActiveProcessor(
 		)
 	}
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
-	metricsClient := shard.GetMetricsClient()
 	config := shard.GetConfig()
 
 	processor := &timerQueueActiveProcessorImpl{}
@@ -176,6 +175,7 @@ func newTimerQueueActiveProcessor(
 				scheduler,
 				rescheduler,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
 				config.TimerTaskMaxRetryCount,
 				queueType,
@@ -195,7 +195,6 @@ func newTimerQueueActiveProcessor(
 		rescheduler,
 		rateLimiter,
 		logger,
-		metricsClient.Scope(metrics.TimerActiveQueueProcessorScope),
 	)
 
 	return processor
@@ -292,6 +291,7 @@ func newTimerQueueFailoverProcessor(
 				scheduler,
 				rescheduler,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
 				shard.GetConfig().TimerTaskMaxRetryCount,
 				queues.QueueTypeActiveTimer,
@@ -311,7 +311,6 @@ func newTimerQueueFailoverProcessor(
 		rescheduler,
 		rateLimiter,
 		logger,
-		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
 	)
 
 	return updateShardAckLevel, processor

@@ -54,11 +54,27 @@ func (i *CallerInfoInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	return handler(
-		headers.SetCallerInfo(
-			ctx,
-			headers.NewCallerInfo(headers.CallerTypeAPI),
-		),
-		req,
-	)
+	callerInfo := headers.GetCallerInfo(ctx)
+
+	updateInfo := false
+	if callerInfo.CallerName == "" {
+		callerInfo.CallerName = string(GetNamespace(i.namespaceRegistry, req))
+		updateInfo = callerInfo.CallerName != ""
+	}
+	if callerInfo.CallerType == "" {
+		callerInfo.CallerType = headers.CallerTypeAPI
+		updateInfo = true
+	}
+	if callerInfo.CallerType == headers.CallerTypeAPI &&
+		callerInfo.CallOrigin == "" {
+		_, method := splitMethodName(info.FullMethod)
+		callerInfo.CallOrigin = method
+		updateInfo = true
+	}
+
+	if updateInfo {
+		ctx = headers.SetCallerInfo(ctx, callerInfo)
+	}
+
+	return handler(ctx, req)
 }

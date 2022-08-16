@@ -50,11 +50,11 @@ func GetNamespace(
 
 	case NamespaceIDGetter:
 		namespaceID := namespace.ID(request.GetNamespaceId())
-		namespaceEntry, err := namespaceRegistry.GetNamespaceByID(namespaceID)
+		namespaceName, err := namespaceRegistry.GetNamespaceName(namespaceID)
 		if err != nil {
 			return ""
 		}
-		return namespaceEntry.Name()
+		return namespaceName
 
 	default:
 		return ""

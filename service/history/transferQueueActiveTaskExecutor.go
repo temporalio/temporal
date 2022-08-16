@@ -303,11 +303,16 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
-	completionEvent, err := mutableState.GetCompletionEvent(ctx)
-	if err != nil {
-		return err
+	var completionEvent *historypb.HistoryEvent // needed to report close event to parent workflow
+	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
+	if replyToParentWorkflow {
+		// only load close event if needed.
+		completionEvent, err = mutableState.GetCompletionEvent(ctx)
+		if err != nil {
+			return err
+		}
+		replyToParentWorkflow = replyToParentWorkflow && !IsTerminatedByResetter(completionEvent)
 	}
-	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == "" && !IsTerminatedByResetter(completionEvent)
 	parentNamespaceID := executionInfo.ParentNamespaceId
 	parentWorkflowID := executionInfo.ParentWorkflowId
 	parentRunID := executionInfo.ParentRunId
@@ -323,7 +328,11 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 
 	workflowTypeName := executionInfo.WorkflowTypeName
-	workflowCloseTime := timestamp.TimeValue(completionEvent.GetEventTime())
+	workflowCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
+	if err != nil {
+		return err
+	}
+
 	workflowStatus := executionState.Status
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
 
@@ -347,7 +356,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		workflowTypeName,
 		workflowStartTime,
 		workflowExecutionTime,
-		workflowCloseTime,
+		*workflowCloseTime,
 		workflowStatus,
 		workflowHistoryLength,
 		visibilityMemo,

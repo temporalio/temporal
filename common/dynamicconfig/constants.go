@@ -151,6 +151,8 @@ const (
 	FrontendPersistenceMaxQPS = "frontend.persistenceMaxQPS"
 	// FrontendPersistenceGlobalMaxQPS is the max qps frontend cluster can query DB
 	FrontendPersistenceGlobalMaxQPS = "frontend.persistenceGlobalMaxQPS"
+	// FrontendPersistenceNamespaceMaxQPS is the max qps each namespace on frontend host can query DB
+	FrontendPersistenceNamespaceMaxQPS = "frontend.persistenceNamespaceMaxQPS"
 	// FrontendEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in frontend persistence client
 	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
@@ -247,6 +249,8 @@ const (
 	MatchingPersistenceMaxQPS = "matching.persistenceMaxQPS"
 	// MatchingPersistenceGlobalMaxQPS is the max qps matching cluster can query DB
 	MatchingPersistenceGlobalMaxQPS = "matching.persistenceGlobalMaxQPS"
+	// MatchingPersistenceNamespaceMaxQPS is the max qps each namespace on matching host can query DB
+	MatchingPersistenceNamespaceMaxQPS = "matching.persistenceNamespaceMaxQPS"
 	// MatchingEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in matching persistence client
 	MatchingEnablePersistencePriorityRateLimiting = "matching.enablePersistencePriorityRateLimiting"
 	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task queue throttling
@@ -285,6 +289,8 @@ const (
 	MatchingForwarderMaxChildrenPerNode = "matching.forwarderMaxChildrenPerNode"
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
+	// MatchingMetadataPollFrequency is how often non-root partitions will poll the root partition for fresh metadata
+	MatchingMetadataPollFrequency = "matching.metadataPollFrequency"
 	// MatchingUseOldRouting is whether to use old task queue routing (name only) instead of namespace+name+type.
 	MatchingUseOldRouting = "matching.useOldRouting"
 
@@ -296,6 +302,8 @@ const (
 	HistoryPersistenceMaxQPS = "history.persistenceMaxQPS"
 	// HistoryPersistenceGlobalMaxQPS is the max qps history cluster can query DB
 	HistoryPersistenceGlobalMaxQPS = "history.persistenceGlobalMaxQPS"
+	// HistoryPersistenceNamespaceMaxQPS is the max qps each namespace on history host can query DB
+	HistoryPersistenceNamespaceMaxQPS = "history.persistenceNamespaceMaxQPS"
 	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
 	HistoryEnablePersistencePriorityRateLimiting = "history.enablePersistencePriorityRateLimiting"
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
@@ -574,6 +582,8 @@ const (
 	WorkerPersistenceMaxQPS = "worker.persistenceMaxQPS"
 	// WorkerPersistenceGlobalMaxQPS is the max qps worker cluster can query DB
 	WorkerPersistenceGlobalMaxQPS = "worker.persistenceGlobalMaxQPS"
+	// WorkerPersistenceNamespaceMaxQPS is the max qps each namespace on worker host can query DB
+	WorkerPersistenceNamespaceMaxQPS = "worker.persistenceNamespaceMaxQPS"
 	// WorkerEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in worker persistence client
 	WorkerEnablePersistencePriorityRateLimiting = "worker.enablePersistencePriorityRateLimiting"
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time

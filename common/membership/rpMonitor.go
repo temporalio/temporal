@@ -84,7 +84,10 @@ func NewRingpopMonitor(
 ) Monitor {
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
-	lifecycleCtx = headers.SetCallerInfo(lifecycleCtx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	lifecycleCtx = headers.SetCallerInfo(
+		lifecycleCtx,
+		headers.SystemBackgroundCallerInfo,
+	)
 
 	rpo := &ringpopMonitor{
 		status: common.DaemonStatusInitialized,

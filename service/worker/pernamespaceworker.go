@@ -322,9 +322,9 @@ func (w *perNamespaceWorker) refresh(ns *namespace.Namespace) {
 		w.componentSet = componentSet
 		return nil
 	}
-	policy := backoff.NewExponentialRetryPolicy(w.wm.initialRetry)
-	policy.SetMaximumInterval(1 * time.Minute)
-	policy.SetExpirationInterval(backoff.NoInterval)
+	policy := backoff.NewExponentialRetryPolicy(w.wm.initialRetry).
+		WithMaximumInterval(1 * time.Minute).
+		WithExpirationInterval(backoff.NoInterval)
 	backoff.ThrottleRetry(op, policy, nil)
 }
 
@@ -341,7 +341,7 @@ func (w *perNamespaceWorker) startWorker(
 	}
 
 	var sdkoptions sdkworker.Options
-	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(headers.CallerTypeBackground))
+	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))
 	sdkoptions.Identity = fmt.Sprintf("server-worker@%d@%s@%s", os.Getpid(), w.wm.hostName, nsName)
 	// sdk default is 2, we increase it if we're supposed to run with more multiplicity.
 	// other defaults are already large enough.

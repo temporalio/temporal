@@ -141,6 +141,12 @@ type (
 		AppendHistoryNodes(ctx context.Context, request *InternalAppendHistoryNodesRequest) error
 		// DeleteHistoryNodes delete a node from history node table
 		DeleteHistoryNodes(ctx context.Context, request *InternalDeleteHistoryNodesRequest) error
+		// ParseHistoryBranchInfo parses the history branch for branch information
+		ParseHistoryBranchInfo(ctx context.Context, request *ParseHistoryBranchInfoRequest) (*ParseHistoryBranchInfoResponse, error)
+		// UpdateHistoryBranchInfo updates the history branch with branch information
+		UpdateHistoryBranchInfo(ctx context.Context, request *UpdateHistoryBranchInfoRequest) (*UpdateHistoryBranchInfoResponse, error)
+		// NewHistoryBranch initializes a new history branch
+		NewHistoryBranch(ctx context.Context, request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *InternalReadHistoryBranchRequest) (*InternalReadHistoryBranchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch
@@ -502,12 +508,6 @@ type (
 		Info string
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32
-	}
-
-	// InternalForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
-	InternalForkHistoryBranchResponse struct {
-		// branchInfo to represent the new branch
-		NewBranchInfo *persistencespb.HistoryBranch
 	}
 
 	// InternalDeleteHistoryNodesRequest is used to remove a history node

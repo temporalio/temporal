@@ -304,8 +304,8 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 					return false
 				default:
 				}
-				return err != shard.ErrShardClosed
-			}); err == shard.ErrShardClosed {
+				return !shard.IsShardOwnershipLostError(err)
+			}); shard.IsShardOwnershipLostError(err) {
 				// shard is unloaded, transfer processor should quit as well
 				t.Stop()
 				return

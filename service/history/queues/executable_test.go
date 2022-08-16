@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/tasks"
@@ -54,10 +55,11 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller      *gomock.Controller
-		mockExecutor    *MockExecutor
-		mockScheduler   *MockScheduler
-		mockRescheduler *MockRescheduler
+		controller            *gomock.Controller
+		mockExecutor          *MockExecutor
+		mockScheduler         *MockScheduler
+		mockRescheduler       *MockRescheduler
+		mockNamespaceRegistry *namespace.MockRegistry
 
 		timeSource *clock.EventTimeSource
 	}
@@ -75,6 +77,9 @@ func (s *executableSuite) SetupTest() {
 	s.mockExecutor = NewMockExecutor(s.controller)
 	s.mockScheduler = NewMockScheduler(s.controller)
 	s.mockRescheduler = NewMockRescheduler(s.controller)
+	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
+
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
 
 	s.timeSource = clock.NewEventTimeSource()
 }
@@ -239,6 +244,7 @@ func (s *executableSuite) newTestExecutable(
 		s.mockScheduler,
 		s.mockRescheduler,
 		s.timeSource,
+		s.mockNamespaceRegistry,
 		log.NewTestLogger(),
 		dynamicconfig.GetIntPropertyFn(100),
 		QueueTypeActiveTransfer,

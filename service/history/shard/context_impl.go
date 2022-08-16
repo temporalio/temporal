@@ -26,6 +26,7 @@ package shard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -68,7 +69,7 @@ import (
 )
 
 const (
-	// See transitionLocked for overview of state transitions.
+	// See transition for overview of state transitions.
 	// These are the possible values of ContextImpl.state:
 	contextStateInitialized contextState = iota
 	contextStateAcquiring
@@ -96,6 +97,7 @@ type (
 		contextTaggedLogger log.Logger
 		throttledLogger     log.Logger
 		engineFactory       EngineFactory
+		engineFuture        *future.FutureImpl[Engine]
 
 		persistenceShardManager persistence.ShardManager
 		clientBean              client.Bean
@@ -113,10 +115,12 @@ type (
 		lifecycleCtx    context.Context
 		lifecycleCancel context.CancelFunc
 
+		// state is protected by stateLock
+		stateLock sync.Mutex
+		state     contextState
+
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
 		rwLock                             sync.RWMutex
-		state                              contextState
-		engineFuture                       *future.FutureImpl[Engine]
 		lastUpdated                        time.Time
 		shardInfo                          *persistence.ShardInfoWithFailover
 		taskSequenceNumber                 int64
@@ -140,11 +144,11 @@ type (
 		NotificationVersion  int64
 	}
 
-	// These are the requests that can be passed to transitionLocked to change state:
+	// These are the requests that can be passed to transition to change state:
 	contextRequest interface{}
 
 	contextRequestAcquire    struct{}
-	contextRequestAcquired   struct{}
+	contextRequestAcquired   struct{ engine Engine }
 	contextRequestLost       struct{}
 	contextRequestStop       struct{}
 	contextRequestFinishStop struct{}
@@ -153,15 +157,12 @@ type (
 var _ Context = (*ContextImpl)(nil)
 
 var (
-	// ErrShardClosed is returned when shard is closed and a req cannot be processed
-	ErrShardClosed = serviceerror.NewUnavailable("shard closed")
-
 	// ErrShardStatusUnknown means we're not sure if we have the shard lock or not. This may be returned
 	// during short windows at initialization and if we've lost the connection to the database.
 	ErrShardStatusUnknown = serviceerror.NewUnavailable("shard status unknown")
 
-	// errStoppingContext is an internal error used to abort acquireShard
-	errStoppingContext = serviceerror.NewUnavailable("stopping context")
+	// errInvalidTransition is an internal error used for acquireShard and transition
+	errInvalidTransition = errors.New("invalid state transition request")
 )
 
 const (
@@ -205,7 +206,7 @@ func (s *ContextImpl) AssertOwnership(
 	s.wLock()
 	defer s.wUnlock()
 
-	if err := s.errorByStateLocked(); err != nil {
+	if err := s.errorByState(); err != nil {
 		return err
 	}
 
@@ -634,11 +635,10 @@ func (s *ContextImpl) AddTasks(
 	}
 
 	s.wLock()
-	if err := s.errorByStateLocked(); err != nil {
+	if err := s.errorByState(); err != nil {
 		s.wUnlock()
 		return err
 	}
-
 	err = s.addTasksLocked(ctx, request, namespaceEntry)
 	s.wUnlock()
 
@@ -670,7 +670,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	s.wLock()
 	defer s.wUnlock()
 
-	if err := s.errorByStateLocked(); err != nil {
+	if err := s.errorByState(); err != nil {
 		return nil, err
 	}
 
@@ -714,7 +714,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	s.wLock()
 	defer s.wUnlock()
 
-	if err := s.errorByStateLocked(); err != nil {
+	if err := s.errorByState(); err != nil {
 		return nil, err
 	}
 
@@ -785,7 +785,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	s.wLock()
 	defer s.wUnlock()
 
-	if err := s.errorByStateLocked(); err != nil {
+	if err := s.errorByState(); err != nil {
 		return nil, err
 	}
 
@@ -849,7 +849,7 @@ func (s *ContextImpl) SetWorkflowExecution(
 	s.wLock()
 	defer s.wUnlock()
 
-	if err := s.errorByStateLocked(); err != nil {
+	if err := s.errorByState(); err != nil {
 		return nil, err
 	}
 
@@ -1018,7 +1018,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		s.wLock()
 		defer s.wUnlock()
 
-		if err := s.errorByStateLocked(); err != nil {
+		if err := s.errorByState(); err != nil {
 			return err
 		}
 
@@ -1044,7 +1044,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 
 				Tasks: newTasks,
 			}
-			err = s.addTasksLocked(ctx, addTasksRequest, namespaceEntry)
+			err := s.addTasksLocked(ctx, addTasksRequest, namespaceEntry)
 			if err != nil {
 				return err
 			}
@@ -1117,20 +1117,16 @@ func (s *ContextImpl) getRangeIDLocked() int64 {
 }
 
 func (s *ContextImpl) errorByState() error {
-	s.rLock()
-	defer s.rUnlock()
+	s.stateLock.Lock()
+	defer s.stateLock.Unlock()
 
-	return s.errorByStateLocked()
-}
-
-func (s *ContextImpl) errorByStateLocked() error {
 	switch s.state {
 	case contextStateInitialized, contextStateAcquiring:
 		return ErrShardStatusUnknown
 	case contextStateAcquired:
 		return nil
 	case contextStateStopping, contextStateStopped:
-		return ErrShardClosed
+		return s.newShardClosedErrorWithShardID()
 	default:
 		panic("invalid state")
 	}
@@ -1203,7 +1199,7 @@ func (s *ContextImpl) updateMaxReadLevelLocked(rl int64) {
 }
 
 func (s *ContextImpl) updateShardInfoLocked() error {
-	if err := s.errorByStateLocked(); err != nil {
+	if err := s.errorByState(); err != nil {
 		return err
 	}
 
@@ -1390,7 +1386,7 @@ func (s *ContextImpl) handleReadError(err error) error {
 	case *persistence.ShardOwnershipLostError:
 		// Shard is stolen, trigger shutdown of history engine.
 		// Handling of max read level doesn't matter here.
-		s.Unload()
+		s.transition(contextRequestStop{})
 		return err
 
 	default:
@@ -1421,7 +1417,7 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 	case *persistence.ShardOwnershipLostError:
 		// Shard is stolen, trigger shutdown of history engine.
 		// Handling of max read level doesn't matter here.
-		s.transitionLocked(contextRequestStop{})
+		s.transition(contextRequestStop{})
 		return err
 
 	default:
@@ -1431,7 +1427,7 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 		// reliably check the outcome by performing a read. If we fail, we'll shut down the shard.
 		// Note that reacquiring the shard will cause the max read level to be updated
 		// to the new range (i.e. past newMaxReadLevel).
-		s.transitionLocked(contextRequestLost{})
+		s.transition(contextRequestLost{})
 		return err
 	}
 }
@@ -1453,29 +1449,21 @@ func (s *ContextImpl) createEngine() Engine {
 
 // start should only be called by the controller.
 func (s *ContextImpl) start() {
-	s.wLock()
-	defer s.wUnlock()
-	s.transitionLocked(contextRequestAcquire{})
+	s.transition(contextRequestAcquire{})
 }
 
 func (s *ContextImpl) Unload() {
-	s.wLock()
-	defer s.wUnlock()
-	s.transitionLocked(contextRequestStop{})
+	s.transition(contextRequestStop{})
 }
 
 // finishStop should only be called by the controller.
 func (s *ContextImpl) finishStop() {
-	// Do this again in case we skipped the stopping state, which could happen
-	// when calling CloseShardByID or the controller is shutting down.
-	s.lifecycleCancel()
-
-	s.wLock()
-	s.transitionLocked(contextRequestFinishStop{})
+	// After this returns, engineFuture.Set may not be called anymore, so if we don't get see
+	// an Engine here, we won't ever have one.
+	s.transition(contextRequestFinishStop{})
 
 	// use a context that we know is cancelled so that this doesn't block
 	engine, _ := s.engineFuture.Get(s.lifecycleCtx)
-	s.wUnlock()
 
 	// Stop the engine if it was running (outside the lock but before returning)
 	if engine != nil {
@@ -1486,8 +1474,8 @@ func (s *ContextImpl) finishStop() {
 }
 
 func (s *ContextImpl) isValid() bool {
-	s.rLock()
-	defer s.rUnlock()
+	s.stateLock.Lock()
+	defer s.stateLock.Unlock()
 	return s.state < contextStateStopping
 }
 
@@ -1517,7 +1505,7 @@ func (s *ContextImpl) rUnlock() {
 	s.rwLock.RUnlock()
 }
 
-func (s *ContextImpl) transitionLocked(request contextRequest) {
+func (s *ContextImpl) transition(request contextRequest) error {
 	/* State transitions:
 
 	The normal pattern:
@@ -1529,14 +1517,14 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 
 	If we get a transient error from persistence:
 		Acquired
-			transient error: handleErrorLocked calls transitionLocked(contextRequestLost)
+			transient error: handleErrorLocked calls transition(contextRequestLost)
 		Acquiring
 			acquireShard gets the shard
 		Acquired
 
 	If we get shard ownership lost:
 		Acquired
-			ShardOwnershipLostError: handleErrorLocked calls transitionLocked(contextRequestStop)
+			ShardOwnershipLostError: handleErrorLocked calls transition(contextRequestStop)
 		Stopping
 			controller removes from map and calls finishStop()
 		Stopped
@@ -1547,10 +1535,9 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 	to controller, which will remove us from the map and call finishStop(), which will transition to Stopped and
 	stop the engine. If it's triggered externally, we'll skip over Stopping and go straight to Stopped.
 
-	If we want to stop, and the acquireShard goroutine is still running, we can't kill it, but we need a
-	mechanism to make sure it doesn't make any persistence calls or state transitions. We make acquireShard
-	check the state each time it acquires the lock, and do nothing if the state has changed to Stopping (or
-	Stopped).
+	If we transition externally to Stopped, and the acquireShard goroutine is still running, we can't kill it,
+	but we should make sure that it can't do anything: the context it uses for persistence ops will be
+	canceled, and if it tries to transition states, it will fail.
 
 	Invariants:
 	- Once state is Stopping, it can only go to Stopped.
@@ -1560,11 +1547,14 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 	  controller set it to Stopped.
 	- If state is Acquiring, acquireShard should be running in the background.
 	- Only acquireShard can use contextRequestAcquired (i.e. transition from Acquiring to Acquired).
-	- Once state has reached Acquired at least once, and not reached Stopped, engine must be non-nil.
+	- Once state has reached Acquired at least once, and not reached Stopped, engineFuture must be set.
 	- Only the controller may call start() and finishStop().
 	- The controller must call finishStop() for every ContextImpl it creates.
 
 	*/
+
+	s.stateLock.Lock()
+	defer s.stateLock.Unlock()
 
 	setStateAcquiring := func() {
 		s.state = contextStateAcquiring
@@ -1573,12 +1563,6 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 
 	setStateStopping := func() {
 		s.state = contextStateStopping
-		// The change in state should cause all write methods to fail, but just in case, set this also,
-		// which will cause failures at the persistence level. (Note that if persistence is unavailable
-		// and we couldn't even load the shard metadata, shardInfo may still be nil here.)
-		if s.shardInfo != nil {
-			s.shardInfo.RangeId = -1
-		}
 		// Cancel lifecycle context as soon as we know we're shutting down
 		s.lifecycleCancel()
 		// This will cause the controller to remove this shard from the map and then call s.finishStop()
@@ -1587,6 +1571,9 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 
 	setStateStopped := func() {
 		s.state = contextStateStopped
+		// Do this again in case we skipped the stopping state, which could happen
+		// when calling CloseShardByID or the controller is shutting down.
+		s.lifecycleCancel()
 	}
 
 	switch s.state {
@@ -1594,74 +1581,84 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 		switch request.(type) {
 		case contextRequestAcquire:
 			setStateAcquiring()
-			return
+			return nil
 		case contextRequestStop:
 			setStateStopping()
-			return
+			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
-			return
+			return nil
 		}
 	case contextStateAcquiring:
-		switch request.(type) {
+		switch request := request.(type) {
 		case contextRequestAcquire:
-			return // nothing to do, already acquiring
+			return nil // nothing to do, already acquiring
 		case contextRequestAcquired:
 			s.state = contextStateAcquired
-			return
+			if request.engine != nil {
+				// engineFuture.Set should only be called inside stateLock when state is
+				// Acquiring, so that other code (i.e. finishStop) can know that after a state
+				// transition to Stopping/Stopped, engineFuture cannot be Set.
+				if s.engineFuture.Ready() {
+					// defensive check, this should never happen
+					s.contextTaggedLogger.Warn("transition to acquired with engine set twice")
+					return errInvalidTransition
+				}
+				s.engineFuture.Set(request.engine, nil)
+			}
+			if !s.engineFuture.Ready() {
+				// we should either have an engine from a previous transition, or set one now
+				s.contextTaggedLogger.Warn("transition to acquired but no engine set")
+				return errInvalidTransition
+			}
+			return nil
 		case contextRequestLost:
-			return // nothing to do, already acquiring
+			return nil // nothing to do, already acquiring
 		case contextRequestStop:
 			setStateStopping()
-			return
+			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
-			return
+			return nil
 		}
 	case contextStateAcquired:
 		switch request.(type) {
 		case contextRequestAcquire:
-			return // nothing to to do, already acquired
+			return nil // nothing to to do, already acquired
 		case contextRequestLost:
 			setStateAcquiring()
-			return
+			return nil
 		case contextRequestStop:
 			setStateStopping()
-			return
+			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
-			return
+			return nil
 		}
 	case contextStateStopping:
 		switch request.(type) {
 		case contextRequestStop:
 			// nothing to do, already stopping
-			return
+			return nil
 		case contextRequestFinishStop:
 			setStateStopped()
-			return
+			return nil
 		}
 	}
 	s.contextTaggedLogger.Warn("invalid state transition request",
 		tag.ShardContextState(int(s.state)),
 		tag.ShardContextStateRequest(fmt.Sprintf("%T", request)),
 	)
+	return errInvalidTransition
 }
 
 func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	// Only have to do this once, we can just re-acquire the rangeid lock after that
 	s.rLock()
-
-	if s.state >= contextStateStopping {
-		s.rUnlock()
-		return errStoppingContext
-	}
-
 	if s.shardInfo != nil {
 		s.rUnlock()
 		return nil
 	}
-
 	s.rUnlock()
 
 	// We don't have any shardInfo yet, load it (outside of context rwlock)
@@ -1732,10 +1729,6 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	s.wLock()
 	defer s.wUnlock()
 
-	if s.state >= contextStateStopping {
-		return errStoppingContext
-	}
-
 	s.shardInfo = updatedShardInfo
 	s.remoteClusterInfos = remoteClusterInfos
 	s.scheduledTaskMaxReadLevelMap = scheduledTaskMaxReadLevelMap
@@ -1802,80 +1795,68 @@ func (s *ContextImpl) acquireShard() {
 	// 3. The state changes to Stopping or Stopped.
 	//
 	// If the shard controller sees that service resolver has assigned ownership to someone
-	// else, it will call finishStop, which will trigger case 3 above.
-	policy := backoff.NewExponentialRetryPolicy(1 * time.Second)
-	policy.SetExpirationInterval(5 * time.Minute)
+	// else, it will call finishStop, which will trigger case 3 above, and also cancel
+	// lifecycleCtx. The persistence operations called here use lifecycleCtx as their context,
+	// so if we were blocked in any of them, they should return immediately with a context
+	// canceled error.
+	policy := backoff.NewExponentialRetryPolicy(1 * time.Second).
+		WithExpirationInterval(5 * time.Minute)
 
 	// Remember this value across attempts
 	ownershipChanged := false
 
 	op := func() error {
+		if !s.isValid() {
+			return s.newShardClosedErrorWithShardID()
+		}
+
 		// Initial load of shard metadata
 		err := s.loadShardMetadata(&ownershipChanged)
 		if err != nil {
 			return err
 		}
 
-		s.wLock()
-		defer s.wUnlock()
-
-		// Check that we should still be running
-		if s.state >= contextStateStopping {
-			return errStoppingContext
-		}
-
 		// Try to acquire RangeID lock. If this gets a persistence error, it may call:
-		// transitionLocked(contextRequestStop) for ShardOwnershipLostError:
-		//   This will transition to Stopping right here, and the transitionLocked call at the end of the
+		// transition(contextRequestStop) for ShardOwnershipLostError:
+		//   This will transition to Stopping right here, and the transition call at the end of the
 		//   outer function will do nothing, since the state was already changed.
-		// transitionLocked(contextRequestLost) for other transient errors:
+		// transition(contextRequestLost) for other transient errors:
 		//   This will do nothing, since state is already Acquiring.
+		s.wLock()
 		err = s.renewRangeLocked(true)
+		s.wUnlock()
 		if err != nil {
 			return err
 		}
 
 		s.contextTaggedLogger.Info("Acquired shard")
 
-		// The first time we get the shard, we have to create the engine. We have to release the lock to
-		// create the engine, and then reacquire it. This is safe because:
-		// 1. We know we're currently in the Acquiring state. The only thing we can transition to (without
-		//    doing it ourselves) is Stopped. In that case, we'll have to stop the engine that we just
-		//    created, since the stop transition didn't do it.
-		// 2. We don't have an engine yet, so no one should be calling any of our methods that mutate things.
+		// The first time we get the shard, we have to create the engine
+		var engine Engine
 		if !s.engineFuture.Ready() {
-			s.wUnlock()
 			s.maybeRecordShardAcquisitionLatency(ownershipChanged)
-			engine := s.createEngine()
-			s.wLock()
-			if s.state >= contextStateStopping {
-				engine.Stop()
-				s.engineFuture.Set(nil, errStoppingContext)
-				return errStoppingContext
-			}
-			s.engineFuture.Set(engine, nil)
+			engine = s.createEngine()
 		}
 
-		s.transitionLocked(contextRequestAcquired{})
+		err = s.transition(contextRequestAcquired{engine: engine})
+
+		if err != nil && engine != nil {
+			// We tried to set the engine but the context was already stopped
+			engine.Stop()
+			return err
+		}
+
 		return nil
 	}
 
 	err := backoff.ThrottleRetry(op, policy, common.IsPersistenceTransientError)
-	if err == errStoppingContext {
-		// State changed since this goroutine started, exit silently.
-		return
-	} else if err != nil {
-		// We got an unretryable error (perhaps ShardOwnershipLostError) or timed out.
+	if err != nil {
+		// We got an unretryable error (perhaps context cancelled or ShardOwnershipLostError).
 		s.contextTaggedLogger.Error("Couldn't acquire shard", tag.Error(err))
 
-		// If there's been another state change since we started (e.g. to Stopping), then don't do anything
-		// here. But if not (i.e. timed out or error), initiate shutting down the shard.
-		s.wLock()
-		defer s.wUnlock()
-		if s.state >= contextStateStopping {
-			return
-		}
-		s.transitionLocked(contextRequestStop{})
+		// On any error, initiate shutting down the shard. If we already changed state
+		// because we got a ShardOwnershipLostError, this won't do anything.
+		s.transition(contextRequestStop{})
 	}
 }
 
@@ -2023,6 +2004,12 @@ func (s *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
 	return s.archivalMetadata
 }
 
+// newDetachedContext creates a detached context with the same deadline
+// and values from the given context. Detached context won't be affected
+// if the context it bases on is cancelled.
+// Use this to perform operations that should not be interrupted by caller
+// cancellation. E.g. workflow operations that, if interrupted, could result in
+// shard renewal or even ownership lost.
 func (s *ContextImpl) newDetachedContext(
 	ctx context.Context,
 ) (context.Context, context.CancelFunc, error) {
@@ -2049,9 +2036,17 @@ func (s *ContextImpl) newDetachedContext(
 
 func (s *ContextImpl) newIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(s.lifecycleCtx, shardIOTimeout)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
 	return ctx, cancel
+}
+
+// newShardClosedErrorWithShardID when shard is closed and a req cannot be processed
+func (s *ContextImpl) newShardClosedErrorWithShardID() *persistence.ShardOwnershipLostError {
+	return &persistence.ShardOwnershipLostError{
+		ShardID: s.shardID, // immutable
+		Msg:     "shard closed",
+	}
 }
 
 func OperationPossiblySucceeded(err error) bool {

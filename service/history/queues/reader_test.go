@@ -76,7 +76,7 @@ func (s *readerSuite) SetupTest() {
 	s.metricsHandler = metrics.NoopMetricsHandler
 
 	s.executableInitializer = func(t tasks.Task) Executable {
-		return NewExecutable(t, nil, nil, nil, nil, clock.NewRealTimeSource(), nil, nil, QueueTypeUnknown, nil)
+		return NewExecutable(t, nil, nil, nil, nil, clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
 	}
 }
 

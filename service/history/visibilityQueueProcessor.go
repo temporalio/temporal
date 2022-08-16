@@ -25,7 +25,6 @@
 package history
 
 import (
-	"errors"
 	"sync/atomic"
 	"time"
 
@@ -168,6 +167,7 @@ func newVisibilityQueueProcessor(
 				scheduler,
 				rescheduler,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
 				shard.GetConfig().VisibilityTaskMaxRetryCount,
 				queues.QueueTypeVisibility,
@@ -190,7 +190,6 @@ func newVisibilityQueueProcessor(
 			config.VisibilityProcessorMaxPollRPS,
 		),
 		logger,
-		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),
 	)
 	retProcessor.queueAckMgr = queueAckMgr
 	retProcessor.queueProcessorBase = queueProcessorBase
@@ -277,8 +276,8 @@ func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
 					return false
 				default:
 				}
-				return err != shard.ErrShardClosed
-			}); errors.Is(err, shard.ErrShardClosed) {
+				return !shard.IsShardOwnershipLostError(err)
+			}); shard.IsShardOwnershipLostError(err) {
 				// shard closed, trigger shutdown and bail out
 				t.Stop()
 				return

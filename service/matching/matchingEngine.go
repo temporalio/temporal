@@ -743,6 +743,61 @@ func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
 	}, nil
 }
 
+func (e *matchingEngineImpl) InvalidateTaskQueueMetadata(
+	hCtx *handlerContext,
+	req *matchingservice.InvalidateTaskQueueMetadataRequest,
+) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
+	taskQueue, err := newTaskQueueID(namespace.ID(req.GetNamespaceId()), req.GetTaskQueue(), req.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, false)
+	if tqMgr == nil && err == nil {
+		// Task queue is not currently loaded, so nothing to do here
+		return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	err = tqMgr.InvalidateMetadata(req)
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
+}
+
+func (e *matchingEngineImpl) GetTaskQueueMetadata(
+	hCtx *handlerContext,
+	req *matchingservice.GetTaskQueueMetadataRequest,
+) (*matchingservice.GetTaskQueueMetadataResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueueName := req.GetTaskQueue()
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	if err != nil {
+		return nil, err
+	}
+	resp := &matchingservice.GetTaskQueueMetadataResponse{}
+	verDatHash := req.GetWantVersioningDataCurhash()
+	// This isn't != nil, because gogoproto will round-trip serialize an empty byte array in a request
+	// into a nil field.
+	if len(verDatHash) > 0 {
+		vDat, err := tqMgr.GetVersioningData(hCtx)
+		if err != nil {
+			return nil, err
+		}
+		if !bytes.Equal(HashVersioningData(vDat), verDatHash) {
+			resp.VersioningDataResp = &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
+				VersioningData: vDat,
+			}
+		}
+	}
+	return resp, nil
+}
+
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 	host, err := e.keyResolver.Lookup(partitionKey)
 	if err != nil {

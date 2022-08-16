@@ -594,13 +594,14 @@ func ApplyClusterMetadataConfigProvider(
 		nil,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
-		DataStoreFactory:     dataStoreFactory,
-		Cfg:                  &config.Persistence,
-		PersistenceMaxQPS:    nil,
-		PriorityRateLimiting: nil,
-		ClusterName:          persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
-		MetricsClient:        nil,
-		Logger:               logger,
+		DataStoreFactory:           dataStoreFactory,
+		Cfg:                        &config.Persistence,
+		PersistenceMaxQPS:          nil,
+		PersistenceNamespaceMaxQPS: nil,
+		EnablePriorityRateLimiting: nil,
+		ClusterName:                persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
+		MetricsClient:              nil,
+		Logger:                     logger,
 	})
 	defer factory.Close()
 
