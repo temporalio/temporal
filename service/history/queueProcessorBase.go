@@ -61,7 +61,7 @@ type (
 		shard        shard.Context
 		timeSource   clock.TimeSource
 		options      *QueueProcessorOptions
-		processor    processor
+		queueProcessor common.Daemon
 		logger       log.Logger
 		metricsScope metrics.Scope
 		rateLimiter  quotas.RateLimiter // Read rate limiter
@@ -89,7 +89,7 @@ func newQueueProcessorBase(
 	clusterName string,
 	shard shard.Context,
 	options *QueueProcessorOptions,
-	processor processor,
+	queueProcessor common.Daemon,
 	queueAckMgr queueAckMgr,
 	historyCache workflow.Cache,
 	scheduler queues.Scheduler,
@@ -100,19 +100,19 @@ func newQueueProcessorBase(
 ) *queueProcessorBase {
 
 	p := &queueProcessorBase{
-		clusterName:  clusterName,
-		shard:        shard,
-		timeSource:   shard.GetTimeSource(),
-		options:      options,
-		processor:    processor,
-		rateLimiter:  rateLimiter,
-		status:       common.DaemonStatusInitialized,
-		notifyCh:     make(chan struct{}, 1),
-		shutdownCh:   make(chan struct{}),
-		logger:       logger,
+		clusterName:    clusterName,
+		shard:          shard,
+		timeSource:     shard.GetTimeSource(),
+		options:        options,
+		queueProcessor: queueProcessor,
+		rateLimiter:    rateLimiter,
+		status:         common.DaemonStatusInitialized,
+		notifyCh:       make(chan struct{}, 1),
+		shutdownCh:     make(chan struct{}),
+		logger:         logger,
 		metricsScope: metricsScope,
-		ackMgr:       queueAckMgr,
-		lastPollTime: time.Time{},
+		ackMgr:         queueAckMgr,
+		lastPollTime:   time.Time{},
 		readTaskRetrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
 			backoff.SystemClock,
@@ -186,7 +186,8 @@ processorPumpLoop:
 			break processorPumpLoop
 		case <-p.ackMgr.getFinishedChan():
 			// use a separate gorouting since the caller hold the shutdownWG
-			go p.Stop()
+			// stop the entire queue processor, not just processor base.
+			go p.queueProcessor.Stop()
 		case <-p.notifyCh:
 			p.processBatch()
 		case <-pollTimer.C:
@@ -204,7 +205,8 @@ processorPumpLoop:
 			))
 			if err := p.ackMgr.updateQueueAckLevel(); shard.IsShardOwnershipLostError(err) {
 				// shard is no longer owned by this instance, bail out
-				go p.Stop()
+				// stop the entire queue processor, not just processor base.
+				go p.queueProcessor.Stop()
 				break processorPumpLoop
 			}
 		}
