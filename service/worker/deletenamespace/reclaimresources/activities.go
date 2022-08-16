@@ -30,6 +30,7 @@ import (
 
 	"go.temporal.io/sdk/activity"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -66,6 +67,8 @@ func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context) (bool, erro
 }
 
 func (a *Activities) CountExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (int64, error) {
+	ctx = headers.SetCallerName(ctx, nsName.String())
+
 	req := &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: nsID,
 		Namespace:   nsName,
@@ -86,6 +89,8 @@ func (a *Activities) CountExecutionsAdvVisibilityActivity(ctx context.Context, n
 }
 
 func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name, notDeletedCount int) error {
+	ctx = headers.SetCallerName(ctx, nsName.String())
+
 	req := &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: nsID,
 		Namespace:   nsName,
@@ -136,6 +141,8 @@ func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context
 	// Unfortunately, this doesn't allow to report progress and retry is limited only by timeout.
 	// TODO: remove this activity after CountWorkflowExecutions is implemented in standard visibility.
 
+	ctx = headers.SetCallerName(ctx, nsName.String())
+
 	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: nsID,
 		Namespace:   nsName,
@@ -158,6 +165,8 @@ func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context
 }
 
 func (a *Activities) DeleteNamespaceActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
+	ctx = headers.SetCallerName(ctx, nsName.String())
+
 	deleteNamespaceRequest := &persistence.DeleteNamespaceByNameRequest{
 		Name: nsName.String(),
 	}

@@ -70,10 +70,6 @@ type (
 		queueShutdown() error
 	}
 
-	timerProcessor interface {
-		notifyNewTimers(timerTask []tasks.Task)
-	}
-
 	timerQueueAckMgr interface {
 		getFinishedChan() <-chan struct{}
 		readTimerTasks() ([]queues.Executable, *time.Time, bool, error)

@@ -88,9 +88,9 @@ func (r *RingPop) bootstrap(
 	bootstrapHostPostRetriever func() ([]string, error),
 	bootstrapRetryBackoffInterval time.Duration,
 ) {
-	policy := backoff.NewExponentialRetryPolicy(bootstrapRetryBackoffInterval)
-	policy.SetBackoffCoefficient(1)
-	policy.SetMaximumAttempts(maxBootstrapRetries)
+	policy := backoff.NewExponentialRetryPolicy(bootstrapRetryBackoffInterval).
+		WithBackoffCoefficient(1).
+		WithMaximumAttempts(maxBootstrapRetries)
 	op := func() error {
 		hostPorts, err := bootstrapHostPostRetriever()
 		if err != nil {

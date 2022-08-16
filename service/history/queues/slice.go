@@ -310,8 +310,12 @@ func (s *SliceImpl) SelectTasks(batchSize int) ([]Executable, error) {
 			task, err := s.iterators[0].Next()
 			if err != nil {
 				s.iterators[0] = s.iterators[0].Remaining()
-				// NOTE: we must return the executables here
-				return executables, err
+				if len(executables) != 0 {
+					// NOTE: we must return the executables here
+					// MoreTasks() will return true so queue reader will try to load again
+					return executables, nil
+				}
+				return nil, err
 			}
 
 			taskKey := task.GetKey()

@@ -28,9 +28,8 @@ import (
 	"context"
 
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -103,7 +102,7 @@ func (s *Processor) Start() error {
 
 func getWorkerOptions(p *Processor) worker.Options {
 	ctx := context.WithValue(context.Background(), processorContextKey, p)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
 	return worker.Options{
 		MaxConcurrentActivityExecutionSize:     p.cfg.MaxConcurrentActivityExecutionSize(),

@@ -28,6 +28,7 @@ import (
 	"context"
 	"net"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -328,6 +329,7 @@ func PersistenceRateLimitingParamsProvider(
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
 	)
 }
@@ -342,6 +344,7 @@ func VisibilityManagerProvider(
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapper searchattribute.Mapper,
 	saProvider searchattribute.Provider,
+	tracerProvider trace.TracerProvider,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -363,6 +366,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityDisableOrderByClause,
 		metricsClient,
 		logger,
+		tracerProvider,
 	)
 }
 

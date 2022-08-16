@@ -28,8 +28,7 @@ import (
 	"context"
 	"net"
 
-	"go.temporal.io/server/api/historyservice/v1"
-
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
@@ -215,12 +214,14 @@ func PersistenceRateLimitingParamsProvider(
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
 	)
 }
 
 func VisibilityManagerProvider(
 	logger log.Logger,
+	tracerProvider trace.TracerProvider,
 	metricsClient metrics.Client,
 	persistenceConfig *config.Persistence,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
@@ -251,6 +252,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetBoolPropertyFn(false), // history visibility never read
 		metricsClient,
 		logger,
+		tracerProvider,
 	)
 }
 
@@ -272,7 +274,6 @@ func ArchivalClientProvider(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
-	historyClient historyservice.HistoryServiceClient,
 ) warchiver.Client {
 	return warchiver.NewClient(
 		metricsClient,
@@ -281,7 +282,6 @@ func ArchivalClientProvider(
 		config.NumArchiveSystemWorkflows,
 		config.ArchiveRequestRPS,
 		archiverProvider,
-		historyClient,
 	)
 }
 

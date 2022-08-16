@@ -124,7 +124,7 @@ func New(
 // Start starts the scanner
 func (s *Scanner) Start() error {
 	ctx := context.WithValue(context.Background(), scannerContextKey, s.context)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
 	workerOpts := worker.Options{
 		MaxConcurrentActivityExecutionSize:     s.context.cfg.MaxConcurrentActivityExecutionSize(),
@@ -176,9 +176,9 @@ func (s *Scanner) startWorkflowWithRetry(
 	// let history / matching service warm up
 	time.Sleep(scannerStartUpDelay)
 
-	policy := backoff.NewExponentialRetryPolicy(time.Second)
-	policy.SetMaximumInterval(time.Minute)
-	policy.SetExpirationInterval(backoff.NoInterval)
+	policy := backoff.NewExponentialRetryPolicy(time.Second).
+		WithMaximumInterval(time.Minute).
+		WithExpirationInterval(backoff.NoInterval)
 	err := backoff.ThrottleRetry(func() error {
 		return s.startWorkflow(s.context.sdkSystemClient, options, workflowType, workflowArgs...)
 	}, policy, func(err error) bool {

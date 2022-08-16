@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.opentelemetry.io/otel"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -201,6 +202,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.AbstractDataStoreFactory,
 		s.Logger,
 		metrics.NoopClient,
+		otel.GetTracerProvider(),
 	)
 	factory := client.NewFactory(dataStoreFactory, &cfg, nil, serialization.NewSerializer(), clusterName, metrics.NoopClient, s.Logger)
 
@@ -309,9 +311,9 @@ func (g *TestTransferTaskIDGenerator) GenerateTransferTaskID() (int64, error) {
 
 // Publish is a utility method to add messages to the queue
 func (s *TestBase) Publish(ctx context.Context, task *replicationspb.ReplicationTask) error {
-	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	retryPolicy.SetBackoffCoefficient(1.5)
-	retryPolicy.SetMaximumAttempts(5)
+	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond).
+		WithBackoffCoefficient(1.5).
+		WithMaximumAttempts(5)
 
 	return backoff.ThrottleRetry(
 		func() error {
@@ -355,9 +357,9 @@ func (s *TestBase) GetAckLevels(
 
 // PublishToNamespaceDLQ is a utility method to add messages to the namespace DLQ
 func (s *TestBase) PublishToNamespaceDLQ(ctx context.Context, task *replicationspb.ReplicationTask) error {
-	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	retryPolicy.SetBackoffCoefficient(1.5)
-	retryPolicy.SetMaximumAttempts(5)
+	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond).
+		WithBackoffCoefficient(1.5).
+		WithMaximumAttempts(5)
 
 	return backoff.ThrottleRetryContext(
 		ctx,

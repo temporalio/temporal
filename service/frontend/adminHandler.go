@@ -59,7 +59,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
@@ -156,9 +155,7 @@ type (
 var (
 	_ adminservice.AdminServiceServer = (*AdminHandler)(nil)
 
-	// TODO: get rid for this retry layer
-	adminHandlerRetryPolicy = common.CreateAdminHandlerRetryPolicy()
-	resendStartEventID      = int64(0)
+	resendStartEventID = int64(0)
 )
 
 // NewAdminHandler creates a gRPC handler for the adminservice
@@ -1153,9 +1150,6 @@ func (adh *AdminHandler) GetDLQMessages(
 		request.InclusiveEndMessageId = common.EndMessageID
 	}
 
-	var tasks []*replicationspb.ReplicationTask
-	var token []byte
-	var op func(ctx context.Context) error
 	switch request.GetType() {
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.historyClient.GetDLQMessages(ctx, &historyservice.GetDLQMessagesRequest{
@@ -1177,32 +1171,22 @@ func (adh *AdminHandler) GetDLQMessages(
 			NextPageToken:    resp.GetNextPageToken(),
 		}, err
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
-		op = func(ctx context.Context) error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				var err error
-				tasks, token, err = adh.namespaceDLQHandler.Read(
-					ctx,
-					request.GetInclusiveEndMessageId(),
-					int(request.GetMaximumPageSize()),
-					request.GetNextPageToken())
-				return err
-			}
+		tasks, token, err := adh.namespaceDLQHandler.Read(
+			ctx,
+			request.GetInclusiveEndMessageId(),
+			int(request.GetMaximumPageSize()),
+			request.GetNextPageToken())
+		if err != nil {
+			return nil, err
 		}
+
+		return &adminservice.GetDLQMessagesResponse{
+			ReplicationTasks: tasks,
+			NextPageToken:    token,
+		}, nil
 	default:
 		return nil, errDLQTypeIsNotSupported
 	}
-	retErr = backoff.ThrottleRetryContext(ctx, op, adminHandlerRetryPolicy, common.IsServiceTransientError)
-	if retErr != nil {
-		return nil, retErr
-	}
-
-	return &adminservice.GetDLQMessagesResponse{
-		ReplicationTasks: tasks,
-		NextPageToken:    token,
-	}, nil
 }
 
 // PurgeDLQMessages purge messages from DLQ
@@ -1219,7 +1203,6 @@ func (adh *AdminHandler) PurgeDLQMessages(
 		request.InclusiveEndMessageId = common.EndMessageID
 	}
 
-	var op func(ctx context.Context) error
 	switch request.GetType() {
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.historyClient.PurgeDLQMessages(ctx, &historyservice.PurgeDLQMessagesRequest{
@@ -1235,23 +1218,15 @@ func (adh *AdminHandler) PurgeDLQMessages(
 
 		return &adminservice.PurgeDLQMessagesResponse{}, err
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
-		op = func(ctx context.Context) error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				return adh.namespaceDLQHandler.Purge(ctx, request.GetInclusiveEndMessageId())
-			}
+		err := adh.namespaceDLQHandler.Purge(ctx, request.GetInclusiveEndMessageId())
+		if err != nil {
+			return nil, err
 		}
+
+		return &adminservice.PurgeDLQMessagesResponse{}, err
 	default:
 		return nil, errDLQTypeIsNotSupported
 	}
-	err = backoff.ThrottleRetryContext(ctx, op, adminHandlerRetryPolicy, common.IsServiceTransientError)
-	if err != nil {
-		return nil, err
-	}
-
-	return &adminservice.PurgeDLQMessagesResponse{}, err
 }
 
 // MergeDLQMessages merges DLQ messages
@@ -1268,8 +1243,6 @@ func (adh *AdminHandler) MergeDLQMessages(
 		request.InclusiveEndMessageId = common.EndMessageID
 	}
 
-	var token []byte
-	var op func(ctx context.Context) error
 	switch request.GetType() {
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_REPLICATION:
 		resp, err := adh.historyClient.MergeDLQMessages(ctx, &historyservice.MergeDLQMessagesRequest{
@@ -1288,32 +1261,22 @@ func (adh *AdminHandler) MergeDLQMessages(
 			NextPageToken: request.GetNextPageToken(),
 		}, nil
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
-		op = func(ctx context.Context) error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				var err error
-				token, err = adh.namespaceDLQHandler.Merge(
-					ctx,
-					request.GetInclusiveEndMessageId(),
-					int(request.GetMaximumPageSize()),
-					request.GetNextPageToken(),
-				)
-				return err
-			}
+		token, err := adh.namespaceDLQHandler.Merge(
+			ctx,
+			request.GetInclusiveEndMessageId(),
+			int(request.GetMaximumPageSize()),
+			request.GetNextPageToken(),
+		)
+		if err != nil {
+			return nil, err
 		}
+
+		return &adminservice.MergeDLQMessagesResponse{
+			NextPageToken: token,
+		}, nil
 	default:
 		return nil, errDLQTypeIsNotSupported
 	}
-	err = backoff.ThrottleRetryContext(ctx, op, adminHandlerRetryPolicy, common.IsServiceTransientError)
-	if err != nil {
-		return nil, err
-	}
-
-	return &adminservice.MergeDLQMessagesResponse{
-		NextPageToken: token,
-	}, nil
 }
 
 // RefreshWorkflowTasks re-generates the workflow tasks

@@ -869,10 +869,16 @@ func (r *nDCHistoryReplicatorImpl) backfillHistory(
 		lastEventID,
 		lastEventVersion),
 	)
-	historyBranch, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	resp, err := r.executionMgr.ParseHistoryBranchInfo(
+		ctx,
+		&persistence.ParseHistoryBranchInfoRequest{
+			BranchToken: branchToken,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
+	historyBranch := resp.BranchInfo
 
 	prevTxnID := common.EmptyVersion
 	var lastHistoryBatch *commonpb.DataBlob
@@ -916,11 +922,16 @@ BackfillLoop:
 			}
 		}
 
-		filteredHistoryBranch, err := serialization.HistoryBranchToBlob(&persistencespb.HistoryBranch{
-			TreeId:    historyBranch.GetTreeId(),
-			BranchId:  branchID,
-			Ancestors: ancestors,
-		})
+		filteredHistoryBranch, err := r.executionMgr.UpdateHistoryBranchInfo(
+			ctx,
+			&persistence.UpdateHistoryBranchInfoRequest{
+				BranchToken: branchToken,
+				BranchInfo: &persistencespb.HistoryBranch{
+					TreeId:    historyBranch.GetTreeId(),
+					BranchId:  branchID,
+					Ancestors: ancestors,
+				},
+			})
 		if err != nil {
 			return nil, err
 		}
@@ -928,10 +939,10 @@ BackfillLoop:
 		if err != nil {
 			return nil, err
 		}
-		_, err = r.shard.GetExecutionManager().AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
+		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shard.GetShardID(),
 			IsNewBranch:       prevBranchID != branchID,
-			BranchToken:       filteredHistoryBranch.GetData(),
+			BranchToken:       filteredHistoryBranch.BranchToken,
 			History:           historyBlob.rawHistory,
 			PrevTransactionID: prevTxnID,
 			TransactionID:     txnID,
@@ -1018,7 +1029,7 @@ func (r *nDCHistoryReplicatorImpl) getHistoryFromLocalPaginationFn(
 ) collection.PaginationFn[*historypb.History] {
 
 	return func(paginationToken []byte) ([]*historypb.History, []byte, error) {
-		response, err := r.shard.GetExecutionManager().ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
+		response, err := r.executionMgr.ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
 			ShardID:       r.shard.GetShardID(),
 			BranchToken:   branchToken,
 			MinEventID:    common.FirstEventID,

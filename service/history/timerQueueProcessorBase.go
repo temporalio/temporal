@@ -66,8 +66,7 @@ type (
 		config           *configs.Config
 		logger           log.Logger
 		metricsClient    metrics.Client
-		metricsScope     metrics.Scope
-		timerProcessor   timerProcessor
+		timerProcessor   common.Daemon
 		timerQueueAckMgr timerQueueAckMgr
 		timerGate        timer.Gate
 		timeSource       clock.TimeSource
@@ -88,14 +87,13 @@ func newTimerQueueProcessorBase(
 	scope int,
 	shard shard.Context,
 	workflowCache workflow.Cache,
-	timerProcessor timerProcessor,
+	timerProcessor common.Daemon,
 	timerQueueAckMgr timerQueueAckMgr,
 	timerGate timer.Gate,
 	scheduler queues.Scheduler,
 	rescheduler queues.Rescheduler,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricsScope metrics.Scope,
 ) *timerQueueProcessorBase {
 	logger = log.With(logger, tag.ComponentTimerQueue)
 	config := shard.GetConfig()
@@ -111,7 +109,6 @@ func newTimerQueueProcessorBase(
 		config:           config,
 		logger:           logger,
 		metricsClient:    shard.GetMetricsClient(),
-		metricsScope:     metricsScope,
 		timerQueueAckMgr: timerQueueAckMgr,
 		timerGate:        timerGate,
 		timeSource:       shard.GetTimeSource(),
@@ -253,7 +250,8 @@ eventLoop:
 			// timer queue ack manager indicate that all task scanned
 			// are finished and no more tasks
 			// use a separate goroutine since the caller hold the shutdownWG
-			go t.Stop()
+			// stop the entire timer queue processor, not just processor base.
+			go t.timerProcessor.Stop()
 			return nil
 		case <-t.timerGate.FireChan():
 			nextFireTime, err := t.readAndFanoutTimerTasks()
@@ -282,9 +280,10 @@ eventLoop:
 				t.config.TimerProcessorUpdateAckInterval(),
 				t.config.TimerProcessorUpdateAckIntervalJitterCoefficient(),
 			))
-			if err := t.timerQueueAckMgr.updateAckLevel(); err == shard.ErrShardClosed {
+			if err := t.timerQueueAckMgr.updateAckLevel(); shard.IsShardOwnershipLostError(err) {
 				// shard is closed, shutdown timerQProcessor and bail out
-				go t.Stop()
+				// stop the entire timer queue processor, not just processor base.
+				go t.timerProcessor.Stop()
 				return err
 			}
 		case <-t.newTimerCh:

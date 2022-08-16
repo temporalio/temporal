@@ -29,6 +29,8 @@ import (
 	"fmt"
 	"sync"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/cluster"
@@ -102,6 +104,7 @@ func (s *ServerImpl) Start() error {
 		s.so.persistenceServiceResolver,
 		s.persistenceFactoryProvider,
 		s.logger,
+		otel.GetTracerProvider(),
 		s.so.customDataStoreFactory,
 	); err != nil {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
@@ -156,6 +159,7 @@ func initSystemNamespaces(
 	persistenceServiceResolver resolver.ServiceResolver,
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	logger log.Logger,
+	tracerProvider trace.TracerProvider,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 ) error {
 	clusterName := persistenceClient.ClusterName(currentClusterName)
@@ -166,15 +170,17 @@ func initSystemNamespaces(
 		customDataStoreFactory,
 		logger,
 		nil,
+		tracerProvider,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
-		DataStoreFactory:     dataStoreFactory,
-		Cfg:                  cfg,
-		PersistenceMaxQPS:    nil,
-		PriorityRateLimiting: nil,
-		ClusterName:          persistenceClient.ClusterName(currentClusterName),
-		MetricsClient:        nil,
-		Logger:               logger,
+		DataStoreFactory:           dataStoreFactory,
+		Cfg:                        cfg,
+		PersistenceMaxQPS:          nil,
+		PersistenceNamespaceMaxQPS: nil,
+		EnablePriorityRateLimiting: nil,
+		ClusterName:                persistenceClient.ClusterName(currentClusterName),
+		MetricsClient:              nil,
+		Logger:                     logger,
 	})
 	defer factory.Close()
 

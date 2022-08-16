@@ -27,6 +27,7 @@ package worker
 import (
 	"context"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.uber.org/fx"
 
@@ -88,6 +89,7 @@ func PersistenceRateLimitingParamsProvider(
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
 	)
 }
@@ -112,6 +114,7 @@ func FrontendClientProvider(
 
 func VisibilityManagerProvider(
 	logger log.Logger,
+	tracerProvider trace.TracerProvider,
 	metricsClient metrics.Client,
 	persistenceConfig *config.Persistence,
 	serviceConfig *Config,
@@ -141,6 +144,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityDisableOrderByClause,
 		metricsClient,
 		logger,
+		tracerProvider,
 	)
 }
 

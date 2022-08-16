@@ -25,11 +25,14 @@
 package client
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/exp/slices"
+
+	"go.temporal.io/api/workflowservice/v1"
 )
 
 type (
@@ -57,15 +60,22 @@ func (s *quotasSuite) SetupTest() {
 func (s *quotasSuite) TearDownTest() {
 }
 
-func (s *quotasSuite) TestCallerTypePriorityMapping() {
-	for _, priority := range CallerTypePriority {
+func (s *quotasSuite) TestCallerTypeDefaultPriorityMapping() {
+	for _, priority := range CallerTypeDefaultPriority {
 		index := slices.Index(RequestPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}
 }
 
-func (s *quotasSuite) TestAPIPriorityOverrideMapping() {
-	for _, priority := range APIPriorityOverride {
+func (s *quotasSuite) TestAPITypeCallOriginPriorityOverrideMapping() {
+	for _, priority := range APITypeCallOriginPriorityOverride {
+		index := slices.Index(RequestPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
+	}
+}
+
+func (s *quotasSuite) TestBackgroundTypeAPIPriorityOverrideMapping() {
+	for _, priority := range BackgroundTypeAPIPriorityOverride {
 		index := slices.Index(RequestPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}
@@ -74,5 +84,19 @@ func (s *quotasSuite) TestAPIPriorityOverrideMapping() {
 func (s *quotasSuite) TestRequestPrioritiesOrdered() {
 	for idx := range RequestPrioritiesOrdered[1:] {
 		s.True(RequestPrioritiesOrdered[idx] < RequestPrioritiesOrdered[idx+1])
+	}
+}
+
+func (s *quotasSuite) TestCallOriginDefined() {
+	var service workflowservice.WorkflowServiceServer
+	t := reflect.TypeOf(&service).Elem()
+	definedAPIs := make(map[string]struct{}, t.NumMethod())
+	for i := 0; i < t.NumMethod(); i++ {
+		definedAPIs[t.Method(i).Name] = struct{}{}
+	}
+
+	for api := range APITypeCallOriginPriorityOverride {
+		_, ok := definedAPIs[api]
+		s.True(ok)
 	}
 }

@@ -648,6 +648,28 @@ func (p *executionRateLimitedPersistenceClient) AppendRawHistoryNodes(
 	return p.persistence.AppendRawHistoryNodes(ctx, request)
 }
 
+// ParseHistoryBranchInfo parses the history branch for branch information
+func (p *executionRateLimitedPersistenceClient) ParseHistoryBranchInfo(
+	ctx context.Context,
+	request *ParseHistoryBranchInfoRequest,
+) (*ParseHistoryBranchInfoResponse, error) {
+	if ok := allow(ctx, "ParseHistoryBranchInfo", p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.ParseHistoryBranchInfo(ctx, request)
+}
+
+// UpdateHistoryBranchInfo updates the history branch with branch information
+func (p *executionRateLimitedPersistenceClient) UpdateHistoryBranchInfo(
+	ctx context.Context,
+	request *UpdateHistoryBranchInfoRequest,
+) (*UpdateHistoryBranchInfoResponse, error) {
+	if ok := allow(ctx, "UpdateHistoryBranchInfo", p.rateLimiter); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.UpdateHistoryBranchInfo(ctx, request)
+}
+
 // NewHistoryBranch initializes a new history branch
 func (p *executionRateLimitedPersistenceClient) NewHistoryBranch(
 	ctx context.Context,
@@ -993,10 +1015,12 @@ func allow(
 	api string,
 	rateLimiter quotas.RequestRateLimiter,
 ) bool {
+	callerInfo := headers.GetCallerInfo(ctx)
 	return rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		api,
 		RateLimitDefaultToken,
-		"", // caller: currently not used when calculating priority
-		headers.GetCallerInfo(ctx).CallerType,
+		callerInfo.CallerName,
+		callerInfo.CallerType,
+		callerInfo.CallOrigin,
 	))
 }

@@ -168,6 +168,7 @@ func newTransferQueueStandbyProcessor(
 				scheduler,
 				rescheduler,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
 				shard.GetConfig().TransferTaskMaxRetryCount,
 				queues.QueueTypeStandbyTransfer,
@@ -187,7 +188,6 @@ func newTransferQueueStandbyProcessor(
 		rescheduler,
 		rateLimiter,
 		logger,
-		shard.GetMetricsClient().Scope(metrics.TransferStandbyQueueProcessorScope),
 	)
 
 	processor.queueAckMgr = queueAckMgr
