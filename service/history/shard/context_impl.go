@@ -1014,7 +1014,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	}()
 
 	// Wrap step 1 and 2 with function to release the lock with defer after step 2.
-	err = func() error {
+	if err = func() error {
 		s.wLock()
 		defer s.wUnlock()
 
@@ -1057,23 +1057,23 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			WorkflowID:  key.WorkflowID,
 			RunID:       key.RunID,
 		}
-		err = s.GetExecutionManager().DeleteCurrentWorkflowExecution(ctx, delCurRequest)
-		return err
-	}()
+		if err := s.GetExecutionManager().DeleteCurrentWorkflowExecution(
+			ctx,
+			delCurRequest,
+		); err != nil {
+			return err
+		}
 
-	if err != nil {
+		// Step 3. Delete workflow mutable state.
+		delRequest := &persistence.DeleteWorkflowExecutionRequest{
+			ShardID:     s.shardID,
+			NamespaceID: key.NamespaceID,
+			WorkflowID:  key.WorkflowID,
+			RunID:       key.RunID,
+		}
+		err = s.GetExecutionManager().DeleteWorkflowExecution(ctx, delRequest)
 		return err
-	}
-
-	// Step 3. Delete workflow mutable state.
-	delRequest := &persistence.DeleteWorkflowExecutionRequest{
-		ShardID:     s.shardID,
-		NamespaceID: key.NamespaceID,
-		WorkflowID:  key.WorkflowID,
-		RunID:       key.RunID,
-	}
-	err = s.GetExecutionManager().DeleteWorkflowExecution(ctx, delRequest)
-	if err != nil {
+	}(); err != nil {
 		return err
 	}
 
@@ -1088,7 +1088,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			return err
 		}
 	}
-
 	return nil
 }
 
