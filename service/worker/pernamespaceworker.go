@@ -335,7 +335,6 @@ func (w *perNamespaceWorker) startWorker(
 	multiplicity int,
 ) (sdkclient.Client, sdkworker.Worker, error) {
 	nsName := ns.Name().String()
-	// TODO: after sdk supports cloning clients to share connections, use that here
 	client, err := w.wm.sdkClientFactory.NewClient(nsName, w.wm.logger)
 	if err != nil {
 		return nil, nil, err

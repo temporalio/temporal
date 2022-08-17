@@ -56,7 +56,10 @@ type (
 		tlsConfig       *tls.Config
 		metricsHandler  *MetricsHandler
 		systemSdkClient sdkclient.Client
-		once            *sync.Once
+		once            sync.Once
+
+		lock           sync.Mutex
+		firstSdkClient sdkclient.Client
 	}
 
 	workerFactory struct{}
@@ -72,24 +75,33 @@ func NewClientFactory(hostPort string, tlsConfig *tls.Config, metricsHandler *Me
 		hostPort:       hostPort,
 		tlsConfig:      tlsConfig,
 		metricsHandler: metricsHandler,
-		once:           &sync.Once{},
 	}
 }
 
 func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkclient.Client, error) {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	options := sdkclient.Options{
+		HostPort:       f.hostPort,
+		Namespace:      namespaceName,
+		MetricsHandler: f.metricsHandler,
+		Logger:         log.NewSdkLogger(logger),
+		ConnectionOptions: sdkclient.ConnectionOptions{
+			TLS: f.tlsConfig,
+		},
+	}
+
+	if f.firstSdkClient != nil {
+		// this shouldn't fail if the existing client was created successfully
+		return sdkclient.NewClientFromExisting(f.firstSdkClient, options)
+	}
+
 	var client sdkclient.Client
 
 	// Retry for up to 1m, handles frontend service not ready
 	err := backoff.ThrottleRetry(func() error {
-		sdkClient, err := sdkclient.Dial(sdkclient.Options{
-			HostPort:       f.hostPort,
-			Namespace:      namespaceName,
-			MetricsHandler: f.metricsHandler,
-			Logger:         log.NewSdkLogger(logger),
-			ConnectionOptions: sdkclient.ConnectionOptions{
-				TLS: f.tlsConfig,
-			},
-		})
+		sdkClient, err := sdkclient.Dial(options)
 		if err != nil {
 			return fmt.Errorf("unable to create SDK client: %w", err)
 		}
@@ -97,6 +109,10 @@ func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkc
 		client = sdkClient
 		return nil
 	}, common.CreateSdkClientFactoryRetryPolicy(), common.IsContextDeadlineExceededErr)
+
+	if err == nil && client != nil && f.firstSdkClient == nil {
+		f.firstSdkClient = client
+	}
 
 	return client, err
 }
