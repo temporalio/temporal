@@ -159,7 +159,7 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 	})
 
 	// Get the entire history tree, so we know if any part of the target branch is referenced by other branches.
-	historyTreeResp, err := m.GetHistoryTree(context.TODO(), &GetHistoryTreeRequest{
+	historyTreeResp, err := m.GetHistoryTree(ctx, &GetHistoryTreeRequest{
 		TreeID:      branch.TreeId,
 		ShardID:     &request.ShardID,
 		BranchToken: request.BranchToken,
