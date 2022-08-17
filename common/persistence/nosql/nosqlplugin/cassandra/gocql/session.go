@@ -31,8 +31,6 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gocql/gocql/otelgocql"
-	"go.opentelemetry.io/otel/trace"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
@@ -49,12 +47,11 @@ const (
 
 type (
 	session struct {
-		status         int32
-		config         config.Cassandra
-		resolver       resolver.ServiceResolver
-		atomic.Value   // *gocql.Session
-		logger         log.Logger
-		tracerProvider trace.TracerProvider
+		status       int32
+		config       config.Cassandra
+		resolver     resolver.ServiceResolver
+		atomic.Value // *gocql.Session
+		logger       log.Logger
 
 		sync.Mutex
 		sessionInitTime time.Time
@@ -62,24 +59,21 @@ type (
 )
 
 func NewSession(
-	ctx context.Context,
 	config config.Cassandra,
 	resolver resolver.ServiceResolver,
 	logger log.Logger,
-	tracerProvider trace.TracerProvider,
 ) (*session, error) {
 
-	gocqlSession, err := initSession(ctx, config, resolver, tracerProvider)
+	gocqlSession, err := initSession(config, resolver)
 	if err != nil {
 		return nil, err
 	}
 
 	session := &session{
-		status:         common.DaemonStatusStarted,
-		config:         config,
-		resolver:       resolver,
-		logger:         logger,
-		tracerProvider: tracerProvider,
+		status:   common.DaemonStatusStarted,
+		config:   config,
+		resolver: resolver,
+		logger:   logger,
 
 		sessionInitTime: time.Now().UTC(),
 	}
@@ -100,7 +94,7 @@ func (s *session) refresh() {
 		return
 	}
 
-	newSession, err := initSession(context.Background(), s.config, s.resolver, s.tracerProvider)
+	newSession, err := initSession(s.config, s.resolver)
 	if err != nil {
 		s.logger.Error("unable to refresh cql session", tag.Error(err))
 		return
@@ -114,20 +108,14 @@ func (s *session) refresh() {
 }
 
 func initSession(
-	ctx context.Context,
 	config config.Cassandra,
 	resolver resolver.ServiceResolver,
-	tracerProvider trace.TracerProvider,
 ) (*gocql.Session, error) {
 	cluster, err := NewCassandraCluster(config, resolver)
 	if err != nil {
 		return nil, err
 	}
-	return otelgocql.NewSessionWithTracing(
-		ctx,
-		cluster,
-		otelgocql.WithTracerProvider(tracerProvider),
-		otelgocql.WithSimpleSpanNames())
+	return cluster.CreateSession()
 }
 
 func (s *session) Query(
