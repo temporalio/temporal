@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -229,7 +230,7 @@ func signalRemoteCluster(
 		_, err = remoteClient.SignalWithStartWorkflowExecution(
 			signalCtx,
 			&workflowservice.SignalWithStartWorkflowExecutionRequest{
-				Namespace:  common.SystemLocalNamespace,
+				Namespace:  primitives.SystemLocalNamespace,
 				RequestId:  uuid.New(),
 				WorkflowId: getWorkflowID(numWorkflows),
 				WorkflowType: &commonpb.WorkflowType{

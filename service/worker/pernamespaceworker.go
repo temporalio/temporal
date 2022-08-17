@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -348,7 +349,7 @@ func (w *perNamespaceWorker) startWorker(
 	sdkoptions.MaxConcurrentWorkflowTaskPollers = 2 * multiplicity
 	sdkoptions.MaxConcurrentActivityTaskPollers = 2 * multiplicity
 
-	sdkworker := w.wm.sdkWorkerFactory.New(client, workercommon.PerNSWorkerTaskQueue, sdkoptions)
+	sdkworker := w.wm.sdkWorkerFactory.New(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
 	for _, cmp := range components {
 		cmp.Register(sdkworker, ns)
 	}

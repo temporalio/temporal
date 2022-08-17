@@ -34,7 +34,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/gogo/protobuf/jsonpb"
-	"go.temporal.io/server/common/clock"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -58,6 +57,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
@@ -72,10 +72,10 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
-	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
@@ -3119,7 +3119,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		Namespace:             request.Namespace,
 		WorkflowId:            workflowID,
 		WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: workercommon.PerNSWorkerTaskQueue},
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                 inputPayload,
 		Identity:              request.Identity,
 		RequestId:             request.RequestId,

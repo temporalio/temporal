@@ -27,13 +27,13 @@ package batcher
 import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
@@ -89,7 +89,7 @@ func NewResult(
 func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	namespaceName := ns.Name().String()
 	enableFeature := s.enabledFeature(namespaceName)
-	enablePerNSWorker := s.enabledPerNSWorker(namespaceName) || namespaceName == common.SystemLocalNamespace
+	enablePerNSWorker := s.enabledPerNSWorker(namespaceName) || namespaceName == primitives.SystemLocalNamespace
 	return &workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: enableFeature && enablePerNSWorker,
 	}
