@@ -154,17 +154,10 @@ func (s *session) NewBatch(
 	}
 }
 
-func extractCtxOrBackground(i interface{}) context.Context {
-	if contexter, ok := i.(interface{ context() context.Context }); ok {
-		return contexter.context()
-	}
-	return context.Background()
-}
-
 func (s *session) ExecuteBatch(
 	b Batch,
 ) (retError error) {
-	defer func() { s.handleError(extractCtxOrBackground(b), retError) }()
+	defer func() { s.handleError(b.(*batch).ctx, retError) }()
 
 	return s.Value.Load().(*gocql.Session).ExecuteBatch(b.(*batch).gocqlBatch)
 }
@@ -173,7 +166,7 @@ func (s *session) MapExecuteBatchCAS(
 	b Batch,
 	previous map[string]interface{},
 ) (_ bool, _ Iter, retError error) {
-	defer func() { s.handleError(extractCtxOrBackground(b), retError) }()
+	defer func() { s.handleError(b.(*batch).ctx, retError) }()
 
 	applied, iter, err := s.Value.Load().(*gocql.Session).MapExecuteBatchCAS(b.(*batch).gocqlBatch, previous)
 	return applied, iter, err

@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"reflect"
 	"strings"
 	"time"
 
@@ -38,14 +39,14 @@ import (
 )
 
 const (
-	instrumentationName = "go.temporal.io/common/persistence/nosqlplugin/cassandra/gocql"
-	batchOperationName  = "batch"
-	queryOperationName  = "query"
+	batchOperationName = "batch"
+	queryOperationName = "query"
 )
 
 var (
-	batchOperationAttr = semconv.DBOperationKey.String(batchOperationName)
-	queryOperationAttr = semconv.DBOperationKey.String(queryOperationName)
+	instrumentationName = reflect.TypeOf(traceObserver{}).PkgPath()
+	batchOperationAttr  = semconv.DBOperationKey.String(batchOperationName)
+	queryOperationAttr  = semconv.DBOperationKey.String(queryOperationName)
 )
 
 type traceObserver struct {
