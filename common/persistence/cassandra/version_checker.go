@@ -25,9 +25,6 @@
 package cassandra
 
 import (
-	"context"
-
-	"go.opentelemetry.io/otel"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -84,7 +81,7 @@ func CheckCompatibleVersion(
 	expectedVersion string,
 ) error {
 
-	session, err := gocql.NewSession(context.Background(), cfg, r, log.NewNoopLogger(), otel.GetTracerProvider())
+	session, err := gocql.NewSession(cfg, r, log.NewNoopLogger())
 	if err != nil {
 		return err
 	}

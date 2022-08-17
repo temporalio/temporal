@@ -60,7 +60,7 @@ func TestMeter(t *testing.T) {
 	err := exp.Collect(ctx)
 	assert.Nil(t, err)
 
-	lib := metrictest.Scope{InstrumentationName: "test"}
+	lib := metrictest.Library{InstrumentationName: "test"}
 	got := exp.Records
 
 	want := []metrictest.ExportRecord{

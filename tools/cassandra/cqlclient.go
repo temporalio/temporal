@@ -30,7 +30,6 @@ import (
 	"fmt"
 	"time"
 
-	"go.opentelemetry.io/otel"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -112,13 +111,7 @@ func newCQLClient(cfg *CQLClientConfig, logger log.Logger) (*cqlClient, error) {
 	cassandraConfig.ConnectTimeout = time.Duration(cfg.Timeout) * time.Second
 
 	logger.Info("Validating connection to cassandra cluster.")
-	session, err := gocql.NewSession(
-		context.Background(),
-		*cassandraConfig,
-		resolver.NewNoopResolver(),
-		logger,
-		otel.GetTracerProvider(),
-	)
+	session, err := gocql.NewSession(*cassandraConfig, resolver.NewNoopResolver(), logger)
 	if err != nil {
 		logger.Error("Connection validation failed.", tag.Error(err))
 		return nil, err
