@@ -35,8 +35,8 @@ var _ Batch = (*batch)(nil)
 
 type (
 	batch struct {
-		session *session
-
+		ctx        context.Context
+		session    *session
 		gocqlBatch *gocql.Batch
 	}
 )
@@ -48,14 +48,23 @@ const (
 	CounterBatch
 )
 
-func newBatch(
+func newBatchWithContext(
+	ctx context.Context,
 	session *session,
 	gocqlBatch *gocql.Batch,
 ) *batch {
 	return &batch{
+		ctx:        context.Background(),
 		session:    session,
 		gocqlBatch: gocqlBatch,
 	}
+}
+
+func newBatch(
+	session *session,
+	gocqlBatch *gocql.Batch,
+) *batch {
+	return newBatchWithContext(context.Background(), session, gocqlBatch)
 }
 
 func (b *batch) Query(stmt string, args ...interface{}) {
@@ -63,7 +72,7 @@ func (b *batch) Query(stmt string, args ...interface{}) {
 }
 
 func (b *batch) WithContext(ctx context.Context) Batch {
-	return newBatch(b.session, b.gocqlBatch.WithContext(ctx))
+	return newBatchWithContext(ctx, b.session, b.gocqlBatch.WithContext(ctx))
 }
 
 func (b *batch) WithTimestamp(timestamp int64) Batch {

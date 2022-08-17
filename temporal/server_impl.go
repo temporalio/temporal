@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"sync"
 
+	"go.opentelemetry.io/otel"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/cluster"
@@ -165,6 +166,7 @@ func initSystemNamespaces(
 		cfg,
 		customDataStoreFactory,
 		logger,
+		otel.GetTracerProvider(),
 		nil,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{

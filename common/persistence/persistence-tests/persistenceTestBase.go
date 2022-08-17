@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	"go.opentelemetry.io/otel/trace"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -200,6 +201,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		&cfg,
 		s.AbstractDataStoreFactory,
 		s.Logger,
+		trace.NewNoopTracerProvider(),
 		metrics.NoopClient,
 	)
 	factory := client.NewFactory(dataStoreFactory, &cfg, nil, serialization.NewSerializer(), clusterName, metrics.NoopClient, s.Logger)

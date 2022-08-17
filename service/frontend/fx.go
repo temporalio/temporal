@@ -28,6 +28,7 @@ import (
 	"context"
 	"net"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -335,6 +336,7 @@ func PersistenceRateLimitingParamsProvider(
 
 func VisibilityManagerProvider(
 	logger log.Logger,
+	tracerProvider trace.TracerProvider,
 	persistenceConfig *config.Persistence,
 	metricsClient metrics.Client,
 	serviceConfig *Config,
@@ -363,6 +365,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetBoolPropertyFn(false), // frontend visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
 		metricsClient,
+		tracerProvider,
 		logger,
 	)
 }

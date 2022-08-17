@@ -28,6 +28,7 @@ import (
 	"context"
 	"net"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
@@ -220,6 +221,7 @@ func PersistenceRateLimitingParamsProvider(
 
 func VisibilityManagerProvider(
 	logger log.Logger,
+	tracerProvider trace.TracerProvider,
 	metricsClient metrics.Client,
 	persistenceConfig *config.Persistence,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
@@ -249,6 +251,7 @@ func VisibilityManagerProvider(
 		serviceConfig.EnableWriteToSecondaryAdvancedVisibility,
 		dynamicconfig.GetBoolPropertyFn(false), // history visibility never read
 		metricsClient,
+		tracerProvider,
 		logger,
 	)
 }

@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	"go.opentelemetry.io/otel/trace"
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
@@ -45,6 +46,7 @@ import (
 func NewCassandraCluster(
 	cfg config.Cassandra,
 	resolver resolver.ServiceResolver,
+	tracerProvider trace.TracerProvider,
 ) (*gocql.ClusterConfig, error) {
 	var resolvedHosts []string
 	for _, host := range parseHosts(cfg.Hosts) {
@@ -170,6 +172,8 @@ func NewCassandraCluster(
 			return nil, err
 		}
 	}
+
+	ConfigureTracing(cluster, tracerProvider)
 
 	return cluster, nil
 }

@@ -25,8 +25,10 @@
 package cassandra
 
 import (
+	"context"
 	"sync"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -53,8 +55,9 @@ func NewFactory(
 	r resolver.ServiceResolver,
 	clusterName string,
 	logger log.Logger,
+	tracerProvider trace.TracerProvider,
 ) *Factory {
-	session, err := gocql.NewSession(cfg, r, logger)
+	session, err := gocql.NewSession(context.Background(), cfg, r, tracerProvider, logger)
 	if err != nil {
 		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
 	}

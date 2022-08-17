@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -34,6 +35,8 @@ import (
 	"testing"
 
 	"github.com/blang/semver/v4"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap/zaptest"
 
 	"go.temporal.io/server/common/config"
@@ -65,9 +68,10 @@ const (
 
 type (
 	CassandraTestData struct {
-		Cfg     *config.Cassandra
-		Factory *cassandra.Factory
-		Logger  log.Logger
+		Cfg            *config.Cassandra
+		Factory        *cassandra.Factory
+		Logger         log.Logger
+		TracerProvider trace.TracerProvider
 	}
 )
 
@@ -75,6 +79,7 @@ func setUpCassandraTest(t *testing.T) (CassandraTestData, func()) {
 	var testData CassandraTestData
 	testData.Cfg = NewCassandraConfig()
 	testData.Logger = log.NewZapLogger(zaptest.NewLogger(t))
+	testData.TracerProvider = otel.GetTracerProvider()
 	SetUpCassandraDatabase(testData.Cfg, testData.Logger)
 	SetUpCassandraSchema(testData.Cfg, testData.Logger)
 
@@ -83,6 +88,7 @@ func setUpCassandraTest(t *testing.T) (CassandraTestData, func()) {
 		resolver.NewNoopResolver(),
 		testCassandraClusterName,
 		testData.Logger,
+		testData.TracerProvider,
 	)
 
 	tearDown := func() {
@@ -98,7 +104,7 @@ func SetUpCassandraDatabase(cfg *config.Cassandra, logger log.Logger) {
 	// NOTE need to connect with empty name to create new database
 	adminCfg.Keyspace = "system"
 
-	session, err := gocql.NewSession(adminCfg, resolver.NewNoopResolver(), logger)
+	session, err := gocql.NewSession(context.Background(), adminCfg, resolver.NewNoopResolver(), trace.NewNoopTracerProvider(), logger)
 	if err != nil {
 		panic(fmt.Sprintf("unable to create Cassandra session: %v", err))
 	}
@@ -121,7 +127,7 @@ func SetUpCassandraSchema(cfg *config.Cassandra, logger log.Logger) {
 }
 
 func ApplySchemaUpdate(cfg *config.Cassandra, schemaFile string, logger log.Logger) {
-	session, err := gocql.NewSession(*cfg, resolver.NewNoopResolver(), logger)
+	session, err := gocql.NewSession(context.Background(), *cfg, resolver.NewNoopResolver(), trace.NewNoopTracerProvider(), logger)
 	if err != nil {
 		panic(err)
 	}
@@ -150,7 +156,7 @@ func TearDownCassandraKeyspace(cfg *config.Cassandra) {
 	// NOTE need to connect with empty name to create new database
 	adminCfg.Keyspace = "system"
 
-	session, err := gocql.NewSession(adminCfg, resolver.NewNoopResolver(), log.NewNoopLogger())
+	session, err := gocql.NewSession(context.Background(), adminCfg, resolver.NewNoopResolver(), trace.NewNoopTracerProvider(), log.NewNoopLogger())
 	if err != nil {
 		panic(fmt.Sprintf("unable to create Cassandra session: %v", err))
 	}

@@ -27,6 +27,7 @@ package worker
 import (
 	"context"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.uber.org/fx"
 
@@ -115,6 +116,7 @@ func VisibilityManagerProvider(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	persistenceConfig *config.Persistence,
+	tracerProvider trace.TracerProvider,
 	serviceConfig *Config,
 	esConfig *esclient.Config,
 	esClient esclient.Client,
@@ -141,6 +143,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetBoolPropertyFn(false), // worker visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
 		metricsClient,
+		tracerProvider,
 		logger,
 	)
 }

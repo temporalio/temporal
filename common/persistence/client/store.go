@@ -25,6 +25,7 @@
 package client
 
 import (
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -72,6 +73,7 @@ func DataStoreFactoryProvider(
 	config *config.Persistence,
 	abstractDataStoreFactory AbstractDataStoreFactory,
 	logger log.Logger,
+	tracerProvider trace.TracerProvider,
 	metricsClient metrics.Client,
 ) (DataStoreFactory, *FaultInjectionDataStoreFactory) {
 
@@ -79,7 +81,7 @@ func DataStoreFactoryProvider(
 	defaultCfg := config.DataStores[config.DefaultStore]
 	switch {
 	case defaultCfg.Cassandra != nil:
-		dataStoreFactory = cassandra.NewFactory(*defaultCfg.Cassandra, r, string(clusterName), logger)
+		dataStoreFactory = cassandra.NewFactory(*defaultCfg.Cassandra, r, string(clusterName), logger, tracerProvider)
 	case defaultCfg.SQL != nil:
 		dataStoreFactory = sql.NewFactory(*defaultCfg.SQL, r, string(clusterName), logger)
 	case defaultCfg.CustomDataStoreConfig != nil:

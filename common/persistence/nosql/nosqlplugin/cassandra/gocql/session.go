@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	"go.opentelemetry.io/otel/trace"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
@@ -59,12 +60,14 @@ type (
 )
 
 func NewSession(
+	ctx context.Context,
 	config config.Cassandra,
 	resolver resolver.ServiceResolver,
+	tracerProvider trace.TracerProvider,
 	logger log.Logger,
 ) (*session, error) {
 
-	gocqlSession, err := initSession(config, resolver)
+	gocqlSession, err := initSession(ctx, config, resolver, tracerProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +84,8 @@ func NewSession(
 	return session, nil
 }
 
-func (s *session) refresh() {
+func (s *session) refresh(ctx context.Context) {
+	span := trace.SpanFromContext(ctx)
 	if atomic.LoadInt32(&s.status) != common.DaemonStatusStarted {
 		return
 	}
@@ -90,12 +94,14 @@ func (s *session) refresh() {
 	defer s.Unlock()
 
 	if time.Now().UTC().Sub(s.sessionInitTime) < sessionRefreshMinInternal {
+		span.AddEvent("too soon to refresh cql session")
 		s.logger.Warn("too soon to refresh cql session")
 		return
 	}
 
-	newSession, err := initSession(s.config, s.resolver)
+	newSession, err := initSession(ctx, s.config, s.resolver, span.TracerProvider())
 	if err != nil {
+		span.RecordError(err)
 		s.logger.Error("unable to refresh cql session", tag.Error(err))
 		return
 	}
@@ -108,10 +114,12 @@ func (s *session) refresh() {
 }
 
 func initSession(
+	ctx context.Context,
 	config config.Cassandra,
 	resolver resolver.ServiceResolver,
+	tracerProvider trace.TracerProvider,
 ) (*gocql.Session, error) {
-	cluster, err := NewCassandraCluster(config, resolver)
+	cluster, err := NewCassandraCluster(config, resolver, tracerProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -146,10 +154,17 @@ func (s *session) NewBatch(
 	}
 }
 
+func extractCtxOrBackground(i interface{}) context.Context {
+	if contexter, ok := i.(interface{ context() context.Context }); ok {
+		return contexter.context()
+	}
+	return context.Background()
+}
+
 func (s *session) ExecuteBatch(
 	b Batch,
 ) (retError error) {
-	defer func() { s.handleError(retError) }()
+	defer func() { s.handleError(extractCtxOrBackground(b), retError) }()
 
 	return s.Value.Load().(*gocql.Session).ExecuteBatch(b.(*batch).gocqlBatch)
 }
@@ -158,7 +173,7 @@ func (s *session) MapExecuteBatchCAS(
 	b Batch,
 	previous map[string]interface{},
 ) (_ bool, _ Iter, retError error) {
-	defer func() { s.handleError(retError) }()
+	defer func() { s.handleError(extractCtxOrBackground(b), retError) }()
 
 	applied, iter, err := s.Value.Load().(*gocql.Session).MapExecuteBatchCAS(b.(*batch).gocqlBatch, previous)
 	return applied, iter, err
@@ -167,7 +182,7 @@ func (s *session) MapExecuteBatchCAS(
 func (s *session) AwaitSchemaAgreement(
 	ctx context.Context,
 ) (retError error) {
-	defer func() { s.handleError(retError) }()
+	defer func() { s.handleError(ctx, retError) }()
 
 	return s.Value.Load().(*gocql.Session).AwaitSchemaAgreement(ctx)
 }
@@ -184,11 +199,12 @@ func (s *session) Close() {
 }
 
 func (s *session) handleError(
+	ctx context.Context,
 	err error,
 ) {
 	switch err {
 	case gocql.ErrNoConnections:
-		s.refresh()
+		s.refresh(ctx)
 	default:
 		// noop
 	}

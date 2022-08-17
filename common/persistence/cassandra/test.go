@@ -25,12 +25,14 @@
 package cassandra
 
 import (
+	"context"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -137,6 +139,7 @@ func (s *TestCluster) CreateSession(
 
 	var err error
 	s.session, err = gocql.NewSession(
+		context.Background(),
 		config.Cassandra{
 			Hosts:    s.cfg.Hosts,
 			Port:     s.cfg.Port,
@@ -151,6 +154,7 @@ func (s *TestCluster) CreateSession(
 			ConnectTimeout: s.cfg.ConnectTimeout,
 		},
 		resolver.NewNoopResolver(),
+		trace.NewNoopTracerProvider(),
 		log.NewNoopLogger(),
 	)
 	if err != nil {

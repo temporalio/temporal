@@ -32,6 +32,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/otel/trace"
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
@@ -134,7 +135,7 @@ func TestNewCassandraCluster(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			r := resolver.NewMockServiceResolver(ctrl)
-			_, err := NewCassandraCluster(tc.cfg, r)
+			_, err := NewCassandraCluster(tc.cfg, r, trace.NewNoopTracerProvider())
 			if !errors.Is(err, tc.err) {
 				assert.Equal(t, tc.err, err)
 			}

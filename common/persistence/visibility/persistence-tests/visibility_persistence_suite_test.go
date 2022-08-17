@@ -31,6 +31,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -76,6 +77,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
 		metrics.NoopClient,
+		trace.NewNoopTracerProvider(),
 		s.Logger)
 
 	if err != nil {
