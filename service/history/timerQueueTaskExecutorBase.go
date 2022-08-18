@@ -116,7 +116,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	case *serviceerror.NotFound:
 		// the mutable state is deleted and delete history branch operation failed.
 		// use task branch token to delete the leftover history branch
-		return t.deleteHistoryBranch(task.BranchToken)
+		return t.deleteHistoryBranch(ctx, task.BranchToken)
 	default:
 		return err
 	}
@@ -140,7 +140,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		// the mutable state has a newer version and the branch token is updated
 		// use task branch token to delete the original branch
 		if !bytes.Equal(task.BranchToken, currentBranchToken) {
-			return t.deleteHistoryBranch(task.BranchToken)
+			return t.deleteHistoryBranch(ctx, task.BranchToken)
 		}
 		t.logger.Error("Different mutable state versions have the same branch token", tag.TaskVersion(task.Version), tag.LastEventVersion(lastWriteVersion))
 		return serviceerror.NewInternal("Mutable state has different version but same branch token")
@@ -199,9 +199,12 @@ func getTaskNamespaceIDAndWorkflowExecution(
 	}
 }
 
-func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(branchToken []byte) error {
+func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
+	ctx context.Context,
+	branchToken []byte,
+) error {
 	if len(branchToken) > 0 {
-		return t.shard.GetExecutionManager().DeleteHistoryBranch(context.TODO(), &persistence.DeleteHistoryBranchRequest{
+		return t.shard.GetExecutionManager().DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
 			ShardID:     t.shard.GetShardID(),
 			BranchToken: branchToken,
 		})
