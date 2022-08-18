@@ -38,8 +38,13 @@ services:
         aliases:
           - elasticsearch
     environment:
+      - cluster.routing.allocation.disk.threshold_enabled=true
+      - cluster.routing.allocation.disk.watermark.low=512mb
+      - cluster.routing.allocation.disk.watermark.high=256mb
+      - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
       - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms100m -Xmx100m
 
   integration-test-cassandra:
     build:
