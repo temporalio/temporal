@@ -618,7 +618,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 	req *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
 ) (retError error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
-	if err := validateNamespaceUUID(namespaceID); err != nil {
+	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
 		return err
 	}
 
