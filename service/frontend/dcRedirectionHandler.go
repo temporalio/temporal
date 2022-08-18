@@ -1670,6 +1670,34 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkflow(
 	return resp, err
 }
 
+func (handler *DCRedirectionHandlerImpl) DescribeBatchOperation(
+  ctx context.Context,
+  request *workflowservice.DescribeBatchOperationRequest,
+) (resp *workflowservice.DescribeBatchOperationResponse, retError error) {
+  panic("DCRedirectionHandlerImpl.DescribeBatchOperationRequest not implemented")
+}
+
+func (handler *DCRedirectionHandlerImpl) ListBatchOperations(
+  ctx context.Context,
+  request *workflowservice.ListBatchOperationsRequest,
+) (resp *workflowservice.ListBatchOperationsResponse, retError error) {
+  panic("DCRedirectionHandlerImpl.ListBatchOperations not implemented")
+}
+
+func (handler *DCRedirectionHandlerImpl) StartBatchOperation(
+  ctx context.Context,
+  request *workflowservice.StartBatchOperationRequest,
+) (resp *workflowservice.StartBatchOperationResponse, retError error) {
+  panic("DCRedirectionHandlerImpl.StartBatchOperation not implemented")
+}
+
+func (handler *DCRedirectionHandlerImpl) StopBatchOperation(
+  ctx context.Context,
+  request *workflowservice.StopBatchOperationRequest,
+) (resp *workflowservice.StopBatchOperationResponse, retError error) {
+  panic("DCRedirectionHandlerImpl.StopBatchOperation not implemented")
+}
+
 func (handler *DCRedirectionHandlerImpl) beforeCall(
 	scope int,
 ) (metrics.Scope, time.Time) {

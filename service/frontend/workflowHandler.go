@@ -3756,6 +3756,35 @@ func (wh *WorkflowHandler) GetWorkerBuildIdOrdering(ctx context.Context, request
 	return matchingResponse.Response, err
 }
 
+func (wh *WorkflowHandler) DescribeBatchOperation(
+  ctx context.Context,
+  request *workflowservice.DescribeBatchOperationRequest,
+) (_ *workflowservice.DescribeBatchOperationResponse, retError error) {
+  panic("WorkflowHandler.DescribeBatchOperationRequest not implemented")
+}
+
+func (wh *WorkflowHandler) ListBatchOperations(
+  ctx context.Context,
+  request *workflowservice.ListBatchOperationsRequest,
+) (_ *workflowservice.ListBatchOperationsResponse, retError error) {
+  panic("WorkflowHandler.ListBatchOperations not implemented")
+}
+
+func (wh *WorkflowHandler) StartBatchOperation(
+  ctx context.Context,
+  request *workflowservice.StartBatchOperationRequest,
+) (_ *workflowservice.StartBatchOperationResponse, retError error) {
+  panic("WorkflowHandler.StartBatchOperation not implemented")
+}
+
+func (wh *WorkflowHandler) StopBatchOperation(
+  ctx context.Context,
+  request *workflowservice.StopBatchOperationRequest,
+) (_ *workflowservice.StopBatchOperationResponse, retError error) {
+  panic("WorkflowHandler.StopBatchOperation not implemented")
+}
+
+
 func (wh *WorkflowHandler) getRawHistory(
 	ctx context.Context,
 	scope metrics.Scope,

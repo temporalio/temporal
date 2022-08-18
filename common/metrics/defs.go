@@ -458,6 +458,8 @@ const (
 	MatchingClientGetTaskQueueMetadataScope
 	// FrontendClientDeprecateNamespaceScope tracks RPC calls to frontend service
 	FrontendClientDeprecateNamespaceScope
+	// FrontendClientDescribeBatchOperationScope tracks RPC calls to frontend service
+	FrontendClientDescribeBatchOperationScope
 	// FrontendClientDescribeNamespaceScope tracks RPC calls to frontend service
 	FrontendClientDescribeNamespaceScope
 	// FrontendClientDescribeTaskQueueScope tracks RPC calls to frontend service
@@ -474,6 +476,8 @@ const (
 	FrontendClientPollForWorkflowExecutionRawHistoryScope
 	// FrontendClientListArchivedWorkflowExecutionsScope tracks RPC calls to frontend service
 	FrontendClientListArchivedWorkflowExecutionsScope
+	// FrontendClientListBatchOperationsScope tracks RPC calls to frontend service
+	FrontendClientListBatchOperationsScope
 	// FrontendClientListClosedWorkflowExecutionsScope tracks RPC calls to frontend service
 	FrontendClientListClosedWorkflowExecutionsScope
 	// FrontendClientListNamespacesScope tracks RPC calls to frontend service
@@ -520,8 +524,12 @@ const (
 	FrontendClientSignalWithStartWorkflowExecutionScope
 	// FrontendClientSignalWorkflowExecutionScope tracks RPC calls to frontend service
 	FrontendClientSignalWorkflowExecutionScope
+	// FrontendClientStartBatchOperationScope tracks RPC calls to frontend service
+	FrontendClientStartBatchOperationScope
 	// FrontendClientStartWorkflowExecutionScope tracks RPC calls to frontend service
 	FrontendClientStartWorkflowExecutionScope
+	// FrontendClientStopBatchOperationScope tracks RPC calls to frontend service
+	FrontendClientStopBatchOperationScope
 	// FrontendClientTerminateWorkflowExecutionScope tracks RPC calls to frontend service
 	FrontendClientTerminateWorkflowExecutionScope
 	// FrontendClientUpdateNamespaceScope tracks RPC calls to frontend service
@@ -1509,6 +1517,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingClientGetTaskQueueMetadataScope:        {operation: "MatchingClientGetTaskQueueMetadata", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 
 		FrontendClientDeprecateNamespaceScope:                 {operation: "FrontendClientDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDescribeBatchOperationScope:             {operation: "FrontendClientDescribeBatchOperation", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeNamespaceScope:                  {operation: "FrontendClientDescribeNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeTaskQueueScope:                  {operation: "FrontendClientDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeWorkflowExecutionScope:          {operation: "FrontendClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1517,6 +1526,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientGetWorkflowExecutionRawHistoryScope:     {operation: "FrontendClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientPollForWorkflowExecutionRawHistoryScope: {operation: "FrontendClientPollForWorkflowExecutionRawHistoryScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListArchivedWorkflowExecutionsScope:     {operation: "FrontendClientListArchivedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListBatchOperationsScope:                {operation: "FrontendClientListBatchOperations", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListClosedWorkflowExecutionsScope:       {operation: "FrontendClientListClosedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListNamespacesScope:                     {operation: "FrontendClientListNamespaces", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListOpenWorkflowExecutionsScope:         {operation: "FrontendClientListOpenWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1540,7 +1550,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientRespondQueryTaskCompletedScope:          {operation: "FrontendClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientSignalWithStartWorkflowExecutionScope:   {operation: "FrontendClientSignalWithStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientSignalWorkflowExecutionScope:            {operation: "FrontendClientSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientStartBatchOperationScope:                {operation: "FrontendClientStartBatchOperation", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientStartWorkflowExecutionScope:             {operation: "FrontendClientStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientStopBatchOperationScope:                 {operation: "FrontendClientStopBatchOperation", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientTerminateWorkflowExecutionScope:         {operation: "FrontendClientTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientUpdateNamespaceScope:                    {operation: "FrontendClientUpdateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListWorkflowExecutionsScope:             {operation: "FrontendClientListWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
