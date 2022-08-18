@@ -31,9 +31,9 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.8.0
 	github.com/temporalio/ringpop-go v0.0.0-20211012191444-6f91b5915e95
+	github.com/temporalio/tchannel-go v1.22.3
 	github.com/temporalio/tctl-kit v0.0.0-20220512165751-9c751176dd14
 	github.com/uber-go/tally/v4 v4.1.2
-	github.com/uber/tchannel-go v1.22.3
 	github.com/urfave/cli v1.22.9
 	github.com/urfave/cli/v2 v2.10.2
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
@@ -68,7 +68,7 @@ require (
 	cloud.google.com/go v0.102.1 // indirect
 	cloud.google.com/go/compute v1.7.0 // indirect
 	cloud.google.com/go/iam v0.3.0 // indirect
-	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
+	github.com/apache/thrift v0.16.0 // indirect
 	github.com/benbjohnson/clock v1.3.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bitly/go-hostpool v0.1.0 // indirect
@@ -109,7 +109,6 @@ require (
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
-	github.com/streadway/quantile v0.0.0-20220407130108-4246515d968d // indirect
 	github.com/stretchr/objx v0.4.0 // indirect
 	github.com/twmb/murmur3 v1.1.6 // indirect
 	github.com/uber-common/bark v1.3.0 // indirect
@@ -143,3 +142,7 @@ require (
 	modernc.org/strutil v1.1.1 // indirect
 	modernc.org/token v1.0.0 // indirect
 )
+
+replace github.com/temporalio/tchannel-go v1.22.3 => ../../temporalio/tchannel-go
+
+replace github.com/temporalio/ringpop-go v0.0.0-20211012191444-6f91b5915e95 => ../../temporalio/ringpop-go
