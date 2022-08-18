@@ -2962,6 +2962,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			InternalErrorDifferentiation:    true,
 			ActivityFailureIncludeHeartbeat: true,
 			SupportsSchedules:               true,
+			EncodedFailureAttributes:        true,
 		},
 	}, nil
 }
