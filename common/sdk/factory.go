@@ -43,7 +43,7 @@ import (
 
 type (
 	ClientFactory interface {
-		NewClient(namespaceName string, logger log.Logger) (sdkclient.Client, error)
+		NewClient(namespaceName string, logger log.Logger) sdkclient.Client
 		GetSystemClient(logger log.Logger) sdkclient.Client
 	}
 
@@ -56,10 +56,9 @@ type (
 		tlsConfig       *tls.Config
 		metricsHandler  *MetricsHandler
 		systemSdkClient sdkclient.Client
-		once            sync.Once
-
-		lock           sync.Mutex
-		firstSdkClient sdkclient.Client
+		firstSdkClient  sdkclient.Client
+		systemOnce      sync.Once
+		firstOnce       sync.Once
 	}
 
 	workerFactory struct{}
@@ -78,10 +77,8 @@ func NewClientFactory(hostPort string, tlsConfig *tls.Config, metricsHandler *Me
 	}
 }
 
-func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkclient.Client, error) {
-	f.lock.Lock()
-	defer f.lock.Unlock()
-
+func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) sdkclient.Client {
+	var retClient sdkclient.Client
 	options := sdkclient.Options{
 		HostPort:       f.hostPort,
 		Namespace:      namespaceName,
@@ -92,42 +89,37 @@ func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkc
 		},
 	}
 
-	if f.firstSdkClient != nil {
-		// this shouldn't fail if the existing client was created successfully
-		return sdkclient.NewClientFromExisting(f.firstSdkClient, options)
-	}
+	f.firstOnce.Do(func() {
+		err := backoff.ThrottleRetry(func() error {
+			sdkClient, err := sdkclient.Dial(options)
+			if err != nil {
+				return fmt.Errorf("unable to create SDK client: %w", err)
+			}
+			retClient = sdkClient
+			return nil
+		}, common.CreateSdkClientFactoryRetryPolicy(), common.IsContextDeadlineExceededErr)
 
-	var client sdkclient.Client
-
-	// Retry for up to 1m, handles frontend service not ready
-	err := backoff.ThrottleRetry(func() error {
-		sdkClient, err := sdkclient.Dial(options)
 		if err != nil {
-			return fmt.Errorf("unable to create SDK client: %w", err)
+			logger.Fatal("error creating sdk client", tag.Error(err))
 		}
 
-		client = sdkClient
-		return nil
-	}, common.CreateSdkClientFactoryRetryPolicy(), common.IsContextDeadlineExceededErr)
+		f.firstSdkClient = retClient
+	})
 
-	if err == nil && client != nil && f.firstSdkClient == nil {
-		f.firstSdkClient = client
+	if retClient == f.firstSdkClient {
+		return retClient
 	}
-
-	return client, err
+	// this shouldn't fail if the existing client was created successfully
+	client, err := sdkclient.NewClientFromExisting(f.firstSdkClient, options)
+	if err != nil {
+		logger.Fatal("error creating sdk client", tag.Error(err))
+	}
+	return client
 }
 
 func (f *clientFactory) GetSystemClient(logger log.Logger) sdkclient.Client {
-	f.once.Do(func() {
-		client, err := f.NewClient(primitives.SystemLocalNamespace, logger)
-		if err != nil {
-			logger.Fatal(
-				"error getting system sdk client",
-				tag.Error(err),
-			)
-		}
-
-		f.systemSdkClient = client
+	f.systemOnce.Do(func() {
+		f.systemSdkClient = f.NewClient(primitives.SystemLocalNamespace, logger)
 	})
 	return f.systemSdkClient
 }

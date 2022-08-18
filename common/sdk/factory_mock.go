@@ -75,12 +75,11 @@ func (mr *MockClientFactoryMockRecorder) GetSystemClient(logger interface{}) *go
 }
 
 // NewClient mocks base method.
-func (m *MockClientFactory) NewClient(namespaceName string, logger log.Logger) (client.Client, error) {
+func (m *MockClientFactory) NewClient(namespaceName string, logger log.Logger) client.Client {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewClient", namespaceName, logger)
 	ret0, _ := ret[0].(client.Client)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // NewClient indicates an expected call of NewClient.

@@ -335,10 +335,7 @@ func (w *perNamespaceWorker) startWorker(
 	multiplicity int,
 ) (sdkclient.Client, sdkworker.Worker, error) {
 	nsName := ns.Name().String()
-	client, err := w.wm.sdkClientFactory.NewClient(nsName, w.wm.logger)
-	if err != nil {
-		return nil, nil, err
-	}
+	client := w.wm.sdkClientFactory.NewClient(nsName, w.wm.logger)
 
 	var sdkoptions sdkworker.Options
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))
@@ -353,7 +350,7 @@ func (w *perNamespaceWorker) startWorker(
 		cmp.Register(sdkworker, ns)
 	}
 	// TODO: use Run() and handle post-startup errors by recreating worker
-	err = sdkworker.Start()
+	err := sdkworker.Start()
 	if err != nil {
 		client.Close()
 		return nil, nil, err
