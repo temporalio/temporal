@@ -415,16 +415,6 @@ func convertMappingBody(esMapping map[string]interface{}, indexName string) map[
 		return result
 	}
 
-	// One more nested field on ES6.
-	// TODO (alex): Remove with ES6 removal.
-	if doc, ok := mappingsMap[docTypeV6]; ok {
-		docMap, ok := doc.(map[string]interface{})
-		if !ok {
-			return result
-		}
-		mappingsMap = docMap
-	}
-
 	properties, ok := mappingsMap["properties"]
 	if !ok {
 		return result
