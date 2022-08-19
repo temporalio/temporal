@@ -387,7 +387,8 @@ func (r *ReaderImpl) submit(
 	executable Executable,
 ) {
 	now := r.timeSource.Now()
-	if fireTime := executable.GetKey().FireTime; now.Before(fireTime) {
+	// Please check the comment in queue_scheduled.go for why adding 1ms to the fire time.
+	if fireTime := executable.GetKey().FireTime.Add(scheduledTaskPrecision); now.Before(fireTime) {
 		r.rescheduler.Add(executable, fireTime)
 		return
 	}
