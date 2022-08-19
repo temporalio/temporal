@@ -175,6 +175,7 @@ message DescribeTaskQueueResponse {
 
 message ListTaskQueuePartitionsRequest {
     string namespace = 1;
+    string namespace_id = 3;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
 }
 

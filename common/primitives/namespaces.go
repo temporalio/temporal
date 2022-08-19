@@ -22,25 +22,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package dynamicconfig
+package primitives
 
-import "go.temporal.io/server/common/primitives"
+import "time"
 
-var defaultNumTaskQueuePartitions = []ConstrainedValue{
-	// The per-ns worker task queue in all namespaces should only have one partition, since
-	// we'll only run one worker per task queue.
-	{
-		Constraints: map[string]any{
-			TaskQueueName.String(): primitives.PerNSWorkerTaskQueue,
-		},
-		Value: 1,
-	},
+// Namespace-related constants.
 
-	// TODO: After we have a solution for ensuring no tasks are lost, add a constraint here for
-	// all task queues in SystemLocalNamespace to have one partition.
-
-	// Default for everything else:
-	{
-		Value: 4,
-	},
-}
+// This was flagged by salus as potentially hardcoded credentials. This is a false positive by the scanner and should be
+// disregarded.
+// #nosec
+const (
+	// SystemLocalNamespace is namespace name for temporal system workflows running in local cluster
+	SystemLocalNamespace = "temporal-system"
+	// SystemNamespaceID is namespace id for all temporal system workflows
+	SystemNamespaceID = "32049b68-7872-4094-8e63-d0dd59896a83"
+	// SystemNamespaceRetention is retention config for all temporal system workflows
+	SystemNamespaceRetention = time.Hour * 24 * 7
+)

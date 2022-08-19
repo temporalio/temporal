@@ -36,18 +36,14 @@ import (
 // to the end of each filters slice, so callers don't need to add it.
 type (
 	Client interface {
-		GetValue(name Key, defaultValue interface{}) (interface{}, error)
-		GetValueWithFilters(name Key, filters []map[Filter]interface{}, defaultValue interface{}) (interface{}, error)
+		GetValue(name Key, defaultValue any) (any, error)
+		GetValueWithFilters(name Key, filters []map[Filter]interface{}, defaultValue any) (any, error)
 
-		GetIntValue(name Key, filters []map[Filter]interface{}, defaultValue int) (int, error)
-		GetFloatValue(name Key, filters []map[Filter]interface{}, defaultValue float64) (float64, error)
-		GetBoolValue(name Key, filters []map[Filter]interface{}, defaultValue bool) (bool, error)
-		GetStringValue(name Key, filters []map[Filter]interface{}, defaultValue string) (string, error)
-		GetMapValue(
-			name Key, filters []map[Filter]interface{}, defaultValue map[string]interface{},
-		) (map[string]interface{}, error)
-		GetDurationValue(
-			name Key, filters []map[Filter]interface{}, defaultValue time.Duration,
-		) (time.Duration, error)
+		GetIntValue(name Key, filters []map[Filter]interface{}, defaultValue any) (int, error)
+		GetFloatValue(name Key, filters []map[Filter]interface{}, defaultValue any) (float64, error)
+		GetBoolValue(name Key, filters []map[Filter]interface{}, defaultValue any) (bool, error)
+		GetStringValue(name Key, filters []map[Filter]interface{}, defaultValue any) (string, error)
+		GetMapValue(name Key, filters []map[Filter]interface{}, defaultValue any) (map[string]any, error)
+		GetDurationValue(name Key, filters []map[Filter]interface{}, defaultValue any) (time.Duration, error)
 	}
 )

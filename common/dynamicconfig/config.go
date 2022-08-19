@@ -131,7 +131,7 @@ type BoolPropertyFnWithNamespaceIDFilter func(id string) bool
 type BoolPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool
 
 // GetProperty gets a interface property and returns defaultValue if property is not found
-func (c *Collection) GetProperty(key Key, defaultValue interface{}) PropertyFn {
+func (c *Collection) GetProperty(key Key, defaultValue any) PropertyFn {
 	return func() interface{} {
 		val, err := c.client.GetValue(key, defaultValue)
 		if err != nil {
@@ -160,13 +160,16 @@ func getFilterMapsForTaskQueue(namespace string, taskQueue string, taskType enum
 	return []map[Filter]interface{}{
 		getOneFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue), TaskTypeFilter(taskType)),
 		getOneFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue)),
-		getOneFilterMap(NamespaceFilter(namespace)),
+		// A task-queue-name-only filter applies to a single task queue name across all
+		// namespaces, with higher precedence than a namespace-only filter. This is intended to
+		// be used by defaultNumTaskQueuePartitions and is probably not useful otherwise.
 		getOneFilterMap(TaskQueueFilter(taskQueue)),
+		getOneFilterMap(NamespaceFilter(namespace)),
 	}
 }
 
 // GetIntProperty gets property and asserts that it's an integer
-func (c *Collection) GetIntProperty(key Key, defaultValue int) IntPropertyFn {
+func (c *Collection) GetIntProperty(key Key, defaultValue any) IntPropertyFn {
 	return func(opts ...FilterOption) int {
 		val, err := c.client.GetIntValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
@@ -178,7 +181,7 @@ func (c *Collection) GetIntProperty(key Key, defaultValue int) IntPropertyFn {
 }
 
 // GetIntPropertyFilteredByNamespace gets property with namespace filter and asserts that it's an integer
-func (c *Collection) GetIntPropertyFilteredByNamespace(key Key, defaultValue int) IntPropertyFnWithNamespaceFilter {
+func (c *Collection) GetIntPropertyFilteredByNamespace(key Key, defaultValue any) IntPropertyFnWithNamespaceFilter {
 	return func(namespace string) int {
 		val, err := c.client.GetIntValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
 		if err != nil {
@@ -190,7 +193,7 @@ func (c *Collection) GetIntPropertyFilteredByNamespace(key Key, defaultValue int
 }
 
 // GetIntPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's an integer
-func (c *Collection) GetIntPropertyFilteredByTaskQueueInfo(key Key, defaultValue int) IntPropertyFnWithTaskQueueInfoFilters {
+func (c *Collection) GetIntPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) IntPropertyFnWithTaskQueueInfoFilters {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int {
 		val, err := c.client.GetIntValue(
 			key,
@@ -206,7 +209,7 @@ func (c *Collection) GetIntPropertyFilteredByTaskQueueInfo(key Key, defaultValue
 }
 
 // GetIntPropertyFilteredByShardID gets property with shardID as filter and asserts that it's an integer
-func (c *Collection) GetIntPropertyFilteredByShardID(key Key, defaultValue int) IntPropertyFnWithShardIDFilter {
+func (c *Collection) GetIntPropertyFilteredByShardID(key Key, defaultValue any) IntPropertyFnWithShardIDFilter {
 	return func(shardID int32) int {
 		val, err := c.client.GetIntValue(
 			key,
@@ -222,7 +225,7 @@ func (c *Collection) GetIntPropertyFilteredByShardID(key Key, defaultValue int) 
 }
 
 // GetFloat64Property gets property and asserts that it's a float64
-func (c *Collection) GetFloat64Property(key Key, defaultValue float64) FloatPropertyFn {
+func (c *Collection) GetFloat64Property(key Key, defaultValue any) FloatPropertyFn {
 	return func(opts ...FilterOption) float64 {
 		val, err := c.client.GetFloatValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
@@ -234,7 +237,7 @@ func (c *Collection) GetFloat64Property(key Key, defaultValue float64) FloatProp
 }
 
 // GetFloat64PropertyFilteredByShardID gets property with shardID filter and asserts that it's a float64
-func (c *Collection) GetFloat64PropertyFilteredByShardID(key Key, defaultValue float64) FloatPropertyFnWithShardIDFilter {
+func (c *Collection) GetFloat64PropertyFilteredByShardID(key Key, defaultValue any) FloatPropertyFnWithShardIDFilter {
 	return func(shardID int32) float64 {
 		val, err := c.client.GetFloatValue(
 			key,
@@ -249,8 +252,8 @@ func (c *Collection) GetFloat64PropertyFilteredByShardID(key Key, defaultValue f
 	}
 }
 
-// GetFloatPropertyFilteredByNamespace gets property with namespace filter and asserts that it's a float
-func (c *Collection) GetFloatPropertyFilteredByNamespace(key Key, defaultValue float64) FloatPropertyFnWithNamespaceFilter {
+// GetFloatPropertyFilteredByNamespace gets property with namespace filter and asserts that it's a float64
+func (c *Collection) GetFloatPropertyFilteredByNamespace(key Key, defaultValue any) FloatPropertyFnWithNamespaceFilter {
 	return func(namespace string) float64 {
 		val, err := c.client.GetFloatValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
 		if err != nil {
@@ -261,8 +264,8 @@ func (c *Collection) GetFloatPropertyFilteredByNamespace(key Key, defaultValue f
 	}
 }
 
-// GetFloatPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's an integer
-func (c *Collection) GetFloatPropertyFilteredByTaskQueueInfo(key Key, defaultValue float64) FloatPropertyFnWithTaskQueueInfoFilters {
+// GetFloatPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's a float64
+func (c *Collection) GetFloatPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) FloatPropertyFnWithTaskQueueInfoFilters {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64 {
 		val, err := c.client.GetFloatValue(
 			key,
@@ -278,7 +281,7 @@ func (c *Collection) GetFloatPropertyFilteredByTaskQueueInfo(key Key, defaultVal
 }
 
 // GetDurationProperty gets property and asserts that it's a duration
-func (c *Collection) GetDurationProperty(key Key, defaultValue time.Duration) DurationPropertyFn {
+func (c *Collection) GetDurationProperty(key Key, defaultValue any) DurationPropertyFn {
 	return func(opts ...FilterOption) time.Duration {
 		val, err := c.client.GetDurationValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
@@ -290,7 +293,7 @@ func (c *Collection) GetDurationProperty(key Key, defaultValue time.Duration) Du
 }
 
 // GetDurationPropertyFilteredByNamespace gets property with namespace filter and asserts that it's a duration
-func (c *Collection) GetDurationPropertyFilteredByNamespace(key Key, defaultValue time.Duration) DurationPropertyFnWithNamespaceFilter {
+func (c *Collection) GetDurationPropertyFilteredByNamespace(key Key, defaultValue any) DurationPropertyFnWithNamespaceFilter {
 	return func(namespace string) time.Duration {
 		val, err := c.client.GetDurationValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
 		if err != nil {
@@ -302,7 +305,7 @@ func (c *Collection) GetDurationPropertyFilteredByNamespace(key Key, defaultValu
 }
 
 // GetDurationPropertyFilteredByNamespaceID gets property with namespaceID filter and asserts that it's a duration
-func (c *Collection) GetDurationPropertyFilteredByNamespaceID(key Key, defaultValue time.Duration) DurationPropertyFnWithNamespaceIDFilter {
+func (c *Collection) GetDurationPropertyFilteredByNamespaceID(key Key, defaultValue any) DurationPropertyFnWithNamespaceIDFilter {
 	return func(namespaceID string) time.Duration {
 		val, err := c.client.GetDurationValue(key, getFilterMap(NamespaceIDFilter(namespaceID)), defaultValue)
 		if err != nil {
@@ -314,7 +317,7 @@ func (c *Collection) GetDurationPropertyFilteredByNamespaceID(key Key, defaultVa
 }
 
 // GetDurationPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's a duration
-func (c *Collection) GetDurationPropertyFilteredByTaskQueueInfo(key Key, defaultValue time.Duration) DurationPropertyFnWithTaskQueueInfoFilters {
+func (c *Collection) GetDurationPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) DurationPropertyFnWithTaskQueueInfoFilters {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration {
 		val, err := c.client.GetDurationValue(
 			key,
@@ -330,7 +333,7 @@ func (c *Collection) GetDurationPropertyFilteredByTaskQueueInfo(key Key, default
 }
 
 // GetDurationPropertyFilteredByShardID gets property with shardID id as filter and asserts that it's a duration
-func (c *Collection) GetDurationPropertyFilteredByShardID(key Key, defaultValue time.Duration) DurationPropertyFnWithShardIDFilter {
+func (c *Collection) GetDurationPropertyFilteredByShardID(key Key, defaultValue any) DurationPropertyFnWithShardIDFilter {
 	return func(shardID int32) time.Duration {
 		val, err := c.client.GetDurationValue(
 			key,
@@ -345,8 +348,8 @@ func (c *Collection) GetDurationPropertyFilteredByShardID(key Key, defaultValue 
 	}
 }
 
-// GetBoolProperty gets property and asserts that it's an bool
-func (c *Collection) GetBoolProperty(key Key, defaultValue bool) BoolPropertyFn {
+// GetBoolProperty gets property and asserts that it's a bool
+func (c *Collection) GetBoolProperty(key Key, defaultValue any) BoolPropertyFn {
 	return func(opts ...FilterOption) bool {
 		val, err := c.client.GetBoolValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
@@ -357,8 +360,8 @@ func (c *Collection) GetBoolProperty(key Key, defaultValue bool) BoolPropertyFn 
 	}
 }
 
-// GetStringProperty gets property and asserts that it's an string
-func (c *Collection) GetStringProperty(key Key, defaultValue string) StringPropertyFn {
+// GetStringProperty gets property and asserts that it's a string
+func (c *Collection) GetStringProperty(key Key, defaultValue any) StringPropertyFn {
 	return func(opts ...FilterOption) string {
 		val, err := c.client.GetStringValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
@@ -370,7 +373,7 @@ func (c *Collection) GetStringProperty(key Key, defaultValue string) StringPrope
 }
 
 // GetMapProperty gets property and asserts that it's a map
-func (c *Collection) GetMapProperty(key Key, defaultValue map[string]interface{}) MapPropertyFn {
+func (c *Collection) GetMapProperty(key Key, defaultValue any) MapPropertyFn {
 	return func(opts ...FilterOption) map[string]interface{} {
 		val, err := c.client.GetMapValue(key, getFilterMap(opts...), defaultValue)
 		if err != nil {
@@ -381,8 +384,8 @@ func (c *Collection) GetMapProperty(key Key, defaultValue map[string]interface{}
 	}
 }
 
-// GetStringPropertyFnWithNamespaceFilter gets property with namespace filter and asserts that its namespace
-func (c *Collection) GetStringPropertyFnWithNamespaceFilter(key Key, defaultValue string) StringPropertyFnWithNamespaceFilter {
+// GetStringPropertyFnWithNamespaceFilter gets property with namespace filter and asserts that it's a string
+func (c *Collection) GetStringPropertyFnWithNamespaceFilter(key Key, defaultValue any) StringPropertyFnWithNamespaceFilter {
 	return func(namespace string) string {
 		val, err := c.client.GetStringValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
 		if err != nil {
@@ -394,7 +397,7 @@ func (c *Collection) GetStringPropertyFnWithNamespaceFilter(key Key, defaultValu
 }
 
 // GetMapPropertyFnWithNamespaceFilter gets property and asserts that it's a map
-func (c *Collection) GetMapPropertyFnWithNamespaceFilter(key Key, defaultValue map[string]interface{}) MapPropertyFnWithNamespaceFilter {
+func (c *Collection) GetMapPropertyFnWithNamespaceFilter(key Key, defaultValue any) MapPropertyFnWithNamespaceFilter {
 	return func(namespace string) map[string]interface{} {
 		val, err := c.client.GetMapValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
 		if err != nil {
@@ -405,8 +408,8 @@ func (c *Collection) GetMapPropertyFnWithNamespaceFilter(key Key, defaultValue m
 	}
 }
 
-// GetBoolPropertyFnWithNamespaceFilter gets property with namespace filter and asserts that its namespace
-func (c *Collection) GetBoolPropertyFnWithNamespaceFilter(key Key, defaultValue bool) BoolPropertyFnWithNamespaceFilter {
+// GetBoolPropertyFnWithNamespaceFilter gets property with namespace filter and asserts that it's a bool
+func (c *Collection) GetBoolPropertyFnWithNamespaceFilter(key Key, defaultValue any) BoolPropertyFnWithNamespaceFilter {
 	return func(namespace string) bool {
 		val, err := c.client.GetBoolValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
 		if err != nil {
@@ -418,7 +421,7 @@ func (c *Collection) GetBoolPropertyFnWithNamespaceFilter(key Key, defaultValue 
 }
 
 // GetBoolPropertyFnWithNamespaceIDFilter gets property with namespaceID filter and asserts that it's a bool
-func (c *Collection) GetBoolPropertyFnWithNamespaceIDFilter(key Key, defaultValue bool) BoolPropertyFnWithNamespaceIDFilter {
+func (c *Collection) GetBoolPropertyFnWithNamespaceIDFilter(key Key, defaultValue any) BoolPropertyFnWithNamespaceIDFilter {
 	return func(id string) bool {
 		val, err := c.client.GetBoolValue(key, getFilterMap(NamespaceIDFilter(id)), defaultValue)
 		if err != nil {
@@ -429,8 +432,8 @@ func (c *Collection) GetBoolPropertyFnWithNamespaceIDFilter(key Key, defaultValu
 	}
 }
 
-// GetBoolPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's an bool
-func (c *Collection) GetBoolPropertyFilteredByTaskQueueInfo(key Key, defaultValue bool) BoolPropertyFnWithTaskQueueInfoFilters {
+// GetBoolPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's a bool
+func (c *Collection) GetBoolPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) BoolPropertyFnWithTaskQueueInfoFilters {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool {
 		val, err := c.client.GetBoolValue(
 			key,
@@ -443,4 +446,9 @@ func (c *Collection) GetBoolPropertyFilteredByTaskQueueInfo(key Key, defaultValu
 
 		return val
 	}
+}
+
+// Task queue partitions use a dedicated function to handle defaults.
+func (c *Collection) GetTaskQueuePartitionsProperty(key Key) IntPropertyFnWithTaskQueueInfoFilters {
+	return c.GetIntPropertyFilteredByTaskQueueInfo(key, defaultNumTaskQueuePartitions)
 }

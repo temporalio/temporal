@@ -457,6 +457,8 @@ type (
 
 	// InternalAppendHistoryNodesRequest is used to append a batch of history nodes
 	InternalAppendHistoryNodesRequest struct {
+		// The raw branch token
+		BranchToken []byte
 		// True if it is the first append request to the branch
 		IsNewBranch bool
 		// The info for clean up data in background
@@ -496,6 +498,8 @@ type (
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
+		// The raw branch token
+		BranchToken []byte
 		// The base branch to fork from
 		ForkBranchInfo *persistencespb.HistoryBranch
 		// Serialized TreeInfo
@@ -512,6 +516,8 @@ type (
 
 	// InternalDeleteHistoryNodesRequest is used to remove a history node
 	InternalDeleteHistoryNodesRequest struct {
+		// The raw branch token
+		BranchToken []byte
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32
 		// The branch to be appended
@@ -524,6 +530,8 @@ type (
 
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch
 	InternalDeleteHistoryBranchRequest struct {
+		// The raw branch token
+		BranchToken []byte
 		// Used in sharded data stores to identify which shard to use
 		ShardID  int32
 		TreeId   string // TreeId, BranchId is used to delete target history branch itself.
@@ -540,6 +548,8 @@ type (
 
 	// InternalReadHistoryBranchRequest is used to read a history branch
 	InternalReadHistoryBranchRequest struct {
+		// The raw branch token
+		BranchToken []byte
 		// The tree of branch range to be read
 		TreeID string
 		// The branch range to be read

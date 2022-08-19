@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -244,14 +245,14 @@ func (m *metadataManagerImpl) InitializeSystemNamespaces(
 	_, err := m.CreateNamespace(ctx, &CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:          common.SystemNamespaceID,
-				Name:        common.SystemLocalNamespace,
+				Id:          primitives.SystemNamespaceID,
+				Name:        primitives.SystemLocalNamespace,
 				State:       enumspb.NAMESPACE_STATE_REGISTERED,
 				Description: "Temporal internal system namespace",
 				Owner:       "temporal-core@temporal.io",
 			},
 			Config: &persistencespb.NamespaceConfig{
-				Retention:               timestamp.DurationPtr(common.SystemNamespaceRetention),
+				Retention:               timestamp.DurationPtr(primitives.SystemNamespaceRetention),
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 			},

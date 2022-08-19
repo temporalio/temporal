@@ -61,17 +61,16 @@ type (
 	IntegrationBase struct {
 		suite.Suite
 
-		testCluster                 *TestCluster
-		testClusterConfig           *TestClusterConfig
-		engine                      FrontendClient
-		adminClient                 AdminClient
-		operatorClient              operatorservice.OperatorServiceClient
-		Logger                      log.Logger
-		namespace                   string
-		testRawHistoryNamespaceName string
-		foreignNamespace            string
-		archivalNamespace           string
-		dynamicConfigOverrides      map[dynamicconfig.Key]interface{}
+		testCluster            *TestCluster
+		testClusterConfig      *TestClusterConfig
+		engine                 FrontendClient
+		adminClient            AdminClient
+		operatorClient         operatorservice.OperatorServiceClient
+		Logger                 log.Logger
+		namespace              string
+		foreignNamespace       string
+		archivalNamespace      string
+		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
 	}
 )
 
@@ -106,9 +105,6 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 
 	s.namespace = s.randomizeStr("integration-test-namespace")
 	s.Require().NoError(s.registerNamespace(s.namespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
-
-	s.testRawHistoryNamespaceName = "TestRawHistoryNamespace"
-	s.Require().NoError(s.registerNamespace(s.testRawHistoryNamespaceName, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
 
 	s.foreignNamespace = s.randomizeStr("integration-foreign-test-namespace")
 	s.Require().NoError(s.registerNamespace(s.foreignNamespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
@@ -162,7 +158,6 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 
 func (s *IntegrationBase) tearDownSuite() {
 	s.Require().NoError(s.markNamespaceAsDeleted(s.namespace))
-	s.Require().NoError(s.markNamespaceAsDeleted(s.testRawHistoryNamespaceName))
 	s.Require().NoError(s.markNamespaceAsDeleted(s.foreignNamespace))
 	if s.archivalNamespace != "" {
 		s.Require().NoError(s.markNamespaceAsDeleted(s.archivalNamespace))

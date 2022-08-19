@@ -51,6 +51,7 @@ const (
 	testGetDurationPropertyFilteredByNamespaceKey     = "testGetDurationPropertyFilteredByNamespaceKey"
 	testGetIntPropertyFilteredByTaskQueueInfoKey      = "testGetIntPropertyFilteredByTaskQueueInfoKey"
 	testGetDurationPropertyFilteredByTaskQueueInfoKey = "testGetDurationPropertyFilteredByTaskQueueInfoKey"
+	testGetDurationPropertyStructuredDefaults         = "testGetDurationPropertyStructuredDefaults"
 	testGetBoolPropertyFilteredByNamespaceIDKey       = "testGetBoolPropertyFilteredByNamespaceIDKey"
 	testGetBoolPropertyFilteredByTaskQueueInfoKey     = "testGetBoolPropertyFilteredByTaskQueueInfoKey"
 
@@ -291,6 +292,8 @@ const (
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
 	// MatchingMetadataPollFrequency is how often non-root partitions will poll the root partition for fresh metadata
 	MatchingMetadataPollFrequency = "matching.metadataPollFrequency"
+	// MatchingUseOldRouting is whether to use old task queue routing (name only) instead of namespace+name+type.
+	MatchingUseOldRouting = "matching.useOldRouting"
 
 	// key for history
 

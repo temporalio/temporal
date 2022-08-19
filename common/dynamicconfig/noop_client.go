@@ -25,58 +25,24 @@
 package dynamicconfig
 
 import (
-	"errors"
-	"time"
-
 	"go.temporal.io/server/common/log"
 )
 
 type (
-	// noopClient is a dummy implements of dynamicconfig Client interface, all operations will always return default values.
-	noopClient struct{}
+	// noopClient is a dummy implementation of dynamicconfig Client interface, all operations will always return default values.
+	noopClient struct {
+		*basicClient
+	}
 )
 
 // NewNoopClient creates a nop client
 func NewNoopClient() *noopClient {
-	return &noopClient{}
+	return &noopClient{
+		basicClient: newBasicClient(log.NewNoopLogger()),
+	}
 }
 
 // NewNoopCollection creates a new nop collection
 func NewNoopCollection() *Collection {
-	return NewCollection(&noopClient{}, log.NewNoopLogger())
-}
-
-func (mc *noopClient) GetValue(name Key, defaultValue interface{}) (interface{}, error) {
-	return nil, errors.New("noop key search")
-}
-
-func (mc *noopClient) GetValueWithFilters(name Key, filters []map[Filter]interface{}, defaultValue interface{}) (interface{}, error) {
-	return nil, errors.New("noop key search")
-}
-
-func (mc *noopClient) GetIntValue(name Key, filters []map[Filter]interface{}, defaultValue int) (int, error) {
-	return defaultValue, errors.New("noop key search")
-}
-
-func (mc *noopClient) GetFloatValue(name Key, filters []map[Filter]interface{}, defaultValue float64) (float64, error) {
-	return defaultValue, errors.New("noop key search")
-}
-
-func (mc *noopClient) GetBoolValue(name Key, filters []map[Filter]interface{}, defaultValue bool) (bool, error) {
-	if len(filters) > 0 && filters[0][Namespace] == "TestRawHistoryNamespace" {
-		return true, errors.New("noop key search")
-	}
-	return defaultValue, errors.New("noop key search")
-}
-
-func (mc *noopClient) GetStringValue(name Key, filters []map[Filter]interface{}, defaultValue string) (string, error) {
-	return defaultValue, errors.New("noop key search")
-}
-
-func (mc *noopClient) GetMapValue(name Key, filters []map[Filter]interface{}, defaultValue map[string]interface{}) (map[string]interface{}, error) {
-	return defaultValue, errors.New("noop key search")
-}
-
-func (mc *noopClient) GetDurationValue(name Key, filters []map[Filter]interface{}, defaultValue time.Duration) (time.Duration, error) {
-	return defaultValue, errors.New("noop key search")
+	return NewCollection(NewNoopClient(), log.NewNoopLogger())
 }

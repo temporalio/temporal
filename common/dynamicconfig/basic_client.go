@@ -32,6 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/exp/slices"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -43,9 +45,9 @@ var (
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
 )
 
-type configValueMap map[string][]*constrainedValue
+type configValueMap map[string][]ConstrainedValue
 
-type constrainedValue struct {
+type ConstrainedValue struct {
 	Value       interface{}
 	Constraints map[string]interface{}
 }
@@ -68,14 +70,13 @@ func (bc *basicClient) getValues() configValueMap {
 }
 
 func (bc *basicClient) updateValues(newValues configValueMap) {
-	oldValues := bc.getValues()
-	bc.values.Store(newValues)
+	oldValues := bc.values.Swap(newValues).(configValueMap)
 	bc.logDiff(oldValues, newValues)
 }
 
 func (bc *basicClient) GetValue(
 	name Key,
-	defaultValue interface{},
+	defaultValue any,
 ) (interface{}, error) {
 	return bc.getValueWithFilters(name, nil, defaultValue)
 }
@@ -91,105 +92,87 @@ func (bc *basicClient) GetValueWithFilters(
 func (bc *basicClient) GetIntValue(
 	name Key,
 	filters []map[Filter]interface{},
-	defaultValue int,
+	defaultValue any,
 ) (int, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
 	if intVal, ok := val.(int); ok {
-		return intVal, nil
+		return intVal, err
 	}
-	return defaultValue, errors.New("value type is not int")
+	intVal, _ := defaultValue.(int)
+	return intVal, errors.New("value type is not int")
 }
 
 func (bc *basicClient) GetFloatValue(
 	name Key,
 	filters []map[Filter]interface{},
-	defaultValue float64,
+	defaultValue any,
 ) (float64, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
 	if floatVal, ok := val.(float64); ok {
-		return floatVal, nil
+		return floatVal, err
 	} else if intVal, ok := val.(int); ok {
-		return float64(intVal), nil
+		return float64(intVal), err
 	}
-	return defaultValue, errors.New("value type is not float64")
+	floatVal, _ := defaultValue.(float64)
+	return floatVal, errors.New("value type is not float64")
 }
 
 func (bc *basicClient) GetBoolValue(
 	name Key,
 	filters []map[Filter]interface{},
-	defaultValue bool,
+	defaultValue any,
 ) (bool, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
 	if boolVal, ok := val.(bool); ok {
-		return boolVal, nil
+		return boolVal, err
 	}
-	return defaultValue, errors.New("value type is not bool")
+	boolVal, _ := defaultValue.(bool)
+	return boolVal, errors.New("value type is not bool")
 }
 
 func (bc *basicClient) GetStringValue(
 	name Key,
 	filters []map[Filter]interface{},
-	defaultValue string,
+	defaultValue any,
 ) (string, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
 	if stringVal, ok := val.(string); ok {
-		return stringVal, nil
+		return stringVal, err
 	}
-	return defaultValue, errors.New("value type is not string")
+	stringVal, _ := defaultValue.(string)
+	return stringVal, errors.New("value type is not string")
 }
 
 func (bc *basicClient) GetMapValue(
 	name Key,
 	filters []map[Filter]interface{},
-	defaultValue map[string]interface{},
-) (map[string]interface{}, error) {
+	defaultValue any,
+) (map[string]any, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
+	if mapVal, ok := val.(map[string]any); ok {
+		return mapVal, err
 	}
-	if mapVal, ok := val.(map[string]interface{}); ok {
-		return mapVal, nil
-	}
-	return defaultValue, errors.New("value type is not map")
+	mapVal, _ := defaultValue.(map[string]any)
+	return mapVal, errors.New("value type is not map")
 }
 
 func (bc *basicClient) GetDurationValue(
-	name Key, filters []map[Filter]interface{}, defaultValue time.Duration,
+	name Key, filters []map[Filter]interface{}, defaultValue any,
 ) (time.Duration, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
 	switch v := val.(type) {
 	case time.Duration:
-		return v, nil
+		return v, err
 	case string:
-		{
-			d, err := timestamp.ParseDurationDefaultDays(v)
-			if err != nil {
-				return defaultValue, fmt.Errorf("failed to parse duration: %v", err)
-			}
-			return d, nil
+		d, parseErr := timestamp.ParseDurationDefaultDays(v)
+		if parseErr != nil {
+			durationVal, _ := defaultValue.(time.Duration)
+			return durationVal, fmt.Errorf("failed to parse duration: %v", parseErr)
 		}
+		return d, err
 	}
-	return defaultValue, errors.New("value not convertible to Duration")
+	durationVal, _ := defaultValue.(time.Duration)
+	return durationVal, errors.New("value not convertible to Duration")
 }
 
 func (bc *basicClient) getValueWithFilters(
@@ -198,8 +181,15 @@ func (bc *basicClient) getValueWithFilters(
 	defaultValue interface{},
 ) (interface{}, error) {
 	keyName := strings.ToLower(key.String())
-	values := bc.values.Load().(configValueMap)
+	values := bc.getValues()
 	constrainedValues := values[keyName]
+
+	if defaultConstraints, ok := defaultValue.([]ConstrainedValue); ok {
+		// if defaultValue is a list of constrained values, then one of them must have an empty
+		// constraint set
+		constrainedValues = append(slices.Clone(constrainedValues), defaultConstraints...)
+	}
+
 	if constrainedValues == nil {
 		return defaultValue, errKeyNotPresent
 	}
@@ -221,7 +211,7 @@ func (bc *basicClient) getValueWithFilters(
 }
 
 // match will return true if the constraints matches the filters exactly
-func match(v *constrainedValue, filters map[Filter]interface{}) bool {
+func match(v ConstrainedValue, filters map[Filter]interface{}) bool {
 	if len(v.Constraints) != len(filters) {
 		return false
 	}
@@ -240,7 +230,7 @@ func (fc *basicClient) logDiff(old configValueMap, new configValueMap) {
 		if !ok {
 			for _, newValue := range newValues {
 				// new key added
-				fc.logValueDiff(key, nil, newValue)
+				fc.logValueDiff(key, nil, &newValue)
 			}
 		} else {
 			// compare existing keys
@@ -252,25 +242,25 @@ func (fc *basicClient) logDiff(old configValueMap, new configValueMap) {
 	for key, oldValues := range old {
 		if _, ok := new[key]; !ok {
 			for _, oldValue := range oldValues {
-				fc.logValueDiff(key, oldValue, nil)
+				fc.logValueDiff(key, &oldValue, nil)
 			}
 		}
 	}
 }
 
-func (bc *basicClient) logConstraintsDiff(key string, oldValues []*constrainedValue, newValues []*constrainedValue) {
+func (bc *basicClient) logConstraintsDiff(key string, oldValues []ConstrainedValue, newValues []ConstrainedValue) {
 	for _, oldValue := range oldValues {
 		matchFound := false
 		for _, newValue := range newValues {
 			if reflect.DeepEqual(oldValue.Constraints, newValue.Constraints) {
 				matchFound = true
 				if !reflect.DeepEqual(oldValue.Value, newValue.Value) {
-					bc.logValueDiff(key, oldValue, newValue)
+					bc.logValueDiff(key, &oldValue, &newValue)
 				}
 			}
 		}
 		if !matchFound {
-			bc.logValueDiff(key, oldValue, nil)
+			bc.logValueDiff(key, &oldValue, nil)
 		}
 	}
 
@@ -282,12 +272,12 @@ func (bc *basicClient) logConstraintsDiff(key string, oldValues []*constrainedVa
 			}
 		}
 		if !matchFound {
-			bc.logValueDiff(key, nil, newValue)
+			bc.logValueDiff(key, nil, &newValue)
 		}
 	}
 }
 
-func (bc *basicClient) logValueDiff(key string, oldValue *constrainedValue, newValue *constrainedValue) {
+func (bc *basicClient) logValueDiff(key string, oldValue *ConstrainedValue, newValue *ConstrainedValue) {
 	logLine := &strings.Builder{}
 	logLine.Grow(128)
 	logLine.WriteString("dynamic config changed for the key: ")
@@ -299,7 +289,7 @@ func (bc *basicClient) logValueDiff(key string, oldValue *constrainedValue, newV
 	bc.logger.Info(logLine.String())
 }
 
-func (bc *basicClient) appendConstrainedValue(logLine *strings.Builder, value *constrainedValue) {
+func (bc *basicClient) appendConstrainedValue(logLine *strings.Builder, value *ConstrainedValue) {
 	if value == nil {
 		logLine.WriteString("nil")
 	} else {

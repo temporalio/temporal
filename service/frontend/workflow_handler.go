@@ -72,12 +72,12 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/batcher"
-	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
@@ -2989,9 +2989,15 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 		return nil, err
 	}
 
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
 	matchingResponse, err := wh.matchingClient.ListTaskQueuePartitions(ctx, &matchingservice.ListTaskQueuePartitionsRequest{
-		Namespace: request.GetNamespace(),
-		TaskQueue: request.TaskQueue,
+		NamespaceId: namespaceID.String(),
+		Namespace:   request.GetNamespace(),
+		TaskQueue:   request.TaskQueue,
 	})
 
 	if matchingResponse == nil {
@@ -3120,7 +3126,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		Namespace:             request.Namespace,
 		WorkflowId:            workflowID,
 		WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: workercommon.PerNSWorkerTaskQueue},
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                 inputPayload,
 		Identity:              request.Identity,
 		RequestId:             request.RequestId,
@@ -3830,7 +3836,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		Namespace:             request.Namespace,
 		WorkflowId:            jobId,
 		WorkflowType:          &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: workercommon.PerNSWorkerTaskQueue},
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                 inputPayload,
 		Identity:              identity,
 		RequestId:             uuid.New(),

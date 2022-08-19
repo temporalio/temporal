@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker"
@@ -283,7 +284,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 		return nil, errRequestNotSet
 	}
 
-	if request.GetNamespace() == common.SystemLocalNamespace {
+	if request.GetNamespace() == primitives.SystemLocalNamespace {
 		return nil, errUnableDeleteSystemNamespace
 	}
 
