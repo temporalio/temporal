@@ -3760,28 +3760,28 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 	ctx context.Context,
 	request *workflowservice.DescribeBatchOperationRequest,
 ) (_ *workflowservice.DescribeBatchOperationResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("WorkflowHandler.DescribeBatchOperation")
+	return nil, serviceerror.NewUnimplemented("WorkflowHandler.DescribeBatchOperation is not implemented")
 }
 
 func (wh *WorkflowHandler) ListBatchOperations(
 	ctx context.Context,
 	request *workflowservice.ListBatchOperationsRequest,
 ) (_ *workflowservice.ListBatchOperationsResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("WorkflowHandler.ListBatchOperations")
+	return nil, serviceerror.NewUnimplemented("WorkflowHandler.ListBatchOperations is not implemented")
 }
 
 func (wh *WorkflowHandler) StartBatchOperation(
 	ctx context.Context,
 	request *workflowservice.StartBatchOperationRequest,
 ) (_ *workflowservice.StartBatchOperationResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("WorkflowHandler.StartBatchOperation")
+	return nil, serviceerror.NewUnimplemented("WorkflowHandler.StartBatchOperation is not implemented")
 }
 
 func (wh *WorkflowHandler) StopBatchOperation(
 	ctx context.Context,
 	request *workflowservice.StopBatchOperationRequest,
 ) (_ *workflowservice.StopBatchOperationResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("WorkflowHandler.StopBatchOperation")
+	return nil, serviceerror.NewUnimplemented("WorkflowHandler.StopBatchOperation is not implemented")
 }
 
 func (wh *WorkflowHandler) getRawHistory(
