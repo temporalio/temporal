@@ -1,7 +1,4 @@
 #!/bin/sh
-# shellcheck disable=SC1004
-# The only portable way to embed a newline in sed is with a literal
-# backslash+newline, but shellcheck doesn't like it.
 
 # These mocks need to be manually fixed up after generation because gomock
 # uses the types in the internal package instead of the public type aliases.
