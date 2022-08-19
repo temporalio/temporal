@@ -65,13 +65,12 @@ type (
 
 		// precalculated / flattened task chan according to weight
 		// e.g. if
-		// priorityToWeight := map[Priority]int{
-		//		0: 5,
-		//		1: 3,
-		//		2: 2,
-		//		3: 1,
-		//	}
-		// then iwrrChannels will contain chan [0, 0, 0, 1, 0, 1, 2, 0, 1, 2, 3] (ID-ed by priority)
+		// ChannelKeyToWeight has the following mapping
+		//  0 -> 5
+		//  1 -> 3
+		//  2 -> 2
+		//  3 -> 1
+		// then iwrrChannels will contain chan [0, 0, 0, 1, 0, 1, 2, 0, 1, 2, 3] (ID-ed by channel key)
 		iwrrChannels atomic.Value // []*WeightedChannel
 	}
 )
