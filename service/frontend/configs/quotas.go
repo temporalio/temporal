@@ -107,6 +107,12 @@ var (
 		"ListScheduleMatchingTimes": 0,
 		"DeleteSchedule":            0,
 		"ListSchedules":             0,
+
+		// TODO(yx): added temporarily here; need to check if it's the right place and priority
+		"DescribeBatchOperation": 0,
+		"ListBatchOperations":    0,
+		"StartBatchOperation":    0,
+		"StopBatchOperation":     0,
 	}
 
 	OtherAPIPrioritiesOrdered = []int{0}
