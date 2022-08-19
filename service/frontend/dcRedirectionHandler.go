@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/serviceerror"
 )
 
 var _ Handler = (*DCRedirectionHandlerImpl)(nil)
@@ -1671,31 +1672,31 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkflow(
 }
 
 func (handler *DCRedirectionHandlerImpl) DescribeBatchOperation(
-  ctx context.Context,
-  request *workflowservice.DescribeBatchOperationRequest,
+	ctx context.Context,
+	request *workflowservice.DescribeBatchOperationRequest,
 ) (resp *workflowservice.DescribeBatchOperationResponse, retError error) {
-  panic("DCRedirectionHandlerImpl.DescribeBatchOperationRequest not implemented")
+	return nil, serviceerror.NewUnimplemented("DCRedirectionHandlerImpl.DescribeBatchOperation")
 }
 
 func (handler *DCRedirectionHandlerImpl) ListBatchOperations(
-  ctx context.Context,
-  request *workflowservice.ListBatchOperationsRequest,
+	ctx context.Context,
+	request *workflowservice.ListBatchOperationsRequest,
 ) (resp *workflowservice.ListBatchOperationsResponse, retError error) {
-  panic("DCRedirectionHandlerImpl.ListBatchOperations not implemented")
+	return nil, serviceerror.NewUnimplemented("DCRedirectionHandlerImpl.ListBatchOperations")
 }
 
 func (handler *DCRedirectionHandlerImpl) StartBatchOperation(
-  ctx context.Context,
-  request *workflowservice.StartBatchOperationRequest,
+	ctx context.Context,
+	request *workflowservice.StartBatchOperationRequest,
 ) (resp *workflowservice.StartBatchOperationResponse, retError error) {
-  panic("DCRedirectionHandlerImpl.StartBatchOperation not implemented")
+	return nil, serviceerror.NewUnimplemented("DCRedirectionHandlerImpl.StartBatchOperation")
 }
 
 func (handler *DCRedirectionHandlerImpl) StopBatchOperation(
-  ctx context.Context,
-  request *workflowservice.StopBatchOperationRequest,
+	ctx context.Context,
+	request *workflowservice.StopBatchOperationRequest,
 ) (resp *workflowservice.StopBatchOperationResponse, retError error) {
-  panic("DCRedirectionHandlerImpl.StopBatchOperation not implemented")
+	return nil, serviceerror.NewUnimplemented("DCRedirectionHandlerImpl.StopBatchOperation")
 }
 
 func (handler *DCRedirectionHandlerImpl) beforeCall(
