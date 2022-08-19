@@ -272,7 +272,7 @@ func NamespaceRateLimitInterceptorProvider(
 	visibilityRateFn := func(namespace string) float64 {
 		return namespaceRPS(
 			serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
-			serviceConfig.GlobalNamespaceRPS,
+			serviceConfig.GlobalNamespaceVisibilityRPS,
 			frontendServiceResolver,
 			namespace,
 		)
