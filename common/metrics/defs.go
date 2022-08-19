@@ -560,6 +560,15 @@ const (
 	FrontendClientUpdateWorkflowScope
 	// FrontendClientGetWorkerBuildIdOrderingScope tracks RPC calls to frontend service
 	FrontendClientGetWorkerBuildIdOrderingScope
+	// FrontendClientDescribeBatchOperationScope tracks RPC calls to frontend service
+	FrontendClientDescribeBatchOperationScope
+	// FrontendClientListBatchOperationsScope tracks RPC calls to frontend service
+	FrontendClientListBatchOperationsScope
+	// FrontendClientStartBatchOperationScope tracks RPC calls to frontend service
+	FrontendClientStartBatchOperationScope
+	// FrontendClientStopBatchOperationScope tracks RPC calls to frontend service
+	FrontendClientStopBatchOperationScope
+
 	// AdminClientAddSearchAttributesScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributesScope
 	// AdminClientRemoveSearchAttributesScope tracks RPC calls to admin service
@@ -614,6 +623,7 @@ const (
 	AdminClientGetTaskQueueTasksScope
 	// AdminClientDeleteWorkflowExecutionScope tracks RPC calls to admin service
 	AdminClientDeleteWorkflowExecutionScope
+
 	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateNamespaceScope
 	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
@@ -714,6 +724,14 @@ const (
 	DCRedirectionGetWorkerBuildIdOrderingScope
 	// DCRedirectionUpdateWorkflowScope tracks RPC calls for dc redirection
 	DCRedirectionUpdateWorkflowScope
+	// DCRedirectionDescribeBatchOperationScope tracks RPC calls for dc redirection
+	DCRedirectionDescribeBatchOperationScope
+	// DCRedirectionListBatchOperationsScope tracks RPC calls for dc redirection
+	DCRedirectionListBatchOperationsScope
+	// DCRedirectionStartBatchOperationScope tracks RPC calls for dc redirection
+	DCRedirectionStartBatchOperationScope
+	// DCRedirectionStopBatchOperationScope tracks RPC calls for dc redirection
+	DCRedirectionStopBatchOperationScope
 
 	// MessagingClientPublishScope tracks Publish calls made by service to messaging layer
 	MessagingClientPublishScope
@@ -993,6 +1011,14 @@ const (
 	FrontendGetWorkerBuildIdOrderingScope
 	// FrontendUpdateWorkflowScope is the metric scope for frontend.UpdateWorkflow
 	FrontendUpdateWorkflowScope
+	// FrontendDescribeBatchOperationScope is the metric scope for frontend.DescribeBatchOperation
+	FrontendDescribeBatchOperationScope
+	// FrontendListBatchOperationsScope is the metric scope for frontend.ListBatchOperations
+	FrontendListBatchOperationsScope
+	// FrontendStartBatchOperationScope is the metric scope for frontend.StartBatchOperation
+	FrontendStartBatchOperationScope
+	// FrontendStopBatchOperationScope is the metric scope for frontend.StopBatchOperation
+	FrontendStopBatchOperationScope
 
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope
@@ -1509,6 +1535,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingClientGetTaskQueueMetadataScope:        {operation: "MatchingClientGetTaskQueueMetadata", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 
 		FrontendClientDeprecateNamespaceScope:                 {operation: "FrontendClientDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDescribeBatchOperationScope:             {operation: "FrontendClientDescribeBatchOperation", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeNamespaceScope:                  {operation: "FrontendClientDescribeNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeTaskQueueScope:                  {operation: "FrontendClientDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeWorkflowExecutionScope:          {operation: "FrontendClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1517,6 +1544,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientGetWorkflowExecutionRawHistoryScope:     {operation: "FrontendClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientPollForWorkflowExecutionRawHistoryScope: {operation: "FrontendClientPollForWorkflowExecutionRawHistoryScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListArchivedWorkflowExecutionsScope:     {operation: "FrontendClientListArchivedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListBatchOperationsScope:                {operation: "FrontendClientListBatchOperations", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListClosedWorkflowExecutionsScope:       {operation: "FrontendClientListClosedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListNamespacesScope:                     {operation: "FrontendClientListNamespaces", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListOpenWorkflowExecutionsScope:         {operation: "FrontendClientListOpenWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1540,7 +1568,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientRespondQueryTaskCompletedScope:          {operation: "FrontendClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientSignalWithStartWorkflowExecutionScope:   {operation: "FrontendClientSignalWithStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientSignalWorkflowExecutionScope:            {operation: "FrontendClientSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientStartBatchOperationScope:                {operation: "FrontendClientStartBatchOperation", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientStartWorkflowExecutionScope:             {operation: "FrontendClientStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientStopBatchOperationScope:                 {operation: "FrontendClientStopBatchOperation", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientTerminateWorkflowExecutionScope:         {operation: "FrontendClientTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientUpdateNamespaceScope:                    {operation: "FrontendClientUpdateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListWorkflowExecutionsScope:             {operation: "FrontendClientListWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1639,6 +1669,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionUpdateWorkerBuildIdOrderingScope:        {operation: "DCRedirectionUpdateWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionGetWorkerBuildIdOrderingScope:           {operation: "DCRedirectionGetWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionUpdateWorkflowScope:                     {operation: "DCRedirectionUpdateWorkflow", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDescribeBatchOperationScope:             {operation: "DCRedirectionDescribeBatchOperation", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListBatchOperationsScope:                {operation: "DCRedirectionListBatchOperations", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionStartBatchOperationScope:                {operation: "DCRedirectionStartBatchOperation", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionStopBatchOperationScope:                 {operation: "DCRedirectionStopBatchOperation", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 
 		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
 		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},
@@ -1763,9 +1797,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendListSchedulesScope:                      {operation: "ListSchedules"},
 		FrontendUpdateWorkerBuildIdOrderingScope:        {operation: "UpdateWorkerBuildIdOrdering"},
 		FrontendGetWorkerBuildIdOrderingScope:           {operation: "GetWorkerBuildIdOrdering"},
+		FrontendUpdateWorkflowScope:                     {operation: "UpdateWorkflow"},
+		FrontendDescribeBatchOperationScope:             {operation: "DescribeBatchOperation"},
+		FrontendListBatchOperationsScope:                {operation: "ListBatchOperations"},
+		FrontendStartBatchOperationScope:                {operation: "StartBatchOperation"},
+		FrontendStopBatchOperationScope:                 {operation: "StopBatchOperation"},
 		VersionCheckScope:                               {operation: "VersionCheck"},
 		AuthorizationScope:                              {operation: "Authorization"},
-		FrontendUpdateWorkflowScope:                     {operation: "UpdateWorkflow"},
 	},
 	// History Scope Names
 	History: {
