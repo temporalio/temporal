@@ -218,13 +218,16 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule
 
 	startWaitGroup.Add(numSubmitter)
 
+	var tasksLock sync.Mutex
 	submittedTasks := map[*testTask]struct{}{}
 	for i := 0; i < numSubmitter; i++ {
 		channel := make(chan *testTask, numTasks)
 		for j := 0; j < numTasks; j++ {
 			mockTask := newTestTask(s.controller, rand.Intn(4))
 			s.mockProcessor.EXPECT().Submit(gomock.Any()).Do(func(task Task) {
+				tasksLock.Lock()
 				submittedTasks[task.(*testTask)] = struct{}{}
+				tasksLock.Unlock()
 				testWaitGroup.Done()
 			}).Times(1)
 			channel <- mockTask
