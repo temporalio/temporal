@@ -25,7 +25,6 @@
 package frontend
 
 import (
-	"math"
 	"math/rand"
 	"net"
 	"os"
@@ -343,12 +342,14 @@ func namespaceRPS(
 	frontendResolver membership.ServiceResolver,
 	namespace string,
 ) float64 {
-	hostRPS := float64(perInstanceRPSFn(namespace))
 	globalRPS := float64(globalRPSFn(namespace))
-	hosts := float64(numFrontendHosts(frontendResolver))
+	if globalRPS > 0 && frontendResolver != nil {
+		hosts := float64(numFrontendHosts(frontendResolver))
+		return globalRPS / hosts
+	}
 
-	rps := hostRPS + globalRPS*math.Exp((1.0-hosts)/8.0)
-	return rps
+	hostRPS := float64(perInstanceRPSFn(namespace))
+	return hostRPS
 }
 
 func numFrontendHosts(

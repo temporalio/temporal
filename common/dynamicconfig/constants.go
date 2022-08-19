@@ -176,8 +176,8 @@ const (
 	// FrontendMaxNamespaceVisibilityBurstPerInstance is namespace burst limit for visibility APIs.
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceVisibilityBurstPerInstance = "frontend.namespaceBurst.visibility"
-	// FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster
-	FrontendGlobalNamespaceRPS = "frontend.globalNamespacerps"
+	// FrontendGlobalNamespaceRPS is namespace rate limit per second for the whole cluster
+	FrontendGlobalNamespaceRPS = "frontend.globalNamespaceRPS"
 	// FrontendThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	FrontendThrottledLogRPS = "frontend.throttledLogRPS"
 	// FrontendShutdownDrainDuration is the duration of traffic drain during shutdown
