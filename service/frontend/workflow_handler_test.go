@@ -52,32 +52,30 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/worker/batcher"
-	workercommon "go.temporal.io/server/service/worker/common"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	dc "go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/worker/batcher"
 )
 
 const (
@@ -1887,7 +1885,7 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Terminate() {
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
 			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
-			s.Equal(workercommon.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
 			s.Equal(payload.EncodeString(batcher.BatchTypeTerminate), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
@@ -1934,7 +1932,7 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
 			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
-			s.Equal(workercommon.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
 			s.Equal(payload.EncodeString(batcher.BatchTypeCancel), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
@@ -1985,7 +1983,7 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Signal() {
 		) (*historyservice.StartWorkflowExecutionResponse, error) {
 			s.Equal(namespaceID.String(), request.NamespaceId)
 			s.Equal(batcher.BatchWFTypeName, request.StartRequest.WorkflowType.Name)
-			s.Equal(workercommon.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
+			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
 			s.Equal(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
