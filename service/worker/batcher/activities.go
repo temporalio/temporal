@@ -71,7 +71,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		return hbd, err
 	}
 
-	sdkClient := a.ClientFactory.NewClient(batchParams.Namespace, logger)
+	sdkClient := a.ClientFactory.NewClient(batchParams.Namespace)
 
 	startOver := true
 	if activity.HasHeartbeatDetails(ctx) {

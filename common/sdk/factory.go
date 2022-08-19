@@ -32,6 +32,7 @@ import (
 	"sync"
 
 	sdkclient "go.temporal.io/sdk/client"
+	sdklog "go.temporal.io/sdk/log"
 	sdkworker "go.temporal.io/sdk/worker"
 
 	"go.temporal.io/server/common"
@@ -43,8 +44,8 @@ import (
 
 type (
 	ClientFactory interface {
-		NewClient(namespaceName string, logger log.Logger) sdkclient.Client
-		GetSystemClient(logger log.Logger) sdkclient.Client
+		NewClient(namespaceName string) sdkclient.Client
+		GetSystemClient() sdkclient.Client
 	}
 
 	WorkerFactory interface {
@@ -55,10 +56,12 @@ type (
 		hostPort        string
 		tlsConfig       *tls.Config
 		metricsHandler  *MetricsHandler
-		systemSdkClient sdkclient.Client
+		logger          log.Logger
+		sdklogger       sdklog.Logger
 		firstSdkClient  sdkclient.Client
-		systemOnce      sync.Once
 		firstOnce       sync.Once
+		systemSdkClient sdkclient.Client
+		systemOnce      sync.Once
 	}
 
 	workerFactory struct{}
@@ -69,21 +72,29 @@ var (
 	_ WorkerFactory = (*workerFactory)(nil)
 )
 
-func NewClientFactory(hostPort string, tlsConfig *tls.Config, metricsHandler *MetricsHandler) *clientFactory {
+func NewClientFactory(
+	hostPort string,
+	tlsConfig *tls.Config,
+	metricsHandler *MetricsHandler,
+	logger log.Logger,
+) *clientFactory {
 	return &clientFactory{
 		hostPort:       hostPort,
 		tlsConfig:      tlsConfig,
 		metricsHandler: metricsHandler,
+		logger:         logger,
+		sdklogger:      log.NewSdkLogger(logger),
 	}
 }
 
-func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) sdkclient.Client {
+func (f *clientFactory) NewClient(namespaceName string) sdkclient.Client {
 	var retClient sdkclient.Client
+
 	options := sdkclient.Options{
 		HostPort:       f.hostPort,
 		Namespace:      namespaceName,
 		MetricsHandler: f.metricsHandler,
-		Logger:         log.NewSdkLogger(logger),
+		Logger:         f.sdklogger,
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			TLS: f.tlsConfig,
 		},
@@ -100,7 +111,7 @@ func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) sdkcl
 		}, common.CreateSdkClientFactoryRetryPolicy(), common.IsContextDeadlineExceededErr)
 
 		if err != nil {
-			logger.Fatal("error creating sdk client", tag.Error(err))
+			f.logger.Fatal("error creating sdk client", tag.Error(err))
 		}
 
 		f.firstSdkClient = retClient
@@ -112,14 +123,14 @@ func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) sdkcl
 	// this shouldn't fail if the existing client was created successfully
 	client, err := sdkclient.NewClientFromExisting(f.firstSdkClient, options)
 	if err != nil {
-		logger.Fatal("error creating sdk client", tag.Error(err))
+		f.logger.Fatal("error creating sdk client", tag.Error(err))
 	}
 	return client
 }
 
-func (f *clientFactory) GetSystemClient(logger log.Logger) sdkclient.Client {
+func (f *clientFactory) GetSystemClient() sdkclient.Client {
 	f.systemOnce.Do(func() {
-		f.systemSdkClient = f.NewClient(primitives.SystemLocalNamespace, logger)
+		f.systemSdkClient = f.NewClient(primitives.SystemLocalNamespace)
 	})
 	return f.systemSdkClient
 }

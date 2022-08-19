@@ -335,7 +335,7 @@ func (w *perNamespaceWorker) startWorker(
 	multiplicity int,
 ) (sdkclient.Client, sdkworker.Worker, error) {
 	nsName := ns.Name().String()
-	client := w.wm.sdkClientFactory.NewClient(nsName, w.wm.logger)
+	client := w.wm.sdkClientFactory.NewClient(nsName)
 
 	var sdkoptions sdkworker.Options
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))

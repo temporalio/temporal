@@ -193,7 +193,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 	}
 
 	mockSdkClient := mocksdk.NewMockClient(s.controller)
-	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(mockSdkClient).AnyTimes()
+	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 
 	// Start workflow failed.
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-add-search-attributes-workflow", gomock.Any()).Return(nil, errors.New("start failed"))
@@ -411,7 +411,7 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	}
 
 	mockSdkClient := mocksdk.NewMockClient(s.controller)
-	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(mockSdkClient).AnyTimes()
+	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 
 	handler.config = &Config{
 		DeleteNamespaceDeleteActivityRPS:                    dynamicconfig.GetIntPropertyFn(22),
