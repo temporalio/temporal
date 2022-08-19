@@ -40,7 +40,8 @@ import (
 
 const (
 	// BatchWFTypeName is the workflow type
-	BatchWFTypeName = "temporal-sys-batch-workflow"
+	BatchWFTypeName   = "temporal-sys-batch-workflow"
+	NamespaceDivision = "TemporalBatcher"
 	// DefaultRPS is the default RPS
 	DefaultRPS = 50
 	// DefaultConcurrency is the default concurrency

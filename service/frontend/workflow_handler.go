@@ -75,17 +75,12 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
 var _ Handler = (*WorkflowHandler)(nil)
-
-const (
-	listBatchWorkflowPageSize = 50
-)
 
 var (
 	minTime = time.Unix(0, 0).UTC()
@@ -122,7 +117,6 @@ type (
 		saValidator                     *searchattribute.Validator
 		archivalMetadata                archiver.ArchivalMetadata
 		healthServer                    *health.Server
-		clientFactory                   sdk.ClientFactory
 	}
 )
 
@@ -3827,11 +3821,12 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			batcher.BatchReasonMemo:        payload.EncodeString(reason),
 		},
 	}
-	searchAttributes := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
-			searchattribute.BatcherUser: payload.EncodeString(identity),
-		},
-	}
+
+	// Add pre-define search attributes
+	var searchAttributes *commonpb.SearchAttributes
+	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.BatcherUser, payload.EncodeString(identity))
+	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
+
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:             request.Namespace,
 		WorkflowId:            jobId,
@@ -3985,7 +3980,7 @@ func (wh *WorkflowHandler) ListBatchOperations(
 
 	resp, err := wh.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace:     request.GetNamespace(),
-		PageSize:      listBatchWorkflowPageSize,
+		PageSize:      int32(wh.config.VisibilityMaxPageSize(request.GetNamespace())),
 		NextPageToken: request.GetNextPageToken(),
 		Query:         fmt.Sprintf("%s = '%s'", searchattribute.WorkflowType, batcher.BatchWFTypeName),
 	})
