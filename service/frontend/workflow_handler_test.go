@@ -1860,6 +1860,7 @@ func (s *workflowHandlerSuite) TestGetSystemInfo() {
 	s.True(resp.Capabilities.InternalErrorDifferentiation)
 	s.True(resp.Capabilities.ActivityFailureIncludeHeartbeat)
 	s.True(resp.Capabilities.SupportsSchedules)
+	s.True(resp.Capabilities.EncodedFailureAttributes)
 }
 
 func (s *workflowHandlerSuite) TestStartBatchOperation_Terminate() {

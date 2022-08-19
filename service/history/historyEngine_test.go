@@ -1078,16 +1078,16 @@ func (s *engineSuite) TestValidateSignalRequest() {
 		WorkflowTaskTimeout:      timestamp.DurationPtr(10 * time.Second),
 		Identity:                 "identity",
 	}
-	err := s.mockHistoryEngine.validateStartWorkflowExecutionRequest(
-		context.Background(), startRequest, tests.LocalNamespaceEntry, "SignalWithStartWorkflowExecution")
+	err := api.ValidateStartWorkflowExecutionRequest(
+		context.Background(), startRequest, s.mockHistoryEngine.shard, tests.LocalNamespaceEntry, "SignalWithStartWorkflowExecution")
 	s.Error(err, "startRequest doesn't have request id, it should error out")
 
 	startRequest.RequestId = "request-id"
 	startRequest.Memo = &commonpb.Memo{Fields: map[string]*commonpb.Payload{
 		"data": payload.EncodeBytes(make([]byte, 4*1024*1024)),
 	}}
-	err = s.mockHistoryEngine.validateStartWorkflowExecutionRequest(
-		context.Background(), startRequest, tests.LocalNamespaceEntry, "SignalWithStartWorkflowExecution")
+	err = api.ValidateStartWorkflowExecutionRequest(
+		context.Background(), startRequest, s.mockHistoryEngine.shard, tests.LocalNamespaceEntry, "SignalWithStartWorkflowExecution")
 	s.Error(err, "memo should be too big")
 }
 
