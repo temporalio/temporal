@@ -9,6 +9,10 @@ buildkite-agent artifact download ".coverage/unit_coverprofile.out" . --step ":g
 buildkite-agent artifact download ".coverage/integ_cassandra_coverprofile.out" . --step ":golang: integration test with cassandra (ES6)" --build "${BUILDKITE_BUILD_ID}"
 mv ./.coverage/integ_cassandra_coverprofile.out ./.coverage/integ_cassandra_es6_coverprofile.out
 
+# ES8.
+buildkite-agent artifact download ".coverage/integ_cassandra_coverprofile.out" . --step ":golang: integration test with cassandra (ES8)" --build "${BUILDKITE_BUILD_ID}"
+mv ./.coverage/integ_cassandra_coverprofile.out ./.coverage/integ_cassandra_es8_coverprofile.out
+
 # Cassandra.
 buildkite-agent artifact download ".coverage/integ_cassandra_coverprofile.out" . --step ":golang: integration test with cassandra" --build "${BUILDKITE_BUILD_ID}"
 buildkite-agent artifact download ".coverage/integ_xdc_cassandra_coverprofile.out" . --step ":golang: integration xdc test with cassandra" --build "${BUILDKITE_BUILD_ID}"
