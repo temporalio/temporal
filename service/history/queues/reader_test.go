@@ -57,6 +57,7 @@ type (
 		logger                log.Logger
 		metricsHandler        metrics.MetricsHandler
 		executableInitializer ExecutableInitializer
+		monitor               *monitorImpl
 	}
 )
 
@@ -78,6 +79,9 @@ func (s *readerSuite) SetupTest() {
 	s.executableInitializer = func(t tasks.Task) Executable {
 		return NewExecutable(t, nil, nil, nil, nil, clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
 	}
+	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
+		CriticalReaderWatermarkAttempts: dynamicconfig.GetIntPropertyFn(1000),
+	})
 }
 
 func (s *readerSuite) TearDownTest() {
@@ -430,6 +434,7 @@ func (s *readerSuite) newTestReader(
 	}
 
 	return NewReader(
+		defaultReaderId,
 		slices,
 		&ReaderOptions{
 			BatchSize:            dynamicconfig.GetIntPropertyFn(10),
@@ -440,6 +445,7 @@ func (s *readerSuite) newTestReader(
 		s.mockRescheduler,
 		clock.NewRealTimeSource(),
 		quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 20 }),
+		s.monitor,
 		s.logger,
 		s.metricsHandler,
 	)

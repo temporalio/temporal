@@ -178,10 +178,14 @@ func (f *timerQueueFactory) CreateQueue(
 					MaxPendingTasksCount: f.Config.TimerProcessorMaxReschedulerSize,
 					PollBackoffInterval:  f.Config.TimerProcessorPollBackoffInterval,
 				},
+				MonitorOptions: queues.MonitorOptions{
+					CriticalReaderWatermarkAttempts: f.Config.QueueCriticalReadWatermarkAttempts,
+				},
 				MaxPollInterval:                     f.Config.TimerProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.TimerProcessorMaxPollIntervalJitterCoefficient,
 				CheckpointInterval:                  f.Config.TimerProcessorUpdateAckInterval,
 				CheckpointIntervalJitterCoefficient: f.Config.TimerProcessorUpdateAckIntervalJitterCoefficient,
+				MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 				TaskMaxRetryCount:                   f.Config.TimerTaskMaxRetryCount,
 			},
 			newQueueProcessorRateLimiter(

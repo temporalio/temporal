@@ -168,10 +168,14 @@ func (f *transferQueueFactory) CreateQueue(
 					MaxPendingTasksCount: f.Config.TransferProcessorMaxReschedulerSize,
 					PollBackoffInterval:  f.Config.TransferProcessorPollBackoffInterval,
 				},
+				MonitorOptions: queues.MonitorOptions{
+					CriticalReaderWatermarkAttempts: f.Config.QueueCriticalReadWatermarkAttempts,
+				},
 				MaxPollInterval:                     f.Config.TransferProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.TransferProcessorMaxPollIntervalJitterCoefficient,
 				CheckpointInterval:                  f.Config.TransferProcessorUpdateAckInterval,
 				CheckpointIntervalJitterCoefficient: f.Config.TransferProcessorUpdateAckIntervalJitterCoefficient,
+				MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 				TaskMaxRetryCount:                   f.Config.TransferTaskMaxRetryCount,
 			},
 			newQueueProcessorRateLimiter(

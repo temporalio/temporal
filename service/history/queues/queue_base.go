@@ -67,6 +67,8 @@ type (
 		options        *Options
 		rescheduler    Rescheduler
 		timeSource     clock.TimeSource
+		monitor        *monitorImpl
+		mitigator      *mitigatorImpl
 		logger         log.Logger
 		metricsHandler metrics.MetricsHandler
 
@@ -81,15 +83,19 @@ type (
 		checkpointRetrier backoff.Retrier
 		checkpointTimer   *time.Timer
 		pollTimer         *time.Timer
+
+		actionCh <-chan action
 	}
 
 	Options struct {
 		ReaderOptions
+		MonitorOptions
 
 		MaxPollInterval                     dynamicconfig.DurationPropertyFn
 		MaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
 		CheckpointInterval                  dynamicconfig.DurationPropertyFn
 		CheckpointIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+		MaxReaderCount                      dynamicconfig.IntPropertyFn
 		TaskMaxRetryCount                   dynamicconfig.IntPropertyFn
 	}
 )
@@ -130,6 +136,10 @@ func newQueueBase(
 		metricsHandler,
 	)
 
+	monitor := newMonitor(category.Type(), &options.MonitorOptions)
+	mitigator, actionCh := newMitigator(monitor, logger, metricsHandler, options.MaxReaderCount)
+	monitor.registerMitigator(mitigator)
+
 	executableInitializer := func(t tasks.Task) Executable {
 		return NewExecutable(
 			t,
@@ -148,12 +158,14 @@ func newQueueBase(
 
 	readerInitializer := func(readerID int32, slices []Slice) Reader {
 		return NewReader(
+			readerID,
 			slices,
 			&options.ReaderOptions,
 			scheduler,
 			rescheduler,
 			timeSource,
 			rateLimiter,
+			monitor,
 			logger,
 			metricsHandler,
 		)
@@ -183,6 +195,8 @@ func newQueueBase(
 		options:        options,
 		rescheduler:    rescheduler,
 		timeSource:     shard.GetTimeSource(),
+		monitor:        monitor,
+		mitigator:      mitigator,
 		logger:         logger,
 		metricsHandler: metricsHandler,
 
@@ -201,6 +215,8 @@ func newQueueBase(
 			createCheckpointRetryPolicy(),
 			backoff.SystemClock,
 		),
+
+		actionCh: actionCh,
 	}
 }
 
@@ -219,6 +235,7 @@ func (p *queueBase) Start() {
 }
 
 func (p *queueBase) Stop() {
+	p.mitigator.close()
 	p.readerGroup.Stop()
 	p.rescheduler.Stop()
 	p.pollTimer.Stop()

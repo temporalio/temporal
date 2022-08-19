@@ -82,6 +82,9 @@ type Config struct {
 	StandbyTaskMissingEventsResendDelay  dynamicconfig.DurationPropertyFn
 	StandbyTaskMissingEventsDiscardDelay dynamicconfig.DurationPropertyFn
 
+	QueueCriticalReadWatermarkAttempts dynamicconfig.IntPropertyFn
+	QueueMaxReaderCount                dynamicconfig.IntPropertyFn
+
 	// TimerQueueProcessor settings
 	TimerTaskHighPriorityRPS                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
@@ -307,6 +310,9 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		StandbyClusterDelay:                  dc.GetDurationProperty(dynamicconfig.StandbyClusterDelay, 5*time.Minute),
 		StandbyTaskMissingEventsResendDelay:  dc.GetDurationProperty(dynamicconfig.StandbyTaskMissingEventsResendDelay, 10*time.Minute),
 		StandbyTaskMissingEventsDiscardDelay: dc.GetDurationProperty(dynamicconfig.StandbyTaskMissingEventsDiscardDelay, 15*time.Minute),
+
+		QueueCriticalReadWatermarkAttempts: dc.GetIntProperty(dynamicconfig.QueueCriticalReadWatermarkAttempts, 2),
+		QueueMaxReaderCount:                dc.GetIntProperty(dynamicconfig.QueueMaxReaderCount, 2),
 
 		TimerTaskHighPriorityRPS:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TimerTaskHighPriorityRPS, 500),
 		TimerTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),

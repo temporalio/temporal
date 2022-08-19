@@ -121,10 +121,14 @@ func (f *visibilityQueueFactory) CreateQueue(
 					MaxPendingTasksCount: f.Config.VisibilityProcessorMaxReschedulerSize,
 					PollBackoffInterval:  f.Config.VisibilityProcessorPollBackoffInterval,
 				},
+				MonitorOptions: queues.MonitorOptions{
+					CriticalReaderWatermarkAttempts: f.Config.QueueCriticalReadWatermarkAttempts,
+				},
 				MaxPollInterval:                     f.Config.VisibilityProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.VisibilityProcessorMaxPollIntervalJitterCoefficient,
 				CheckpointInterval:                  f.Config.VisibilityProcessorUpdateAckInterval,
 				CheckpointIntervalJitterCoefficient: f.Config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
+				MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 				TaskMaxRetryCount:                   f.Config.VisibilityTaskMaxRetryCount,
 			},
 			newQueueProcessorRateLimiter(

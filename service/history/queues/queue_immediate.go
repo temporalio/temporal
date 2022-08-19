@@ -153,6 +153,10 @@ func (p *immediateQueue) processEventLoop() {
 			p.processPollTimer()
 		case <-p.checkpointTimer.C:
 			p.checkpoint()
+		case action := <-p.actionCh:
+			if action != nil {
+				action.run(p.readerGroup)
+			}
 		}
 	}
 }
