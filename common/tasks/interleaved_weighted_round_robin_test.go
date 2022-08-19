@@ -247,7 +247,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule
 
 	testWaitGroup.Wait()
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
-	s.Len(len(submittedTasks), numSubmitter*numTasks)
+	s.Len(submittedTasks, numSubmitter*numTasks)
 }
 
 func newTestTask(
