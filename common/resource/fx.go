@@ -391,7 +391,7 @@ func ArchiverProviderProvider(cfg *config.Config) provider.ArchiverProvider {
 func SdkClientFactoryProvider(
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	provider metrics.MetricsHandler,
+	metricsHandler metrics.MetricsHandler,
 	logger SnTaggedLogger,
 ) (sdk.ClientFactory, error) {
 	tlsFrontendConfig, err := tlsConfigProvider.GetFrontendClientConfig()
@@ -402,7 +402,7 @@ func SdkClientFactoryProvider(
 	return sdk.NewClientFactory(
 		cfg.PublicClient.HostPort,
 		tlsFrontendConfig,
-		sdk.NewMetricsHandler(provider),
+		metricsHandler,
 		logger,
 	), nil
 }
