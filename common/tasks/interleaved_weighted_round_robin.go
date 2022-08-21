@@ -82,7 +82,7 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 	logger log.Logger,
 ) *InterleavedWeightedRoundRobinScheduler[T, K] {
 	iwrrChannels := atomic.Value{}
-	iwrrChannels.Store([]*WeightedChannel[T]{})
+	iwrrChannels.Store(WeightedChannels[T]{})
 	return &InterleavedWeightedRoundRobinScheduler[T, K]{
 		status: common.DaemonStatusInitialized,
 
@@ -211,7 +211,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 	}
 	sort.Sort(weightedChannels)
 
-	iwrrChannels := make([]*WeightedChannel[T], 0, len(weightedChannels))
+	iwrrChannels := make(WeightedChannels[T], 0, len(weightedChannels))
 	maxWeight := weightedChannels[len(weightedChannels)-1].Weight()
 	for round := maxWeight - 1; round > -1; round-- {
 		for index := len(weightedChannels) - 1; index > -1 && weightedChannels[index].Weight() > round; index-- {
@@ -223,8 +223,8 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 	return channel
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler[T, K]) channels() []*WeightedChannel[T] {
-	return s.iwrrChannels.Load().([]*WeightedChannel[T])
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) channels() WeightedChannels[T] {
+	return s.iwrrChannels.Load().(WeightedChannels[T])
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) notifyDispatcher() {
@@ -247,7 +247,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) dispatchTasksWithWeight()
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTasksWithWeight(
-	channels []*WeightedChannel[T],
+	channels WeightedChannels[T],
 ) {
 	numTasks := int64(0)
 LoopDispatch:

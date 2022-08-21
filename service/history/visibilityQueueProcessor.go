@@ -141,7 +141,7 @@ func newVisibilityQueueProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newVisibilityTaskScheduler(shard, logger, metricProvider)
+		scheduler = newVisibilityTaskShardScheduler(shard, logger, metricProvider)
 		retProcessor.ownedScheduler = scheduler
 	}
 
@@ -354,7 +354,7 @@ func (t *visibilityQueueProcessorImpl) queueShutdown() error {
 	return t.visibilityQueueShutdown()
 }
 
-func newVisibilityTaskScheduler(
+func newVisibilityTaskShardScheduler(
 	shard shard.Context,
 	logger log.Logger,
 	metricProvider metrics.MetricsHandler,

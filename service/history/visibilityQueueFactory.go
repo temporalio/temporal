@@ -56,9 +56,9 @@ type (
 func NewVisibilityQueueFactory(
 	params visibilityQueueFactoryParams,
 ) queues.Factory {
-	var scheduler queues.Scheduler
+	var hostScheduler queues.Scheduler
 	if params.Config.VisibilityProcessorEnablePriorityTaskScheduler() {
-		scheduler = queues.NewNamespacePriorityScheduler(
+		hostScheduler = queues.NewNamespacePriorityScheduler(
 			queues.NewPriorityAssigner(
 				params.ClusterMetadata.GetCurrentClusterName(),
 				params.NamespaceRegistry,
@@ -79,7 +79,7 @@ func NewVisibilityQueueFactory(
 	return &visibilityQueueFactory{
 		visibilityQueueFactoryParams: params,
 		queueFactoryBase: queueFactoryBase{
-			scheduler: scheduler,
+			hostScheduler: hostScheduler,
 			hostRateLimiter: newQueueHostRateLimiter(
 				params.Config.VisibilityProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
@@ -93,7 +93,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 	engine shard.Engine,
 	workflowCache workflow.Cache,
 ) queues.Queue {
-	if f.scheduler != nil && f.Config.VisibilityProcessorEnableMultiCursor() {
+	if f.hostScheduler != nil && f.Config.VisibilityProcessorEnableMultiCursor() {
 		logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
 
 		executor := newVisibilityQueueTaskExecutor(
@@ -107,7 +107,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		return queues.NewImmediateQueue(
 			shard,
 			tasks.CategoryVisibility,
-			f.scheduler,
+			f.hostScheduler,
 			executor,
 			&queues.Options{
 				ReaderOptions: queues.ReaderOptions{
@@ -133,7 +133,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 	return newVisibilityQueueProcessor(
 		shard,
 		workflowCache,
-		f.scheduler,
+		f.hostScheduler,
 		f.VisibilityMgr,
 		f.MetricsHandler,
 		f.hostRateLimiter,

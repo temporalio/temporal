@@ -33,6 +33,8 @@ import (
 
 const (
 	fifoSchedulerDefaultWeight = 100
+
+	fifoSchedulerTaskChannelKey = 0
 )
 
 type (
@@ -53,9 +55,9 @@ func NewFIFOScheduler(
 ) *FIFOScheduler {
 	return &FIFOScheduler{
 		wRRScheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
-			tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, struct{}]{
-				TaskToChannelKey:   func(_ Executable) struct{} { return struct{}{} },
-				ChannelKeyToWeight: func(_ struct{}) int { return fifoSchedulerDefaultWeight },
+			tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, int]{
+				TaskToChannelKey:   func(_ Executable) int { return fifoSchedulerTaskChannelKey },
+				ChannelKeyToWeight: func(_ int) int { return fifoSchedulerDefaultWeight },
 			},
 			tasks.NewParallelProcessor(
 				&tasks.ParallelProcessorOptions{

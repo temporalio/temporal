@@ -367,7 +367,7 @@ func (t *timerQueueProcessorBase) submitTask(
 	}
 }
 
-func newTimerTaskScheduler(
+func newTimerTaskShardScheduler(
 	shard shard.Context,
 	logger log.Logger,
 	metricProvider metrics.MetricsHandler,

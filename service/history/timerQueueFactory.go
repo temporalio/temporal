@@ -63,9 +63,9 @@ type (
 func NewTimerQueueFactory(
 	params timerQueueFactoryParams,
 ) queues.Factory {
-	var scheduler queues.Scheduler
+	var hostScheduler queues.Scheduler
 	if params.Config.TimerProcessorEnablePriorityTaskScheduler() {
-		scheduler = queues.NewNamespacePriorityScheduler(
+		hostScheduler = queues.NewNamespacePriorityScheduler(
 			queues.NewPriorityAssigner(
 				params.ClusterMetadata.GetCurrentClusterName(),
 				params.NamespaceRegistry,
@@ -86,7 +86,7 @@ func NewTimerQueueFactory(
 	return &timerQueueFactory{
 		timerQueueFactoryParams: params,
 		queueFactoryBase: queueFactoryBase{
-			scheduler: scheduler,
+			hostScheduler: hostScheduler,
 			hostRateLimiter: newQueueHostRateLimiter(
 				params.Config.TimerProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
@@ -100,7 +100,7 @@ func (f *timerQueueFactory) CreateQueue(
 	engine shard.Engine,
 	workflowCache workflow.Cache,
 ) queues.Queue {
-	if f.scheduler != nil && f.Config.TimerProcessorEnableMultiCursor() {
+	if f.hostScheduler != nil && f.Config.TimerProcessorEnableMultiCursor() {
 		logger := log.With(shard.GetLogger(), tag.ComponentTimerQueue)
 
 		currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
@@ -163,7 +163,7 @@ func (f *timerQueueFactory) CreateQueue(
 		return queues.NewScheduledQueue(
 			shard,
 			tasks.CategoryTimer,
-			f.scheduler,
+			f.hostScheduler,
 			executor,
 			&queues.Options{
 				ReaderOptions: queues.ReaderOptions{
@@ -189,7 +189,7 @@ func (f *timerQueueFactory) CreateQueue(
 	return newTimerQueueProcessor(
 		shard,
 		workflowCache,
-		f.scheduler,
+		f.hostScheduler,
 		f.ClientBean,
 		f.ArchivalClient,
 		f.MatchingClient,

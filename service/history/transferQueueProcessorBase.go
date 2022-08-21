@@ -106,7 +106,7 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 	return t.transferQueueShutdown()
 }
 
-func newTransferTaskScheduler(
+func newTransferTaskShardScheduler(
 	shard shard.Context,
 	logger log.Logger,
 	metricProvider metrics.MetricsHandler,
