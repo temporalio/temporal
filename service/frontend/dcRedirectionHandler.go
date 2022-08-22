@@ -1738,7 +1738,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeBatchOperation(
 	ctx context.Context,
 	request *workflowservice.DescribeBatchOperationRequest,
 ) (resp *workflowservice.DescribeBatchOperationResponse, retError error) {
-	var apiName = "StopBatchOperation"
+	var apiName = "DescribeBatchOperation"
 	var err error
 	var cluster string
 
@@ -1770,7 +1770,7 @@ func (handler *DCRedirectionHandlerImpl) ListBatchOperations(
 	ctx context.Context,
 	request *workflowservice.ListBatchOperationsRequest,
 ) (resp *workflowservice.ListBatchOperationsResponse, retError error) {
-	var apiName = "StopBatchOperation"
+	var apiName = "ListBatchOperations"
 	var err error
 	var cluster string
 

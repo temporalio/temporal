@@ -26,6 +26,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -34,6 +35,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/olivere/elastic/v7"
+	"github.com/olivere/elastic/v7/uritemplates"
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/log"
@@ -245,11 +247,32 @@ func (c *clientV7) WaitForYellowStatus(ctx context.Context, index string) (strin
 }
 
 func (c *clientV7) GetMapping(ctx context.Context, index string) (map[string]string, error) {
-	resp, err := c.esClient.GetMapping().Index(index).Do(ctx)
+	// Manually build mapping request because olivere/elastic/v7 client doesn't work with ES8
+	path, err := uritemplates.Expand("/{index}/_mapping", map[string]string{
+		"index": index,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return convertMappingBody(resp, index), err
+
+	// Get HTTP response
+	res, err := c.esClient.PerformRequest(ctx, elastic.PerformRequestOptions{
+		Method:  "GET",
+		Path:    path,
+		Params:  url.Values{},
+		Headers: http.Header{},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Decode body
+	var body map[string]interface{}
+	if err := json.Unmarshal(res.Body, &body); err != nil {
+		return nil, err
+	}
+
+	return convertMappingBody(body, index), nil
 }
 
 func (c *clientV7) GetDateFieldType() string {
@@ -390,16 +413,6 @@ func convertMappingBody(esMapping map[string]interface{}, indexName string) map[
 	mappingsMap, ok := mappings.(map[string]interface{})
 	if !ok {
 		return result
-	}
-
-	// One more nested field on ES6.
-	// TODO (alex): Remove with ES6 removal.
-	if doc, ok := mappingsMap[docTypeV6]; ok {
-		docMap, ok := doc.(map[string]interface{})
-		if !ok {
-			return result
-		}
-		mappingsMap = docMap
 	}
 
 	properties, ok := mappingsMap["properties"]

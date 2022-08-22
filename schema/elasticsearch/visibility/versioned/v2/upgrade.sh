@@ -28,16 +28,11 @@ fi
 
 echo "=== Step 1. Add new builtin search attributes ==="
 
-case $ES_VERSION in
-    v6) date_type='date'       ; doc_type='/_doc' ;;
-    *)  date_type='date_nanos' ; doc_type=''      ;;
-esac
-
 new_mapping='
 {
   "properties": {
     "TemporalScheduledStartTime": {
-      "type": "'$date_type'"
+      "type": "date_nanos"
     },
     "TemporalScheduledById": {
       "type": "keyword"
@@ -56,7 +51,7 @@ else
     REPLY="y"
 fi
 if [ "${REPLY}" = "y" ]; then
-    curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${es_endpoint}/${ES_VIS_INDEX_V1}${doc_type}/_mapping" -H "Content-Type: application/json" --data-binary "$new_mapping" | jq
+    curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${es_endpoint}/${ES_VIS_INDEX_V1}/_mapping" -H "Content-Type: application/json" --data-binary "$new_mapping" | jq
     # Wait for mapping changes to go through.
     until curl --silent --user "${ES_USER}":"${ES_PWD}" "${es_endpoint}/_cluster/health/${ES_VIS_INDEX_V1}" | jq --exit-status '.status=="green" | .'; do
         echo "Waiting for Elasticsearch index ${ES_VIS_INDEX_V1} become green."
