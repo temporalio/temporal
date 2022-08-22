@@ -25,33 +25,41 @@
 package queues
 
 import (
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
-	action interface {
-		run(*ReaderGroup)
+	// Action is operations that can be run on a ReaderGroup.
+	// It is created by Mitigator upon receiving an Alert and
+	// run by a Queue to resolve the alert.
+	Action interface {
+		Run(*ReaderGroup)
 	}
 
-	actionReaderWatermark struct {
+	actionReaderStuck struct {
 		mitigator *mitigatorImpl
 
-		attributes *AlertReaderWatermarkAttributes
+		attributes *AlertAttributesReaderStuck
+		logger     log.Logger
 	}
 )
 
-func newReaderWatermarkAction(
+func newReaderStuckAction(
 	mitigator *mitigatorImpl,
-	attributes *AlertReaderWatermarkAttributes,
-) action {
-	return &actionReaderWatermark{
+	attributes *AlertAttributesReaderStuck,
+	logger log.Logger,
+) Action {
+	return &actionReaderStuck{
 		mitigator:  mitigator,
 		attributes: attributes,
+		logger:     logger,
 	}
 }
 
-func (a *actionReaderWatermark) run(readerGroup *ReaderGroup) {
-	defer a.mitigator.resolve(AlertTypeReaderWatermark)
+func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) {
+	defer a.mitigator.resolve(AlertTypeReaderStuck)
 
 	if a.attributes.ReaderID == int32(a.mitigator.maxReaderCount()-1) {
 		return
@@ -59,6 +67,7 @@ func (a *actionReaderWatermark) run(readerGroup *ReaderGroup) {
 
 	reader, ok := readerGroup.ReaderByID(a.attributes.ReaderID)
 	if !ok {
+		a.logger.Error("Failed to get queue with readerID for reader stuck action", tag.QueueReaderID(a.attributes.ReaderID))
 		return
 	}
 

@@ -40,8 +40,8 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		monitor   *monitorImpl
-		mitigator *testMitigator
+		monitor *monitorImpl
+		alertCh <-chan *Alert
 	}
 
 	testMitigator struct {
@@ -57,14 +57,16 @@ func TestMonitorSuite(t *testing.T) {
 func (s *monitorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.mitigator = &testMitigator{}
-
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled,
 		&MonitorOptions{
-			CriticalReaderWatermarkAttempts: dynamicconfig.GetIntPropertyFn(3),
+			ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(3),
 		},
 	)
-	s.monitor.registerMitigator(s.mitigator)
+	s.alertCh = s.monitor.AlertCh()
+}
+
+func (s *monitorSuite) TearDownTest() {
+	s.monitor.Close()
 }
 
 func (s *monitorSuite) TestReaderWatermarkStats() {
@@ -80,25 +82,20 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 		0,
 	), watermark)
 
-	for i := 0; i != s.monitor.options.CriticalReaderWatermarkAttempts(); i++ {
+	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts(); i++ {
 		now = now.Add(time.Millisecond * 100)
 		s.monitor.SetReaderWatermark(defaultReaderId, tasks.NewKey(now, rand.Int63()))
 	}
 
-	s.Len(s.mitigator.alerts, 1)
+	alert := <-s.alertCh
 	s.Equal(Alert{
-		AlertType: AlertTypeReaderWatermark,
-		AlertReaderWatermarkAttributes: &AlertReaderWatermarkAttributes{
+		AlertType: AlertTypeReaderStuck,
+		AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
 			ReaderID: defaultReaderId,
 			CurrentWatermark: tasks.NewKey(
 				now.Truncate(monitorWatermarkPrecision),
 				0,
 			),
 		},
-	}, s.mitigator.alerts[0])
-}
-
-func (m *testMitigator) Alert(alert Alert) bool {
-	m.alerts = append(m.alerts, alert)
-	return true
+	}, *alert)
 }

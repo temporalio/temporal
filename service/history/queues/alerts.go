@@ -25,18 +25,21 @@
 package queues
 
 import (
+	"strconv"
+
 	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
+	// Alert is created by a Monitor when some statistics of the Queue is abnormal
 	Alert struct {
-		AlertType                      AlertType
-		AlertReaderWatermarkAttributes *AlertReaderWatermarkAttributes
+		AlertType                  AlertType
+		AlertAttributesReaderStuck *AlertAttributesReaderStuck
 	}
 
 	AlertType int
 
-	AlertReaderWatermarkAttributes struct {
+	AlertAttributesReaderStuck struct {
 		ReaderID         int32
 		CurrentWatermark tasks.Key
 	}
@@ -44,5 +47,20 @@ type (
 
 const (
 	AlertTypeUnspecified AlertType = iota
-	AlertTypeReaderWatermark
+	AlertTypeReaderStuck
 )
+
+var (
+	alertTypeNames = map[AlertType]string{
+		0: "Unspecified",
+		1: "ReaderStuck",
+	}
+)
+
+func (a AlertType) String() string {
+	s, ok := alertTypeNames[a]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(a))
+}

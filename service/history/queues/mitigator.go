@@ -36,8 +36,9 @@ import (
 var _ Mitigator = (*mitigatorImpl)(nil)
 
 type (
+	// Mitigator generates an Action for resolving the given Alert
 	Mitigator interface {
-		Alert(Alert) bool
+		Alert(Alert) Action
 	}
 
 	mitigatorImpl struct {
@@ -49,7 +50,6 @@ type (
 		maxReaderCount dynamicconfig.IntPropertyFn
 
 		pendingAlerts map[AlertType]Alert
-		actionCh      chan<- action
 	}
 )
 
@@ -58,45 +58,35 @@ func newMitigator(
 	logger log.Logger,
 	metricsHandler metrics.MetricsHandler,
 	maxReaderCount dynamicconfig.IntPropertyFn,
-) (*mitigatorImpl, <-chan action) {
-	actionCh := make(chan action, 10)
-
+) *mitigatorImpl {
 	return &mitigatorImpl{
 		monitor:        monitor,
 		logger:         logger,
 		metricsHandler: metricsHandler,
 		maxReaderCount: maxReaderCount,
 		pendingAlerts:  make(map[AlertType]Alert),
-		actionCh:       actionCh,
-	}, actionCh
+	}
 }
 
-func (m *mitigatorImpl) Alert(alert Alert) bool {
+func (m *mitigatorImpl) Alert(alert Alert) Action {
 	m.Lock()
 	defer m.Unlock()
 
 	if _, ok := m.pendingAlerts[alert.AlertType]; ok {
-		return true
+		return nil
 	}
 
-	var action action
+	var action Action
 	switch alert.AlertType {
-	case AlertTypeReaderWatermark:
-		action = newReaderWatermarkAction(m, alert.AlertReaderWatermarkAttributes)
+	case AlertTypeReaderStuck:
+		action = newReaderStuckAction(m, alert.AlertAttributesReaderStuck, m.logger)
 	default:
-		m.logger.Error("Unknown queue alert type", tag.Value(alert.AlertType))
-		return false
+		m.logger.Error("Unknown queue alert type", tag.QueueAlertType(alert.AlertType.String()))
+		return nil
 	}
 
-	select {
-	case m.actionCh <- action:
-		m.logger.Info("Received queue alert", tag.Key("alert"), tag.Value(alert.AlertType))
-		m.pendingAlerts[alert.AlertType] = alert
-		return true
-	default:
-		m.logger.Warn("Too many pending queue actions")
-		return false
-	}
+	m.pendingAlerts[alert.AlertType] = alert
+	return action
 }
 
 func (m *mitigatorImpl) resolve(alertType AlertType) {
@@ -104,9 +94,5 @@ func (m *mitigatorImpl) resolve(alertType AlertType) {
 	defer m.Unlock()
 
 	delete(m.pendingAlerts, alertType)
-	m.logger.Info("Action completed for queue alert", tag.Key("alert-type"), tag.Value(alertType))
-}
-
-func (m *mitigatorImpl) close() {
-	close(m.actionCh)
+	m.logger.Info("Action completed for queue alert", tag.QueueAlertType(alertType.String()))
 }

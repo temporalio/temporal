@@ -169,7 +169,7 @@ func (f *transferQueueFactory) CreateQueue(
 					PollBackoffInterval:  f.Config.TransferProcessorPollBackoffInterval,
 				},
 				MonitorOptions: queues.MonitorOptions{
-					CriticalReaderWatermarkAttempts: f.Config.QueueCriticalReadWatermarkAttempts,
+					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
 				},
 				MaxPollInterval:                     f.Config.TransferProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.TransferProcessorMaxPollIntervalJitterCoefficient,

@@ -36,27 +36,35 @@ var _ Monitor = (*monitorImpl)(nil)
 
 const (
 	monitorWatermarkPrecision = time.Second
+
+	alertChSize = 10
 )
 
 type (
+	// Monitor tracks Queue statistics and sends an Alert to the AlertCh
+	// if any statistics becomes abnormal
 	Monitor interface {
 		GetReaderWatermark(readerID int32) (tasks.Key, bool)
 		SetReaderWatermark(readerID int32, watermark tasks.Key)
+
+		AlertCh() <-chan *Alert
+		Close()
 	}
 
 	MonitorOptions struct {
-		CriticalReaderWatermarkAttempts dynamicconfig.IntPropertyFn
+		ReaderStuckCriticalAttempts dynamicconfig.IntPropertyFn
 	}
 
 	monitorImpl struct {
 		sync.Mutex
 
-		mitigator Mitigator
-
 		readerStats
 
 		categoryType tasks.CategoryType
 		options      *MonitorOptions
+
+		alertCh    chan *Alert
+		shutdownCh chan struct{}
 	}
 
 	readerStats struct {
@@ -79,6 +87,8 @@ func newMonitor(
 		},
 		categoryType: categoryType,
 		options:      options,
+		alertCh:      make(chan *Alert, alertChSize),
+		shutdownCh:   make(chan struct{}),
 	}
 }
 
@@ -121,11 +131,11 @@ func (m *monitorImpl) SetReaderWatermark(readerID int32, watermark tasks.Key) {
 
 	progress.attempts++
 
-	ciriticalAttempts := m.options.CriticalReaderWatermarkAttempts()
-	if ciriticalAttempts > 0 && progress.attempts > ciriticalAttempts && m.mitigator != nil {
-		m.mitigator.Alert(Alert{
-			AlertType: AlertTypeReaderWatermark,
-			AlertReaderWatermarkAttributes: &AlertReaderWatermarkAttributes{
+	ciriticalAttempts := m.options.ReaderStuckCriticalAttempts()
+	if ciriticalAttempts > 0 && progress.attempts >= ciriticalAttempts {
+		m.sendAlertLocked(&Alert{
+			AlertType: AlertTypeReaderStuck,
+			AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
 				ReaderID:         readerID,
 				CurrentWatermark: progress.watermark,
 			},
@@ -133,12 +143,45 @@ func (m *monitorImpl) SetReaderWatermark(readerID int32, watermark tasks.Key) {
 	}
 }
 
-func (m *monitorImpl) registerMitigator(
-	mitigator Mitigator,
-) {
-	if m.mitigator != nil {
-		panic("Mitigator already registered on queue monitor")
+func (m *monitorImpl) AlertCh() <-chan *Alert {
+	return m.alertCh
+}
+
+func (m *monitorImpl) Close() {
+	m.Lock()
+	defer m.Unlock()
+
+	close(m.shutdownCh)
+
+	for {
+		select {
+		case <-m.alertCh:
+			// drain alertCh
+		default:
+			close(m.alertCh)
+			return
+		}
+	}
+}
+
+func (m *monitorImpl) sendAlertLocked(alert *Alert) {
+	if m.isClosed() {
+		// make sure alert won't be sent to a closed chan
+		return
 	}
 
-	m.mitigator = mitigator
+	select {
+	case m.alertCh <- alert:
+	default:
+		// do not block if alertCh full
+	}
+}
+
+func (m *monitorImpl) isClosed() bool {
+	select {
+	case <-m.shutdownCh:
+		return true
+	default:
+		return false
+	}
 }

@@ -42,8 +42,6 @@ type (
 
 		monitor   Monitor
 		mitigator *mitigatorImpl
-
-		actionCh <-chan action
 	}
 )
 
@@ -56,7 +54,7 @@ func (s *mitigatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.monitor = newMonitor(tasks.CategoryTypeImmediate, nil)
-	s.mitigator, s.actionCh = newMitigator(
+	s.mitigator = newMitigator(
 		s.monitor,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
@@ -66,28 +64,26 @@ func (s *mitigatorSuite) SetupTest() {
 
 func (s *mitigatorSuite) TestReaderWatermarkAlert() {
 	alert := Alert{
-		AlertType: AlertTypeReaderWatermark,
-		AlertReaderWatermarkAttributes: &AlertReaderWatermarkAttributes{
+		AlertType: AlertTypeReaderStuck,
+		AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
 			ReaderID:         1,
 			CurrentWatermark: NewRandomKey(),
 		},
 	}
-
-	s.True(s.mitigator.Alert(alert))
-	action := <-s.actionCh
-	s.Equal(&actionReaderWatermark{
+	expectedAction := &actionReaderStuck{
 		mitigator:  s.mitigator,
-		attributes: alert.AlertReaderWatermarkAttributes,
-	}, action.(*actionReaderWatermark))
-
-	s.True(s.mitigator.Alert(alert))
-	select {
-	case <-s.actionCh:
-		s.Fail("mitigator should have only one outstanding action for reader watermark alert")
-	default:
+		attributes: alert.AlertAttributesReaderStuck,
+		logger:     s.mitigator.logger,
 	}
 
+	action := s.mitigator.Alert(alert)
+	s.Equal(expectedAction, action.(*actionReaderStuck))
+
+	action = s.mitigator.Alert(alert)
+	s.Nil(action, "mitigator should have only one outstanding action for reader watermark alert")
+
 	s.mitigator.resolve(alert.AlertType)
-	s.True(s.mitigator.Alert(alert))
-	<-s.actionCh
+	action = s.mitigator.Alert(alert)
+	s.NotNil(action)
+	s.Equal(expectedAction, action.(*actionReaderStuck))
 }

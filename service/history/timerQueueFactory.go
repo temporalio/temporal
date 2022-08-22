@@ -179,7 +179,7 @@ func (f *timerQueueFactory) CreateQueue(
 					PollBackoffInterval:  f.Config.TimerProcessorPollBackoffInterval,
 				},
 				MonitorOptions: queues.MonitorOptions{
-					CriticalReaderWatermarkAttempts: f.Config.QueueCriticalReadWatermarkAttempts,
+					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
 				},
 				MaxPollInterval:                     f.Config.TimerProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.TimerProcessorMaxPollIntervalJitterCoefficient,

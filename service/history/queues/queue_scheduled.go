@@ -184,10 +184,8 @@ func (p *scheduledQueue) processEventLoop() {
 			p.processPollTimer()
 		case <-p.checkpointTimer.C:
 			p.checkpoint()
-		case action := <-p.actionCh:
-			if action != nil {
-				action.run(p.readerGroup)
-			}
+		case alert := <-p.alertCh:
+			p.handleAlert(alert)
 		}
 	}
 }

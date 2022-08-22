@@ -84,7 +84,7 @@ type (
 		checkpointTimer   *time.Timer
 		pollTimer         *time.Timer
 
-		actionCh <-chan action
+		alertCh <-chan *Alert
 	}
 
 	Options struct {
@@ -137,8 +137,7 @@ func newQueueBase(
 	)
 
 	monitor := newMonitor(category.Type(), &options.MonitorOptions)
-	mitigator, actionCh := newMitigator(monitor, logger, metricsHandler, options.MaxReaderCount)
-	monitor.registerMitigator(mitigator)
+	mitigator := newMitigator(monitor, logger, metricsHandler, options.MaxReaderCount)
 
 	executableInitializer := func(t tasks.Task) Executable {
 		return NewExecutable(
@@ -216,7 +215,7 @@ func newQueueBase(
 			backoff.SystemClock,
 		),
 
-		actionCh: actionCh,
+		alertCh: monitor.AlertCh(),
 	}
 }
 
@@ -235,7 +234,7 @@ func (p *queueBase) Start() {
 }
 
 func (p *queueBase) Stop() {
-	p.mitigator.close()
+	p.monitor.Close()
 	p.readerGroup.Stop()
 	p.rescheduler.Stop()
 	p.pollTimer.Stop()
@@ -368,6 +367,23 @@ func (p *queueBase) checkpoint() {
 		p.metricsHandler.Counter(AckLevelUpdateFailedCounter).Record(1)
 		p.logger.Error("Error updating queue state", tag.Error(err), tag.OperationFailed)
 	}
+}
+
+func (p *queueBase) handleAlert(alert *Alert) {
+	// Upon getting an Alert from monitor,
+	// send it to the mitigator for deduping and generating the corresponding Action.
+	// Then run the returned Action to resolve the Alert.
+
+	if alert == nil {
+		return
+	}
+
+	action := p.mitigator.Alert(*alert)
+	if action == nil {
+		return
+	}
+
+	action.Run(p.readerGroup)
 }
 
 func createCheckpointRetryPolicy() backoff.RetryPolicy {

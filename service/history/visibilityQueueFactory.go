@@ -122,7 +122,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 					PollBackoffInterval:  f.Config.VisibilityProcessorPollBackoffInterval,
 				},
 				MonitorOptions: queues.MonitorOptions{
-					CriticalReaderWatermarkAttempts: f.Config.QueueCriticalReadWatermarkAttempts,
+					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
 				},
 				MaxPollInterval:                     f.Config.VisibilityProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.VisibilityProcessorMaxPollIntervalJitterCoefficient,

@@ -80,7 +80,7 @@ func (s *readerSuite) SetupTest() {
 		return NewExecutable(t, nil, nil, nil, nil, clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
-		CriticalReaderWatermarkAttempts: dynamicconfig.GetIntPropertyFn(1000),
+		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(1000),
 	})
 }
 
