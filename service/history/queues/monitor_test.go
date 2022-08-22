@@ -43,10 +43,6 @@ type (
 		monitor *monitorImpl
 		alertCh <-chan *Alert
 	}
-
-	testMitigator struct {
-		alerts []Alert
-	}
 )
 
 func TestMonitorSuite(t *testing.T) {
