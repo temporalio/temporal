@@ -38,6 +38,9 @@ import (
 )
 
 const (
+	// This is the task channel buffer size between
+	// weighted round robin scheduler and the actual
+	// worker pool (parallel processor).
 	defaultParallelProcessorQueueSize = 10
 )
 

@@ -43,6 +43,9 @@ type (
 		QueueSize   int
 	}
 
+	// FIFOScheduler is used by shard level worker pool
+	// and always schedule tasks in fifo order regardless
+	// which namespace the task belongs to.
 	FIFOScheduler struct {
 		wRRScheduler tasks.Scheduler[Executable]
 	}
