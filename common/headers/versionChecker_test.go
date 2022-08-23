@@ -59,9 +59,6 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 		supportsMyFeature bool
 	}{
 		{
-			expectErr: false,
-		},
-		{
 			callContext: context.Background(),
 			expectErr:   false,
 		},
@@ -106,11 +103,11 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 			expectErr:   false,
 		},
 		{
-			callContext:       s.constructCallContext("3.0.5", ClientNameGoSDK, "", myFeature),
+			callContext:       s.constructCallContext("2.4.5", ClientNameGoSDK, "", myFeature),
 			supportsMyFeature: true,
 		},
 		{
-			callContext: s.constructCallContext("3.2.15", ClientNameGoSDK, "",
+			callContext: s.constructCallContext("2.4.5", ClientNameGoSDK, "",
 				strings.Join([]string{"another-feature", myFeature, "third-feature"}, SupportedFeaturesHeaderDelim)),
 			supportsMyFeature: true,
 		},

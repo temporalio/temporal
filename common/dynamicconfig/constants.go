@@ -189,8 +189,6 @@ const (
 	FrontendThrottledLogRPS = "frontend.throttledLogRPS"
 	// FrontendShutdownDrainDuration is the duration of traffic drain during shutdown
 	FrontendShutdownDrainDuration = "frontend.shutdownDrainDuration"
-	// EnableClientVersionCheck enables client version check for frontend
-	EnableClientVersionCheck = "frontend.enableClientVersionCheck"
 	// FrontendMaxBadBinaries is the max number of bad binaries in namespace config
 	FrontendMaxBadBinaries = "frontend.maxBadBinaries"
 	// SendRawWorkflowHistory is whether to enable raw history retrieving
