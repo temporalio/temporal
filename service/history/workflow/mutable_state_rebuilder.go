@@ -648,6 +648,9 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED_EXTERNALLY:
 			return nil, serviceerror.NewUnimplemented("Workflow/activity property motification not implemented")
 
+		case enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:
+			return nil, serviceerror.NewUnimplemented("Workflow property motification not implemented")
+
 		default:
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))
 		}
