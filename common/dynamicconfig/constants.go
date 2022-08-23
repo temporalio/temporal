@@ -340,8 +340,6 @@ const (
 	// StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
 	// before discarding the task
 	StandbyTaskMissingEventsDiscardDelay = "history.standbyTaskMissingEventsDiscardDelay"
-	// TimerTaskHighPriorityRPS is the per namespace rps limit for processing timer tasks as high priority
-	TimerTaskHighPriorityRPS = "history.timerTaskHighPriorityRPS"
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
 	TimerTaskBatchSize = "history.timerTaskBatchSize"
 	// TimerTaskWorkerCount is number of task workers for timer processor
@@ -358,8 +356,6 @@ const (
 	TimerProcessorEnablePriorityTaskScheduler = "history.timerProcessorEnablePriorityTaskScheduler"
 	// TimerProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for timer processor
 	TimerProcessorSchedulerWorkerCount = "history.timerProcessorSchedulerWorkerCount"
-	// TimerProcessorSchedulerQueueSize is the task channel size in the host level task scheduler for timer processor
-	TimerProcessorSchedulerQueueSize = "history.timerProcessorSchedulerQueueSize"
 	// TimerProcessorSchedulerRoundRobinWeights is the priority round robin weights for timer task scheduler
 	TimerProcessorSchedulerRoundRobinWeights = "history.timerProcessorSchedulerRoundRobinWeights"
 	// TimerProcessorUpdateAckInterval is update interval for timer processor
@@ -388,8 +384,6 @@ const (
 	TimerProcessorHistoryArchivalSizeLimit = "history.timerProcessorHistoryArchivalSizeLimit"
 	// TimerProcessorArchivalTimeLimit is the upper time limit for inline history archival
 	TimerProcessorArchivalTimeLimit = "history.timerProcessorArchivalTimeLimit"
-	// TransferTaskHighPriorityRPS is the per namespace rps limit for processing timer tasks as high priority
-	TransferTaskHighPriorityRPS = "history.transferTaskHighPriorityRPS"
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize = "history.transferTaskBatchSize"
 	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
@@ -412,8 +406,6 @@ const (
 	TransferProcessorEnablePriorityTaskScheduler = "history.transferProcessorEnablePriorityTaskScheduler"
 	// TransferProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for transferQueueProcessor
 	TransferProcessorSchedulerWorkerCount = "history.transferProcessorSchedulerWorkerCount"
-	// TransferProcessorSchedulerQueueSize is the task channel size in the host level task scheduler for transferQueueProcessor
-	TransferProcessorSchedulerQueueSize = "history.transferProcessorSchedulerQueueSize"
 	// TransferProcessorSchedulerRoundRobinWeights is the priority round robin weights for transfer task scheduler
 	TransferProcessorSchedulerRoundRobinWeights = "history.transferProcessorSchedulerRoundRobinWeights"
 	// TransferProcessorUpdateShardTaskCount is update shard count for transferQueueProcessor
@@ -435,8 +427,6 @@ const (
 	// TransferProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
 	TransferProcessorVisibilityArchivalTimeLimit = "history.transferProcessorVisibilityArchivalTimeLimit"
 
-	// VisibilityTaskHighPriorityRPS is the per namespace rps limit for processing timer tasks as high priority
-	VisibilityTaskHighPriorityRPS = "history.visibilityTaskHighPriorityRPS"
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"
 	// VisibilityProcessorMaxPollRPS is max poll rate per second for visibilityQueueProcessor
@@ -454,8 +444,6 @@ const (
 	VisibilityProcessorEnablePriorityTaskScheduler = "history.visibilityProcessorEnablePriorityTaskScheduler"
 	// VisibilityProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for visibilityQueueProcessor
 	VisibilityProcessorSchedulerWorkerCount = "history.visibilityProcessorSchedulerWorkerCount"
-	// VisibilityProcessorSchedulerQueueSize is the task channel size in the host level task scheduler for visibilityQueueProcessor
-	VisibilityProcessorSchedulerQueueSize = "history.visibilityProcessorSchedulerQueueSize"
 	// VisibilityProcessorSchedulerRoundRobinWeights is the priority round robin weights for visibility task scheduler
 	VisibilityProcessorSchedulerRoundRobinWeights = "history.visibilityProcessorSchedulerRoundRobinWeights"
 	// VisibilityProcessorMaxPollInterval max poll interval for visibilityQueueProcessor

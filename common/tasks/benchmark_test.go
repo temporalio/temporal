@@ -25,6 +25,7 @@
 package tasks
 
 import (
+	"math/rand"
 	"sync"
 	"testing"
 
@@ -41,12 +42,12 @@ type (
 )
 
 var (
-	_ Processor    = (*noopProcessor)(nil)
-	_ PriorityTask = (*noopTask)(nil)
+	_ Processor = (*noopProcessor)(nil)
+	_ Task      = (*noopTask)(nil)
 )
 
 var (
-	benchmarkPriorityToWeight = map[Priority]int{
+	channelKeyToWeight = map[int]int{
 		0: 5,
 		1: 3,
 		2: 2,
@@ -58,8 +59,9 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Sequential(b *testing.B) {
 	logger := log.NewTestLogger()
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
-		InterleavedWeightedRoundRobinSchedulerOptions{
-			PriorityToWeight: benchmarkPriorityToWeight,
+		InterleavedWeightedRoundRobinSchedulerOptions[*noopTask, int]{
+			TaskToChannelKey:   func(nt *noopTask) int { return rand.Intn(4) },
+			ChannelKeyToWeight: func(key int) int { return channelKeyToWeight[key] },
 		},
 		&noopProcessor{},
 		metrics.NoopMetricsHandler,
@@ -84,8 +86,9 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Parallel(b *testing.B) {
 	logger := log.NewTestLogger()
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
-		InterleavedWeightedRoundRobinSchedulerOptions{
-			PriorityToWeight: benchmarkPriorityToWeight,
+		InterleavedWeightedRoundRobinSchedulerOptions[*noopTask, int]{
+			TaskToChannelKey:   func(nt *noopTask) int { return rand.Intn(4) },
+			ChannelKeyToWeight: func(key int) int { return channelKeyToWeight[key] },
 		},
 		&noopProcessor{},
 		metrics.NoopMetricsHandler,
@@ -121,5 +124,3 @@ func (n *noopTask) Ack()                             { n.Done() }
 func (n *noopTask) Nack(err error)                   { panic("implement me") }
 func (n *noopTask) Reschedule()                      { panic("implement me") }
 func (n *noopTask) State() State                     { panic("implement me") }
-func (n *noopTask) GetPriority() Priority            { return 0 }
-func (n *noopTask) SetPriority(i Priority)           { panic("implement me") }
