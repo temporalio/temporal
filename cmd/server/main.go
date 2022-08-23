@@ -88,6 +88,11 @@ func buildCLI() *cli.App {
 			Usage:   "availability zone",
 			EnvVars: []string{config.EnvKeyAvailabilityZone, config.EnvKeyAvailabilityZoneTypo},
 		},
+		&cli.BoolFlag{
+			Name:    "no-auth",
+			Usage:   "disable authorizer",
+			EnvVars: []string{config.EnvKeyNoAuth},
+		},
 	}
 
 	app.Commands = []*cli.Command{
@@ -120,6 +125,7 @@ func buildCLI() *cli.App {
 				zone := c.String("zone")
 				configDir := path.Join(c.String("root"), c.String("config"))
 				services := c.StringSlice("service")
+				no_auth := c.Bool("no-auth")
 
 				// For backward compatibility to support old flag format (i.e. `--services=frontend,history,matching`).
 				if c.IsSet("services") {
@@ -155,11 +161,23 @@ func buildCLI() *cli.App {
 					logger.Info("Dynamic config client is not configured. Using noop client.")
 				}
 
-				authorizer, err := authorization.GetAuthorizerFromConfig(
-					&cfg.Global.Authorization,
-				)
-				if err != nil {
-					return cli.Exit(fmt.Sprintf("Unable to instantiate authorizer. Error: %v", err), 1)
+				var authorizer authorization.Authorizer
+				if no_auth {
+					authorizer = authorization.NewNoopAuthorizer()
+				} else {
+					authorizer, err = authorization.GetAuthorizerFromConfig(
+						&cfg.Global.Authorization,
+					)
+					if err != nil {
+						return cli.Exit(fmt.Sprintf("Unable to instantiate authorizer. Error: %v", err), 1)
+					}
+					if authorization.IsNoopAuthorizer(authorizer) {
+						logger.Warn(
+							"No authorizer is set in config; disabling authorizer. " +
+								"Future versions will require using the flag `--no-auth` " +
+								"if you do not want to set an authorizer.",
+						)
+					}
 				}
 
 				claimMapper, err := authorization.GetClaimMapperFromConfig(&cfg.Global.Authorization, logger)
