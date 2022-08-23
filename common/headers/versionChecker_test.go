@@ -54,69 +54,56 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 	myFeature := "my-new-feature-flag"
 
 	testCases := []struct {
-		callContext              context.Context
-		enableClientVersionCheck bool
-		expectErr                bool
-		supportsMyFeature        bool
+		callContext       context.Context
+		expectErr         bool
+		supportsMyFeature bool
 	}{
 		{
-			enableClientVersionCheck: false,
-			expectErr:                false,
+			expectErr: false,
 		},
 		{
-			callContext:              context.Background(),
-			enableClientVersionCheck: true,
-			expectErr:                false,
+			callContext: context.Background(),
+			expectErr:   false,
 		},
 		{
-			callContext:              s.constructCallContext("", "unknown-client", "", ""),
-			enableClientVersionCheck: true,
-			expectErr:                false,
+			callContext: s.constructCallContext("", "unknown-client", "", ""),
+			expectErr:   false,
 		},
 		{
-			callContext:              s.constructCallContext("0.0.0", "", "", ""),
-			enableClientVersionCheck: true,
-			expectErr:                false,
+			callContext: s.constructCallContext("0.0.0", "", "", ""),
+			expectErr:   false,
 		},
 		{
-			callContext:              s.constructCallContext("0.0.0", "unknown-client", "", ""),
-			enableClientVersionCheck: true,
-			expectErr:                false,
+			callContext: s.constructCallContext("0.0.0", "unknown-client", "", ""),
+			expectErr:   false,
 		},
 		{
-			callContext:              s.constructCallContext("malformed-version", ClientNameGoSDK, "", ""),
-			enableClientVersionCheck: true,
-			expectErr:                true,
+			callContext: s.constructCallContext("malformed-version", ClientNameGoSDK, "", ""),
+			expectErr:   true,
 		},
 		{
-			callContext:              s.constructCallContext("3.0.1", ClientNameGoSDK, "", ""),
-			enableClientVersionCheck: true,
-			expectErr:                true,
+			callContext: s.constructCallContext("3.0.1", ClientNameGoSDK, "", ""),
+			expectErr:   true,
 		},
 		{
-			callContext:              s.constructCallContext("2.4.5", ClientNameGoSDK, "", ""),
-			enableClientVersionCheck: true,
-			expectErr:                false,
+			callContext: s.constructCallContext("2.4.5", ClientNameGoSDK, "", ""),
+			expectErr:   false,
 		},
 		{
-			callContext:              s.constructCallContext("2.4.5", ClientNameGoSDK, "<23.1.0", ""),
-			enableClientVersionCheck: true,
-			expectErr:                false,
+			callContext: s.constructCallContext("2.4.5", ClientNameGoSDK, "<23.1.0", ""),
+			expectErr:   false,
 		},
 		{
-			callContext:              s.constructCallContext("2.4.5", ClientNameGoSDK, ">23.1.0", ""),
-			enableClientVersionCheck: true,
-			expectErr:                true,
+			callContext: s.constructCallContext("2.4.5", ClientNameGoSDK, ">23.1.0", ""),
+			expectErr:   true,
 		},
 		{
-			callContext:              s.constructCallContext("2.4.5", ClientNameGoSDK, "<1.0.0 >=3.5.6 || >22.0.0", ""),
-			enableClientVersionCheck: true,
-			expectErr:                false,
+			callContext: s.constructCallContext("2.4.5", ClientNameGoSDK, "<1.0.0 >=3.5.6 || >22.0.0", ""),
+			expectErr:   false,
 		},
 		{
-			callContext:              s.constructCallContext("", ClientNameGoSDK, "<1.0.0 >=3.5.6 || >22.0.0", ""),
-			enableClientVersionCheck: true,
-			expectErr:                false,
+			callContext: s.constructCallContext("", ClientNameGoSDK, "<1.0.0 >=3.5.6 || >22.0.0", ""),
+			expectErr:   false,
 		},
 		{
 			callContext:       s.constructCallContext("3.0.5", ClientNameGoSDK, "", myFeature),
@@ -134,7 +121,7 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 	}, serverVersion)
 
 	for caseIndex, tc := range testCases {
-		err := versionChecker.ClientSupported(tc.callContext, tc.enableClientVersionCheck)
+		err := versionChecker.ClientSupported(tc.callContext)
 		if tc.expectErr {
 			s.Errorf(err, "Case #%d", caseIndex)
 			switch err.(type) {
