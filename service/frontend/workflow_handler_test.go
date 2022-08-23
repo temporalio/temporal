@@ -1896,8 +1896,10 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Terminate() {
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
 	)
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
 	request := &workflowservice.StartBatchOperationRequest{
 		Namespace: testNamespace.String(),
+		JobId:     uuid.New(),
 		Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 			TerminationOperation: &batchpb.BatchOperationTermination{
 				Reason:   inputString,
@@ -1943,8 +1945,10 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
 	)
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
 	request := &workflowservice.StartBatchOperationRequest{
 		Namespace: testNamespace.String(),
+		JobId:     uuid.New(),
 		Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{
 			CancellationOperation: &batchpb.BatchOperationCancellation{
 				Reason:   inputString,
@@ -1994,8 +1998,10 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Signal() {
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		},
 	)
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
 	request := &workflowservice.StartBatchOperationRequest{
 		Namespace: testNamespace.String(),
+		JobId:     uuid.New(),
 		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
 			SignalOperation: &batchpb.BatchOperationSignal{
 				Signal:   signalName,

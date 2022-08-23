@@ -3775,11 +3775,26 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, errRequestNotSet
 	}
 
+	if len(request.GetJobId()) == 0 {
+		return nil, errBatchJobIDNotSet
+	}
+
+	// Validate concurrent batch operation
+	countResp, err := wh.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		Namespace: request.GetNamespace(),
+		Query:     batcher.OpenBatchOperationQuery,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if countResp.GetCount() >= int64(wh.config.MaxConcurrentBatchOperation(request.GetNamespace())) {
+		return nil, serviceerror.NewUnavailable("Max concurrent batch operations is reached")
+	}
+
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
-	jobId := uuid.New()
 	var identity string
 	var reason string
 	var operationType string
@@ -3830,7 +3845,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:             request.Namespace,
-		WorkflowId:            jobId,
+		WorkflowId:            request.GetJobId(),
 		WorkflowType:          &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
 		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                 inputPayload,
@@ -3845,9 +3860,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	if err != nil {
 		return nil, err
 	}
-	return &workflowservice.StartBatchOperationResponse{
-		JobId: jobId,
-	}, nil
+	return &workflowservice.StartBatchOperationResponse{}, nil
 }
 
 func (wh *WorkflowHandler) StopBatchOperation(
@@ -3874,8 +3887,8 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: request.GetJobId(),
 		},
-		Reason:   "request.GetReason()",   // TODO
-		Identity: "request.GetIdentity()", // TODO
+		Reason:   request.GetReason(),
+		Identity: request.GetIdentity(),
 	}
 	_, err := wh.TerminateWorkflowExecution(ctx, terminateReq)
 	if err != nil {
@@ -3916,7 +3929,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 
 	executionInfo := resp.GetWorkflowExecutionInfo()
 	operationState := getBatchOperationState(executionInfo.GetStatus())
-	typePayload := resp.GetWorkflowExecutionInfo().Memo.GetFields()[batcher.BatchOperationTypeMemo]
+	typePayload := executionInfo.GetMemo().GetFields()[batcher.BatchOperationTypeMemo]
 	var operationTypeString string
 	err = payload.Decode(typePayload, &operationTypeString)
 	if err != nil {
@@ -3948,8 +3961,33 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		completedOpsCount = int64(hbd.SuccessCount)
 		failureOpsCount = int64(hbd.ErrorCount)
 	}
+	// batch stop reason
+	var stopReason string
+	if executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED {
+		lastHistoryResp, err := wh.GetWorkflowExecutionHistoryReverse(ctx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+			Namespace:       request.GetNamespace(),
+			Execution:       execution,
+			MaximumPageSize: 1,
+		})
+		if err != nil {
+			return nil, err
+		}
+		historyEvents := lastHistoryResp.GetHistory().GetEvents()
+		if len(historyEvents) != 1 {
+			return nil, serviceerror.NewInternal("Cannot get batch operation terminated event.")
+		}
+		if historyEvents[0].EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
+			return nil, serviceerror.NewInternal("Cannot get terminated event from a terminated batch operation.")
+		}
+		stopReason = historyEvents[0].GetWorkflowExecutionTerminatedEventAttributes().GetReason()
+	}
+	var identity string
+	encodedBatcherIdentity := executionInfo.GetSearchAttributes().GetIndexedFields()[searchattribute.BatcherUser]
+	err = payload.Decode(encodedBatcherIdentity, &identity)
+	if err != nil {
+		return nil, err
+	}
 	return &workflowservice.DescribeBatchOperationResponse{
-		// TODO: add identity
 		OperationType:          operationType,
 		JobId:                  executionInfo.Execution.GetWorkflowId(),
 		State:                  operationState,
@@ -3958,6 +3996,8 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		TotalOperationCount:    totalOpsCount,
 		CompleteOperationCount: completedOpsCount,
 		FailureOperationCount:  failureOpsCount,
+		Identity:               identity,
+		Reason:                 stopReason,
 	}, nil
 }
 

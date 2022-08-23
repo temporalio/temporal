@@ -28,6 +28,9 @@ import (
 	"fmt"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/searchattribute"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -54,6 +57,15 @@ const (
 	BatchTypeCancel = "cancel"
 	// BatchTypeSignal is batch type for signaling workflows
 	BatchTypeSignal = "signal"
+)
+
+var (
+	OpenBatchOperationQuery = fmt.Sprintf("%s = '%s' AND %s = %d",
+		searchattribute.TemporalNamespaceDivision,
+		NamespaceDivision,
+		searchattribute.ExecutionStatus,
+		int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
+	)
 )
 
 type (
