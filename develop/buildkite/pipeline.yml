@@ -38,7 +38,7 @@ steps:
           run: integration-test-cassandra
           config: ./develop/buildkite/docker-compose.yml
 
-  - label: ":golang: integration test with cassandra (ES6)"
+  - label: ":golang: integration test with cassandra (ES8)"
     agents:
       queue: "default"
       docker: "*"
@@ -51,7 +51,7 @@ steps:
     plugins:
       - docker-compose#v3.8.0:
           run: integration-test-cassandra
-          config: ./develop/buildkite/docker-compose-es6.yml
+          config: ./develop/buildkite/docker-compose-es8.yml
 
   - label: ":golang: integration xdc test with cassandra"
     agents:

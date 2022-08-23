@@ -27,7 +27,6 @@ package visibility
 import (
 	"context"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
@@ -216,7 +215,7 @@ func (m *visibilityManagerMetrics) tagScope(scope int) (metrics.Scope, metrics.S
 }
 
 func (m *visibilityManagerMetrics) updateErrorMetric(scope metrics.Scope, err error) error {
-	switch err.(type) {
+	switch err := err.(type) {
 	case nil:
 		return nil
 	case *serviceerror.InvalidArgument:
@@ -226,8 +225,7 @@ func (m *visibilityManagerMetrics) updateErrorMetric(scope metrics.Scope, err er
 		scope.IncCounter(metrics.VisibilityPersistenceTimeout)
 		scope.IncCounter(metrics.VisibilityPersistenceFailures)
 	case *serviceerror.ResourceExhausted:
-		scope.Tagged(metrics.ResourceExhaustedCauseTag(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED)).
-			IncCounter(metrics.VisibilityPersistenceResourceExhausted)
+		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.VisibilityPersistenceResourceExhausted)
 		scope.IncCounter(metrics.VisibilityPersistenceFailures)
 	case *serviceerror.Internal:
 		scope.IncCounter(metrics.VisibilityPersistenceInternal)

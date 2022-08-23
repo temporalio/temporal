@@ -1442,7 +1442,7 @@ func (c *metadataPersistenceClient) InitializeSystemNamespaces(
 func (p *metricEmitter) updateErrorMetric(scope int, err error) {
 	p.metricClient.Scope(scope, metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.PersistenceErrorWithType)
 
-	switch err.(type) {
+	switch err := err.(type) {
 	case *ShardAlreadyExistError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardExistsCounter)
 	case *ShardOwnershipLostError:
@@ -1463,6 +1463,7 @@ func (p *metricEmitter) updateErrorMetric(scope int, err error) {
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
 	case *serviceerror.ResourceExhausted:
+		p.metricClient.Scope(scope, metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.PersistenceErrBusyCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:

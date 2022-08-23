@@ -35,7 +35,6 @@ import (
 )
 
 const (
-	docTypeV6                           = "_doc"
 	versionTypeExternal                 = "external"
 	minimumCloseIdleConnectionsInterval = 15 * time.Second
 )

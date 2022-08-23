@@ -22,54 +22,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package api
 
 import (
-	"context"
+	"github.com/pborman/uuid"
+	"go.temporal.io/api/serviceerror"
 
-	elastic6 "github.com/olivere/elastic"
-	"github.com/olivere/elastic/v7"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/history/shard"
 )
 
-type (
-	bulkServiceV6 struct {
-		esBulkService *elastic6.BulkService
-	}
-)
+func GetActiveNamespace(
+	shard shard.Context,
+	namespaceUUID namespace.ID,
+) (*namespace.Namespace, error) {
 
-func newBulkServiceV6(esBulkService *elastic6.BulkService) *bulkServiceV6 {
-	return &bulkServiceV6{
-		esBulkService: esBulkService,
+	err := ValidateNamespaceUUID(namespaceUUID)
+	if err != nil {
+		return nil, err
 	}
+
+	namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespaceUUID)
+	if err != nil {
+		return nil, err
+	}
+	if !namespaceEntry.ActiveInCluster(shard.GetClusterMetadata().GetCurrentClusterName()) {
+		return nil, serviceerror.NewNamespaceNotActive(
+			namespaceEntry.Name().String(),
+			shard.GetClusterMetadata().GetCurrentClusterName(),
+			namespaceEntry.ActiveClusterName())
+	}
+	return namespaceEntry, nil
 }
 
-func (b *bulkServiceV6) Do(ctx context.Context) error {
-	_, err := b.esBulkService.Do(ctx)
-	return err
-}
-
-func (b *bulkServiceV6) NumberOfActions() int {
-	return b.esBulkService.NumberOfActions()
-}
-
-func (b *bulkServiceV6) Add(request *BulkableRequest) {
-	switch request.RequestType {
-	case BulkableRequestTypeIndex:
-		bulkDeleteRequest := elastic.NewBulkIndexRequest().
-			Index(request.Index).
-			Type(docTypeV6).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version).
-			Doc(request.Doc)
-		b.esBulkService.Add(bulkDeleteRequest)
-	case BulkableRequestTypeDelete:
-		bulkDeleteRequest := elastic.NewBulkDeleteRequest().
-			Index(request.Index).
-			Type(docTypeV6).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version)
-		b.esBulkService.Add(bulkDeleteRequest)
+func ValidateNamespaceUUID(
+	namespaceUUID namespace.ID,
+) error {
+	if namespaceUUID == "" {
+		return serviceerror.NewInvalidArgument("Missing namespace UUID.")
+	} else if uuid.Parse(namespaceUUID.String()) == nil {
+		return serviceerror.NewInvalidArgument("Invalid namespace UUID.")
 	}
+	return nil
 }

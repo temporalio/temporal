@@ -32,7 +32,7 @@ import (
 	"time"
 
 	"github.com/temporalio/ringpop-go"
-	"github.com/uber/tchannel-go"
+	"github.com/temporalio/tchannel-go"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"

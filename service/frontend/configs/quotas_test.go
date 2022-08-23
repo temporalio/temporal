@@ -187,6 +187,11 @@ func (s *quotasSuite) TestOtherAPIs() {
 		"ListScheduleMatchingTimes": {},
 		"DeleteSchedule":            {},
 		"ListSchedules":             {},
+
+		"DescribeBatchOperation": {},
+		"ListBatchOperations":    {},
+		"StartBatchOperation":    {},
+		"StopBatchOperation":     {},
 	}
 
 	var service workflowservice.WorkflowServiceServer

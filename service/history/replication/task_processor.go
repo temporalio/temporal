@@ -275,7 +275,7 @@ func (p *taskProcessorImpl) applyReplicationTask(
 	)
 
 	err := p.handleReplicationTask(ctx, replicationTask)
-	if err == nil || p.isStopped() {
+	if err == nil || p.isStopped() || shard.IsShardOwnershipLostError(err) {
 		return err
 	}
 

@@ -32,7 +32,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/temporalio/ringpop-go"
-	"github.com/uber/tchannel-go"
+	"github.com/temporalio/tchannel-go"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"

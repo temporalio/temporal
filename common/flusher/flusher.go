@@ -1,6 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2022 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
@@ -22,38 +22,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package flusher
 
 import (
-	"fmt"
-	"net/http"
-
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/future"
 )
 
-func NewClient(config *Config, httpClient *http.Client, logger log.Logger) (Client, error) {
-	switch config.Version {
-	case "v8", "v7", "":
-		return newClientV7(config, httpClient, logger)
-	default:
-		return nil, fmt.Errorf("not supported Elasticsearch version: %v", config.Version)
+type (
+	Writer[T any] interface {
+		Write(items []T) error
 	}
-}
 
-func NewCLIClient(config *Config, logger log.Logger) (CLIClient, error) {
-	switch config.Version {
-	case "v8", "v7", "":
-		return newClientV7(config, nil, logger)
-	default:
-		return nil, fmt.Errorf("not supported Elasticsearch version: %v", config.Version)
+	Flusher[T any] interface {
+		common.Daemon
+		Buffer(item T) future.Future[struct{}]
 	}
-}
 
-func NewIntegrationTestsClient(config *Config, logger log.Logger) (IntegrationTestsClient, error) {
-	switch config.Version {
-	case "v8", "v7", "":
-		return newClientV7(config, nil, logger)
-	default:
-		return nil, fmt.Errorf("not supported Elasticsearch version: %v", config.Version)
+	FlushItem[T any] struct {
+		Item   T
+		Future *future.FutureImpl[struct{}]
 	}
-}
+)

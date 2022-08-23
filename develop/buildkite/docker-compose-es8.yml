@@ -32,13 +32,19 @@ services:
           - postgresql
 
   elasticsearch:
-    image: elasticsearch:6.8.13
+    image: elasticsearch:8.0.0
     networks:
       services-network:
         aliases:
           - elasticsearch
     environment:
+      - cluster.routing.allocation.disk.threshold_enabled=true
+      - cluster.routing.allocation.disk.watermark.low=512mb
+      - cluster.routing.allocation.disk.watermark.high=256mb
+      - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms100m -Xmx100m
 
   integration-test-cassandra:
     build:
@@ -47,7 +53,7 @@ services:
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
-      - "ES_VERSION=v6"
+      - "ES_VERSION=v8"
       - "PERSISTENCE_TYPE=nosql"
       - "PERSISTENCE_DRIVER=cassandra"
       - "TEST_TAG=esintegration"

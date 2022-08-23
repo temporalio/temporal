@@ -5,9 +5,9 @@ set -eu
 # Download cover profiles from all the test containers.
 buildkite-agent artifact download ".coverage/unit_coverprofile.out" . --step ":golang: unit test" --build "${BUILDKITE_BUILD_ID}"
 
-# ES6.
-buildkite-agent artifact download ".coverage/integ_cassandra_coverprofile.out" . --step ":golang: integration test with cassandra (ES6)" --build "${BUILDKITE_BUILD_ID}"
-mv ./.coverage/integ_cassandra_coverprofile.out ./.coverage/integ_cassandra_es6_coverprofile.out
+# ES8.
+buildkite-agent artifact download ".coverage/integ_cassandra_coverprofile.out" . --step ":golang: integration test with cassandra (ES8)" --build "${BUILDKITE_BUILD_ID}"
+mv ./.coverage/integ_cassandra_coverprofile.out ./.coverage/integ_cassandra_es8_coverprofile.out
 
 # Cassandra.
 buildkite-agent artifact download ".coverage/integ_cassandra_coverprofile.out" . --step ":golang: integration test with cassandra" --build "${BUILDKITE_BUILD_ID}"
