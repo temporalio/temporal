@@ -51,7 +51,7 @@ type (
 	}
 
 	queueFactoryBase struct {
-		scheduler       queues.Scheduler
+		hostScheduler   queues.Scheduler
 		hostRateLimiter quotas.RateLimiter
 	}
 
@@ -103,14 +103,14 @@ func QueueFactoryLifetimeHooks(
 }
 
 func (f *queueFactoryBase) Start() {
-	if f.scheduler != nil {
-		f.scheduler.Start()
+	if f.hostScheduler != nil {
+		f.hostScheduler.Start()
 	}
 }
 
 func (f *queueFactoryBase) Stop() {
-	if f.scheduler != nil {
-		f.scheduler.Stop()
+	if f.hostScheduler != nil {
+		f.hostScheduler.Stop()
 	}
 }
 

@@ -1,6 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2022 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
@@ -22,23 +22,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues
+package flusher
 
 import (
-	"go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/future"
 )
 
 type (
-	noopPriorityAssignerImpl struct{}
+	Writer[T any] interface {
+		Write(items []T) error
+	}
+
+	Flusher[T any] interface {
+		common.Daemon
+		Buffer(item T) future.Future[struct{}]
+	}
+
+	FlushItem[T any] struct {
+		Item   T
+		Future *future.FutureImpl[struct{}]
+	}
 )
-
-var noopPriorityAssigner = &noopPriorityAssignerImpl{}
-
-func NewNoopPriorityAssigner() PriorityAssigner {
-	return noopPriorityAssigner
-}
-
-func (a *noopPriorityAssignerImpl) Assign(execuable Executable) error {
-	execuable.SetPriority(tasks.PriorityHigh)
-	return nil
-}

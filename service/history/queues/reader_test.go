@@ -390,23 +390,24 @@ func (s *readerSuite) TestSubmitTask() {
 
 	mockExecutable := NewMockExecutable(s.controller)
 
-	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(reader.timeSource.Now(), rand.Int63())).Times(1)
+	pastFireTime := reader.timeSource.Now().Add(-time.Minute)
+	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
 	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(true, nil).Times(1)
 	reader.submit(mockExecutable)
 
-	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(reader.timeSource.Now(), rand.Int63())).Times(1)
+	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
 	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(false, nil).Times(1)
 	mockExecutable.EXPECT().Reschedule().Times(1)
 	reader.submit(mockExecutable)
 
-	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(reader.timeSource.Now(), rand.Int63())).Times(1)
+	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
 	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(false, errors.New("some random error")).Times(1)
 	mockExecutable.EXPECT().Reschedule().Times(1)
 	reader.submit(mockExecutable)
 
 	futureFireTime := reader.timeSource.Now().Add(time.Minute)
 	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(futureFireTime, rand.Int63())).Times(1)
-	s.mockRescheduler.EXPECT().Add(mockExecutable, futureFireTime).Times(1)
+	s.mockRescheduler.EXPECT().Add(mockExecutable, futureFireTime.Add(scheduledTaskPrecision)).Times(1)
 	reader.submit(mockExecutable)
 }
 

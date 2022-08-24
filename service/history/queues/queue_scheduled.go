@@ -87,6 +87,17 @@ func NewScheduledQueue(
 				return nil, nil, err
 			}
 
+			// The rest of the code assumes task loaded is ordered by task key, which has precision of ns for time.
+			// However for cassandra impl, the task returned is ordered by visibilitystamp column which only has
+			// ms precision, which makes tasks out of order, even across multiple loads.
+			// So truncate task key time also to ms precision to make them ordered.
+			//
+			// This however, moves task visibility time forward for 1ms and may cause timer tasks to be skipped
+			// during processing. To compensate for that, add 1ms back when scheduling the task in reader.go.
+			for _, task := range resp.Tasks {
+				task.SetVisibilityTime(task.GetVisibilityTime().Truncate(scheduledTaskPrecision))
+			}
+
 			for len(resp.Tasks) > 0 && !r.ContainsKey(resp.Tasks[0].GetKey()) {
 				resp.Tasks = resp.Tasks[1:]
 			}

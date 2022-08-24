@@ -22,54 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package tasks
 
-import (
-	"context"
+// State represents the current state of a task
+type State int
 
-	elastic6 "github.com/olivere/elastic"
-	"github.com/olivere/elastic/v7"
+const (
+	// TaskStatePending is the state for a task when it's waiting to be processed or currently being processed
+	TaskStatePending State = iota + 1
+	// TaskStateCancelled is the state for a task when its execution has request to be cancelled
+	TaskStateCancelled
+	// TaskStateAcked is the state for a task if it has been successfully completed
+	TaskStateAcked
+	// TaskStateNacked is the state for a task if it can not be processed
+	TaskStateNacked
 )
-
-type (
-	bulkServiceV6 struct {
-		esBulkService *elastic6.BulkService
-	}
-)
-
-func newBulkServiceV6(esBulkService *elastic6.BulkService) *bulkServiceV6 {
-	return &bulkServiceV6{
-		esBulkService: esBulkService,
-	}
-}
-
-func (b *bulkServiceV6) Do(ctx context.Context) error {
-	_, err := b.esBulkService.Do(ctx)
-	return err
-}
-
-func (b *bulkServiceV6) NumberOfActions() int {
-	return b.esBulkService.NumberOfActions()
-}
-
-func (b *bulkServiceV6) Add(request *BulkableRequest) {
-	switch request.RequestType {
-	case BulkableRequestTypeIndex:
-		bulkDeleteRequest := elastic.NewBulkIndexRequest().
-			Index(request.Index).
-			Type(docTypeV6).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version).
-			Doc(request.Doc)
-		b.esBulkService.Add(bulkDeleteRequest)
-	case BulkableRequestTypeDelete:
-		bulkDeleteRequest := elastic.NewBulkDeleteRequest().
-			Index(request.Index).
-			Type(docTypeV6).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version)
-		b.esBulkService.Add(bulkDeleteRequest)
-	}
-}

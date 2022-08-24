@@ -28,6 +28,7 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/client"
@@ -1668,6 +1669,34 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkflow(
 	})
 
 	return resp, err
+}
+
+func (handler *DCRedirectionHandlerImpl) DescribeBatchOperation(
+	ctx context.Context,
+	request *workflowservice.DescribeBatchOperationRequest,
+) (resp *workflowservice.DescribeBatchOperationResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("DCRedirectionHandlerImpl.DescribeBatchOperation is not implemented")
+}
+
+func (handler *DCRedirectionHandlerImpl) ListBatchOperations(
+	ctx context.Context,
+	request *workflowservice.ListBatchOperationsRequest,
+) (resp *workflowservice.ListBatchOperationsResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("DCRedirectionHandlerImpl.ListBatchOperations is not implemented")
+}
+
+func (handler *DCRedirectionHandlerImpl) StartBatchOperation(
+	ctx context.Context,
+	request *workflowservice.StartBatchOperationRequest,
+) (resp *workflowservice.StartBatchOperationResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("DCRedirectionHandlerImpl.StartBatchOperation is not implemented")
+}
+
+func (handler *DCRedirectionHandlerImpl) StopBatchOperation(
+	ctx context.Context,
+	request *workflowservice.StopBatchOperationRequest,
+) (resp *workflowservice.StopBatchOperationResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("DCRedirectionHandlerImpl.StopBatchOperation is not implemented")
 }
 
 func (handler *DCRedirectionHandlerImpl) beforeCall(
