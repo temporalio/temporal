@@ -36,8 +36,9 @@ import (
 
 type SDKVersionInterceptor struct {
 	sync.RWMutex
-	sdkInfoSet map[check.SDKInfo]struct{}
-	maxSetSize int
+	sdkInfoSet     map[check.SDKInfo]struct{}
+	versionChecker headers.VersionChecker
+	maxSetSize     int
 }
 
 const defaultMaxSetSize = 100
@@ -45,8 +46,9 @@ const defaultMaxSetSize = 100
 // NewSDKVersionInterceptor creates a new SDKVersionInterceptor with default max set size
 func NewSDKVersionInterceptor() *SDKVersionInterceptor {
 	return &SDKVersionInterceptor{
-		sdkInfoSet: make(map[check.SDKInfo]struct{}),
-		maxSetSize: defaultMaxSetSize,
+		sdkInfoSet:     make(map[check.SDKInfo]struct{}),
+		versionChecker: headers.NewDefaultVersionChecker(),
+		maxSetSize:     defaultMaxSetSize,
 	}
 }
 
@@ -60,6 +62,9 @@ func (vi *SDKVersionInterceptor) Intercept(
 	sdkName, sdkVersion := headers.GetClientNameAndVersion(ctx)
 	if sdkName != "" && sdkVersion != "" {
 		vi.RecordSDKInfo(sdkName, sdkVersion)
+		if err := vi.versionChecker.ClientSupported(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return handler(ctx, req)
 }

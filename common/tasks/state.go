@@ -22,23 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues
+package tasks
 
-import (
-	"go.temporal.io/server/common/tasks"
+// State represents the current state of a task
+type State int
+
+const (
+	// TaskStatePending is the state for a task when it's waiting to be processed or currently being processed
+	TaskStatePending State = iota + 1
+	// TaskStateCancelled is the state for a task when its execution has request to be cancelled
+	TaskStateCancelled
+	// TaskStateAcked is the state for a task if it has been successfully completed
+	TaskStateAcked
+	// TaskStateNacked is the state for a task if it can not be processed
+	TaskStateNacked
 )
-
-type (
-	noopPriorityAssignerImpl struct{}
-)
-
-var noopPriorityAssigner = &noopPriorityAssignerImpl{}
-
-func NewNoopPriorityAssigner() PriorityAssigner {
-	return noopPriorityAssigner
-}
-
-func (a *noopPriorityAssignerImpl) Assign(execuable Executable) error {
-	execuable.SetPriority(tasks.PriorityHigh)
-	return nil
-}

@@ -43,7 +43,6 @@ type (
 	}
 
 	PriorityAssignerOptions struct {
-		HighPriorityRPS       dynamicconfig.IntPropertyFnWithNamespaceFilter
 		CriticalRetryAttempts dynamicconfig.IntPropertyFn
 	}
 
@@ -99,7 +98,6 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 		return err
 	}
 
-	namespaceName := namespaceEntry.Name().String()
 	namespaceActive := namespaceEntry.ActiveInCluster(a.currentClusterName)
 	// TODO: remove QueueType() and the special logic for assgining high priority to no-op tasks
 	// after merging active/standby queue processor or performing task filtering before submitting
@@ -139,44 +137,6 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 		return nil
 	}
 
-	ratelimiter := a.getOrCreateRateLimiter(namespaceName)
-	if !ratelimiter.Allow() {
-		executable.SetPriority(tasks.PriorityMedium)
-
-		a.metricsProvider.Counter(TaskThrottledCounter).Record(
-			1,
-			metrics.NamespaceTag(namespaceName),
-			metrics.TaskTypeTag(executable.GetType().String()),
-		)
-
-		return nil
-	}
-
 	executable.SetPriority(tasks.PriorityHigh)
 	return nil
-}
-
-func (a *priorityAssignerImpl) getOrCreateRateLimiter(
-	namespaceName string,
-) quotas.RateLimiter {
-	a.RLock()
-	rateLimiter, ok := a.rateLimiters[namespaceName]
-	a.RUnlock()
-	if ok {
-		return rateLimiter
-	}
-
-	newRateLimiter := quotas.NewDefaultIncomingRateLimiter(
-		func() float64 { return float64(a.options.HighPriorityRPS(namespaceName)) },
-	)
-
-	a.Lock()
-	defer a.Unlock()
-
-	rateLimiter, ok = a.rateLimiters[namespaceName]
-	if ok {
-		return rateLimiter
-	}
-	a.rateLimiters[namespaceName] = newRateLimiter
-	return newRateLimiter
 }

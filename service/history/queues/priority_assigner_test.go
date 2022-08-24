@@ -67,7 +67,6 @@ func (s *priorityAssignerSuite) SetupTest() {
 		cluster.TestCurrentClusterName,
 		s.mockNamespaceRegistry,
 		PriorityAssignerOptions{
-			HighPriorityRPS:       dynamicconfig.GetIntPropertyFilteredByNamespace(3),
 			CriticalRetryAttempts: dynamicconfig.GetIntPropertyFn(100),
 		},
 		metrics.NoopMetricsHandler,
@@ -125,30 +124,5 @@ func (s *priorityAssignerSuite) TestAssign_SelectedTaskTypes() {
 	mockExecutable.EXPECT().SetPriority(tasks.PriorityMedium)
 
 	err := s.priorityAssigner.Assign(mockExecutable)
-	s.NoError(err)
-}
-
-func (s *priorityAssignerSuite) TestAssign_Throttled() {
-	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
-
-	rps := s.priorityAssigner.options.HighPriorityRPS("")
-	mockExecutable := NewMockExecutable(s.controller)
-	mockExecutable.EXPECT().Attempt().Return(10).AnyTimes()
-	mockExecutable.EXPECT().GetNamespaceID().Return(tests.NamespaceID.String()).AnyTimes()
-	mockExecutable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_UNSPECIFIED).AnyTimes()
-	mockExecutable.EXPECT().QueueType().Return(QueueTypeActiveTransfer).AnyTimes()
-
-	mockExecutable.EXPECT().SetPriority(tasks.PriorityHigh).Times(1)
-	err := s.priorityAssigner.Assign(mockExecutable)
-	s.NoError(err)
-
-	for i := 0; i != rps*3; i++ {
-		mockExecutable.EXPECT().SetPriority(gomock.Any()).Times(1)
-		err := s.priorityAssigner.Assign(mockExecutable)
-		s.NoError(err)
-	}
-
-	mockExecutable.EXPECT().SetPriority(tasks.PriorityMedium).Times(1)
-	err = s.priorityAssigner.Assign(mockExecutable)
 	s.NoError(err)
 }
