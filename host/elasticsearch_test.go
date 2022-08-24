@@ -1098,7 +1098,7 @@ func (s *elasticsearchIntegrationSuite) createStartWorkflowExecutionRequest(id, 
 	return request
 }
 
-func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowSearchAttributesExecution() {
+func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecutionSearchAttributes() {
 	id := "es-integration-upsert-workflow-search-attributes-test"
 	wt := "es-integration-upsert-workflow-search-attributes-test-type"
 	tl := "es-integration-upsert-workflow-search-attributes-test-taskqueue"
@@ -1335,7 +1335,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowSearchAttributesExecut
 	s.True(verified)
 }
 
-func (s *elasticsearchIntegrationSuite) TestModifyWorkflowPropertiesExecution() {
+func (s *elasticsearchIntegrationSuite) TestModifyWorkflowExecutionProperties() {
 	id := "es-integration-modify-workflow-properties-test"
 	wt := "es-integration-modify-workflow-properties-test-type"
 	tl := "es-integration-modify-workflow-properties-test-taskqueue"
