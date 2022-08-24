@@ -42,8 +42,8 @@ import (
 )
 
 type (
-	// clientV7 implements Client
-	clientV7 struct {
+	// clientImpl implements Client
+	clientImpl struct {
 		esClient *elastic.Client
 		url      url.URL
 
@@ -60,10 +60,10 @@ var (
 	pointInTimeSupportedIn = semver.MustParseRange(">=7.10.0")
 )
 
-var _ ClientV7 = (*clientV7)(nil)
+var _ Client = (*clientImpl)(nil)
 
-// newClientV7 create a ES client
-func newClientV7(cfg *Config, httpClient *http.Client, logger log.Logger) (*clientV7, error) {
+// newClient create a ES client
+func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*clientImpl, error) {
 	options := []elastic.ClientOptionFunc{
 		elastic.SetURL(cfg.URL.String()),
 		elastic.SetBasicAuth(cfg.Username, cfg.Password),
@@ -114,13 +114,13 @@ func newClientV7(cfg *Config, httpClient *http.Client, logger log.Logger) (*clie
 		client.Start()
 	}
 
-	return &clientV7{
+	return &clientImpl{
 		esClient: client,
 		url:      cfg.URL,
 	}, nil
 }
 
-func (c *clientV7) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
+func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
 	searchSource := elastic.NewSearchSource().
 		Query(p.Query).
 		SortBy(p.Sorter...)
@@ -146,7 +146,7 @@ func (c *clientV7) Search(ctx context.Context, p *SearchParameters) (*elastic.Se
 	return searchService.Do(ctx)
 }
 
-func (c *clientV7) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
+func (c *clientImpl) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
 	scrollService := elastic.NewScrollService(c.esClient).
 		Index(p.Index).
 		Query(p.Query).
@@ -161,25 +161,25 @@ func (c *clientV7) OpenScroll(ctx context.Context, p *SearchParameters, keepAliv
 	return searchResult, err
 }
 
-func (c *clientV7) Scroll(ctx context.Context, scrollID string, keepAliveInterval string) (*elastic.SearchResult, error) {
+func (c *clientImpl) Scroll(ctx context.Context, scrollID string, keepAliveInterval string) (*elastic.SearchResult, error) {
 	scrollService := elastic.NewScrollService(c.esClient)
 	result, err := scrollService.ScrollId(scrollID).KeepAlive(keepAliveInterval).Do(ctx)
 	return result, err
 }
 
-func (c *clientV7) CloseScroll(ctx context.Context, id string) error {
+func (c *clientImpl) CloseScroll(ctx context.Context, id string) error {
 	err := elastic.NewScrollService(c.esClient).ScrollId(id).Clear(ctx)
 	return err
 }
 
-func (c *clientV7) IsPointInTimeSupported(ctx context.Context) bool {
+func (c *clientImpl) IsPointInTimeSupported(ctx context.Context) bool {
 	c.initIsPointInTimeSupported.Do(func() {
 		c.isPointInTimeSupported = c.queryPointInTimeSupported(ctx)
 	})
 	return c.isPointInTimeSupported
 }
 
-func (c *clientV7) queryPointInTimeSupported(ctx context.Context) bool {
+func (c *clientImpl) queryPointInTimeSupported(ctx context.Context) bool {
 	result, _, err := c.esClient.Ping(c.url.String()).Do(ctx)
 	if err != nil {
 		return false
@@ -194,7 +194,7 @@ func (c *clientV7) queryPointInTimeSupported(ctx context.Context) bool {
 	return pointInTimeSupportedIn(esVersion)
 }
 
-func (c *clientV7) OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error) {
+func (c *clientImpl) OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error) {
 	resp, err := c.esClient.OpenPointInTime(index).KeepAlive(keepAliveInterval).Do(ctx)
 	if err != nil {
 		return "", err
@@ -202,7 +202,7 @@ func (c *clientV7) OpenPointInTime(ctx context.Context, index string, keepAliveI
 	return resp.Id, nil
 }
 
-func (c *clientV7) ClosePointInTime(ctx context.Context, id string) (bool, error) {
+func (c *clientImpl) ClosePointInTime(ctx context.Context, id string) (bool, error) {
 	resp, err := c.esClient.ClosePointInTime(id).Do(ctx)
 	if err != nil {
 		return false, err
@@ -210,11 +210,11 @@ func (c *clientV7) ClosePointInTime(ctx context.Context, id string) (bool, error
 	return resp.Succeeded, nil
 }
 
-func (c *clientV7) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
+func (c *clientImpl) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
 	return c.esClient.Count(index).Query(query).Do(ctx)
 }
 
-func (c *clientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
+func (c *clientImpl) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
 	esBulkProcessor, err := c.esClient.BulkProcessor().
 		Name(p.Name).
 		Workers(p.NumOfWorkers).
@@ -226,10 +226,10 @@ func (c *clientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 		After(p.AfterFunc).
 		Do(ctx)
 
-	return newBulkProcessorV7(esBulkProcessor), err
+	return newBulkProcessor(esBulkProcessor), err
 }
 
-func (c *clientV7) PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error) {
+func (c *clientImpl) PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error) {
 	body := buildMappingBody(mapping)
 	resp, err := c.esClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
 	if err != nil {
@@ -238,7 +238,7 @@ func (c *clientV7) PutMapping(ctx context.Context, index string, mapping map[str
 	return resp.Acknowledged, err
 }
 
-func (c *clientV7) WaitForYellowStatus(ctx context.Context, index string) (string, error) {
+func (c *clientImpl) WaitForYellowStatus(ctx context.Context, index string) (string, error) {
 	resp, err := c.esClient.ClusterHealth().Index(index).WaitForYellowStatus().Do(ctx)
 	if err != nil {
 		return "", err
@@ -246,7 +246,7 @@ func (c *clientV7) WaitForYellowStatus(ctx context.Context, index string) (strin
 	return resp.Status, err
 }
 
-func (c *clientV7) GetMapping(ctx context.Context, index string) (map[string]string, error) {
+func (c *clientImpl) GetMapping(ctx context.Context, index string) (map[string]string, error) {
 	// Manually build mapping request because olivere/elastic/v7 client doesn't work with ES8
 	path, err := uritemplates.Expand("/{index}/_mapping", map[string]string{
 		"index": index,
@@ -275,11 +275,11 @@ func (c *clientV7) GetMapping(ctx context.Context, index string) (map[string]str
 	return convertMappingBody(body, index), nil
 }
 
-func (c *clientV7) GetDateFieldType() string {
+func (c *clientImpl) GetDateFieldType() string {
 	return "date_nanos"
 }
 
-func (c *clientV7) CreateIndex(ctx context.Context, index string) (bool, error) {
+func (c *clientImpl) CreateIndex(ctx context.Context, index string) (bool, error) {
 	resp, err := c.esClient.CreateIndex(index).Do(ctx)
 	if err != nil {
 		return false, err
@@ -287,19 +287,19 @@ func (c *clientV7) CreateIndex(ctx context.Context, index string) (bool, error) 
 	return resp.Acknowledged, nil
 }
 
-func (c *clientV7) IsNotFoundError(err error) bool {
+func (c *clientImpl) IsNotFoundError(err error) bool {
 	return elastic.IsNotFound(err)
 }
 
-func (c *clientV7) CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error) {
+func (c *clientImpl) CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error) {
 	return c.esClient.CatIndices().Do(ctx)
 }
 
-func (c *clientV7) Bulk() BulkService {
-	return newBulkServiceV7(c.esClient.Bulk())
+func (c *clientImpl) Bulk() BulkService {
+	return newBulkService(c.esClient.Bulk())
 }
 
-func (c *clientV7) IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error) {
+func (c *clientImpl) IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error) {
 	//lint:ignore SA1019 Changing to IndexPutIndexTemplate requires template changes and will be done separately.
 	resp, err := c.esClient.IndexPutTemplate(templateName).BodyString(bodyString).Do(ctx)
 	if err != nil {
@@ -308,11 +308,11 @@ func (c *clientV7) IndexPutTemplate(ctx context.Context, templateName string, bo
 	return resp.Acknowledged, nil
 }
 
-func (c *clientV7) IndexExists(ctx context.Context, indexName string) (bool, error) {
+func (c *clientImpl) IndexExists(ctx context.Context, indexName string) (bool, error) {
 	return c.esClient.IndexExists(indexName).Do(ctx)
 }
 
-func (c *clientV7) DeleteIndex(ctx context.Context, indexName string) (bool, error) {
+func (c *clientImpl) DeleteIndex(ctx context.Context, indexName string) (bool, error) {
 	resp, err := c.esClient.DeleteIndex(indexName).Do(ctx)
 	if err != nil {
 		return false, err
@@ -320,7 +320,7 @@ func (c *clientV7) DeleteIndex(ctx context.Context, indexName string) (bool, err
 	return resp.Acknowledged, nil
 }
 
-func (c *clientV7) IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error) {
+func (c *clientImpl) IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error) {
 	resp, err := c.esClient.IndexPutSettings(indexName).BodyString(bodyString).Do(ctx)
 	if err != nil {
 		return false, err
@@ -328,11 +328,11 @@ func (c *clientV7) IndexPutSettings(ctx context.Context, indexName string, bodyS
 	return resp.Acknowledged, nil
 }
 
-func (c *clientV7) IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error) {
+func (c *clientImpl) IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error) {
 	return c.esClient.IndexGetSettings(indexName).Do(ctx)
 }
 
-func (c *clientV7) Delete(ctx context.Context, indexName string, docID string, version int64) error {
+func (c *clientImpl) Delete(ctx context.Context, indexName string, docID string, version int64) error {
 	_, err := c.esClient.Delete().
 		Index(indexName).
 		Id(docID).

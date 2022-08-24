@@ -29,21 +29,21 @@ import (
 )
 
 type (
-	bulkProcessorV7 struct {
+	bulkProcessorImpl struct {
 		esBulkProcessor *elastic.BulkProcessor
 	}
 )
 
-func newBulkProcessorV7(esBulkProcessor *elastic.BulkProcessor) *bulkProcessorV7 {
+func newBulkProcessor(esBulkProcessor *elastic.BulkProcessor) *bulkProcessorImpl {
 	if esBulkProcessor == nil {
 		return nil
 	}
-	return &bulkProcessorV7{
+	return &bulkProcessorImpl{
 		esBulkProcessor: esBulkProcessor,
 	}
 }
 
-func (p *bulkProcessorV7) Stop() error {
+func (p *bulkProcessorImpl) Stop() error {
 	errF := p.esBulkProcessor.Flush()
 	errS := p.esBulkProcessor.Stop()
 	if errF != nil {
@@ -52,7 +52,7 @@ func (p *bulkProcessorV7) Stop() error {
 	return errS
 }
 
-func (p *bulkProcessorV7) Add(request *BulkableRequest) {
+func (p *bulkProcessorImpl) Add(request *BulkableRequest) {
 	switch request.RequestType {
 	case BulkableRequestTypeIndex:
 		bulkIndexRequest := elastic.NewBulkIndexRequest().
