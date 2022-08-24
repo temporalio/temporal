@@ -1,0 +1,82 @@
+{
+  "order": 0,
+  "index_patterns": [
+    "test-visibility*"
+  ],
+  "settings": {
+    "index": {
+      "number_of_shards": "5",
+      "number_of_replicas": "0"
+    }
+  },
+  "mappings": {
+    "dynamic": "false",
+    "properties": {
+      "NamespaceId": {
+        "type": "keyword"
+      },
+      "WorkflowId": {
+        "type": "keyword"
+      },
+      "RunId": {
+        "type": "keyword"
+      },
+      "WorkflowType": {
+        "type": "keyword"
+      },
+      "StartTime": {
+        "type": "date_nanos"
+      },
+      "ExecutionTime": {
+        "type": "date_nanos"
+      },
+      "CloseTime": {
+        "type": "date_nanos"
+      },
+      "ExecutionDuration": {
+        "type": "long"
+      },
+      "ExecutionStatus": {
+        "type": "keyword"
+      },
+      "HistoryLength": {
+        "type": "long"
+      },
+      "TemporalChangeVersion": {
+        "type": "keyword"
+      },
+      "CustomTextField": {
+        "type": "text"
+      },
+      "CustomKeywordField": {
+        "type": "keyword"
+      },
+      "CustomIntField": {
+        "type": "long"
+      },
+      "CustomDoubleField": {
+        "type": "scaled_float",
+        "scaling_factor": 10000
+      },
+      "CustomBoolField": {
+        "type": "boolean"
+      },
+      "CustomDatetimeField": {
+        "type": "date_nanos"
+      },
+      "BatcherNamespace": {
+        "type": "keyword"
+      },
+      "BatcherUser": {
+        "type": "keyword"
+      },
+      "BinaryChecksums": {
+        "type": "keyword"
+      },
+      "StateTransitionCount": {
+        "type": "long"
+      }
+    }
+  },
+  "aliases": {}
+}

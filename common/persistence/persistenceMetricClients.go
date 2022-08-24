@@ -898,6 +898,51 @@ func (p *executionPersistenceClient) AppendRawHistoryNodes(
 	return resp, err
 }
 
+// ParseHistoryBranchInfo parses the history branch for branch information
+func (p *executionPersistenceClient) ParseHistoryBranchInfo(
+	ctx context.Context,
+	request *ParseHistoryBranchInfoRequest,
+) (*ParseHistoryBranchInfoResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceParseHistoryBranchInfoScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceParseHistoryBranchInfoScope, metrics.PersistenceLatency)
+	resp, err := p.persistence.ParseHistoryBranchInfo(ctx, request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceParseHistoryBranchInfoScope, err)
+	}
+	return resp, err
+}
+
+// UpdateHistoryBranchInfo updates the history branch with branch information
+func (p *executionPersistenceClient) UpdateHistoryBranchInfo(
+	ctx context.Context,
+	request *UpdateHistoryBranchInfoRequest,
+) (*UpdateHistoryBranchInfoResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceUpdateHistoryBranchInfoScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateHistoryBranchInfoScope, metrics.PersistenceLatency)
+	resp, err := p.persistence.UpdateHistoryBranchInfo(ctx, request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceUpdateHistoryBranchInfoScope, err)
+	}
+	return resp, err
+}
+
+// NewHistoryBranch initializes a new history branch
+func (p *executionPersistenceClient) NewHistoryBranch(
+	ctx context.Context,
+	request *NewHistoryBranchRequest,
+) (*NewHistoryBranchResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceNewHistoryBranchScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceNewHistoryBranchScope, metrics.PersistenceLatency)
+	response, err := p.persistence.NewHistoryBranch(ctx, request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceNewHistoryBranchScope, err)
+	}
+	return response, err
+}
+
 // ReadHistoryBranch returns history node data for a branch
 func (p *executionPersistenceClient) ReadHistoryBranch(
 	ctx context.Context,
@@ -1397,7 +1442,7 @@ func (c *metadataPersistenceClient) InitializeSystemNamespaces(
 func (p *metricEmitter) updateErrorMetric(scope int, err error) {
 	p.metricClient.Scope(scope, metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.PersistenceErrorWithType)
 
-	switch err.(type) {
+	switch err := err.(type) {
 	case *ShardAlreadyExistError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardExistsCounter)
 	case *ShardOwnershipLostError:
@@ -1418,6 +1463,7 @@ func (p *metricEmitter) updateErrorMetric(scope int, err error) {
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
 	case *serviceerror.ResourceExhausted:
+		p.metricClient.Scope(scope, metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.PersistenceErrBusyCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:

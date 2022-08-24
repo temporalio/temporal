@@ -29,6 +29,7 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/util"
 )
 
@@ -37,6 +38,7 @@ type (
 	Config struct {
 		PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
 		PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
+		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 		SyncMatchWaitDuration                 dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		RPS                                   dynamicconfig.IntPropertyFn
@@ -56,6 +58,7 @@ type (
 		ForwarderMaxRatePerSecond    dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		ForwarderMaxChildrenPerNode  dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		MaxVersionGraphSize          dynamicconfig.IntPropertyFn
+		MetadataPollFrequency        dynamicconfig.DurationPropertyFn
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -106,15 +109,29 @@ type (
 
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection) *Config {
+	defaultUpdateAckInterval := []dynamicconfig.ConstrainedValue{
+		// Use a longer default interval for the per-namespace internal worker queues.
+		{
+			Constraints: map[string]any{
+				dynamicconfig.TaskQueueName.String(): primitives.PerNSWorkerTaskQueue,
+			},
+			Value: 5 * time.Minute,
+		},
+		// Default for everything else.
+		{
+			Value: 1 * time.Minute,
+		},
+	}
 	return &Config{
 		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.MatchingPersistenceMaxQPS, 3000),
 		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.MatchingPersistenceGlobalMaxQPS, 0),
+		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MatchingPersistenceNamespaceMaxQPS, 0),
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.MatchingEnablePersistencePriorityRateLimiting, true),
 		SyncMatchWaitDuration:                 dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond),
 		RPS:                                   dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
 		RangeSize:                             100000,
 		GetTasksBatchSize:                     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingGetTasksBatchSize, 1000),
-		UpdateAckInterval:                     dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingUpdateAckInterval, 1*time.Minute),
+		UpdateAckInterval:                     dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingUpdateAckInterval, defaultUpdateAckInterval),
 		IdleTaskqueueCheckInterval:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingIdleTaskqueueCheckInterval, 5*time.Minute),
 		MaxTaskqueueIdleTime:                  dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MaxTaskqueueIdleTime, 5*time.Minute),
 		LongPollExpirationInterval:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingLongPollExpirationInterval, time.Minute),
@@ -123,14 +140,15 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		OutstandingTaskAppendsThreshold:       dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingOutstandingTaskAppendsThreshold, 250),
 		MaxTaskBatchSize:                      dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMaxTaskBatchSize, 100),
 		ThrottledLogRPS:                       dc.GetIntProperty(dynamicconfig.MatchingThrottledLogRPS, 20),
-		NumTaskqueueWritePartitions:           dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueWritePartitions, dynamicconfig.DefaultNumTaskQueuePartitions),
-		NumTaskqueueReadPartitions:            dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingNumTaskqueueReadPartitions, dynamicconfig.DefaultNumTaskQueuePartitions),
+		NumTaskqueueWritePartitions:           dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueWritePartitions),
+		NumTaskqueueReadPartitions:            dc.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueReadPartitions),
 		ForwarderMaxOutstandingPolls:          dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxOutstandingPolls, 1),
 		ForwarderMaxOutstandingTasks:          dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 1),
 		ForwarderMaxRatePerSecond:             dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxRatePerSecond, 10),
 		ForwarderMaxChildrenPerNode:           dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
-		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0),
+		ShutdownDrainDuration:                 dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0*time.Second),
 		MaxVersionGraphSize:                   dc.GetIntProperty(dynamicconfig.VersionGraphNodeLimit, 1000),
+		MetadataPollFrequency:                 dc.GetDurationProperty(dynamicconfig.MatchingMetadataPollFrequency, 5*time.Minute),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
 		AdminNamespaceTaskqueueToPartitionDispatchRate: dc.GetFloatPropertyFilteredByTaskQueueInfo(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1000),
@@ -140,13 +158,6 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Name) *taskQueueConfig {
 	taskQueueName := id.name
 	taskType := id.taskType
-
-	writePartition := func() int {
-		return util.Max(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
-	}
-	readPartition := func() int {
-		return util.Max(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
-	}
 
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,
@@ -180,8 +191,12 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 		MaxTaskBatchSize: func() int {
 			return config.MaxTaskBatchSize(namespace.String(), taskQueueName, taskType)
 		},
-		NumWritePartitions: writePartition,
-		NumReadPartitions:  readPartition,
+		NumWritePartitions: func() int {
+			return util.Max(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
+		},
+		NumReadPartitions: func() int {
+			return util.Max(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
+		},
 		AdminNamespaceToPartitionDispatchRate: func() float64 {
 			return config.AdminNamespaceToPartitionDispatchRate(namespace.String())
 		},

@@ -215,6 +215,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		WorkerConfig:                     options.WorkerConfig,
 		MockAdminClient:                  options.MockAdminClient,
 		NamespaceReplicationTaskExecutor: namespace.NewReplicationTaskExecutor(options.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, logger),
+		DynamicConfigOverrides:           options.DynamicConfigOverrides,
 	}
 
 	err = newPProfInitializerImpl(logger, pprofTestPort).Start()

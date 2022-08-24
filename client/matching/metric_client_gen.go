@@ -63,6 +63,20 @@ func (c *metricClient) DescribeTaskQueue(
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
+func (c *metricClient) GetTaskQueueMetadata(
+	ctx context.Context,
+	request *matchingservice.GetTaskQueueMetadataRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.GetTaskQueueMetadataResponse, retError error) {
+
+	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientGetTaskQueueMetadataScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	return c.client.GetTaskQueueMetadata(ctx, request, opts...)
+}
+
 func (c *metricClient) GetWorkerBuildIdOrdering(
 	ctx context.Context,
 	request *matchingservice.GetWorkerBuildIdOrderingRequest,
@@ -75,6 +89,20 @@ func (c *metricClient) GetWorkerBuildIdOrdering(
 	}()
 
 	return c.client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+}
+
+func (c *metricClient) InvalidateTaskQueueMetadata(
+	ctx context.Context,
+	request *matchingservice.InvalidateTaskQueueMetadataRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.InvalidateTaskQueueMetadataResponse, retError error) {
+
+	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientInvalidateTaskQueueMetadataScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	return c.client.InvalidateTaskQueueMetadata(ctx, request, opts...)
 }
 
 func (c *metricClient) ListTaskQueuePartitions(

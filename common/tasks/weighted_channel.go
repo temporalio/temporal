@@ -25,50 +25,50 @@
 package tasks
 
 const (
-	WeightedChannelDefaultSize = 10000
+	WeightedChannelDefaultSize = 1000
 )
 
 type (
-	WeightedChannels []*WeightedChannel
+	WeightedChannels[T Task] []*WeightedChannel[T]
 
-	WeightedChannel struct {
+	WeightedChannel[T Task] struct {
 		weight  int
-		channel chan PriorityTask
+		channel chan T
 	}
 )
 
-func NewWeightedChannel(
+func NewWeightedChannel[T Task](
 	weight int,
 	size int,
-) *WeightedChannel {
-	return &WeightedChannel{
+) *WeightedChannel[T] {
+	return &WeightedChannel[T]{
 		weight:  weight,
-		channel: make(chan PriorityTask, size),
+		channel: make(chan T, size),
 	}
 }
 
-func (c *WeightedChannel) Chan() chan PriorityTask {
+func (c *WeightedChannel[T]) Chan() chan T {
 	return c.channel
 }
 
-func (c *WeightedChannel) Weight() int {
+func (c *WeightedChannel[T]) Weight() int {
 	return c.weight
 }
 
-func (c *WeightedChannel) Len() int {
+func (c *WeightedChannel[T]) Len() int {
 	return len(c.channel)
 }
 
-func (c *WeightedChannel) Cap() int {
+func (c *WeightedChannel[T]) Cap() int {
 	return cap(c.channel)
 }
 
-func (c WeightedChannels) Len() int {
+func (c WeightedChannels[T]) Len() int {
 	return len(c)
 }
-func (c WeightedChannels) Swap(i, j int) {
+func (c WeightedChannels[T]) Swap(i, j int) {
 	c[i], c[j] = c[j], c[i]
 }
-func (c WeightedChannels) Less(i, j int) bool {
+func (c WeightedChannels[T]) Less(i, j int) bool {
 	return c[i].Weight() < c[j].Weight()
 }

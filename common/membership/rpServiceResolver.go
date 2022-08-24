@@ -33,7 +33,7 @@ import (
 	"time"
 
 	"github.com/temporalio/ringpop-go"
-	"github.com/uber/tchannel-go"
+	"github.com/temporalio/tchannel-go"
 
 	"github.com/dgryski/go-farm"
 	"github.com/temporalio/ringpop-go/events"

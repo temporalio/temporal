@@ -86,6 +86,7 @@ func startAndSignalWorkflow(
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
 	newWorkflowContext, err := api.NewWorkflowWithSignal(
+		ctx,
 		shard,
 		namespaceEntry,
 		workflowID,

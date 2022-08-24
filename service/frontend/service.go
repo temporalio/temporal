@@ -25,7 +25,6 @@
 package frontend
 
 import (
-	"math"
 	"math/rand"
 	"net"
 	"os"
@@ -59,6 +58,7 @@ type Config struct {
 	ESIndexName                           string
 	PersistenceMaxQPS                     dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS               dynamicconfig.IntPropertyFn
+	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 
 	StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
@@ -79,9 +79,9 @@ type Config struct {
 	MaxNamespaceVisibilityRPSPerInstance   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityBurstPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
 	GlobalNamespaceRPS                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceVisibilityRPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                       dynamicconfig.IntPropertyFn
 	WorkerBuildIdSizeLimit                 dynamicconfig.IntPropertyFn
-	EnableClientVersionCheck               dynamicconfig.BoolPropertyFn
 	DisallowQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ShutdownDrainDuration                  dynamicconfig.DurationPropertyFn
 
@@ -155,6 +155,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		ESIndexName:                           esIndexName,
 		PersistenceMaxQPS:                     dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
 		PersistenceGlobalMaxQPS:               dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
+		PersistenceNamespaceMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendPersistenceNamespaceMaxQPS, 0),
 		EnablePersistencePriorityRateLimiting: dc.GetBoolProperty(dynamicconfig.FrontendEnablePersistencePriorityRateLimiting, true),
 
 		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
@@ -175,6 +176,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		MaxNamespaceVisibilityRPSPerInstance:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
 		MaxNamespaceVisibilityBurstPerInstance: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance, 10),
 		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
+		GlobalNamespaceVisibilityRPS:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceVisibilityRPS, 0),
 		MaxIDLengthLimit:                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		WorkerBuildIdSizeLimit:                 dc.GetIntProperty(dynamicconfig.WorkerBuildIdSizeLimit, 1000),
 		MaxBadBinaries:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, namespace.MaxBadBinaries),
@@ -182,9 +184,8 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		BlobSizeLimitError:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
 		BlobSizeLimitWarn:                      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 256*1024),
 		ThrottledLogRPS:                        dc.GetIntProperty(dynamicconfig.FrontendThrottledLogRPS, 20),
-		ShutdownDrainDuration:                  dc.GetDurationProperty(dynamicconfig.FrontendShutdownDrainDuration, 0),
+		ShutdownDrainDuration:                  dc.GetDurationProperty(dynamicconfig.FrontendShutdownDrainDuration, 0*time.Second),
 		EnableNamespaceNotActiveAutoForwarding: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableNamespaceNotActiveAutoForwarding, true),
-		EnableClientVersionCheck:               dc.GetBoolProperty(dynamicconfig.EnableClientVersionCheck, true),
 		SearchAttributesNumberOfKeysLimit:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
 		SearchAttributesTotalSizeLimit:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
@@ -341,12 +342,14 @@ func namespaceRPS(
 	frontendResolver membership.ServiceResolver,
 	namespace string,
 ) float64 {
-	hostRPS := float64(perInstanceRPSFn(namespace))
 	globalRPS := float64(globalRPSFn(namespace))
-	hosts := float64(numFrontendHosts(frontendResolver))
+	if globalRPS > 0 && frontendResolver != nil {
+		hosts := float64(numFrontendHosts(frontendResolver))
+		return globalRPS / hosts
+	}
 
-	rps := hostRPS + globalRPS*math.Exp((1.0-hosts)/8.0)
-	return rps
+	hostRPS := float64(perInstanceRPSFn(namespace))
+	return hostRPS
 }
 
 func numFrontendHosts(

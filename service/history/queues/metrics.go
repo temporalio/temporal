@@ -51,12 +51,20 @@ const (
 	TaskNoUserQueueLatency      = "task_latency_queue_nouserlatency"
 	TaskReschedulerPendingTasks = "task_rescheduler_pending_tasks"
 	TaskThrottledCounter        = "task_throttled_counter"
+
+	TaskBatchCompleteCounter    = "task_batch_complete_counter"
+	NewTimerNotifyCounter       = "new_timer_notifications"
+	AckLevelUpdateCounter       = "ack_level_update"
+	AckLevelUpdateFailedCounter = "ack_level_update_failed"
+	PendingTasksCounter         = "pending_tasks"
 )
 
 // Operation tag value for queue processors
 const (
+	OperationTimerQueueProcessor           = "TimerQueueProcessor"
 	OperationTimerActiveQueueProcessor     = "TimerActiveQueueProcessor"
 	OperationTimerStandbyQueueProcessor    = "TimerStandbyQueueProcessor"
+	OperationTransferQueueProcessor        = "TransferQueueProcessor"
 	OperationTransferActiveQueueProcessor  = "TransferActiveQueueProcessor"
 	OperationTransferStandbyQueueProcessor = "TransferStandbyQueueProcessor"
 	OperationVisibilityQueueProcessor      = "VisibilityQueueProcessor"

@@ -87,11 +87,11 @@ func ForTaskType(t int) MutationConstraint {
 func Set(k Key, v interface{}, constrainers ...MutationConstraint) Mutation {
 	return func(m configValueMap) {
 		kstr := strings.ToLower(k.String())
-		cv := constrainedValue{Value: v, Constraints: map[string]interface{}{}}
+		cv := ConstrainedValue{Value: v, Constraints: map[string]interface{}{}}
 		for _, cf := range constrainers {
 			cf(cv.Constraints)
 		}
-		m[kstr] = []*constrainedValue{&cv}
+		m[kstr] = []ConstrainedValue{cv}
 	}
 }
 
@@ -101,11 +101,11 @@ func Set(k Key, v interface{}, constrainers ...MutationConstraint) Mutation {
 func Add(k Key, v interface{}, constrainers ...MutationConstraint) Mutation {
 	return func(m configValueMap) {
 		kstr := strings.ToLower(k.String())
-		cv := constrainedValue{Value: v, Constraints: map[string]interface{}{}}
+		cv := ConstrainedValue{Value: v, Constraints: map[string]interface{}{}}
 		for _, cf := range constrainers {
 			cf(cv.Constraints)
 		}
-		m[kstr] = append(m[kstr], &cv)
+		m[kstr] = append(m[kstr], cv)
 	}
 }
 

@@ -89,6 +89,20 @@ func (c *clientImpl) DeprecateNamespace(
 	return client.DeprecateNamespace(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeBatchOperation(
+	ctx context.Context,
+	request *workflowservice.DescribeBatchOperationRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeBatchOperationResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.DescribeBatchOperation(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeNamespace(
 	ctx context.Context,
 	request *workflowservice.DescribeNamespaceRequest,
@@ -241,6 +255,20 @@ func (c *clientImpl) ListArchivedWorkflowExecutions(
 	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
 	return client.ListArchivedWorkflowExecutions(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListBatchOperations(
+	ctx context.Context,
+	request *workflowservice.ListBatchOperationsRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListBatchOperationsResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListBatchOperations(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListClosedWorkflowExecutions(
@@ -649,6 +677,20 @@ func (c *clientImpl) SignalWorkflowExecution(
 	return client.SignalWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *clientImpl) StartBatchOperation(
+	ctx context.Context,
+	request *workflowservice.StartBatchOperationRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.StartBatchOperationResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.StartBatchOperation(ctx, request, opts...)
+}
+
 func (c *clientImpl) StartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
@@ -661,6 +703,20 @@ func (c *clientImpl) StartWorkflowExecution(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.StartWorkflowExecution(ctx, request, opts...)
+}
+
+func (c *clientImpl) StopBatchOperation(
+	ctx context.Context,
+	request *workflowservice.StopBatchOperationRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.StopBatchOperationResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.StopBatchOperation(ctx, request, opts...)
 }
 
 func (c *clientImpl) TerminateWorkflowExecution(

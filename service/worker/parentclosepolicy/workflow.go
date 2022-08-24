@@ -42,9 +42,11 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -135,13 +137,15 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 			namespace = request.Namespace
 		}
 
+		requestCtx := headers.SetCallerName(ctx, namespace)
+
 		var err error
 		switch execution.Policy {
 		case enumspb.PARENT_CLOSE_POLICY_ABANDON:
 			// no-op
 			continue
 		case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
-			_, err = client.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
+			_, err = client.TerminateWorkflowExecution(requestCtx, &historyservice.TerminateWorkflowExecutionRequest{
 				NamespaceId: namespaceId,
 				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 					Namespace: namespace,
@@ -156,7 +160,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 				ChildWorkflowOnly:         childWorkflowOnly,
 			})
 		case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
-			_, err = client.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
+			_, err = client.RequestCancelWorkflowExecution(requestCtx, &historyservice.RequestCancelWorkflowExecutionRequest{
 				NamespaceId: namespaceId,
 				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 					Namespace: namespace,
@@ -226,7 +230,7 @@ func signalRemoteCluster(
 		_, err = remoteClient.SignalWithStartWorkflowExecution(
 			signalCtx,
 			&workflowservice.SignalWithStartWorkflowExecutionRequest{
-				Namespace:  common.SystemLocalNamespace,
+				Namespace:  primitives.SystemLocalNamespace,
 				RequestId:  uuid.New(),
 				WorkflowId: getWorkflowID(numWorkflows),
 				WorkflowType: &commonpb.WorkflowType{

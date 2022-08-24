@@ -43,19 +43,22 @@ type (
 	PersistenceRateLimitingParams struct {
 		fx.Out
 
-		PersistenceMaxQps    persistenceClient.PersistenceMaxQps
-		PriorityRateLimiting persistenceClient.PriorityRateLimiting
+		PersistenceMaxQps          persistenceClient.PersistenceMaxQps
+		PersistenceNamespaceMaxQps persistenceClient.PersistenceNamespaceMaxQps
+		EnablePriorityRateLimiting persistenceClient.EnablePriorityRateLimiting
 	}
 )
 
 func NewPersistenceRateLimitingParams(
 	maxQps dynamicconfig.IntPropertyFn,
 	globalMaxQps dynamicconfig.IntPropertyFn,
-	priorityRateLimiting dynamicconfig.BoolPropertyFn,
+	namespaceMaxQps dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	enablePriorityRateLimiting dynamicconfig.BoolPropertyFn,
 ) PersistenceRateLimitingParams {
 	return PersistenceRateLimitingParams{
-		PersistenceMaxQps:    PersistenceMaxQpsFn(maxQps, globalMaxQps),
-		PriorityRateLimiting: persistenceClient.PriorityRateLimiting(priorityRateLimiting),
+		PersistenceMaxQps:          PersistenceMaxQpsFn(maxQps, globalMaxQps),
+		PersistenceNamespaceMaxQps: persistenceClient.PersistenceNamespaceMaxQps(namespaceMaxQps),
+		EnablePriorityRateLimiting: persistenceClient.EnablePriorityRateLimiting(enablePriorityRateLimiting),
 	}
 }
 
@@ -81,6 +84,7 @@ func PersistenceMaxQpsFn(
 func GrpcServerOptionsProvider(
 	logger log.Logger,
 	rpcFactory common.RPCFactory,
+	retryableInterceptor *interceptor.RetryableInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	tracingInterceptor telemetry.ServerTraceInterceptor,
@@ -98,6 +102,7 @@ func GrpcServerOptionsProvider(
 			grpc.UnaryServerInterceptor(tracingInterceptor),
 			metrics.NewServerMetricsContextInjectorInterceptor(),
 			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
+			retryableInterceptor.Intercept,
 			telemetryInterceptor.Intercept,
 			rateLimitInterceptor.Intercept,
 		),

@@ -22,23 +22,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues
+package shard
 
 import (
-	"go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/namespace"
 )
+
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination controller_mock.go
 
 type (
-	noopPriorityAssignerImpl struct{}
+	Controller interface {
+		common.Daemon
+
+		GetShardByID(shardID int32) (Context, error)
+		GetShardByNamespaceWorkflow(namespaceID namespace.ID, workflowID string) (Context, error)
+		CloseShardByID(shardID int32)
+		ShardIDs() []int32
+	}
 )
-
-var noopPriorityAssigner = &noopPriorityAssignerImpl{}
-
-func NewNoopPriorityAssigner() PriorityAssigner {
-	return noopPriorityAssigner
-}
-
-func (a *noopPriorityAssignerImpl) Assign(execuable Executable) error {
-	execuable.SetPriority(tasks.PriorityHigh)
-	return nil
-}

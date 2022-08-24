@@ -36,15 +36,9 @@ if ! curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_V
 fi
 
 echo "=== Step 1. Add custom search attributes to the new index. ==="
-DOC_TYPE=""
-if [ "${ES_VERSION}" != "v7" ]; then
-    DOC_TYPE="/_doc"
-fi
-CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}${DOC_TYPE}/_mapping" | jq --compact-output '.. | .Attr? | select(.!=null) | .properties | with_entries(select(.key == ($customSA[]))) | {properties:.}' --argjson customSA "${CUSTOM_SEARCH_ATTRIBUTES}")
-if [ "${ES_VERSION}" == "v7" ]; then
-    # Replace "date" type with "date_nanos" only for Elasticsearch v7.
-    CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[].type | select(. == "date")) = "date_nanos"' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
-fi
+CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}/_mapping" | jq --compact-output '.. | .Attr? | select(.!=null) | .properties | with_entries(select(.key == ($customSA[]))) | {properties:.}' --argjson customSA "${CUSTOM_SEARCH_ATTRIBUTES}")
+# Replace "date" type with "date_nanos"
+CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[].type | select(. == "date")) = "date_nanos"' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
 # Replace "double" type with "scaled_float".
 CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[] | select(.type == "double")) = {"type":"scaled_float","scaling_factor":10000}' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
 
@@ -57,7 +51,7 @@ if jq --exit-status '.properties[]? | length > 0' <<< "${CUSTOM_SEARCH_ATTRIBUTE
         REPLY="y"
     fi
     if [ "${REPLY}" = "y" ]; then
-        curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}${DOC_TYPE}/_mapping" -H "Content-Type: application/json" --data-binary "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}" | jq
+        curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}/_mapping" -H "Content-Type: application/json" --data-binary "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}" | jq
         # Wait for mapping changes to go through.
         until curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_cluster/health/${ES_VIS_INDEX_V1}" | jq --exit-status '.status=="green" | .'; do
             echo "Waiting for Elasticsearch index ${ES_VIS_INDEX_V1} become green."

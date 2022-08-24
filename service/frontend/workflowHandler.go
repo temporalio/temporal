@@ -28,12 +28,12 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
 	"github.com/gogo/protobuf/jsonpb"
-	"go.temporal.io/server/common/clock"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
@@ -71,10 +72,10 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
-	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/scheduler"
 )
 
@@ -84,8 +85,6 @@ var (
 	minTime = time.Unix(0, 0).UTC()
 	maxTime = time.Date(2100, 1, 1, 1, 0, 0, 0, time.UTC)
 
-	// This error is used to bail out retry if context is near its deadline. (Cannot be retryable error).
-	errContextNearDeadline = serviceerror.NewDeadlineExceeded("context near deadline")
 	// Tail room for context deadline to bail out from retry for long poll.
 	longPollTailRoom = time.Second
 
@@ -118,10 +117,6 @@ type (
 		archivalMetadata                archiver.ArchivalMetadata
 		healthServer                    *health.Server
 	}
-)
-
-var (
-	frontendServiceRetryPolicy = common.CreateFrontendServiceRetryPolicy()
 )
 
 // NewWorkflowHandler creates a gRPC handler for workflowservice
@@ -231,10 +226,6 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -259,10 +250,6 @@ func (wh *WorkflowHandler) DescribeNamespace(ctx context.Context, request *workf
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -282,10 +269,6 @@ func (wh *WorkflowHandler) ListNamespaces(ctx context.Context, request *workflow
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -303,10 +286,6 @@ func (wh *WorkflowHandler) UpdateNamespace(ctx context.Context, request *workflo
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -331,10 +310,6 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -355,10 +330,6 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -433,10 +404,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -727,10 +694,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -865,10 +828,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 
 	callTime := time.Now().UTC()
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -901,33 +860,24 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	pollerID := uuid.New()
-	var matchingResp *matchingservice.PollWorkflowTaskQueueResponse
-	op := func(ctx context.Context) error {
-		if contextNearDeadline(ctx, longPollTailRoom) {
-			return errContextNearDeadline
-		}
-		var err error
-		matchingResp, err = wh.matchingClient.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
-			NamespaceId: namespaceID.String(),
-			PollerId:    pollerID,
-			PollRequest: request,
-		})
-		return err
+	if contextNearDeadline(ctx, longPollTailRoom) {
+		return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 	}
 
-	err = backoff.ThrottleRetryContext(ctx, op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	pollerID := uuid.New()
+	matchingResp, err := wh.matchingClient.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollerId:    pollerID,
+		PollRequest: request,
+	})
 	if err != nil {
-		if err == errContextNearDeadline {
-			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
-		}
-
 		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
 		if contextWasCanceled {
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
 			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
 			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 		}
+
 		// For all other errors log an error and return it back to client.
 		ctxTimeout := "not-set"
 		ctxDeadline, ok := ctx.Deadline()
@@ -970,10 +920,6 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -1042,10 +988,6 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -1117,10 +1059,6 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 
 	callTime := time.Now().UTC()
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1146,27 +1084,17 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
-	pollerID := uuid.New()
-	var matchingResponse *matchingservice.PollActivityTaskQueueResponse
-	op := func(ctx context.Context) error {
-		if contextNearDeadline(ctx, longPollTailRoom) {
-			return errContextNearDeadline
-		}
-
-		var err error
-		matchingResponse, err = wh.matchingClient.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
-			NamespaceId: namespaceID.String(),
-			PollerId:    pollerID,
-			PollRequest: request,
-		})
-		return err
+	if contextNearDeadline(ctx, longPollTailRoom) {
+		return &workflowservice.PollActivityTaskQueueResponse{}, nil
 	}
 
-	err = backoff.ThrottleRetryContext(ctx, op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	pollerID := uuid.New()
+	matchingResponse, err := wh.matchingClient.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollerId:    pollerID,
+		PollRequest: request,
+	})
 	if err != nil {
-		if err == errContextNearDeadline {
-			return &workflowservice.PollActivityTaskQueueResponse{}, nil
-		}
 		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
 		if contextWasCanceled {
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
@@ -1187,6 +1115,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 
 		return nil, err
 	}
+
 	return &workflowservice.PollActivityTaskQueueResponse{
 		TaskToken:                   matchingResponse.TaskToken,
 		WorkflowExecution:           matchingResponse.WorkflowExecution,
@@ -1217,10 +1146,6 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -1289,10 +1214,6 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -1395,10 +1316,6 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1466,10 +1383,6 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -1575,10 +1488,6 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1664,10 +1573,6 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -1781,10 +1686,6 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1853,10 +1754,6 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -1956,10 +1853,6 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1991,10 +1884,6 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -2059,10 +1948,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -2143,10 +2028,6 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -2191,10 +2072,6 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -2225,10 +2102,6 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -2319,10 +2192,6 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -2430,10 +2299,6 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -2476,10 +2341,6 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -2564,10 +2425,6 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -2613,10 +2470,6 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -2651,10 +2504,6 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	searchAttributes, err := wh.saProvider.GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
@@ -2677,10 +2526,6 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -2750,10 +2595,6 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -2787,10 +2628,6 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 
 	if wh.config.DisallowQuery(request.GetNamespace()) {
 		return nil, errQueryDisallowedForNamespace
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -2851,10 +2688,6 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -2905,10 +2738,6 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -2967,10 +2796,6 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -2985,6 +2810,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			InternalErrorDifferentiation:    true,
 			ActivityFailureIncludeHeartbeat: true,
 			SupportsSchedules:               true,
+			EncodedFailureAttributes:        true,
 		},
 	}, nil
 }
@@ -3005,9 +2831,15 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 		return nil, err
 	}
 
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
 	matchingResponse, err := wh.matchingClient.ListTaskQueuePartitions(ctx, &matchingservice.ListTaskQueuePartitionsRequest{
-		Namespace: request.GetNamespace(),
-		TaskQueue: request.TaskQueue,
+		NamespaceId: namespaceID.String(),
+		Namespace:   request.GetNamespace(),
+		TaskQueue:   request.TaskQueue,
 	})
 
 	if matchingResponse == nil {
@@ -3028,10 +2860,6 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -3040,8 +2868,9 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, errSchedulesNotAllowed
 	}
 
-	// a schedule id is a workflow id so validate it the same way
-	if err := wh.validateWorkflowID(request.ScheduleId); err != nil {
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
+
+	if err := wh.validateWorkflowID(workflowID); err != nil {
 		return nil, err
 	}
 
@@ -3128,12 +2957,14 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	if err != nil {
 		return nil, err
 	}
+	// Add namespace division
+	searchattribute.AddSearchAttribute(&request.SearchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
 	// Create StartWorkflowExecutionRequest
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:             request.Namespace,
-		WorkflowId:            request.ScheduleId,
+		WorkflowId:            workflowID,
 		WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: workercommon.PerNSWorkerTaskQueue},
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                 inputPayload,
 		Identity:              request.Identity,
 		RequestId:             request.RequestId,
@@ -3161,10 +2992,6 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -3178,7 +3005,8 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return nil, err
 	}
 
-	execution := &commonpb.WorkflowExecution{WorkflowId: request.ScheduleId}
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
+	execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
 
 	// first describe to get memo and search attributes
 	describeResponse, err := wh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
@@ -3308,6 +3136,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		return errWaitForRefresh
 	}
 
+	// TODO: confirm retry is necessary here.
 	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
 	isWaitErr := func(e error) bool { return e == errWaitForRefresh }
 	err = backoff.ThrottleRetryContext(ctx, op, policy, isWaitErr)
@@ -3326,10 +3155,6 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -3341,6 +3166,8 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
 		return nil, errRequestIDTooLong
 	}
+
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -3365,7 +3192,7 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID.String(),
-		request.GetScheduleId(),
+		workflowID,
 		"", // don't have runid yet
 		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
@@ -3378,7 +3205,7 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		NamespaceId: namespaceID.String(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         request.Namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: request.ScheduleId},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 			SignalName:        scheduler.SignalNameUpdate,
 			Input:             inputPayloads,
 			Identity:          request.Identity,
@@ -3400,10 +3227,6 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -3415,6 +3238,8 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
 		return nil, errRequestIDTooLong
 	}
+
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -3438,7 +3263,7 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID.String(),
-		request.GetScheduleId(),
+		workflowID,
 		"", // don't have runid yet
 		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
@@ -3451,7 +3276,7 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		NamespaceId: namespaceID.String(),
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         request.Namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: request.ScheduleId},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 			SignalName:        scheduler.SignalNamePatch,
 			Input:             inputPayloads,
 			Identity:          request.Identity,
@@ -3473,10 +3298,6 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -3484,6 +3305,8 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 	if !wh.config.EnableSchedules(request.Namespace) {
 		return nil, errSchedulesNotAllowed
 	}
+
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -3502,7 +3325,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		sizeLimitWarn,
 		sizeLimitError,
 		namespaceID.String(),
-		request.ScheduleId,
+		workflowID,
 		"",
 		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
@@ -3514,7 +3337,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		NamespaceId: namespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
 			Namespace: request.Namespace,
-			Execution: &commonpb.WorkflowExecution{WorkflowId: request.ScheduleId},
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 			Query: &querypb.WorkflowQuery{
 				QueryType: scheduler.QueryNameListMatchingTimes,
 				QueryArgs: queryPayload,
@@ -3543,10 +3366,6 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -3554,6 +3373,8 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 	if !wh.config.EnableSchedules(request.Namespace) {
 		return nil, errSchedulesNotAllowed
 	}
+
+	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -3564,7 +3385,7 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		NamespaceId: namespaceID.String(),
 		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 			Namespace:         request.Namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: request.ScheduleId},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 			Reason:            "terminated by DeleteSchedule",
 			Identity:          request.Identity,
 		},
@@ -3582,10 +3403,6 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -3618,6 +3435,7 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{
 			NamespaceID:       namespaceID,
 			Namespace:         namespaceName,
+			NamespaceDivision: scheduler.NamespaceDivision,
 			PageSize:          int(request.GetMaximumPageSize()),
 			NextPageToken:     request.NextPageToken,
 			EarliestStartTime: minTime,
@@ -3635,8 +3453,10 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 		info := wh.decodeScheduleListInfo(searchAttributes)
 		searchAttributes = wh.cleanScheduleSearchAttributes(searchAttributes)
 		memo := wh.cleanScheduleMemo(ex.GetMemo())
+		workflowID := ex.GetExecution().GetWorkflowId()
+		scheduleID := strings.TrimPrefix(workflowID, scheduler.WorkflowIDPrefix)
 		schedules[i] = &schedpb.ScheduleListEntry{
-			ScheduleId:       ex.GetExecution().GetWorkflowId(),
+			ScheduleId:       scheduleID,
 			Memo:             memo,
 			SearchAttributes: searchAttributes,
 			Info:             info,
@@ -3654,10 +3474,6 @@ func (wh *WorkflowHandler) UpdateWorkerBuildIdOrdering(ctx context.Context, requ
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -3699,10 +3515,6 @@ func (wh *WorkflowHandler) UpdateWorkflow(
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -3725,10 +3537,6 @@ func (wh *WorkflowHandler) GetWorkerBuildIdOrdering(ctx context.Context, request
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
 	}
 
 	if request == nil {
@@ -3754,6 +3562,34 @@ func (wh *WorkflowHandler) GetWorkerBuildIdOrdering(ctx context.Context, request
 	}
 
 	return matchingResponse.Response, err
+}
+
+func (wh *WorkflowHandler) DescribeBatchOperation(
+	ctx context.Context,
+	request *workflowservice.DescribeBatchOperationRequest,
+) (_ *workflowservice.DescribeBatchOperationResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("WorkflowHandler.DescribeBatchOperation is not implemented")
+}
+
+func (wh *WorkflowHandler) ListBatchOperations(
+	ctx context.Context,
+	request *workflowservice.ListBatchOperationsRequest,
+) (_ *workflowservice.ListBatchOperationsResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("WorkflowHandler.ListBatchOperations is not implemented")
+}
+
+func (wh *WorkflowHandler) StartBatchOperation(
+	ctx context.Context,
+	request *workflowservice.StartBatchOperationRequest,
+) (_ *workflowservice.StartBatchOperationResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("WorkflowHandler.StartBatchOperation is not implemented")
+}
+
+func (wh *WorkflowHandler) StopBatchOperation(
+	ctx context.Context,
+	request *workflowservice.StopBatchOperationRequest,
+) (_ *workflowservice.StopBatchOperationResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("WorkflowHandler.StopBatchOperation is not implemented")
 }
 
 func (wh *WorkflowHandler) getRawHistory(

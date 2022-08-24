@@ -202,7 +202,11 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_NamespaceOnly() {
 	cln := NewCollection(s.client, log.NewNoopLogger())
 	expectedValue := 1004
 	f := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
-	v := f("another-namespace", "other-test-tq", 0)
+	v := f("another-namespace", "test-tq", 0)
+	s.Equal(expectedValue, v)
+	expectedValue = 1005
+	f = cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
+	v = f("another-namespace", "other-test-tq", 0)
 	s.Equal(expectedValue, v)
 }
 
@@ -323,12 +327,12 @@ func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
 
 func (s *fileBasedClientSuite) TestMatch() {
 	testCases := []struct {
-		v       *constrainedValue
+		v       ConstrainedValue
 		filters map[Filter]interface{}
 		matched bool
 	}{
 		{
-			v: &constrainedValue{
+			v: ConstrainedValue{
 				Constraints: map[string]interface{}{},
 			},
 			filters: map[Filter]interface{}{
@@ -337,14 +341,14 @@ func (s *fileBasedClientSuite) TestMatch() {
 			matched: false,
 		},
 		{
-			v: &constrainedValue{
+			v: ConstrainedValue{
 				Constraints: map[string]interface{}{"some key": "some value"},
 			},
 			filters: map[Filter]interface{}{},
 			matched: false,
 		},
 		{
-			v: &constrainedValue{
+			v: ConstrainedValue{
 				Constraints: map[string]interface{}{"namespace": "samples-namespace"},
 			},
 			filters: map[Filter]interface{}{
@@ -353,7 +357,7 @@ func (s *fileBasedClientSuite) TestMatch() {
 			matched: false,
 		},
 		{
-			v: &constrainedValue{
+			v: ConstrainedValue{
 				Constraints: map[string]interface{}{
 					"namespace":     "samples-namespace",
 					"taskQueueName": "sample-task-queue",
@@ -366,7 +370,7 @@ func (s *fileBasedClientSuite) TestMatch() {
 			matched: true,
 		},
 		{
-			v: &constrainedValue{
+			v: ConstrainedValue{
 				Constraints: map[string]interface{}{
 					"namespace":         "samples-namespace",
 					"some-other-filter": "sample-task-queue",
@@ -379,7 +383,7 @@ func (s *fileBasedClientSuite) TestMatch() {
 			matched: false,
 		},
 		{
-			v: &constrainedValue{
+			v: ConstrainedValue{
 				Constraints: map[string]interface{}{
 					"namespace": "samples-namespace",
 				},

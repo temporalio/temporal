@@ -419,7 +419,7 @@ func (f *replicationTaskFetcherWorker) getMessages() error {
 
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(fetchTaskRequestTimeout)
 	defer cancel()
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
 	request := &adminservice.GetReplicationMessagesRequest{
 		Tokens:      tokens,

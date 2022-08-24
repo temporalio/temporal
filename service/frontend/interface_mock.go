@@ -120,6 +120,21 @@ func (mr *MockHandlerMockRecorder) DeprecateNamespace(arg0, arg1 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeprecateNamespace", reflect.TypeOf((*MockHandler)(nil).DeprecateNamespace), arg0, arg1)
 }
 
+// DescribeBatchOperation mocks base method.
+func (m *MockHandler) DescribeBatchOperation(arg0 context.Context, arg1 *v10.DescribeBatchOperationRequest) (*v10.DescribeBatchOperationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeBatchOperation", arg0, arg1)
+	ret0, _ := ret[0].(*v10.DescribeBatchOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeBatchOperation indicates an expected call of DescribeBatchOperation.
+func (mr *MockHandlerMockRecorder) DescribeBatchOperation(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeBatchOperation", reflect.TypeOf((*MockHandler)(nil).DescribeBatchOperation), arg0, arg1)
+}
+
 // DescribeNamespace mocks base method.
 func (m *MockHandler) DescribeNamespace(arg0 context.Context, arg1 *v10.DescribeNamespaceRequest) (*v10.DescribeNamespaceResponse, error) {
 	m.ctrl.T.Helper()
@@ -297,6 +312,21 @@ func (m *MockHandler) ListArchivedWorkflowExecutions(arg0 context.Context, arg1 
 func (mr *MockHandlerMockRecorder) ListArchivedWorkflowExecutions(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListArchivedWorkflowExecutions", reflect.TypeOf((*MockHandler)(nil).ListArchivedWorkflowExecutions), arg0, arg1)
+}
+
+// ListBatchOperations mocks base method.
+func (m *MockHandler) ListBatchOperations(arg0 context.Context, arg1 *v10.ListBatchOperationsRequest) (*v10.ListBatchOperationsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListBatchOperations", arg0, arg1)
+	ret0, _ := ret[0].(*v10.ListBatchOperationsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListBatchOperations indicates an expected call of ListBatchOperations.
+func (mr *MockHandlerMockRecorder) ListBatchOperations(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBatchOperations", reflect.TypeOf((*MockHandler)(nil).ListBatchOperations), arg0, arg1)
 }
 
 // ListClosedWorkflowExecutions mocks base method.
@@ -746,6 +776,21 @@ func (mr *MockHandlerMockRecorder) Start() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockHandler)(nil).Start))
 }
 
+// StartBatchOperation mocks base method.
+func (m *MockHandler) StartBatchOperation(arg0 context.Context, arg1 *v10.StartBatchOperationRequest) (*v10.StartBatchOperationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartBatchOperation", arg0, arg1)
+	ret0, _ := ret[0].(*v10.StartBatchOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartBatchOperation indicates an expected call of StartBatchOperation.
+func (mr *MockHandlerMockRecorder) StartBatchOperation(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartBatchOperation", reflect.TypeOf((*MockHandler)(nil).StartBatchOperation), arg0, arg1)
+}
+
 // StartWorkflowExecution mocks base method.
 func (m *MockHandler) StartWorkflowExecution(arg0 context.Context, arg1 *v10.StartWorkflowExecutionRequest) (*v10.StartWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -771,6 +816,21 @@ func (m *MockHandler) Stop() {
 func (mr *MockHandlerMockRecorder) Stop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockHandler)(nil).Stop))
+}
+
+// StopBatchOperation mocks base method.
+func (m *MockHandler) StopBatchOperation(arg0 context.Context, arg1 *v10.StopBatchOperationRequest) (*v10.StopBatchOperationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StopBatchOperation", arg0, arg1)
+	ret0, _ := ret[0].(*v10.StopBatchOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StopBatchOperation indicates an expected call of StopBatchOperation.
+func (mr *MockHandlerMockRecorder) StopBatchOperation(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopBatchOperation", reflect.TypeOf((*MockHandler)(nil).StopBatchOperation), arg0, arg1)
 }
 
 // TerminateWorkflowExecution mocks base method.

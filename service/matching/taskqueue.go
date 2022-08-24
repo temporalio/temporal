@@ -35,15 +35,18 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
+// TODO: This file ought to be moved into common. Frontend is duplicating this name mangling scheme
+//   and if it ever changes, it's likely to break.
+
 type (
 	// taskQueueID is the key that uniquely identifies a task queue
 	taskQueueID struct {
-		qualifiedTaskQueueName
+		QualifiedTaskQueueName
 		namespaceID namespace.ID
 		taskType    enumspb.TaskQueueType
 	}
-	// qualifiedTaskQueueName refers to the fully qualified task queue name
-	qualifiedTaskQueueName struct {
+	// QualifiedTaskQueueName refers to the fully qualified task queue name
+	QualifiedTaskQueueName struct {
 		name      string // internal name of the tasks list
 		baseName  string // original name of the task queue as specified by user
 		partition int    // partitionID of task queue
@@ -72,24 +75,37 @@ const (
 //
 // Returns error if the given name is non-compliant with the required format
 // for task queue names
-func newTaskQueueName(name string) (qualifiedTaskQueueName, error) {
-	tn := qualifiedTaskQueueName{
+func newTaskQueueName(name string) (QualifiedTaskQueueName, error) {
+	tn := QualifiedTaskQueueName{
 		name:     name,
 		baseName: name,
 	}
 	if err := tn.init(); err != nil {
-		return qualifiedTaskQueueName{}, err
+		return QualifiedTaskQueueName{}, err
 	}
 	return tn, nil
 }
 
+// NewTaskQueueNameWithPartition can be used to create root and non-root taskqueue names easily without needing to
+// manually craft the correct string. See newTaskQueueName for more details.
+func NewTaskQueueNameWithPartition(baseName string, partition int) (QualifiedTaskQueueName, error) {
+	tqName, err := newTaskQueueName(baseName)
+	if partition == 0 {
+		return tqName, err
+	}
+	partName := tqName.mkName(partition)
+	tqName.partition = partition
+	tqName.name = partName
+	return tqName, err
+}
+
 // IsRoot returns true if this task queue is a root partition
-func (tn *qualifiedTaskQueueName) IsRoot() bool {
+func (tn *QualifiedTaskQueueName) IsRoot() bool {
 	return tn.partition == 0
 }
 
 // GetRoot returns the root name for a task queue
-func (tn *qualifiedTaskQueueName) GetRoot() string {
+func (tn *QualifiedTaskQueueName) GetRoot() string {
 	return tn.baseName
 }
 
@@ -97,7 +113,7 @@ func (tn *qualifiedTaskQueueName) GetRoot() string {
 // input:
 //   degree: Number of children at each level of the tree
 // Returns empty string if this task queue is the root
-func (tn *qualifiedTaskQueueName) Parent(degree int) string {
+func (tn *QualifiedTaskQueueName) Parent(degree int) string {
 	if tn.IsRoot() || degree == 0 {
 		return ""
 	}
@@ -105,14 +121,14 @@ func (tn *qualifiedTaskQueueName) Parent(degree int) string {
 	return tn.mkName(pid)
 }
 
-func (tn *qualifiedTaskQueueName) mkName(partition int) string {
+func (tn *QualifiedTaskQueueName) mkName(partition int) string {
 	if partition == 0 {
 		return tn.baseName
 	}
 	return fmt.Sprintf("%v%v/%v", taskQueuePartitionPrefix, tn.baseName, partition)
 }
 
-func (tn *qualifiedTaskQueueName) init() error {
+func (tn *QualifiedTaskQueueName) init() error {
 	if !strings.HasPrefix(tn.name, taskQueuePartitionPrefix) {
 		return nil
 	}
@@ -132,14 +148,24 @@ func (tn *qualifiedTaskQueueName) init() error {
 	return nil
 }
 
+func (tn *QualifiedTaskQueueName) String() string {
+	return tn.mkName(tn.partition)
+}
+
 // newTaskQueueID returns taskQueueID which uniquely identfies as task queue
 func newTaskQueueID(namespaceID namespace.ID, taskQueueName string, taskType enumspb.TaskQueueType) (*taskQueueID, error) {
-	name, err := newTaskQueueName(taskQueueName)
+	return newTaskQueueIDWithPartition(namespaceID, taskQueueName, taskType, 0)
+}
+
+func newTaskQueueIDWithPartition(
+	namespaceID namespace.ID, taskQueueName string, taskType enumspb.TaskQueueType, partition int,
+) (*taskQueueID, error) {
+	name, err := NewTaskQueueNameWithPartition(taskQueueName, partition)
 	if err != nil {
 		return nil, err
 	}
 	return &taskQueueID{
-		qualifiedTaskQueueName: name,
+		QualifiedTaskQueueName: name,
 		namespaceID:            namespaceID,
 		taskType:               taskType,
 	}, nil

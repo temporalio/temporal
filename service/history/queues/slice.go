@@ -204,26 +204,28 @@ func (s *SliceImpl) MergeWithSlice(slice Slice) []Slice {
 
 func (s *SliceImpl) mergeByRange(incomingSlice *SliceImpl) *SliceImpl {
 	mergedTaskTracker := s.executableTracker.merge(incomingSlice.executableTracker)
+	mergedIterators := s.mergeIterators(incomingSlice)
 
 	s.destroy()
 	incomingSlice.destroy()
 
 	return s.newSlice(
 		s.scope.MergeByRange(incomingSlice.scope),
-		s.mergeIterators(incomingSlice),
+		mergedIterators,
 		mergedTaskTracker,
 	)
 }
 
 func (s *SliceImpl) mergeByPredicate(incomingSlice *SliceImpl) *SliceImpl {
 	mergedTaskTracker := s.executableTracker.merge(incomingSlice.executableTracker)
+	mergedIterators := s.mergeIterators(incomingSlice)
 
 	s.destroy()
 	incomingSlice.destroy()
 
 	return s.newSlice(
 		s.scope.MergeByPredicate(incomingSlice.scope),
-		s.mergeIterators(incomingSlice),
+		mergedIterators,
 		mergedTaskTracker,
 	)
 }
@@ -308,8 +310,12 @@ func (s *SliceImpl) SelectTasks(batchSize int) ([]Executable, error) {
 			task, err := s.iterators[0].Next()
 			if err != nil {
 				s.iterators[0] = s.iterators[0].Remaining()
-				// NOTE: we must return the executables here
-				return executables, err
+				if len(executables) != 0 {
+					// NOTE: we must return the executables here
+					// MoreTasks() will return true so queue reader will try to load again
+					return executables, nil
+				}
+				return nil, err
 			}
 
 			taskKey := task.GetKey()

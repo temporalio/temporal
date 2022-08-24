@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives"
 )
 
 type (
@@ -102,7 +103,7 @@ func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkc
 
 func (f *clientFactory) GetSystemClient(logger log.Logger) sdkclient.Client {
 	f.once.Do(func() {
-		client, err := f.NewClient(common.SystemLocalNamespace, logger)
+		client, err := f.NewClient(primitives.SystemLocalNamespace, logger)
 		if err != nil {
 			logger.Fatal(
 				"error getting system sdk client",

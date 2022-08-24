@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -322,9 +323,9 @@ func (w *perNamespaceWorker) refresh(ns *namespace.Namespace) {
 		w.componentSet = componentSet
 		return nil
 	}
-	policy := backoff.NewExponentialRetryPolicy(w.wm.initialRetry)
-	policy.SetMaximumInterval(1 * time.Minute)
-	policy.SetExpirationInterval(backoff.NoInterval)
+	policy := backoff.NewExponentialRetryPolicy(w.wm.initialRetry).
+		WithMaximumInterval(1 * time.Minute).
+		WithExpirationInterval(backoff.NoInterval)
 	backoff.ThrottleRetry(op, policy, nil)
 }
 
@@ -341,14 +342,14 @@ func (w *perNamespaceWorker) startWorker(
 	}
 
 	var sdkoptions sdkworker.Options
-	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(headers.CallerTypeBackground))
+	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))
 	sdkoptions.Identity = fmt.Sprintf("server-worker@%d@%s@%s", os.Getpid(), w.wm.hostName, nsName)
 	// sdk default is 2, we increase it if we're supposed to run with more multiplicity.
 	// other defaults are already large enough.
 	sdkoptions.MaxConcurrentWorkflowTaskPollers = 2 * multiplicity
 	sdkoptions.MaxConcurrentActivityTaskPollers = 2 * multiplicity
 
-	sdkworker := w.wm.sdkWorkerFactory.New(client, workercommon.PerNSWorkerTaskQueue, sdkoptions)
+	sdkworker := w.wm.sdkWorkerFactory.New(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
 	for _, cmp := range components {
 		cmp.Register(sdkworker, ns)
 	}

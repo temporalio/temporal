@@ -1857,6 +1857,7 @@ func (s *workflowHandlerSuite) TestGetSystemInfo() {
 	s.True(resp.Capabilities.InternalErrorDifferentiation)
 	s.True(resp.Capabilities.ActivityFailureIncludeHeartbeat)
 	s.True(resp.Capabilities.SupportsSchedules)
+	s.True(resp.Capabilities.EncodedFailureAttributes)
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
@@ -1963,6 +1964,4 @@ func TestContextNearDeadline(t *testing.T) {
 	ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*500)
 	assert.True(t, contextNearDeadline(ctx, longPollTailRoom))
 	assert.False(t, contextNearDeadline(ctx, time.Millisecond))
-
-	assert.False(t, common.IsServiceTransientError(errContextNearDeadline))
 }

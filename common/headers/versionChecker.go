@@ -84,7 +84,7 @@ var (
 type (
 	// VersionChecker is used to check client/server compatibility and client's capabilities
 	VersionChecker interface {
-		ClientSupported(ctx context.Context, enableClientVersionCheck bool) error
+		ClientSupported(ctx context.Context) error
 		ClientSupportsFeature(ctx context.Context, feature string) bool
 	}
 
@@ -134,10 +134,7 @@ func SetVersionsForTests(ctx context.Context, clientVersion, clientName, support
 }
 
 // ClientSupported returns an error if client is unsupported, nil otherwise.
-func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersionCheck bool) error {
-	if !enableClientVersionCheck {
-		return nil
-	}
+func (vc *versionChecker) ClientSupported(ctx context.Context) error {
 
 	headers := GetValues(ctx, ClientNameHeaderName, ClientVersionHeaderName, SupportedServerVersionsHeaderName)
 	clientName := headers[0]

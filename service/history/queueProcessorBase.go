@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -57,20 +56,21 @@ type (
 	}
 
 	queueProcessorBase struct {
-		clusterName  string
-		shard        shard.Context
-		timeSource   clock.TimeSource
-		options      *QueueProcessorOptions
-		processor    processor
-		logger       log.Logger
-		metricsScope metrics.Scope
-		rateLimiter  quotas.RateLimiter // Read rate limiter
-		ackMgr       queueAckMgr
-		scheduler    queues.Scheduler
-		rescheduler  queues.Rescheduler
+		clusterName    string
+		shard          shard.Context
+		timeSource     clock.TimeSource
+		options        *QueueProcessorOptions
+		queueProcessor common.Daemon
+		logger         log.Logger
+		rateLimiter    quotas.RateLimiter // Read rate limiter
+		ackMgr         queueAckMgr
+		scheduler      queues.Scheduler
+		rescheduler    queues.Rescheduler
 
-		lastPollTime time.Time
-		backoffTimer *time.Timer
+		lastPollTime     time.Time
+		backoffTimerLock sync.Mutex
+		backoffTimer     *time.Timer
+		readTaskRetrier  backoff.Retrier
 
 		notifyCh   chan struct{}
 		status     int32
@@ -80,39 +80,41 @@ type (
 )
 
 var (
-	loadQueueTaskThrottleRetryDelay = 5 * time.Second
+	loadQueueTaskThrottleRetryDelay = 3 * time.Second
 )
 
 func newQueueProcessorBase(
 	clusterName string,
 	shard shard.Context,
 	options *QueueProcessorOptions,
-	processor processor,
+	queueProcessor common.Daemon,
 	queueAckMgr queueAckMgr,
 	historyCache workflow.Cache,
 	scheduler queues.Scheduler,
 	rescheduler queues.Rescheduler,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricsScope metrics.Scope,
 ) *queueProcessorBase {
 
 	p := &queueProcessorBase{
-		clusterName:  clusterName,
-		shard:        shard,
-		timeSource:   shard.GetTimeSource(),
-		options:      options,
-		processor:    processor,
-		rateLimiter:  rateLimiter,
-		status:       common.DaemonStatusInitialized,
-		notifyCh:     make(chan struct{}, 1),
-		shutdownCh:   make(chan struct{}),
-		logger:       logger,
-		metricsScope: metricsScope,
-		ackMgr:       queueAckMgr,
-		lastPollTime: time.Time{},
-		scheduler:    scheduler,
-		rescheduler:  rescheduler,
+		clusterName:    clusterName,
+		shard:          shard,
+		timeSource:     shard.GetTimeSource(),
+		options:        options,
+		queueProcessor: queueProcessor,
+		rateLimiter:    rateLimiter,
+		status:         common.DaemonStatusInitialized,
+		notifyCh:       make(chan struct{}, 1),
+		shutdownCh:     make(chan struct{}),
+		logger:         logger,
+		ackMgr:         queueAckMgr,
+		lastPollTime:   time.Time{},
+		readTaskRetrier: backoff.NewRetrier(
+			common.CreateReadTaskRetryPolicy(),
+			backoff.SystemClock,
+		),
+		scheduler:   scheduler,
+		rescheduler: rescheduler,
 	}
 
 	return p
@@ -188,7 +190,8 @@ eventLoop:
 			break eventLoop
 		case <-p.ackMgr.getFinishedChan():
 			// use a separate gorouting since the caller hold the shutdownWG
-			go p.Stop()
+			// stop the entire queue processor, not just processor base.
+			go p.queueProcessor.Stop()
 		case <-p.notifyCh:
 			p.processBatch()
 		case <-pollTimer.C:
@@ -204,9 +207,10 @@ eventLoop:
 				p.options.UpdateAckInterval(),
 				p.options.UpdateAckIntervalJitterCoefficient(),
 			))
-			if err := p.ackMgr.updateQueueAckLevel(); err == shard.ErrShardClosed {
+			if err := p.ackMgr.updateQueueAckLevel(); shard.IsShardOwnershipLostError(err) {
 				// shard is no longer owned by this instance, bail out
-				go p.Stop()
+				// stop the entire queue processor, not just processor base.
+				go p.queueProcessor.Stop()
 				break eventLoop
 			}
 		}
@@ -231,12 +235,16 @@ func (p *queueProcessorBase) processBatch() {
 
 	p.lastPollTime = p.timeSource.Now()
 	tasks, more, err := p.ackMgr.readQueueTasks()
-
 	if err != nil {
-		p.logger.Warn("Processor unable to retrieve tasks", tag.Error(err))
-		p.notifyNewTask() // re-enqueue the event
+		p.logger.Error("Processor unable to retrieve tasks", tag.Error(err))
+		if common.IsResourceExhausted(err) {
+			p.throttle(loadQueueTaskThrottleRetryDelay)
+		} else {
+			p.throttle(p.readTaskRetrier.NextBackOff())
+		}
 		return
 	}
+	p.readTaskRetrier.Reset()
 
 	if len(tasks) == 0 {
 		return
@@ -260,21 +268,23 @@ func (p *queueProcessorBase) processBatch() {
 
 func (p *queueProcessorBase) verifyReschedulerSize() bool {
 	passed := p.rescheduler.Len() < p.options.MaxReschdulerSize()
-	if passed && p.backoffTimer != nil {
-		p.backoffTimer.Stop()
-		p.backoffTimer = nil
-	}
-	if !passed && p.backoffTimer == nil {
+	if !passed {
 		p.throttle(p.options.PollBackoffInterval())
 	}
-
 	return passed
 }
 
 func (p *queueProcessorBase) throttle(duration time.Duration) {
+	p.backoffTimerLock.Lock()
+	defer p.backoffTimerLock.Unlock()
+
 	if p.backoffTimer == nil {
 		p.backoffTimer = time.AfterFunc(duration, func() {
+			p.backoffTimerLock.Lock()
+			defer p.backoffTimerLock.Unlock()
+
 			p.notifyNewTask() // re-enqueue the event
+			p.backoffTimer = nil
 		})
 	}
 }

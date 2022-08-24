@@ -288,7 +288,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	}
 
 	if len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
-		return nil, serviceerror.NewInvalidArgument("Can only reset workflow with pending child workflows")
+		return nil, serviceerror.NewInvalidArgument("workflowResetter encountered pending child workflows.")
 	}
 
 	if err := r.failWorkflowTask(
@@ -532,7 +532,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 		case common.TransientEventID:
 			// activity is started (with retry policy)
 			// should not encounter this case when rebuilding mutable state
-			return serviceerror.NewInternal("workflowResetter encounter transient activity")
+			return serviceerror.NewInternal("workflowResetter encountered transient activity.")
 
 		default:
 			if _, err := mutableState.AddActivityTaskFailedEvent(

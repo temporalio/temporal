@@ -35,6 +35,8 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -96,7 +98,7 @@ func newTransferQueueProcessor(
 ) queues.Queue {
 
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
-		shard.GetConfig().TransferProcessorEnableSingleCursor()
+		shard.GetConfig().TransferProcessorEnableSingleProcessor()
 
 	logger := log.With(shard.GetLogger(), tag.ComponentTransferQueue)
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
@@ -279,32 +281,36 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 	timer := time.NewTimer(t.config.TransferProcessorCompleteTransferInterval())
 	defer timer.Stop()
 
+	completeTaskRetryPolicy := common.CreateCompleteTaskRetryPolicy()
+
 	for {
 		select {
 		case <-t.shutdownChan:
 			// before shutdown, make sure the ack level is up to date
-			err := t.completeTransfer()
-			if err != nil {
-				t.logger.Error("Error complete transfer task", tag.Error(err))
+			if err := t.completeTransfer(); err != nil {
+				t.logger.Error("Failed to complete transfer task", tag.Error(err))
 			}
 			return
 		case <-timer.C:
-		CompleteLoop:
-			for attempt := 1; attempt <= t.config.TransferProcessorCompleteTransferFailureRetryCount(); attempt++ {
+			if err := backoff.ThrottleRetry(func() error {
 				err := t.completeTransfer()
 				if err != nil {
 					t.logger.Info("Failed to complete transfer task", tag.Error(err))
-					if err == shard.ErrShardClosed {
-						// shard closed, trigger shutdown and bail out
-						t.Stop()
-						return
-					}
-					backoff := time.Duration((attempt - 1) * 100)
-					time.Sleep(backoff * time.Millisecond)
-				} else {
-					break CompleteLoop
 				}
+				return err
+			}, completeTaskRetryPolicy, func(err error) bool {
+				select {
+				case <-t.shutdownChan:
+					return false
+				default:
+				}
+				return !shard.IsShardOwnershipLostError(err)
+			}); shard.IsShardOwnershipLostError(err) {
+				// shard is unloaded, transfer processor should quit as well
+				t.Stop()
+				return
 			}
+
 			timer.Reset(t.config.TransferProcessorCompleteTransferInterval())
 		}
 	}

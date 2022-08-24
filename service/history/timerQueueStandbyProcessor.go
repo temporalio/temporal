@@ -80,7 +80,6 @@ func newTimerQueueStandbyProcessor(
 		)
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
-	metricsClient := shard.GetMetricsClient()
 	timerTaskFilter := func(task tasks.Task) bool {
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
@@ -125,7 +124,7 @@ func newTimerQueueStandbyProcessor(
 	}
 
 	if scheduler == nil {
-		scheduler = newTimerTaskScheduler(shard, logger, metricProvider)
+		scheduler = newTimerTaskShardScheduler(shard, logger, metricProvider)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -152,6 +151,7 @@ func newTimerQueueStandbyProcessor(
 				scheduler,
 				rescheduler,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
 				config.TimerTaskMaxRetryCount,
 				queues.QueueTypeStandbyTimer,
@@ -171,7 +171,6 @@ func newTimerQueueStandbyProcessor(
 		rescheduler,
 		rateLimiter,
 		logger,
-		metricsClient.Scope(metrics.TimerStandbyQueueProcessorScope),
 	)
 
 	return processor

@@ -46,7 +46,6 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -304,11 +303,16 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
-	completionEvent, err := mutableState.GetCompletionEvent(ctx)
-	if err != nil {
-		return err
+	var completionEvent *historypb.HistoryEvent // needed to report close event to parent workflow
+	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
+	if replyToParentWorkflow {
+		// only load close event if needed.
+		completionEvent, err = mutableState.GetCompletionEvent(ctx)
+		if err != nil {
+			return err
+		}
+		replyToParentWorkflow = replyToParentWorkflow && !IsTerminatedByResetter(completionEvent)
 	}
-	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == "" && !IsTerminatedByResetter(completionEvent)
 	parentNamespaceID := executionInfo.ParentNamespaceId
 	parentWorkflowID := executionInfo.ParentWorkflowId
 	parentRunID := executionInfo.ParentRunId
@@ -324,7 +328,11 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 
 	workflowTypeName := executionInfo.WorkflowTypeName
-	workflowCloseTime := timestamp.TimeValue(completionEvent.GetEventTime())
+	workflowCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
+	if err != nil {
+		return err
+	}
+
 	workflowStatus := executionState.Status
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
 
@@ -348,7 +356,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		workflowTypeName,
 		workflowStartTime,
 		workflowExecutionTime,
-		workflowCloseTime,
+		*workflowCloseTime,
 		workflowStatus,
 		workflowHistoryLength,
 		visibilityMemo,
@@ -477,7 +485,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		return err
 	}
 
-	if err = t.requestCancelExternalExecutionWithRetry(
+	if err = t.requestCancelExternalExecution(
 		ctx,
 		task,
 		targetNamespaceName,
@@ -602,7 +610,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		)
 	}
 
-	if err = t.signalExternalExecutionWithRetry(
+	if err = t.signalExternalExecution(
 		ctx,
 		task,
 		targetNamespaceName,
@@ -785,7 +793,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		targetNamespaceName = namespaceEntry.Name()
 	}
 
-	childRunID, childClock, err := t.startWorkflowWithRetry(
+	childRunID, childClock, err := t.startWorkflow(
 		ctx,
 		task,
 		parentNamespaceName,
@@ -1207,7 +1215,7 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 	return context.UpdateWorkflowExecutionAsActive(ctx, t.shard.GetTimeSource().Now())
 }
 
-func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetry(
+func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecution(
 	ctx context.Context,
 	task *tasks.CancelExecutionTask,
 	targetNamespace namespace.Name,
@@ -1235,21 +1243,11 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
 	}
 
-	op := func(ctx context.Context) error {
-		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, request)
-		return err
-	}
-
-	err := backoff.ThrottleRetryContext(
-		ctx,
-		op,
-		workflow.PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
-	)
+	_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, request)
 	return err
 }
 
-func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
+func (t *transferQueueActiveTaskExecutor) signalExternalExecution(
 	ctx context.Context,
 	task *tasks.SignalExecutionTask,
 	targetNamespace namespace.Name,
@@ -1279,20 +1277,11 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
 	}
 
-	op := func(ctx context.Context) error {
-		_, err := t.historyClient.SignalWorkflowExecution(ctx, request)
-		return err
-	}
-
-	return backoff.ThrottleRetryContext(
-		ctx,
-		op,
-		workflow.PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
-	)
+	_, err := t.historyClient.SignalWorkflowExecution(ctx, request)
+	return err
 }
 
-func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
+func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	ctx context.Context,
 	task *tasks.StartChildExecutionTask,
 	namespace namespace.Name,
@@ -1335,19 +1324,8 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 		t.shard.GetTimeSource().Now(),
 	)
 
-	var response *historyservice.StartWorkflowExecutionResponse
-	var err error
-	op := func(ctx context.Context) error {
-		response, err = t.historyClient.StartWorkflowExecution(ctx, request)
-		return err
-	}
-
-	if err = backoff.ThrottleRetryContext(
-		ctx,
-		op,
-		workflow.PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
-	); err != nil {
+	response, err := t.historyClient.StartWorkflowExecution(ctx, request)
+	if err != nil {
 		return "", nil, err
 	}
 	return response.GetRunId(), response.GetClock(), nil

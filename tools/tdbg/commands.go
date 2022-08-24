@@ -275,11 +275,11 @@ func AdminListShardTasks(c *cli.Context) error {
 		pageSize = c.Int(FlagPageSize)
 	}
 
-	minFireTime, err := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())
+	minFireTime, err := parseTime(c.String(FlagMinVisibilityTimestamp), time.Unix(0, 0), time.Now().UTC())
 	if err != nil {
 		return err
 	}
-	maxFireTime, err := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())
+	maxFireTime, err := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Unix(0, 0), time.Now().UTC())
 	if err != nil {
 		return err
 	}

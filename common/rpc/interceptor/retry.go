@@ -22,54 +22,47 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package interceptor
 
 import (
 	"context"
 
-	elastic6 "github.com/olivere/elastic"
-	"github.com/olivere/elastic/v7"
+	"go.temporal.io/server/common/backoff"
+	"google.golang.org/grpc"
 )
 
 type (
-	bulkServiceV6 struct {
-		esBulkService *elastic6.BulkService
+	RetryableInterceptor struct {
+		policy      backoff.RetryPolicy
+		isRetryable backoff.IsRetryable
 	}
 )
 
-func newBulkServiceV6(esBulkService *elastic6.BulkService) *bulkServiceV6 {
-	return &bulkServiceV6{
-		esBulkService: esBulkService,
+var _ grpc.UnaryServerInterceptor = (*RetryableInterceptor)(nil).Intercept
+
+func NewRetryableInterceptor(
+	policy backoff.RetryPolicy,
+	isRetryable backoff.IsRetryable,
+) *RetryableInterceptor {
+	return &RetryableInterceptor{
+		policy:      policy,
+		isRetryable: isRetryable,
 	}
 }
 
-func (b *bulkServiceV6) Do(ctx context.Context) error {
-	_, err := b.esBulkService.Do(ctx)
-	return err
-}
-
-func (b *bulkServiceV6) NumberOfActions() int {
-	return b.esBulkService.NumberOfActions()
-}
-
-func (b *bulkServiceV6) Add(request *BulkableRequest) {
-	switch request.RequestType {
-	case BulkableRequestTypeIndex:
-		bulkDeleteRequest := elastic.NewBulkIndexRequest().
-			Index(request.Index).
-			Type(docTypeV6).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version).
-			Doc(request.Doc)
-		b.esBulkService.Add(bulkDeleteRequest)
-	case BulkableRequestTypeDelete:
-		bulkDeleteRequest := elastic.NewBulkDeleteRequest().
-			Index(request.Index).
-			Type(docTypeV6).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version)
-		b.esBulkService.Add(bulkDeleteRequest)
+func (i *RetryableInterceptor) Intercept(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+	var response interface{}
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = handler(ctx, req)
+		return err
 	}
+
+	err := backoff.ThrottleRetryContext(ctx, op, i.policy, i.isRetryable)
+	return response, err
 }

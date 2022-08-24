@@ -92,6 +92,8 @@ type (
 	}
 )
 
+var _ Controller = (*ControllerImpl)(nil)
+
 func (c *ControllerImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
@@ -300,9 +302,10 @@ func (c *ControllerImpl) removeShard(shardID int32, expected *ContextImpl) (*Con
 // ControllerImpl. It is responsible for acquiring /
 // releasing shards in response to any event that can
 // change the shard ownership. These events are
-//   a. Ring membership change
-//   b. Periodic ticker
-//   c. ShardOwnershipLostError and subsequent ShardClosedEvents from engine
+//
+//	a. Ring membership change
+//	b. Periodic ticker
+//	c. ShardOwnershipLostError and subsequent ShardClosedEvents from engine
 func (c *ControllerImpl) shardManagementPump() {
 	defer c.shutdownWG.Done()
 
@@ -393,7 +396,10 @@ LoopSubmit:
 	// Wait until all shards are processed.
 	wg.Wait()
 
-	c.metricsScope.UpdateGauge(metrics.NumShardsGauge, float64(c.NumShards()))
+	c.RLock()
+	numOfOwnedShards := len(c.historyShards)
+	c.RUnlock()
+	c.metricsScope.UpdateGauge(metrics.NumShardsGauge, float64(numOfOwnedShards))
 }
 
 func (c *ControllerImpl) doShutdown() {
@@ -406,30 +412,22 @@ func (c *ControllerImpl) doShutdown() {
 	c.historyShards = nil
 }
 
-func (c *ControllerImpl) NumShards() int {
-	c.RLock()
-	defer c.RUnlock()
-	return len(c.historyShards)
-}
-
 func (c *ControllerImpl) ShardIDs() []int32 {
 	c.RLock()
-	ids := []int32{}
+	defer c.RUnlock()
+
+	ids := make([]int32, 0, len(c.historyShards))
 	for id := range c.historyShards {
-		id32 := int32(id)
-		ids = append(ids, id32)
+		ids = append(ids, id)
 	}
-	c.RUnlock()
 	return ids
 }
 
 func IsShardOwnershipLostError(err error) bool {
-	if err == ErrShardClosed {
-		return true
-	}
-
 	switch err.(type) {
 	case *persistence.ShardOwnershipLostError:
+		return true
+	case *serviceerrors.ShardOwnershipLost:
 		return true
 	}
 
