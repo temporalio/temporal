@@ -554,6 +554,11 @@ func QueueAlertType(alertType string) ZapTag {
 	return NewStringTag("queue-alert-type", alertType)
 }
 
+// QueueAlertAttributes returns tag for queue alert attributes
+func QueueAlertAttributes(attributes interface{}) ZapTag {
+	return NewAnyTag("queue-alert-attributes", attributes)
+}
+
 // Task returns tag for Task
 func Task(task interface{}) ZapTag {
 	return NewAnyTag("queue-task", task)

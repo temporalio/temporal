@@ -70,20 +70,18 @@ func (s *mitigatorSuite) TestReaderWatermarkAlert() {
 			CurrentWatermark: NewRandomKey(),
 		},
 	}
-	expectedAction := &actionReaderStuck{
-		mitigator:  s.mitigator,
-		attributes: alert.AlertAttributesReaderStuck,
-		logger:     s.mitigator.logger,
-	}
 
-	action := s.mitigator.Alert(alert)
-	s.Equal(expectedAction, action.(*actionReaderStuck))
+	action := s.mitigator.Mitigate(alert)
+	s.IsType(&actionReaderStuck{}, action)
 
-	action = s.mitigator.Alert(alert)
-	s.Nil(action, "mitigator should have only one outstanding action for reader watermark alert")
+	s.Nil(
+		s.mitigator.Mitigate(alert),
+		"mitigator should have only one outstanding action for reader watermark alert",
+	)
 
-	s.mitigator.resolve(alert.AlertType)
-	action = s.mitigator.Alert(alert)
+	action.(*actionReaderStuck).completionFn()
+
+	action = s.mitigator.Mitigate(alert)
 	s.NotNil(action)
-	s.Equal(expectedAction, action.(*actionReaderStuck))
+	s.IsType(&actionReaderStuck{}, action)
 }

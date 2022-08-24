@@ -38,7 +38,7 @@ var _ Mitigator = (*mitigatorImpl)(nil)
 type (
 	// Mitigator generates an Action for resolving the given Alert
 	Mitigator interface {
-		Alert(Alert) Action
+		Mitigate(Alert) Action
 	}
 
 	mitigatorImpl struct {
@@ -49,7 +49,8 @@ type (
 		metricsHandler metrics.MetricsHandler
 		maxReaderCount dynamicconfig.IntPropertyFn
 
-		pendingAlerts map[AlertType]Alert
+		// map value is alert attriutes, used only for logging
+		pendingAlerts map[AlertType]interface{}
 	}
 )
 
@@ -64,11 +65,11 @@ func newMitigator(
 		logger:         logger,
 		metricsHandler: metricsHandler,
 		maxReaderCount: maxReaderCount,
-		pendingAlerts:  make(map[AlertType]Alert),
+		pendingAlerts:  make(map[AlertType]interface{}),
 	}
 }
 
-func (m *mitigatorImpl) Alert(alert Alert) Action {
+func (m *mitigatorImpl) Mitigate(alert Alert) Action {
 	m.Lock()
 	defer m.Unlock()
 
@@ -77,15 +78,22 @@ func (m *mitigatorImpl) Alert(alert Alert) Action {
 	}
 
 	var action Action
+	var alertAttributes interface{}
 	switch alert.AlertType {
 	case AlertTypeReaderStuck:
-		action = newReaderStuckAction(m, alert.AlertAttributesReaderStuck, m.logger)
+		action = newReaderStuckAction(
+			alert.AlertAttributesReaderStuck,
+			func() { m.resolve(AlertTypeReaderStuck) },
+			m.logger,
+		)
+		alertAttributes = alert.AlertAttributesReaderStuck
 	default:
 		m.logger.Error("Unknown queue alert type", tag.QueueAlertType(alert.AlertType.String()))
 		return nil
 	}
 
-	m.pendingAlerts[alert.AlertType] = alert
+	m.pendingAlerts[alert.AlertType] = alertAttributes
+
 	return action
 }
 
@@ -93,6 +101,11 @@ func (m *mitigatorImpl) resolve(alertType AlertType) {
 	m.Lock()
 	defer m.Unlock()
 
+	attributes := m.pendingAlerts[alertType]
 	delete(m.pendingAlerts, alertType)
-	m.logger.Info("Action completed for queue alert", tag.QueueAlertType(alertType.String()))
+
+	m.logger.Info("Action completed for queue alert",
+		tag.QueueAlertType(alertType.String()),
+		tag.QueueAlertAttributes(attributes),
+	)
 }

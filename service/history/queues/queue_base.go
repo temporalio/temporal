@@ -378,7 +378,7 @@ func (p *queueBase) handleAlert(alert *Alert) {
 		return
 	}
 
-	action := p.mitigator.Alert(*alert)
+	action := p.mitigator.Mitigate(*alert)
 	if action == nil {
 		return
 	}

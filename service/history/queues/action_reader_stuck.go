@@ -31,39 +31,27 @@ import (
 )
 
 type (
-	// Action is operations that can be run on a ReaderGroup.
-	// It is created by Mitigator upon receiving an Alert and
-	// run by a Queue to resolve the alert.
-	Action interface {
-		Run(*ReaderGroup)
-	}
-
 	actionReaderStuck struct {
-		mitigator *mitigatorImpl
-
-		attributes *AlertAttributesReaderStuck
-		logger     log.Logger
+		attributes   *AlertAttributesReaderStuck
+		completionFn actionCompletionFn
+		logger       log.Logger
 	}
 )
 
 func newReaderStuckAction(
-	mitigator *mitigatorImpl,
 	attributes *AlertAttributesReaderStuck,
+	completionFn actionCompletionFn,
 	logger log.Logger,
-) Action {
+) *actionReaderStuck {
 	return &actionReaderStuck{
-		mitigator:  mitigator,
-		attributes: attributes,
-		logger:     logger,
+		attributes:   attributes,
+		completionFn: completionFn,
+		logger:       logger,
 	}
 }
 
 func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) {
-	defer a.mitigator.resolve(AlertTypeReaderStuck)
-
-	if a.attributes.ReaderID == int32(a.mitigator.maxReaderCount()-1) {
-		return
-	}
+	defer a.completionFn()
 
 	reader, ok := readerGroup.ReaderByID(a.attributes.ReaderID)
 	if !ok {
