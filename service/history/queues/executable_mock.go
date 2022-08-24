@@ -365,18 +365,6 @@ func (mr *MockExecutableMockRecorder) RetryPolicy() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryPolicy", reflect.TypeOf((*MockExecutable)(nil).RetryPolicy))
 }
 
-// SetPriority mocks base method.
-func (m *MockExecutable) SetPriority(arg0 tasks.Priority) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetPriority", arg0)
-}
-
-// SetPriority indicates an expected call of SetPriority.
-func (mr *MockExecutableMockRecorder) SetPriority(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPriority", reflect.TypeOf((*MockExecutable)(nil).SetPriority), arg0)
-}
-
 // SetTaskID mocks base method.
 func (m *MockExecutable) SetTaskID(id int64) {
 	m.ctrl.T.Helper()

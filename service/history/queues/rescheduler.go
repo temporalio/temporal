@@ -42,7 +42,7 @@ import (
 )
 
 const (
-	rescheduleFailureBackoff = 3 * time.Second
+	taskChanFullBackoff = 3 * time.Second
 )
 
 type (
@@ -73,10 +73,12 @@ type (
 		shutdownCh chan struct{}
 		shutdownWG sync.WaitGroup
 
-		timerGate timer.Gate
+		timerGate        timer.Gate
+		taskChannelKeyFn TaskChannelKeyFn
 
 		sync.Mutex
-		pq collection.Queue[rescheduledExecuable]
+		pqMap          map[TaskChannelKey]collection.Queue[rescheduledExecuable]
+		numExecutables int
 	}
 )
 
@@ -95,11 +97,10 @@ func NewRescheduler(
 		status:     common.DaemonStatusInitialized,
 		shutdownCh: make(chan struct{}),
 
-		timerGate: timer.NewLocalGate(timeSource),
+		timerGate:        timer.NewLocalGate(timeSource),
+		taskChannelKeyFn: scheduler.TaskChannelKeyFn(),
 
-		pq: collection.NewPriorityQueue((func(this rescheduledExecuable, that rescheduledExecuable) bool {
-			return this.rescheduleTime.Before(that.rescheduleTime)
-		})),
+		pqMap: make(map[TaskChannelKey]collection.Queue[rescheduledExecuable]),
 	}
 }
 
@@ -134,10 +135,12 @@ func (r *reschedulerImpl) Add(
 	rescheduleTime time.Time,
 ) {
 	r.Lock()
-	r.pq.Add(rescheduledExecuable{
+	pq := r.getOrCreatePQLocked(r.taskChannelKeyFn(executable))
+	pq.Add(rescheduledExecuable{
 		executable:     executable,
 		rescheduleTime: rescheduleTime,
 	})
+	r.numExecutables++
 	r.Unlock()
 
 	r.timerGate.Update(rescheduleTime)
@@ -151,7 +154,7 @@ func (r *reschedulerImpl) Len() int {
 	r.Lock()
 	defer r.Unlock()
 
-	return r.pq.Len()
+	return r.numExecutables
 }
 
 func (r *reschedulerImpl) rescheduleLoop() {
@@ -173,37 +176,38 @@ func (r *reschedulerImpl) reschedule() {
 	r.Lock()
 	defer r.Unlock()
 
-	r.metricsHandler.Histogram(TaskReschedulerPendingTasks, metrics.Dimensionless).Record(int64(r.pq.Len()))
+	r.metricsHandler.Histogram(TaskReschedulerPendingTasks, metrics.Dimensionless).Record(int64(r.numExecutables))
 
-	var failToSubmit []rescheduledExecuable
-	for !r.pq.IsEmpty() {
-		if r.timeSource.Now().Before(r.pq.Peek().rescheduleTime) {
-			break
+	now := r.timeSource.Now()
+	for key, pq := range r.pqMap {
+		for !pq.IsEmpty() {
+			rescheduled := pq.Remove()
+
+			if now.Before(rescheduled.rescheduleTime) {
+				pq.Add(rescheduled)
+				r.timerGate.Update(rescheduled.rescheduleTime)
+				break
+			}
+
+			executable := rescheduled.executable
+			if executable.State() == ctasks.TaskStateCancelled {
+				r.numExecutables--
+				continue
+			}
+
+			submitted := r.scheduler.TrySubmit(executable)
+			if !submitted {
+				pq.Add(rescheduled)
+				r.timerGate.Update(now.Add(taskChanFullBackoff))
+				break
+			}
+
+			r.numExecutables--
 		}
 
-		rescheduled := r.pq.Remove()
-		executable := rescheduled.executable
-		if executable.State() == ctasks.TaskStateCancelled {
-			continue
+		if pq.IsEmpty() {
+			delete(r.pqMap, key)
 		}
-
-		submitted, err := r.scheduler.TrySubmit(executable)
-		if err != nil {
-			executable.Logger().Error("Failed to reschedule task", tag.Error(err))
-		}
-
-		if !submitted {
-			rescheduled.rescheduleTime.Add(rescheduleFailureBackoff)
-			failToSubmit = append(failToSubmit, rescheduled)
-		}
-	}
-
-	for _, rescheduled := range failToSubmit {
-		r.pq.Add(rescheduled)
-	}
-
-	if !r.pq.IsEmpty() {
-		r.timerGate.Update(r.pq.Peek().rescheduleTime)
 	}
 }
 
@@ -211,11 +215,29 @@ func (r *reschedulerImpl) drain() {
 	r.Lock()
 	defer r.Unlock()
 
-	for !r.pq.IsEmpty() {
-		r.pq.Remove()
+	for _, pq := range r.pqMap {
+		for !pq.IsEmpty() {
+			pq.Remove()
+		}
 	}
+
+	r.numExecutables = 0
 }
 
 func (r *reschedulerImpl) isStopped() bool {
 	return atomic.LoadInt32(&r.status) == common.DaemonStatusStopped
+}
+
+func (r *reschedulerImpl) getOrCreatePQLocked(
+	key TaskChannelKey,
+) collection.Queue[rescheduledExecuable] {
+	if pq, ok := r.pqMap[key]; ok {
+		return pq
+	}
+
+	pq := collection.NewPriorityQueue((func(this rescheduledExecuable, that rescheduledExecuable) bool {
+		return this.rescheduleTime.Before(that.rescheduleTime)
+	}))
+	r.pqMap[key] = pq
+	return pq
 }

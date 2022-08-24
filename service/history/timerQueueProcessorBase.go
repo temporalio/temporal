@@ -358,11 +358,7 @@ func (t *timerQueueProcessorBase) verifyReschedulerSize() bool {
 func (t *timerQueueProcessorBase) submitTask(
 	executable queues.Executable,
 ) {
-	submitted, err := t.scheduler.TrySubmit(executable)
-	if err != nil {
-		t.logger.Error("Failed to submit task", tag.Error(err))
-		executable.Reschedule()
-	} else if !submitted {
+	if !t.scheduler.TrySubmit(executable) {
 		executable.Reschedule()
 	}
 }

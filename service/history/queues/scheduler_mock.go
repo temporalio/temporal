@@ -57,6 +57,20 @@ func (m *MockScheduler) EXPECT() *MockSchedulerMockRecorder {
 	return m.recorder
 }
 
+// ChannelWeightFn mocks base method.
+func (m *MockScheduler) ChannelWeightFn() ChannelWeightFn {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ChannelWeightFn")
+	ret0, _ := ret[0].(ChannelWeightFn)
+	return ret0
+}
+
+// ChannelWeightFn indicates an expected call of ChannelWeightFn.
+func (mr *MockSchedulerMockRecorder) ChannelWeightFn() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChannelWeightFn", reflect.TypeOf((*MockScheduler)(nil).ChannelWeightFn))
+}
+
 // Start mocks base method.
 func (m *MockScheduler) Start() {
 	m.ctrl.T.Helper()
@@ -82,11 +96,9 @@ func (mr *MockSchedulerMockRecorder) Stop() *gomock.Call {
 }
 
 // Submit mocks base method.
-func (m *MockScheduler) Submit(arg0 Executable) error {
+func (m *MockScheduler) Submit(arg0 Executable) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Submit", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "Submit", arg0)
 }
 
 // Submit indicates an expected call of Submit.
@@ -95,13 +107,26 @@ func (mr *MockSchedulerMockRecorder) Submit(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Submit", reflect.TypeOf((*MockScheduler)(nil).Submit), arg0)
 }
 
+// TaskChannelKeyFn mocks base method.
+func (m *MockScheduler) TaskChannelKeyFn() TaskChannelKeyFn {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TaskChannelKeyFn")
+	ret0, _ := ret[0].(TaskChannelKeyFn)
+	return ret0
+}
+
+// TaskChannelKeyFn indicates an expected call of TaskChannelKeyFn.
+func (mr *MockSchedulerMockRecorder) TaskChannelKeyFn() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskChannelKeyFn", reflect.TypeOf((*MockScheduler)(nil).TaskChannelKeyFn))
+}
+
 // TrySubmit mocks base method.
-func (m *MockScheduler) TrySubmit(arg0 Executable) (bool, error) {
+func (m *MockScheduler) TrySubmit(arg0 Executable) bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TrySubmit", arg0)
 	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // TrySubmit indicates an expected call of TrySubmit.

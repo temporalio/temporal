@@ -54,12 +54,10 @@ type (
 		ctasks.Task
 		tasks.Task
 
-		GetPriority() ctasks.Priority
-		SetPriority(ctasks.Priority)
-
 		Attempt() int
 		Logger() log.Logger
 		GetTask() tasks.Task
+		GetPriority() ctasks.Priority
 
 		QueueType() QueueType
 	}
@@ -104,6 +102,7 @@ type (
 		executor          Executor
 		scheduler         Scheduler
 		rescheduler       Rescheduler
+		priorityAssigner  PriorityAssigner
 		timeSource        clock.TimeSource
 		namespaceRegistry namespace.Registry
 
@@ -125,6 +124,7 @@ func NewExecutable(
 	executor Executor,
 	scheduler Scheduler,
 	rescheduler Rescheduler,
+	priorityAssigner PriorityAssigner,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
@@ -132,13 +132,14 @@ func NewExecutable(
 	queueType QueueType,
 	namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn,
 ) Executable {
-	return &executableImpl{
+	executable := &executableImpl{
 		Task:              task,
 		state:             ctasks.TaskStatePending,
 		attempt:           1,
 		executor:          executor,
 		scheduler:         scheduler,
 		rescheduler:       rescheduler,
+		priorityAssigner:  priorityAssigner,
 		timeSource:        timeSource,
 		namespaceRegistry: namespaceRegistry,
 		loadTime:          util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
@@ -154,6 +155,8 @@ func NewExecutable(
 		filter:                        filter,
 		namespaceCacheRefreshInterval: namespaceCacheRefreshInterval,
 	}
+	executable.priority = priorityAssigner.Assign(executable)
+	return executable
 }
 
 func (e *executableImpl) Execute() error {
@@ -316,12 +319,17 @@ func (e *executableImpl) Nack(err error) {
 		return
 	}
 
+	newPriority := e.priorityAssigner.Assign(e)
+	e.Lock()
+	e.priority = newPriority
+	e.Unlock()
+
 	submitted := false
 	if e.shouldResubmitOnNack(e.Attempt(), err) {
 		// we do not need to know if there any error during submission
 		// as long as it's not submitted, the execuable should be add
 		// to the rescheduler
-		submitted, _ = e.scheduler.TrySubmit(e)
+		submitted = e.scheduler.TrySubmit(e)
 	}
 
 	if !submitted {
@@ -333,6 +341,11 @@ func (e *executableImpl) Reschedule() {
 	if e.State() == ctasks.TaskStateCancelled {
 		return
 	}
+
+	newPriority := e.priorityAssigner.Assign(e)
+	e.Lock()
+	e.priority = newPriority
+	e.Unlock()
 
 	e.rescheduler.Add(e, e.rescheduleTime(nil, e.Attempt()))
 }

@@ -63,6 +63,9 @@ func (s *rescheudulerSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockScheduler = NewMockScheduler(s.controller)
+	s.mockScheduler.EXPECT().TaskChannelKeyFn().Return(
+		func(_ Executable) TaskChannelKey { return TaskChannelKey{} },
+	).AnyTimes()
 
 	s.timeSource = clock.NewEventTimeSource()
 
@@ -91,9 +94,9 @@ func (s *rescheudulerSuite) TestStartStop() {
 
 	numTasks := 20
 	taskCh := make(chan struct{}, numTasks)
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
 		taskCh <- struct{}{}
-		return true, nil
+		return true
 	}).Times(numTasks)
 
 	for i := 0; i != numTasks; i++ {
@@ -156,14 +159,14 @@ func (s *rescheudulerSuite) TestReschedule_NoRescheduleLimit() {
 	}
 	s.Equal(numExecutable, s.rescheduler.Len())
 
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(true, nil).Times(numExecutable / 2)
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(true).Times(numExecutable / 2)
 
 	s.timeSource.Update(now.Add(rescheduleInterval))
 	s.rescheduler.reschedule()
 	s.Equal(numExecutable/2, s.rescheduler.Len())
 }
 
-func (s *rescheudulerSuite) TestReschedule_SubmissionFailed() {
+func (s *rescheudulerSuite) TestReschedule_TaskChanFull() {
 	now := time.Now()
 	s.timeSource.Update(now)
 	rescheduleInterval := time.Minute
@@ -171,7 +174,7 @@ func (s *rescheudulerSuite) TestReschedule_SubmissionFailed() {
 	numExecutable := 10
 	for i := 0; i != numExecutable; i++ {
 		mockTask := NewMockExecutable(s.controller)
-		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).Times(1)
+		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).MaxTimes(1)
 		s.rescheduler.Add(
 			mockTask,
 			now.Add(time.Duration(rand.Int63n(rescheduleInterval.Nanoseconds()))),
@@ -180,13 +183,15 @@ func (s *rescheudulerSuite) TestReschedule_SubmissionFailed() {
 	s.Equal(numExecutable, s.rescheduler.Len())
 
 	numSubmitted := 0
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
-		submitted := rand.Intn(2) == 0
-		if submitted {
+	numAllowed := numExecutable / 2
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
+		if numSubmitted < numAllowed {
 			numSubmitted++
+			return true
 		}
-		return submitted, nil
-	}).Times(numExecutable)
+
+		return false
+	}).Times(numAllowed + 1)
 
 	s.timeSource.Update(now.Add(rescheduleInterval))
 	s.rescheduler.reschedule()
