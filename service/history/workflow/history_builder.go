@@ -728,6 +728,21 @@ func (b *HistoryBuilder) AddUpsertWorkflowSearchAttributesEvent(
 	return b.appendEvents(event)
 }
 
+func (b *HistoryBuilder) AddWorkflowPropertiesModifiedEvent(
+	workflowTaskCompletedEventID int64,
+	command *commandpb.ModifyWorkflowPropertiesCommandAttributes,
+) *historypb.HistoryEvent {
+	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED, b.timeSource.Now())
+	event.Attributes = &historypb.HistoryEvent_WorkflowPropertiesModifiedEventAttributes{
+		WorkflowPropertiesModifiedEventAttributes: &historypb.WorkflowPropertiesModifiedEventAttributes{
+			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
+			UpsertedMemo:                 command.UpsertedMemo,
+		},
+	}
+
+	return b.appendEvents(event)
+}
+
 func (b *HistoryBuilder) AddSignalExternalWorkflowExecutionFailedEvent(
 	workflowTaskCompletedEventID int64,
 	initiatedEventID int64,
@@ -1253,7 +1268,8 @@ func (b *HistoryBuilder) bufferEvent(
 		enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_ACCEPTED,
-		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED:
+		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED,
+		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:
 		// do not buffer event if event is directly generated from a corresponding command
 		return false
 
