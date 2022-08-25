@@ -22,52 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package queues
 
-import (
-	"github.com/olivere/elastic/v7"
+var (
+	_ Action = (*actionReaderStuck)(nil)
 )
 
 type (
-	bulkProcessorImpl struct {
-		esBulkProcessor *elastic.BulkProcessor
+	// Action is operations that can be run on a ReaderGroup.
+	// It is created by Mitigator upon receiving an Alert and
+	// run by a Queue to resolve the alert.
+	Action interface {
+		Run(*ReaderGroup)
 	}
+
+	actionCompletionFn func()
 )
-
-func newBulkProcessor(esBulkProcessor *elastic.BulkProcessor) *bulkProcessorImpl {
-	if esBulkProcessor == nil {
-		return nil
-	}
-	return &bulkProcessorImpl{
-		esBulkProcessor: esBulkProcessor,
-	}
-}
-
-func (p *bulkProcessorImpl) Stop() error {
-	errF := p.esBulkProcessor.Flush()
-	errS := p.esBulkProcessor.Stop()
-	if errF != nil {
-		return errF
-	}
-	return errS
-}
-
-func (p *bulkProcessorImpl) Add(request *BulkableRequest) {
-	switch request.RequestType {
-	case BulkableRequestTypeIndex:
-		bulkIndexRequest := elastic.NewBulkIndexRequest().
-			Index(request.Index).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version).
-			Doc(request.Doc)
-		p.esBulkProcessor.Add(bulkIndexRequest)
-	case BulkableRequestTypeDelete:
-		bulkDeleteRequest := elastic.NewBulkDeleteRequest().
-			Index(request.Index).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version)
-		p.esBulkProcessor.Add(bulkDeleteRequest)
-	}
-}

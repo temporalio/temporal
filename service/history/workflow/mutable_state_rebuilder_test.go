@@ -660,16 +660,51 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeUpsertWorkflowSearchAttribu
 	now := time.Now().UTC()
 	evenType := enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES
 	event := &historypb.HistoryEvent{
-		TaskId:     rand.Int63(),
-		Version:    version,
-		EventId:    130,
-		EventTime:  &now,
-		EventType:  evenType,
-		Attributes: &historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes{UpsertWorkflowSearchAttributesEventAttributes: &historypb.UpsertWorkflowSearchAttributesEventAttributes{}},
+		TaskId:    rand.Int63(),
+		Version:   version,
+		EventId:   130,
+		EventTime: &now,
+		EventType: evenType,
+		Attributes: &historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes{
+			UpsertWorkflowSearchAttributesEventAttributes: &historypb.UpsertWorkflowSearchAttributesEventAttributes{},
+		},
 	}
 	s.mockMutableState.EXPECT().ReplicateUpsertWorkflowSearchAttributesEvent(event).Return()
 	s.mockUpdateVersion(event)
-	s.mockTaskGenerator.EXPECT().GenerateWorkflowSearchAttrTasks(
+	s.mockTaskGenerator.EXPECT().GenerateUpsertVisibilityTask(
+		timestamp.TimeValue(event.GetEventTime()),
+	).Return(nil)
+	s.mockMutableState.EXPECT().ClearStickyness()
+
+	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil)
+	s.Nil(err)
+	s.Equal(event.TaskId, s.executionInfo.LastEventTaskId)
+}
+
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowPropertiesModified() {
+	version := int64(1)
+	requestID := uuid.New()
+
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      tests.RunID,
+	}
+
+	now := time.Now().UTC()
+	evenType := enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED
+	event := &historypb.HistoryEvent{
+		TaskId:    rand.Int63(),
+		Version:   version,
+		EventId:   130,
+		EventTime: &now,
+		EventType: evenType,
+		Attributes: &historypb.HistoryEvent_WorkflowPropertiesModifiedEventAttributes{
+			WorkflowPropertiesModifiedEventAttributes: &historypb.WorkflowPropertiesModifiedEventAttributes{},
+		},
+	}
+	s.mockMutableState.EXPECT().ReplicateWorkflowPropertiesModifiedEvent(event).Return()
+	s.mockUpdateVersion(event)
+	s.mockTaskGenerator.EXPECT().GenerateUpsertVisibilityTask(
 		timestamp.TimeValue(event.GetEventTime()),
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
@@ -1779,9 +1814,14 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeExternalWorkflowExecutionSi
 
 func (s *stateBuilderSuite) TestApplyEventsNewEventsNotHandled() {
 	eventTypes := enumspb.EventType_value
-	s.Equal(46, len(eventTypes), "If you see this error, you are adding new event type. "+
-		"Before updating the number to make this test pass, please make sure you update stateBuilderImpl.ApplyEvents method "+
-		"to handle the new command type. Otherwise cross dc will not work on the new event.")
+	s.Equal(
+		47,
+		len(eventTypes),
+		"If you see this error, you are adding new event type. Before updating "+
+			"the number to make this test pass, please make sure you update "+
+			"`MutableStateRebuilderImpl.ApplyEvents` method to handle the new "+
+			"command type. Otherwise cross dc will not work on the new event.",
+	)
 }
 
 func (p *testTaskGeneratorProvider) NewTaskGenerator(

@@ -397,6 +397,31 @@ func (s *historyBuilderSuite) TestWorkflowExecutionSearchAttribute() {
 	}, event)
 }
 
+func (s *historyBuilderSuite) TestWorkflowExecutionMemo() {
+	workflowTaskCompletionEventID := rand.Int63()
+	attributes := &commandpb.ModifyWorkflowPropertiesCommandAttributes{
+		UpsertedMemo: testMemo,
+	}
+	event := s.historyBuilder.AddWorkflowPropertiesModifiedEvent(
+		workflowTaskCompletionEventID,
+		attributes,
+	)
+	s.Equal(event, s.flush())
+	s.Equal(&historypb.HistoryEvent{
+		EventId:   s.nextEventID,
+		TaskId:    s.nextTaskID,
+		EventTime: timestamp.TimePtr(s.now),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED,
+		Version:   s.version,
+		Attributes: &historypb.HistoryEvent_WorkflowPropertiesModifiedEventAttributes{
+			WorkflowPropertiesModifiedEventAttributes: &historypb.WorkflowPropertiesModifiedEventAttributes{
+				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
+				UpsertedMemo:                 attributes.UpsertedMemo,
+			},
+		},
+	}, event)
+}
+
 func (s *historyBuilderSuite) TestWorkflowExecutionCompleted() {
 	workflowTaskCompletionEventID := rand.Int63()
 	attributes := &commandpb.CompleteWorkflowExecutionCommandAttributes{
@@ -2177,6 +2202,7 @@ func (s *historyBuilderSuite) TestBufferEvent() {
 		enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:                    true,
 		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_ACCEPTED:                             true,
 		enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED:                            true,
+		enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:                         true,
 	}
 
 	// other events will not be assign event ID immediately
