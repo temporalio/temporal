@@ -208,8 +208,7 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 }
 
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
-	cc := dynamicconfig.NewMutableEphemeralClient()
-	cfg := NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.RangeSize = 1 // TaskID block size
 	var leaseErr error = nil
 	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
