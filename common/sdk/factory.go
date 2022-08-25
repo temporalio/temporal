@@ -111,6 +111,7 @@ func (f *clientFactory) GetSystemClient() sdkclient.Client {
 		err := backoff.ThrottleRetry(func() error {
 			sdkClient, err := sdkclient.Dial(f.options(primitives.SystemLocalNamespace))
 			if err != nil {
+				f.logger.Warn("error creating sdk client", tag.Error(err))
 				return err
 			}
 			f.systemSdkClient = sdkClient
