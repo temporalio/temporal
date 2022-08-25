@@ -78,20 +78,20 @@ func (s *metadataSuite) SetupTest() {
 	s.clusterName = uuid.New()
 	s.secondClusterName = uuid.New()
 
-	//clusterInfo := map[string]ClusterInformation{
-	//	s.clusterName: {
-	//		Enabled:                true,
-	//		InitialFailoverVersion: int64(1),
-	//		RPCAddress:             uuid.New(),
-	//		version:                1,
-	//	},
-	//	s.secondClusterName: {
-	//		Enabled:                true,
-	//		InitialFailoverVersion: int64(4),
-	//		RPCAddress:             uuid.New(),
-	//		version:                1,
-	//	},
-	//}
+	clusterInfo := map[string]ClusterInformation{
+		s.clusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: int64(1),
+			RPCAddress:             uuid.New(),
+			version:                1,
+		},
+		s.secondClusterName: {
+			Enabled:                true,
+			InitialFailoverVersion: int64(4),
+			RPCAddress:             uuid.New(),
+			version:                1,
+		},
+	}
 	s.metadata = newMetadata(
 		s.isGlobalNamespaceEnabled,
 		s.failoverVersionIncrement,
@@ -102,7 +102,9 @@ func (s *metadataSuite) SetupTest() {
 		s.mockClusterMetadataStore,
 		dynamicconfig.GetDurationPropertyFn(time.Second),
 		log.NewNoopLogger(),
-	).(*metadataImpl)
+	)
+	s.metadata.clusterInfo = clusterInfo
+	s.metadata.versionToClusterName = updateVersionToClusterName(clusterInfo, s.failoverVersionIncrement)
 }
 
 func (s *metadataSuite) TearDownTest() {

@@ -95,8 +95,6 @@ type (
 		InternalRPCAddress string `yaml:"internalRPCAddress"`
 		// InitialFailoverVersion use for failover version control. This cannot be zero or smaller than the FailoverVersionIncrement.
 		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
-		//// ClusterInformation contains all cluster names to corresponding information about that cluster
-		//ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
 	}
 
 	// ClusterInformation contains the information about each cluster which participated in cross DC
@@ -150,7 +148,7 @@ func newMetadata(
 	clusterMetadataStore persistence.ClusterMetadataManager,
 	refreshDuration dynamicconfig.DurationPropertyFn,
 	logger log.Logger,
-) Metadata {
+) *metadataImpl {
 	if len(internalRPCAddress) == 0 {
 		panic("Empty internal RPC address")
 	} else if len(masterClusterName) == 0 {
@@ -161,6 +159,8 @@ func newMetadata(
 		panic("Version increment is 0")
 	} else if initialFailoverVersion == 0 {
 		panic("Initial failover version is 0")
+	} else if len(internalRPCAddress) == 0 {
+		panic("Internal RPC address is empty")
 	}
 
 	clusterInfo := make(map[string]ClusterInformation)
@@ -207,8 +207,9 @@ func NewMetadataFromConfig(
 
 func NewMetadataForTest(
 	config *Config,
+	clusterInfo map[string]ClusterInformation,
 ) Metadata {
-	return newMetadata(
+	metadataMgr := newMetadata(
 		config.EnableGlobalNamespace,
 		config.FailoverVersionIncrement,
 		config.MasterClusterName,
@@ -219,6 +220,9 @@ func NewMetadataForTest(
 		dynamicconfig.GetDurationPropertyFn(refreshInterval),
 		log.NewNoopLogger(),
 	)
+	metadataMgr.clusterInfo = clusterInfo
+	metadataMgr.versionToClusterName = updateVersionToClusterName(clusterInfo, config.FailoverVersionIncrement)
+	return metadataMgr
 }
 
 func (m *metadataImpl) Start() {

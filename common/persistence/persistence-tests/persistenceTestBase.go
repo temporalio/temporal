@@ -210,7 +210,11 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
 	s.fatalOnError("NewClusterMetadataManager", err)
 
-	s.ClusterMetadata = cluster.NewMetadataFromConfig(clusterMetadataConfig, s.ClusterMetadataManager, dynamicconfig.NewNoopCollection(), s.Logger)
+	if clusterMetadataConfig.EnableGlobalNamespace {
+		s.ClusterMetadata = cluster.NewMetadataForTest(clusterMetadataConfig, cluster.TestAllClusterInfo)
+	} else {
+		s.ClusterMetadata = cluster.NewMetadataForTest(clusterMetadataConfig, cluster.TestAllClusterInfo)
+	}
 	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager, dynamicconfig.GetBoolPropertyFn(true))
 
 	s.MetadataManager, err = factory.NewMetadataManager()

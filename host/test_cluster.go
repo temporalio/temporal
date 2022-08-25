@@ -113,7 +113,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			FailoverVersionIncrement: options.ClusterMetadata.FailoverVersionIncrement,
 			MasterClusterName:        options.ClusterMetadata.MasterClusterName,
 			CurrentClusterName:       options.ClusterMetadata.CurrentClusterName,
-			ClusterInformation:       options.ClusterMetadata.ClusterInformation,
+			InitialFailoverVersion:   options.ClusterMetadata.InitialFailoverVersion,
+			InternalRPCAddress:       options.ClusterMetadata.InternalRPCAddress,
 		}
 	}
 
@@ -168,26 +169,24 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		}
 	}
 
-	for clusterName, clusterInfo := range clusterMetadataConfig.ClusterInformation {
-		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
-			ClusterMetadata: persistencespb.ClusterMetadata{
-				HistoryShardCount:        options.HistoryConfig.NumHistoryShards,
-				ClusterName:              clusterName,
-				ClusterId:                uuid.New(),
-				IsConnectionEnabled:      clusterInfo.Enabled,
-				IsGlobalNamespaceEnabled: clusterMetadataConfig.EnableGlobalNamespace,
-				FailoverVersionIncrement: clusterMetadataConfig.FailoverVersionIncrement,
-				ClusterAddress:           clusterInfo.RPCAddress,
-				InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
-			}})
-		if err != nil {
-			return nil, err
-		}
+	_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
+		ClusterMetadata: persistencespb.ClusterMetadata{
+			HistoryShardCount:        options.HistoryConfig.NumHistoryShards,
+			ClusterName:              clusterMetadataConfig.CurrentClusterName,
+			ClusterId:                uuid.New(),
+			IsConnectionEnabled:      true,
+			IsGlobalNamespaceEnabled: clusterMetadataConfig.EnableGlobalNamespace,
+			FailoverVersionIncrement: clusterMetadataConfig.FailoverVersionIncrement,
+			ClusterAddress:           clusterMetadataConfig.InternalRPCAddress,
+			InitialFailoverVersion:   clusterMetadataConfig.InitialFailoverVersion,
+		}})
+	if err != nil {
+		return nil, err
 	}
 
 	// This will save custom test search attributes to cluster metadata.
 	// Actual Elasticsearch fields are created from index template (testdata/es_v7_index_template.json).
-	err := testBase.SearchAttributesManager.SaveSearchAttributes(
+	err = testBase.SearchAttributesManager.SaveSearchAttributes(
 		context.Background(),
 		options.ESConfig.GetVisibilityIndex(),
 		searchattribute.TestNameTypeMap.Custom(),

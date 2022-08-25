@@ -416,12 +416,6 @@ type (
 		S3ForcePathStyle bool    `yaml:"s3ForcePathStyle"`
 	}
 
-	// PublicClient is config for connecting to temporal frontend
-	PublicClient struct {
-		// HostPort is the host port to connect on. Host can be DNS name
-		HostPort string `yaml:"hostPort" validate:"nonzero"`
-	}
-
 	// NamespaceDefaults is the default config for each namespace
 	NamespaceDefaults struct {
 		// Archival is the default archival config for each namespace

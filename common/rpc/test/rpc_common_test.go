@@ -86,7 +86,7 @@ var (
 	}
 	clusterMetadata = &cluster.Config{
 		CurrentClusterName: "test",
-		ClusterInformation: map[string]cluster.ClusterInformation{"test": {RPCAddress: localhostIPv4 + ":1234"}},
+		InternalRPCAddress: localhostIPv4 + ":1234",
 	}
 )
 

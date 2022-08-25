@@ -130,8 +130,8 @@ func (s *integrationClustersTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.cluster2 = c
 
-	cluster1Address := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName].RPCAddress
-	cluster2Address := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].RPCAddress
+	cluster1Address := clusterConfigs[0].ClusterMetadata.InternalRPCAddress
+	cluster2Address := clusterConfigs[1].ClusterMetadata.InternalRPCAddress
 	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(
 		host.NewContext(),
 		&adminservice.AddOrUpdateRemoteClusterRequest{

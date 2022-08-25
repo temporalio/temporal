@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"go.uber.org/fx"
-	"golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/api/operatorservice/v1"
@@ -617,7 +616,8 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		FailoverVersionIncrement: c.clusterMetadataConfig.FailoverVersionIncrement,
 		MasterClusterName:        c.clusterMetadataConfig.MasterClusterName,
 		CurrentClusterName:       c.clusterMetadataConfig.CurrentClusterName,
-		ClusterInformation:       maps.Clone(c.clusterMetadataConfig.ClusterInformation),
+		InitialFailoverVersion:   c.clusterMetadataConfig.InitialFailoverVersion,
+		InternalRPCAddress:       c.clusterMetadataConfig.InternalRPCAddress,
 	}
 	if c.workerConfig.EnableReplicator {
 		clusterConfigCopy.EnableGlobalNamespace = true
@@ -628,8 +628,8 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	var clientBean client.Bean
 	var namespaceRegistry namespace.Registry
 	clientConfig := &config.Config{
-		PublicClient: config.PublicClient{
-			HostPort: c.FrontendGRPCAddress(),
+		ClusterMetadata: &cluster.Config{
+			InternalRPCAddress: c.FrontendGRPCAddress(),
 		},
 	}
 	app := fx.New(
