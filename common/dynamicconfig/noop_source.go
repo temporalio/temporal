@@ -29,20 +29,21 @@ import (
 )
 
 type (
-	// noopClient is a dummy implementation of dynamicconfig Client interface, all operations will always return default values.
-	noopClient struct {
-		*basicClient
-	}
+	// noopSource is a dummy implementation of dynamicconfig Source interface, all operations
+	// will always return default values.
+	noopSource struct{}
 )
 
-// NewNoopClient creates a nop client
-func NewNoopClient() *noopClient {
-	return &noopClient{
-		basicClient: newBasicClient(log.NewNoopLogger()),
-	}
+// NewNoopSource creates a nop client
+func NewNoopSource() *noopSource {
+	return nil
 }
 
-// NewNoopCollection creates a new nop collection
+func (n *noopSource) GetValue(name Key) ([]ConstrainedValue, error) {
+	return nil, nil
+}
+
+// NewNoopCollection creates a new noop collection
 func NewNoopCollection() *Collection {
-	return NewCollection(NewNoopClient(), log.NewNoopLogger())
+	return NewCollection(NewNoopSource(), log.NewNoopLogger())
 }

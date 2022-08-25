@@ -112,8 +112,8 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 	defaultUpdateAckInterval := []dynamicconfig.ConstrainedValue{
 		// Use a longer default interval for the per-namespace internal worker queues.
 		{
-			Constraints: map[string]any{
-				dynamicconfig.TaskQueueName.String(): primitives.PerNSWorkerTaskQueue,
+			Constraints: {
+				TaskQueueName: primitives.PerNSWorkerTaskQueue,
 			},
 			Value: 5 * time.Minute,
 		},
