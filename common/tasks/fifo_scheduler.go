@@ -93,7 +93,7 @@ func (f *FIFOScheduler[T]) Start() {
 	f.shutdownWG.Add(1)
 	go f.workerMonitor()
 
-	f.logger.Info("Parallel task processor started")
+	f.logger.Info("fifo scheduler started")
 }
 
 func (f *FIFOScheduler[T]) Stop() {
@@ -111,10 +111,10 @@ func (f *FIFOScheduler[T]) Stop() {
 
 	go func() {
 		if success := common.AwaitWaitGroup(&f.shutdownWG, time.Minute); !success {
-			f.logger.Warn("parallel processor timed out waiting for workers")
+			f.logger.Warn("fifo scheduler timed out waiting for workers")
 		}
 	}()
-	f.logger.Info("parallel processor stopped")
+	f.logger.Info("fifo scheduler stopped")
 }
 
 func (f *FIFOScheduler[T]) Submit(task T) {
