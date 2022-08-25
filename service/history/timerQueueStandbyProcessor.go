@@ -60,6 +60,7 @@ func newTimerQueueStandbyProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	workflowDeleteManager workflow.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	clusterName string,
@@ -124,7 +125,7 @@ func newTimerQueueStandbyProcessor(
 	}
 
 	if scheduler == nil {
-		scheduler = newTimerTaskShardScheduler(shard, logger, metricProvider)
+		scheduler = newTimerTaskShardScheduler(shard, logger)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -150,6 +151,7 @@ func newTimerQueueStandbyProcessor(
 				taskExecutor,
 				scheduler,
 				rescheduler,
+				priorityAssigner,
 				shard.GetTimeSource(),
 				shard.GetNamespaceRegistry(),
 				logger,

@@ -60,6 +60,7 @@ func newTimerQueueActiveProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	workflowDeleteManager workflow.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
@@ -90,7 +91,7 @@ func newTimerQueueActiveProcessor(
 	processor := &timerQueueActiveProcessorImpl{}
 
 	if scheduler == nil {
-		scheduler = newTimerTaskShardScheduler(shard, logger, metricProvider)
+		scheduler = newTimerTaskShardScheduler(shard, logger)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -174,6 +175,7 @@ func newTimerQueueActiveProcessor(
 				taskExecutor,
 				scheduler,
 				rescheduler,
+				priorityAssigner,
 				shard.GetTimeSource(),
 				shard.GetNamespaceRegistry(),
 				logger,
@@ -204,6 +206,7 @@ func newTimerQueueFailoverProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	workflowDeleteManager workflow.DeleteManager,
 	namespaceIDs map[string]struct{},
 	standbyClusterName string,
@@ -264,7 +267,7 @@ func newTimerQueueFailoverProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newTimerTaskShardScheduler(shard, logger, metricProvider)
+		scheduler = newTimerTaskShardScheduler(shard, logger)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -290,6 +293,7 @@ func newTimerQueueFailoverProcessor(
 				taskExecutor,
 				scheduler,
 				rescheduler,
+				priorityAssigner,
 				shard.GetTimeSource(),
 				shard.GetNamespaceRegistry(),
 				logger,

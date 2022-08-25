@@ -24,62 +24,17 @@
 
 package queues
 
-import (
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/tasks"
+var (
+	_ Action = (*actionReaderStuck)(nil)
 )
 
 type (
-	FIFOSchedulerOptions struct {
-		WorkerCount dynamicconfig.IntPropertyFn
-		QueueSize   int
+	// Action is operations that can be run on a ReaderGroup.
+	// It is created by Mitigator upon receiving an Alert and
+	// run by a Queue to resolve the alert.
+	Action interface {
+		Run(*ReaderGroup)
 	}
 
-	// FIFOScheduler is used by shard level worker pool
-	// and always schedule tasks in fifo order regardless
-	// which namespace the task belongs to.
-	FIFOScheduler struct {
-		scheduler tasks.Scheduler[Executable]
-	}
+	actionCompletionFn func()
 )
-
-var _ tasks.Scheduler[Executable] = (*tasks.FIFOScheduler[Executable])(nil)
-
-func NewFIFOScheduler(
-	options FIFOSchedulerOptions,
-	metricsProvider metrics.MetricsHandler,
-	logger log.Logger,
-) *FIFOScheduler {
-	return &FIFOScheduler{
-		scheduler: tasks.NewFIFOScheduler[Executable](
-			&tasks.FIFOSchedulerOptions{
-				QueueSize:   options.QueueSize,
-				WorkerCount: options.WorkerCount,
-			},
-			logger,
-		),
-	}
-}
-
-func (s *FIFOScheduler) Start() {
-	s.scheduler.Start()
-}
-
-func (s *FIFOScheduler) Stop() {
-	s.scheduler.Stop()
-}
-
-func (s *FIFOScheduler) Submit(
-	executable Executable,
-) error {
-	s.scheduler.Submit(executable)
-	return nil
-}
-
-func (s *FIFOScheduler) TrySubmit(
-	executable Executable,
-) (bool, error) {
-	return s.scheduler.TrySubmit(executable), nil
-}

@@ -40,7 +40,7 @@ import (
 )
 
 type (
-	SchedulerParams struct {
+	QueueFactoryBaseParams struct {
 		fx.In
 
 		NamespaceRegistry namespace.Registry
@@ -50,9 +50,10 @@ type (
 		Logger            resource.SnTaggedLogger
 	}
 
-	queueFactoryBase struct {
-		hostScheduler   queues.Scheduler
-		hostRateLimiter quotas.RateLimiter
+	QueueFactoryBase struct {
+		HostScheduler        queues.Scheduler
+		HostPriorityAssigner queues.PriorityAssigner
+		HostRateLimiter      quotas.RateLimiter
 	}
 
 	QueueFactoriesLifetimeHookParams struct {
@@ -102,19 +103,19 @@ func QueueFactoryLifetimeHooks(
 	)
 }
 
-func (f *queueFactoryBase) Start() {
-	if f.hostScheduler != nil {
-		f.hostScheduler.Start()
+func (f *QueueFactoryBase) Start() {
+	if f.HostScheduler != nil {
+		f.HostScheduler.Start()
 	}
 }
 
-func (f *queueFactoryBase) Stop() {
-	if f.hostScheduler != nil {
-		f.hostScheduler.Stop()
+func (f *QueueFactoryBase) Stop() {
+	if f.HostScheduler != nil {
+		f.HostScheduler.Stop()
 	}
 }
 
-func newQueueHostRateLimiter(
+func NewQueueHostRateLimiter(
 	hostRPS dynamicconfig.IntPropertyFn,
 	fallBackRPS dynamicconfig.IntPropertyFn,
 ) quotas.RateLimiter {

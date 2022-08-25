@@ -59,8 +59,8 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Sequential(b *testing.B) {
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*noopTask, int]{
-			TaskToChannelKey:   func(nt *noopTask) int { return rand.Intn(4) },
-			ChannelKeyToWeight: func(key int) int { return channelKeyToWeight[key] },
+			TaskChannelKeyFn: func(nt *noopTask) int { return rand.Intn(4) },
+			ChannelWeightFn:  func(key int) int { return channelKeyToWeight[key] },
 		},
 		Scheduler[*noopTask](&noopScheduler{}),
 		logger,
@@ -85,8 +85,8 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Parallel(b *testing.B) {
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*noopTask, int]{
-			TaskToChannelKey:   func(nt *noopTask) int { return rand.Intn(4) },
-			ChannelKeyToWeight: func(key int) int { return channelKeyToWeight[key] },
+			TaskChannelKeyFn: func(nt *noopTask) int { return rand.Intn(4) },
+			ChannelWeightFn:  func(key int) int { return channelKeyToWeight[key] },
 		},
 		Scheduler[*noopTask](&noopScheduler{}),
 		logger,

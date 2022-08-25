@@ -68,7 +68,6 @@ const (
 	OperationTransferActiveQueueProcessor  = "TransferActiveQueueProcessor"
 	OperationTransferStandbyQueueProcessor = "TransferStandbyQueueProcessor"
 	OperationVisibilityQueueProcessor      = "VisibilityQueueProcessor"
-	OperationTaskPriorityAssigner          = "TaskPriorityAssigner"
 )
 
 // Task type tag value for active and standby tasks

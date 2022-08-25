@@ -59,6 +59,7 @@ func newTransferQueueStandbyProcessor(
 	clusterName string,
 	shard shard.Context,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
 	taskAllocator taskAllocator,
@@ -143,7 +144,7 @@ func newTransferQueueStandbyProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newTransferTaskShardScheduler(shard, logger, metricProvider)
+		scheduler = newTransferTaskShardScheduler(shard, logger)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -167,6 +168,7 @@ func newTransferQueueStandbyProcessor(
 				taskExecutor,
 				scheduler,
 				rescheduler,
+				priorityAssigner,
 				shard.GetTimeSource(),
 				shard.GetNamespaceRegistry(),
 				logger,

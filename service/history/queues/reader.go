@@ -76,11 +76,13 @@ type (
 	ReaderImpl struct {
 		sync.Mutex
 
+		readerID       int32
 		options        *ReaderOptions
 		scheduler      Scheduler
 		rescheduler    Rescheduler
 		timeSource     clock.TimeSource
 		ratelimiter    quotas.RateLimiter
+		monitor        Monitor
 		logger         log.Logger
 		metricsHandler metrics.MetricsHandler
 
@@ -98,12 +100,14 @@ type (
 )
 
 func NewReader(
+	readerID int32,
 	slices []Slice,
 	options *ReaderOptions,
 	scheduler Scheduler,
 	rescheduler Rescheduler,
 	timeSource clock.TimeSource,
 	ratelimiter quotas.RateLimiter,
+	monitor Monitor,
 	logger log.Logger,
 	metricsHandler metrics.MetricsHandler,
 ) *ReaderImpl {
@@ -114,11 +118,13 @@ func NewReader(
 	}
 
 	return &ReaderImpl{
+		readerID:       readerID,
 		options:        options,
 		scheduler:      scheduler,
 		rescheduler:    rescheduler,
 		timeSource:     timeSource,
 		ratelimiter:    ratelimiter,
+		monitor:        monitor,
 		logger:         logger,
 		metricsHandler: metricsHandler,
 
@@ -332,8 +338,11 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	}
 	r.retrier.Reset()
 
-	for _, task := range tasks {
-		r.submit(task)
+	if len(tasks) != 0 {
+		for _, task := range tasks {
+			r.submit(task)
+		}
+		r.monitor.SetReaderWatermark(r.readerID, tasks[len(tasks)-1].GetKey())
 	}
 
 	if loadSlice.MoreTasks() {
@@ -393,11 +402,7 @@ func (r *ReaderImpl) submit(
 		return
 	}
 
-	submitted, err := r.scheduler.TrySubmit(executable)
-	if err != nil {
-		r.logger.Error("Failed to submit task", tag.Error(err))
-		executable.Reschedule()
-	} else if !submitted {
+	if !r.scheduler.TrySubmit(executable) {
 		executable.Reschedule()
 	}
 }

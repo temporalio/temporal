@@ -358,11 +358,7 @@ func (t *timerQueueProcessorBase) verifyReschedulerSize() bool {
 func (t *timerQueueProcessorBase) submitTask(
 	executable queues.Executable,
 ) {
-	submitted, err := t.scheduler.TrySubmit(executable)
-	if err != nil {
-		t.logger.Error("Failed to submit task", tag.Error(err))
-		executable.Reschedule()
-	} else if !submitted {
+	if !t.scheduler.TrySubmit(executable) {
 		executable.Reschedule()
 	}
 }
@@ -370,7 +366,6 @@ func (t *timerQueueProcessorBase) submitTask(
 func newTimerTaskShardScheduler(
 	shard shard.Context,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
 	return queues.NewFIFOScheduler(
@@ -378,7 +373,6 @@ func newTimerTaskShardScheduler(
 			WorkerCount: config.TimerTaskWorkerCount,
 			QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
 		},
-		metricProvider,
 		logger,
 	)
 }

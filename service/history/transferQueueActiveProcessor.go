@@ -62,6 +62,7 @@ func newTransferQueueActiveProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -118,7 +119,7 @@ func newTransferQueueActiveProcessor(
 	}
 
 	if scheduler == nil {
-		scheduler = newTransferTaskShardScheduler(shard, logger, metricProvider)
+		scheduler = newTransferTaskShardScheduler(shard, logger)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -200,6 +201,7 @@ func newTransferQueueActiveProcessor(
 				taskExecutor,
 				scheduler,
 				rescheduler,
+				priorityAssigner,
 				shard.GetTimeSource(),
 				shard.GetNamespaceRegistry(),
 				logger,
@@ -232,6 +234,7 @@ func newTransferQueueFailoverProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -312,7 +315,7 @@ func newTransferQueueFailoverProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newTransferTaskShardScheduler(shard, logger, metricProvider)
+		scheduler = newTransferTaskShardScheduler(shard, logger)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -336,6 +339,7 @@ func newTransferQueueFailoverProcessor(
 				taskExecutor,
 				scheduler,
 				rescheduler,
+				priorityAssigner,
 				shard.GetTimeSource(),
 				shard.GetNamespaceRegistry(),
 				logger,

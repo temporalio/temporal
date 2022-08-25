@@ -1098,10 +1098,10 @@ func (s *elasticsearchIntegrationSuite) createStartWorkflowExecutionRequest(id, 
 	return request
 }
 
-func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
-	id := "es-integration-upsert-workflow-test"
-	wt := "es-integration-upsert-workflow-test-type"
-	tl := "es-integration-upsert-workflow-test-taskqueue"
+func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecutionSearchAttributes() {
+	id := "es-integration-upsert-workflow-search-attributes-test"
+	wt := "es-integration-upsert-workflow-search-attributes-test-type"
+	tl := "es-integration-upsert-workflow-search-attributes-test-taskqueue"
 	identity := "worker1"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
@@ -1329,6 +1329,217 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		if len(resp.GetExecutions()) == 1 {
 			verified = true
 			break
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.True(verified)
+}
+
+func (s *elasticsearchIntegrationSuite) TestModifyWorkflowExecutionProperties() {
+	id := "es-integration-modify-workflow-properties-test"
+	wt := "es-integration-modify-workflow-properties-test-type"
+	tl := "es-integration-modify-workflow-properties-test-taskqueue"
+	identity := "worker1"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	commandCount := 0
+	wtHandler := func(
+		execution *commonpb.WorkflowExecution,
+		wt *commonpb.WorkflowType,
+		previousStartedEventID,
+		startedEventID int64,
+		history *historypb.History,
+	) ([]*commandpb.Command, error) {
+
+		modifyCommand := &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES,
+			Attributes: &commandpb.Command_ModifyWorkflowPropertiesCommandAttributes{
+				ModifyWorkflowPropertiesCommandAttributes: &commandpb.ModifyWorkflowPropertiesCommandAttributes{},
+			},
+		}
+
+		// handle first upsert
+		if commandCount == 0 {
+			commandCount++
+			attrValPayload1, _ := payload.Encode("test memo val 1")
+			attrValPayload2, _ := payload.Encode("test memo val 2")
+			memo := &commonpb.Memo{
+				Fields: map[string]*commonpb.Payload{
+					"test_memo_key_1": attrValPayload1,
+					"test_memo_key_2": attrValPayload2,
+				},
+			}
+			modifyCommand.GetModifyWorkflowPropertiesCommandAttributes().UpsertedMemo = memo
+			return []*commandpb.Command{modifyCommand}, nil
+		}
+
+		// handle second upsert, which update existing fields and add new field
+		if commandCount == 1 {
+			commandCount++
+			attrValPayload1, _ := payload.Encode("test memo val 1 new")
+			attrValPayload2, _ := payload.Encode(nil)
+			attrValPayload3, _ := payload.Encode("test memo val 3")
+			memo := &commonpb.Memo{
+				Fields: map[string]*commonpb.Payload{
+					"test_memo_key_1": attrValPayload1,
+					"test_memo_key_2": attrValPayload2,
+					"test_memo_key_3": attrValPayload3,
+				},
+			}
+			modifyCommand.GetModifyWorkflowPropertiesCommandAttributes().UpsertedMemo = memo
+			return []*commandpb.Command{modifyCommand}, nil
+		}
+
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
+				},
+			},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		StickyTaskQueue:     taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// process 1st workflow task and assert workflow task is handled correctly.
+	_, newTask, err := poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
+		false,
+		false,
+		true,
+		true,
+		0,
+		1,
+		true,
+		nil)
+	s.NoError(err)
+	s.NotNil(newTask)
+	s.NotNil(newTask.WorkflowTask)
+	s.Equal(int64(3), newTask.WorkflowTask.GetPreviousStartedEventId())
+	s.Equal(int64(7), newTask.WorkflowTask.GetStartedEventId())
+	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED, newTask.WorkflowTask.History.Events[1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
+
+	time.Sleep(waitForESToSettle)
+
+	// verify memo data is on ES
+	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  int32(2),
+		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
+	}
+	verified := false
+	for i := 0; i < numOfRetry; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		if len(resp.GetExecutions()) == 1 {
+			execution := resp.GetExecutions()[0]
+			retrievedMemo := execution.Memo
+			if retrievedMemo != nil && len(retrievedMemo.GetFields()) == 2 {
+				var memoVal *string
+				memoValBytes := retrievedMemo.GetFields()["test_memo_key_1"]
+				err = payload.Decode(memoValBytes, &memoVal)
+				s.NoError(err)
+				s.NotNil(memoVal)
+				s.Equal("test memo val 1", *memoVal)
+
+				memoValBytes = retrievedMemo.GetFields()["test_memo_key_2"]
+				err = payload.Decode(memoValBytes, &memoVal)
+				s.NoError(err)
+				s.NotNil(memoVal)
+				s.Equal("test memo val 2", *memoVal)
+
+				verified = true
+				break
+			}
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.True(verified)
+
+	// process 2nd workflow task and assert workflow task is handled correctly.
+	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
+		false,
+		false,
+		true,
+		true,
+		0,
+		1,
+		true,
+		nil)
+	s.NoError(err)
+	s.NotNil(newTask)
+	s.NotNil(newTask.WorkflowTask)
+	s.Equal(4, len(newTask.WorkflowTask.History.Events))
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, newTask.WorkflowTask.History.Events[0].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED, newTask.WorkflowTask.History.Events[1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, newTask.WorkflowTask.History.Events[2].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, newTask.WorkflowTask.History.Events[3].GetEventType())
+
+	time.Sleep(waitForESToSettle)
+
+	// verify memo data is on ES
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  int32(2),
+		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
+	}
+	verified = false
+	for i := 0; i < numOfRetry; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		if len(resp.GetExecutions()) == 1 {
+			execution := resp.GetExecutions()[0]
+			retrievedMemo := execution.Memo
+			if retrievedMemo != nil && len(retrievedMemo.GetFields()) == 2 {
+				var memoVal *string
+				memoValBytes := retrievedMemo.GetFields()["test_memo_key_1"]
+				err = payload.Decode(memoValBytes, &memoVal)
+				s.NoError(err)
+				s.NotNil(memoVal)
+				s.Equal("test memo val 1 new", *memoVal)
+
+				memoValBytes = retrievedMemo.GetFields()["test_memo_key_3"]
+				err = payload.Decode(memoValBytes, &memoVal)
+				s.NoError(err)
+				s.NotNil(memoVal)
+				s.Equal("test memo val 3", *memoVal)
+
+				verified = true
+				break
+			}
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}

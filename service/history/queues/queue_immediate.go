@@ -53,6 +53,7 @@ func NewImmediateQueue(
 	shard shard.Context,
 	category tasks.Category,
 	scheduler Scheduler,
+	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
 	rateLimiter quotas.RateLimiter,
@@ -88,6 +89,7 @@ func NewImmediateQueue(
 			category,
 			paginationFnProvider,
 			scheduler,
+			priorityAssigner,
 			executor,
 			options,
 			rateLimiter,
@@ -153,6 +155,8 @@ func (p *immediateQueue) processEventLoop() {
 			p.processPollTimer()
 		case <-p.checkpointTimer.C:
 			p.checkpoint()
+		case alert := <-p.alertCh:
+			p.handleAlert(alert)
 		}
 	}
 }

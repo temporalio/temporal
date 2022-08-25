@@ -39,9 +39,15 @@ type (
 	// InterleavedWeightedRoundRobinSchedulerOptions is the config for
 	// interleaved weighted round robin scheduler
 	InterleavedWeightedRoundRobinSchedulerOptions[T Task, K comparable] struct {
-		TaskToChannelKey   func(T) K
-		ChannelKeyToWeight func(K) int
+		TaskChannelKeyFn TaskChannelKeyFn[T, K]
+		ChannelWeightFn  ChannelWeightFn[K]
 	}
+
+	// TaskChannelKeyFn is the function for mapping a task to its task channel (key)
+	TaskChannelKeyFn[T Task, K comparable] func(T) K
+
+	// ChannelWeightFn is the function for mapping a task channel (key) to its weight
+	ChannelWeightFn[K comparable] func(K) int
 
 	// InterleavedWeightedRoundRobinScheduler is a round robin scheduler implementation
 	// ref: https://en.wikipedia.org/wiki/Weighted_round_robin#Interleaved_WRR
@@ -141,7 +147,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Submit(
 	}
 
 	// there are tasks pending dispatching, need to respect round roubin weight
-	channel := s.getOrCreateTaskChannel(s.options.TaskToChannelKey(task))
+	channel := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
 	channel.Chan() <- task
 	s.notifyDispatcher()
 }
@@ -155,7 +161,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) TrySubmit(
 	}
 
 	// there are tasks pending dispatching, need to respect round roubin weight
-	channel := s.getOrCreateTaskChannel(s.options.TaskToChannelKey(task))
+	channel := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
 	select {
 	case channel.Chan() <- task:
 		s.notifyDispatcher()
@@ -196,7 +202,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 		return channel
 	}
 
-	weight := s.options.ChannelKeyToWeight(channelKey)
+	weight := s.options.ChannelWeightFn(channelKey)
 	channel = NewWeightedChannel[T](weight, WeightedChannelDefaultSize)
 	s.weightedChannels[channelKey] = channel
 

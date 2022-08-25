@@ -67,6 +67,8 @@ type (
 		options        *Options
 		rescheduler    Rescheduler
 		timeSource     clock.TimeSource
+		monitor        *monitorImpl
+		mitigator      *mitigatorImpl
 		logger         log.Logger
 		metricsHandler metrics.MetricsHandler
 
@@ -81,15 +83,19 @@ type (
 		checkpointRetrier backoff.Retrier
 		checkpointTimer   *time.Timer
 		pollTimer         *time.Timer
+
+		alertCh <-chan *Alert
 	}
 
 	Options struct {
 		ReaderOptions
+		MonitorOptions
 
 		MaxPollInterval                     dynamicconfig.DurationPropertyFn
 		MaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
 		CheckpointInterval                  dynamicconfig.DurationPropertyFn
 		CheckpointIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+		MaxReaderCount                      dynamicconfig.IntPropertyFn
 		TaskMaxRetryCount                   dynamicconfig.IntPropertyFn
 	}
 )
@@ -99,6 +105,7 @@ func newQueueBase(
 	category tasks.Category,
 	paginationFnProvider PaginationFnProvider,
 	scheduler Scheduler,
+	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
 	rateLimiter quotas.RateLimiter,
@@ -130,6 +137,9 @@ func newQueueBase(
 		metricsHandler,
 	)
 
+	monitor := newMonitor(category.Type(), &options.MonitorOptions)
+	mitigator := newMitigator(monitor, logger, metricsHandler, options.MaxReaderCount)
+
 	executableInitializer := func(t tasks.Task) Executable {
 		return NewExecutable(
 			t,
@@ -137,6 +147,7 @@ func newQueueBase(
 			executor,
 			scheduler,
 			rescheduler,
+			priorityAssigner,
 			timeSource,
 			shard.GetNamespaceRegistry(),
 			logger,
@@ -148,12 +159,14 @@ func newQueueBase(
 
 	readerInitializer := func(readerID int32, slices []Slice) Reader {
 		return NewReader(
+			readerID,
 			slices,
 			&options.ReaderOptions,
 			scheduler,
 			rescheduler,
 			timeSource,
 			rateLimiter,
+			monitor,
 			logger,
 			metricsHandler,
 		)
@@ -183,6 +196,8 @@ func newQueueBase(
 		options:        options,
 		rescheduler:    rescheduler,
 		timeSource:     shard.GetTimeSource(),
+		monitor:        monitor,
+		mitigator:      mitigator,
 		logger:         logger,
 		metricsHandler: metricsHandler,
 
@@ -201,6 +216,8 @@ func newQueueBase(
 			createCheckpointRetryPolicy(),
 			backoff.SystemClock,
 		),
+
+		alertCh: monitor.AlertCh(),
 	}
 }
 
@@ -219,6 +236,7 @@ func (p *queueBase) Start() {
 }
 
 func (p *queueBase) Stop() {
+	p.monitor.Close()
 	p.readerGroup.Stop()
 	p.rescheduler.Stop()
 	p.pollTimer.Stop()
@@ -351,6 +369,23 @@ func (p *queueBase) checkpoint() {
 		p.metricsHandler.Counter(AckLevelUpdateFailedCounter).Record(1)
 		p.logger.Error("Error updating queue state", tag.Error(err), tag.OperationFailed)
 	}
+}
+
+func (p *queueBase) handleAlert(alert *Alert) {
+	// Upon getting an Alert from monitor,
+	// send it to the mitigator for deduping and generating the corresponding Action.
+	// Then run the returned Action to resolve the Alert.
+
+	if alert == nil {
+		return
+	}
+
+	action := p.mitigator.Mitigate(*alert)
+	if action == nil {
+		return
+	}
+
+	action.Run(p.readerGroup)
 }
 
 func createCheckpointRetryPolicy() backoff.RetryPolicy {

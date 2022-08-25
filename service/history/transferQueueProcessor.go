@@ -78,6 +78,7 @@ type (
 		isStopped                 int32
 		shutdownChan              chan struct{}
 		scheduler                 queues.Scheduler
+		priorityAssigner          queues.PriorityAssigner
 		activeTaskProcessor       *transferQueueActiveProcessorImpl
 		standbyTaskProcessorsLock sync.RWMutex
 		standbyTaskProcessors     map[string]*transferQueueStandbyProcessorImpl
@@ -88,6 +89,7 @@ func newTransferQueueProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	clientBean client.Bean,
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
@@ -124,10 +126,12 @@ func newTransferQueueProcessor(
 		logger:             logger,
 		shutdownChan:       make(chan struct{}),
 		scheduler:          scheduler,
+		priorityAssigner:   priorityAssigner,
 		activeTaskProcessor: newTransferQueueActiveProcessor(
 			shard,
 			workflowCache,
 			scheduler,
+			priorityAssigner,
 			archivalClient,
 			sdkClientFactory,
 			matchingClient,
@@ -231,6 +235,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 		t.shard,
 		t.workflowCache,
 		t.scheduler,
+		t.priorityAssigner,
 		t.archivalClient,
 		t.sdkClientFactory,
 		t.matchingClient,
@@ -395,6 +400,7 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 				clusterName,
 				t.shard,
 				t.scheduler,
+				t.priorityAssigner,
 				t.workflowCache,
 				t.archivalClient,
 				t.taskAllocator,

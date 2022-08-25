@@ -82,8 +82,8 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 
 	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*testTask, int]{
-			TaskToChannelKey:   func(task *testTask) int { return task.channelKey },
-			ChannelKeyToWeight: func(key int) int { return channelKeyToWeight[key] },
+			TaskChannelKeyFn: func(task *testTask) int { return task.channelKey },
+			ChannelWeightFn:  func(key int) int { return channelKeyToWeight[key] },
 		},
 		Scheduler[*testTask](s.mockFIFOScheduler),
 		logger,

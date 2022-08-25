@@ -244,6 +244,20 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateStartWorkflowTaskTasks(now, wor
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateStartWorkflowTaskTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateStartWorkflowTaskTasks), now, workflowTaskScheduledEventID)
 }
 
+// GenerateUpsertVisibilityTask mocks base method.
+func (m *MockTaskGenerator) GenerateUpsertVisibilityTask(now time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateUpsertVisibilityTask", now)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateUpsertVisibilityTask indicates an expected call of GenerateUpsertVisibilityTask.
+func (mr *MockTaskGeneratorMockRecorder) GenerateUpsertVisibilityTask(now interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateUpsertVisibilityTask", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateUpsertVisibilityTask), now)
+}
+
 // GenerateUserTimerTasks mocks base method.
 func (m *MockTaskGenerator) GenerateUserTimerTasks(now time.Time) error {
 	m.ctrl.T.Helper()
@@ -284,20 +298,6 @@ func (m *MockTaskGenerator) GenerateWorkflowResetTasks(now time.Time) error {
 func (mr *MockTaskGeneratorMockRecorder) GenerateWorkflowResetTasks(now interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateWorkflowResetTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateWorkflowResetTasks), now)
-}
-
-// GenerateWorkflowSearchAttrTasks mocks base method.
-func (m *MockTaskGenerator) GenerateWorkflowSearchAttrTasks(now time.Time) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateWorkflowSearchAttrTasks", now)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// GenerateWorkflowSearchAttrTasks indicates an expected call of GenerateWorkflowSearchAttrTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateWorkflowSearchAttrTasks(now interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateWorkflowSearchAttrTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateWorkflowSearchAttrTasks), now)
 }
 
 // GenerateWorkflowStartTasks mocks base method.

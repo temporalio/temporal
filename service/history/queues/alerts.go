@@ -22,52 +22,45 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package queues
 
 import (
-	"github.com/olivere/elastic/v7"
+	"strconv"
+
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
-	bulkProcessorImpl struct {
-		esBulkProcessor *elastic.BulkProcessor
+	// Alert is created by a Monitor when some statistics of the Queue is abnormal
+	Alert struct {
+		AlertType                  AlertType
+		AlertAttributesReaderStuck *AlertAttributesReaderStuck
+	}
+
+	AlertType int
+
+	AlertAttributesReaderStuck struct {
+		ReaderID         int32
+		CurrentWatermark tasks.Key
 	}
 )
 
-func newBulkProcessor(esBulkProcessor *elastic.BulkProcessor) *bulkProcessorImpl {
-	if esBulkProcessor == nil {
-		return nil
-	}
-	return &bulkProcessorImpl{
-		esBulkProcessor: esBulkProcessor,
-	}
-}
+const (
+	AlertTypeUnspecified AlertType = iota
+	AlertTypeReaderStuck
+)
 
-func (p *bulkProcessorImpl) Stop() error {
-	errF := p.esBulkProcessor.Flush()
-	errS := p.esBulkProcessor.Stop()
-	if errF != nil {
-		return errF
+var (
+	alertTypeNames = map[AlertType]string{
+		0: "Unspecified",
+		1: "ReaderStuck",
 	}
-	return errS
-}
+)
 
-func (p *bulkProcessorImpl) Add(request *BulkableRequest) {
-	switch request.RequestType {
-	case BulkableRequestTypeIndex:
-		bulkIndexRequest := elastic.NewBulkIndexRequest().
-			Index(request.Index).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version).
-			Doc(request.Doc)
-		p.esBulkProcessor.Add(bulkIndexRequest)
-	case BulkableRequestTypeDelete:
-		bulkDeleteRequest := elastic.NewBulkDeleteRequest().
-			Index(request.Index).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version)
-		p.esBulkProcessor.Add(bulkDeleteRequest)
+func (a AlertType) String() string {
+	s, ok := alertTypeNames[a]
+	if ok {
+		return s
 	}
+	return strconv.Itoa(int(a))
 }
