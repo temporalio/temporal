@@ -206,7 +206,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	if dcClient == nil {
 		dcConfig := so.config.DynamicConfigClient
 		if dcConfig != nil {
-			dcClient, err = dynamicconfig.NewFileBasedClient(dcConfig, logger, stopChan)
+			dcClient, err = dynamicconfig.NewFileSource(dcConfig, logger, stopChan)
 			if err != nil {
 				return serverOptionsProvider{}, fmt.Errorf("unable to create dynamic config client: %w", err)
 			}

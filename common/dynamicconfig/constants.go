@@ -24,10 +24,6 @@
 
 package dynamicconfig
 
-import (
-	enumspb "go.temporal.io/api/enums/v1"
-)
-
 func (k Key) String() string {
 	return string(k)
 }
@@ -654,6 +650,8 @@ const (
 	WorkerEnableScheduler = "worker.enableScheduler"
 )
 
+/* FIXME: delete
+
 // Filter represents a filter on the dynamic config key
 type Filter int
 
@@ -727,3 +725,4 @@ func ShardIDFilter(shardID int32) FilterOption {
 		filterMap[ShardID] = shardID
 	}
 }
+*/

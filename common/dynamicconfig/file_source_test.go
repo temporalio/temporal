@@ -36,56 +36,56 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-type fileBasedClientSuite struct {
+type fileSourceSuite struct {
 	suite.Suite
 	*require.Assertions
 	client XXXClient
 	doneCh chan interface{}
 }
 
-func TestFileBasedClientSuite(t *testing.T) {
-	s := new(fileBasedClientSuite)
+func TestFileSourceSuite(t *testing.T) {
+	s := new(fileSourceSuite)
 	suite.Run(t, s)
 }
 
-func (s *fileBasedClientSuite) SetupSuite() {
+func (s *fileSourceSuite) SetupSuite() {
 	var err error
 	s.doneCh = make(chan interface{})
-	s.client, err = NewFileBasedClient(&FileBasedClientConfig{
+	s.client, err = NewFileSource(&FileSourceConfig{
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second * 5,
 	}, log.NewNoopLogger(), s.doneCh)
 	s.Require().NoError(err)
 }
 
-func (s *fileBasedClientSuite) TearDownSuite() {
+func (s *fileSourceSuite) TearDownSuite() {
 	close(s.doneCh)
 }
 
-func (s *fileBasedClientSuite) SetupTest() {
+func (s *fileSourceSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *fileBasedClientSuite) TestGetValue() {
+func (s *fileSourceSuite) TestGetValue() {
 	v, err := s.client.GetValue(testGetBoolPropertyKey, true)
 	s.NoError(err)
 	s.Equal(false, v)
 }
 
-func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
+func (s *fileSourceSuite) TestGetValue_NonExistKey() {
 	defaultValue := true
 	v, err := s.client.GetValue(unknownKey, defaultValue)
 	s.Error(err)
 	s.Equal(defaultValue, v)
 }
 
-func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
+func (s *fileSourceSuite) TestGetValue_CaseInsensitie() {
 	v, err := s.client.GetValue(testCaseInsensitivePropertyKey, false)
 	s.Nil(err)
 	s.Equal(true, v)
 }
 
-func (s *fileBasedClientSuite) TestGetValueWithFilters() {
+func (s *fileSourceSuite) TestGetValueWithFilters() {
 	filters := []map[Filter]interface{}{{
 		Namespace: "global-samples-namespace",
 	}}
@@ -109,7 +109,7 @@ func (s *fileBasedClientSuite) TestGetValueWithFilters() {
 	s.Equal(false, v)
 }
 
-func (s *fileBasedClientSuite) TestGetValueWithFilters_UnknownFilter() {
+func (s *fileSourceSuite) TestGetValueWithFilters_UnknownFilter() {
 	filters := []map[Filter]interface{}{{
 		Namespace:     "global-samples-namespace",
 		unknownFilter: "unknown-filter",
@@ -119,13 +119,13 @@ func (s *fileBasedClientSuite) TestGetValueWithFilters_UnknownFilter() {
 	s.Equal(false, v)
 }
 
-func (s *fileBasedClientSuite) TestGetIntValue() {
+func (s *fileSourceSuite) TestGetIntValue() {
 	v, err := s.client.GetIntValue(testGetIntPropertyKey, nil, 1)
 	s.NoError(err)
 	s.Equal(1000, v)
 }
 
-func (s *fileBasedClientSuite) TestGetIntValue_FilterNotMatch() {
+func (s *fileSourceSuite) TestGetIntValue_FilterNotMatch() {
 	filters := []map[Filter]interface{}{{
 		Namespace: "samples-namespace",
 	}}
@@ -134,7 +134,7 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilterNotMatch() {
 	s.Equal(1000, v)
 }
 
-func (s *fileBasedClientSuite) TestGetIntValue_WrongType() {
+func (s *fileSourceSuite) TestGetIntValue_WrongType() {
 	defaultValue := 2000
 	filters := []map[Filter]interface{}{{
 		Namespace: "global-samples-namespace",
@@ -144,7 +144,7 @@ func (s *fileBasedClientSuite) TestGetIntValue_WrongType() {
 	s.Equal(defaultValue, v)
 }
 
-func (s *fileBasedClientSuite) TestGetIntValue_FilteredByWorkflowTaskQueueInfo() {
+func (s *fileSourceSuite) TestGetIntValue_FilteredByWorkflowTaskQueueInfo() {
 	expectedValue := 1001
 	filters := []map[Filter]interface{}{{
 		Namespace:     "global-samples-namespace",
@@ -156,7 +156,7 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByWorkflowTaskQueueInfo()
 	s.Equal(expectedValue, v)
 }
 
-func (s *fileBasedClientSuite) TestGetIntValue_FilteredByNoTaskTypeQueueInfo() {
+func (s *fileSourceSuite) TestGetIntValue_FilteredByNoTaskTypeQueueInfo() {
 	expectedValue := 1003
 	filters := []map[Filter]interface{}{{
 		Namespace:     "global-samples-namespace",
@@ -167,7 +167,7 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByNoTaskTypeQueueInfo() {
 	s.Equal(expectedValue, v)
 }
 
-func (s *fileBasedClientSuite) TestGetIntValue_FilteredByActivityTaskQueueInfo() {
+func (s *fileSourceSuite) TestGetIntValue_FilteredByActivityTaskQueueInfo() {
 	expectedValue := 1002
 	filters := []map[Filter]interface{}{{
 		Namespace:     "global-samples-namespace",
@@ -179,7 +179,7 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByActivityTaskQueueInfo()
 	s.Equal(expectedValue, v)
 }
 
-func (s *fileBasedClientSuite) TestGetIntValue_FilteredByTaskQueueNameOnly() {
+func (s *fileSourceSuite) TestGetIntValue_FilteredByTaskQueueNameOnly() {
 	expectedValue := 1005
 	filters := []map[Filter]interface{}{{
 		TaskQueueName: "other-test-tq",
@@ -189,7 +189,7 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByTaskQueueNameOnly() {
 	s.Equal(expectedValue, v)
 }
 
-func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchWithoutType() {
+func (s *fileSourceSuite) TestGetIntValue_FilterByTQ_MatchWithoutType() {
 	cln := NewCollection(s.client, log.NewNoopLogger())
 	expectedValue := 1003
 	f := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
@@ -198,7 +198,7 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchWithoutType() {
 	s.Equal(expectedValue, v)
 }
 
-func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_NamespaceOnly() {
+func (s *fileSourceSuite) TestGetIntValue_FilterByTQ_NamespaceOnly() {
 	cln := NewCollection(s.client, log.NewNoopLogger())
 	expectedValue := 1004
 	f := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
@@ -210,7 +210,7 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_NamespaceOnly() {
 	s.Equal(expectedValue, v)
 }
 
-func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchFallback() {
+func (s *fileSourceSuite) TestGetIntValue_FilterByTQ_MatchFallback() {
 	cln := NewCollection(s.client, log.NewNoopLogger())
 	// should return 1001 as the most specific match
 	f1 := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 1001)
@@ -220,13 +220,13 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchFallback() {
 	s.Equal(v1, v2)
 }
 
-func (s *fileBasedClientSuite) TestGetFloatValue() {
+func (s *fileSourceSuite) TestGetFloatValue() {
 	v, err := s.client.GetFloatValue(testGetFloat64PropertyKey, nil, 1)
 	s.NoError(err)
 	s.Equal(12.0, v)
 }
 
-func (s *fileBasedClientSuite) TestGetFloatValue_WrongType() {
+func (s *fileSourceSuite) TestGetFloatValue_WrongType() {
 	filters := []map[Filter]interface{}{{
 		Namespace: "samples-namespace",
 	}}
@@ -236,13 +236,13 @@ func (s *fileBasedClientSuite) TestGetFloatValue_WrongType() {
 	s.Equal(defaultValue, v)
 }
 
-func (s *fileBasedClientSuite) TestGetBoolValue() {
+func (s *fileSourceSuite) TestGetBoolValue() {
 	v, err := s.client.GetBoolValue(testGetBoolPropertyKey, nil, true)
 	s.NoError(err)
 	s.Equal(false, v)
 }
 
-func (s *fileBasedClientSuite) TestGetStringValue() {
+func (s *fileSourceSuite) TestGetStringValue() {
 	filters := []map[Filter]interface{}{{
 		TaskQueueName: "random taskqueue",
 	}}
@@ -251,7 +251,7 @@ func (s *fileBasedClientSuite) TestGetStringValue() {
 	s.Equal("constrained-string", v)
 }
 
-func (s *fileBasedClientSuite) TestGetMapValue() {
+func (s *fileSourceSuite) TestGetMapValue() {
 	var defaultVal map[string]interface{}
 	v, err := s.client.GetMapValue(testGetMapPropertyKey, nil, defaultVal)
 	s.NoError(err)
@@ -269,7 +269,7 @@ func (s *fileBasedClientSuite) TestGetMapValue() {
 	s.Equal(expectedVal, v)
 }
 
-func (s *fileBasedClientSuite) TestGetMapValue_WrongType() {
+func (s *fileSourceSuite) TestGetMapValue_WrongType() {
 	var defaultVal map[string]interface{}
 	filters := []map[Filter]interface{}{{
 		TaskQueueName: "random taskqueue",
@@ -279,13 +279,13 @@ func (s *fileBasedClientSuite) TestGetMapValue_WrongType() {
 	s.Equal(defaultVal, v)
 }
 
-func (s *fileBasedClientSuite) TestGetDurationValue() {
+func (s *fileSourceSuite) TestGetDurationValue() {
 	v, err := s.client.GetDurationValue(testGetDurationPropertyKey, nil, time.Second)
 	s.NoError(err)
 	s.Equal(time.Minute, v)
 }
 
-func (s *fileBasedClientSuite) TestGetDurationValue_NotStringRepresentation() {
+func (s *fileSourceSuite) TestGetDurationValue_NotStringRepresentation() {
 	filters := []map[Filter]interface{}{{
 		Namespace: "samples-namespace",
 	}}
@@ -294,7 +294,7 @@ func (s *fileBasedClientSuite) TestGetDurationValue_NotStringRepresentation() {
 	s.Equal(time.Second, v)
 }
 
-func (s *fileBasedClientSuite) TestGetDurationValue_ParseFailed() {
+func (s *fileSourceSuite) TestGetDurationValue_ParseFailed() {
 	filters := []map[Filter]interface{}{{
 		Namespace:     "samples-namespace",
 		TaskQueueName: "longIdleTimeTaskqueue",
@@ -304,28 +304,28 @@ func (s *fileBasedClientSuite) TestGetDurationValue_ParseFailed() {
 	s.Equal(time.Second, v)
 }
 
-func (s *fileBasedClientSuite) TestValidateConfig_ConfigNotExist() {
-	_, err := NewFileBasedClient(nil, nil, nil)
+func (s *fileSourceSuite) TestValidateConfig_ConfigNotExist() {
+	_, err := NewFileSource(nil, nil, nil)
 	s.Error(err)
 }
 
-func (s *fileBasedClientSuite) TestValidateConfig_FileNotExist() {
-	_, err := NewFileBasedClient(&FileBasedClientConfig{
+func (s *fileSourceSuite) TestValidateConfig_FileNotExist() {
+	_, err := NewFileSource(&FileSourceConfig{
 		Filepath:     "file/not/exist.yaml",
 		PollInterval: time.Second * 10,
 	}, nil, nil)
 	s.Error(err)
 }
 
-func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
-	_, err := NewFileBasedClient(&FileBasedClientConfig{
+func (s *fileSourceSuite) TestValidateConfig_ShortPollInterval() {
+	_, err := NewFileSource(&FileSourceConfig{
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second,
 	}, nil, nil)
 	s.Error(err)
 }
 
-func (s *fileBasedClientSuite) TestMatch() {
+func (s *fileSourceSuite) TestMatch() {
 	testCases := []struct {
 		v       ConstrainedValue
 		filters map[Filter]interface{}
@@ -414,7 +414,7 @@ func (mfi MockFileInfo) ModTime() time.Time { return mfi.ModTimeValue }
 func (mfi MockFileInfo) IsDir() bool        { return mfi.IsDirectory }
 func (mfi MockFileInfo) Sys() interface{}   { return nil }
 
-func (s *fileBasedClientSuite) TestUpdate_ChangedValue() {
+func (s *fileSourceSuite) TestUpdate_ChangedValue() {
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
@@ -469,8 +469,8 @@ testGetBoolPropertyKey:
 	reader.EXPECT().ReadFile(gomock.Any()).Return(originFileData, nil)
 
 	mockLogger.EXPECT().Info(gomock.Any()).Times(6)
-	client, err := NewFileBasedClientWithReader(reader,
-		&FileBasedClientConfig{
+	client, err := NewFileSourceWithReader(reader,
+		&FileSourceConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
 		}, mockLogger, s.doneCh)
@@ -489,7 +489,7 @@ testGetBoolPropertyKey:
 	close(doneCh)
 }
 
-func (s *fileBasedClientSuite) TestUpdate_ChangedMapValue() {
+func (s *fileSourceSuite) TestUpdate_ChangedMapValue() {
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
@@ -522,8 +522,8 @@ history.defaultActivityRetryPolicy:
 	reader.EXPECT().ReadFile(gomock.Any()).Return(originFileData, nil)
 
 	mockLogger.EXPECT().Info(gomock.Any()).Times(2)
-	client, err := NewFileBasedClientWithReader(reader,
-		&FileBasedClientConfig{
+	client, err := NewFileSourceWithReader(reader,
+		&FileSourceConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
 		}, mockLogger, s.doneCh)
@@ -539,7 +539,7 @@ history.defaultActivityRetryPolicy:
 	close(doneCh)
 }
 
-func (s *fileBasedClientSuite) TestUpdate_NewEntry() {
+func (s *fileSourceSuite) TestUpdate_NewEntry() {
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
@@ -574,8 +574,8 @@ testGetIntPropertyKey:
 
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: nil newValue: { constraints: {} value: 12 }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
-	client, err := NewFileBasedClientWithReader(reader,
-		&FileBasedClientConfig{
+	client, err := NewFileSourceWithReader(reader,
+		&FileSourceConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
 		}, mockLogger, s.doneCh)
@@ -592,7 +592,7 @@ testGetIntPropertyKey:
 	close(doneCh)
 }
 
-func (s *fileBasedClientSuite) TestUpdate_ChangeOrder_ShouldNotWriteLog() {
+func (s *fileSourceSuite) TestUpdate_ChangeOrder_ShouldNotWriteLog() {
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
@@ -635,8 +635,8 @@ testGetFloat64PropertyKey:
 	reader.EXPECT().ReadFile(gomock.Any()).Return(originFileData, nil)
 
 	mockLogger.EXPECT().Info(gomock.Any()).Times(4)
-	client, err := NewFileBasedClientWithReader(reader,
-		&FileBasedClientConfig{
+	client, err := NewFileSourceWithReader(reader,
+		&FileSourceConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
 		}, mockLogger, s.doneCh)

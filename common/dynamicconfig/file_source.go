@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination file_based_client_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination file_source_mock.go
 
 package dynamicconfig
 
@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-var _ XXXClient = (*fileBasedClient)(nil)
+var _ Source = (*fileSource)(nil)
 
 const (
 	minPollInterval = time.Second * 5
@@ -52,19 +52,19 @@ type (
 		ReadFile(src string) ([]byte, error)
 	}
 
-	// FileBasedClientConfig is the config for the file based dynamic config client.
+	// FileSourceConfig is the config for the file based dynamic config source.
 	// It specifies where the config file is stored and how often the config should be
 	// updated by checking the config file again.
-	FileBasedClientConfig struct {
+	FileSourceConfig struct {
 		Filepath     string        `yaml:"filepath"`
 		PollInterval time.Duration `yaml:"pollInterval"`
 	}
 
-	fileBasedClient struct {
+	fileSource struct {
 		*basicClient
 		reader          fileReader
 		lastUpdatedTime time.Time
-		config          *FileBasedClientConfig
+		config          *FileSourceConfig
 		doneCh          <-chan interface{}
 	}
 
@@ -72,9 +72,9 @@ type (
 	}
 )
 
-// NewFileBasedClient creates a file based client.
-func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
-	client := &fileBasedClient{
+// NewFileSource creates a file based source.
+func NewFileSource(config *FileSourceConfig, logger log.Logger, doneCh <-chan interface{}) (*fileSource, error) {
+	client := &fileSource{
 		basicClient: newBasicClient(logger),
 		reader:      &osReader{},
 		config:      config,
@@ -89,8 +89,8 @@ func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh
 	return client, nil
 }
 
-func NewFileBasedClientWithReader(reader fileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
-	client := &fileBasedClient{
+func NewFileSourceWithReader(reader fileReader, config *FileSourceConfig, logger log.Logger, doneCh <-chan interface{}) (*fileSource, error) {
+	client := &fileSource{
 		basicClient: newBasicClient(logger),
 		reader:      reader,
 		config:      config,
@@ -105,7 +105,7 @@ func NewFileBasedClientWithReader(reader fileReader, config *FileBasedClientConf
 	return client, nil
 }
 
-func (fc *fileBasedClient) init() error {
+func (fc *fileSource) init() error {
 	if err := fc.validateConfig(fc.config); err != nil {
 		return fmt.Errorf("unable to validate dynamic config: %w", err)
 	}
@@ -133,7 +133,7 @@ func (fc *fileBasedClient) init() error {
 	return nil
 }
 
-func (fc *fileBasedClient) update() error {
+func (fc *fileSource) update() error {
 	defer func() {
 		fc.lastUpdatedTime = time.Now().UTC()
 	}()
@@ -162,7 +162,7 @@ func (fc *fileBasedClient) update() error {
 	return err
 }
 
-func (fc *fileBasedClient) storeValues(newValues map[string][]ConstrainedValue) error {
+func (fc *fileSource) storeValues(newValues map[string][]ConstrainedValue) error {
 	formattedNewValues := make(configValueMap, len(newValues))
 
 	// yaml will unmarshal map into map[interface{}]interface{} instead of map[string]interface{}
@@ -186,7 +186,7 @@ func (fc *fileBasedClient) storeValues(newValues map[string][]ConstrainedValue) 
 	return nil
 }
 
-func (fc *fileBasedClient) validateConfig(config *FileBasedClientConfig) error {
+func (fc *fileSource) validateConfig(config *FileSourceConfig) error {
 	if config == nil {
 		return errors.New("configuration for dynamic config client is nil")
 	}
