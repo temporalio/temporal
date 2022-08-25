@@ -181,27 +181,27 @@ func (r *reschedulerImpl) reschedule() {
 	now := r.timeSource.Now()
 	for key, pq := range r.pqMap {
 		for !pq.IsEmpty() {
-			rescheduled := pq.Remove()
+			rescheduled := pq.Peek()
 
-			if now.Before(rescheduled.rescheduleTime) {
-				pq.Add(rescheduled)
-				r.timerGate.Update(rescheduled.rescheduleTime)
+			if rescheduleTime := rescheduled.rescheduleTime; now.Before(rescheduleTime) {
+				r.timerGate.Update(rescheduleTime)
 				break
 			}
 
 			executable := rescheduled.executable
 			if executable.State() == ctasks.TaskStateCancelled {
+				pq.Remove()
 				r.numExecutables--
 				continue
 			}
 
 			submitted := r.scheduler.TrySubmit(executable)
 			if !submitted {
-				pq.Add(rescheduled)
 				r.timerGate.Update(now.Add(taskChanFullBackoff))
 				break
 			}
 
+			pq.Remove()
 			r.numExecutables--
 		}
 
