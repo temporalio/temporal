@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
@@ -43,6 +44,9 @@ import (
 
 const (
 	taskChanFullBackoff = 3 * time.Second
+
+	reschedulerPQCleanupDuration          = 3 * time.Minute
+	reschedulerPQCleanupJitterCoefficient = 0.15
 )
 
 type (
@@ -160,6 +164,12 @@ func (r *reschedulerImpl) Len() int {
 func (r *reschedulerImpl) rescheduleLoop() {
 	defer r.shutdownWG.Done()
 
+	cleanupTimer := time.NewTimer(backoff.JitDuration(
+		reschedulerPQCleanupDuration,
+		reschedulerPQCleanupJitterCoefficient,
+	))
+	defer cleanupTimer.Stop()
+
 	for {
 		select {
 		case <-r.shutdownCh:
@@ -167,6 +177,12 @@ func (r *reschedulerImpl) rescheduleLoop() {
 			return
 		case <-r.timerGate.FireChan():
 			r.reschedule()
+		case <-cleanupTimer.C:
+			r.cleanupPQ()
+			cleanupTimer.Reset(backoff.JitDuration(
+				reschedulerPQCleanupDuration,
+				reschedulerPQCleanupJitterCoefficient,
+			))
 		}
 	}
 
@@ -179,7 +195,7 @@ func (r *reschedulerImpl) reschedule() {
 	r.metricsHandler.Histogram(TaskReschedulerPendingTasks, metrics.Dimensionless).Record(int64(r.numExecutables))
 
 	now := r.timeSource.Now()
-	for key, pq := range r.pqMap {
+	for _, pq := range r.pqMap {
 		for !pq.IsEmpty() {
 			rescheduled := pq.Peek()
 
@@ -204,7 +220,14 @@ func (r *reschedulerImpl) reschedule() {
 			pq.Remove()
 			r.numExecutables--
 		}
+	}
+}
 
+func (r *reschedulerImpl) cleanupPQ() {
+	r.Lock()
+	defer r.Unlock()
+
+	for key, pq := range r.pqMap {
 		if pq.IsEmpty() {
 			delete(r.pqMap, key)
 		}
@@ -215,10 +238,11 @@ func (r *reschedulerImpl) drain() {
 	r.Lock()
 	defer r.Unlock()
 
-	for _, pq := range r.pqMap {
+	for key, pq := range r.pqMap {
 		for !pq.IsEmpty() {
 			pq.Remove()
 		}
+		delete(r.pqMap, key)
 	}
 
 	r.numExecutables = 0

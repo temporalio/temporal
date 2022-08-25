@@ -155,7 +155,7 @@ func NewExecutable(
 		filter:                        filter,
 		namespaceCacheRefreshInterval: namespaceCacheRefreshInterval,
 	}
-	executable.priority = priorityAssigner.Assign(executable)
+	executable.updatePriority()
 	return executable
 }
 
@@ -319,10 +319,7 @@ func (e *executableImpl) Nack(err error) {
 		return
 	}
 
-	newPriority := e.priorityAssigner.Assign(e)
-	e.Lock()
-	e.priority = newPriority
-	e.Unlock()
+	e.updatePriority()
 
 	submitted := false
 	if e.shouldResubmitOnNack(e.Attempt(), err) {
@@ -342,10 +339,7 @@ func (e *executableImpl) Reschedule() {
 		return
 	}
 
-	newPriority := e.priorityAssigner.Assign(e)
-	e.Lock()
-	e.priority = newPriority
-	e.Unlock()
+	e.updatePriority()
 
 	e.rescheduler.Add(e, e.rescheduleTime(nil, e.Attempt()))
 }
@@ -423,4 +417,13 @@ func (e *executableImpl) rescheduleTime(
 	}
 
 	return e.timeSource.Now().Add(reschedulePolicy.ComputeNextDelay(0, attempt))
+}
+
+func (e *executableImpl) updatePriority() {
+	// do NOT invoke Assign while holding the lock
+	newPriority := e.priorityAssigner.Assign(e)
+
+	e.Lock()
+	defer e.Unlock()
+	e.priority = newPriority
 }
