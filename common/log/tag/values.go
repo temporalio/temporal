@@ -40,6 +40,7 @@ var (
 	WorkflowActionWorkflowSignaled               = workflowAction("add-workflow-signaled-event")
 	WorkflowActionWorkflowRecordMarker           = workflowAction("add-workflow-marker-record-event")
 	WorkflowActionUpsertWorkflowSearchAttributes = workflowAction("add-workflow-upsert-search-attributes-event")
+	WorkflowActionWorkflowPropertiesModified     = workflowAction("add-workflow-properties-modified-event")
 
 	// workflow task
 	WorkflowActionWorkflowTaskScheduled = workflowAction("add-workflowtask-scheduled-event")

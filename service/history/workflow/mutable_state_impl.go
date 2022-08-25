@@ -40,7 +40,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"golang.org/x/exp/maps"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -1805,7 +1804,7 @@ func (e *MutableStateImpl) addBinaryCheckSumIfNotExists(
 	}
 	exeInfo.SearchAttributes[searchattribute.BinaryChecksums] = checksumsPayload
 	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != visibility.AdvancedVisibilityWritingModeOff {
-		return e.taskGenerator.GenerateWorkflowSearchAttrTasks(timestamp.TimeValue(event.GetEventTime()))
+		return e.taskGenerator.GenerateUpsertVisibilityTask(timestamp.TimeValue(event.GetEventTime()))
 	}
 	return nil
 }
@@ -2780,7 +2779,7 @@ func (e *MutableStateImpl) AddUpsertWorkflowSearchAttributesEvent(
 	event := e.hBuilder.AddUpsertWorkflowSearchAttributesEvent(workflowTaskCompletedEventID, command)
 	e.ReplicateUpsertWorkflowSearchAttributesEvent(event)
 	// TODO merge active & passive task generation
-	if err := e.taskGenerator.GenerateWorkflowSearchAttrTasks(
+	if err := e.taskGenerator.GenerateUpsertVisibilityTask(
 		timestamp.TimeValue(event.GetEventTime()),
 	); err != nil {
 		return nil, err
@@ -2798,15 +2797,51 @@ func (e *MutableStateImpl) ReplicateUpsertWorkflowSearchAttributesEvent(
 	e.executionInfo.SearchAttributes = mergeMapOfPayload(currentSearchAttr, upsertSearchAttr)
 }
 
+func (e *MutableStateImpl) AddWorkflowPropertiesModifiedEvent(
+	workflowTaskCompletedEventID int64,
+	command *commandpb.ModifyWorkflowPropertiesCommandAttributes,
+) (*historypb.HistoryEvent, error) {
+	opTag := tag.WorkflowActionWorkflowPropertiesModified
+	if err := e.checkMutability(opTag); err != nil {
+		return nil, err
+	}
+
+	event := e.hBuilder.AddWorkflowPropertiesModifiedEvent(workflowTaskCompletedEventID, command)
+	e.ReplicateWorkflowPropertiesModifiedEvent(event)
+	// TODO merge active & passive task generation
+	if err := e.taskGenerator.GenerateUpsertVisibilityTask(
+		timestamp.TimeValue(event.GetEventTime()),
+	); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+func (e *MutableStateImpl) ReplicateWorkflowPropertiesModifiedEvent(
+	event *historypb.HistoryEvent,
+) {
+	attr := event.GetWorkflowPropertiesModifiedEventAttributes()
+	if attr.UpsertedMemo != nil {
+		upsertMemo := attr.GetUpsertedMemo().GetFields()
+		currentMemo := e.GetExecutionInfo().Memo
+		e.executionInfo.Memo = mergeMapOfPayload(currentMemo, upsertMemo)
+	}
+}
+
 func mergeMapOfPayload(
 	current map[string]*commonpb.Payload,
 	upsert map[string]*commonpb.Payload,
 ) map[string]*commonpb.Payload {
-
 	if current == nil {
 		current = make(map[string]*commonpb.Payload)
 	}
-	maps.Copy(current, upsert)
+	for k, v := range upsert {
+		if v.Data == nil {
+			delete(current, k)
+		} else {
+			current[k] = v
+		}
+	}
 	return current
 }
 
