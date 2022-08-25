@@ -68,7 +68,7 @@ func (c *Collection) logError(key Key, err error) {
 type PropertyFn func() interface{}
 
 // IntPropertyFn is a wrapper to get int property from dynamic config
-type IntPropertyFn func(opts ...FilterOption) int
+type IntPropertyFn func() int
 
 // IntPropertyFnWithNamespaceFilter is a wrapper to get int property from dynamic config with namespace as filter
 type IntPropertyFnWithNamespaceFilter func(namespace string) int
@@ -80,7 +80,7 @@ type IntPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue stri
 type IntPropertyFnWithShardIDFilter func(shardID int32) int
 
 // FloatPropertyFn is a wrapper to get float property from dynamic config
-type FloatPropertyFn func(opts ...FilterOption) float64
+type FloatPropertyFn func() float64
 
 // FloatPropertyFnWithShardIDFilter is a wrapper to get float property from dynamic config with shardID as filter
 type FloatPropertyFnWithShardIDFilter func(shardID int32) float64
@@ -92,7 +92,7 @@ type FloatPropertyFnWithNamespaceFilter func(namespace string) float64
 type FloatPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64
 
 // DurationPropertyFn is a wrapper to get duration property from dynamic config
-type DurationPropertyFn func(opts ...FilterOption) time.Duration
+type DurationPropertyFn func() time.Duration
 
 // DurationPropertyFnWithNamespaceFilter is a wrapper to get duration property from dynamic config with namespace as filter
 type DurationPropertyFnWithNamespaceFilter func(namespace string) time.Duration
@@ -107,13 +107,13 @@ type DurationPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue
 type DurationPropertyFnWithShardIDFilter func(shardID int32) time.Duration
 
 // BoolPropertyFn is a wrapper to get bool property from dynamic config
-type BoolPropertyFn func(opts ...FilterOption) bool
+type BoolPropertyFn func() bool
 
 // StringPropertyFn is a wrapper to get string property from dynamic config
-type StringPropertyFn func(opts ...FilterOption) string
+type StringPropertyFn func() string
 
 // MapPropertyFn is a wrapper to get map property from dynamic config
-type MapPropertyFn func(opts ...FilterOption) map[string]interface{}
+type MapPropertyFn func() map[string]interface{}
 
 // StringPropertyFnWithNamespaceFilter is a wrapper to get string property from dynamic config
 type StringPropertyFnWithNamespaceFilter func(namespace string) string
@@ -170,8 +170,8 @@ func getFilterMapsForTaskQueue(namespace string, taskQueue string, taskType enum
 
 // GetIntProperty gets property and asserts that it's an integer
 func (c *Collection) GetIntProperty(key Key, defaultValue any) IntPropertyFn {
-	return func(opts ...FilterOption) int {
-		val, err := c.client.GetIntValue(key, getFilterMap(opts...), defaultValue)
+	return func() int {
+		val, err := c.client.GetIntValue(key, nil, defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}
@@ -226,8 +226,8 @@ func (c *Collection) GetIntPropertyFilteredByShardID(key Key, defaultValue any) 
 
 // GetFloat64Property gets property and asserts that it's a float64
 func (c *Collection) GetFloat64Property(key Key, defaultValue any) FloatPropertyFn {
-	return func(opts ...FilterOption) float64 {
-		val, err := c.client.GetFloatValue(key, getFilterMap(opts...), defaultValue)
+	return func() float64 {
+		val, err := c.client.GetFloatValue(key, nil, defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}
@@ -282,8 +282,8 @@ func (c *Collection) GetFloatPropertyFilteredByTaskQueueInfo(key Key, defaultVal
 
 // GetDurationProperty gets property and asserts that it's a duration
 func (c *Collection) GetDurationProperty(key Key, defaultValue any) DurationPropertyFn {
-	return func(opts ...FilterOption) time.Duration {
-		val, err := c.client.GetDurationValue(key, getFilterMap(opts...), defaultValue)
+	return func() time.Duration {
+		val, err := c.client.GetDurationValue(key, nil, defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}
@@ -350,8 +350,8 @@ func (c *Collection) GetDurationPropertyFilteredByShardID(key Key, defaultValue 
 
 // GetBoolProperty gets property and asserts that it's a bool
 func (c *Collection) GetBoolProperty(key Key, defaultValue any) BoolPropertyFn {
-	return func(opts ...FilterOption) bool {
-		val, err := c.client.GetBoolValue(key, getFilterMap(opts...), defaultValue)
+	return func() bool {
+		val, err := c.client.GetBoolValue(key, nil, defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}
@@ -362,8 +362,8 @@ func (c *Collection) GetBoolProperty(key Key, defaultValue any) BoolPropertyFn {
 
 // GetStringProperty gets property and asserts that it's a string
 func (c *Collection) GetStringProperty(key Key, defaultValue any) StringPropertyFn {
-	return func(opts ...FilterOption) string {
-		val, err := c.client.GetStringValue(key, getFilterMap(opts...), defaultValue)
+	return func() string {
+		val, err := c.client.GetStringValue(key, nil, defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}
@@ -374,8 +374,8 @@ func (c *Collection) GetStringProperty(key Key, defaultValue any) StringProperty
 
 // GetMapProperty gets property and asserts that it's a map
 func (c *Collection) GetMapProperty(key Key, defaultValue any) MapPropertyFn {
-	return func(opts ...FilterOption) map[string]interface{} {
-		val, err := c.client.GetMapValue(key, getFilterMap(opts...), defaultValue)
+	return func() map[string]interface{} {
+		val, err := c.client.GetMapValue(key, nil, defaultValue)
 		if err != nil {
 			c.logError(key, err)
 		}

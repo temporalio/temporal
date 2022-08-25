@@ -633,7 +633,7 @@ func TestTaskQueueSubPartitionPollsPeriodically(t *testing.T) {
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
-	tqCfg.config.MetadataPollFrequency = func(opts ...dynamicconfig.FilterOption) time.Duration {
+	tqCfg.config.MetadataPollFrequency = func() time.Duration {
 		return time.Millisecond * 10
 	}
 
@@ -668,7 +668,7 @@ func TestTaskQueueSubPartitionDoesNotPollIfNoDataThenPollsWhenInvalidated(t *tes
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
-	tqCfg.config.MetadataPollFrequency = func(opts ...dynamicconfig.FilterOption) time.Duration {
+	tqCfg.config.MetadataPollFrequency = func() time.Duration {
 		return time.Millisecond * 10
 	}
 
@@ -720,7 +720,7 @@ func TestTaskQueueManagerWaitInitFailThenPass(t *testing.T) {
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
-	tqCfg.config.MetadataPollFrequency = func(opts ...dynamicconfig.FilterOption) time.Duration {
+	tqCfg.config.MetadataPollFrequency = func() time.Duration {
 		return time.Millisecond * 10
 	}
 
@@ -766,7 +766,7 @@ func TestFetchingVersioningDataErrorsIfNeverFetchedFromRootSuccessfully(t *testi
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
-	tqCfg.config.MetadataPollFrequency = func(opts ...dynamicconfig.FilterOption) time.Duration {
+	tqCfg.config.MetadataPollFrequency = func() time.Duration {
 		return time.Millisecond * 10
 	}
 
