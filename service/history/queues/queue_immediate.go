@@ -153,6 +153,8 @@ func (p *immediateQueue) processEventLoop() {
 			p.processPollTimer()
 		case <-p.checkpointTimer.C:
 			p.checkpoint()
+		case alert := <-p.alertCh:
+			p.handleAlert(alert)
 		}
 	}
 }
