@@ -58,8 +58,6 @@ type (
 		Services map[string]Service `yaml:"services"`
 		// Archival is the config for archival
 		Archival Archival `yaml:"archival"`
-		// PublicClient is config for connecting to temporal frontend
-		PublicClient PublicClient `yaml:"publicClient"`
 		// DynamicConfigClient is the config for setting up the file based dynamic config client
 		// Filepath should be relative to the root directory
 		DynamicConfigClient *dynamicconfig.FileBasedClientConfig `yaml:"dynamicConfigClient"`

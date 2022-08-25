@@ -395,7 +395,7 @@ func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.T
 	}
 
 	return sdk.NewClientFactory(
-		cfg.PublicClient.HostPort,
+		cfg.ClusterMetadata.InternalRPCAddress,
 		tlsFrontendConfig,
 		sdk.NewMetricsHandler(provider),
 	), nil

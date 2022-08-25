@@ -30,8 +30,7 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/server/service/history/replication"
-
+	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -39,17 +38,9 @@ import (
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc"
-
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
-
-	"github.com/pborman/uuid"
-
-	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/telemetry"
+	"google.golang.org/grpc"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
@@ -57,6 +48,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -68,11 +60,14 @@ import (
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
@@ -573,7 +568,6 @@ func WorkerServiceProvider(
 // ApplyClusterMetadataConfigProvider performs a config check against the configured persistence store for cluster metadata.
 // If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
 // This is to keep this check hidden from downstream calls.
-// TODO: move this to cluster.fx
 func ApplyClusterMetadataConfigProvider(
 	logger log.Logger,
 	config *config.Config,
@@ -612,142 +606,124 @@ func ApplyClusterMetadataConfigProvider(
 	defer clusterMetadataManager.Close()
 
 	clusterData := config.ClusterMetadata
-	for clusterName, clusterInfo := range clusterData.ClusterInformation {
-		if clusterName != clusterData.CurrentClusterName {
-			logger.Warn(
-				"ClusterInformation in ClusterMetadata config is deprecated. "+
-					"Please use TCTL admin tool to configure remote cluster connections",
-				tag.Key("clusterInformation"),
-				tag.ClusterName(clusterName),
-				tag.IgnoredValue(clusterInfo))
-			continue
-		}
+	if clusterData.InitialFailoverVersion == 0 || len(clusterData.InternalRPCAddress) == 0 {
+		return config.ClusterMetadata, config.Persistence, fmt.Errorf("ClusterInformation config is deprecated. Please set InitialFailoverVersion and InternalRPCAddress in ClusterMetadata config")
+	}
+	// Only configure current cluster metadata from static config file
+	clusterId := uuid.New()
+	applied, err := clusterMetadataManager.SaveClusterMetadata(
+		ctx,
+		&persistence.SaveClusterMetadataRequest{
+			ClusterMetadata: persistencespb.ClusterMetadata{
+				HistoryShardCount:        config.Persistence.NumHistoryShards,
+				ClusterName:              clusterData.CurrentClusterName,
+				ClusterId:                clusterId,
+				ClusterAddress:           clusterData.InternalRPCAddress,
+				FailoverVersionIncrement: clusterData.FailoverVersionIncrement,
+				InitialFailoverVersion:   clusterData.InitialFailoverVersion,
+				IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
+				IsConnectionEnabled:      true, // current cluster connection always be enabled
+			},
+		})
+	if err != nil {
+		logger.Warn("Failed to save cluster metadata.", tag.Error(err), tag.ClusterName(clusterData.CurrentClusterName))
+	}
+	if applied {
+		logger.Info("Successfully saved cluster metadata.", tag.ClusterName(clusterData.CurrentClusterName))
+		return config.ClusterMetadata, config.Persistence, nil
+	}
+	resp, err := clusterMetadataManager.GetClusterMetadata(ctx, &persistence.GetClusterMetadataRequest{
+		ClusterName: clusterData.CurrentClusterName,
+	})
+	if err != nil {
+		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
+	}
+	err = updateClusterData(ctx, clusterMetadataManager, resp, clusterData)
+	if err != nil {
+		return config.ClusterMetadata, config.Persistence, err
+	}
+	overwriteClusterData(resp, clusterData, config, logger)
+	return config.ClusterMetadata, config.Persistence, nil
+}
 
-		// Only configure current cluster metadata from static config file
-		clusterId := uuid.New()
+func updateClusterData(
+	ctx context.Context,
+	clusterMetadataManager persistence.ClusterMetadataManager,
+	persistedData *persistence.GetClusterMetadataResponse,
+	clusterData *cluster.Config,
+) error {
+	// Allow updating current cluster metadata if global namespace is disabled
+	updateCurrentClusterMetadata := false
+	currentMetadata := persistedData.ClusterMetadata
+	if !persistedData.IsGlobalNamespaceEnabled && clusterData.EnableGlobalNamespace {
+		currentMetadata.IsGlobalNamespaceEnabled = clusterData.EnableGlobalNamespace
+		currentMetadata.InitialFailoverVersion = clusterData.InitialFailoverVersion
+		currentMetadata.FailoverVersionIncrement = clusterData.FailoverVersionIncrement
+		updateCurrentClusterMetadata = true
+	}
+	// Allow updating current cluster internal rpc address
+	if persistedData.ClusterAddress != clusterData.InternalRPCAddress {
+		currentMetadata.ClusterAddress = clusterData.InternalRPCAddress
+		updateCurrentClusterMetadata = true
+	}
+	if updateCurrentClusterMetadata {
 		applied, err := clusterMetadataManager.SaveClusterMetadata(
 			ctx,
 			&persistence.SaveClusterMetadataRequest{
-				ClusterMetadata: persistencespb.ClusterMetadata{
-					HistoryShardCount:        config.Persistence.NumHistoryShards,
-					ClusterName:              clusterName,
-					ClusterId:                clusterId,
-					ClusterAddress:           clusterInfo.RPCAddress,
-					FailoverVersionIncrement: clusterData.FailoverVersionIncrement,
-					InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
-					IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
-					IsConnectionEnabled:      clusterInfo.Enabled,
-				},
+				ClusterMetadata: currentMetadata,
+				Version:         persistedData.Version,
 			})
-		if err != nil {
-			logger.Warn("Failed to save cluster metadata.", tag.Error(err), tag.ClusterName(clusterName))
-		}
-		if applied {
-			logger.Info("Successfully saved cluster metadata.", tag.ClusterName(clusterName))
-			continue
-		}
-
-		resp, err := clusterMetadataManager.GetClusterMetadata(ctx, &persistence.GetClusterMetadataRequest{
-			ClusterName: clusterName,
-		})
-		if err != nil {
-			return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
-		}
-
-		// Allow updating cluster metadata if global namespace is disabled
-		if !resp.IsGlobalNamespaceEnabled && clusterData.EnableGlobalNamespace {
-			currentMetadata := resp.ClusterMetadata
-			currentMetadata.IsGlobalNamespaceEnabled = clusterData.EnableGlobalNamespace
-			currentMetadata.InitialFailoverVersion = clusterInfo.InitialFailoverVersion
-			currentMetadata.FailoverVersionIncrement = clusterData.FailoverVersionIncrement
-
-			applied, err = clusterMetadataManager.SaveClusterMetadata(
-				ctx,
-				&persistence.SaveClusterMetadataRequest{
-					ClusterMetadata: currentMetadata,
-					Version:         resp.Version,
-				})
-			if !applied || err != nil {
-				return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while updating cluster metadata: %w", err)
-			}
-		} else if resp.IsGlobalNamespaceEnabled != clusterData.EnableGlobalNamespace {
-			logger.Warn(
-				mismatchLogMessage,
-				tag.Key("clusterMetadata.EnableGlobalNamespace"),
-				tag.IgnoredValue(clusterData.EnableGlobalNamespace),
-				tag.Value(resp.IsGlobalNamespaceEnabled))
-			config.ClusterMetadata.EnableGlobalNamespace = resp.IsGlobalNamespaceEnabled
-		}
-
-		// Verify current cluster metadata
-		persistedShardCount := resp.HistoryShardCount
-		if config.Persistence.NumHistoryShards != persistedShardCount {
-			logger.Warn(
-				mismatchLogMessage,
-				tag.Key("persistence.numHistoryShards"),
-				tag.IgnoredValue(config.Persistence.NumHistoryShards),
-				tag.Value(persistedShardCount))
-			config.Persistence.NumHistoryShards = persistedShardCount
-		}
-		if resp.FailoverVersionIncrement != clusterData.FailoverVersionIncrement {
-			logger.Warn(
-				mismatchLogMessage,
-				tag.Key("clusterMetadata.FailoverVersionIncrement"),
-				tag.IgnoredValue(clusterData.FailoverVersionIncrement),
-				tag.Value(resp.FailoverVersionIncrement))
-			config.ClusterMetadata.FailoverVersionIncrement = resp.FailoverVersionIncrement
+		if !applied || err != nil {
+			return fmt.Errorf("error while updating cluster metadata: %w", err)
 		}
 	}
-	err = loadClusterInformationFromStore(ctx, config, clusterMetadataManager, logger)
-	if err != nil {
-		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
+	return nil
+}
+
+func overwriteClusterData(
+	persistedData *persistence.GetClusterMetadataResponse,
+	clusterData *cluster.Config,
+	config *config.Config,
+	logger log.Logger,
+) {
+	// Verify current cluster metadata
+	persistedShardCount := persistedData.HistoryShardCount
+	if config.Persistence.NumHistoryShards != persistedShardCount {
+		logger.Warn(
+			mismatchLogMessage,
+			tag.Key("persistence.numHistoryShards"),
+			tag.IgnoredValue(config.Persistence.NumHistoryShards),
+			tag.Value(persistedShardCount))
+		config.Persistence.NumHistoryShards = persistedShardCount
 	}
-	return config.ClusterMetadata, config.Persistence, nil
+	if persistedData.FailoverVersionIncrement != clusterData.FailoverVersionIncrement {
+		logger.Warn(
+			mismatchLogMessage,
+			tag.Key("clusterMetadata.FailoverVersionIncrement"),
+			tag.IgnoredValue(clusterData.FailoverVersionIncrement),
+			tag.Value(persistedData.FailoverVersionIncrement))
+		config.ClusterMetadata.FailoverVersionIncrement = persistedData.FailoverVersionIncrement
+	}
+	if persistedData.InitialFailoverVersion != clusterData.InitialFailoverVersion {
+		logger.Warn(
+			mismatchLogMessage,
+			tag.Key("clusterMetadata.InitialFailoverVersion"),
+			tag.IgnoredValue(clusterData.InitialFailoverVersion),
+			tag.Value(persistedData.InitialFailoverVersion))
+		config.ClusterMetadata.InitialFailoverVersion = persistedData.InitialFailoverVersion
+	}
+	if persistedData.IsGlobalNamespaceEnabled && !clusterData.EnableGlobalNamespace {
+		logger.Warn(
+			mismatchLogMessage,
+			tag.Key("clusterMetadata.EnableGlobalNamespace"),
+			tag.IgnoredValue(clusterData.EnableGlobalNamespace),
+			tag.Value(persistedData.IsGlobalNamespaceEnabled))
+		config.ClusterMetadata.EnableGlobalNamespace = persistedData.IsGlobalNamespaceEnabled
+	}
 }
 
 func PersistenceFactoryProvider() persistenceClient.FactoryProviderFn {
 	return persistenceClient.FactoryProvider
-}
-
-// TODO: move this to cluster.fx
-func loadClusterInformationFromStore(ctx context.Context, config *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
-	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
-		request := &persistence.ListClusterMetadataRequest{
-			PageSize:      100,
-			NextPageToken: nil,
-		}
-		resp, err := clusterMsg.ListClusterMetadata(ctx, request)
-		if err != nil {
-			return nil, nil, err
-		}
-		var pageItem []interface{}
-		for _, metadata := range resp.ClusterMetadata {
-			pageItem = append(pageItem, metadata)
-		}
-		return pageItem, resp.NextPageToken, nil
-	})
-
-	for iter.HasNext() {
-		item, err := iter.Next()
-		if err != nil {
-			return err
-		}
-		metadata := item.(*persistence.GetClusterMetadataResponse)
-		newMetadata := cluster.ClusterInformation{
-			Enabled:                metadata.IsConnectionEnabled,
-			InitialFailoverVersion: metadata.InitialFailoverVersion,
-			RPCAddress:             metadata.ClusterAddress,
-		}
-		if staticClusterMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok && metadata.ClusterName != config.ClusterMetadata.CurrentClusterName {
-			logger.Warn(
-				"ClusterInformation in ClusterMetadata config is deprecated. Please use TCTL tool to configure remote cluster connections",
-				tag.Key("clusterInformation"),
-				tag.IgnoredValue(staticClusterMetadata),
-				tag.Value(newMetadata))
-		}
-		config.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
-	}
-	return nil
 }
 
 func ServerLifetimeHooks(

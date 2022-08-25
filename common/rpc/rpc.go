@@ -191,9 +191,8 @@ func (d *RPCFactory) CreateFrontendGRPCConnection(rpcAddress string) *grpc.Clien
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
-		currCluster := d.clusterMetadata.ClusterInformation[d.clusterMetadata.CurrentClusterName]
 
-		if currCluster.RPCAddress == rpcAddress {
+		if d.clusterMetadata.InternalRPCAddress == rpcAddress {
 			tlsClientConfig, err = d.tlsFactory.GetFrontendClientConfig()
 		} else {
 			hostname, _, err2 := net.SplitHostPort(rpcAddress)

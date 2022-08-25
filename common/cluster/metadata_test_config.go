@@ -83,7 +83,8 @@ func NewTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bo
 			FailoverVersionIncrement: TestFailoverVersionIncrement,
 			MasterClusterName:        masterClusterName,
 			CurrentClusterName:       TestCurrentClusterName,
-			ClusterInformation:       TestAllClusterInfo,
+			InitialFailoverVersion:   TestCurrentClusterInitialFailoverVersion,
+			InternalRPCAddress:       TestCurrentClusterFrontendAddress,
 		}
 	}
 
@@ -92,6 +93,7 @@ func NewTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bo
 		FailoverVersionIncrement: TestFailoverVersionIncrement,
 		MasterClusterName:        TestCurrentClusterName,
 		CurrentClusterName:       TestCurrentClusterName,
-		ClusterInformation:       TestSingleDCClusterInfo,
+		InitialFailoverVersion:   TestCurrentClusterInitialFailoverVersion,
+		InternalRPCAddress:       TestCurrentClusterFrontendAddress,
 	}
 }

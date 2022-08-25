@@ -91,8 +91,12 @@ type (
 		MasterClusterName string `yaml:"masterClusterName"`
 		// CurrentClusterName is the name of the current cluster
 		CurrentClusterName string `yaml:"currentClusterName"`
-		// ClusterInformation contains all cluster names to corresponding information about that cluster
-		ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
+		// Address indicate the internal service address(Host:Port). Host can be DNS name.
+		InternalRPCAddress string `yaml:"internalRPCAddress"`
+		// InitialFailoverVersion use for failover version control. This cannot be zero or smaller than the FailoverVersionIncrement.
+		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
+		//// ClusterInformation contains all cluster names to corresponding information about that cluster
+		//ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
 	}
 
 	// ClusterInformation contains the information about each cluster which participated in cross DC
@@ -101,7 +105,7 @@ type (
 		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
 		// Address indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
-		// private field to track cluster infomation updates
+		// private field to track cluster information updates
 		version int64
 	}
 
@@ -136,51 +140,44 @@ type (
 	}
 )
 
-func NewMetadata(
+func newMetadata(
 	enableGlobalNamespace bool,
 	failoverVersionIncrement int64,
 	masterClusterName string,
 	currentClusterName string,
-	clusterInfo map[string]ClusterInformation,
+	internalRPCAddress string,
+	initialFailoverVersion int64,
 	clusterMetadataStore persistence.ClusterMetadataManager,
 	refreshDuration dynamicconfig.DurationPropertyFn,
 	logger log.Logger,
 ) Metadata {
-	if len(clusterInfo) == 0 {
-		panic("Empty cluster information")
+	if len(internalRPCAddress) == 0 {
+		panic("Empty internal RPC address")
 	} else if len(masterClusterName) == 0 {
 		panic("Master cluster name is empty")
 	} else if len(currentClusterName) == 0 {
 		panic("Current cluster name is empty")
 	} else if failoverVersionIncrement == 0 {
 		panic("Version increment is 0")
+	} else if initialFailoverVersion == 0 {
+		panic("Initial failover version is 0")
 	}
 
+	clusterInfo := make(map[string]ClusterInformation)
+	clusterInfo[currentClusterName] = ClusterInformation{
+		Enabled:                true,
+		InitialFailoverVersion: initialFailoverVersion,
+		RPCAddress:             internalRPCAddress,
+	}
 	versionToClusterName := updateVersionToClusterName(clusterInfo, failoverVersionIncrement)
-	if _, ok := clusterInfo[currentClusterName]; !ok {
-		panic("Current cluster is not specified in cluster info")
-	}
-	if _, ok := clusterInfo[masterClusterName]; !ok {
-		panic("Master cluster is not specified in cluster info")
-	}
-	if len(versionToClusterName) != len(clusterInfo) {
-		panic("Cluster info initial versions have duplicates")
-	}
 
-	copyClusterInfo := make(map[string]ClusterInformation)
-	for k, v := range clusterInfo {
-		copyClusterInfo[k] = v
-	}
-	if refreshDuration == nil {
-		refreshDuration = dynamicconfig.GetDurationPropertyFn(refreshInterval)
-	}
 	return &metadataImpl{
 		status:                   common.DaemonStatusInitialized,
 		enableGlobalNamespace:    enableGlobalNamespace,
 		failoverVersionIncrement: failoverVersionIncrement,
 		masterClusterName:        masterClusterName,
 		currentClusterName:       currentClusterName,
-		clusterInfo:              copyClusterInfo,
+		clusterInfo:              clusterInfo,
 		versionToClusterName:     versionToClusterName,
 		clusterChangeCallback:    make(map[any]CallbackFn),
 		clusterMetadataStore:     clusterMetadataStore,
@@ -195,12 +192,13 @@ func NewMetadataFromConfig(
 	dynamicCollection *dynamicconfig.Collection,
 	logger log.Logger,
 ) Metadata {
-	return NewMetadata(
+	return newMetadata(
 		config.EnableGlobalNamespace,
 		config.FailoverVersionIncrement,
 		config.MasterClusterName,
 		config.CurrentClusterName,
-		config.ClusterInformation,
+		config.InternalRPCAddress,
+		config.InitialFailoverVersion,
 		clusterMetadataStore,
 		dynamicCollection.GetDurationProperty(dynamicconfig.ClusterMetadataRefreshInterval, refreshInterval),
 		logger,
@@ -210,14 +208,15 @@ func NewMetadataFromConfig(
 func NewMetadataForTest(
 	config *Config,
 ) Metadata {
-	return NewMetadata(
+	return newMetadata(
 		config.EnableGlobalNamespace,
 		config.FailoverVersionIncrement,
 		config.MasterClusterName,
 		config.CurrentClusterName,
-		config.ClusterInformation,
+		config.InternalRPCAddress,
+		config.InitialFailoverVersion,
 		nil,
-		nil,
+		dynamicconfig.GetDurationPropertyFn(refreshInterval),
 		log.NewNoopLogger(),
 	)
 }
