@@ -56,9 +56,14 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
-// If sticky poller is not seem in last 10s, we treat it as sticky worker unavailable
-// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
-const stickyPollerUnavailableWindow = 10 * time.Second
+const (
+	// If sticky poller is not seem in last 10s, we treat it as sticky worker unavailable
+	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
+	stickyPollerUnavailableWindow = 10 * time.Second
+
+	recordTaskStartedDefaultTimeout   = 10 * time.Second
+	recordTaskStartedSyncMatchTimeout = 1 * time.Second
+)
 
 // Implements matching.Engine
 // TODO: Switch implementation from lock/channel based to a partitioned agent
@@ -987,6 +992,9 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	pollReq *workflowservice.PollWorkflowTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+	ctx, cancel := newRecordTaskStartedContext(ctx, task)
+	defer cancel()
+
 	return e.historyClient.RecordWorkflowTaskStarted(ctx, &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
@@ -1003,6 +1011,9 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	pollReq *workflowservice.PollActivityTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
+	ctx, cancel := newRecordTaskStartedContext(ctx, task)
+	defer cancel()
+
 	return e.historyClient.RecordActivityTaskStarted(ctx, &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
@@ -1049,4 +1060,22 @@ func (m *lockableQueryTaskMap) delete(key string) {
 	m.Lock()
 	defer m.Unlock()
 	delete(m.queryTaskMap, key)
+}
+
+// newRecordTaskStartedContext creates a context for recording
+// activity or workflow task started. The parentCtx from
+// pollActivity/WorkflowTaskQueue endpoint (which is a long poll
+// API) has long timeout and unsutiable for recording task started,
+// especially if the task is doing sync match and has caller
+// (history transfer queue) waiting for response.
+func newRecordTaskStartedContext(
+	parentCtx context.Context,
+	task *internalTask,
+) (context.Context, context.CancelFunc) {
+	timeout := recordTaskStartedDefaultTimeout
+	if task.isSyncMatchTask() {
+		timeout = recordTaskStartedSyncMatchTimeout
+	}
+
+	return context.WithTimeout(parentCtx, timeout)
 }

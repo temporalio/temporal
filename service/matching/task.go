@@ -120,6 +120,10 @@ func (task *internalTask) isForwarded() bool {
 	return task.forwardedFrom != ""
 }
 
+func (task *internalTask) isSyncMatchTask() bool {
+	return task.responseC != nil
+}
+
 func (task *internalTask) workflowExecution() *commonpb.WorkflowExecution {
 	switch {
 	case task.event != nil:
