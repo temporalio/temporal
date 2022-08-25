@@ -25,7 +25,6 @@
 package queues
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -77,7 +76,7 @@ func (s *readerSuite) SetupTest() {
 	s.metricsHandler = metrics.NoopMetricsHandler
 
 	s.executableInitializer = func(t tasks.Task) Executable {
-		return NewExecutable(t, nil, nil, nil, nil, clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
+		return NewExecutable(t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(1000),
@@ -103,9 +102,9 @@ func (s *readerSuite) TestStartLoadStop() {
 	}
 
 	doneCh := make(chan struct{})
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
 		close(doneCh)
-		return true, nil
+		return true
 	}).Times(1)
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
@@ -248,10 +247,10 @@ func (s *readerSuite) TestThrottle() {
 	reader.Pause(delay)
 
 	doneCh := make(chan struct{})
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
 		s.True(time.Now().After(now.Add(delay)))
 		close(doneCh)
-		return true, nil
+		return true
 	}).Times(1)
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
@@ -306,9 +305,9 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 	reader.timeSource = mockTimeSource
 
 	taskSubmitted := 0
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
 		taskSubmitted++
-		return true, nil
+		return true
 	}).AnyTimes()
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
@@ -336,9 +335,9 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 	reader.timeSource = mockTimeSource
 
 	taskSubmitted := 0
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
 		taskSubmitted++
-		return true, nil
+		return true
 	}).AnyTimes()
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
@@ -366,9 +365,9 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_NoNextSlice() {
 	reader.timeSource = mockTimeSource
 
 	taskSubmitted := 0
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
 		taskSubmitted++
-		return true, nil
+		return true
 	}).AnyTimes()
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
@@ -392,16 +391,11 @@ func (s *readerSuite) TestSubmitTask() {
 
 	pastFireTime := reader.timeSource.Now().Add(-time.Minute)
 	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(true, nil).Times(1)
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(true).Times(1)
 	reader.submit(mockExecutable)
 
 	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(false, nil).Times(1)
-	mockExecutable.EXPECT().Reschedule().Times(1)
-	reader.submit(mockExecutable)
-
-	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(false, errors.New("some random error")).Times(1)
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(false).Times(1)
 	mockExecutable.EXPECT().Reschedule().Times(1)
 	reader.submit(mockExecutable)
 

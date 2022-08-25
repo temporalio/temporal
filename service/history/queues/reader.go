@@ -402,11 +402,7 @@ func (r *ReaderImpl) submit(
 		return
 	}
 
-	submitted, err := r.scheduler.TrySubmit(executable)
-	if err != nil {
-		r.logger.Error("Failed to submit task", tag.Error(err))
-		executable.Reschedule()
-	} else if !submitted {
+	if !r.scheduler.TrySubmit(executable) {
 		executable.Reschedule()
 	}
 }

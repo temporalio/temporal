@@ -41,15 +41,14 @@ type (
 	visibilityQueueFactoryParams struct {
 		fx.In
 
-		SchedulerParams
+		QueueFactoryBaseParams
 
-		VisibilityMgr  manager.VisibilityManager
-		MetricsHandler metrics.MetricsHandler
+		VisibilityMgr manager.VisibilityManager
 	}
 
 	visibilityQueueFactory struct {
 		visibilityQueueFactoryParams
-		queueFactoryBase
+		QueueFactoryBase
 	}
 )
 
@@ -59,14 +58,6 @@ func NewVisibilityQueueFactory(
 	var hostScheduler queues.Scheduler
 	if params.Config.VisibilityProcessorEnablePriorityTaskScheduler() {
 		hostScheduler = queues.NewNamespacePriorityScheduler(
-			queues.NewPriorityAssigner(
-				params.ClusterMetadata.GetCurrentClusterName(),
-				params.NamespaceRegistry,
-				queues.PriorityAssignerOptions{
-					CriticalRetryAttempts: params.Config.VisibilityTaskMaxRetryCount,
-				},
-				params.MetricsHandler,
-			),
 			queues.NamespacePrioritySchedulerOptions{
 				WorkerCount:      params.Config.VisibilityProcessorSchedulerWorkerCount,
 				NamespaceWeights: params.Config.VisibilityProcessorSchedulerRoundRobinWeights,
@@ -78,9 +69,16 @@ func NewVisibilityQueueFactory(
 	}
 	return &visibilityQueueFactory{
 		visibilityQueueFactoryParams: params,
-		queueFactoryBase: queueFactoryBase{
-			hostScheduler: hostScheduler,
-			hostRateLimiter: newQueueHostRateLimiter(
+		QueueFactoryBase: QueueFactoryBase{
+			HostScheduler: hostScheduler,
+			HostPriorityAssigner: queues.NewPriorityAssigner(
+				params.ClusterMetadata.GetCurrentClusterName(),
+				params.NamespaceRegistry,
+				queues.PriorityAssignerOptions{
+					CriticalRetryAttempts: params.Config.TransferTaskMaxRetryCount(),
+				},
+			),
+			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.VisibilityProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
 			),
@@ -93,7 +91,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 	engine shard.Engine,
 	workflowCache workflow.Cache,
 ) queues.Queue {
-	if f.hostScheduler != nil && f.Config.VisibilityProcessorEnableMultiCursor() {
+	if f.HostScheduler != nil && f.Config.VisibilityProcessorEnableMultiCursor() {
 		logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
 
 		executor := newVisibilityQueueTaskExecutor(
@@ -107,7 +105,8 @@ func (f *visibilityQueueFactory) CreateQueue(
 		return queues.NewImmediateQueue(
 			shard,
 			tasks.CategoryVisibility,
-			f.hostScheduler,
+			f.HostScheduler,
+			f.HostPriorityAssigner,
 			executor,
 			&queues.Options{
 				ReaderOptions: queues.ReaderOptions{
@@ -126,7 +125,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 				TaskMaxRetryCount:                   f.Config.VisibilityTaskMaxRetryCount,
 			},
 			newQueueProcessorRateLimiter(
-				f.hostRateLimiter,
+				f.HostRateLimiter,
 				f.Config.VisibilityProcessorMaxPollRPS,
 			),
 			logger,
@@ -137,9 +136,10 @@ func (f *visibilityQueueFactory) CreateQueue(
 	return newVisibilityQueueProcessor(
 		shard,
 		workflowCache,
-		f.hostScheduler,
+		f.HostScheduler,
+		f.HostPriorityAssigner,
 		f.VisibilityMgr,
 		f.MetricsHandler,
-		f.hostRateLimiter,
+		f.HostRateLimiter,
 	)
 }
