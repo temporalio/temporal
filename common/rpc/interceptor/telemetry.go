@@ -242,16 +242,19 @@ func (ti *TelemetryInterceptor) handleError(
 
 	switch err := err.(type) {
 	// we emit service_error_with_type metrics, no need to emit specific metric for these known error types.
-	case *serviceerror.WorkflowNotReady,
+	case *serviceerror.AlreadyExists,
+		*serviceerror.CancellationAlreadyRequested,
 		*serviceerror.NamespaceInvalidState,
-		*serviceerror.InvalidArgument,
 		*serviceerror.NamespaceNotActive,
-		*serviceerror.WorkflowExecutionAlreadyStarted,
-		*serviceerror.NotFound,
 		*serviceerror.NamespaceNotFound,
 		*serviceerror.NamespaceAlreadyExists,
+		*serviceerror.InvalidArgument,
+		*serviceerror.WorkflowExecutionAlreadyStarted,
+		*serviceerror.WorkflowNotReady,
+		*serviceerror.NotFound,
 		*serviceerror.QueryFailed,
 		*serviceerror.ClientVersionNotSupported,
+		*serviceerror.ServerVersionNotSupported,
 		*serviceerror.PermissionDenied,
 		*serviceerrors.StickyWorkerUnavailable,
 		*serviceerrors.ShardOwnershipLost,
@@ -266,6 +269,7 @@ func (ti *TelemetryInterceptor) handleError(
 	// Any other errors are treated as ServiceFailures against SLA.
 	// Including below known errors and any other unknown errors.
 	//  *serviceerror.DataLoss,
+	//  *serviceerror.Internal
 	//	*serviceerror.Unavailable:
 	default:
 		scope.IncCounter(metrics.ServiceFailures)

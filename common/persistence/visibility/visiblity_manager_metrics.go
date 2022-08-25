@@ -215,28 +215,21 @@ func (m *visibilityManagerMetrics) tagScope(scope int) (metrics.Scope, metrics.S
 }
 
 func (m *visibilityManagerMetrics) updateErrorMetric(scope metrics.Scope, err error) error {
-	switch err := err.(type) {
-	case nil:
+	if err == nil {
 		return nil
-	case *serviceerror.InvalidArgument:
-		scope.IncCounter(metrics.VisibilityPersistenceInvalidArgument)
-		scope.IncCounter(metrics.VisibilityPersistenceFailures)
-	case *persistence.TimeoutError:
-		scope.IncCounter(metrics.VisibilityPersistenceTimeout)
-		scope.IncCounter(metrics.VisibilityPersistenceFailures)
+	}
+
+	scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.VisibilityPersistenceErrorWithType)
+
+	switch err := err.(type) {
+	case *serviceerror.InvalidArgument,
+		*persistence.TimeoutError,
+		*persistence.ConditionFailedError,
+		*serviceerror.NotFound:
+		// no-op
+
 	case *serviceerror.ResourceExhausted:
 		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.VisibilityPersistenceResourceExhausted)
-		scope.IncCounter(metrics.VisibilityPersistenceFailures)
-	case *serviceerror.Internal:
-		scope.IncCounter(metrics.VisibilityPersistenceInternal)
-		scope.IncCounter(metrics.VisibilityPersistenceFailures)
-	case *serviceerror.Unavailable:
-		scope.IncCounter(metrics.VisibilityPersistenceUnavailable)
-		scope.IncCounter(metrics.VisibilityPersistenceFailures)
-	case *persistence.ConditionFailedError:
-		scope.IncCounter(metrics.VisibilityPersistenceConditionFailed)
-	case *serviceerror.NotFound:
-		scope.IncCounter(metrics.VisibilityPersistenceNotFound)
 	default:
 		m.logger.Error("Operation failed with an error.", tag.Error(err))
 		scope.IncCounter(metrics.VisibilityPersistenceFailures)
