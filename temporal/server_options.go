@@ -63,7 +63,7 @@ type (
 		audienceGetter             authorization.JWTAudienceMapper
 		persistenceServiceResolver resolver.ServiceResolver
 		elasticsearchHttpClient    *http.Client
-		dynamicConfigClient        dynamicconfig.Client
+		dynamicConfigClient        dynamicconfig.XXXClient
 		customDataStoreFactory     persistenceClient.AbstractDataStoreFactory
 		clientFactoryProvider      client.FactoryProvider
 		searchAttributesMapper     searchattribute.Mapper

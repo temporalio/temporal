@@ -34,11 +34,9 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-// Collection wraps dynamic config client with a closure so that across the code, the config values
-// can be directly accessed by calling the function without propagating the client everywhere in
-// code
+// Collection implements lookup and constraint logic on top of a Source.
 type Collection struct {
-	client   Client
+	source   Source
 	logger   log.Logger
 	errCount int64
 }
@@ -48,9 +46,9 @@ const (
 )
 
 // NewCollection creates a new collection
-func NewCollection(client Client, logger log.Logger) *Collection {
+func NewCollection(source Source, logger log.Logger) *Collection {
 	return &Collection{
-		client:   client,
+		source:   source,
 		logger:   logger,
 		errCount: -1,
 	}

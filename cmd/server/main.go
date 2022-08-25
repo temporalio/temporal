@@ -150,7 +150,7 @@ func buildCLI() *cli.App {
 					tag.NewStringTag("server-version", headers.ServerVersion),
 				)
 
-				var dynamicConfigClient dynamicconfig.Client
+				var dynamicConfigClient dynamicconfig.XXXClient
 				if cfg.DynamicConfigClient != nil {
 					dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(cfg.DynamicConfigClient, logger, temporal.InterruptCh())
 					if err != nil {

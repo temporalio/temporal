@@ -136,7 +136,7 @@ func WithElasticsearchHttpClient(c *http.Client) ServerOption {
 }
 
 // WithDynamicConfigClient sets custom dynamic config client for reading dynamic configuration.
-func WithDynamicConfigClient(c dynamicconfig.Client) ServerOption {
+func WithDynamicConfigClient(c dynamicconfig.XXXClient) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.dynamicConfigClient = c
 	})

@@ -127,7 +127,7 @@ type (
 		Logger                  log.Logger
 		ClientFactoryProvider   client.FactoryProvider
 		MetricsClient           metrics.Client
-		DynamicConfigClient     dynamicconfig.Client
+		DynamicConfigClient     dynamicconfig.XXXClient
 		DynamicConfigCollection *dynamicconfig.Collection
 		TLSConfigProvider       encryption.TLSConfigProvider
 		EsConfig                *esclient.Config
@@ -316,7 +316,7 @@ type (
 		ServiceNames               resource.ServiceNames
 		Logger                     log.Logger
 		NamespaceLogger            resource.NamespaceLogger
-		DynamicConfigClient        dynamicconfig.Client
+		DynamicConfigClient        dynamicconfig.XXXClient
 		MetricsHandler             metrics.MetricsHandler
 		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
@@ -372,7 +372,7 @@ func HistoryServiceProvider(
 		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
+		fx.Provide(func() dynamicconfig.XXXClient { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
@@ -432,7 +432,7 @@ func MatchingServiceProvider(
 		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
+		fx.Provide(func() dynamicconfig.XXXClient { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
@@ -489,7 +489,7 @@ func FrontendServiceProvider(
 		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
+		fx.Provide(func() dynamicconfig.XXXClient { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
@@ -547,7 +547,7 @@ func WorkerServiceProvider(
 		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
+		fx.Provide(func() dynamicconfig.XXXClient { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),

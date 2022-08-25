@@ -28,9 +28,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
-// Key represents a key/property stored in dynamic config
-type Key string
-
 func (k Key) String() string {
 	return string(k)
 }

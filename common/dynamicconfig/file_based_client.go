@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-var _ Client = (*fileBasedClient)(nil)
+var _ XXXClient = (*fileBasedClient)(nil)
 
 const (
 	minPollInterval = time.Second * 5

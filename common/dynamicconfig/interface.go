@@ -30,12 +30,9 @@ import (
 	"time"
 )
 
-// Client allows fetching values from a dynamic configuration system NOTE: This does not have async
-// options right now. In the interest of keeping it minimal, we can add when requirement arises.
-// Filters should be ordered from most to least specific. An empty filter is automatically added
-// to the end of each filters slice, so callers don't need to add it.
 type (
-	Client interface {
+	// FIXME: remove/make internal
+	XXXClient interface {
 		GetValue(name Key, defaultValue any) (any, error)
 		GetValueWithFilters(name Key, filters []map[Filter]interface{}, defaultValue any) (any, error)
 

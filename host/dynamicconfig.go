@@ -57,7 +57,7 @@ type dynamicClient struct {
 	sync.RWMutex
 
 	overrides map[dynamicconfig.Key]interface{}
-	client    dynamicconfig.Client
+	client    dynamicconfig.XXXClient
 }
 
 func (d *dynamicClient) GetValue(name dynamicconfig.Key, defaultValue interface{}) (interface{}, error) {
@@ -165,7 +165,7 @@ func (d *dynamicClient) OverrideValue(name dynamicconfig.Key, value interface{})
 }
 
 // newIntegrationConfigClient - returns a dynamic config client for integration testing
-func newIntegrationConfigClient(client dynamicconfig.Client) *dynamicClient {
+func newIntegrationConfigClient(client dynamicconfig.XXXClient) *dynamicClient {
 	integrationClient := &dynamicClient{
 		overrides: make(map[dynamicconfig.Key]interface{}),
 		client:    client,

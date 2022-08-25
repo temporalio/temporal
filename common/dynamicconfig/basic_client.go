@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-var _ Client = (*basicClient)(nil)
+var _ XXXClient = (*basicClient)(nil)
 
 var (
 	errKeyNotPresent        = errors.New("key not present")
@@ -46,11 +46,6 @@ var (
 )
 
 type configValueMap map[string][]ConstrainedValue
-
-type ConstrainedValue struct {
-	Value       interface{}
-	Constraints map[string]interface{}
-}
 
 type basicClient struct {
 	logger log.Logger

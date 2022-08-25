@@ -39,7 +39,7 @@ import (
 type fileBasedClientSuite struct {
 	suite.Suite
 	*require.Assertions
-	client Client
+	client XXXClient
 	doneCh chan interface{}
 }
 
