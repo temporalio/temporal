@@ -49,7 +49,8 @@ type (
 		metricsHandler metrics.MetricsHandler
 		maxReaderCount dynamicconfig.IntPropertyFn
 
-		// map value is alert attriutes, used only for logging
+		// map key is alert type, used for deduping
+		// map value is alert attriutes, used only for logging upon action completion
 		pendingAlerts map[AlertType]interface{}
 	}
 )
