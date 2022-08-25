@@ -5,22 +5,8 @@
     failoverVersionIncrement: 10
     masterClusterName: "active"
     currentClusterName: "active"
-    clusterInformation:
-      active:
-        enabled: true
-        initialFailoverVersion: 1
-        rpcName: "frontend"
-        rpcAddress: "127.0.0.1:7134"
-      standby:
-        enabled: true
-        initialFailoverVersion: 2
-        rpcName: "frontend"
-        rpcAddress: "127.0.0.1:8134"
-      other:
-        enabled: true
-        initialFailoverVersion: 3
-        rpcName: "frontend"
-        rpcAddress: "127.0.0.1:9134"
+    initialFailoverVersion: 1
+    internalRPCAddress: "127.0.0.1:7134"
   enablearchival: false
   workerconfig:
     enablearchiver: false
@@ -30,6 +16,7 @@
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
+
 - persistence:
     dbname: integration_standby
   clustermetadata:
@@ -37,22 +24,8 @@
     failoverVersionIncrement: 10
     masterClusterName: "active"
     currentClusterName: "standby"
-    clusterInformation:
-      active:
-        enabled: true
-        initialFailoverVersion: 1
-        rpcName: "frontend"
-        rpcAddress: "127.0.0.1:7134"
-      standby:
-        enabled: true
-        initialFailoverVersion: 2
-        rpcName: "frontend"
-        rpcAddress: "127.0.0.1:8134"
-      other:
-        enabled: true
-        initialFailoverVersion: 3
-        rpcName: "frontend"
-        rpcAddress: "127.0.0.1:9134"
+    initialFailoverVersion: 2
+    internalRPCAddress: "127.0.0.1:8134"
   enablearchival: false
   workerconfig:
     enablearchiver: false
@@ -62,6 +35,7 @@
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
+
 - persistence:
     dbname: integration_other
   clustermetadata:
@@ -69,22 +43,8 @@
     failoverVersionIncrement: 10
     masterClusterName: "active"
     currentClusterName: "other"
-    clusterInformation:
-      active:
-        enabled: true
-        initialFailoverVersion: 1
-        rpcName: "frontend"
-        rpcAddress: "127.0.0.1:7134"
-      standby:
-        enabled: true
-        initialFailoverVersion: 2
-        rpcName: "frontend"
-        rpcAddress: "127.0.0.1:8134"
-      other:
-        enabled: true
-        initialFailoverVersion: 3
-        rpcName: "frontend"
-        rpcAddress: "127.0.0.1:9134"
+    initialFailoverVersion: 3
+    internalRPCAddress: "127.0.0.1:9134"
   enablearchival: false
   workerconfig:
     enablearchiver: false

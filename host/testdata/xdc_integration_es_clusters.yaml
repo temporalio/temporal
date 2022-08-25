@@ -5,12 +5,8 @@
     failoverVersionIncrement: 10
     masterClusterName: "active-es"
     currentClusterName: "active-es"
-    clusterInformation:
-      active-es:
-        enabled: true
-        initialFailoverVersion: 1
-        rpcName: "frontend"
-        rpcAddress: "127.0.0.1:9134"
+    initialFailoverVersion: 1
+    internalRPCAddress: "127.0.0.1:9134"
   enablearchival: false
   workerconfig:
     enablearchiver: false
@@ -35,12 +31,8 @@
     failoverVersionIncrement: 10
     masterClusterName: "standby-es"
     currentClusterName: "standby-es"
-    clusterInformation:
-      standby-es:
-        enabled: true
-        initialFailoverVersion: 2
-        rpcName: "frontend"
-        rpcAddress: "127.0.0.1:10134"
+    initialFailoverVersion: 2
+    internalRPCAddress: "127.0.0.1:10134"
   enablearchival: false
   workerconfig:
     enablearchiver: false

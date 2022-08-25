@@ -213,7 +213,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	if clusterMetadataConfig.EnableGlobalNamespace {
 		s.ClusterMetadata = cluster.NewMetadataForTest(clusterMetadataConfig, cluster.TestAllClusterInfo)
 	} else {
-		s.ClusterMetadata = cluster.NewMetadataForTest(clusterMetadataConfig, cluster.TestAllClusterInfo)
+		s.ClusterMetadata = cluster.NewMetadataForTest(clusterMetadataConfig, cluster.TestSingleDCClusterInfo)
 	}
 	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager, dynamicconfig.GetBoolPropertyFn(true))
 
