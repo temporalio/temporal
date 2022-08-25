@@ -31,7 +31,6 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 )
 
 var _ Scheduler[Task] = (*InterleavedWeightedRoundRobinScheduler[Task, struct{}])(nil)
@@ -49,9 +48,8 @@ type (
 	InterleavedWeightedRoundRobinScheduler[T Task, K comparable] struct {
 		status int32
 
-		processor       Processor
-		metricsProvider metrics.MetricsHandler
-		logger          log.Logger
+		fifoScheduler Scheduler[T]
+		logger        log.Logger
 
 		notifyChan   chan struct{}
 		shutdownChan chan struct{}
@@ -77,8 +75,7 @@ type (
 
 func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 	options InterleavedWeightedRoundRobinSchedulerOptions[T, K],
-	processor Processor,
-	metricsProvider metrics.MetricsHandler,
+	fifoScheduler Scheduler[T],
 	logger log.Logger,
 ) *InterleavedWeightedRoundRobinScheduler[T, K] {
 	iwrrChannels := atomic.Value{}
@@ -86,9 +83,8 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 	return &InterleavedWeightedRoundRobinScheduler[T, K]{
 		status: common.DaemonStatusInitialized,
 
-		processor:       processor,
-		metricsProvider: metricsProvider.WithTags(metrics.OperationTag(OperationTaskScheduler)),
-		logger:          logger,
+		fifoScheduler: fifoScheduler,
+		logger:        logger,
 
 		options: options,
 
@@ -110,7 +106,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Start() {
 		return
 	}
 
-	s.processor.Start()
+	s.fifoScheduler.Start()
 
 	go s.eventLoop()
 
@@ -128,7 +124,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Stop() {
 
 	close(s.shutdownChan)
 
-	s.processor.Stop()
+	s.fifoScheduler.Stop()
 
 	s.rescheduleTasks()
 
@@ -140,7 +136,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Submit(
 ) {
 	numTasks := atomic.AddInt64(&s.numInflightTask, 1)
 	if numTasks == 1 {
-		s.doDispatchTasksDirectly(task)
+		s.doDispatchTaskDirectly(task)
 		return
 	}
 
@@ -154,8 +150,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) TrySubmit(
 	task T,
 ) bool {
 	numTasks := atomic.AddInt64(&s.numInflightTask, 1)
-	if numTasks == 1 {
-		s.doDispatchTasksDirectly(task)
+	if numTasks == 1 && s.tryDispatchTaskDirectly(task) {
 		return true
 	}
 
@@ -254,7 +249,7 @@ LoopDispatch:
 	for _, channel := range channels {
 		select {
 		case task := <-channel.Chan():
-			s.processor.Submit(task)
+			s.fifoScheduler.Submit(task)
 			numTasks++
 		default:
 			continue LoopDispatch
@@ -263,11 +258,21 @@ LoopDispatch:
 	atomic.AddInt64(&s.numInflightTask, -numTasks)
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTasksDirectly(
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTaskDirectly(
 	task T,
 ) {
-	s.processor.Submit(task)
+	s.fifoScheduler.Submit(task)
 	atomic.AddInt64(&s.numInflightTask, -1)
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) tryDispatchTaskDirectly(
+	task T,
+) bool {
+	dispatched := s.fifoScheduler.TrySubmit(task)
+	if dispatched {
+		atomic.AddInt64(&s.numInflightTask, -1)
+	}
+	return dispatched
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) hasRemainingTasks() bool {

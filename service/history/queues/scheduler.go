@@ -61,7 +61,7 @@ type (
 		NamespaceWeights dynamicconfig.MapPropertyFnWithNamespaceFilter
 	}
 
-	namespacePrioritySchedulerImpl struct {
+	NamespacePrioritySchedulerImpl struct {
 		priorityAssigner PriorityAssigner
 		wRRScheduler     tasks.Scheduler[Executable]
 	}
@@ -78,8 +78,8 @@ func NewNamespacePriorityScheduler(
 	namespaceRegistry namespace.Registry,
 	metricsProvider metrics.MetricsHandler,
 	logger log.Logger,
-) *namespacePrioritySchedulerImpl {
-	return &namespacePrioritySchedulerImpl{
+) *NamespacePrioritySchedulerImpl {
+	return &NamespacePrioritySchedulerImpl{
 		priorityAssigner: priorityAssigner,
 		wRRScheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
 			tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, taskChannelKey]{
@@ -97,29 +97,27 @@ func NewNamespacePriorityScheduler(
 					)[key.priority]
 				},
 			},
-			tasks.NewParallelProcessor(
-				&tasks.ParallelProcessorOptions{
+			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
+				&tasks.FIFOSchedulerOptions{
 					QueueSize:   defaultParallelProcessorQueueSize,
 					WorkerCount: options.WorkerCount,
 				},
-				metricsProvider,
 				logger,
-			),
-			metricsProvider,
+			)),
 			logger,
 		),
 	}
 }
 
-func (s *namespacePrioritySchedulerImpl) Start() {
+func (s *NamespacePrioritySchedulerImpl) Start() {
 	s.wRRScheduler.Start()
 }
 
-func (s *namespacePrioritySchedulerImpl) Stop() {
+func (s *NamespacePrioritySchedulerImpl) Stop() {
 	s.wRRScheduler.Stop()
 }
 
-func (s *namespacePrioritySchedulerImpl) Submit(
+func (s *NamespacePrioritySchedulerImpl) Submit(
 	executable Executable,
 ) error {
 	if err := s.priorityAssigner.Assign(executable); err != nil {
@@ -131,7 +129,7 @@ func (s *namespacePrioritySchedulerImpl) Submit(
 	return nil
 }
 
-func (s *namespacePrioritySchedulerImpl) TrySubmit(
+func (s *NamespacePrioritySchedulerImpl) TrySubmit(
 	executable Executable,
 ) (bool, error) {
 	if err := s.priorityAssigner.Assign(executable); err != nil {

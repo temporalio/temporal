@@ -31,12 +31,6 @@ import (
 	"go.temporal.io/server/common/tasks"
 )
 
-const (
-	fifoSchedulerDefaultWeight = 100
-
-	fifoSchedulerTaskChannelKey = 0
-)
-
 type (
 	FIFOSchedulerOptions struct {
 		WorkerCount dynamicconfig.IntPropertyFn
@@ -47,9 +41,11 @@ type (
 	// and always schedule tasks in fifo order regardless
 	// which namespace the task belongs to.
 	FIFOScheduler struct {
-		wRRScheduler tasks.Scheduler[Executable]
+		scheduler tasks.Scheduler[Executable]
 	}
 )
+
+var _ tasks.Scheduler[Executable] = (*tasks.FIFOScheduler[Executable])(nil)
 
 func NewFIFOScheduler(
 	options FIFOSchedulerOptions,
@@ -57,42 +53,33 @@ func NewFIFOScheduler(
 	logger log.Logger,
 ) *FIFOScheduler {
 	return &FIFOScheduler{
-		wRRScheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
-			tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, int]{
-				TaskToChannelKey:   func(_ Executable) int { return fifoSchedulerTaskChannelKey },
-				ChannelKeyToWeight: func(_ int) int { return fifoSchedulerDefaultWeight },
+		scheduler: tasks.NewFIFOScheduler[Executable](
+			&tasks.FIFOSchedulerOptions{
+				QueueSize:   options.QueueSize,
+				WorkerCount: options.WorkerCount,
 			},
-			tasks.NewParallelProcessor(
-				&tasks.ParallelProcessorOptions{
-					QueueSize:   options.QueueSize,
-					WorkerCount: options.WorkerCount,
-				},
-				metricsProvider,
-				logger,
-			),
-			metricsProvider,
 			logger,
 		),
 	}
 }
 
 func (s *FIFOScheduler) Start() {
-	s.wRRScheduler.Start()
+	s.scheduler.Start()
 }
 
 func (s *FIFOScheduler) Stop() {
-	s.wRRScheduler.Stop()
+	s.scheduler.Stop()
 }
 
 func (s *FIFOScheduler) Submit(
 	executable Executable,
 ) error {
-	s.wRRScheduler.Submit(executable)
+	s.scheduler.Submit(executable)
 	return nil
 }
 
 func (s *FIFOScheduler) TrySubmit(
 	executable Executable,
 ) (bool, error) {
-	return s.wRRScheduler.TrySubmit(executable), nil
+	return s.scheduler.TrySubmit(executable), nil
 }
