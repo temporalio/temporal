@@ -394,8 +394,8 @@ func findMatch(cvs, defaultCVs []ConstrainedValue, precedence []Constraints) (an
 		return nil, errKeyNotPresent
 	}
 	for _, m := range precedence {
-		// duplicate the code in the loop so that we don't have to allocate a new slice to hold
-		// the concatenation of cvs and defaultCVs
+		// duplicate the code so that we don't have to allocate a new slice to hold the
+		// concatenation of cvs and defaultCVs
 		for _, cv := range cvs {
 			if m == cv.Constraints {
 				return cv.Value, nil
@@ -411,6 +411,8 @@ func findMatch(cvs, defaultCVs []ConstrainedValue, precedence []Constraints) (an
 	return nil, errNoMatchingConstraint
 }
 
+// matchAndConvert can't be a method of Collection because methods can't be generic, but we can
+// take a *Collection as an argument.
 func matchAndConvert[T any](
 	c *Collection,
 	key Key,
@@ -419,10 +421,12 @@ func matchAndConvert[T any](
 	converter func(value any) (T, error),
 ) T {
 	cvs := c.source.GetValue(key)
+
 	// defaultValue may be a list of constrained values. In that case, one of them must have an
 	// empty constraint set to be the fallback default. Otherwise we'll return the zero value
 	// and log an error (since []ConstrainedValue can't be converted to the desired type).
 	defaultCVs, _ := defaultValue.([]ConstrainedValue)
+
 	val, matchErr := findMatch(cvs, defaultCVs, precedence)
 	if matchErr != nil {
 		c.logError(key, matchErr)

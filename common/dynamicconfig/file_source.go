@@ -189,11 +189,10 @@ func (fc *fileSource) update() error {
 		newValues[strings.ToLower(key)] = cvs
 	}
 
-	oldValues := fc.values.Swap(newValues)
-	if oldValues, ok := oldValues.(configValueMap); ok {
-		fc.logDiff(oldValues, newValues)
-		fc.logger.Info("Updated dynamic config")
-	}
+	prev := fc.values.Swap(newValues)
+	oldValues, _ := prev.(configValueMap)
+	fc.logDiff(oldValues, newValues)
+	fc.logger.Info("Updated dynamic config")
 
 	return nil
 }
@@ -235,19 +234,19 @@ func (fc *fileSource) logDiff(old configValueMap, new configValueMap) {
 	}
 }
 
-func (bc *fileSource) logConstraintsDiff(key string, oldValues []ConstrainedValue, newValues []ConstrainedValue) {
+func (fc *fileSource) logConstraintsDiff(key string, oldValues []ConstrainedValue, newValues []ConstrainedValue) {
 	for _, oldValue := range oldValues {
 		matchFound := false
 		for _, newValue := range newValues {
 			if oldValue.Constraints == newValue.Constraints {
 				matchFound = true
 				if !reflect.DeepEqual(oldValue.Value, newValue.Value) {
-					bc.logValueDiff(key, &oldValue, &newValue)
+					fc.logValueDiff(key, &oldValue, &newValue)
 				}
 			}
 		}
 		if !matchFound {
-			bc.logValueDiff(key, &oldValue, nil)
+			fc.logValueDiff(key, &oldValue, nil)
 		}
 	}
 
@@ -259,24 +258,24 @@ func (bc *fileSource) logConstraintsDiff(key string, oldValues []ConstrainedValu
 			}
 		}
 		if !matchFound {
-			bc.logValueDiff(key, nil, &newValue)
+			fc.logValueDiff(key, nil, &newValue)
 		}
 	}
 }
 
-func (bc *fileSource) logValueDiff(key string, oldValue *ConstrainedValue, newValue *ConstrainedValue) {
+func (fc *fileSource) logValueDiff(key string, oldValue *ConstrainedValue, newValue *ConstrainedValue) {
 	logLine := &strings.Builder{}
 	logLine.Grow(128)
 	logLine.WriteString("dynamic config changed for the key: ")
 	logLine.WriteString(key)
 	logLine.WriteString(" oldValue: ")
-	bc.appendConstrainedValue(logLine, oldValue)
+	fc.appendConstrainedValue(logLine, oldValue)
 	logLine.WriteString(" newValue: ")
-	bc.appendConstrainedValue(logLine, newValue)
-	bc.logger.Info(logLine.String())
+	fc.appendConstrainedValue(logLine, newValue)
+	fc.logger.Info(logLine.String())
 }
 
-func (bc *fileSource) appendConstrainedValue(logLine *strings.Builder, value *ConstrainedValue) {
+func (fc *fileSource) appendConstrainedValue(logLine *strings.Builder, value *ConstrainedValue) {
 	if value == nil {
 		logLine.WriteString("nil")
 	} else {
@@ -362,17 +361,24 @@ func convertYamlConstraints(m map[string]any) (Constraints, error) {
 				return cs, fmt.Errorf("taskQueueName constraint must be string")
 			}
 		case "tasktype":
-			if v, ok := v.(int); ok {
+			switch v := v.(type) {
+			case int:
 				switch v {
 				case 0:
 					cs.TaskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
 				case 1:
 					cs.TaskQueueType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
 				default:
-					return cs, fmt.Errorf("taskType constraint must be 0 or 1")
+					return cs, fmt.Errorf("taskType constraint must be Workflow/Activity/0/1")
 				}
-			} else {
-				return cs, fmt.Errorf("taskType constraint must be 0 or 1")
+			case string:
+				if i, ok := enumspb.TaskQueueType_value[v]; ok && i > 0 {
+					cs.TaskQueueType = enumspb.TaskQueueType(i)
+				} else {
+					return cs, fmt.Errorf("taskType constraint must be Workflow/Activity/0/1")
+				}
+			default:
+				return cs, fmt.Errorf("taskType constraint must be Workflow/Activity/0/1")
 			}
 		case "shardid":
 			if v, ok := v.(int); ok {
