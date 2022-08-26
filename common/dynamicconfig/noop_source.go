@@ -39,8 +39,8 @@ func NewNoopSource() *noopSource {
 	return nil
 }
 
-func (n *noopSource) GetValue(name Key) ([]ConstrainedValue, error) {
-	return nil, nil
+func (n *noopSource) GetValue(key Key) []ConstrainedValue {
+	return nil
 }
 
 // NewNoopCollection creates a new noop collection

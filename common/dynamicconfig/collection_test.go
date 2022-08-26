@@ -69,13 +69,6 @@ func (s *configSuite) SetupSuite() {
 	s.cln = NewCollection(s.client, logger)
 }
 
-func (s *configSuite) TestGetProperty() {
-	value := s.cln.GetProperty(testGetPropertyKey, "a")
-	s.Equal("a", value())
-	s.client.SetValue(testGetPropertyKey, "b")
-	s.Equal("b", value())
-}
-
 func (s *configSuite) TestGetIntProperty() {
 	value := s.cln.GetIntProperty(testGetIntPropertyKey, 10)
 	s.Equal(10, value())

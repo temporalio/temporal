@@ -40,10 +40,13 @@ type (
 		// matter. The effective order of constraints is determined by server logic. See the
 		// comment on Constraints below.
 		//
+		// If none of the ConstrainedValues match the constraints being used for the key, then
+		// the server default value will be used.
+		//
 		// Note that GetValue is called very often! You should not synchronously call out to an
 		// external system. Instead you should keep a set of all configured values, refresh it
 		// periodically or when notified, and only do in-memory lookups inside of GetValue.
-		GetValue(name Key) ([]ConstrainedValue, error)
+		GetValue(key Key) []ConstrainedValue
 	}
 
 	// Key is a key/property stored in dynamic config. For convenience, it is recommended that
@@ -64,7 +67,7 @@ type (
 	}
 
 	// Constraints describe under what conditions a ConstrainedValue should be used.
-	// There are few standard "constraint priority orders" that the server uses:
+	// There are few standard "constraint precedence orders" that the server uses:
 	//   global:
 	//     no constraints
 	//   namespace-specific:

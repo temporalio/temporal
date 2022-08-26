@@ -25,6 +25,8 @@
 package dynamicconfig
 
 import (
+	"errors"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -32,17 +34,62 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-// Collection implements lookup and constraint logic on top of a Source.
-type Collection struct {
-	source   Source
-	logger   log.Logger
-	errCount int64
-}
+type (
+	// Collection implements lookup and constraint logic on top of a Source.
+	Collection struct {
+		source   Source
+		logger   log.Logger
+		errCount int64
+	}
+
+	// These function types follow a similar pattern:
+	//   {X}PropertyFn - returns a value of type X that is global (no filters)
+	//   {X}PropertyFnWith{Y}Filter - returns a value of type X with the given filters
+	// Available value types:
+	//   Bool: bool
+	//   Duration: time.Duration
+	//   Float: float64
+	//   Int: int
+	//   Map: map[string]any
+	//   String: string
+	// Available filters:
+	//   Namespace func(namespace string)
+	//   NamespaceID func(namespaceID string)
+	//   TaskQueueInfo func(namespace string, taskQueue string, taskType enumspb.TaskQueueType)
+	//   ShardID func(shardID int32)
+	BoolPropertyFn                             func() bool
+	BoolPropertyFnWithNamespaceFilter          func(namespace string) bool
+	BoolPropertyFnWithNamespaceIDFilter        func(namespaceID string) bool
+	BoolPropertyFnWithTaskQueueInfoFilters     func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool
+	DurationPropertyFn                         func() time.Duration
+	DurationPropertyFnWithNamespaceFilter      func(namespace string) time.Duration
+	DurationPropertyFnWithNamespaceIDFilter    func(namespaceID string) time.Duration
+	DurationPropertyFnWithShardIDFilter        func(shardID int32) time.Duration
+	DurationPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration
+	FloatPropertyFn                            func() float64
+	FloatPropertyFnWithNamespaceFilter         func(namespace string) float64
+	FloatPropertyFnWithShardIDFilter           func(shardID int32) float64
+	FloatPropertyFnWithTaskQueueInfoFilters    func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64
+	IntPropertyFn                              func() int
+	IntPropertyFnWithNamespaceFilter           func(namespace string) int
+	IntPropertyFnWithShardIDFilter             func(shardID int32) int
+	IntPropertyFnWithTaskQueueInfoFilters      func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int
+	MapPropertyFn                              func() map[string]any
+	MapPropertyFnWithNamespaceFilter           func(namespace string) map[string]any
+	StringPropertyFn                           func() string
+	StringPropertyFnWithNamespaceFilter        func(namespace string) string
+)
 
 const (
 	errCountLogThreshold = 1000
+)
+
+var (
+	errKeyNotPresent        = errors.New("key not present")
+	errNoMatchingConstraint = errors.New("no matching constraint in key")
 )
 
 // NewCollection creates a new collection
@@ -55,6 +102,8 @@ func NewCollection(source Source, logger log.Logger) *Collection {
 }
 
 func (c *Collection) logError(key Key, err error) {
+	// TODO: This is a lot of unnecessary contention with little benefit. Consider using
+	// https://github.com/cespare/percpu here.
 	errCount := atomic.AddInt64(&c.errCount, 1)
 	if errCount%errCountLogThreshold == 0 {
 		// log only every 'x' errors to reduce mem allocs and to avoid log noise
@@ -62,391 +111,427 @@ func (c *Collection) logError(key Key, err error) {
 	}
 }
 
-// PropertyFn is a wrapper to get property from dynamic config
-type PropertyFn func() interface{}
-
-// IntPropertyFn is a wrapper to get int property from dynamic config
-type IntPropertyFn func() int
-
-// IntPropertyFnWithNamespaceFilter is a wrapper to get int property from dynamic config with namespace as filter
-type IntPropertyFnWithNamespaceFilter func(namespace string) int
-
-// IntPropertyFnWithTaskQueueInfoFilters is a wrapper to get int property from dynamic config with three filters: namespace, taskQueue, taskType
-type IntPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int
-
-// IntPropertyFnWithShardIDFilter is a wrapper to get int property from dynamic config with shardID as filter
-type IntPropertyFnWithShardIDFilter func(shardID int32) int
-
-// FloatPropertyFn is a wrapper to get float property from dynamic config
-type FloatPropertyFn func() float64
-
-// FloatPropertyFnWithShardIDFilter is a wrapper to get float property from dynamic config with shardID as filter
-type FloatPropertyFnWithShardIDFilter func(shardID int32) float64
-
-// FloatPropertyFnWithNamespaceFilter is a wrapper to get float property from dynamic config with namespace as filter
-type FloatPropertyFnWithNamespaceFilter func(namespace string) float64
-
-// FloatPropertyFnWithTaskQueueInfoFilters is a wrapper to get float property from dynamic config with three filters: namespace, taskQueue, taskType
-type FloatPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64
-
-// DurationPropertyFn is a wrapper to get duration property from dynamic config
-type DurationPropertyFn func() time.Duration
-
-// DurationPropertyFnWithNamespaceFilter is a wrapper to get duration property from dynamic config with namespace as filter
-type DurationPropertyFnWithNamespaceFilter func(namespace string) time.Duration
-
-// DurationPropertyFnWithNamespaceIDFilter is a wrapper to get duration property from dynamic config with namespaceID as filter
-type DurationPropertyFnWithNamespaceIDFilter func(namespaceID string) time.Duration
-
-// DurationPropertyFnWithTaskQueueInfoFilters is a wrapper to get duration property from dynamic config  with three filters: namespace, taskQueue, taskType
-type DurationPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration
-
-// DurationPropertyFnWithShardIDFilter is a wrapper to get duration property from dynamic config with shardID as filter
-type DurationPropertyFnWithShardIDFilter func(shardID int32) time.Duration
-
-// BoolPropertyFn is a wrapper to get bool property from dynamic config
-type BoolPropertyFn func() bool
-
-// StringPropertyFn is a wrapper to get string property from dynamic config
-type StringPropertyFn func() string
-
-// MapPropertyFn is a wrapper to get map property from dynamic config
-type MapPropertyFn func() map[string]interface{}
-
-// StringPropertyFnWithNamespaceFilter is a wrapper to get string property from dynamic config
-type StringPropertyFnWithNamespaceFilter func(namespace string) string
-
-// MapPropertyFnWithNamespaceFilter is a wrapper to get map property from dynamic config
-type MapPropertyFnWithNamespaceFilter func(namespace string) map[string]interface{}
-
-// BoolPropertyFnWithNamespaceFilter is a wrapper to get bool property from dynamic config
-type BoolPropertyFnWithNamespaceFilter func(namespace string) bool
-
-// BoolPropertyFnWithNamespaceIDFilter is a wrapper to get bool property from dynamic config
-type BoolPropertyFnWithNamespaceIDFilter func(id string) bool
-
-// BoolPropertyFnWithTaskQueueInfoFilters is a wrapper to get bool property from dynamic config with three filters: namespace, taskQueue, taskType
-type BoolPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool
-
-// GetProperty gets a interface property and returns defaultValue if property is not found
-func (c *Collection) GetProperty(key Key, defaultValue any) PropertyFn {
-	return func() interface{} {
-		val, err := c.client.GetValue(key, defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-		return val
-	}
-}
-
-func getOneFilterMap(opts ...FilterOption) map[Filter]interface{} {
-	m := make(map[Filter]interface{}, len(opts))
-	for _, opt := range opts {
-		opt(m)
-	}
-	return m
-}
-
-func getFilterMap(opts ...FilterOption) []map[Filter]interface{} {
-	if len(opts) == 0 {
-		return nil
-	}
-	return []map[Filter]interface{}{getOneFilterMap(opts...)}
-}
-
-func getFilterMapsForTaskQueue(namespace string, taskQueue string, taskType enumspb.TaskQueueType) []map[Filter]interface{} {
-	return []map[Filter]interface{}{
-		getOneFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue), TaskTypeFilter(taskType)),
-		getOneFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue)),
-		// A task-queue-name-only filter applies to a single task queue name across all
-		// namespaces, with higher precedence than a namespace-only filter. This is intended to
-		// be used by defaultNumTaskQueuePartitions and is probably not useful otherwise.
-		getOneFilterMap(TaskQueueFilter(taskQueue)),
-		getOneFilterMap(NamespaceFilter(namespace)),
-	}
-}
-
 // GetIntProperty gets property and asserts that it's an integer
 func (c *Collection) GetIntProperty(key Key, defaultValue any) IntPropertyFn {
 	return func() int {
-		val, err := c.client.GetIntValue(key, nil, defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			globalPrecedence(),
+			convertInt,
+		)
 	}
 }
 
 // GetIntPropertyFilteredByNamespace gets property with namespace filter and asserts that it's an integer
 func (c *Collection) GetIntPropertyFilteredByNamespace(key Key, defaultValue any) IntPropertyFnWithNamespaceFilter {
 	return func(namespace string) int {
-		val, err := c.client.GetIntValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			namespacePrecedence(namespace),
+			convertInt,
+		)
 	}
 }
 
 // GetIntPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's an integer
 func (c *Collection) GetIntPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) IntPropertyFnWithTaskQueueInfoFilters {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int {
-		val, err := c.client.GetIntValue(
+		return matchAndConvert(
+			c,
 			key,
-			getFilterMapsForTaskQueue(namespace, taskQueue, taskType),
 			defaultValue,
+			taskQueuePrecedence(namespace, taskQueue, taskType),
+			convertInt,
 		)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
 	}
 }
 
 // GetIntPropertyFilteredByShardID gets property with shardID as filter and asserts that it's an integer
 func (c *Collection) GetIntPropertyFilteredByShardID(key Key, defaultValue any) IntPropertyFnWithShardIDFilter {
 	return func(shardID int32) int {
-		val, err := c.client.GetIntValue(
+		return matchAndConvert(
+			c,
 			key,
-			getFilterMap(ShardIDFilter(shardID)),
 			defaultValue,
+			shardIDPrecedence(shardID),
+			convertInt,
 		)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
 	}
 }
 
 // GetFloat64Property gets property and asserts that it's a float64
 func (c *Collection) GetFloat64Property(key Key, defaultValue any) FloatPropertyFn {
 	return func() float64 {
-		val, err := c.client.GetFloatValue(key, nil, defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			globalPrecedence(),
+			convertFloat,
+		)
 	}
 }
 
 // GetFloat64PropertyFilteredByShardID gets property with shardID filter and asserts that it's a float64
 func (c *Collection) GetFloat64PropertyFilteredByShardID(key Key, defaultValue any) FloatPropertyFnWithShardIDFilter {
 	return func(shardID int32) float64 {
-		val, err := c.client.GetFloatValue(
+		return matchAndConvert(
+			c,
 			key,
-			getFilterMap(ShardIDFilter(shardID)),
 			defaultValue,
+			shardIDPrecedence(shardID),
+			convertFloat,
 		)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
 	}
 }
 
 // GetFloatPropertyFilteredByNamespace gets property with namespace filter and asserts that it's a float64
 func (c *Collection) GetFloatPropertyFilteredByNamespace(key Key, defaultValue any) FloatPropertyFnWithNamespaceFilter {
 	return func(namespace string) float64 {
-		val, err := c.client.GetFloatValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			namespacePrecedence(namespace),
+			convertFloat,
+		)
 	}
 }
 
 // GetFloatPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's a float64
 func (c *Collection) GetFloatPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) FloatPropertyFnWithTaskQueueInfoFilters {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64 {
-		val, err := c.client.GetFloatValue(
+		return matchAndConvert(
+			c,
 			key,
-			getFilterMapsForTaskQueue(namespace, taskQueue, taskType),
 			defaultValue,
+			taskQueuePrecedence(namespace, taskQueue, taskType),
+			convertFloat,
 		)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
 	}
 }
 
 // GetDurationProperty gets property and asserts that it's a duration
 func (c *Collection) GetDurationProperty(key Key, defaultValue any) DurationPropertyFn {
 	return func() time.Duration {
-		val, err := c.client.GetDurationValue(key, nil, defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			globalPrecedence(),
+			convertDuration,
+		)
 	}
 }
 
 // GetDurationPropertyFilteredByNamespace gets property with namespace filter and asserts that it's a duration
 func (c *Collection) GetDurationPropertyFilteredByNamespace(key Key, defaultValue any) DurationPropertyFnWithNamespaceFilter {
 	return func(namespace string) time.Duration {
-		val, err := c.client.GetDurationValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			namespacePrecedence(namespace),
+			convertDuration,
+		)
 	}
 }
 
 // GetDurationPropertyFilteredByNamespaceID gets property with namespaceID filter and asserts that it's a duration
 func (c *Collection) GetDurationPropertyFilteredByNamespaceID(key Key, defaultValue any) DurationPropertyFnWithNamespaceIDFilter {
 	return func(namespaceID string) time.Duration {
-		val, err := c.client.GetDurationValue(key, getFilterMap(NamespaceIDFilter(namespaceID)), defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			namespaceIDPrecedence(namespaceID),
+			convertDuration,
+		)
 	}
 }
 
 // GetDurationPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's a duration
 func (c *Collection) GetDurationPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) DurationPropertyFnWithTaskQueueInfoFilters {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration {
-		val, err := c.client.GetDurationValue(
+		return matchAndConvert(
+			c,
 			key,
-			getFilterMapsForTaskQueue(namespace, taskQueue, taskType),
 			defaultValue,
+			taskQueuePrecedence(namespace, taskQueue, taskType),
+			convertDuration,
 		)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
 	}
 }
 
 // GetDurationPropertyFilteredByShardID gets property with shardID id as filter and asserts that it's a duration
 func (c *Collection) GetDurationPropertyFilteredByShardID(key Key, defaultValue any) DurationPropertyFnWithShardIDFilter {
 	return func(shardID int32) time.Duration {
-		val, err := c.client.GetDurationValue(
+		return matchAndConvert(
+			c,
 			key,
-			getFilterMap(ShardIDFilter(shardID)),
 			defaultValue,
+			shardIDPrecedence(shardID),
+			convertDuration,
 		)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
 	}
 }
 
 // GetBoolProperty gets property and asserts that it's a bool
 func (c *Collection) GetBoolProperty(key Key, defaultValue any) BoolPropertyFn {
 	return func() bool {
-		val, err := c.client.GetBoolValue(key, nil, defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			globalPrecedence(),
+			convertBool,
+		)
 	}
 }
 
 // GetStringProperty gets property and asserts that it's a string
 func (c *Collection) GetStringProperty(key Key, defaultValue any) StringPropertyFn {
 	return func() string {
-		val, err := c.client.GetStringValue(key, nil, defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			globalPrecedence(),
+			convertString,
+		)
 	}
 }
 
 // GetMapProperty gets property and asserts that it's a map
 func (c *Collection) GetMapProperty(key Key, defaultValue any) MapPropertyFn {
 	return func() map[string]interface{} {
-		val, err := c.client.GetMapValue(key, nil, defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			globalPrecedence(),
+			convertMap,
+		)
 	}
 }
 
 // GetStringPropertyFnWithNamespaceFilter gets property with namespace filter and asserts that it's a string
 func (c *Collection) GetStringPropertyFnWithNamespaceFilter(key Key, defaultValue any) StringPropertyFnWithNamespaceFilter {
 	return func(namespace string) string {
-		val, err := c.client.GetStringValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			namespacePrecedence(namespace),
+			convertString,
+		)
 	}
 }
 
 // GetMapPropertyFnWithNamespaceFilter gets property and asserts that it's a map
 func (c *Collection) GetMapPropertyFnWithNamespaceFilter(key Key, defaultValue any) MapPropertyFnWithNamespaceFilter {
 	return func(namespace string) map[string]interface{} {
-		val, err := c.client.GetMapValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			namespacePrecedence(namespace),
+			convertMap,
+		)
 	}
 }
 
 // GetBoolPropertyFnWithNamespaceFilter gets property with namespace filter and asserts that it's a bool
 func (c *Collection) GetBoolPropertyFnWithNamespaceFilter(key Key, defaultValue any) BoolPropertyFnWithNamespaceFilter {
 	return func(namespace string) bool {
-		val, err := c.client.GetBoolValue(key, getFilterMap(NamespaceFilter(namespace)), defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			namespacePrecedence(namespace),
+			convertBool,
+		)
 	}
 }
 
 // GetBoolPropertyFnWithNamespaceIDFilter gets property with namespaceID filter and asserts that it's a bool
 func (c *Collection) GetBoolPropertyFnWithNamespaceIDFilter(key Key, defaultValue any) BoolPropertyFnWithNamespaceIDFilter {
-	return func(id string) bool {
-		val, err := c.client.GetBoolValue(key, getFilterMap(NamespaceIDFilter(id)), defaultValue)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
+	return func(namespaceID string) bool {
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			namespaceIDPrecedence(namespaceID),
+			convertBool,
+		)
 	}
 }
 
 // GetBoolPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's a bool
 func (c *Collection) GetBoolPropertyFilteredByTaskQueueInfo(key Key, defaultValue any) BoolPropertyFnWithTaskQueueInfoFilters {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool {
-		val, err := c.client.GetBoolValue(
+		return matchAndConvert(
+			c,
 			key,
-			getFilterMapsForTaskQueue(namespace, taskQueue, taskType),
 			defaultValue,
+			taskQueuePrecedence(namespace, taskQueue, taskType),
+			convertBool,
 		)
-		if err != nil {
-			c.logError(key, err)
-		}
-
-		return val
 	}
 }
 
 // Task queue partitions use a dedicated function to handle defaults.
 func (c *Collection) GetTaskQueuePartitionsProperty(key Key) IntPropertyFnWithTaskQueueInfoFilters {
 	return c.GetIntPropertyFilteredByTaskQueueInfo(key, defaultNumTaskQueuePartitions)
+}
+
+func findMatch(cvs, defaultCVs []ConstrainedValue, precedence []Constraints) (any, error) {
+	if len(cvs)+len(defaultCVs) == 0 {
+		return nil, errKeyNotPresent
+	}
+	for _, m := range precedence {
+		// duplicate the code in the loop so that we don't have to allocate a new slice to hold
+		// the concatenation of cvs and defaultCVs
+		for _, cv := range cvs {
+			if m == cv.Constraints {
+				return cv.Value, nil
+			}
+		}
+		for _, cv := range defaultCVs {
+			if m == cv.Constraints {
+				return cv.Value, nil
+			}
+		}
+	}
+	// key is present but no constraint section matches
+	return nil, errNoMatchingConstraint
+}
+
+func matchAndConvert[T any](
+	c *Collection,
+	key Key,
+	defaultValue any,
+	precedence []Constraints,
+	converter func(value any) (T, error),
+) T {
+	cvs := c.source.GetValue(key)
+	// defaultValue may be a list of constrained values. In that case, one of them must have an
+	// empty constraint set to be the fallback default. Otherwise we'll return the zero value
+	// and log an error (since []ConstrainedValue can't be converted to the desired type).
+	defaultCVs, _ := defaultValue.([]ConstrainedValue)
+	val, matchErr := findMatch(cvs, defaultCVs, precedence)
+	if matchErr != nil {
+		c.logError(key, matchErr)
+		// couldn't find a constrained match, use default
+		val = defaultValue
+	}
+
+	typedVal, convertErr := converter(val)
+	if convertErr != nil && matchErr == nil {
+		// We failed to convert the value to the desired type. Try converting the default. note
+		// that if err != nil then val _is_ defaultValue and we don't have to try this again.
+		c.logError(key, convertErr)
+		typedVal, convertErr = converter(defaultValue)
+	}
+	if convertErr != nil {
+		// If we can't convert the default, that's a bug in our code, use Warn level.
+		c.logger.Warn("can't convert default value", tag.Key(key.String()), tag.Error(matchErr))
+		// Return typedVal anyway since we have to return something.
+	}
+	return typedVal
+}
+
+func globalPrecedence() []Constraints {
+	return []Constraints{
+		{},
+	}
+}
+
+func namespacePrecedence(namespace string) []Constraints {
+	return []Constraints{
+		{Namespace: namespace},
+		{},
+	}
+}
+
+func namespaceIDPrecedence(namespaceID string) []Constraints {
+	return []Constraints{
+		{NamespaceID: namespaceID},
+		{},
+	}
+}
+
+func taskQueuePrecedence(namespace string, taskQueue string, taskType enumspb.TaskQueueType) []Constraints {
+	return []Constraints{
+		{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskType},
+		{Namespace: namespace, TaskQueueName: taskQueue},
+		// A task-queue-name-only filter applies to a single task queue name across all
+		// namespaces, with higher precedence than a namespace-only filter. This is intended to
+		// be used by defaultNumTaskQueuePartitions and is probably not useful otherwise.
+		{TaskQueueName: taskQueue},
+		{Namespace: namespace},
+		{},
+	}
+}
+
+func shardIDPrecedence(shardID int32) []Constraints {
+	return []Constraints{
+		{ShardID: shardID},
+		{},
+	}
+}
+
+func convertInt(val any) (int, error) {
+	if intVal, ok := val.(int); ok {
+		return intVal, nil
+	}
+	return 0, errors.New("value type is not int")
+}
+
+func convertFloat(val any) (float64, error) {
+	if floatVal, ok := val.(float64); ok {
+		return floatVal, nil
+	} else if intVal, ok := val.(int); ok {
+		return float64(intVal), nil
+	}
+	return 0, errors.New("value type is not float64")
+}
+
+func convertDuration(val any) (time.Duration, error) {
+	switch v := val.(type) {
+	case time.Duration:
+		return v, nil
+	case string:
+		d, err := timestamp.ParseDurationDefaultDays(v)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse duration: %v", err)
+		}
+		return d, nil
+	}
+	return 0, errors.New("value not convertible to Duration")
+}
+
+func convertString(val any) (string, error) {
+	if stringVal, ok := val.(string); ok {
+		return stringVal, nil
+	}
+	return "", errors.New("value type is not string")
+}
+
+func convertBool(val any) (bool, error) {
+	if boolVal, ok := val.(bool); ok {
+		return boolVal, nil
+	}
+	return false, errors.New("value type is not bool")
+}
+
+func convertMap(val any) (map[string]any, error) {
+	if mapVal, ok := val.(map[string]any); ok {
+		return mapVal, nil
+	}
+	return nil, errors.New("value type is not map")
 }
