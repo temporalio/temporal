@@ -361,23 +361,16 @@ func convertYamlConstraints(m map[string]any) (Constraints, error) {
 			}
 		case "tasktype":
 			switch v := v.(type) {
-			case int:
-				switch v {
-				case 0:
-					cs.TaskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
-				case 1:
-					cs.TaskQueueType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
-				default:
-					return cs, fmt.Errorf("taskType constraint must be Workflow/Activity/0/1")
-				}
 			case string:
 				if i, ok := enumspb.TaskQueueType_value[v]; ok && i > 0 {
 					cs.TaskQueueType = enumspb.TaskQueueType(i)
 				} else {
-					return cs, fmt.Errorf("taskType constraint must be Workflow/Activity/0/1")
+					return cs, fmt.Errorf("taskType constraint must be Workflow/Activity")
 				}
+			case int:
+				cs.TaskQueueType = enumspb.TaskQueueType(v)
 			default:
-				return cs, fmt.Errorf("taskType constraint must be Workflow/Activity/0/1")
+				return cs, fmt.Errorf("taskType constraint must be Workflow/Activity")
 			}
 		case "shardid":
 			if v, ok := v.(int); ok {
