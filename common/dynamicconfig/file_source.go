@@ -63,7 +63,6 @@ type (
 		PollInterval time.Duration `yaml:"pollInterval"`
 	}
 
-	// FIXME: move to another file?
 	configValueMap map[string][]ConstrainedValue
 
 	fileSource struct {

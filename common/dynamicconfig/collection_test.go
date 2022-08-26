@@ -33,6 +33,26 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
+const (
+	// dynamic config for tests
+	unknownKey                                        = "unknownKey"
+	testGetPropertyKey                                = "testGetPropertyKey"
+	testCaseInsensitivePropertyKey                    = "testCaseInsensitivePropertyKey"
+	testGetIntPropertyKey                             = "testGetIntPropertyKey"
+	testGetFloat64PropertyKey                         = "testGetFloat64PropertyKey"
+	testGetDurationPropertyKey                        = "testGetDurationPropertyKey"
+	testGetBoolPropertyKey                            = "testGetBoolPropertyKey"
+	testGetStringPropertyKey                          = "testGetStringPropertyKey"
+	testGetMapPropertyKey                             = "testGetMapPropertyKey"
+	testGetIntPropertyFilteredByNamespaceKey          = "testGetIntPropertyFilteredByNamespaceKey"
+	testGetDurationPropertyFilteredByNamespaceKey     = "testGetDurationPropertyFilteredByNamespaceKey"
+	testGetIntPropertyFilteredByTaskQueueInfoKey      = "testGetIntPropertyFilteredByTaskQueueInfoKey"
+	testGetDurationPropertyFilteredByTaskQueueInfoKey = "testGetDurationPropertyFilteredByTaskQueueInfoKey"
+	testGetDurationPropertyStructuredDefaults         = "testGetDurationPropertyStructuredDefaults"
+	testGetBoolPropertyFilteredByNamespaceIDKey       = "testGetBoolPropertyFilteredByNamespaceIDKey"
+	testGetBoolPropertyFilteredByTaskQueueInfoKey     = "testGetBoolPropertyFilteredByTaskQueueInfoKey"
+)
+
 // Note: fileSourceSuite also heavily tests Collection, since some tests are easier with data
 // provided from a file.
 type collectionSuite struct {
