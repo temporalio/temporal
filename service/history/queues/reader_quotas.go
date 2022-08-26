@@ -35,60 +35,51 @@ const (
 	readerRequestToken = 1
 )
 
-const (
-	defaultReaderPriority    = 0
-	nonDefaultReaderPriority = defaultReaderPriority + 1
-)
-
-var (
-	readerPriorities = []int{
-		defaultReaderPriority,
-		nonDefaultReaderPriority,
-	}
-)
-
-var (
-	defaultReaderCaller = newReaderRequest(defaultReaderId).Caller
-)
-
-func NewPriorityRateLimiter(
+func NewReaderPriorityRateLimiter(
 	rateFn quotas.RateFn,
+	maxReaders int,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RateLimiter)
-	for priority := range readerPriorities {
-		rateLimiters[priority] = quotas.NewDefaultOutgoingRateLimiter(rateFn)
+	rateLimiters := make(map[int]quotas.RateLimiter, maxReaders)
+	readerCallerToPriority := make(map[string]int, maxReaders)
+	for readerId := defaultReaderId; readerId != defaultReaderId+maxReaders; readerId++ {
+		// use readerId as priority
+		rateLimiters[readerId] = quotas.NewDefaultOutgoingRateLimiter(rateFn)
+		readerCallerToPriority[newReaderRequest(int32(readerId)).Caller] = readerId
 	}
+	defaultPriority := defaultReaderId + maxReaders
 
 	return quotas.NewPriorityRateLimiter(
 		func(req quotas.Request) int {
-			if req.Caller == defaultReaderCaller {
-				return defaultReaderPriority
+			if priority, ok := readerCallerToPriority[req.Caller]; ok {
+				return priority
 			}
-			return nonDefaultReaderPriority
+			return defaultPriority
 		},
 		rateLimiters,
 	)
 }
 
-func newReaderRateLimiter(
+func newShardReaderRateLimiter(
 	shardMaxPollRPS dynamicconfig.IntPropertyFn,
-	hostRateLimiter quotas.RequestRateLimiter,
+	hostReaderRateLimiter quotas.RequestRateLimiter,
+	maxReaders int,
 ) quotas.RequestRateLimiter {
 	return quotas.NewMultiRequestRateLimiter(
-		NewPriorityRateLimiter(func() float64 {
-			return float64(shardMaxPollRPS())
-		}),
-		hostRateLimiter,
+		NewReaderPriorityRateLimiter(
+			func() float64 { return float64(shardMaxPollRPS()) },
+			maxReaders,
+		),
+		hostReaderRateLimiter,
 	)
 }
 
 func newReaderRequest(
-	readerID int,
+	readerID int32,
 ) quotas.Request {
 	return quotas.NewRequest(
 		"",
 		readerRequestToken,
-		strconv.Itoa(readerID),
+		strconv.Itoa(int(readerID)),
 		"",
 		"",
 	)

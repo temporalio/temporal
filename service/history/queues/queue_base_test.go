@@ -79,6 +79,7 @@ var testQueueOptions = &Options{
 	MaxPollIntervalJitterCoefficient:    dynamicconfig.GetFloatPropertyFn(0.15),
 	CheckpointInterval:                  dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond),
 	CheckpointIntervalJitterCoefficient: dynamicconfig.GetFloatPropertyFn(0.15),
+	MaxReaderCount:                      dynamicconfig.GetIntPropertyFn(5),
 	TaskMaxRetryCount:                   dynamicconfig.GetIntPropertyFn(100),
 }
 
@@ -100,7 +101,7 @@ func (s *queueBaseSuite) SetupTest() {
 
 	s.config = tests.NewDynamicConfig()
 	s.options = testQueueOptions
-	s.rateLimiter = NewPriorityRateLimiter(func() float64 { return 20 })
+	s.rateLimiter = NewReaderPriorityRateLimiter(func() float64 { return 20 }, s.options.MaxReaderCount())
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 }

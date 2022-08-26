@@ -142,7 +142,7 @@ func NewReader(
 			backoff.SystemClock,
 		),
 
-		rateLimiterRequest: newReaderRequest(int(readerID)),
+		rateLimiterRequest: newReaderRequest(readerID),
 	}
 }
 

@@ -138,7 +138,7 @@ func newTransferQueueProcessor(
 			historyClient,
 			taskAllocator,
 			clientBean,
-			newQueueShardRateLimiter(
+			newQueueProcessorRateLimiter(
 				hostRateLimiter,
 				config.TransferProcessorMaxPollRPS,
 			),
@@ -245,7 +245,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 		minLevel,
 		maxLevel,
 		t.taskAllocator,
-		newQueueShardRateLimiter(
+		newQueueProcessorRateLimiter(
 			t.hostRateLimiter,
 			t.config.TransferProcessorFailoverMaxPollRPS,
 		),
@@ -405,7 +405,7 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 				t.archivalClient,
 				t.taskAllocator,
 				t.clientBean,
-				newQueueShardRateLimiter(
+				newQueueProcessorRateLimiter(
 					t.hostRateLimiter,
 					t.config.TransferProcessorMaxPollRPS,
 				),

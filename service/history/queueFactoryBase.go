@@ -123,11 +123,11 @@ func NewQueueHostRateLimiter(
 	fallBackRPS dynamicconfig.IntPropertyFn,
 ) quotas.RateLimiter {
 	return quotas.NewDefaultOutgoingRateLimiter(
-		hostRateLimiterRateFn(hostRPS, fallBackRPS),
+		NewHostRateLimiterRateFn(hostRPS, fallBackRPS),
 	)
 }
 
-func hostRateLimiterRateFn(
+func NewHostRateLimiterRateFn(
 	hostRPS dynamicconfig.IntPropertyFn,
 	fallBackRPS dynamicconfig.IntPropertyFn,
 ) quotas.RateFn {

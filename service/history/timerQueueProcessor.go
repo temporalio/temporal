@@ -138,7 +138,7 @@ func newTimerQueueProcessor(
 			matchingClient,
 			taskAllocator,
 			clientBean,
-			newQueueShardRateLimiter(
+			newQueueProcessorRateLimiter(
 				hostRateLimiter,
 				config.TimerProcessorMaxPollRPS,
 			),
@@ -249,7 +249,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 		maxLevel,
 		t.matchingClient,
 		t.taskAllocator,
-		newQueueShardRateLimiter(
+		newQueueProcessorRateLimiter(
 			t.hostRateLimiter,
 			t.config.TimerProcessorFailoverMaxPollRPS,
 		),
@@ -412,7 +412,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 				clusterName,
 				t.taskAllocator,
 				t.clientBean,
-				newQueueShardRateLimiter(
+				newQueueProcessorRateLimiter(
 					t.hostRateLimiter,
 					t.config.TimerProcessorMaxPollRPS,
 				),
@@ -425,7 +425,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 	}
 }
 
-func newQueueShardRateLimiter(
+func newQueueProcessorRateLimiter(
 	hostRateLimiter quotas.RateLimiter,
 	shardMaxPollRPS dynamicconfig.IntPropertyFn,
 ) quotas.RateLimiter {

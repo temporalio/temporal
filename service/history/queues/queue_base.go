@@ -109,7 +109,7 @@ func newQueueBase(
 	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
-	hostRateLimiter quotas.RequestRateLimiter,
+	hostReaderRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
 	metricsHandler metrics.MetricsHandler,
 ) *queueBase {
@@ -166,9 +166,10 @@ func newQueueBase(
 			scheduler,
 			rescheduler,
 			timeSource,
-			newReaderRateLimiter(
+			newShardReaderRateLimiter(
 				options.MaxPollRPS,
-				hostRateLimiter,
+				hostReaderRateLimiter,
+				options.MaxReaderCount(),
 			),
 			monitor,
 			logger,

@@ -186,7 +186,7 @@ func newVisibilityQueueProcessor(
 		workflowCache,
 		scheduler,
 		rescheduler,
-		newQueueShardRateLimiter(
+		newQueueProcessorRateLimiter(
 			hostRateLimiter,
 			config.VisibilityProcessorMaxPollRPS,
 		),

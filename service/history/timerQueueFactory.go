@@ -89,11 +89,12 @@ func NewTimerQueueFactory(
 				params.Config.TimerProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
 			),
-			HostReaderRateLimiter: queues.NewPriorityRateLimiter(
-				hostRateLimiterRateFn(
+			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
+				NewHostRateLimiterRateFn(
 					params.Config.TimerProcessorMaxPollHostRPS,
 					params.Config.PersistenceMaxQPS,
 				),
+				params.Config.QueueMaxReaderCount(),
 			),
 		},
 	}

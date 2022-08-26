@@ -438,7 +438,7 @@ func (s *readerSuite) newTestReader(
 		s.mockScheduler,
 		s.mockRescheduler,
 		clock.NewRealTimeSource(),
-		NewPriorityRateLimiter(func() float64 { return 20 }),
+		NewReaderPriorityRateLimiter(func() float64 { return 20 }, 1),
 		s.monitor,
 		s.logger,
 		s.metricsHandler,

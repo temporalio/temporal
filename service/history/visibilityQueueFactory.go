@@ -82,11 +82,12 @@ func NewVisibilityQueueFactory(
 				params.Config.VisibilityProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
 			),
-			HostReaderRateLimiter: queues.NewPriorityRateLimiter(
-				hostRateLimiterRateFn(
+			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
+				NewHostRateLimiterRateFn(
 					params.Config.VisibilityProcessorMaxPollHostRPS,
 					params.Config.PersistenceMaxQPS,
 				),
+				params.Config.QueueMaxReaderCount(),
 			),
 		},
 	}

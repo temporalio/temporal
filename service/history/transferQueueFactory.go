@@ -92,11 +92,12 @@ func NewTransferQueueFactory(
 				params.Config.TransferProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
 			),
-			HostReaderRateLimiter: queues.NewPriorityRateLimiter(
-				hostRateLimiterRateFn(
+			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
+				NewHostRateLimiterRateFn(
 					params.Config.TransferProcessorMaxPollHostRPS,
 					params.Config.PersistenceMaxQPS,
 				),
+				params.Config.QueueMaxReaderCount(),
 			),
 		},
 	}
