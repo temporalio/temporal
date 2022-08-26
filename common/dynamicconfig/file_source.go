@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -188,8 +189,11 @@ func (fc *fileSource) update() error {
 		newValues[strings.ToLower(key)] = cvs
 	}
 
-	fc.values.Store(newValues)
-	fc.logger.Info("Updated dynamic config")
+	oldValues := fc.values.Swap(newValues)
+	if oldValues, ok := oldValues.(configValueMap); ok {
+		fc.logDiff(oldValues, newValues)
+		fc.logger.Info("Updated dynamic config")
+	}
 
 	return nil
 }
@@ -205,6 +209,95 @@ func (fc *fileSource) validateConfig(config *FileSourceConfig) error {
 		return fmt.Errorf("poll interval should be at least %v", minPollInterval)
 	}
 	return nil
+}
+
+func (fc *fileSource) logDiff(old configValueMap, new configValueMap) {
+	for key, newValues := range new {
+		oldValues, ok := old[key]
+		if !ok {
+			for _, newValue := range newValues {
+				// new key added
+				fc.logValueDiff(key, nil, &newValue)
+			}
+		} else {
+			// compare existing keys
+			fc.logConstraintsDiff(key, oldValues, newValues)
+		}
+	}
+
+	// check for removed values
+	for key, oldValues := range old {
+		if _, ok := new[key]; !ok {
+			for _, oldValue := range oldValues {
+				fc.logValueDiff(key, &oldValue, nil)
+			}
+		}
+	}
+}
+
+func (bc *fileSource) logConstraintsDiff(key string, oldValues []ConstrainedValue, newValues []ConstrainedValue) {
+	for _, oldValue := range oldValues {
+		matchFound := false
+		for _, newValue := range newValues {
+			if oldValue.Constraints == newValue.Constraints {
+				matchFound = true
+				if !reflect.DeepEqual(oldValue.Value, newValue.Value) {
+					bc.logValueDiff(key, &oldValue, &newValue)
+				}
+			}
+		}
+		if !matchFound {
+			bc.logValueDiff(key, &oldValue, nil)
+		}
+	}
+
+	for _, newValue := range newValues {
+		matchFound := false
+		for _, oldValue := range oldValues {
+			if oldValue.Constraints == newValue.Constraints {
+				matchFound = true
+			}
+		}
+		if !matchFound {
+			bc.logValueDiff(key, nil, &newValue)
+		}
+	}
+}
+
+func (bc *fileSource) logValueDiff(key string, oldValue *ConstrainedValue, newValue *ConstrainedValue) {
+	logLine := &strings.Builder{}
+	logLine.Grow(128)
+	logLine.WriteString("dynamic config changed for the key: ")
+	logLine.WriteString(key)
+	logLine.WriteString(" oldValue: ")
+	bc.appendConstrainedValue(logLine, oldValue)
+	logLine.WriteString(" newValue: ")
+	bc.appendConstrainedValue(logLine, newValue)
+	bc.logger.Info(logLine.String())
+}
+
+func (bc *fileSource) appendConstrainedValue(logLine *strings.Builder, value *ConstrainedValue) {
+	if value == nil {
+		logLine.WriteString("nil")
+	} else {
+		logLine.WriteString("{ constraints: {")
+		if value.Constraints.Namespace != "" {
+			logLine.WriteString(fmt.Sprintf("{Namespace:%s}", value.Constraints.Namespace))
+		}
+		if value.Constraints.NamespaceID != "" {
+			logLine.WriteString(fmt.Sprintf("{NamespaceID:%s}", value.Constraints.NamespaceID))
+		}
+		if value.Constraints.TaskQueueName != "" {
+			logLine.WriteString(fmt.Sprintf("{TaskQueueName:%s}", value.Constraints.TaskQueueName))
+		}
+		if value.Constraints.TaskQueueType != enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+			logLine.WriteString(fmt.Sprintf("{TaskQueueType:%s}", value.Constraints.TaskQueueType))
+		}
+		if value.Constraints.ShardID != 0 {
+			logLine.WriteString(fmt.Sprintf("{ShardID:%d}", value.Constraints.ShardID))
+		}
+		logLine.WriteString(fmt.Sprint("} value: ", value.Value, " }"))
+	}
 }
 
 func convertKeyTypeToString(v interface{}) (interface{}, error) {
