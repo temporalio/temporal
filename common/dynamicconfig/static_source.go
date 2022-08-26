@@ -24,6 +24,8 @@
 
 package dynamicconfig
 
+import "go.temporal.io/server/common/log"
+
 type (
 	// StaticSource is a simple implementation of Source that just looks up in a map.
 	// Values can be either plain values or []ConstrainedValue for a constrained value.
@@ -38,4 +40,15 @@ func (s StaticSource) GetValue(key Key) []ConstrainedValue {
 		return []ConstrainedValue{{Value: v}}
 	}
 	return nil
+}
+
+// NewNoopSource returns a Source that has no keys (a Collection using it will always return
+// default values).
+func NewNoopSource() Source {
+	return StaticSource(nil)
+}
+
+// NewNoopCollection creates a new noop collection.
+func NewNoopCollection() *Collection {
+	return NewCollection(NewNoopSource(), log.NewNoopLogger())
 }

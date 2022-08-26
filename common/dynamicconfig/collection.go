@@ -39,6 +39,8 @@ import (
 
 type (
 	// Collection implements lookup and constraint logic on top of a Source.
+	// The rest of the server code should use Collection as the interface to dynamic config,
+	// instead of the low-level Source.
 	Collection struct {
 		source   Source
 		logger   log.Logger

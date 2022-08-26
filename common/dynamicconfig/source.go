@@ -29,9 +29,9 @@ import (
 )
 
 type (
-	// Source is a source of dynamic configuration. The default Source reads from a file in the
-	// filesystem, and refreshes it periodically. You can extend the server with an alternate
-	// Source using ServerOptions.
+	// Source is a source of dynamic configuration. The default Source, fileSource, reads from
+	// a file in the filesystem, and refreshes it periodically. You can extend the server with
+	// an alternate Source using ServerOptions.
 	Source interface {
 		// GetValue returns a set of values and associated constraints for a key. Not all
 		// constraints are valid for all keys.
@@ -58,9 +58,10 @@ type (
 	// The type of the Value field depends on the key. Acceptable types will be one of:
 	//   int, float64, bool, string, map[string]any, time.Duration
 	//
-	// If time.Duration is expected, Value may also be a string, which will be converted
-	// using timestamp.ParseDurationDefaultDays. In other cases, the exact type must be
-	// used. If a Value is returned with an unexpected type, it will be ignored.
+	// If time.Duration is expected, a string is also accepted, which will be converted using
+	// timestamp.ParseDurationDefaultDays. If float64 is expected, int is also accepted. In
+	// other cases, the exact type must be used. If a Value is returned with an unexpected
+	// type, it will be ignored.
 	ConstrainedValue struct {
 		Constraints Constraints
 		Value       any
@@ -68,22 +69,26 @@ type (
 
 	// Constraints describe under what conditions a ConstrainedValue should be used.
 	// There are few standard "constraint precedence orders" that the server uses:
-	//   global:
+	//   global precedence:
 	//     no constraints
-	//   namespace-specific:
+	//   namespace precedence:
 	//     Namespace
 	//     no constraints
-	//   task-queue-specific:
+	//   task queue precedence
 	//     Namespace+TaskQueueName+TaskQueueType
 	//     Namespace+TaskQueueName
 	//     TaskQueueName
 	//     Namespace
 	//     no constraints
-	//   shard-id-specific:
+	//   shard id precedence:
 	//     ShardID
 	//     no constraints
 	// In each case, the constraints that the server is checking and the constraints that apply
 	// to the value must match exactly, including the fields that are not set (zero values).
+	// That is, for keys that use namespace precedence, you must either return a
+	// ConstrainedValue with only Namespace set, or with no fields set. (Or return one of
+	// each.) If you return a ConstrainedValue with Namespace and ShardID set, for example,
+	// that value will never be used, even if the Namespace matches.
 	Constraints struct {
 		Namespace     string
 		NamespaceID   string
