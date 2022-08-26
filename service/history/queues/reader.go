@@ -81,7 +81,7 @@ type (
 		scheduler      Scheduler
 		rescheduler    Rescheduler
 		timeSource     clock.TimeSource
-		ratelimiter    quotas.RateLimiter
+		ratelimiter    quotas.RequestRateLimiter
 		monitor        Monitor
 		logger         log.Logger
 		metricsHandler metrics.MetricsHandler
@@ -96,6 +96,8 @@ type (
 
 		throttleTimer *time.Timer
 		retrier       backoff.Retrier
+
+		rateLimiterRequest quotas.Request
 	}
 )
 
@@ -106,7 +108,7 @@ func NewReader(
 	scheduler Scheduler,
 	rescheduler Rescheduler,
 	timeSource clock.TimeSource,
-	ratelimiter quotas.RateLimiter,
+	ratelimiter quotas.RequestRateLimiter,
 	monitor Monitor,
 	logger log.Logger,
 	metricsHandler metrics.MetricsHandler,
@@ -139,6 +141,8 @@ func NewReader(
 			common.CreateReadTaskRetryPolicy(),
 			backoff.SystemClock,
 		),
+
+		rateLimiterRequest: newReaderRequest(int(readerID)),
 	}
 }
 
@@ -308,7 +312,7 @@ func (r *ReaderImpl) eventLoop() {
 }
 
 func (r *ReaderImpl) loadAndSubmitTasks() {
-	_ = r.ratelimiter.Wait(context.Background())
+	_ = r.ratelimiter.Wait(context.Background(), r.rateLimiterRequest)
 
 	r.Lock()
 	defer r.Unlock()
