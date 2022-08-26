@@ -46,7 +46,7 @@ func NewReaderPriorityRateLimiter(
 		rateLimiters[readerId] = quotas.NewDefaultOutgoingRateLimiter(rateFn)
 		readerCallerToPriority[newReaderRequest(int32(readerId)).Caller] = readerId
 	}
-	defaultPriority := defaultReaderId + maxReaders
+	defaultPriority := defaultReaderId + maxReaders - 1
 
 	return quotas.NewPriorityRateLimiter(
 		func(req quotas.Request) int {
