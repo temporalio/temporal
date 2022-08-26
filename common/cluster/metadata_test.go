@@ -99,12 +99,11 @@ func (s *metadataSuite) SetupTest() {
 		s.clusterName,
 		uuid.New(),
 		1,
+		clusterInfo,
 		s.mockClusterMetadataStore,
 		dynamicconfig.GetDurationPropertyFn(time.Second),
 		log.NewNoopLogger(),
 	)
-	s.metadata.clusterInfo = clusterInfo
-	s.metadata.versionToClusterName = updateVersionToClusterName(clusterInfo, s.failoverVersionIncrement)
 }
 
 func (s *metadataSuite) TearDownTest() {

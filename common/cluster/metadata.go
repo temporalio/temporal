@@ -145,6 +145,7 @@ func newMetadata(
 	currentClusterName string,
 	internalRPCAddress string,
 	initialFailoverVersion int64,
+	remoteClusters map[string]ClusterInformation,
 	clusterMetadataStore persistence.ClusterMetadataManager,
 	refreshDuration dynamicconfig.DurationPropertyFn,
 	logger log.Logger,
@@ -169,6 +170,12 @@ func newMetadata(
 		InitialFailoverVersion: initialFailoverVersion,
 		RPCAddress:             internalRPCAddress,
 	}
+	for remoteClusterName, remoteClusterInfo := range remoteClusters {
+		if remoteClusterName == currentClusterName {
+			continue
+		}
+		clusterInfo[remoteClusterName] = remoteClusterInfo
+	}
 	versionToClusterName := updateVersionToClusterName(clusterInfo, failoverVersionIncrement)
 
 	return &metadataImpl{
@@ -191,7 +198,11 @@ func NewMetadataFromConfig(
 	clusterMetadataStore persistence.ClusterMetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
 	logger log.Logger,
-) Metadata {
+) (Metadata, error) {
+	remoteClusters, err := getRemoteClusterInfo(context.Background(), clusterMetadataStore)
+	if err != nil {
+		return nil, err
+	}
 	return newMetadata(
 		config.EnableGlobalNamespace,
 		config.FailoverVersionIncrement,
@@ -199,10 +210,11 @@ func NewMetadataFromConfig(
 		config.CurrentClusterName,
 		config.InternalRPCAddress,
 		config.InitialFailoverVersion,
+		remoteClusters,
 		clusterMetadataStore,
 		dynamicCollection.GetDurationProperty(dynamicconfig.ClusterMetadataRefreshInterval, refreshInterval),
 		logger,
-	)
+	), nil
 }
 
 func NewMetadataForTest(
@@ -216,12 +228,11 @@ func NewMetadataForTest(
 		config.CurrentClusterName,
 		config.InternalRPCAddress,
 		config.InitialFailoverVersion,
+		clusterInfo,
 		nil,
 		dynamicconfig.GetDurationPropertyFn(refreshInterval),
 		log.NewNoopLogger(),
 	)
-	metadataMgr.clusterInfo = clusterInfo
-	metadataMgr.versionToClusterName = updateVersionToClusterName(clusterInfo, config.FailoverVersionIncrement)
 	return metadataMgr
 }
 
@@ -549,4 +560,40 @@ func (m *metadataImpl) listAllClusterMetadataFromDB(
 		}
 	}
 	return result, nil
+}
+
+func getRemoteClusterInfo(
+	ctx context.Context,
+	clusterMgr persistence.ClusterMetadataManager,
+) (map[string]ClusterInformation, error) {
+	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
+		request := &persistence.ListClusterMetadataRequest{
+			PageSize:      100,
+			NextPageToken: nil,
+		}
+		resp, err := clusterMgr.ListClusterMetadata(ctx, request)
+		if err != nil {
+			return nil, nil, err
+		}
+		var pageItem []interface{}
+		for _, metadata := range resp.ClusterMetadata {
+			pageItem = append(pageItem, metadata)
+		}
+		return pageItem, resp.NextPageToken, nil
+	})
+
+	clusterMap := make(map[string]ClusterInformation)
+	for iter.HasNext() {
+		item, err := iter.Next()
+		if err != nil {
+			return nil, err
+		}
+		metadata := item.(*persistence.GetClusterMetadataResponse)
+		clusterMap[metadata.ClusterName] = ClusterInformation{
+			Enabled:                metadata.IsConnectionEnabled,
+			InitialFailoverVersion: metadata.InitialFailoverVersion,
+			RPCAddress:             metadata.ClusterAddress,
+		}
+	}
+	return clusterMap, nil
 }

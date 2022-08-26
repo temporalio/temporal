@@ -78,6 +78,7 @@ type (
 		IsMasterCluster        bool
 		ClusterNo              int
 		ClusterMetadata        cluster.Config
+		RemoteClusterMap       map[string]cluster.ClusterInformation
 		Persistence            persistencetests.TestBaseOptions
 		HistoryConfig          *HistoryConfig
 		ESConfig               *esclient.Config
@@ -168,7 +169,22 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			return nil, err
 		}
 	}
-
+	for clusterName, info := range options.RemoteClusterMap {
+		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
+			ClusterMetadata: persistencespb.ClusterMetadata{
+				HistoryShardCount:        options.HistoryConfig.NumHistoryShards,
+				ClusterName:              clusterName,
+				ClusterId:                uuid.New(),
+				IsConnectionEnabled:      info.Enabled,
+				IsGlobalNamespaceEnabled: clusterMetadataConfig.EnableGlobalNamespace,
+				FailoverVersionIncrement: clusterMetadataConfig.FailoverVersionIncrement,
+				ClusterAddress:           info.RPCAddress,
+				InitialFailoverVersion:   info.InitialFailoverVersion,
+			}})
+		if err != nil {
+			return nil, err
+		}
+	}
 	_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			HistoryShardCount:        options.HistoryConfig.NumHistoryShards,

@@ -122,9 +122,8 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 
 	var clusterConfigs []*host.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
-	//clusterConfigs[0].WorkerConfig = &host.WorkerConfig{}
-	//clusterConfigs[1].WorkerConfig = &host.WorkerConfig{}
-
+	clusterConfigs[0].WorkerConfig = &host.WorkerConfig{}
+	clusterConfigs[1].WorkerConfig = &host.WorkerConfig{}
 	s.standByReplicationTasksChan = make(chan *replicationspb.ReplicationTask, 100)
 
 	s.standByTaskID = 0
@@ -144,53 +143,6 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	cluster, err := host.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
 	s.active = cluster
-	standby, err := host.NewCluster(clusterConfigs[1], log.With(s.logger, tag.ClusterName(clusterName[1])))
-	s.Require().NoError(err)
-	other, err := host.NewCluster(clusterConfigs[2], log.With(s.logger, tag.ClusterName(clusterName[1])))
-	s.Require().NoError(err)
-	_, err = s.active.GetAdminClient().AddOrUpdateRemoteCluster(
-		host.NewContext(),
-		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               clusterConfigs[1].ClusterMetadata.InternalRPCAddress,
-			EnableRemoteClusterConnection: true,
-		})
-	s.Require().NoError(err)
-	_, err = s.active.GetAdminClient().AddOrUpdateRemoteCluster(
-		host.NewContext(),
-		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               clusterConfigs[2].ClusterMetadata.InternalRPCAddress,
-			EnableRemoteClusterConnection: true,
-		})
-	s.Require().NoError(err)
-	_, err = standby.GetAdminClient().AddOrUpdateRemoteCluster(
-		host.NewContext(),
-		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               clusterConfigs[0].ClusterMetadata.InternalRPCAddress,
-			EnableRemoteClusterConnection: true,
-		})
-	s.Require().NoError(err)
-	_, err = standby.GetAdminClient().AddOrUpdateRemoteCluster(
-		host.NewContext(),
-		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               clusterConfigs[2].ClusterMetadata.InternalRPCAddress,
-			EnableRemoteClusterConnection: true,
-		})
-	s.Require().NoError(err)
-	_, err = other.GetAdminClient().AddOrUpdateRemoteCluster(
-		host.NewContext(),
-		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               clusterConfigs[0].ClusterMetadata.InternalRPCAddress,
-			EnableRemoteClusterConnection: true,
-		})
-	s.Require().NoError(err)
-	_, err = other.GetAdminClient().AddOrUpdateRemoteCluster(
-		host.NewContext(),
-		&adminservice.AddOrUpdateRemoteClusterRequest{
-			FrontendAddress:               clusterConfigs[1].ClusterMetadata.InternalRPCAddress,
-			EnableRemoteClusterConnection: true,
-		})
-	s.Require().NoError(err)
-	time.Sleep(time.Second)
 	s.registerNamespace()
 
 	s.version = clusterConfigs[1].ClusterMetadata.InitialFailoverVersion
