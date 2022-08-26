@@ -235,7 +235,7 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
 
 	// Verify partitions have data
-	partCount, err := s.testCluster.GetHost().dynamicClient.GetIntValue(
+	partCount, err := s.testCluster.GetHost().dcSource.GetIntValue(
 		dynamicconfig.MatchingNumTaskqueueReadPartitions, nil, 0)
 	s.Greater(partCount, 1, "This test makes no sense unless there are >1 partitions")
 	s.NoError(err)

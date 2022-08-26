@@ -106,7 +106,7 @@ type (
 		frontendClient                   workflowservice.WorkflowServiceClient
 		operatorClient                   operatorservice.OperatorServiceClient
 		historyClient                    historyservice.HistoryServiceClient
-		dynamicClient                    *dynamicClient
+		dcSource                         *dcSource
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
 		persistenceConfig                config.Persistence
@@ -166,9 +166,9 @@ type (
 
 // NewTemporal returns an instance that hosts full temporal in one process
 func NewTemporal(params *TemporalParams) *temporalImpl {
-	integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
+	testDCSource := newTestDCSource(dynamicconfig.NewNoopSource())
 	for k, v := range params.DynamicConfigOverrides {
-		integrationClient.OverrideValue(k, v)
+		testDCSource.OverrideValue(k, v)
 	}
 	impl := &temporalImpl{
 		logger:                           params.Logger,
@@ -191,9 +191,9 @@ func NewTemporal(params *TemporalParams) *temporalImpl {
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
 		spanExporters:                    params.SpanExporters,
-		dynamicClient:                    integrationClient,
+		dcSource:                         testDCSource,
 	}
-	impl.overrideHistoryDynamicConfig(integrationClient)
+	impl.overrideHistoryDynamicConfig(testDCSource)
 	return impl
 }
 
@@ -393,7 +393,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.XXXClient { return c.dynamicClient }),
+		fx.Provide(func() dynamicconfig.Source { return c.dcSource }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
@@ -485,7 +485,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-			fx.Provide(func() dynamicconfig.XXXClient { return c.dynamicClient }),
+			fx.Provide(func() dynamicconfig.Source { return c.dcSource }),
 			fx.Provide(func() log.Logger { return c.logger }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -566,7 +566,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.XXXClient { return c.dynamicClient }),
+		fx.Provide(func() dynamicconfig.Source { return c.dcSource }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
@@ -662,7 +662,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.XXXClient { return c.dynamicClient }),
+		fx.Provide(func() dynamicconfig.Source { return c.dcSource }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
@@ -699,7 +699,7 @@ func (c *temporalImpl) GetExecutionManager() persistence.ExecutionManager {
 	return c.executionManager
 }
 
-func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
+func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcSource) {
 	client.OverrideValue(dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
 
 	if c.workerConfig.EnableIndexer {
