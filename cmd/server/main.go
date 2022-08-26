@@ -150,15 +150,15 @@ func buildCLI() *cli.App {
 					tag.NewStringTag("server-version", headers.ServerVersion),
 				)
 
-				var dynamicConfigSource dynamicconfig.XXXClient
-				if cfg.DynamicConfigClient != nil {
-					dynamicConfigSource, err = dynamicconfig.NewFileSource(cfg.DynamicConfigClient, logger, temporal.InterruptCh())
+				var dynamicConfigSource dynamicconfig.Source
+				if cfg.DynamicConfigSource != nil {
+					dynamicConfigSource, err = dynamicconfig.NewFileSource(cfg.DynamicConfigSource, logger, temporal.InterruptCh())
 					if err != nil {
-						return cli.Exit(fmt.Sprintf("Unable to create dynamic config client. Error: %v", err), 1)
+						return cli.Exit(fmt.Sprintf("Unable to create dynamic config source. Error: %v", err), 1)
 					}
 				} else {
-					dynamicConfigSource = dynamicconfig.NewNoopClient()
-					logger.Info("Dynamic config client is not configured. Using noop client.")
+					dynamicConfigSource = dynamicconfig.NewNoopSource()
+					logger.Info("Dynamic config source is not configured. Using noop source.")
 				}
 
 				authorizer, err := authorization.GetAuthorizerFromConfig(
@@ -182,7 +182,7 @@ func buildCLI() *cli.App {
 				s := temporal.NewServer(
 					temporal.ForServices(services),
 					temporal.WithConfig(cfg),
-					temporal.WithDynamicConfigClient(dynamicConfigSource),
+					temporal.WithDynamicConfigSource(dynamicConfigSource),
 					temporal.WithLogger(logger),
 					temporal.InterruptOn(temporal.InterruptCh()),
 					temporal.WithAuthorizer(authorizer),

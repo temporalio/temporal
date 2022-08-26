@@ -60,9 +60,10 @@ type (
 		Archival Archival `yaml:"archival"`
 		// PublicClient is config for connecting to temporal frontend
 		PublicClient PublicClient `yaml:"publicClient"`
-		// DynamicConfigClient is the config for setting up the file based dynamic config source
+		// DynamicConfigSource is the config for setting up the file based dynamic config source
 		// Filepath should be relative to the root directory
-		DynamicConfigClient *dynamicconfig.FileSourceConfig `yaml:"dynamicConfigClient"`
+		// NOTE: using old yaml key name for backwards compatibility
+		DynamicConfigSource *dynamicconfig.FileSourceConfig `yaml:"dynamicConfigClient"`
 		// NamespaceDefaults is the default config for every namespace
 		NamespaceDefaults NamespaceDefaults `yaml:"namespaceDefaults"`
 		// ExporterConfig allows the specification of process-wide OTEL exporters
