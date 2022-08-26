@@ -61,10 +61,15 @@ type dcSource struct {
 	fallback  dynamicconfig.Source
 }
 
-func (d *dcSource) GetValue(name dynamicconfig.Key) []dynamicconfig.ConstrainedValue {
+func (d *dcSource) getRawValue(name dynamicconfig.Key) (any, bool) {
 	d.RLock()
 	defer d.RUnlock()
-	if val, ok := d.overrides[name]; ok {
+	v, ok := d.overrides[name]
+	return v, ok
+}
+
+func (d *dcSource) GetValue(name dynamicconfig.Key) []dynamicconfig.ConstrainedValue {
+	if val, ok := d.getRawValue(name); ok {
 		return []dynamicconfig.ConstrainedValue{{Value: val}}
 	}
 	return d.fallback.GetValue(name)
