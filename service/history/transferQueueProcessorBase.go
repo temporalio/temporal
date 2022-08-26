@@ -30,7 +30,6 @@ import (
 
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -109,7 +108,6 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 func newTransferTaskShardScheduler(
 	shard shard.Context,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
 	return queues.NewFIFOScheduler(
@@ -117,7 +115,6 @@ func newTransferTaskShardScheduler(
 			WorkerCount: config.TransferTaskWorkerCount,
 			QueueSize:   config.TransferTaskBatchSize(),
 		},
-		metricProvider,
 		logger,
 	)
 }

@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
@@ -41,10 +40,6 @@ const (
 	// weighted round robin scheduler and the actual
 	// worker pool (parallel processor).
 	namespacePrioritySchedulerProcessorQueueSize = 10
-)
-
-const (
-	fifoSchedulerChannelWeight = 100
 )
 
 type (
@@ -81,7 +76,7 @@ type (
 	}
 
 	schedulerImpl struct {
-		wRRScheduler tasks.Scheduler[Executable]
+		tasks.Scheduler[Executable]
 
 		taskChannelKeyFn TaskChannelKeyFn
 		channelWeightFn  ChannelWeightFn
@@ -91,7 +86,6 @@ type (
 func NewNamespacePriorityScheduler(
 	options NamespacePrioritySchedulerOptions,
 	namespaceRegistry namespace.Registry,
-	metricsProvider metrics.MetricsHandler,
 	logger log.Logger,
 ) Scheduler {
 	taskChannelKeyFn := func(e Executable) TaskChannelKey {
@@ -107,63 +101,21 @@ func NewNamespacePriorityScheduler(
 			logger,
 		)[key.Priority]
 	}
-	parallelProcessorOptions := &tasks.ParallelProcessorOptions{
+	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
 		QueueSize:   namespacePrioritySchedulerProcessorQueueSize,
 		WorkerCount: options.WorkerCount,
 	}
 
-	return newScheduler(
-		taskChannelKeyFn,
-		channelWeightFn,
-		parallelProcessorOptions,
-		metricsProvider,
-		logger,
-	)
-}
-
-// NewFIFOScheduler is used to create shard level task scheduler
-// and always schedule tasks in fifo order regardless
-// which namespace the task belongs to.
-func NewFIFOScheduler(
-	options FIFOSchedulerOptions,
-	metricsProvider metrics.MetricsHandler,
-	logger log.Logger,
-) Scheduler {
-	taskChannelKeyFn := func(_ Executable) TaskChannelKey { return TaskChannelKey{} }
-	channelWeightFn := func(_ TaskChannelKey) int { return fifoSchedulerChannelWeight }
-	parallelProcessorOptions := &tasks.ParallelProcessorOptions{
-		QueueSize:   options.QueueSize,
-		WorkerCount: options.WorkerCount,
-	}
-
-	return newScheduler(
-		taskChannelKeyFn,
-		channelWeightFn,
-		parallelProcessorOptions,
-		metricsProvider,
-		logger,
-	)
-}
-
-func newScheduler(
-	taskChannelKeyFn TaskChannelKeyFn,
-	channelWeightFn ChannelWeightFn,
-	parallelProcessorOptions *tasks.ParallelProcessorOptions,
-	metricsProvider metrics.MetricsHandler,
-	logger log.Logger,
-) *schedulerImpl {
 	return &schedulerImpl{
-		wRRScheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
+		Scheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
 			tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
 				TaskChannelKeyFn: taskChannelKeyFn,
 				ChannelWeightFn:  channelWeightFn,
 			},
-			tasks.NewParallelProcessor(
-				parallelProcessorOptions,
-				metricsProvider,
+			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
+				fifoSchedulerOptions,
 				logger,
-			),
-			metricsProvider,
+			)),
 			logger,
 		),
 		taskChannelKeyFn: taskChannelKeyFn,
@@ -171,24 +123,28 @@ func newScheduler(
 	}
 }
 
-func (s *schedulerImpl) Start() {
-	s.wRRScheduler.Start()
-}
+// NewFIFOScheduler is used to create shard level task scheduler
+// and always schedule tasks in fifo order regardless
+// which namespace the task belongs to.
+func NewFIFOScheduler(
+	options FIFOSchedulerOptions,
+	logger log.Logger,
+) Scheduler {
+	taskChannelKeyFn := func(_ Executable) TaskChannelKey { return TaskChannelKey{} }
+	channelWeightFn := func(_ TaskChannelKey) int { return 1 }
+	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
+		QueueSize:   options.QueueSize,
+		WorkerCount: options.WorkerCount,
+	}
 
-func (s *schedulerImpl) Stop() {
-	s.wRRScheduler.Stop()
-}
-
-func (s *schedulerImpl) Submit(
-	executable Executable,
-) {
-	s.wRRScheduler.Submit(executable)
-}
-
-func (s *schedulerImpl) TrySubmit(
-	executable Executable,
-) bool {
-	return s.wRRScheduler.TrySubmit(executable)
+	return &schedulerImpl{
+		Scheduler: tasks.NewFIFOScheduler[Executable](
+			fifoSchedulerOptions,
+			logger,
+		),
+		taskChannelKeyFn: taskChannelKeyFn,
+		channelWeightFn:  channelWeightFn,
+	}
 }
 
 func (s *schedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {

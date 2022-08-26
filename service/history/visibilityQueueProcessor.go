@@ -142,7 +142,7 @@ func newVisibilityQueueProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newVisibilityTaskShardScheduler(shard, logger, metricProvider)
+		scheduler = newVisibilityTaskShardScheduler(shard, logger)
 		retProcessor.ownedScheduler = scheduler
 	}
 
@@ -359,7 +359,6 @@ func (t *visibilityQueueProcessorImpl) queueShutdown() error {
 func newVisibilityTaskShardScheduler(
 	shard shard.Context,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
 	return queues.NewFIFOScheduler(
@@ -367,7 +366,6 @@ func newVisibilityTaskShardScheduler(
 			WorkerCount: config.VisibilityTaskWorkerCount,
 			QueueSize:   config.VisibilityTaskBatchSize(),
 		},
-		metricProvider,
 		logger,
 	)
 }

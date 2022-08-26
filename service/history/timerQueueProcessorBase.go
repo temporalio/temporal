@@ -366,7 +366,6 @@ func (t *timerQueueProcessorBase) submitTask(
 func newTimerTaskShardScheduler(
 	shard shard.Context,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
 	return queues.NewFIFOScheduler(
@@ -374,7 +373,6 @@ func newTimerTaskShardScheduler(
 			WorkerCount: config.TimerTaskWorkerCount,
 			QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
 		},
-		metricProvider,
 		logger,
 	)
 }
