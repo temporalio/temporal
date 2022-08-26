@@ -290,3 +290,83 @@ func (s *collectionSuite) TestFindMatch() {
 		s.Equal(tc.matched, err == nil)
 	}
 }
+
+func BenchmarkCollection(b *testing.B) {
+	// source with just one value
+	source1 := StaticSource(map[Key]any{
+		MatchingMaxTaskBatchSize: []ConstrainedValue{{Value: 12}},
+	})
+	cln1 := NewCollection(source1, log.NewNoopLogger())
+	b.Run("global int", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N/2; i++ {
+			size := cln1.GetIntProperty(MatchingMaxTaskBatchSize, 10)
+			_ = size()
+			size = cln1.GetIntProperty(MatchingGetTasksBatchSize, 10)
+			_ = size()
+		}
+	})
+	b.Run("namespace int", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N/2; i++ {
+			size := cln1.GetIntPropertyFilteredByNamespace(MatchingMaxTaskBatchSize, 10)
+			_ = size("my-namespace")
+			size = cln1.GetIntPropertyFilteredByNamespace(MatchingGetTasksBatchSize, 10)
+			_ = size("my-namespace")
+		}
+	})
+	b.Run("taskqueue int", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N/2; i++ {
+			size := cln1.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, 10)
+			_ = size("my-namespace", "my-task-queue", 1)
+			size = cln1.GetIntPropertyFilteredByTaskQueueInfo(MatchingGetTasksBatchSize, 10)
+			_ = size("my-namespace", "my-task-queue", 1)
+		}
+	})
+
+	// source with more constrained values
+	source2 := StaticSource(map[Key]any{
+		MatchingMaxTaskBatchSize: []ConstrainedValue{
+			{
+				Constraints: Constraints{
+					TaskQueueName: "other-tq",
+				},
+				Value: 18,
+			},
+			{
+				Constraints: Constraints{
+					Namespace: "other-ns",
+				},
+				Value: 15,
+			},
+		},
+	})
+	cln2 := NewCollection(source2, log.NewNoopLogger())
+	b.Run("single default", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N/4; i++ {
+			size := cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, 10)
+			_ = size("my-namespace", "my-task-queue", 1)
+			size = cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, 10)
+			_ = size("my-namespace", "other-tq", 1)
+			size = cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, 10)
+			_ = size("other-ns", "my-task-queue", 1)
+			size = cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, 10)
+			_ = size("other-ns", "other-tq", 1)
+		}
+	})
+	b.Run("structured default", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N/4; i++ {
+			size := cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, defaultNumTaskQueuePartitions)
+			_ = size("my-namespace", "my-task-queue", 1)
+			size = cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, defaultNumTaskQueuePartitions)
+			_ = size("my-namespace", "other-tq", 1)
+			size = cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, defaultNumTaskQueuePartitions)
+			_ = size("other-ns", "my-task-queue", 1)
+			size = cln2.GetIntPropertyFilteredByTaskQueueInfo(MatchingMaxTaskBatchSize, defaultNumTaskQueuePartitions)
+			_ = size("other-ns", "other-tq", 1)
+		}
+	})
+}
