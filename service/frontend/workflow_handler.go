@@ -3583,6 +3583,10 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, errRequestNotSet
 	}
 
+	if len(request.GetJobId()) == 0 {
+		return nil, errBatchJobIDNotSet
+	}
+
 	// Validate concurrent batch operation
 	countResp, err := wh.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 		Namespace: request.GetNamespace(),
@@ -3621,7 +3625,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
 	}
 
-	input := batcher.BatchParams{
+	input := &batcher.BatchParams{
 		Namespace:       request.Namespace,
 		Query:           request.VisibilityQuery,
 		Reason:          reason,
@@ -3634,6 +3638,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	if err != nil {
 		return nil, err
 	}
+
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
 			batcher.BatchOperationTypeMemo: payload.EncodeString(operationType),
@@ -3646,36 +3651,24 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.BatcherUser, payload.EncodeString(identity))
 	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
 
-	wid := batcher.GenerateOperationID(input)
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:             request.Namespace,
-		WorkflowId:            wid,
+		WorkflowId:            request.GetJobId(),
 		WorkflowType:          &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
 		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                 inputPayload,
 		Identity:              identity,
 		RequestId:             uuid.New(),
-		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		Memo:                  memo,
 		SearchAttributes:      searchAttributes,
 	}
-	startResp, err := wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC()))
+
+	_, err = wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC()))
 	if err != nil {
 		return nil, err
 	}
-
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: wid,
-		RunId:      startResp.GetRunId(),
-	}
-	_, err = batcher.EncodeOperationJobID(execution)
-	if err != nil {
-		return nil, err
-	}
-
-	return &workflowservice.StartBatchOperationResponse{
-		//TODO: add JOB ID
-	}, nil
+	return &workflowservice.StartBatchOperationResponse{}, nil
 }
 
 func (wh *WorkflowHandler) StopBatchOperation(
@@ -3697,18 +3690,15 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errRequestNotSet
 	}
 
-	execution, err := batcher.DecodeOperationJobID(request.GetJobId())
-	if err != nil {
-		return nil, err
-	}
-
 	terminateReq := &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         request.GetNamespace(),
-		WorkflowExecution: execution,
-		Reason:            request.GetReason(),
-		Identity:          request.GetIdentity(),
+		Namespace: request.GetNamespace(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: request.GetJobId(),
+		},
+		Reason:   request.GetReason(),
+		Identity: request.GetIdentity(),
 	}
-	_, err = wh.TerminateWorkflowExecution(ctx, terminateReq)
+	_, err := wh.TerminateWorkflowExecution(ctx, terminateReq)
 	if err != nil {
 		return nil, err
 	}
@@ -3733,9 +3723,9 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		return nil, errRequestNotSet
 	}
 
-	execution, err := batcher.DecodeOperationJobID(request.GetJobId())
-	if err != nil {
-		return nil, err
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: request.GetJobId(),
+		RunId:      "",
 	}
 	resp, err := wh.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: request.GetNamespace(),
@@ -3807,7 +3797,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 	}
 	return &workflowservice.DescribeBatchOperationResponse{
 		OperationType:          operationType,
-		JobId:                  request.GetJobId(),
+		JobId:                  executionInfo.Execution.GetWorkflowId(),
 		State:                  operationState,
 		StartTime:              executionInfo.StartTime,
 		CloseTime:              executionInfo.CloseTime,
@@ -3841,7 +3831,7 @@ func (wh *WorkflowHandler) ListBatchOperations(
 		Namespace:     request.GetNamespace(),
 		PageSize:      int32(wh.config.VisibilityMaxPageSize(request.GetNamespace())),
 		NextPageToken: request.GetNextPageToken(),
-		Query:         fmt.Sprintf("%s = '%s'", searchattribute.TemporalNamespaceDivision, batcher.NamespaceDivision),
+		Query:         fmt.Sprintf("%s = '%s'", searchattribute.WorkflowType, batcher.BatchWFTypeName),
 	})
 	if err != nil {
 		return nil, err
@@ -3849,12 +3839,8 @@ func (wh *WorkflowHandler) ListBatchOperations(
 
 	var operations []*batchpb.BatchOperationInfo
 	for _, execution := range resp.GetExecutions() {
-		jobID, err := batcher.EncodeOperationJobID(execution.GetExecution())
-		if err != nil {
-			return nil, err
-		}
 		operations = append(operations, &batchpb.BatchOperationInfo{
-			JobId:     jobID,
+			JobId:     execution.GetExecution().GetWorkflowId(),
 			State:     getBatchOperationState(execution.GetStatus()),
 			StartTime: execution.GetStartTime(),
 			CloseTime: execution.GetCloseTime(),
