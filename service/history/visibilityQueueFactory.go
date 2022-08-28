@@ -63,6 +63,8 @@ func NewVisibilityQueueFactory(
 				NamespaceWeights: params.Config.VisibilityProcessorSchedulerRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
+			params.TimeSource,
+			params.MetricsHandler,
 			params.Logger,
 		)
 	}

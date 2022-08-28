@@ -75,8 +75,8 @@ func (s *readerSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 
-	s.executableInitializer = func(t tasks.Task) Executable {
-		return NewExecutable(t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
+	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
+		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(1000),
@@ -429,7 +429,7 @@ func (s *readerSuite) newTestReader(
 	}
 
 	return NewReader(
-		defaultReaderId,
+		DefaultReaderId,
 		slices,
 		&ReaderOptions{
 			BatchSize:            dynamicconfig.GetIntPropertyFn(10),

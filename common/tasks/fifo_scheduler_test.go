@@ -49,6 +49,8 @@ type (
 		scheduler   *FIFOScheduler[*MockTask]
 		retryPolicy backoff.RetryPolicy
 	}
+
+	noopMonitor[T Task] struct{}
 )
 
 func TestFIFOSchedulerSuite(t *testing.T) {
@@ -218,6 +220,7 @@ func (s *fifoSchedulerSuite) TestStartStopWorkers() {
 
 func (s *fifoSchedulerSuite) newTestProcessor() *FIFOScheduler[*MockTask] {
 	return NewFIFOScheduler[*MockTask](
+		&noopMonitor[*MockTask]{},
 		&FIFOSchedulerOptions{
 			QueueSize:   1,
 			WorkerCount: dynamicconfig.GetIntPropertyFn(1),
@@ -225,3 +228,7 @@ func (s *fifoSchedulerSuite) newTestProcessor() *FIFOScheduler[*MockTask] {
 		log.NewNoopLogger(),
 	)
 }
+
+func (m *noopMonitor[T]) Start()        {}
+func (m *noopMonitor[T]) Stop()         {}
+func (m *noopMonitor[T]) RecordStart(T) {}

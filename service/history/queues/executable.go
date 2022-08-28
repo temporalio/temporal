@@ -55,9 +55,10 @@ type (
 		tasks.Task
 
 		Attempt() int
-		Logger() log.Logger
 		GetTask() tasks.Task
 		GetPriority() ctasks.Priority
+		GetScheduledTime() time.Time
+		SetScheduledTime(time.Time)
 
 		QueueType() QueueType
 	}
@@ -106,7 +107,9 @@ type (
 		timeSource        clock.TimeSource
 		namespaceRegistry namespace.Registry
 
+		readerID                      int32
 		loadTime                      time.Time
+		scheduledTime                 time.Time
 		userLatency                   time.Duration
 		logger                        log.Logger
 		metricsProvider               metrics.MetricsHandler
@@ -118,7 +121,13 @@ type (
 	}
 )
 
+// TODO: Remove filter, queueType, and namespaceCacheRefreshInterval
+// parameters after deprecating old queue processing logic.
+// CriticalRetryAttempt probably should also be removed as it's only
+// used for emiting logs and metrics when # of attempts is high, and
+// doesn't have to be a dynamic config.
 func NewExecutable(
+	readerID int32,
 	task tasks.Task,
 	filter TaskFilter,
 	executor Executor,
@@ -142,6 +151,7 @@ func NewExecutable(
 		priorityAssigner:  priorityAssigner,
 		timeSource:        timeSource,
 		namespaceRegistry: namespaceRegistry,
+		readerID:          readerID,
 		loadTime:          util.MaxTime(timeSource.Now(), task.GetKey().FireTime),
 		logger: log.NewLazyLogger(
 			logger,
@@ -303,14 +313,20 @@ func (e *executableImpl) Ack() {
 	e.state = ctasks.TaskStateAcked
 
 	if e.shouldProcess {
+		e.metricsProvider.Timer(TaskLoadLatency).Record(
+			e.loadTime.Sub(e.GetVisibilityTime()),
+			metrics.QueueReaderIDTag(e.readerID),
+		)
 		e.metricsProvider.Histogram(TaskAttempt, metrics.Dimensionless).Record(int64(e.attempt))
 
-		priorityTaggedProvider := e.metricsProvider.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
-		priorityTaggedProvider.Timer(TaskLatency).Record(time.Since(e.loadTime))
-		priorityTaggedProvider.Timer(TaskQueueLatency).Record(time.Since(e.GetVisibilityTime()))
-		priorityTaggedProvider.Timer(TaskUserLatency).Record(e.userLatency)
-		priorityTaggedProvider.Timer(TaskNoUserLatency).Record(time.Since(e.loadTime) - e.userLatency)
-		priorityTaggedProvider.Timer(TaskNoUserQueueLatency).Record(time.Since(e.GetVisibilityTime()) - e.userLatency)
+		taggedMetricsProvider := e.metricsProvider.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
+		taggedMetricsProvider.Timer(TaskLatency).Record(time.Since(e.loadTime))
+		taggedMetricsProvider.Timer(TaskUserLatency).Record(e.userLatency)
+		taggedMetricsProvider.Timer(TaskNoUserLatency).Record(time.Since(e.loadTime) - e.userLatency)
+
+		taggedMetricsProvider = taggedMetricsProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))
+		taggedMetricsProvider.Timer(TaskQueueLatency).Record(time.Since(e.GetVisibilityTime()))
+		taggedMetricsProvider.Timer(TaskNoUserQueueLatency).Record(time.Since(e.GetVisibilityTime()) - e.userLatency)
 	}
 }
 
@@ -326,6 +342,7 @@ func (e *executableImpl) Nack(err error) {
 		// we do not need to know if there any error during submission
 		// as long as it's not submitted, the execuable should be add
 		// to the rescheduler
+		e.SetScheduledTime(e.timeSource.Now())
 		submitted = e.scheduler.TrySubmit(e)
 	}
 
@@ -375,12 +392,16 @@ func (e *executableImpl) Attempt() int {
 	return e.attempt
 }
 
-func (e *executableImpl) Logger() log.Logger {
-	return e.logger
-}
-
 func (e *executableImpl) GetTask() tasks.Task {
 	return e.Task
+}
+
+func (e *executableImpl) GetScheduledTime() time.Time {
+	return e.scheduledTime
+}
+
+func (e *executableImpl) SetScheduledTime(t time.Time) {
+	e.scheduledTime = t
 }
 
 func (e *executableImpl) QueueType() QueueType {

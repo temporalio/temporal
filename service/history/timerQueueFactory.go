@@ -70,6 +70,8 @@ func NewTimerQueueFactory(
 				NamespaceWeights: params.Config.TimerProcessorSchedulerRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
+			params.TimeSource,
+			params.MetricsHandler,
 			params.Logger,
 		)
 	}

@@ -95,6 +95,8 @@ const (
 	TaskCategoryTagName   = "task_category"
 	TaskTypeTagName       = "task_type"
 	TaskPriorityTagName   = "task_priority"
+	QueueReaderIDTagName  = "queue_reader_id"
+	QueueAlertTypeTagName = "queue_alert_type"
 	QueueTypeTagName      = "queue_type"
 	visibilityTypeTagName = "visibility_type"
 	ErrorTypeTagName      = "error_type"

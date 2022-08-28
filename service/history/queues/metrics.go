@@ -43,6 +43,8 @@ const (
 	TaskStandbyRetryCounter     = "task_errors_standby_retry_counter"
 	TaskWorkflowBusyCounter     = "task_errors_workflow_busy"
 	TaskNotActiveCounter        = "task_errors_not_active_counter"
+	TaskLoadLatency             = "task_latency_load"
+	TaskScheduleLatency         = "task_latency_schedule"
 	TaskProcessingLatency       = "task_latency_processing"
 	TaskNoUserProcessingLatency = "task_latency_processing_nouserlatency"
 	TaskQueueLatency            = "task_latency_queue"
@@ -57,6 +59,10 @@ const (
 	AckLevelUpdateCounter       = "ack_level_update"
 	AckLevelUpdateFailedCounter = "ack_level_update_failed"
 	PendingTasksCounter         = "pending_tasks"
+
+	QueueReaderCountHistogram = "queue_reader_count"
+	QueueSliceCountHistogram  = "queue_slice_count"
+	QueueActionCounter        = "queue_actions"
 )
 
 // Operation tag value for queue processors

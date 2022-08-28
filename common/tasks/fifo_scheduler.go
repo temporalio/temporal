@@ -54,7 +54,8 @@ type (
 		status  int32
 		options *FIFOSchedulerOptions
 
-		logger log.Logger
+		monitor Monitor[T]
+		logger  log.Logger
 
 		tasksChan        chan T
 		shutdownChan     chan struct{}
@@ -65,6 +66,7 @@ type (
 
 // NewFIFOScheduler creates a new FIFOScheduler
 func NewFIFOScheduler[T Task](
+	scheduleMoniter Monitor[T],
 	options *FIFOSchedulerOptions,
 	logger log.Logger,
 ) *FIFOScheduler[T] {
@@ -88,6 +90,7 @@ func (f *FIFOScheduler[T]) Start() {
 		return
 	}
 
+	f.monitor.Start()
 	f.startWorkers(f.options.WorkerCount())
 
 	f.shutdownWG.Add(1)
@@ -108,6 +111,8 @@ func (f *FIFOScheduler[T]) Stop() {
 	close(f.shutdownChan)
 	// must be called after the close of the shutdownChan
 	f.drainTasks()
+
+	f.monitor.Stop()
 
 	go func() {
 		if success := common.AwaitWaitGroup(&f.shutdownWG, time.Minute); !success {
@@ -211,8 +216,10 @@ func (f *FIFOScheduler[T]) processTask(
 }
 
 func (f *FIFOScheduler[T]) executeTask(
-	task Task,
+	task T,
 ) {
+	f.monitor.RecordStart(task)
+
 	operation := func() error {
 		if err := task.Execute(); err != nil {
 			return task.HandleErr(err)

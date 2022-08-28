@@ -44,12 +44,12 @@ type (
 		CanMergeWithSlice(Slice) bool
 		MergeWithSlice(Slice) []Slice
 		ShrinkRange()
-		SelectTasks(int) ([]Executable, error)
+		SelectTasks(readerID int32, batchSize int) ([]Executable, error)
 		MoreTasks() bool
 		Clear()
 	}
 
-	ExecutableInitializer func(tasks.Task) Executable
+	ExecutableInitializer func(readerID int32, t tasks.Task) Executable
 
 	SliceImpl struct {
 		paginationFnProvider  PaginationFnProvider
@@ -297,7 +297,7 @@ func (s *SliceImpl) ShrinkRange() {
 	s.scope.Range.InclusiveMin = newRangeMin
 }
 
-func (s *SliceImpl) SelectTasks(batchSize int) ([]Executable, error) {
+func (s *SliceImpl) SelectTasks(readerID int32, batchSize int) ([]Executable, error) {
 	s.stateSanityCheck()
 
 	if len(s.iterators) == 0 {
@@ -328,7 +328,7 @@ func (s *SliceImpl) SelectTasks(batchSize int) ([]Executable, error) {
 				continue
 			}
 
-			executable := s.executableInitializer(task)
+			executable := s.executableInitializer(readerID, task)
 			s.executableTracker.add(executable)
 			executables = append(executables, executable)
 		} else {

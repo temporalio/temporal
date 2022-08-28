@@ -64,8 +64,8 @@ func (s *sliceSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	s.executableInitializer = func(t tasks.Task) Executable {
-		return NewExecutable(t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
+	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
+		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
 	}
 }
 
@@ -367,7 +367,7 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 
 		executables := make([]Executable, 0, numTasks)
 		for {
-			selectedExecutables, err := slice.SelectTasks(batchSize)
+			selectedExecutables, err := slice.SelectTasks(DefaultReaderId, batchSize)
 			s.NoError(err)
 			if len(selectedExecutables) == 0 {
 				break
@@ -412,10 +412,10 @@ func (s *sliceSuite) TestSelectTasks_Error_NoLoadedTasks() {
 	}
 
 	slice := NewSlice(paginationFnProvider, s.executableInitializer, NewScope(r, predicate))
-	_, err := slice.SelectTasks(100)
+	_, err := slice.SelectTasks(DefaultReaderId, 100)
 	s.Error(err)
 
-	executables, err := slice.SelectTasks(100)
+	executables, err := slice.SelectTasks(DefaultReaderId, 100)
 	s.NoError(err)
 	s.Len(executables, numTasks)
 	s.Empty(slice.iterators)
@@ -455,7 +455,7 @@ func (s *sliceSuite) TestSelectTasks_Error_WithLoadedTasks() {
 	}
 
 	slice := NewSlice(paginationFnProvider, s.executableInitializer, NewScope(r, predicate))
-	executables, err := slice.SelectTasks(100)
+	executables, err := slice.SelectTasks(DefaultReaderId, 100)
 	s.NoError(err)
 	s.Len(executables, numTasks)
 	s.True(slice.MoreTasks())

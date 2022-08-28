@@ -66,12 +66,12 @@ func (s *monitorSuite) TearDownTest() {
 }
 
 func (s *monitorSuite) TestReaderWatermarkStats() {
-	_, ok := s.monitor.GetReaderWatermark(defaultReaderId)
+	_, ok := s.monitor.GetReaderWatermark(DefaultReaderId)
 	s.False(ok)
 
 	now := time.Now().Truncate(monitorWatermarkPrecision)
-	s.monitor.SetReaderWatermark(defaultReaderId, tasks.NewKey(now, rand.Int63()))
-	watermark, ok := s.monitor.GetReaderWatermark(defaultReaderId)
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+	watermark, ok := s.monitor.GetReaderWatermark(DefaultReaderId)
 	s.True(ok)
 	s.Equal(tasks.NewKey(
 		now.Truncate(monitorWatermarkPrecision),
@@ -80,14 +80,14 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 
 	for i := 0; i != s.monitor.options.ReaderStuckCriticalAttempts(); i++ {
 		now = now.Add(time.Millisecond * 100)
-		s.monitor.SetReaderWatermark(defaultReaderId, tasks.NewKey(now, rand.Int63()))
+		s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
 	}
 
 	alert := <-s.alertCh
 	s.Equal(Alert{
 		AlertType: AlertTypeReaderStuck,
 		AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
-			ReaderID: defaultReaderId,
+			ReaderID: DefaultReaderId,
 			CurrentWatermark: tasks.NewKey(
 				now.Truncate(monitorWatermarkPrecision),
 				0,
