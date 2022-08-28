@@ -198,9 +198,13 @@ func (e *executableImpl) Execute() error {
 	}
 	e.userLatency += userLatency
 
-	e.metricsProvider.Counter(TaskRequests).Record(1, metrics.TaskPriorityTag(e.priority.String()))
 	e.metricsProvider.Timer(TaskProcessingLatency).Record(time.Since(startTime))
 	e.metricsProvider.Timer(TaskNoUserProcessingLatency).Record(time.Since(startTime) - userLatency)
+
+	taggedProvider := e.metricsProvider.WithTags(metrics.TaskPriorityTag(e.priority.String()))
+	taggedProvider.Counter(TaskRequests).Record(1)
+	taggedProvider.Timer(TaskScheduleLatency).Record(e.scheduledTime.Sub(startTime))
+
 	return err
 }
 

@@ -34,8 +34,8 @@ import (
 
 // Metric names
 const (
-	TaskRequests                = "task_requests"
-	TaskLatency                 = "task_latency"
+	TaskRequests = "task_requests"
+
 	TaskFailures                = "task_errors"
 	TaskDiscarded               = "task_errors_discarded"
 	TaskSkipped                 = "task_skipped"
@@ -43,14 +43,15 @@ const (
 	TaskStandbyRetryCounter     = "task_errors_standby_retry_counter"
 	TaskWorkflowBusyCounter     = "task_errors_workflow_busy"
 	TaskNotActiveCounter        = "task_errors_not_active_counter"
-	TaskLoadLatency             = "task_latency_load"
-	TaskScheduleLatency         = "task_latency_schedule"
-	TaskProcessingLatency       = "task_latency_processing"
-	TaskNoUserProcessingLatency = "task_latency_processing_nouserlatency"
-	TaskQueueLatency            = "task_latency_queue"
-	TaskNoUserLatency           = "task_latency_nouserlatency"
-	TaskUserLatency             = "task_latency_userlatency"
-	TaskNoUserQueueLatency      = "task_latency_queue_nouserlatency"
+	TaskLoadLatency             = "task_latency_load"                     // latency for loading task into memory
+	TaskScheduleLatency         = "task_latency_schedule"                 // latency for scheduling task one time (from submission to procesing)
+	TaskProcessingLatency       = "task_latency_processing"               // latency for processing task one time
+	TaskNoUserProcessingLatency = "task_latency_processing_nouserlatency" // same as TaskProcessingLatency, but excludes workflow lock latency
+	TaskLatency                 = "task_latency"                          // task in-memory latency across multiple attempts
+	TaskNoUserLatency           = "task_latency_nouserlatency"            // same as TaskLatency, but excludes workflow lock latency
+	TaskQueueLatency            = "task_latency_queue"                    // task e2e latency
+	TaskNoUserQueueLatency      = "task_latency_queue_nouserlatency"      // same as TaskQueueLatency, but excludes workflow lock latency
+	TaskUserLatency             = "task_latency_userlatency"              // workflow lock latency across multiple attempts
 	TaskReschedulerPendingTasks = "task_rescheduler_pending_tasks"
 	TaskThrottledCounter        = "task_throttled_counter"
 
@@ -60,6 +61,7 @@ const (
 	AckLevelUpdateFailedCounter = "ack_level_update_failed"
 	PendingTasksCounter         = "pending_tasks"
 
+	QueueScheduleLatency      = "queue_latency_schedule" // latency for scheduling 100 tasks in one task channel
 	QueueReaderCountHistogram = "queue_reader_count"
 	QueueSliceCountHistogram  = "queue_slice_count"
 	QueueActionCounter        = "queue_actions"
