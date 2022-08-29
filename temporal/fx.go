@@ -606,9 +606,6 @@ func ApplyClusterMetadataConfigProvider(
 	defer clusterMetadataManager.Close()
 
 	clusterData := config.ClusterMetadata
-	if clusterData.InitialFailoverVersion == 0 || len(clusterData.InternalRPCAddress) == 0 {
-		return config.ClusterMetadata, config.Persistence, fmt.Errorf("ClusterInformation config is deprecated. Please set InitialFailoverVersion and InternalRPCAddress in ClusterMetadata config")
-	}
 	// Only configure current cluster metadata from static config file
 	clusterId := uuid.New()
 	applied, err := clusterMetadataManager.SaveClusterMetadata(
@@ -719,6 +716,20 @@ func overwriteClusterData(
 			tag.IgnoredValue(clusterData.EnableGlobalNamespace),
 			tag.Value(persistedData.IsGlobalNamespaceEnabled))
 		config.ClusterMetadata.EnableGlobalNamespace = persistedData.IsGlobalNamespaceEnabled
+	}
+	if len(clusterData.InternalRPCAddress) == 0 {
+		logger.Warn(
+			missClusterConfigMessage,
+			tag.Key("clusterMetadata.InternalRPCAddress"),
+			tag.Value(persistedData.ClusterAddress))
+		config.ClusterMetadata.InternalRPCAddress = persistedData.ClusterAddress
+	}
+	if clusterData.InitialFailoverVersion == 0 {
+		logger.Warn(
+			missClusterConfigMessage,
+			tag.Key("clusterMetadata.InitialFailoverVersion"),
+			tag.Value(persistedData.InitialFailoverVersion))
+		config.ClusterMetadata.InitialFailoverVersion = persistedData.InitialFailoverVersion
 	}
 }
 

@@ -160,8 +160,6 @@ func newMetadata(
 		panic("Version increment is 0")
 	} else if initialFailoverVersion == 0 {
 		panic("Initial failover version is 0")
-	} else if len(internalRPCAddress) == 0 {
-		panic("Internal RPC address is empty")
 	}
 
 	clusterInfo := make(map[string]ClusterInformation)
