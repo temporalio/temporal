@@ -391,10 +391,12 @@ func (s *readerSuite) TestSubmitTask() {
 
 	pastFireTime := reader.timeSource.Now().Add(-time.Minute)
 	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
+	mockExecutable.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
 	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(true).Times(1)
 	reader.submit(mockExecutable)
 
 	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
+	mockExecutable.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
 	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(false).Times(1)
 	mockExecutable.EXPECT().Reschedule().Times(1)
 	reader.submit(mockExecutable)
