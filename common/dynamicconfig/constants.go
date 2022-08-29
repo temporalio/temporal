@@ -340,10 +340,16 @@ const (
 	// StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
 	// before discarding the task
 	StandbyTaskMissingEventsDiscardDelay = "history.standbyTaskMissingEventsDiscardDelay"
+	// QueuePendingTaskCriticalCount is the max number of pending task in one queue
+	// before triggering queue slice splitting and unloading
+	QueuePendingTaskCriticalCount = "history.queuePendingTaskCriticalCount"
 	// QueueReaderStuckCriticalAttempts is the max number of task loading attempts for a certain task range
 	// before that task range is split into a separate slice to unblock loading for later range.
 	// currently only work for scheduled queues and the task range is 1s.
 	QueueReaderStuckCriticalAttempts = "history.queueReaderStuckCriticalAttempts"
+	// QueuePendingTaskMaxCount is the max number of task pending tasks in one queue before stop
+	// loading new tasks into memory.
+	QueuePendingTaskMaxCount = "history.queuePendingTasksMaxCount"
 	// QueueMaxReaderCount is the max number of readers in one multi-cursor queue
 	QueueMaxReaderCount = "history.queueMaxReaderCount"
 	// TimerTaskBatchSize is batch size for timer processor to process tasks

@@ -62,6 +62,30 @@ func (s *mitigatorSuite) SetupTest() {
 	)
 }
 
+func (s *mitigatorSuite) TestQueuePendingTaskAlert() {
+	alert := Alert{
+		AlertType: AlertTypeQueuePendingTaskCount,
+		AlertAttributesQueuePendingTaskCount: &AlertAttributesQueuePendingTaskCount{
+			CurrentPendingTaskCount:   1000,
+			CiriticalPendingTaskCount: 500,
+		},
+	}
+
+	action := s.mitigator.Mitigate(alert)
+	s.IsType(&actionQueuePendingTask{}, action)
+
+	s.Nil(
+		s.mitigator.Mitigate(alert),
+		"mitigator should have only one outstanding action for pending task alert",
+	)
+
+	action.(*actionQueuePendingTask).completionFn()
+
+	action = s.mitigator.Mitigate(alert)
+	s.NotNil(action)
+	s.IsType(&actionQueuePendingTask{}, action)
+}
+
 func (s *mitigatorSuite) TestReaderWatermarkAlert() {
 	alert := Alert{
 		AlertType: AlertTypeReaderStuck,

@@ -79,7 +79,8 @@ func (s *readerSuite) SetupTest() {
 		return NewExecutable(t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
-		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(1000),
+		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
+		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(10),
 	})
 }
 
@@ -176,7 +177,7 @@ func (s *readerSuite) TestMergeSlices() {
 	incomingScopes := NewRandomScopes(rand.Intn(10))
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableInitializer, incomingScope))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableInitializer, s.monitor, incomingScope))
 	}
 
 	reader.MergeSlices(incomingSlices...)
@@ -276,7 +277,10 @@ func (s *readerSuite) TestLoadAndSubmitTasks_TooManyPendingTasks() {
 
 	reader := s.newTestReader(scopes, nil)
 
-	s.mockRescheduler.EXPECT().Len().Return(reader.options.MaxPendingTasksCount() * 2).Times(1)
+	s.monitor.SetSlicePendingTaskCount(
+		reader.slices.Front().Value.(Slice),
+		reader.options.MaxPendingTasksCount(),
+	)
 
 	// should be no-op
 	reader.loadAndSubmitTasks()
@@ -424,7 +428,7 @@ func (s *readerSuite) newTestReader(
 ) *ReaderImpl {
 	slices := make([]Slice, 0, len(scopes))
 	for _, scope := range scopes {
-		slice := NewSlice(paginationFnProvider, s.executableInitializer, scope)
+		slice := NewSlice(paginationFnProvider, s.executableInitializer, s.monitor, scope)
 		slices = append(slices, slice)
 	}
 

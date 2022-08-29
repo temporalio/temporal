@@ -408,7 +408,7 @@ func (r *ReaderImpl) submit(
 }
 
 func (r *ReaderImpl) verifyPendingTaskSize() bool {
-	return r.rescheduler.Len() < r.options.MaxPendingTasksCount()
+	return r.monitor.GetTotalPendingTaskCount() < r.options.MaxPendingTasksCount()
 }
 
 func appendSlice(

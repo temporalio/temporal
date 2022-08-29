@@ -74,10 +74,15 @@ var testQueueOptions = &Options{
 		MaxPendingTasksCount: dynamicconfig.GetIntPropertyFn(100),
 		PollBackoffInterval:  dynamicconfig.GetDurationPropertyFn(200 * time.Millisecond),
 	},
+	MonitorOptions: MonitorOptions{
+		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
+		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(10),
+	},
 	MaxPollInterval:                     dynamicconfig.GetDurationPropertyFn(time.Minute * 5),
 	MaxPollIntervalJitterCoefficient:    dynamicconfig.GetFloatPropertyFn(0.15),
 	CheckpointInterval:                  dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond),
 	CheckpointIntervalJitterCoefficient: dynamicconfig.GetFloatPropertyFn(0.15),
+	MaxReaderCount:                      dynamicconfig.GetIntPropertyFn(5),
 	TaskMaxRetryCount:                   dynamicconfig.GetIntPropertyFn(100),
 }
 
