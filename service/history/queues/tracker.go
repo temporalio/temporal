@@ -85,7 +85,7 @@ func (t *executableTracker) merge(incomingTracker *executableTracker) *executabl
 	thatExecutables, thatPendingTasks := incomingTracker.pendingExecutables, incomingTracker.pendingPerNamesapce
 	if len(thisExecutables) < len(thatExecutables) {
 		thisExecutables, thatExecutables = thatExecutables, thisExecutables
-		thisPendingTasks, thatPendingTasks = thatPendingTasks, thisPendingTasks
+		thisPendingTasks = thatPendingTasks
 	}
 
 	for key, executable := range thatExecutables {
