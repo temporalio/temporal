@@ -1900,9 +1900,9 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Terminate() {
 	request := &workflowservice.StartBatchOperationRequest{
 		Namespace: testNamespace.String(),
 		JobId:     uuid.New(),
+		Reason:    inputString,
 		Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 			TerminationOperation: &batchpb.BatchOperationTermination{
-				Reason:   inputString,
 				Identity: inputString,
 			},
 		},
@@ -1949,9 +1949,9 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 	request := &workflowservice.StartBatchOperationRequest{
 		Namespace: testNamespace.String(),
 		JobId:     uuid.New(),
+		Reason:    inputString,
 		Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{
 			CancellationOperation: &batchpb.BatchOperationCancellation{
-				Reason:   inputString,
 				Identity: inputString,
 			},
 		},

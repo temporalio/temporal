@@ -3604,13 +3604,11 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, err
 	}
 	var identity string
-	var reason string
 	var operationType string
 	var signalParams batcher.SignalParams
 	switch op := request.Operation.(type) {
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 		identity = op.TerminationOperation.GetIdentity()
-		reason = op.TerminationOperation.Reason
 		operationType = batcher.BatchTypeTerminate
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		identity = op.SignalOperation.GetIdentity()
@@ -3619,16 +3617,15 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		signalParams.Input = op.SignalOperation.GetInput()
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
 		identity = op.CancellationOperation.GetIdentity()
-		reason = op.CancellationOperation.Reason
 		operationType = batcher.BatchTypeCancel
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
 	}
 
 	input := &batcher.BatchParams{
-		Namespace:       request.Namespace,
-		Query:           request.VisibilityQuery,
-		Reason:          reason,
+		Namespace:       request.GetNamespace(),
+		Query:           request.GetVisibilityQuery(),
+		Reason:          request.GetReason(),
 		BatchType:       operationType,
 		TerminateParams: batcher.TerminateParams{},
 		CancelParams:    batcher.CancelParams{},
@@ -3642,7 +3639,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
 			batcher.BatchOperationTypeMemo: payload.EncodeString(operationType),
-			batcher.BatchReasonMemo:        payload.EncodeString(reason),
+			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
 		},
 	}
 
