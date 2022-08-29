@@ -439,13 +439,13 @@ func matchAndConvert[T any](
 	typedVal, convertErr := converter(val)
 	if convertErr != nil && matchErr == nil {
 		// We failed to convert the value to the desired type. Try converting the default. note
-		// that if err != nil then val _is_ defaultValue and we don't have to try this again.
+		// that if matchErr != nil then val _is_ defaultValue and we don't have to try this again.
 		c.logError(key, convertErr)
 		typedVal, convertErr = converter(defaultValue)
 	}
 	if convertErr != nil {
 		// If we can't convert the default, that's a bug in our code, use Warn level.
-		c.logger.Warn("can't convert default value", tag.Key(key.String()), tag.Error(matchErr))
+		c.logger.Warn("can't convert default value (this is a bug; fix server code)", tag.Key(key.String()), tag.Error(matchErr))
 		// Return typedVal anyway since we have to return something.
 	}
 	return typedVal
