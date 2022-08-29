@@ -187,6 +187,10 @@ func (m *schedulerMonitor) emitMetric(
 	taskChanKey TaskChannelKey,
 	stats *scheduleStats,
 ) {
+	if stats.numStarted == 0 {
+		return
+	}
+
 	totalLatency := stats.totalLatency
 	if stats.numStarted != m.options.aggregationCount {
 		totalLatency = totalLatency / time.Duration(stats.numStarted) * time.Duration(m.options.aggregationCount)
