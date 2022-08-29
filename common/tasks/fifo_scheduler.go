@@ -74,7 +74,8 @@ func NewFIFOScheduler[T Task](
 		status:  common.DaemonStatusInitialized,
 		options: options,
 
-		logger: logger,
+		monitor: scheduleMoniter,
+		logger:  logger,
 
 		tasksChan:    make(chan T, options.QueueSize),
 		shutdownChan: make(chan struct{}),
