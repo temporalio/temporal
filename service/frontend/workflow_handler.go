@@ -3575,7 +3575,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -3682,7 +3682,7 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -3715,7 +3715,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -3819,7 +3819,7 @@ func (wh *WorkflowHandler) ListBatchOperations(
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.versionChecker.ClientSupported(ctx); err != nil {
 		return nil, err
 	}
 
