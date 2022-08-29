@@ -79,7 +79,8 @@ func (s *readerSuite) SetupTest() {
 		return NewExecutable(t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
-		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(1000),
+		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 	})
 }
 

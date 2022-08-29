@@ -35,6 +35,7 @@ type (
 	Alert struct {
 		AlertType                  AlertType
 		AlertAttributesReaderStuck *AlertAttributesReaderStuck
+		AlertAttributesSliceCount  *AlertAttributesSlicesCount
 	}
 
 	AlertType int
@@ -43,17 +44,24 @@ type (
 		ReaderID         int32
 		CurrentWatermark tasks.Key
 	}
+
+	AlertAttributesSlicesCount struct {
+		CurrentSliceCount  int
+		CriticalSliceCount int
+	}
 )
 
 const (
 	AlertTypeUnspecified AlertType = iota
 	AlertTypeReaderStuck
+	AlertTypeSliceCount
 )
 
 var (
 	alertTypeNames = map[AlertType]string{
 		0: "Unspecified",
 		1: "ReaderStuck",
+		2: "SliceCount",
 	}
 )
 

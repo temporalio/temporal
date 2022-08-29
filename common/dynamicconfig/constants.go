@@ -344,6 +344,9 @@ const (
 	// before that task range is split into a separate slice to unblock loading for later range.
 	// currently only work for scheduled queues and the task range is 1s.
 	QueueReaderStuckCriticalAttempts = "history.queueReaderStuckCriticalAttempts"
+	// QueueCriticalSlicesCount is the max number of slices in one queue
+	// before force compacting slices
+	QueueCriticalSlicesCount = "history.queueCriticalSlicesCount"
 	// QueueMaxReaderCount is the max number of readers in one multi-cursor queue
 	QueueMaxReaderCount = "history.queueMaxReaderCount"
 	// TimerTaskBatchSize is batch size for timer processor to process tasks

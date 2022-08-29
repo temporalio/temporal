@@ -115,6 +115,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 				},
 				MonitorOptions: queues.MonitorOptions{
 					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+					SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 				},
 				MaxPollInterval:                     f.Config.VisibilityProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.VisibilityProcessorMaxPollIntervalJitterCoefficient,

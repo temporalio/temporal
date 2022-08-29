@@ -171,6 +171,7 @@ func (f *timerQueueFactory) CreateQueue(
 				},
 				MonitorOptions: queues.MonitorOptions{
 					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+					SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 				},
 				MaxPollInterval:                     f.Config.TimerProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.TimerProcessorMaxPollIntervalJitterCoefficient,
