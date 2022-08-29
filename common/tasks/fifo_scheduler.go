@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 )
 
 const (
@@ -42,157 +41,168 @@ const (
 	defaultMonitorTickerJitter   = 0.15
 )
 
+var _ Scheduler[Task] = (*FIFOScheduler[Task])(nil)
+
 type (
-	// ParallelProcessorOptions is the configs for ParallelProcessor
-	ParallelProcessorOptions struct {
+	// FIFOSchedulerOptions is the configs for FIFOScheduler
+	FIFOSchedulerOptions struct {
 		QueueSize   int
 		WorkerCount dynamicconfig.IntPropertyFn
 	}
 
-	ParallelProcessor struct {
+	FIFOScheduler[T Task] struct {
 		status  int32
-		options *ParallelProcessorOptions
+		options *FIFOSchedulerOptions
 
-		metricsProvider metrics.MetricsHandler
-		logger          log.Logger
+		logger log.Logger
 
-		tasksChan        chan Task
+		tasksChan        chan T
 		shutdownChan     chan struct{}
 		shutdownWG       sync.WaitGroup
 		workerShutdownCh []chan struct{}
 	}
 )
 
-// NewParallelProcessor creates a new ParallelProcessor
-func NewParallelProcessor(
-	options *ParallelProcessorOptions,
-	metricsProvider metrics.MetricsHandler,
+// NewFIFOScheduler creates a new FIFOScheduler
+func NewFIFOScheduler[T Task](
+	options *FIFOSchedulerOptions,
 	logger log.Logger,
-) *ParallelProcessor {
-	return &ParallelProcessor{
+) *FIFOScheduler[T] {
+	return &FIFOScheduler[T]{
 		status:  common.DaemonStatusInitialized,
 		options: options,
 
-		logger:          logger,
-		metricsProvider: metricsProvider.WithTags(metrics.OperationTag(OperationParallelTaskProcessing)),
+		logger: logger,
 
-		tasksChan:    make(chan Task, options.QueueSize),
+		tasksChan:    make(chan T, options.QueueSize),
 		shutdownChan: make(chan struct{}),
 	}
 }
 
-func (p *ParallelProcessor) Start() {
+func (f *FIFOScheduler[T]) Start() {
 	if !atomic.CompareAndSwapInt32(
-		&p.status,
+		&f.status,
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
 		return
 	}
 
-	p.startWorkers(p.options.WorkerCount())
+	f.startWorkers(f.options.WorkerCount())
 
-	p.shutdownWG.Add(1)
-	go p.workerMonitor()
+	f.shutdownWG.Add(1)
+	go f.workerMonitor()
 
-	p.logger.Info("Parallel task processor started")
+	f.logger.Info("fifo scheduler started")
 }
 
-func (p *ParallelProcessor) Stop() {
+func (f *FIFOScheduler[T]) Stop() {
 	if !atomic.CompareAndSwapInt32(
-		&p.status,
+		&f.status,
 		common.DaemonStatusStarted,
 		common.DaemonStatusStopped,
 	) {
 		return
 	}
 
-	close(p.shutdownChan)
+	close(f.shutdownChan)
 	// must be called after the close of the shutdownChan
-	p.drainTasks()
+	f.drainTasks()
 
 	go func() {
-		if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
-			p.logger.Warn("parallel processor timed out waiting for workers")
+		if success := common.AwaitWaitGroup(&f.shutdownWG, time.Minute); !success {
+			f.logger.Warn("fifo scheduler timed out waiting for workers")
 		}
 	}()
-	p.logger.Info("parallel processor stopped")
+	f.logger.Info("fifo scheduler stopped")
 }
 
-func (p *ParallelProcessor) Submit(task Task) {
-	p.tasksChan <- task
-	if p.isStopped() {
-		p.drainTasks()
+func (f *FIFOScheduler[T]) Submit(task T) {
+	f.tasksChan <- task
+	if f.isStopped() {
+		f.drainTasks()
 	}
 }
 
-func (p *ParallelProcessor) workerMonitor() {
-	defer p.shutdownWG.Done()
+func (f *FIFOScheduler[T]) TrySubmit(task T) bool {
+	select {
+	case f.tasksChan <- task:
+		if f.isStopped() {
+			f.drainTasks()
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+func (f *FIFOScheduler[T]) workerMonitor() {
+	defer f.shutdownWG.Done()
 
 	timer := time.NewTimer(backoff.JitDuration(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
 	defer timer.Stop()
 
 	for {
 		select {
-		case <-p.shutdownChan:
-			p.stopWorkers(len(p.workerShutdownCh))
+		case <-f.shutdownChan:
+			f.stopWorkers(len(f.workerShutdownCh))
 			return
 		case <-timer.C:
 			timer.Reset(backoff.JitDuration(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
 
-			targetWorkerNum := p.options.WorkerCount()
-			currentWorkerNum := len(p.workerShutdownCh)
+			targetWorkerNum := f.options.WorkerCount()
+			currentWorkerNum := len(f.workerShutdownCh)
 
 			if targetWorkerNum == currentWorkerNum {
 				continue
 			}
 
 			if targetWorkerNum > currentWorkerNum {
-				p.startWorkers(targetWorkerNum - currentWorkerNum)
+				f.startWorkers(targetWorkerNum - currentWorkerNum)
 			} else {
-				p.stopWorkers(currentWorkerNum - targetWorkerNum)
+				f.stopWorkers(currentWorkerNum - targetWorkerNum)
 			}
-			p.logger.Info("Update worker pool size", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
+			f.logger.Info("Update worker pool size", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
 		}
 	}
 }
 
-func (p *ParallelProcessor) startWorkers(
+func (f *FIFOScheduler[T]) startWorkers(
 	count int,
 ) {
 	for i := 0; i < count; i++ {
 		shutdownCh := make(chan struct{})
-		p.workerShutdownCh = append(p.workerShutdownCh, shutdownCh)
+		f.workerShutdownCh = append(f.workerShutdownCh, shutdownCh)
 
-		p.shutdownWG.Add(1)
-		go p.processTask(shutdownCh)
+		f.shutdownWG.Add(1)
+		go f.processTask(shutdownCh)
 	}
 }
 
-func (p *ParallelProcessor) stopWorkers(
+func (f *FIFOScheduler[T]) stopWorkers(
 	count int,
 ) {
-	shutdownChToClose := p.workerShutdownCh[:count]
-	p.workerShutdownCh = p.workerShutdownCh[count:]
+	shutdownChToClose := f.workerShutdownCh[:count]
+	f.workerShutdownCh = f.workerShutdownCh[count:]
 
 	for _, shutdownCh := range shutdownChToClose {
 		close(shutdownCh)
 	}
 }
 
-func (p *ParallelProcessor) processTask(
+func (f *FIFOScheduler[T]) processTask(
 	shutdownCh chan struct{},
 ) {
-	defer p.shutdownWG.Done()
+	defer f.shutdownWG.Done()
 
 	for {
-		if p.isStopped() {
+		if f.isStopped() {
 			return
 		}
 
 		select {
-		case task := <-p.tasksChan:
-			p.executeTask(task)
+		case task := <-f.tasksChan:
+			f.executeTask(task)
 
 		case <-shutdownCh:
 			return
@@ -200,7 +210,7 @@ func (p *ParallelProcessor) processTask(
 	}
 }
 
-func (p *ParallelProcessor) executeTask(
+func (f *FIFOScheduler[T]) executeTask(
 	task Task,
 ) {
 	operation := func() error {
@@ -211,11 +221,11 @@ func (p *ParallelProcessor) executeTask(
 	}
 
 	isRetryable := func(err error) bool {
-		return !p.isStopped() && task.IsRetryableError(err)
+		return !f.isStopped() && task.IsRetryableError(err)
 	}
 
 	if err := backoff.ThrottleRetry(operation, task.RetryPolicy(), isRetryable); err != nil {
-		if p.isStopped() {
+		if f.isStopped() {
 			task.Reschedule()
 			return
 		}
@@ -227,11 +237,11 @@ func (p *ParallelProcessor) executeTask(
 	task.Ack()
 }
 
-func (p *ParallelProcessor) drainTasks() {
+func (f *FIFOScheduler[T]) drainTasks() {
 LoopDrain:
 	for {
 		select {
-		case task := <-p.tasksChan:
+		case task := <-f.tasksChan:
 			task.Reschedule()
 		default:
 			break LoopDrain
@@ -239,6 +249,6 @@ LoopDrain:
 	}
 }
 
-func (p *ParallelProcessor) isStopped() bool {
-	return atomic.LoadInt32(&p.status) == common.DaemonStatusStopped
+func (f *FIFOScheduler[T]) isStopped() bool {
+	return atomic.LoadInt32(&f.status) == common.DaemonStatusStopped
 }

@@ -22,13 +22,45 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package queues
 
-// TODO: Following is a copy of existing metrics scope and name definition
-// for using the new MetricsHandler interface. We should probably move them
-// to a common place once all the metrics refactoring work is done.
+import (
+	"strconv"
+
+	"go.temporal.io/server/service/history/tasks"
+)
+
+type (
+	// Alert is created by a Monitor when some statistics of the Queue is abnormal
+	Alert struct {
+		AlertType                  AlertType
+		AlertAttributesReaderStuck *AlertAttributesReaderStuck
+	}
+
+	AlertType int
+
+	AlertAttributesReaderStuck struct {
+		ReaderID         int32
+		CurrentWatermark tasks.Key
+	}
+)
 
 const (
-	OperationTaskScheduler          = "TaskScheduler"
-	OperationParallelTaskProcessing = "ParallelTaskProcessing"
+	AlertTypeUnspecified AlertType = iota
+	AlertTypeReaderStuck
 )
+
+var (
+	alertTypeNames = map[AlertType]string{
+		0: "Unspecified",
+		1: "ReaderStuck",
+	}
+)
+
+func (a AlertType) String() string {
+	s, ok := alertTypeNames[a]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(a))
+}

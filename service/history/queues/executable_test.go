@@ -189,7 +189,7 @@ func (s *executableSuite) TestTaskNack_Resubmit() {
 		return true
 	})
 
-	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true, nil)
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true)
 
 	executable.Nack(errors.New("some random error"))
 	s.Equal(ctasks.TaskStatePending, executable.State())
@@ -243,6 +243,7 @@ func (s *executableSuite) newTestExecutable(
 		s.mockExecutor,
 		s.mockScheduler,
 		s.mockRescheduler,
+		NewNoopPriorityAssigner(),
 		s.timeSource,
 		s.mockNamespaceRegistry,
 		log.NewTestLogger(),

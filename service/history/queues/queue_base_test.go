@@ -93,12 +93,15 @@ func (s *queueBaseSuite) SetupTest() {
 	s.mockScheduler = NewMockScheduler(s.controller)
 	s.mockRescheduler = NewMockRescheduler(s.controller)
 
+	s.mockScheduler.EXPECT().TaskChannelKeyFn().Return(
+		func(_ Executable) TaskChannelKey { return TaskChannelKey{} },
+	).AnyTimes()
+
 	s.config = tests.NewDynamicConfig()
 	s.options = testQueueOptions
 	s.rateLimiter = quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 20 })
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
-
 }
 
 func (s *queueBaseSuite) TearDownTest() {
@@ -130,6 +133,7 @@ func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
 		tasks.CategoryTransfer,
 		nil,
 		s.mockScheduler,
+		NewNoopPriorityAssigner(),
 		nil,
 		s.options,
 		s.rateLimiter,
@@ -213,6 +217,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState() {
 		tasks.CategoryTransfer,
 		nil,
 		s.mockScheduler,
+		NewNoopPriorityAssigner(),
 		nil,
 		s.options,
 		s.rateLimiter,
@@ -261,9 +266,9 @@ func (s *queueBaseSuite) TestStartStop() {
 	}
 
 	doneCh := make(chan struct{})
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
 		close(doneCh)
-		return true, nil
+		return true
 	}).Times(1)
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
@@ -272,6 +277,7 @@ func (s *queueBaseSuite) TestStartStop() {
 		tasks.CategoryTransfer,
 		paginationFnProvider,
 		s.mockScheduler,
+		NewNoopPriorityAssigner(),
 		nil,
 		s.options,
 		s.rateLimiter,
@@ -322,6 +328,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 		tasks.CategoryTimer,
 		nil,
 		s.mockScheduler,
+		NewNoopPriorityAssigner(),
 		nil,
 		s.options,
 		s.rateLimiter,
@@ -378,6 +385,7 @@ func (s *queueBaseSuite) TestCompleteTaskAndPersistState() {
 		tasks.CategoryTimer,
 		nil,
 		s.mockScheduler,
+		NewNoopPriorityAssigner(),
 		nil,
 		s.options,
 		s.rateLimiter,

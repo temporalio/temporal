@@ -186,6 +186,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 			s.mockShard,
 			s.workflowCache,
 			nil,
+			nil,
 			s.mockDeleteManager,
 			s.mockMatchingClient,
 			newTaskAllocator(s.mockShard),
@@ -1486,5 +1487,5 @@ func (s *timerQueueActiveTaskExecutorSuite) getMutableStateFromCache(
 func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(
 	task tasks.Task,
 ) queues.Executable {
-	return queues.NewExecutable(task, nil, s.timerQueueActiveTaskExecutor, nil, nil, s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeActiveTimer, nil)
+	return queues.NewExecutable(task, nil, s.timerQueueActiveTaskExecutor, nil, nil, queues.NewNoopPriorityAssigner(), s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeActiveTimer, nil)
 }

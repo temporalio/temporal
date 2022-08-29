@@ -37,42 +37,41 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 )
 
 type (
-	parallelProcessorSuite struct {
+	fifoSchedulerSuite struct {
 		*require.Assertions
 		suite.Suite
 
 		controller *gomock.Controller
 
-		processor   *ParallelProcessor
+		scheduler   *FIFOScheduler[*MockTask]
 		retryPolicy backoff.RetryPolicy
 	}
 )
 
-func TestParallelProcessorSuite(t *testing.T) {
-	s := new(parallelProcessorSuite)
+func TestFIFOSchedulerSuite(t *testing.T) {
+	s := new(fifoSchedulerSuite)
 	suite.Run(t, s)
 }
 
-func (s *parallelProcessorSuite) SetupTest() {
+func (s *fifoSchedulerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 
 	s.retryPolicy = backoff.NewExponentialRetryPolicy(time.Millisecond)
-	s.processor = s.newTestProcessor()
-	s.processor.Start()
+	s.scheduler = s.newTestProcessor()
+	s.scheduler.Start()
 }
 
-func (s *parallelProcessorSuite) TearDownTest() {
-	s.processor.Stop()
+func (s *fifoSchedulerSuite) TearDownTest() {
+	s.scheduler.Stop()
 	s.controller.Finish()
 }
 
-func (s *parallelProcessorSuite) TestSubmitProcess_Running_Success() {
+func (s *fifoSchedulerSuite) TestSubmitProcess_Running_Success() {
 	testWaitGroup := sync.WaitGroup{}
 	testWaitGroup.Add(1)
 
@@ -81,12 +80,12 @@ func (s *parallelProcessorSuite) TestSubmitProcess_Running_Success() {
 	mockTask.EXPECT().Execute().Return(nil).Times(1)
 	mockTask.EXPECT().Ack().Do(func() { testWaitGroup.Done() }).Times(1)
 
-	s.processor.Submit(mockTask)
+	s.scheduler.Submit(mockTask)
 
 	testWaitGroup.Wait()
 }
 
-func (s *parallelProcessorSuite) TestSubmitProcess_Running_FailExecution() {
+func (s *fifoSchedulerSuite) TestSubmitProcess_Running_FailExecution() {
 	testWaitGroup := sync.WaitGroup{}
 	testWaitGroup.Add(1)
 
@@ -98,16 +97,16 @@ func (s *parallelProcessorSuite) TestSubmitProcess_Running_FailExecution() {
 	mockTask.EXPECT().IsRetryableError(executionErr).Return(false).MaxTimes(1)
 	mockTask.EXPECT().Nack(executionErr).Do(func(_ error) { testWaitGroup.Done() }).Times(1)
 
-	s.processor.Submit(mockTask)
+	s.scheduler.Submit(mockTask)
 
 	testWaitGroup.Wait()
 }
 
-func (s *parallelProcessorSuite) TestSubmitProcess_Stopped_Submission() {
+func (s *fifoSchedulerSuite) TestSubmitProcess_Stopped_Submission() {
 	testWaitGroup := sync.WaitGroup{}
 	testWaitGroup.Add(1)
 
-	s.processor.Stop()
+	s.scheduler.Stop()
 
 	mockTask := NewMockTask(s.controller)
 
@@ -119,12 +118,12 @@ func (s *parallelProcessorSuite) TestSubmitProcess_Stopped_Submission() {
 	// if task get drained
 	mockTask.EXPECT().Reschedule().Do(func() { testWaitGroup.Done() }).MaxTimes(1)
 
-	s.processor.Submit(mockTask)
+	s.scheduler.Submit(mockTask)
 
 	testWaitGroup.Wait()
 }
 
-func (s *parallelProcessorSuite) TestSubmitProcess_Stopped_FailExecution() {
+func (s *fifoSchedulerSuite) TestSubmitProcess_Stopped_FailExecution() {
 	testWaitGroup := sync.WaitGroup{}
 	testWaitGroup.Add(1)
 
@@ -133,18 +132,18 @@ func (s *parallelProcessorSuite) TestSubmitProcess_Stopped_FailExecution() {
 	executionErr := errors.New("random transient error")
 	mockTask.EXPECT().Execute().Return(executionErr).Times(1)
 	mockTask.EXPECT().HandleErr(executionErr).DoAndReturn(func(err error) error {
-		s.processor.Stop()
+		s.scheduler.Stop()
 		return err
 	}).Times(1)
 	mockTask.EXPECT().IsRetryableError(executionErr).Return(true).MaxTimes(1)
 	mockTask.EXPECT().Reschedule().Do(func() { testWaitGroup.Done() }).Times(1)
 
-	s.processor.Submit(mockTask)
+	s.scheduler.Submit(mockTask)
 
 	testWaitGroup.Wait()
 }
 
-func (s *parallelProcessorSuite) TestParallelSubmitProcess() {
+func (s *fifoSchedulerSuite) TestParallelSubmitProcess() {
 	numSubmitter := 200
 	numTasks := 100
 
@@ -157,7 +156,7 @@ func (s *parallelProcessorSuite) TestParallelSubmitProcess() {
 	startWaitGroup.Add(numSubmitter)
 
 	for i := 0; i < numSubmitter; i++ {
-		channel := make(chan Task, numTasks)
+		channel := make(chan *MockTask, numTasks)
 		for j := 0; j < numTasks; j++ {
 			mockTask := NewMockTask(s.controller)
 			mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
@@ -187,7 +186,7 @@ func (s *parallelProcessorSuite) TestParallelSubmitProcess() {
 			startWaitGroup.Wait()
 
 			for mockTask := range channel {
-				s.processor.Submit(mockTask)
+				s.scheduler.Submit(mockTask)
 			}
 
 			endWaitGroup.Done()
@@ -199,7 +198,7 @@ func (s *parallelProcessorSuite) TestParallelSubmitProcess() {
 	testWaitGroup.Wait()
 }
 
-func (s *parallelProcessorSuite) TestStartStopWorkers() {
+func (s *fifoSchedulerSuite) TestStartStopWorkers() {
 	processor := s.newTestProcessor()
 	// don't start the processor,
 	// manually add/remove workers here to test the start/stop logic
@@ -217,13 +216,12 @@ func (s *parallelProcessorSuite) TestStartStopWorkers() {
 	processor.shutdownWG.Wait()
 }
 
-func (s *parallelProcessorSuite) newTestProcessor() *ParallelProcessor {
-	return NewParallelProcessor(
-		&ParallelProcessorOptions{
+func (s *fifoSchedulerSuite) newTestProcessor() *FIFOScheduler[*MockTask] {
+	return NewFIFOScheduler[*MockTask](
+		&FIFOSchedulerOptions{
 			QueueSize:   1,
 			WorkerCount: dynamicconfig.GetIntPropertyFn(1),
 		},
-		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
 	)
 }

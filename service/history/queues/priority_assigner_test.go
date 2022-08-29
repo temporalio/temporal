@@ -33,8 +33,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -67,9 +65,8 @@ func (s *priorityAssignerSuite) SetupTest() {
 		cluster.TestCurrentClusterName,
 		s.mockNamespaceRegistry,
 		PriorityAssignerOptions{
-			CriticalRetryAttempts: dynamicconfig.GetIntPropertyFn(100),
+			CriticalRetryAttempts: 100,
 		},
-		metrics.NoopMetricsHandler,
 	).(*priorityAssignerImpl)
 }
 
@@ -80,10 +77,8 @@ func (s *priorityAssignerSuite) TearDownTest() {
 func (s *priorityAssignerSuite) TestAssign_CriticalAttempts() {
 	mockExecutable := NewMockExecutable(s.controller)
 	mockExecutable.EXPECT().Attempt().Return(1000).AnyTimes()
-	mockExecutable.EXPECT().SetPriority(tasks.PriorityLow)
 
-	err := s.priorityAssigner.Assign(mockExecutable)
-	s.NoError(err)
+	s.Equal(tasks.PriorityLow, s.priorityAssigner.Assign(mockExecutable))
 }
 
 func (s *priorityAssignerSuite) TestAssign_StandbyNamespaceStandbyQueue() {
@@ -93,10 +88,8 @@ func (s *priorityAssignerSuite) TestAssign_StandbyNamespaceStandbyQueue() {
 	mockExecutable.EXPECT().Attempt().Return(10).AnyTimes()
 	mockExecutable.EXPECT().GetNamespaceID().Return(tests.NamespaceID.String()).AnyTimes()
 	mockExecutable.EXPECT().QueueType().Return(QueueTypeStandbyTransfer).AnyTimes()
-	mockExecutable.EXPECT().SetPriority(tasks.PriorityLow)
 
-	err := s.priorityAssigner.Assign(mockExecutable)
-	s.NoError(err)
+	s.Equal(tasks.PriorityLow, s.priorityAssigner.Assign(mockExecutable))
 }
 
 func (s *priorityAssignerSuite) TestAssign_NoopExecuable() {
@@ -106,10 +99,8 @@ func (s *priorityAssignerSuite) TestAssign_NoopExecuable() {
 	mockExecutable.EXPECT().Attempt().Return(10).AnyTimes()
 	mockExecutable.EXPECT().GetNamespaceID().Return(tests.NamespaceID.String()).AnyTimes()
 	mockExecutable.EXPECT().QueueType().Return(QueueTypeActiveTransfer).AnyTimes()
-	mockExecutable.EXPECT().SetPriority(tasks.PriorityHigh)
 
-	err := s.priorityAssigner.Assign(mockExecutable)
-	s.NoError(err)
+	s.Equal(tasks.PriorityHigh, s.priorityAssigner.Assign(mockExecutable))
 }
 
 func (s *priorityAssignerSuite) TestAssign_SelectedTaskTypes() {
@@ -121,8 +112,6 @@ func (s *priorityAssignerSuite) TestAssign_SelectedTaskTypes() {
 	mockExecutable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT).AnyTimes()
 
 	mockExecutable.EXPECT().QueueType().Return(QueueTypeActiveTransfer).AnyTimes()
-	mockExecutable.EXPECT().SetPriority(tasks.PriorityMedium)
 
-	err := s.priorityAssigner.Assign(mockExecutable)
-	s.NoError(err)
+	s.Equal(tasks.PriorityMedium, s.priorityAssigner.Assign(mockExecutable))
 }

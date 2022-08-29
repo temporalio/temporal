@@ -511,7 +511,15 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 		case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 			b.mutableState.ReplicateUpsertWorkflowSearchAttributesEvent(event)
-			if err := taskGenerator.GenerateWorkflowSearchAttrTasks(
+			if err := taskGenerator.GenerateUpsertVisibilityTask(
+				timestamp.TimeValue(event.GetEventTime()),
+			); err != nil {
+				return nil, err
+			}
+
+		case enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:
+			b.mutableState.ReplicateWorkflowPropertiesModifiedEvent(event)
+			if err := taskGenerator.GenerateUpsertVisibilityTask(
 				timestamp.TimeValue(event.GetEventTime()),
 			); err != nil {
 				return nil, err

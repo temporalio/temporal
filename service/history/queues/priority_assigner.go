@@ -25,77 +25,66 @@
 package queues
 
 import (
-	"sync"
+	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tasks"
 )
 
 type (
 	// PriorityAssigner assigns priority to task executables
 	PriorityAssigner interface {
-		Assign(Executable) error
+		Assign(Executable) tasks.Priority
 	}
 
 	PriorityAssignerOptions struct {
-		CriticalRetryAttempts dynamicconfig.IntPropertyFn
+		CriticalRetryAttempts int
 	}
 
 	priorityAssignerImpl struct {
 		currentClusterName string
 		namespaceRegistry  namespace.Registry
-		metricsProvider    metrics.MetricsHandler
 		options            PriorityAssignerOptions
-
-		sync.RWMutex
-		rateLimiters map[string]quotas.RateLimiter
 	}
+
+	// noopPriorityAssigner always assign high priority to tasks
+	// it should only be used in tests
+	noopPriorityAssigner struct{}
 )
 
 func NewPriorityAssigner(
 	currentClusterName string,
 	namespaceRegistry namespace.Registry,
 	options PriorityAssignerOptions,
-	metricsProvider metrics.MetricsHandler,
 ) PriorityAssigner {
 	return &priorityAssignerImpl{
 		currentClusterName: currentClusterName,
 		namespaceRegistry:  namespaceRegistry,
-		metricsProvider:    metricsProvider.WithTags(metrics.OperationTag(OperationTaskPriorityAssigner)),
 		options:            options,
-		rateLimiters:       make(map[string]quotas.RateLimiter),
 	}
 }
 
-func (a *priorityAssignerImpl) Assign(executable Executable) error {
+func (a *priorityAssignerImpl) Assign(executable Executable) tasks.Priority {
 	/*
 		Summary:
 		- High priority: active tasks from active queue processor and no-op tasks (currently ignoring overrides)
-		- Default priority: throttled tasks and selected task types (e.g. delete history events)
+		- Default priority: selected task types (e.g. delete history events)
 		- Low priority: standby tasks and tasks keep retrying
-
-		Only candidates for high priority will consume the token in the rate limiter for high priority tasks and
-		potentially be throttled.
 	*/
 
-	if executable.Attempt() > a.options.CriticalRetryAttempts() {
-		executable.SetPriority(tasks.PriorityLow)
-		return nil
+	if executable.Attempt() > a.options.CriticalRetryAttempts {
+		return tasks.PriorityLow
 	}
 
 	namespaceEntry, err := a.namespaceRegistry.GetNamespaceByID(namespace.ID(executable.GetNamespaceID()))
 	if err != nil {
 		if _, ok := err.(*serviceerror.NamespaceNotFound); ok {
-			executable.SetPriority(tasks.PriorityLow)
-			return nil
+			return tasks.PriorityLow
 		}
 
-		return err
+		panic(fmt.Sprintf("unexpected error from GetNamespaceByID, namespaceID: %v", executable.GetNamespaceID()))
 	}
 
 	namespaceActive := namespaceEntry.ActiveInCluster(a.currentClusterName)
@@ -114,16 +103,14 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 
 	if !taskActive && !namespaceActive {
 		// standby tasks
-		executable.SetPriority(tasks.PriorityLow)
-		return nil
+		return tasks.PriorityLow
 	}
 
 	if (taskActive && !namespaceActive) || (!taskActive && namespaceActive) {
 		// no-op tasks, set to high priority to ack them as soon as possible
 		// don't consume rps limit
 		// ignoring overrides for some no-op standby tasks for now
-		executable.SetPriority(tasks.PriorityHigh)
-		return nil
+		return tasks.PriorityHigh
 	}
 
 	// active tasks for active namespaces
@@ -133,10 +120,16 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 		enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
 		// add more task types here if we believe it's ok to delay those tasks
 		// and assign them the same priority as throttled tasks
-		executable.SetPriority(tasks.PriorityMedium)
-		return nil
+		return tasks.PriorityMedium
 	}
 
-	executable.SetPriority(tasks.PriorityHigh)
-	return nil
+	return tasks.PriorityHigh
+}
+
+func NewNoopPriorityAssigner() PriorityAssigner {
+	return &noopPriorityAssigner{}
+}
+
+func (a *noopPriorityAssigner) Assign(_ Executable) tasks.Priority {
+	return tasks.PriorityHigh
 }

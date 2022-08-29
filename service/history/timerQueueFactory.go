@@ -46,17 +46,16 @@ type (
 	timerQueueFactoryParams struct {
 		fx.In
 
-		SchedulerParams
+		QueueFactoryBaseParams
 
 		ClientBean     client.Bean
 		ArchivalClient archiver.Client
 		MatchingClient resource.MatchingClient
-		MetricsHandler metrics.MetricsHandler
 	}
 
 	timerQueueFactory struct {
 		timerQueueFactoryParams
-		queueFactoryBase
+		QueueFactoryBase
 	}
 )
 
@@ -66,28 +65,26 @@ func NewTimerQueueFactory(
 	var hostScheduler queues.Scheduler
 	if params.Config.TimerProcessorEnablePriorityTaskScheduler() {
 		hostScheduler = queues.NewNamespacePriorityScheduler(
-			queues.NewPriorityAssigner(
-				params.ClusterMetadata.GetCurrentClusterName(),
-				params.NamespaceRegistry,
-				queues.PriorityAssignerOptions{
-					CriticalRetryAttempts: params.Config.TimerTaskMaxRetryCount,
-				},
-				params.MetricsHandler,
-			),
 			queues.NamespacePrioritySchedulerOptions{
 				WorkerCount:      params.Config.TimerProcessorSchedulerWorkerCount,
 				NamespaceWeights: params.Config.TimerProcessorSchedulerRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
-			params.MetricsHandler,
 			params.Logger,
 		)
 	}
 	return &timerQueueFactory{
 		timerQueueFactoryParams: params,
-		queueFactoryBase: queueFactoryBase{
-			hostScheduler: hostScheduler,
-			hostRateLimiter: newQueueHostRateLimiter(
+		QueueFactoryBase: QueueFactoryBase{
+			HostScheduler: hostScheduler,
+			HostPriorityAssigner: queues.NewPriorityAssigner(
+				params.ClusterMetadata.GetCurrentClusterName(),
+				params.NamespaceRegistry,
+				queues.PriorityAssignerOptions{
+					CriticalRetryAttempts: params.Config.TimerTaskMaxRetryCount(),
+				},
+			),
+			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.TimerProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
 			),
@@ -100,7 +97,7 @@ func (f *timerQueueFactory) CreateQueue(
 	engine shard.Engine,
 	workflowCache workflow.Cache,
 ) queues.Queue {
-	if f.hostScheduler != nil && f.Config.TimerProcessorEnableMultiCursor() {
+	if f.HostScheduler != nil && f.Config.TimerProcessorEnableMultiCursor() {
 		logger := log.With(shard.GetLogger(), tag.ComponentTimerQueue)
 
 		currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
@@ -163,7 +160,8 @@ func (f *timerQueueFactory) CreateQueue(
 		return queues.NewScheduledQueue(
 			shard,
 			tasks.CategoryTimer,
-			f.hostScheduler,
+			f.HostScheduler,
+			f.HostPriorityAssigner,
 			executor,
 			&queues.Options{
 				ReaderOptions: queues.ReaderOptions{
@@ -171,14 +169,18 @@ func (f *timerQueueFactory) CreateQueue(
 					MaxPendingTasksCount: f.Config.TimerProcessorMaxReschedulerSize,
 					PollBackoffInterval:  f.Config.TimerProcessorPollBackoffInterval,
 				},
+				MonitorOptions: queues.MonitorOptions{
+					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+				},
 				MaxPollInterval:                     f.Config.TimerProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.TimerProcessorMaxPollIntervalJitterCoefficient,
 				CheckpointInterval:                  f.Config.TimerProcessorUpdateAckInterval,
 				CheckpointIntervalJitterCoefficient: f.Config.TimerProcessorUpdateAckIntervalJitterCoefficient,
+				MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 				TaskMaxRetryCount:                   f.Config.TimerTaskMaxRetryCount,
 			},
 			newQueueProcessorRateLimiter(
-				f.hostRateLimiter,
+				f.HostRateLimiter,
 				f.Config.TimerProcessorMaxPollRPS,
 			),
 			logger,
@@ -189,11 +191,12 @@ func (f *timerQueueFactory) CreateQueue(
 	return newTimerQueueProcessor(
 		shard,
 		workflowCache,
-		f.hostScheduler,
+		f.HostScheduler,
+		f.HostPriorityAssigner,
 		f.ClientBean,
 		f.ArchivalClient,
 		f.MatchingClient,
 		f.MetricsHandler,
-		f.hostRateLimiter,
+		f.HostRateLimiter,
 	)
 }
