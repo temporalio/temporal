@@ -511,7 +511,15 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 		case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 			b.mutableState.ReplicateUpsertWorkflowSearchAttributesEvent(event)
-			if err := taskGenerator.GenerateWorkflowSearchAttrTasks(
+			if err := taskGenerator.GenerateUpsertVisibilityTask(
+				timestamp.TimeValue(event.GetEventTime()),
+			); err != nil {
+				return nil, err
+			}
+
+		case enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:
+			b.mutableState.ReplicateWorkflowPropertiesModifiedEvent(event)
+			if err := taskGenerator.GenerateUpsertVisibilityTask(
 				timestamp.TimeValue(event.GetEventTime()),
 			); err != nil {
 				return nil, err
@@ -647,9 +655,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 		case enumspb.EVENT_TYPE_ACTIVITY_PROPERTIES_MODIFIED_EXTERNALLY,
 			enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED_EXTERNALLY:
 			return nil, serviceerror.NewUnimplemented("Workflow/activity property motification not implemented")
-
-		case enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:
-			return nil, serviceerror.NewUnimplemented("Workflow property motification not implemented")
 
 		default:
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))

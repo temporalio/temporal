@@ -54,11 +54,7 @@ type (
 		PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error)
 		WaitForYellowStatus(ctx context.Context, index string) (string, error)
 		GetMapping(ctx context.Context, index string) (map[string]string, error)
-	}
 
-	// TODO (alex): Combine ClientV7 with Client interface after ES v6 support removal.
-	ClientV7 interface {
-		Client
 		IsPointInTimeSupported(ctx context.Context) bool
 		OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error)
 		ClosePointInTime(ctx context.Context, id string) (bool, error)

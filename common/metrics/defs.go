@@ -2052,15 +2052,10 @@ const (
 	ArchivalConfigFailures
 
 	VisibilityPersistenceRequests
+	VisibilityPersistenceErrorWithType
 	VisibilityPersistenceFailures
 	VisibilityPersistenceLatency
-	VisibilityPersistenceInvalidArgument
 	VisibilityPersistenceResourceExhausted
-	VisibilityPersistenceConditionFailed
-	VisibilityPersistenceTimeout
-	VisibilityPersistenceNotFound
-	VisibilityPersistenceInternal
-	VisibilityPersistenceUnavailable
 
 	SequentialTaskSubmitRequest
 	SequentialTaskSubmitRequestTaskQueueExist
@@ -2188,6 +2183,7 @@ const (
 	CommandTypeChildWorkflowCounter
 	CommandTypeContinueAsNewCounter
 	CommandTypeSignalExternalWorkflowCounter
+	CommandTypeModifyWorkflowPropertiesCounter
 	CommandTypeUpsertWorkflowSearchAttributesCounter
 	ActivityEagerExecutionCounter
 	EmptyCompletionCommandsCounter
@@ -2545,15 +2541,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ArchivalConfigFailures:                              NewCounterDef("archivalconfig_failures"),
 
 		VisibilityPersistenceRequests:          NewCounterDef("visibility_persistence_requests"),
+		VisibilityPersistenceErrorWithType:     NewCounterDef("visibility_persistence_error_with_type"),
 		VisibilityPersistenceFailures:          NewCounterDef("visibility_persistence_errors"),
-		VisibilityPersistenceLatency:           NewTimerDef("visibility_persistence_latency"),
-		VisibilityPersistenceInvalidArgument:   NewCounterDef("visibility_persistence_invalid_argument"),
 		VisibilityPersistenceResourceExhausted: NewCounterDef("visibility_persistence_resource_exhausted"),
-		VisibilityPersistenceConditionFailed:   NewCounterDef("visibility_persistence_condition_failed"),
-		VisibilityPersistenceTimeout:           NewCounterDef("visibility_persistence_timeout"),
-		VisibilityPersistenceNotFound:          NewCounterDef("visibility_persistence_not_found"),
-		VisibilityPersistenceInternal:          NewCounterDef("visibility_persistence_internal"),
-		VisibilityPersistenceUnavailable:       NewCounterDef("visibility_persistence_unavailable"),
+		VisibilityPersistenceLatency:           NewTimerDef("visibility_persistence_latency"),
 
 		SequentialTaskSubmitRequest:                 NewCounterDef("sequentialtask_submit_request"),
 		SequentialTaskSubmitRequestTaskQueueExist:   NewCounterDef("sequentialtask_submit_request_taskqueue_exist"),
@@ -2674,6 +2665,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CommandTypeContinueAsNewCounter:                   NewCounterDef("continue_as_new_command"),
 		CommandTypeSignalExternalWorkflowCounter:          NewCounterDef("signal_external_workflow_command"),
 		CommandTypeUpsertWorkflowSearchAttributesCounter:  NewCounterDef("upsert_workflow_search_attributes_command"),
+		CommandTypeModifyWorkflowPropertiesCounter:        NewCounterDef("modify_workflow_properties_command"),
 		CommandTypeChildWorkflowCounter:                   NewCounterDef("child_workflow_command"),
 		ActivityEagerExecutionCounter:                     NewCounterDef("activity_eager_execution"),
 		EmptyCompletionCommandsCounter:                    NewCounterDef("empty_completion_commands"),

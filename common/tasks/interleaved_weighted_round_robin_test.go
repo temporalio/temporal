@@ -35,7 +35,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 )
 
 type (
@@ -43,8 +42,8 @@ type (
 		*require.Assertions
 		suite.Suite
 
-		controller    *gomock.Controller
-		mockProcessor *MockProcessor
+		controller        *gomock.Controller
+		mockFIFOScheduler *MockScheduler[*testTask]
 
 		scheduler *InterleavedWeightedRoundRobinScheduler[*testTask, int]
 	}
@@ -71,7 +70,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockProcessor = NewMockProcessor(s.controller)
+	s.mockFIFOScheduler = NewMockScheduler[*testTask](s.controller)
 
 	channelKeyToWeight := map[int]int{
 		0: 5,
@@ -83,11 +82,10 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 
 	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*testTask, int]{
-			TaskToChannelKey:   func(task *testTask) int { return task.channelKey },
-			ChannelKeyToWeight: func(key int) int { return channelKeyToWeight[key] },
+			TaskChannelKeyFn: func(task *testTask) int { return task.channelKey },
+			ChannelWeightFn:  func(key int) int { return channelKeyToWeight[key] },
 		},
-		s.mockProcessor,
-		metrics.NoopMetricsHandler,
+		Scheduler[*testTask](s.mockFIFOScheduler),
 		logger,
 	)
 }
@@ -97,16 +95,58 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success() {
-	s.mockProcessor.EXPECT().Start()
+func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Success() {
+	s.mockFIFOScheduler.EXPECT().Start()
 	s.scheduler.Start()
-	s.mockProcessor.EXPECT().Stop()
+	s.mockFIFOScheduler.EXPECT().Stop()
 
 	testWaitGroup := sync.WaitGroup{}
 	testWaitGroup.Add(1)
 
 	mockTask := newTestTask(s.controller, 0)
-	s.mockProcessor.EXPECT().Submit(mockTask).Do(func(task Task) {
+	s.mockFIFOScheduler.EXPECT().TrySubmit(mockTask).DoAndReturn(func(task Task) bool {
+		testWaitGroup.Done()
+		return true
+	})
+
+	s.True(s.scheduler.TrySubmit(mockTask))
+
+	testWaitGroup.Wait()
+	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
+}
+
+func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Fail() {
+	s.mockFIFOScheduler.EXPECT().Start()
+	s.scheduler.Start()
+	s.mockFIFOScheduler.EXPECT().Stop()
+
+	testWaitGroup := sync.WaitGroup{}
+	testWaitGroup.Add(1)
+
+	mockTask := newTestTask(s.controller, 0)
+	s.mockFIFOScheduler.EXPECT().TrySubmit(mockTask).DoAndReturn(func(task Task) bool {
+		return false
+	}).Times(1)
+	s.mockFIFOScheduler.EXPECT().Submit(mockTask).Do(func(task Task) {
+		testWaitGroup.Done()
+	}).Times(1)
+
+	s.True(s.scheduler.TrySubmit(mockTask))
+
+	testWaitGroup.Wait()
+	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
+}
+
+func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success() {
+	s.mockFIFOScheduler.EXPECT().Start()
+	s.scheduler.Start()
+	s.mockFIFOScheduler.EXPECT().Stop()
+
+	testWaitGroup := sync.WaitGroup{}
+	testWaitGroup.Add(1)
+
+	mockTask := newTestTask(s.controller, 0)
+	s.mockFIFOScheduler.EXPECT().Submit(mockTask).Do(func(task Task) {
 		testWaitGroup.Done()
 	})
 
@@ -117,9 +157,9 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Fail() {
-	s.mockProcessor.EXPECT().Start()
+	s.mockFIFOScheduler.EXPECT().Start()
 	s.scheduler.Start()
-	s.mockProcessor.EXPECT().Stop()
+	s.mockFIFOScheduler.EXPECT().Stop()
 	s.scheduler.Stop()
 
 	testWaitGroup := sync.WaitGroup{}
@@ -131,7 +171,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Fail() 
 		testWaitGroup.Done()
 	}).MaxTimes(1)
 	// or process by worker
-	s.mockProcessor.EXPECT().Submit(mockTask).Do(func(task Task) {
+	s.mockFIFOScheduler.EXPECT().Submit(mockTask).Do(func(task Task) {
 		testWaitGroup.Done()
 	}).MaxTimes(1)
 
@@ -203,9 +243,9 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule() {
-	s.mockProcessor.EXPECT().Start()
+	s.mockFIFOScheduler.EXPECT().Start()
 	s.scheduler.Start()
-	s.mockProcessor.EXPECT().Stop()
+	s.mockFIFOScheduler.EXPECT().Stop()
 
 	numSubmitter := 200
 	numTasks := 100
@@ -224,7 +264,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule
 		channel := make(chan *testTask, numTasks)
 		for j := 0; j < numTasks; j++ {
 			mockTask := newTestTask(s.controller, rand.Intn(4))
-			s.mockProcessor.EXPECT().Submit(gomock.Any()).Do(func(task Task) {
+			s.mockFIFOScheduler.EXPECT().Submit(gomock.Any()).Do(func(task Task) {
 				tasksLock.Lock()
 				submittedTasks[task.(*testTask)] = struct{}{}
 				tasksLock.Unlock()

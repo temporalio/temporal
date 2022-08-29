@@ -90,3 +90,8 @@ func GetAuthorizerFromConfig(config *config.Authorization) (Authorizer, error) {
 	}
 	return nil, fmt.Errorf("unknown authorizer: %s", config.Authorizer)
 }
+
+func IsNoopAuthorizer(authorizer Authorizer) bool {
+	_, ok := authorizer.(*noopAuthorizer)
+	return ok
+}

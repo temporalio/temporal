@@ -62,16 +62,7 @@ const (
 
 // Default sort by uses the sorting order defined in the index template, so no
 // additional sorting is needed during query.
-// Keep RunID as tiebreaker because ES v6 date precision is milliseconds.
-// ES v7 date precision is nanoseconds which is good enough for tie breaking.
-// Remove this when we drop support for ES v6.
 var defaultSorter = []elastic.Sorter{
-	elastic.NewFieldSort(searchattribute.CloseTime).Desc().Missing("_first"),
-	elastic.NewFieldSort(searchattribute.StartTime).Desc().Missing("_first"),
-	elastic.NewFieldSort(searchattribute.RunID).Desc().Missing("_first"),
-}
-
-var defaultSorterV7 = []elastic.Sorter{
 	elastic.NewFieldSort(searchattribute.CloseTime).Desc().Missing("_first"),
 	elastic.NewFieldSort(searchattribute.StartTime).Desc().Missing("_first"),
 }
@@ -499,18 +490,19 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	if esClientV7, isV7 := s.esClient.(client.ClientV7); isV7 {
-		// Elasticsearch 7.10+ can use "point in time" (PIT) instead of scroll to scan over all workflows without skipping or duplicating them.
-		// https://www.elastic.co/guide/en/elasticsearch/reference/7.10/point-in-time-api.html
-		if esClientV7.IsPointInTimeSupported(ctx) {
-			return s.scanWorkflowExecutionsWithPit(ctx, request, esClientV7)
-		}
+	// Elasticsearch 7.10+ can use "point in time" (PIT) instead of scroll to scan over all workflows without skipping or duplicating them.
+	// https://www.elastic.co/guide/en/elasticsearch/reference/7.10/point-in-time-api.html
+	if s.esClient.IsPointInTimeSupported(ctx) {
+		return s.scanWorkflowExecutionsWithPit(ctx, request)
 	}
 
 	return s.scanWorkflowExecutionsWithScroll(ctx, request)
 }
 
-func (s *visibilityStore) scanWorkflowExecutionsWithPit(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2, esClient client.ClientV7) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *visibilityStore) scanWorkflowExecutionsWithPit(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	p, err := s.buildSearchParametersV2(request)
 	if err != nil {
 		return nil, err
@@ -518,7 +510,7 @@ func (s *visibilityStore) scanWorkflowExecutionsWithPit(ctx context.Context, req
 
 	// First call doesn't have token with PointInTimeID.
 	if len(request.NextPageToken) == 0 {
-		pitID, err := esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
+		pitID, err := s.esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
 		if err != nil {
 			return nil, convertElasticsearchClientError("Unable to create point in time", err)
 		}
@@ -535,14 +527,14 @@ func (s *visibilityStore) scanWorkflowExecutionsWithPit(ctx context.Context, req
 		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(token.PointInTimeID, pointInTimeKeepAliveInterval)
 	}
 
-	searchResult, err := esClient.Search(ctx, p)
+	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
 		return nil, convertElasticsearchClientError("ScanWorkflowExecutions failed", err)
 	}
 
 	// Empty hits list indicate that this is a last page.
 	if searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize {
-		_, err = esClient.ClosePointInTime(ctx, searchResult.PitId)
+		_, err = s.esClient.ClosePointInTime(ctx, searchResult.PitId)
 		if err != nil {
 			return nil, convertElasticsearchClientError("Unable to close point in time", err)
 		}
@@ -651,12 +643,7 @@ func (s *visibilityStore) buildSearchParameters(
 		Index:    s.index,
 		Query:    boolQuery,
 		PageSize: request.PageSize,
-	}
-
-	if _, isV7 := s.esClient.(client.ClientV7); isV7 {
-		params.Sorter = defaultSorterV7
-	} else {
-		params.Sorter = defaultSorter
+		Sorter:   defaultSorter,
 	}
 
 	if token != nil && len(token.SearchAfter) > 0 {
@@ -737,11 +724,7 @@ func (s *visibilityStore) convertQuery(
 
 func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
 	if len(fieldSorts) == 0 {
-		if _, isV7 := s.esClient.(client.ClientV7); isV7 {
-			return defaultSorterV7
-		} else {
-			return defaultSorter
-		}
+		return defaultSorter
 	}
 
 	res := make([]elastic.Sorter, len(fieldSorts)+1)

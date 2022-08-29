@@ -127,6 +127,7 @@ type (
 		AddTimerFiredEvent(string) (*historypb.HistoryEvent, error)
 		AddTimerStartedEvent(int64, *commandpb.StartTimerCommandAttributes) (*historypb.HistoryEvent, *persistencespb.TimerInfo, error)
 		AddUpsertWorkflowSearchAttributesEvent(int64, *commandpb.UpsertWorkflowSearchAttributesCommandAttributes) (*historypb.HistoryEvent, error)
+		AddWorkflowPropertiesModifiedEvent(int64, *commandpb.ModifyWorkflowPropertiesCommandAttributes) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCancelRequestedEvent(*historyservice.RequestCancelWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionCanceledEvent(int64, *commandpb.CancelWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string, header *commonpb.Header) (*historypb.HistoryEvent, error)
@@ -227,6 +228,7 @@ type (
 		ReplicateTimerFiredEvent(*historypb.HistoryEvent) error
 		ReplicateTimerStartedEvent(*historypb.HistoryEvent) (*persistencespb.TimerInfo, error)
 		ReplicateTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error)
+		ReplicateWorkflowPropertiesModifiedEvent(*historypb.HistoryEvent)
 		ReplicateUpsertWorkflowSearchAttributesEvent(*historypb.HistoryEvent)
 		ReplicateWorkflowExecutionCancelRequestedEvent(*historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionCanceledEvent(int64, *historypb.HistoryEvent) error

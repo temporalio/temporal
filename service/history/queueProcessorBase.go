@@ -292,12 +292,7 @@ func (p *queueProcessorBase) throttle(duration time.Duration) {
 func (p *queueProcessorBase) submitTask(
 	executable queues.Executable,
 ) {
-
-	submitted, err := p.scheduler.TrySubmit(executable)
-	if err != nil {
-		p.logger.Error("Failed to submit task", tag.Error(err))
-		executable.Reschedule()
-	} else if !submitted {
+	if !p.scheduler.TrySubmit(executable) {
 		executable.Reschedule()
 	}
 }

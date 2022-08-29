@@ -89,7 +89,7 @@ type (
 			now time.Time,
 			event *historypb.HistoryEvent,
 		) error
-		GenerateWorkflowSearchAttrTasks(
+		GenerateUpsertVisibilityTask(
 			now time.Time,
 		) error
 		GenerateWorkflowResetTasks(
@@ -491,10 +491,9 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateWorkflowSearchAttrTasks(
+func (r *TaskGeneratorImpl) GenerateUpsertVisibilityTask(
 	now time.Time,
 ) error {
-
 	currentVersion := r.mutableState.GetCurrentVersion()
 
 	r.mutableState.AddTasks(&tasks.UpsertExecutionVisibilityTask{

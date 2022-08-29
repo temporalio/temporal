@@ -62,6 +62,7 @@ var (
 		{CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION},
 		{CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION},
 		{CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES},
+		{CommandType: enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES},
 	}
 
 	terminalCommands = []*commandpb.Command{
@@ -205,6 +206,29 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
+}
+
+func (s *commandAttrValidatorSuite) TestValidateModifyWorkflowProperties() {
+	namespace := namespace.Name("tests.Namespace")
+	var attributes *commandpb.ModifyWorkflowPropertiesCommandAttributes
+
+	fc, err := s.validator.validateModifyWorkflowProperties(namespace, attributes)
+	s.EqualError(err, "ModifyWorkflowPropertiesCommandAttributes is not set on command.")
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
+
+	// test attributes has at least one non-nil attribute
+	attributes = &commandpb.ModifyWorkflowPropertiesCommandAttributes{}
+	fc, err = s.validator.validateModifyWorkflowProperties(namespace, attributes)
+	s.EqualError(err, "ModifyWorkflowPropertiesCommandAttributes attributes are all nil.")
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
+
+	// test UpsertedMemo cannot be an empty map
+	attributes = &commandpb.ModifyWorkflowPropertiesCommandAttributes{
+		UpsertedMemo: &commonpb.Memo{},
+	}
+	fc, err = s.validator.validateModifyWorkflowProperties(namespace, attributes)
+	s.EqualError(err, "UpsertedMemo.Fields is empty on command.")
+	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, fc)
 }
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal() {

@@ -51,7 +51,7 @@ type processorSuite struct {
 	esProcessor       *processorImpl
 	mockBulkProcessor *client.MockBulkProcessor
 	mockMetricClient  *metrics.MockClient
-	mockESClient      *client.MockClientV7
+	mockESClient      *client.MockClient
 }
 
 var (
@@ -81,7 +81,7 @@ func (s *processorSuite) SetupTest() {
 
 	s.mockMetricClient = metrics.NewMockClient(s.controller)
 	s.mockBulkProcessor = client.NewMockBulkProcessor(s.controller)
-	s.mockESClient = client.NewMockClientV7(s.controller)
+	s.mockESClient = client.NewMockClient(s.controller)
 	s.esProcessor = NewProcessor(cfg, s.mockESClient, logger, s.mockMetricClient)
 
 	// esProcessor.Start mock

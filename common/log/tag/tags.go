@@ -544,6 +544,21 @@ func ShardQueueAcks(categoryName string, ackLevel interface{}) ZapTag {
 
 // task queue processor
 
+// QueueReaderID returns tag for queue readerID
+func QueueReaderID(readerID int32) ZapTag {
+	return NewInt32("queue-reader-id", readerID)
+}
+
+// QueueAlertType returns tag for queue alert type
+func QueueAlertType(alertType string) ZapTag {
+	return NewStringTag("queue-alert-type", alertType)
+}
+
+// QueueAlertAttributes returns tag for queue alert attributes
+func QueueAlertAttributes(attributes interface{}) ZapTag {
+	return NewAnyTag("queue-alert-attributes", attributes)
+}
+
 // Task returns tag for Task
 func Task(task interface{}) ZapTag {
 	return NewAnyTag("queue-task", task)

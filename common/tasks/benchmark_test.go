@@ -31,19 +31,18 @@ import (
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 )
 
 type (
-	noopProcessor struct{}
+	noopScheduler struct{}
 	noopTask      struct {
 		*sync.WaitGroup
 	}
 )
 
 var (
-	_ Processor = (*noopProcessor)(nil)
-	_ Task      = (*noopTask)(nil)
+	_ Scheduler[*noopTask] = (*noopScheduler)(nil)
+	_ Task                 = (*noopTask)(nil)
 )
 
 var (
@@ -60,11 +59,10 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Sequential(b *testing.B) {
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*noopTask, int]{
-			TaskToChannelKey:   func(nt *noopTask) int { return rand.Intn(4) },
-			ChannelKeyToWeight: func(key int) int { return channelKeyToWeight[key] },
+			TaskChannelKeyFn: func(nt *noopTask) int { return rand.Intn(4) },
+			ChannelWeightFn:  func(key int) int { return channelKeyToWeight[key] },
 		},
-		&noopProcessor{},
-		metrics.NoopMetricsHandler,
+		Scheduler[*noopTask](&noopScheduler{}),
 		logger,
 	)
 	scheduler.Start()
@@ -87,11 +85,10 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Parallel(b *testing.B) {
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*noopTask, int]{
-			TaskToChannelKey:   func(nt *noopTask) int { return rand.Intn(4) },
-			ChannelKeyToWeight: func(key int) int { return channelKeyToWeight[key] },
+			TaskChannelKeyFn: func(nt *noopTask) int { return rand.Intn(4) },
+			ChannelWeightFn:  func(key int) int { return channelKeyToWeight[key] },
 		},
-		&noopProcessor{},
-		metrics.NoopMetricsHandler,
+		Scheduler[*noopTask](&noopScheduler{}),
 		logger,
 	)
 	scheduler.Start()
@@ -111,9 +108,10 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler_Parallel(b *testing.B) {
 	waitGroup.Wait()
 }
 
-func (n *noopProcessor) Start()           {}
-func (n *noopProcessor) Stop()            {}
-func (n *noopProcessor) Submit(task Task) { task.Ack() }
+func (n *noopScheduler) Start()                        {}
+func (n *noopScheduler) Stop()                         {}
+func (n *noopScheduler) Submit(task *noopTask)         { task.Ack() }
+func (n *noopScheduler) TrySubmit(task *noopTask) bool { task.Ack(); return true }
 
 func (n *noopTask) Execute() error                   { panic("implement me") }
 func (n *noopTask) HandleErr(err error) error        { panic("implement me") }
