@@ -125,7 +125,7 @@ func newTimerQueueStandbyProcessor(
 	}
 
 	if scheduler == nil {
-		scheduler = newTimerTaskShardScheduler(shard, logger, metricProvider)
+		scheduler = newTimerTaskShardScheduler(shard, logger)
 		processor.ownedScheduler = scheduler
 	}
 

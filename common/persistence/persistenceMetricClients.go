@@ -1443,29 +1443,20 @@ func (p *metricEmitter) updateErrorMetric(scope int, err error) {
 	p.metricClient.Scope(scope, metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.PersistenceErrorWithType)
 
 	switch err := err.(type) {
-	case *ShardAlreadyExistError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardExistsCounter)
-	case *ShardOwnershipLostError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
-	case *CurrentWorkflowConditionFailedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrCurrentWorkflowConditionFailedCounter)
-	case *WorkflowConditionFailedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrWorkflowConditionFailedCounter)
-	case *ConditionFailedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
-	case *TimeoutError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	case *serviceerror.InvalidArgument:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrBadRequestCounter)
-	case *serviceerror.NamespaceAlreadyExists:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrNamespaceAlreadyExistsCounter)
-	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
+	case *ShardAlreadyExistError,
+		*ShardOwnershipLostError,
+		*CurrentWorkflowConditionFailedError,
+		*WorkflowConditionFailedError,
+		*ConditionFailedError,
+		*TimeoutError,
+		*serviceerror.InvalidArgument,
+		*serviceerror.NamespaceAlreadyExists,
+		*serviceerror.NotFound,
+		*serviceerror.NamespaceNotFound:
+		// no-op
+
 	case *serviceerror.ResourceExhausted:
-		p.metricClient.Scope(scope, metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.PersistenceErrBusyCounter)
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
+		p.metricClient.Scope(scope, metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.PersistenceErrResourceExhaustedCounter)
 	default:
 		p.logger.Error("Operation failed with internal error.", tag.Error(err), tag.MetricScope(scope))
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)

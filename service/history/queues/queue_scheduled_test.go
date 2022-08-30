@@ -90,7 +90,6 @@ func (s *scheduledQueueSuite) SetupTest() {
 				WorkerCount: dynamicconfig.GetIntPropertyFn(10),
 				QueueSize:   100,
 			},
-			metrics.NoopMetricsHandler,
 			log.NewTestLogger(),
 		),
 		nil,

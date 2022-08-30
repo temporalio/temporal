@@ -73,7 +73,6 @@ func NewTransferQueueFactory(
 				NamespaceWeights: params.Config.TransferProcessorSchedulerRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
-			params.MetricsHandler,
 			params.Logger,
 		)
 	}

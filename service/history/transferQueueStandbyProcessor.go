@@ -144,7 +144,7 @@ func newTransferQueueStandbyProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newTransferTaskShardScheduler(shard, logger, metricProvider)
+		scheduler = newTransferTaskShardScheduler(shard, logger)
 		processor.ownedScheduler = scheduler
 	}
 

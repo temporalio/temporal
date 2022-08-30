@@ -28,7 +28,6 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/client"
@@ -1671,32 +1670,132 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkflow(
 	return resp, err
 }
 
-func (handler *DCRedirectionHandlerImpl) DescribeBatchOperation(
-	ctx context.Context,
-	request *workflowservice.DescribeBatchOperationRequest,
-) (resp *workflowservice.DescribeBatchOperationResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("DCRedirectionHandlerImpl.DescribeBatchOperation is not implemented")
-}
-
-func (handler *DCRedirectionHandlerImpl) ListBatchOperations(
-	ctx context.Context,
-	request *workflowservice.ListBatchOperationsRequest,
-) (resp *workflowservice.ListBatchOperationsResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("DCRedirectionHandlerImpl.ListBatchOperations is not implemented")
-}
-
 func (handler *DCRedirectionHandlerImpl) StartBatchOperation(
 	ctx context.Context,
 	request *workflowservice.StartBatchOperationRequest,
 ) (resp *workflowservice.StartBatchOperationResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("DCRedirectionHandlerImpl.StartBatchOperation is not implemented")
+	var apiName = "StartBatchOperation"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionStartBatchOperationScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.StartBatchOperation(ctx, request)
+			return err
+		default:
+			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			if err != nil {
+				return err
+			}
+			resp, err = remoteClient.StartBatchOperation(ctx, request)
+			return err
+		}
+	})
+
+	return resp, err
 }
 
 func (handler *DCRedirectionHandlerImpl) StopBatchOperation(
 	ctx context.Context,
 	request *workflowservice.StopBatchOperationRequest,
 ) (resp *workflowservice.StopBatchOperationResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("DCRedirectionHandlerImpl.StopBatchOperation is not implemented")
+	var apiName = "StopBatchOperation"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionStopBatchOperationScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.StopBatchOperation(ctx, request)
+			return err
+		default:
+			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			if err != nil {
+				return err
+			}
+			resp, err = remoteClient.StopBatchOperation(ctx, request)
+			return err
+		}
+	})
+
+	return resp, err
+}
+
+func (handler *DCRedirectionHandlerImpl) DescribeBatchOperation(
+	ctx context.Context,
+	request *workflowservice.DescribeBatchOperationRequest,
+) (resp *workflowservice.DescribeBatchOperationResponse, retError error) {
+	var apiName = "DescribeBatchOperation"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeBatchOperationScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.DescribeBatchOperation(ctx, request)
+			return err
+		default:
+			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			if err != nil {
+				return err
+			}
+			resp, err = remoteClient.DescribeBatchOperation(ctx, request)
+			return err
+		}
+	})
+
+	return resp, err
+}
+
+func (handler *DCRedirectionHandlerImpl) ListBatchOperations(
+	ctx context.Context,
+	request *workflowservice.ListBatchOperationsRequest,
+) (resp *workflowservice.ListBatchOperationsResponse, retError error) {
+	var apiName = "ListBatchOperations"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListBatchOperationsScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.ListBatchOperations(ctx, request)
+			return err
+		default:
+			remoteClient, err := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			if err != nil {
+				return err
+			}
+			resp, err = remoteClient.ListBatchOperations(ctx, request)
+			return err
+		}
+	})
+
+	return resp, err
 }
 
 func (handler *DCRedirectionHandlerImpl) beforeCall(
