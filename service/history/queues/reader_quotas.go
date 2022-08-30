@@ -44,16 +44,17 @@ func NewReaderPriorityRateLimiter(
 	for readerId := defaultReaderId; readerId != defaultReaderId+maxReaders; readerId++ {
 		// use readerId as priority
 		rateLimiters[readerId] = quotas.NewDefaultOutgoingRateLimiter(rateFn)
+		// reader will use readerId (in string type) as caller when using the rate limiter
 		readerCallerToPriority[newReaderRequest(int32(readerId)).Caller] = readerId
 	}
-	defaultPriority := defaultReaderId + maxReaders - 1
+	lowestPriority := defaultReaderId + maxReaders - 1
 
 	return quotas.NewPriorityRateLimiter(
 		func(req quotas.Request) int {
 			if priority, ok := readerCallerToPriority[req.Caller]; ok {
 				return priority
 			}
-			return defaultPriority
+			return lowestPriority
 		},
 		rateLimiters,
 	)
@@ -76,6 +77,10 @@ func newShardReaderRateLimiter(
 func newReaderRequest(
 	readerID int32,
 ) quotas.Request {
+	// The priority is only based on readerID (caller),
+	// api, caller type and call initiation (origin)
+	// are the same for all the readers, and not related to
+	// priority so leaving those fields empty.
 	return quotas.NewRequest(
 		"",
 		readerRequestToken,
