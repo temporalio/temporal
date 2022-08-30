@@ -116,7 +116,6 @@ func newTimerQueueActiveProcessor(
 		matchingClient,
 	)
 	ackLevel := shard.GetQueueClusterAckLevel(tasks.CategoryTimer, currentClusterName).FireTime
-	queueType := queues.QueueTypeActiveTimer
 
 	// if single cursor is enabled, then this processor is responsible for both active and standby tasks
 	// and we need to customize some parameters for ack manager and task executable
@@ -157,7 +156,6 @@ func newTimerQueueActiveProcessor(
 			logger,
 		)
 		ackLevel = shard.GetQueueAckLevel(tasks.CategoryTimer).FireTime
-		queueType = queues.QueueTypeTimer
 	}
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
@@ -179,8 +177,8 @@ func newTimerQueueActiveProcessor(
 				shard.GetTimeSource(),
 				shard.GetNamespaceRegistry(),
 				logger,
+				metricProvider,
 				config.TimerTaskMaxRetryCount,
-				queueType,
 				config.NamespaceCacheRefreshInterval,
 			)
 		},
@@ -297,8 +295,8 @@ func newTimerQueueFailoverProcessor(
 				shard.GetTimeSource(),
 				shard.GetNamespaceRegistry(),
 				logger,
+				metricProvider,
 				shard.GetConfig().TimerTaskMaxRetryCount,
-				queues.QueueTypeActiveTimer,
 				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},

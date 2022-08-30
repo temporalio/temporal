@@ -68,9 +68,11 @@ func NewTransferQueueFactory(
 	var hostScheduler queues.Scheduler
 	if params.Config.TransferProcessorEnablePriorityTaskScheduler() {
 		hostScheduler = queues.NewNamespacePriorityScheduler(
+			params.ClusterMetadata.GetCurrentClusterName(),
 			queues.NamespacePrioritySchedulerOptions{
-				WorkerCount:      params.Config.TransferProcessorSchedulerWorkerCount,
-				NamespaceWeights: params.Config.TransferProcessorSchedulerRoundRobinWeights,
+				WorkerCount:             params.Config.TransferProcessorSchedulerWorkerCount,
+				ActiveNamespaceWeights:  params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
+				StandbyNamespaceWeights: params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
 			params.Logger,
@@ -79,14 +81,8 @@ func NewTransferQueueFactory(
 	return &transferQueueFactory{
 		transferQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
-			HostScheduler: hostScheduler,
-			HostPriorityAssigner: queues.NewPriorityAssigner(
-				params.ClusterMetadata.GetCurrentClusterName(),
-				params.NamespaceRegistry,
-				queues.PriorityAssignerOptions{
-					CriticalRetryAttempts: params.Config.TransferTaskMaxRetryCount(),
-				},
-			),
+			HostScheduler:        hostScheduler,
+			HostPriorityAssigner: queues.NewPriorityAssigner(),
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.TransferProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,

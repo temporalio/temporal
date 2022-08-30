@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -158,7 +159,7 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 		s.logger,
 		s.clusterName,
 		func(task tasks.Task) queues.Executable {
-			return queues.NewExecutable(task, nil, nil, nil, nil, queues.NewNoopPriorityAssigner(), s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeActiveTimer, nil)
+			return queues.NewExecutable(task, nil, nil, nil, nil, queues.NewNoopPriorityAssigner(), s.mockShard.GetTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil, nil)
 		},
 	)
 }
@@ -646,7 +647,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 		},
 		s.logger,
 		func(task tasks.Task) queues.Executable {
-			return queues.NewExecutable(task, nil, nil, nil, nil, queues.NewNoopPriorityAssigner(), s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeActiveTimer, nil)
+			return queues.NewExecutable(task, nil, nil, nil, nil, queues.NewNoopPriorityAssigner(), s.mockShard.GetTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil, nil)
 		},
 	)
 }

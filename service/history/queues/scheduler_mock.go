@@ -134,3 +134,15 @@ func (mr *MockSchedulerMockRecorder) TrySubmit(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrySubmit", reflect.TypeOf((*MockScheduler)(nil).TrySubmit), arg0)
 }
+
+// UpdateChannelWeight mocks base method.
+func (m *MockScheduler) UpdateChannelWeight() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateChannelWeight")
+}
+
+// UpdateChannelWeight indicates an expected call of UpdateChannelWeight.
+func (mr *MockSchedulerMockRecorder) UpdateChannelWeight() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateChannelWeight", reflect.TypeOf((*MockScheduler)(nil).UpdateChannelWeight))
+}

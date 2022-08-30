@@ -32,10 +32,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -43,8 +40,7 @@ type (
 		*require.Assertions
 		suite.Suite
 
-		controller            *gomock.Controller
-		mockNamespaceRegistry *namespace.MockRegistry
+		controller *gomock.Controller
 
 		priorityAssigner *priorityAssignerImpl
 	}
@@ -59,59 +55,17 @@ func (s *priorityAssignerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
 
-	s.priorityAssigner = NewPriorityAssigner(
-		cluster.TestCurrentClusterName,
-		s.mockNamespaceRegistry,
-		PriorityAssignerOptions{
-			CriticalRetryAttempts: 100,
-		},
-	).(*priorityAssignerImpl)
+	s.priorityAssigner = NewPriorityAssigner().(*priorityAssignerImpl)
 }
 
 func (s *priorityAssignerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *priorityAssignerSuite) TestAssign_CriticalAttempts() {
-	mockExecutable := NewMockExecutable(s.controller)
-	mockExecutable.EXPECT().Attempt().Return(1000).AnyTimes()
-
-	s.Equal(tasks.PriorityLow, s.priorityAssigner.Assign(mockExecutable))
-}
-
-func (s *priorityAssignerSuite) TestAssign_StandbyNamespaceStandbyQueue() {
-	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalStandbyNamespaceEntry, nil)
-
-	mockExecutable := NewMockExecutable(s.controller)
-	mockExecutable.EXPECT().Attempt().Return(10).AnyTimes()
-	mockExecutable.EXPECT().GetNamespaceID().Return(tests.NamespaceID.String()).AnyTimes()
-	mockExecutable.EXPECT().QueueType().Return(QueueTypeStandbyTransfer).AnyTimes()
-
-	s.Equal(tasks.PriorityLow, s.priorityAssigner.Assign(mockExecutable))
-}
-
-func (s *priorityAssignerSuite) TestAssign_NoopExecuable() {
-	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalStandbyNamespaceEntry, nil)
-
-	mockExecutable := NewMockExecutable(s.controller)
-	mockExecutable.EXPECT().Attempt().Return(10).AnyTimes()
-	mockExecutable.EXPECT().GetNamespaceID().Return(tests.NamespaceID.String()).AnyTimes()
-	mockExecutable.EXPECT().QueueType().Return(QueueTypeActiveTransfer).AnyTimes()
-
-	s.Equal(tasks.PriorityHigh, s.priorityAssigner.Assign(mockExecutable))
-}
-
 func (s *priorityAssignerSuite) TestAssign_SelectedTaskTypes() {
-	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil)
-
 	mockExecutable := NewMockExecutable(s.controller)
-	mockExecutable.EXPECT().Attempt().Return(10).AnyTimes()
-	mockExecutable.EXPECT().GetNamespaceID().Return(tests.NamespaceID.String()).AnyTimes()
-	mockExecutable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT).AnyTimes()
+	mockExecutable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT).Times(1)
 
-	mockExecutable.EXPECT().QueueType().Return(QueueTypeActiveTransfer).AnyTimes()
-
-	s.Equal(tasks.PriorityMedium, s.priorityAssigner.Assign(mockExecutable))
+	s.Equal(tasks.PriorityLow, s.priorityAssigner.Assign(mockExecutable))
 }

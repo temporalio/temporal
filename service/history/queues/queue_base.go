@@ -65,6 +65,7 @@ type (
 
 		category       tasks.Category
 		options        *Options
+		scheduler      Scheduler
 		rescheduler    Rescheduler
 		timeSource     clock.TimeSource
 		monitor        *monitorImpl
@@ -151,8 +152,8 @@ func newQueueBase(
 			timeSource,
 			shard.GetNamespaceRegistry(),
 			logger,
+			metricsHandler, // TODO: verify it's ok override tag values
 			options.TaskMaxRetryCount,
-			QueueTypeUnknown, // we don't care about queue type
 			shard.GetConfig().NamespaceCacheRefreshInterval,
 		)
 	}
@@ -194,6 +195,7 @@ func newQueueBase(
 
 		category:       category,
 		options:        options,
+		scheduler:      scheduler,
 		rescheduler:    rescheduler,
 		timeSource:     shard.GetTimeSource(),
 		monitor:        monitor,
@@ -250,8 +252,7 @@ func (p *queueBase) Category() tasks.Category {
 func (p *queueBase) FailoverNamespace(
 	namespaceIDs map[string]struct{},
 ) {
-	// TODO: reschedule all tasks for namespaces that becomes active
-	// no-op
+	p.rescheduler.Reschedule(namespaceIDs)
 }
 
 func (p *queueBase) LockTaskProcessing() {

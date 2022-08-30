@@ -111,35 +111,30 @@ func newTransferQueueActiveTaskExecutor(
 func (t *transferQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.MetricsHandler, error) {
-	task := executable.GetTask()
-	taskType := queues.GetActiveTransferTaskTypeTagValue(task)
-	metricsProvider := t.metricProvider.WithTags(
-		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
-		metrics.TaskTypeTag(taskType),
-		metrics.OperationTag(taskType), // for backward compatibility
-	)
-
-	switch task := task.(type) {
+) (bool, error) {
+	var err error
+	switch task := executable.GetTask().(type) {
 	case *tasks.ActivityTask:
-		return metricsProvider, t.processActivityTask(ctx, task)
+		err = t.processActivityTask(ctx, task)
 	case *tasks.WorkflowTask:
-		return metricsProvider, t.processWorkflowTask(ctx, task)
+		err = t.processWorkflowTask(ctx, task)
 	case *tasks.CloseExecutionTask:
-		return metricsProvider, t.processCloseExecution(ctx, task)
+		err = t.processCloseExecution(ctx, task)
 	case *tasks.CancelExecutionTask:
-		return metricsProvider, t.processCancelExecution(ctx, task)
+		err = t.processCancelExecution(ctx, task)
 	case *tasks.SignalExecutionTask:
-		return metricsProvider, t.processSignalExecution(ctx, task)
+		err = t.processSignalExecution(ctx, task)
 	case *tasks.StartChildExecutionTask:
-		return metricsProvider, t.processStartChildExecution(ctx, task)
+		err = t.processStartChildExecution(ctx, task)
 	case *tasks.ResetWorkflowTask:
-		return metricsProvider, t.processResetWorkflow(ctx, task)
+		err = t.processResetWorkflow(ctx, task)
 	case *tasks.DeleteExecutionTask:
-		return metricsProvider, t.processDeleteExecutionTask(ctx, task)
+		err = t.processDeleteExecutionTask(ctx, task)
 	default:
-		return metricsProvider, errUnknownTransferTask
+		err = errUnknownTransferTask
 	}
+
+	return true, err
 }
 
 func (t *transferQueueActiveTaskExecutor) processActivityTask(

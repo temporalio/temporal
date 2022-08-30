@@ -364,8 +364,10 @@ const (
 	TimerProcessorEnablePriorityTaskScheduler = "history.timerProcessorEnablePriorityTaskScheduler"
 	// TimerProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for timer processor
 	TimerProcessorSchedulerWorkerCount = "history.timerProcessorSchedulerWorkerCount"
-	// TimerProcessorSchedulerRoundRobinWeights is the priority round robin weights for timer task scheduler
-	TimerProcessorSchedulerRoundRobinWeights = "history.timerProcessorSchedulerRoundRobinWeights"
+	// TimerProcessorSchedulerActiveRoundRobinWeights is the priority round robin weights used by timer task scheduler for active namespaces
+	TimerProcessorSchedulerActiveRoundRobinWeights = "history.timerProcessorSchedulerActiveRoundRobinWeights"
+	// TimerProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights used by timer task scheduler for standby namespaces
+	TimerProcessorSchedulerStandbyRoundRobinWeights = "history.timerProcessorSchedulerStandbyRoundRobinWeights"
 	// TimerProcessorUpdateAckInterval is update interval for timer processor
 	TimerProcessorUpdateAckInterval = "history.timerProcessorUpdateAckInterval"
 	// TimerProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
@@ -414,8 +416,10 @@ const (
 	TransferProcessorEnablePriorityTaskScheduler = "history.transferProcessorEnablePriorityTaskScheduler"
 	// TransferProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for transferQueueProcessor
 	TransferProcessorSchedulerWorkerCount = "history.transferProcessorSchedulerWorkerCount"
-	// TransferProcessorSchedulerRoundRobinWeights is the priority round robin weights for transfer task scheduler
-	TransferProcessorSchedulerRoundRobinWeights = "history.transferProcessorSchedulerRoundRobinWeights"
+	// TransferProcessorSchedulerActiveRoundRobinWeights is the priority round robin weights used by transfer task scheduler for active namespaces
+	TransferProcessorSchedulerActiveRoundRobinWeights = "history.transferProcessorSchedulerActiveRoundRobinWeights"
+	// TransferProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights used by transfer task scheduler for standby namespaces
+	TransferProcessorSchedulerStandbyRoundRobinWeights = "history.transferProcessorSchedulerStandbyRoundRobinWeights"
 	// TransferProcessorUpdateShardTaskCount is update shard count for transferQueueProcessor
 	TransferProcessorUpdateShardTaskCount = "history.transferProcessorUpdateShardTaskCount"
 	// TransferProcessorMaxPollInterval max poll interval for transferQueueProcessor
@@ -452,8 +456,10 @@ const (
 	VisibilityProcessorEnablePriorityTaskScheduler = "history.visibilityProcessorEnablePriorityTaskScheduler"
 	// VisibilityProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for visibilityQueueProcessor
 	VisibilityProcessorSchedulerWorkerCount = "history.visibilityProcessorSchedulerWorkerCount"
-	// VisibilityProcessorSchedulerRoundRobinWeights is the priority round robin weights for visibility task scheduler
-	VisibilityProcessorSchedulerRoundRobinWeights = "history.visibilityProcessorSchedulerRoundRobinWeights"
+	// VisibilityProcessorSchedulerActiveRoundRobinWeights is the priority round robin weights by visibility task scheduler for active namespaces
+	VisibilityProcessorSchedulerActiveRoundRobinWeights = "history.visibilityProcessorSchedulerActiveRoundRobinWeights"
+	// VisibilityProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights by visibility task scheduler for standby namespaces
+	VisibilityProcessorSchedulerStandbyRoundRobinWeights = "history.visibilityProcessorSchedulerStandbyRoundRobinWeights"
 	// VisibilityProcessorMaxPollInterval max poll interval for visibilityQueueProcessor
 	VisibilityProcessorMaxPollInterval = "history.visibilityProcessorMaxPollInterval"
 	// VisibilityProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient

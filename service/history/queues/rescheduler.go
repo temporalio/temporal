@@ -58,6 +58,11 @@ type (
 		// Add task executable to the rescheduler.
 		Add(task Executable, rescheduleTime time.Time)
 
+		// Reschedule triggers an immediate reschedule for provided namespace
+		// ignoring executable's reschedule time.
+		// Used by namespace failover logic
+		Reschedule(namespaceIDs map[string]struct{})
+
 		// Len returns the total number of task executables waiting to be rescheduled.
 		Len() int
 	}
@@ -152,6 +157,32 @@ func (r *reschedulerImpl) Add(
 	if r.isStopped() {
 		r.drain()
 	}
+}
+
+func (r *reschedulerImpl) Reschedule(
+	namespaceIDs map[string]struct{},
+) {
+	r.Lock()
+	defer r.Unlock()
+
+	now := r.timeSource.Now()
+	for key, pq := range r.pqMap {
+		if _, ok := namespaceIDs[key.NamespaceID]; !ok {
+			continue
+		}
+
+		// set reschedule time for all tasks in this pq to be now
+		newPQ := r.newPQ()
+		for !pq.IsEmpty() {
+			rescheduled := pq.Remove()
+			rescheduled.rescheduleTime = now
+			newPQ.Add(rescheduled)
+		}
+		r.pqMap[key] = newPQ
+	}
+
+	// then update timer gate to trigger the actual reschedule
+	r.timerGate.Update(now)
 }
 
 func (r *reschedulerImpl) Len() int {
@@ -259,9 +290,13 @@ func (r *reschedulerImpl) getOrCreatePQLocked(
 		return pq
 	}
 
-	pq := collection.NewPriorityQueue((func(this rescheduledExecuable, that rescheduledExecuable) bool {
-		return this.rescheduleTime.Before(that.rescheduleTime)
-	}))
+	pq := r.newPQ()
 	r.pqMap[key] = pq
 	return pq
+}
+
+func (r *reschedulerImpl) newPQ() collection.Queue[rescheduledExecuable] {
+	return collection.NewPriorityQueue((func(this rescheduledExecuable, that rescheduledExecuable) bool {
+		return this.rescheduleTime.Before(that.rescheduleTime)
+	}))
 }

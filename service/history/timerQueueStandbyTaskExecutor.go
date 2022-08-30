@@ -88,33 +88,28 @@ func newTimerQueueStandbyTaskExecutor(
 func (t *timerQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.MetricsHandler, error) {
-	task := executable.GetTask()
-	taskType := queues.GetStandbyTimerTaskTypeTagValue(task)
-	metricsProvider := t.metricProvider.WithTags(
-		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
-		metrics.TaskTypeTag(taskType),
-		metrics.OperationTag(taskType), // for backward compatibility
-	)
-
-	switch task := task.(type) {
+) (bool, error) {
+	var err error
+	switch task := executable.GetTask().(type) {
 	case *tasks.UserTimerTask:
-		return metricsProvider, t.executeUserTimerTimeoutTask(ctx, task)
+		err = t.executeUserTimerTimeoutTask(ctx, task)
 	case *tasks.ActivityTimeoutTask:
-		return metricsProvider, t.executeActivityTimeoutTask(ctx, task)
+		err = t.executeActivityTimeoutTask(ctx, task)
 	case *tasks.WorkflowTaskTimeoutTask:
-		return metricsProvider, t.executeWorkflowTaskTimeoutTask(ctx, task)
+		err = t.executeWorkflowTaskTimeoutTask(ctx, task)
 	case *tasks.WorkflowBackoffTimerTask:
-		return metricsProvider, t.executeWorkflowBackoffTimerTask(ctx, task)
+		err = t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.ActivityRetryTimerTask:
-		return metricsProvider, t.executeActivityRetryTimerTask(ctx, task)
+		err = t.executeActivityRetryTimerTask(ctx, task)
 	case *tasks.WorkflowTimeoutTask:
-		return metricsProvider, t.executeWorkflowTimeoutTask(ctx, task)
+		err = t.executeWorkflowTimeoutTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
-		return metricsProvider, t.executeDeleteHistoryEventTask(ctx, task)
+		err = t.executeDeleteHistoryEventTask(ctx, task)
 	default:
-		return metricsProvider, errUnknownTimerTask
+		err = errUnknownTimerTask
 	}
+
+	return false, err
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(

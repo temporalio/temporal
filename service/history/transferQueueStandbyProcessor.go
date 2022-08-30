@@ -172,8 +172,8 @@ func newTransferQueueStandbyProcessor(
 				shard.GetTimeSource(),
 				shard.GetNamespaceRegistry(),
 				logger,
+				metricProvider,
 				shard.GetConfig().TransferTaskMaxRetryCount,
-				queues.QueueTypeStandbyTransfer,
 				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},
