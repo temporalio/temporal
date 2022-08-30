@@ -251,17 +251,19 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) shouldUpdateWeight() bool
 
 	select {
 	case <-s.options.ChannelWeightUpdateCh:
-		// we don't know the channel capacity here,
-		// so drain the channel
-		for {
-			select {
-			case <-s.options.ChannelWeightUpdateCh:
-			default:
-				return true
-			}
-		}
+		return true
 	default:
 		return false
+	}
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) drainWeightUpdateCh() {
+	for {
+		select {
+		case <-s.options.ChannelWeightUpdateCh:
+		default:
+			return
+		}
 	}
 }
 
@@ -275,6 +277,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) dispatchTasksWithWeight()
 	for s.hasRemainingTasks() {
 		if s.shouldUpdateWeight() {
 			s.Lock()
+			s.drainWeightUpdateCh()
 			s.updateChannelWeightLocked()
 			s.flattenWeightedChannelsLocked()
 			s.Unlock()

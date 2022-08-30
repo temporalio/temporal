@@ -172,7 +172,7 @@ func (r *reschedulerImpl) Reschedule(
 		}
 
 		// set reschedule time for all tasks in this pq to be now
-		newPQ := r.newPQ()
+		newPQ := r.newPriorityQueue()
 		for !pq.IsEmpty() {
 			rescheduled := pq.Remove()
 			rescheduled.rescheduleTime = now
@@ -290,12 +290,12 @@ func (r *reschedulerImpl) getOrCreatePQLocked(
 		return pq
 	}
 
-	pq := r.newPQ()
+	pq := r.newPriorityQueue()
 	r.pqMap[key] = pq
 	return pq
 }
 
-func (r *reschedulerImpl) newPQ() collection.Queue[rescheduledExecuable] {
+func (r *reschedulerImpl) newPriorityQueue() collection.Queue[rescheduledExecuable] {
 	return collection.NewPriorityQueue((func(this rescheduledExecuable, that rescheduledExecuable) bool {
 		return this.rescheduleTime.Before(that.rescheduleTime)
 	}))
