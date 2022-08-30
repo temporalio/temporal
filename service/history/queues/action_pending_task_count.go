@@ -34,8 +34,8 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-var (
-	targetThresholdCoefficient = 0.8
+const (
+	targetLoadFactor           = 0.8
 	clearSliceThrottleDuration = 10 * time.Second
 )
 
@@ -87,7 +87,7 @@ func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) {
 	a.gatherStatistics(readers)
 	a.findSliceToClear(
 		a.monitor.GetTotalPendingTaskCount(),
-		int(float64(a.attributes.CiriticalPendingTaskCount)*targetThresholdCoefficient),
+		int(float64(a.attributes.CiriticalPendingTaskCount)*targetLoadFactor),
 	)
 	a.splitAndClearSlice(readers, readerGroup)
 }
@@ -139,12 +139,16 @@ func (a *actionQueuePendingTask) findSliceToClear(
 	targetPendingTasks int,
 ) {
 	// order namespace by # of pending tasks
-	pq := collection.NewPriorityQueue(func(this, that namespace.ID) bool {
-		return a.tasksPerNamespace[this] > a.tasksPerNamespace[that]
-	})
+	namespaceIDs := make([]namespace.ID, 0, len(a.tasksPerNamespace))
 	for namespaceID := range a.tasksPerNamespace {
-		pq.Add(namespaceID)
+		namespaceIDs = append(namespaceIDs, namespaceID)
 	}
+	pq := collection.NewPriorityQueueWithItems(
+		func(this, that namespace.ID) bool {
+			return a.tasksPerNamespace[this] > a.tasksPerNamespace[that]
+		},
+		namespaceIDs,
+	)
 
 	for currentPendingTasks > targetPendingTasks && !pq.IsEmpty() {
 		namespaceID := pq.Remove()

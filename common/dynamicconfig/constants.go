@@ -348,7 +348,10 @@ const (
 	// currently only work for scheduled queues and the task range is 1s.
 	QueueReaderStuckCriticalAttempts = "history.queueReaderStuckCriticalAttempts"
 	// QueuePendingTaskMaxCount is the max number of task pending tasks in one queue before stop
-	// loading new tasks into memory.
+	// loading new tasks into memory. While QueuePendingTaskCriticalCount won't stop task loading
+	// for the entire queue but only trigger a queue action to unload tasks. Ideally this max count
+	// limit should not be hit and task unloading should happen once critical count is exceeded. But
+	// since queue action is async, we need this hard limit.
 	QueuePendingTaskMaxCount = "history.queuePendingTasksMaxCount"
 	// QueueMaxReaderCount is the max number of readers in one multi-cursor queue
 	QueueMaxReaderCount = "history.queueMaxReaderCount"
