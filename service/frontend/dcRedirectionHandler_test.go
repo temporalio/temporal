@@ -107,7 +107,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(s.currentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
-	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNoopSource(), s.mockResource.GetLogger()), 0, "", false)
+	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNoopClient(), s.mockResource.GetLogger()), 0, "", false)
 
 	frontendHandlerGRPC := NewWorkflowHandler(
 		s.config,

@@ -38,11 +38,11 @@ import (
 )
 
 type (
-	// Collection implements lookup and constraint logic on top of a Source.
+	// Collection implements lookup and constraint logic on top of a Client.
 	// The rest of the server code should use Collection as the interface to dynamic config,
-	// instead of the low-level Source.
+	// instead of the low-level Client.
 	Collection struct {
-		source   Source
+		client   Client
 		logger   log.Logger
 		errCount int64
 	}
@@ -95,9 +95,9 @@ var (
 )
 
 // NewCollection creates a new collection
-func NewCollection(source Source, logger log.Logger) *Collection {
+func NewCollection(client Client, logger log.Logger) *Collection {
 	return &Collection{
-		source:   source,
+		client:   client,
 		logger:   logger,
 		errCount: -1,
 	}
@@ -422,7 +422,7 @@ func matchAndConvert[T any](
 	precedence []Constraints,
 	converter func(value any) (T, error),
 ) T {
-	cvs := c.source.GetValue(key)
+	cvs := c.client.GetValue(key)
 
 	// defaultValue may be a list of constrained values. In that case, one of them must have an
 	// empty constraint set to be the fallback default. Otherwise we'll return the zero value

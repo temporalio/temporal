@@ -235,7 +235,7 @@ func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() 
 	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
 
 	// Verify partitions have data
-	partCountRaw, ok := s.testCluster.GetHost().dcSource.getRawValue(
+	partCountRaw, ok := s.testCluster.GetHost().dcClient.getRawValue(
 		dynamicconfig.MatchingNumTaskqueueReadPartitions)
 	s.True(ok)
 	partCount := partCountRaw.(int)

@@ -55,35 +55,35 @@ var (
 	}
 )
 
-type dcSource struct {
+type dcClient struct {
 	sync.RWMutex
 	overrides map[dynamicconfig.Key]any
-	fallback  dynamicconfig.Source
+	fallback  dynamicconfig.Client
 }
 
-func (d *dcSource) getRawValue(name dynamicconfig.Key) (any, bool) {
+func (d *dcClient) getRawValue(name dynamicconfig.Key) (any, bool) {
 	d.RLock()
 	defer d.RUnlock()
 	v, ok := d.overrides[name]
 	return v, ok
 }
 
-func (d *dcSource) GetValue(name dynamicconfig.Key) []dynamicconfig.ConstrainedValue {
+func (d *dcClient) GetValue(name dynamicconfig.Key) []dynamicconfig.ConstrainedValue {
 	if val, ok := d.getRawValue(name); ok {
 		return []dynamicconfig.ConstrainedValue{{Value: val}}
 	}
 	return d.fallback.GetValue(name)
 }
 
-func (d *dcSource) OverrideValue(name dynamicconfig.Key, value any) {
+func (d *dcClient) OverrideValue(name dynamicconfig.Key, value any) {
 	d.Lock()
 	defer d.Unlock()
 	d.overrides[name] = value
 }
 
-// newTestDCSource - returns a dynamic config source for integration testing
-func newTestDCSource(fallback dynamicconfig.Source) *dcSource {
-	return &dcSource{
+// newTestDCClient - returns a dynamic config client for integration testing
+func newTestDCClient(fallback dynamicconfig.Client) *dcClient {
+	return &dcClient{
 		overrides: maps.Clone(staticOverrides),
 		fallback:  fallback,
 	}

@@ -29,10 +29,10 @@ import (
 )
 
 type (
-	// Source is a source of dynamic configuration. The default Source, fileSource, reads from
-	// a file in the filesystem, and refreshes it periodically. You can extend the server with
-	// an alternate Source using ServerOptions.
-	Source interface {
+	// Client is a source of dynamic configuration. The default Client, fileBasedClient, reads
+	// from a file in the filesystem, and refreshes it periodically. You can extend the server
+	// with an alternate Client using ServerOptions.
+	Client interface {
 		// GetValue returns a set of values and associated constraints for a key. Not all
 		// constraints are valid for all keys.
 		//

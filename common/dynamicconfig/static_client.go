@@ -27,12 +27,12 @@ package dynamicconfig
 import "go.temporal.io/server/common/log"
 
 type (
-	// StaticSource is a simple implementation of Source that just looks up in a map.
+	// StaticClient is a simple implementation of Client that just looks up in a map.
 	// Values can be either plain values or []ConstrainedValue for a constrained value.
-	StaticSource map[Key]any
+	StaticClient map[Key]any
 )
 
-func (s StaticSource) GetValue(key Key) []ConstrainedValue {
+func (s StaticClient) GetValue(key Key) []ConstrainedValue {
 	if v, ok := s[key]; ok {
 		if cvs, ok := v.([]ConstrainedValue); ok {
 			return cvs
@@ -42,13 +42,13 @@ func (s StaticSource) GetValue(key Key) []ConstrainedValue {
 	return nil
 }
 
-// NewNoopSource returns a Source that has no keys (a Collection using it will always return
+// NewNoopClient returns a Client that has no keys (a Collection using it will always return
 // default values).
-func NewNoopSource() Source {
-	return StaticSource(nil)
+func NewNoopClient() Client {
+	return StaticClient(nil)
 }
 
 // NewNoopCollection creates a new noop collection.
 func NewNoopCollection() *Collection {
-	return NewCollection(NewNoopSource(), log.NewNoopLogger())
+	return NewCollection(NewNoopClient(), log.NewNoopLogger())
 }
