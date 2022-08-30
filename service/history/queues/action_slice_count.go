@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	targetThresholdCoefficient = 0.8
+	targetLoadFactor = 0.8
 )
 
 type (
@@ -78,7 +78,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 	}
 
 	// have to compact (force merge) slices to reduce slice count
-	preferredSliceCount := int(float64(a.attributes.CriticalSliceCount) * targetThresholdCoefficient)
+	preferredSliceCount := int(float64(a.attributes.CriticalSliceCount) * targetLoadFactor)
 	numSliceToCompact := currentSliceCount - preferredSliceCount
 
 	// find compact candidates by calculating distance between two slices
