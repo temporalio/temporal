@@ -198,7 +198,7 @@ func NewTemporal(params *TemporalParams) *temporalImpl {
 }
 
 func (c *temporalImpl) enableWorker() bool {
-	return c.workerConfig.EnableArchiver || c.workerConfig.EnableReplicator
+	return c.workerConfig.StartWorkerAnyway || c.workerConfig.EnableArchiver || c.workerConfig.EnableReplicator
 }
 
 func (c *temporalImpl) Start() error {

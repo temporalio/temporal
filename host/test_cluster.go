@@ -89,9 +89,10 @@ type (
 
 	// WorkerConfig is the config for enabling/disabling Temporal worker
 	WorkerConfig struct {
-		EnableArchiver   bool
-		EnableIndexer    bool
-		EnableReplicator bool
+		EnableArchiver    bool
+		EnableIndexer     bool
+		EnableReplicator  bool
+		StartWorkerAnyway bool
 	}
 )
 
