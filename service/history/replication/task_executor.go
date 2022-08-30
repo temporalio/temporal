@@ -28,6 +28,7 @@ package replication
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -48,7 +49,7 @@ import (
 
 type (
 	TaskExecutor interface {
-		Execute(ctx context.Context, replicationTask *replicationspb.ReplicationTask, forceApply bool) (int, error)
+		Execute(ctx context.Context, replicationTask *replicationspb.ReplicationTask, forceApply bool) (string, error)
 	}
 
 	TaskExecutorParams struct {
@@ -71,7 +72,7 @@ type (
 		historyEngine      shard.Engine
 		deleteManager      workflow.DeleteManager
 		workflowCache      workflow.Cache
-		metricsClient      metrics.Client
+		metricsHandler     metrics.Handler
 		logger             log.Logger
 	}
 )
@@ -95,7 +96,7 @@ func NewTaskExecutor(
 		historyEngine:      historyEngine,
 		deleteManager:      deleteManager,
 		workflowCache:      workflowCache,
-		metricsClient:      shard.GetMetricsClient(),
+		metricsHandler:     shard.GetMetricsHandler(),
 		logger:             shard.GetLogger(),
 	}
 }
@@ -104,32 +105,32 @@ func (e *taskExecutorImpl) Execute(
 	ctx context.Context,
 	replicationTask *replicationspb.ReplicationTask,
 	forceApply bool,
-) (int, error) {
+) (string, error) {
 	var err error
-	var scope int
+	var operation string
 	switch replicationTask.GetTaskType() {
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_SHARD_STATUS_TASK:
 		// Shard status will be sent as part of the Replication message without kafka
-		scope = metrics.SyncShardTaskScope
+		operation = metrics.SyncShardTaskOperation
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
-		scope = metrics.SyncActivityTaskScope
+		operation = metrics.SyncActivityTaskOperation
 		err = e.handleActivityTask(ctx, replicationTask, forceApply)
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_METADATA_TASK:
 		// Without kafka we should not have size limits so we don't necessary need this in the new replication scheme.
-		scope = metrics.HistoryMetadataReplicationTaskScope
+		operation = metrics.HistoryMetadataReplicationTaskOperation
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
-		scope = metrics.HistoryReplicationTaskScope
+		operation = metrics.HistoryReplicationTaskOperation
 		err = e.handleHistoryReplicationTask(ctx, replicationTask, forceApply)
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
-		scope = metrics.SyncWorkflowStateTaskScope
+		operation = metrics.SyncWorkflowStateTaskOperation
 		err = e.handleSyncWorkflowStateTask(ctx, replicationTask, forceApply)
 	default:
 		e.logger.Error("Unknown task type.")
-		scope = metrics.ReplicatorScope
+		operation = metrics.ReplicatorOperation
 		err = ErrUnknownReplicationTask
 	}
 
-	return scope, err
+	return operation, err
 }
 
 func (e *taskExecutorImpl) handleActivityTask(
@@ -144,8 +145,13 @@ func (e *taskExecutorImpl) handleActivityTask(
 		return err
 	}
 
-	replicationStopWatch := e.metricsClient.StartTimer(metrics.SyncActivityTaskScope, metrics.ServiceLatency)
-	defer replicationStopWatch.Stop()
+	start := time.Now()
+	defer func() {
+		e.metricsHandler.Timer(metrics.ServiceLatency.MetricName.String()).Record(
+			time.Since(start),
+			metrics.OperationTag(metrics.SyncActivityTaskOperation),
+		)
+	}()
 
 	request := &historyservice.SyncActivityRequest{
 		NamespaceId:        attr.NamespaceId,
@@ -172,9 +178,12 @@ func (e *taskExecutorImpl) handleActivityTask(
 		return nil
 
 	case *serviceerrors.RetryReplication:
-		e.metricsClient.IncCounter(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientRequests)
-		stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientLatency)
-		defer stopwatch.Stop()
+		scope := e.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationOperation))
+		scope.Counter(metrics.ClientRequests.MetricName.String()).Record(1)
+		replicationTime := time.Now()
+		defer func() {
+			scope.Timer(metrics.ClientLatency.MetricName.String()).Record(time.Since(replicationTime))
+		}()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
 			ctx,
@@ -216,8 +225,13 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		return err
 	}
 
-	replicationStopWatch := e.metricsClient.StartTimer(metrics.HistoryReplicationTaskScope, metrics.ServiceLatency)
-	defer replicationStopWatch.Stop()
+	start := time.Now()
+	defer func() {
+		e.metricsHandler.Timer(metrics.ServiceLatency.MetricName.String()).Record(
+			time.Since(start),
+			metrics.OperationTag(metrics.HistoryReplicationTaskOperation),
+		)
+	}()
 
 	request := &historyservice.ReplicateEventsV2Request{
 		NamespaceId: attr.NamespaceId,
@@ -239,9 +253,12 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		return nil
 
 	case *serviceerrors.RetryReplication:
-		e.metricsClient.IncCounter(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientRequests)
-		resendStopWatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
-		defer resendStopWatch.Stop()
+		scope := e.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationOperation))
+		scope.Counter(metrics.ClientRequests.MetricName.String()).Record(1)
+		replicationTime := time.Now()
+		defer func() {
+			scope.Timer(metrics.ClientLatency.MetricName.String()).Record(time.Since(replicationTime))
+		}()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
 			ctx,

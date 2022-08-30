@@ -42,7 +42,7 @@ type (
 	}
 )
 
-var _ MetricsHandler = (*tallyMetricsHandler)(nil)
+var _ Handler = (*tallyMetricsHandler)(nil)
 
 func NewTallyMetricsHandler(cfg ClientConfig, scope tally.Scope) *tallyMetricsHandler {
 	perUnitBuckets := make(map[MetricUnit]tally.Buckets)
@@ -58,9 +58,9 @@ func NewTallyMetricsHandler(cfg ClientConfig, scope tally.Scope) *tallyMetricsHa
 	}
 }
 
-// WithTags creates a new MetricProvder with provided []Tag
+// WithTags creates a new metric handler with provided []Tag
 // Tags are merged with registered Tags from the source MetricsHandler
-func (tmp *tallyMetricsHandler) WithTags(tags ...Tag) MetricsHandler {
+func (tmp *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
 	return &tallyMetricsHandler{
 		scope:          tmp.scope.Tagged(tagsToMap(tags, tmp.excludeTags)),
 		perUnitBuckets: tmp.perUnitBuckets,

@@ -66,7 +66,7 @@ func newTransferQueueStandbyProcessor(
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueStandbyProcessorImpl {
 	config := shard.GetConfig()
@@ -78,7 +78,7 @@ func newTransferQueueStandbyProcessor(
 		UpdateAckIntervalJitterCoefficient: config.TransferProcessorUpdateAckIntervalJitterCoefficient,
 		MaxReschdulerSize:                  config.TransferProcessorMaxReschedulerSize,
 		PollBackoffInterval:                config.TransferProcessorPollBackoffInterval,
-		MetricScope:                        metrics.TransferStandbyQueueProcessorScope,
+		Operation:                          metrics.TransferStandbyQueueProcessorOperation,
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
 
@@ -138,7 +138,7 @@ func newTransferQueueStandbyProcessor(
 			logger,
 		),
 		logger,
-		metricProvider,
+		metricsHandler,
 		clusterName,
 		matchingClient,
 	)
@@ -152,7 +152,7 @@ func newTransferQueueStandbyProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationTransferStandbyQueueProcessor)),
+		metricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferStandbyQueueProcessor)),
 	)
 
 	queueAckMgr := newQueueAckMgr(

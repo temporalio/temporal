@@ -76,7 +76,7 @@ type (
 		processor                Processor
 		processorAckTimeout      dynamicconfig.DurationPropertyFn
 		disableOrderByClause     dynamicconfig.BoolPropertyFn
-		metricsClient            metrics.Client
+		metricsHandler           metrics.Handler
 	}
 
 	visibilityPageToken struct {
@@ -105,7 +105,7 @@ func NewVisibilityStore(
 	processor Processor,
 	processorAckTimeout dynamicconfig.DurationPropertyFn,
 	disableOrderByClause dynamicconfig.BoolPropertyFn,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 ) *visibilityStore {
 
 	return &visibilityStore{
@@ -116,7 +116,7 @@ func NewVisibilityStore(
 		processor:                processor,
 		processorAckTimeout:      processorAckTimeout,
 		disableOrderByClause:     disableOrderByClause,
-		metricsClient:            metricsClient,
+		metricsHandler:           metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibilityOperation)),
 	}
 }
 
@@ -834,13 +834,13 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentGenerateFailuresCount)
+		s.metricsHandler.Counter(metrics.ElasticsearchDocumentGenerateFailuresCount.MetricName.String()).Record(1)
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 
 	searchAttributes, err := searchattribute.Decode(request.SearchAttributes, &typeMap)
 	if err != nil {
-		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentGenerateFailuresCount)
+		s.metricsHandler.Counter(metrics.ElasticsearchDocumentGenerateFailuresCount.MetricName.String()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to decode search attributes: %v", err))
 	}
 	for saName, saValue := range searchAttributes {
@@ -857,7 +857,7 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 
 func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap, namespace namespace.Name) (*store.InternalWorkflowExecutionInfo, error) {
 	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) error {
-		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
+		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.MetricName.String()).Record(1)
 		return serviceerror.NewInternal(fmt.Sprintf("Unable to parse Elasticsearch document(%s) %q field value %q: %v", docID, fieldName, fieldValue, err))
 	}
 
@@ -866,7 +866,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 	// Very important line. See finishParseJSONValue bellow.
 	d.UseNumber()
 	if err := d.Decode(&sourceMap); err != nil {
-		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
+		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.MetricName.String()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to unmarshal JSON from Elasticsearch document(%s): %v", hit.Id, err))
 	}
 
@@ -907,7 +907,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 			if errors.Is(err, searchattribute.ErrInvalidName) {
 				continue
 			}
-			s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
+			s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.MetricName.String()).Record(1)
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to get type for Elasticsearch document(%s) field %q: %v", hit.Id, fieldName, err))
 		}
 
@@ -950,7 +950,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		var err error
 		record.SearchAttributes, err = searchattribute.Encode(customSearchAttributes, &saTypeMap)
 		if err != nil {
-			s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
+			s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.MetricName.String()).Record(1)
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to encode custom search attributes of Elasticsearch document(%s): %v", hit.Id, err))
 		}
 		err = searchattribute.ApplyAliases(s.searchAttributesMapper, record.SearchAttributes, namespace.String())
@@ -962,7 +962,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 	if memoEncoding != "" {
 		record.Memo = persistence.NewDataBlob(memo, memoEncoding)
 	} else if memo != nil {
-		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
+		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.MetricName.String()).Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf("%q field is missing in Elasticsearch document(%s)", searchattribute.MemoEncoding, hit.Id))
 	}
 

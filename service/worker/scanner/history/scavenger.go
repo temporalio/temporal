@@ -58,13 +58,13 @@ type (
 
 	// Scavenger is the type that holds the state for history scavenger daemon
 	Scavenger struct {
-		numShards   int32
-		db          persistence.ExecutionManager
-		client      historyservice.HistoryServiceClient
-		rateLimiter quotas.RateLimiter
-		metrics     metrics.Client
-		logger      log.Logger
-		isInTest    bool
+		numShards      int32
+		db             persistence.ExecutionManager
+		client         historyservice.HistoryServiceClient
+		rateLimiter    quotas.RateLimiter
+		metricsHandler metrics.Handler
+		logger         log.Logger
+		isInTest       bool
 		// only clean up history branches that older than this age
 		// Our history archiver delete mutable state, and then upload history to blob store and then delete history.
 		historyDataMinAge dynamicconfig.DurationPropertyFn
@@ -103,10 +103,11 @@ func NewScavenger(
 	client historyservice.HistoryServiceClient,
 	hbd ScavengerHeartbeatDetails,
 	historyDataMinAge dynamicconfig.DurationPropertyFn,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *Scavenger {
 
+	mHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryScavengerOperation))
 	return &Scavenger{
 		numShards: numShards,
 		db:        db,
@@ -115,7 +116,7 @@ func NewScavenger(
 			func() float64 { return float64(rps) },
 		),
 		historyDataMinAge: historyDataMinAge,
-		metrics:           metricsClient,
+		metricsHandler:    mHandler,
 		logger:            logger,
 
 		hbd: hbd,
@@ -215,8 +216,7 @@ func (s *Scavenger) filterTask(
 ) *taskDetail {
 
 	if time.Now().UTC().Add(-s.historyDataMinAge()).Before(timestamp.TimeValue(branch.ForkTime)) {
-		s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerSkipCount)
-
+		s.metricsHandler.Counter(metrics.HistoryScavengerSkipCount.MetricName.String()).Record(1)
 		s.Lock()
 		defer s.Unlock()
 		s.hbd.SkipCount++
@@ -226,8 +226,7 @@ func (s *Scavenger) filterTask(
 	namespaceID, workflowID, runID, err := persistence.SplitHistoryGarbageCleanupInfo(branch.Info)
 	if err != nil {
 		s.logger.Error("unable to parse the history cleanup info", tag.DetailInfo(branch.Info))
-		s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerErrorCount)
-
+		s.metricsHandler.Counter(metrics.HistoryScavengerErrorCount.MetricName.String()).Record(1)
 		s.Lock()
 		defer s.Unlock()
 		s.hbd.ErrorCount++
@@ -294,12 +293,12 @@ func (s *Scavenger) handleErr(
 	s.Lock()
 	defer s.Unlock()
 	if err != nil {
-		s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerErrorCount)
+		s.metricsHandler.Counter(metrics.HistoryScavengerErrorCount.MetricName.String()).Record(1)
 		s.hbd.ErrorCount++
 		return
 	}
 
-	s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerSuccessCount)
+	s.metricsHandler.Counter(metrics.HistoryScavengerSuccessCount.MetricName.String()).Record(1)
 	s.hbd.SuccessCount++
 }
 

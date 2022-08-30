@@ -84,7 +84,7 @@ type (
 		ratelimiter    quotas.RateLimiter
 		monitor        Monitor
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 
 		status     int32
 		shutdownCh chan struct{}
@@ -109,7 +109,7 @@ func NewReader(
 	ratelimiter quotas.RateLimiter,
 	monitor Monitor,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *ReaderImpl {
 
 	sliceList := list.New()

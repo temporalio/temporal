@@ -68,7 +68,7 @@ func newTimerQueueStandbyProcessor(
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *timerQueueStandbyProcessorImpl {
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(clusterName)
@@ -115,7 +115,7 @@ func newTimerQueueStandbyProcessor(
 		),
 		matchingClient,
 		logger,
-		metricProvider,
+		metricsHandler,
 		clusterName,
 		config,
 	)
@@ -133,11 +133,11 @@ func newTimerQueueStandbyProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationTimerStandbyQueueProcessor)),
+		metricsHandler.WithTags(metrics.OperationTag(queues.OperationTimerStandbyQueueProcessor)),
 	)
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
-		metrics.TimerStandbyQueueProcessorScope,
+		metrics.TimerStandbyQueueProcessorOperation,
 		shard,
 		shard.GetQueueClusterAckLevel(tasks.CategoryTimer, clusterName).FireTime,
 		timeNow,
@@ -163,7 +163,7 @@ func newTimerQueueStandbyProcessor(
 	)
 
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
-		metrics.TimerStandbyQueueProcessorScope,
+		metrics.TimerStandbyQueueProcessorOperation,
 		shard,
 		workflowCache,
 		processor,

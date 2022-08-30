@@ -107,19 +107,22 @@ func (v *visibilityArchiver) Archive(
 	request *archiverspb.VisibilityRecord,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
-	scope := v.container.MetricsClient.Scope(metrics.VisibilityArchiverScope, metrics.NamespaceTag(request.Namespace))
+	mHandler := v.container.MetricsHandler.WithTags(
+		metrics.OperationTag(metrics.VisibilityArchiverOperation),
+		metrics.NamespaceTag(request.Namespace),
+	)
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
-	sw := scope.StartTimer(metrics.ServiceLatency)
+	startTime := time.Now()
 	logger := archiver.TagLoggerWithArchiveVisibilityRequestAndURI(v.container.Logger, request, URI.String())
 	archiveFailReason := ""
 	defer func() {
-		sw.Stop()
+		mHandler.Timer(metrics.ServiceLatency.MetricName.String()).Record(time.Since(startTime))
 		if err != nil {
 			if isRetryableError(err) {
-				scope.IncCounter(metrics.VisibilityArchiverArchiveTransientErrorCount)
+				mHandler.Counter(metrics.VisibilityArchiverArchiveTransientErrorCount.MetricName.String()).Record(1)
 				logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(archiveFailReason), tag.Error(err))
 			} else {
-				scope.IncCounter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount)
+				mHandler.Counter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount.MetricName.String()).Record(1)
 				logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiveFailReason), tag.Error(err))
 				if featureCatalog.NonRetryableError != nil {
 					err = featureCatalog.NonRetryableError()
@@ -152,7 +155,7 @@ func (v *visibilityArchiver) Archive(
 			return err
 		}
 	}
-	scope.IncCounter(metrics.VisibilityArchiveSuccessCount)
+	mHandler.Counter(metrics.VisibilityArchiveSuccessCount.MetricName.String()).Record(1)
 	return nil
 }
 func createIndexesToArchive(request *archiverspb.VisibilityRecord) []indexToArchive {

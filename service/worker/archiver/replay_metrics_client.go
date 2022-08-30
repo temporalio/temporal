@@ -25,145 +25,59 @@
 package archiver
 
 import (
-	"time"
-
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/log"
 
 	"go.temporal.io/server/common/metrics"
 )
 
 type (
-	replayMetricsClient struct {
-		client metrics.Client
-		ctx    workflow.Context
-	}
-
-	replayMetricsScope struct {
-		scope metrics.Scope
-		ctx   workflow.Context
+	replayMetricsHandler struct {
+		metricsHandler metrics.Handler
+		ctx            workflow.Context
 	}
 )
 
-// NewReplayMetricsClient creates a metrics client which is aware of temporal's replay mode
-func NewReplayMetricsClient(client metrics.Client, ctx workflow.Context) metrics.Client {
-	return &replayMetricsClient{
-		client: client,
-		ctx:    ctx,
+// NewReplayMetricsHandler creates a metrics handler which is aware of temporal's replay mode
+func NewReplayMetricsHandler(metricsHandler metrics.Handler, ctx workflow.Context) metrics.Handler {
+	return &replayMetricsHandler{
+		metricsHandler: metricsHandler,
+		ctx:            ctx,
 	}
 }
 
-// IncCounter increments a counter metric
-func (r *replayMetricsClient) IncCounter(scope int, counter int) {
+func (r *replayMetricsHandler) WithTags(tag ...metrics.Tag) metrics.Handler {
+	return NewReplayMetricsHandler(r.metricsHandler.WithTags(tag...), r.ctx)
+}
+
+func (r *replayMetricsHandler) Counter(metricsName string) metrics.CounterMetric {
 	if workflow.IsReplaying(r.ctx) {
-		return
+		return metrics.NoopMetricsCounter
 	}
-	r.client.IncCounter(scope, counter)
+	return r.metricsHandler.Counter(metricsName)
 }
 
-// AddCounter adds delta to the counter metric
-func (r *replayMetricsClient) AddCounter(scope int, counter int, delta int64) {
+func (r *replayMetricsHandler) Gauge(metricsName string) metrics.GaugeMetric {
 	if workflow.IsReplaying(r.ctx) {
-		return
+		return metrics.NoopMetricsGauge
 	}
-	r.client.AddCounter(scope, counter, delta)
+	return r.metricsHandler.Gauge(metricsName)
 }
 
-// StartTimer starts a timer for the given metric name. Time will be recorded when stopwatch is stopped.
-func (r *replayMetricsClient) StartTimer(scope int, timer int) metrics.Stopwatch {
+func (r *replayMetricsHandler) Timer(metricsName string) metrics.TimerMetric {
 	if workflow.IsReplaying(r.ctx) {
-		return metrics.NoopStopwatch
+		return metrics.NoopMetricsTimer
 	}
-	return r.client.StartTimer(scope, timer)
+	return r.metricsHandler.Timer(metricsName)
 }
 
-// RecordTimer starts a timer for the given metric name
-func (r *replayMetricsClient) RecordTimer(scope int, timer int, d time.Duration) {
+func (r *replayMetricsHandler) Histogram(metricsName string, unit metrics.MetricUnit) metrics.HistogramMetric {
 	if workflow.IsReplaying(r.ctx) {
-		return
+		return metrics.NoopHistogram
 	}
-	r.client.RecordTimer(scope, timer, d)
+	return r.metricsHandler.Histogram(metricsName, unit)
 }
 
-// RecordDistribution record and emit a distribution (wrapper on top of timer) for the given
-// metric name
-func (r *replayMetricsClient) RecordDistribution(scope int, timer int, d int) {
-	if workflow.IsReplaying(r.ctx) {
-		return
-	}
-	r.client.RecordDistribution(scope, timer, d)
-}
-
-// UpdateGauge reports Gauge type absolute value metric
-func (r *replayMetricsClient) UpdateGauge(scope int, gauge int, value float64) {
-	if workflow.IsReplaying(r.ctx) {
-		return
-	}
-	r.client.UpdateGauge(scope, gauge, value)
-}
-
-// Scope returns a client that adds the given tags to all metrics
-func (r *replayMetricsClient) Scope(scope int, tags ...metrics.Tag) metrics.Scope {
-	return NewReplayMetricsScope(r.client.Scope(scope, tags...), r.ctx)
-}
-
-// NewReplayMetricsScope creates a metrics scope which is aware of temporal's replay mode
-func NewReplayMetricsScope(scope metrics.Scope, ctx workflow.Context) metrics.Scope {
-	return &replayMetricsScope{
-		scope: scope,
-		ctx:   ctx,
-	}
-}
-
-// IncCounter increments a counter metric
-func (r *replayMetricsScope) IncCounter(counter int) {
-	if workflow.IsReplaying(r.ctx) {
-		return
-	}
-	r.scope.IncCounter(counter)
-}
-
-// AddCounter adds delta to the counter metric
-func (r *replayMetricsScope) AddCounter(counter int, delta int64) {
-	if workflow.IsReplaying(r.ctx) {
-		return
-	}
-	r.scope.AddCounter(counter, delta)
-}
-
-// StartTimer starts a timer for the given metric name. Time will be recorded when stopwatch is stopped.
-func (r *replayMetricsScope) StartTimer(timer int) metrics.Stopwatch {
-	if workflow.IsReplaying(r.ctx) {
-		return metrics.NoopStopwatch
-	}
-	return r.scope.StartTimer(timer)
-}
-
-// RecordTimer starts a timer for the given metric name
-func (r *replayMetricsScope) RecordTimer(timer int, d time.Duration) {
-	if workflow.IsReplaying(r.ctx) {
-		return
-	}
-	r.scope.RecordTimer(timer, d)
-}
-
-// RecordDistribution records a distribution (wrapper on top of timer) for the given
-// metric name
-func (r *replayMetricsScope) RecordDistribution(timer int, d int) {
-	if workflow.IsReplaying(r.ctx) {
-		return
-	}
-	r.scope.RecordDistribution(timer, d)
-}
-
-// UpdateGauge reports Gauge type absolute value metric
-func (r *replayMetricsScope) UpdateGauge(gauge int, value float64) {
-	if workflow.IsReplaying(r.ctx) {
-		return
-	}
-	r.scope.UpdateGauge(gauge, value)
-}
-
-// Tagged return an internal replay aware scope that can be used to add additional information to metrics
-func (r *replayMetricsScope) Tagged(tags ...metrics.Tag) metrics.Scope {
-	return NewReplayMetricsScope(r.scope.Tagged(tags...), r.ctx)
+func (r *replayMetricsHandler) Stop(logger log.Logger) {
+	r.metricsHandler.Stop(logger)
 }

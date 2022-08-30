@@ -99,7 +99,7 @@ type (
 		replicationProcessorMgr    common.Daemon
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
-		metricsClient              metrics.Client
+		metricsHandler             metrics.Handler
 		logger                     log.Logger
 		throttledLogger            log.Logger
 		config                     *configs.Config
@@ -159,7 +159,7 @@ func NewEngineWithShardContext(
 		tokenSerializer:            common.NewProtoTaskTokenSerializer(),
 		logger:                     log.With(logger, tag.ComponentHistoryEngine),
 		throttledLogger:            log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
-		metricsClient:              shard.GetMetricsClient(),
+		metricsHandler:             shard.GetMetricsHandler(),
 		eventNotifier:              eventNotifier,
 		config:                     config,
 		sdkClientFactory:           sdkClientFactory,
@@ -177,7 +177,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
-	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
+	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsHandler(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
@@ -417,7 +417,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	namespaceID := namespaceEntry.ID()
 
 	request := startRequest.StartRequest
-	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, e.shard, e.metricsClient)
+	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionOperation, e.shard, e.metricsHandler)
 	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, e.shard, namespaceEntry, "StartWorkflowExecution")
 	if err != nil {
 		return nil, err
@@ -709,7 +709,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 	request *historyservice.QueryWorkflowRequest,
 ) (_ *historyservice.QueryWorkflowResponse, retErr error) {
 
-	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
+	scope := e.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryQueryWorkflowOperation))
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
@@ -797,11 +797,13 @@ func (e *historyEngineImpl) QueryWorkflow(
 
 	// If we get here it means query could not be dispatched through matching directly, so it must block
 	// until either an result has been obtained on a workflow task response or until it is safe to dispatch directly through matching.
-	sw := scope.StartTimer(metrics.WorkflowTaskQueryLatency)
-	defer sw.Stop()
+	start := time.Now()
+	defer func() {
+		scope.Timer(metrics.WorkflowTaskQueryLatency.MetricName.String()).Record(time.Since(start))
+	}()
 	queryReg := mutableState.GetQueryRegistry()
 	if len(queryReg.GetBufferedIDs()) >= e.config.MaxBufferedQueryCount() {
-		scope.IncCounter(metrics.QueryBufferExceededCount)
+		scope.Counter(metrics.QueryBufferExceededCount.MetricName.String()).Record(1)
 		return nil, consts.ErrConsistentQueryBufferExceeded
 	}
 	queryID, completionCh := queryReg.BufferQuery(req.GetQuery())
@@ -811,7 +813,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 	case <-completionCh:
 		completionState, err := queryReg.GetCompletionState(queryID)
 		if err != nil {
-			scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
+			scope.Counter(metrics.QueryRegistryInvalidStateCount.MetricName.String()).Record(1)
 			return nil, err
 		}
 		switch completionState.Type {
@@ -827,7 +829,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 			case enumspb.QUERY_RESULT_TYPE_FAILED:
 				return nil, serviceerror.NewQueryFailed(result.GetErrorMessage())
 			default:
-				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
+				scope.Counter(metrics.QueryRegistryInvalidStateCount.MetricName.String()).Record(1)
 				return nil, consts.ErrQueryEnteredInvalidState
 			}
 		case workflow.QueryCompletionTypeUnblocked:
@@ -840,11 +842,11 @@ func (e *historyEngineImpl) QueryWorkflow(
 		case workflow.QueryCompletionTypeFailed:
 			return nil, completionState.Err
 		default:
-			scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
+			scope.Counter(metrics.QueryRegistryInvalidStateCount.MetricName.String()).Record(1)
 			return nil, consts.ErrQueryEnteredInvalidState
 		}
 	case <-ctx.Done():
-		scope.IncCounter(metrics.ConsistentQueryTimeoutCount)
+		scope.Counter(metrics.ConsistentQueryTimeoutCount.MetricName.String()).Record(1)
 		return nil, ctx.Err()
 	}
 }
@@ -854,11 +856,13 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 	msResp *historyservice.GetMutableStateResponse,
 	namespaceID string,
 	queryRequest *workflowservice.QueryWorkflowRequest,
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 ) (*historyservice.QueryWorkflowResponse, error) {
 
-	sw := scope.StartTimer(metrics.DirectQueryDispatchLatency)
-	defer sw.Stop()
+	start := time.Now()
+	defer func() {
+		metricsHandler.Timer(metrics.DirectQueryDispatchLatency.MetricName.String()).Record(time.Since(start))
+	}()
 
 	if msResp.GetIsStickyTaskQueueEnabled() &&
 		len(msResp.GetStickyTaskQueue().GetName()) != 0 &&
@@ -873,12 +877,12 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		// using a clean new context in case customer provide a context which has
 		// a really short deadline, causing we clear the stickiness
 		stickyContext, cancel := context.WithTimeout(context.Background(), timestamp.DurationValue(msResp.GetStickyTaskQueueScheduleToStartTimeout()))
-		stickyStopWatch := scope.StartTimer(metrics.DirectQueryDispatchStickyLatency)
+		stickyQueueLatency := time.Now()
 		matchingResp, err := e.rawMatchingClient.QueryWorkflow(stickyContext, stickyMatchingRequest)
-		stickyStopWatch.Stop()
+		metricsHandler.Timer(metrics.DirectQueryDispatchStickyLatency.MetricName.String()).Record(time.Since(stickyQueueLatency))
 		cancel()
 		if err == nil {
-			scope.IncCounter(metrics.DirectQueryDispatchStickySuccessCount)
+			metricsHandler.Counter(metrics.DirectQueryDispatchStickySuccessCount.MetricName.String()).Record(1)
 			return &historyservice.QueryWorkflowResponse{
 				Response: &workflowservice.QueryWorkflowResponse{
 					QueryResult:   matchingResp.GetQueryResult(),
@@ -890,22 +894,22 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		}
 		if msResp.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			resetContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			clearStickinessStopWatch := scope.StartTimer(metrics.DirectQueryDispatchClearStickinessLatency)
+			clearStickinessLatency := time.Now()
 			_, err := e.ResetStickyTaskQueue(resetContext, &historyservice.ResetStickyTaskQueueRequest{
 				NamespaceId: namespaceID,
 				Execution:   queryRequest.GetExecution(),
 			})
-			clearStickinessStopWatch.Stop()
+			metricsHandler.Timer(metrics.DirectQueryDispatchClearStickinessLatency.MetricName.String()).Record(time.Since(clearStickinessLatency))
 			cancel()
 			if err != nil && err != consts.ErrWorkflowCompleted {
 				return nil, err
 			}
-			scope.IncCounter(metrics.DirectQueryDispatchClearStickinessSuccessCount)
+			metricsHandler.Counter(metrics.DirectQueryDispatchClearStickinessSuccessCount.MetricName.String()).Record(1)
 		}
 	}
 
 	if err := common.IsValidContext(ctx); err != nil {
-		scope.IncCounter(metrics.DirectQueryDispatchTimeoutBeforeNonStickyCount)
+		metricsHandler.Counter(metrics.DirectQueryDispatchTimeoutBeforeNonStickyCount.MetricName.String()).Record(1)
 		return nil, err
 	}
 
@@ -915,13 +919,13 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		TaskQueue:    msResp.TaskQueue,
 	}
 
-	nonStickyStopWatch := scope.StartTimer(metrics.DirectQueryDispatchNonStickyLatency)
+	nonStickyQueueLatency := time.Now()
 	matchingResp, err := e.matchingClient.QueryWorkflow(ctx, nonStickyMatchingRequest)
-	nonStickyStopWatch.Stop()
+	metricsHandler.Timer(metrics.DirectQueryDispatchNonStickyLatency.MetricName.String()).Record(time.Since(nonStickyQueueLatency))
 	if err != nil {
 		return nil, err
 	}
-	scope.IncCounter(metrics.DirectQueryDispatchNonStickySuccessCount)
+	metricsHandler.Counter(metrics.DirectQueryDispatchNonStickySuccessCount.MetricName.String()).Record(1)
 	return &historyservice.QueryWorkflowResponse{
 		Response: &workflowservice.QueryWorkflowResponse{
 			QueryResult:   matchingResp.GetQueryResult(),
@@ -1269,12 +1273,12 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			requestID := request.GetRequestId()
 			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
 
-			metricsScope := e.metricsClient.Scope(metrics.HistoryRecordActivityTaskStartedScope)
+			metricsScope := e.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRecordActivityTaskStartedOperation))
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				metricsScope.IncCounter(metrics.StaleMutableStateCounter)
+				metricsScope.Counter(metrics.StaleMutableStateCounter.MetricName.String()).Record(1)
 				return nil, consts.ErrStaleState
 			}
 
@@ -1319,13 +1323,13 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			namespaceName := namespaceEntry.Name()
 			taskQueueName := ai.GetTaskQueue()
 
-			metrics.GetPerTaskQueueScope(
+			mHandler := metrics.GetPerTaskQueueTags(
 				metricsScope,
 				namespaceName.String(),
 				taskQueueName,
 				enumspb.TASK_QUEUE_KIND_NORMAL,
-			).Tagged(metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY)).
-				RecordTimer(metrics.TaskScheduleToStartLatency, scheduleToStartLatency)
+			).WithTags(metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
+			mHandler.Timer(metrics.TaskScheduleToStartLatency.MetricName.String()).Record(scheduleToStartLatency)
 
 			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt
@@ -1437,7 +1441,10 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskCompletedScope, metrics.StaleMutableStateCounter)
+				e.metricsHandler.Counter(metrics.StaleMutableStateCounter.MetricName.String()).Record(
+					1,
+					metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedOperation),
+				)
 				return nil, consts.ErrStaleState
 			}
 
@@ -1459,14 +1466,14 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 		})
 
 	if err == nil && !activityStartedTime.IsZero() {
-		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskCompletedScope).
-			Tagged(
-				metrics.NamespaceTag(namespace.String()),
-				metrics.WorkflowTypeTag(workflowTypeName),
-				metrics.ActivityTypeTag(token.ActivityType),
-				metrics.TaskQueueTag(taskQueue),
-			)
-		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
+		scope := e.metricsHandler.WithTags(
+			metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedOperation),
+			metrics.NamespaceTag(namespace.String()),
+			metrics.WorkflowTypeTag(workflowTypeName),
+			metrics.ActivityTypeTag(token.ActivityType),
+			metrics.TaskQueueTag(taskQueue),
+		)
+		scope.Timer(metrics.ActivityE2ELatency.MetricName.String()).Record(time.Since(activityStartedTime))
 	}
 	return err
 }
@@ -1523,7 +1530,10 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskFailedScope, metrics.StaleMutableStateCounter)
+				e.metricsHandler.Counter(metrics.StaleMutableStateCounter.MetricName.String()).Record(
+					1,
+					metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedOperation),
+				)
 				return nil, consts.ErrStaleState
 			}
 
@@ -1564,14 +1574,14 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			return postActions, nil
 		})
 	if err == nil && !activityStartedTime.IsZero() {
-		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskFailedScope).
-			Tagged(
-				metrics.NamespaceTag(namespace.String()),
-				metrics.WorkflowTypeTag(workflowTypeName),
-				metrics.ActivityTypeTag(token.ActivityType),
-				metrics.TaskQueueTag(taskQueue),
-			)
-		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
+		scope := e.metricsHandler.WithTags(
+			metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedOperation),
+			metrics.NamespaceTag(namespace.String()),
+			metrics.WorkflowTypeTag(workflowTypeName),
+			metrics.ActivityTypeTag(token.ActivityType),
+			metrics.TaskQueueTag(taskQueue),
+		)
+		scope.Timer(metrics.ActivityE2ELatency.MetricName.String()).Record(time.Since(activityStartedTime))
 	}
 	return err
 }
@@ -1628,7 +1638,10 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskCanceledScope, metrics.StaleMutableStateCounter)
+				e.metricsHandler.Counter(metrics.StaleMutableStateCounter.MetricName.String()).Record(
+					1,
+					metrics.OperationTag(metrics.HistoryRespondActivityTaskCanceledOperation),
+				)
 				return nil, consts.ErrStaleState
 			}
 
@@ -1661,14 +1674,14 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 		})
 
 	if err == nil && !activityStartedTime.IsZero() {
-		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskCanceledScope).
-			Tagged(
-				metrics.NamespaceTag(namespace.String()),
-				metrics.WorkflowTypeTag(workflowTypeName),
-				metrics.ActivityTypeTag(token.ActivityType),
-				metrics.TaskQueueTag(taskQueue),
-			)
-		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
+		scope := e.metricsHandler.WithTags(
+			metrics.OperationTag(metrics.HistoryRespondActivityTaskCanceledOperation),
+			metrics.NamespaceTag(namespace.String()),
+			metrics.WorkflowTypeTag(workflowTypeName),
+			metrics.ActivityTypeTag(token.ActivityType),
+			metrics.TaskQueueTag(taskQueue),
+		)
+		scope.Timer(metrics.ActivityE2ELatency.MetricName.String()).Record(time.Since(activityStartedTime))
 	}
 	return err
 }
@@ -1725,7 +1738,10 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRecordActivityTaskHeartbeatScope, metrics.StaleMutableStateCounter)
+				e.metricsHandler.Counter(metrics.StaleMutableStateCounter.MetricName.String()).Record(
+					1,
+					metrics.OperationTag(metrics.HistoryRecordActivityTaskHeartbeatOperation),
+				)
 				return nil, consts.ErrStaleState
 			}
 
@@ -2692,7 +2708,10 @@ func (e *historyEngineImpl) ReapplyEvents(
 						tag.WorkflowNamespaceID(namespaceID.String()),
 						tag.WorkflowID(workflowID),
 					)
-					e.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
+					e.metricsHandler.Counter(metrics.EventReapplySkippedCount.MetricName.String()).Record(
+						1,
+						metrics.OperationTag(metrics.HistoryReapplyEventsOperation),
+					)
 					return &api.UpdateWorkflowAction{
 						Noop:               true,
 						CreateWorkflowTask: false,

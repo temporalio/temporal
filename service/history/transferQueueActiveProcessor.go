@@ -71,7 +71,7 @@ func newTransferQueueActiveProcessor(
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	singleProcessor bool,
 ) *transferQueueActiveProcessorImpl {
 	config := shard.GetConfig()
@@ -83,7 +83,7 @@ func newTransferQueueActiveProcessor(
 		UpdateAckIntervalJitterCoefficient: config.TransferProcessorUpdateAckIntervalJitterCoefficient,
 		MaxReschdulerSize:                  config.TransferProcessorMaxReschedulerSize,
 		PollBackoffInterval:                config.TransferProcessorPollBackoffInterval,
-		MetricScope:                        metrics.TransferActiveQueueProcessorScope,
+		Operation:                          metrics.TransferActiveQueueProcessorOperation,
 	}
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
@@ -127,7 +127,7 @@ func newTransferQueueActiveProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationTransferActiveQueueProcessor)),
+		metricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferActiveQueueProcessor)),
 	)
 
 	transferTaskFilter := func(task tasks.Task) bool {
@@ -139,7 +139,7 @@ func newTransferQueueActiveProcessor(
 		archivalClient,
 		sdkClientFactory,
 		logger,
-		metricProvider,
+		metricsHandler,
 		config,
 		matchingClient,
 	)
@@ -173,7 +173,7 @@ func newTransferQueueActiveProcessor(
 					logger,
 				),
 				logger,
-				metricProvider,
+				metricsHandler,
 				// note: the cluster name is for calculating time for standby tasks,
 				// here we are basically using current cluster time
 				// this field will be deprecated soon, currently exists so that
@@ -246,7 +246,7 @@ func newTransferQueueFailoverProcessor(
 	taskAllocator taskAllocator,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
@@ -257,7 +257,7 @@ func newTransferQueueFailoverProcessor(
 		UpdateAckIntervalJitterCoefficient: config.TransferProcessorUpdateAckIntervalJitterCoefficient,
 		MaxReschdulerSize:                  config.TransferProcessorMaxReschedulerSize,
 		PollBackoffInterval:                config.TransferProcessorPollBackoffInterval,
-		MetricScope:                        metrics.TransferActiveQueueProcessorScope,
+		Operation:                          metrics.TransferActiveQueueProcessorOperation,
 	}
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	failoverUUID := uuid.New()
@@ -309,7 +309,7 @@ func newTransferQueueFailoverProcessor(
 		archivalClient,
 		sdkClientFactory,
 		logger,
-		metricProvider,
+		metricsHandler,
 		config,
 		matchingClient,
 	)
@@ -323,7 +323,7 @@ func newTransferQueueFailoverProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationTransferActiveQueueProcessor)),
+		metricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferActiveQueueProcessor)),
 	)
 
 	queueAckMgr := newQueueFailoverAckMgr(

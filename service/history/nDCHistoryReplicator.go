@@ -116,7 +116,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
 		historySerializer serialization.Serializer
-		metricsClient     metrics.Client
+		metricsHandler    metrics.Handler
 		namespaceRegistry namespace.Registry
 		historyCache      workflow.Cache
 		eventsReapplier   nDCEventsReapplier
@@ -152,7 +152,7 @@ func newNDCHistoryReplicator(
 		clusterMetadata:   shard.GetClusterMetadata(),
 		executionMgr:      shard.GetExecutionManager(),
 		historySerializer: eventSerializer,
-		metricsClient:     shard.GetMetricsClient(),
+		metricsHandler:    shard.GetMetricsHandler(),
 		namespaceRegistry: shard.GetNamespaceRegistry(),
 		historyCache:      historyCache,
 		transactionMgr:    transactionMgr,
@@ -361,7 +361,10 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 			if err != nil {
 				return err
 			} else if !doContinue {
-				r.metricsClient.IncCounter(metrics.ReplicateHistoryEventsScope, metrics.DuplicateReplicationEventsCounter)
+				r.metricsHandler.Counter(metrics.DuplicateReplicationEventsCounter.MetricName.String()).Record(
+					1,
+					metrics.OperationTag(metrics.ReplicateHistoryEventsOperation),
+				)
 				return nil
 			}
 

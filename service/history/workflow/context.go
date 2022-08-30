@@ -150,13 +150,13 @@ type (
 
 type (
 	ContextImpl struct {
-		shard         shard.Context
-		workflowKey   definition.WorkflowKey
-		logger        log.Logger
-		metricsClient metrics.Client
-		timeSource    clock.TimeSource
-		config        *configs.Config
-		transaction   Transaction
+		shard          shard.Context
+		workflowKey    definition.WorkflowKey
+		logger         log.Logger
+		metricsHandler metrics.Handler
+		timeSource     clock.TimeSource
+		config         *configs.Config
+		transaction    Transaction
 
 		mutex        locks.PriorityMutex
 		MutableState MutableState
@@ -172,14 +172,14 @@ func NewContext(
 	logger log.Logger,
 ) *ContextImpl {
 	return &ContextImpl{
-		shard:         shard,
-		workflowKey:   workflowKey,
-		logger:        logger,
-		metricsClient: shard.GetMetricsClient(),
-		timeSource:    shard.GetTimeSource(),
-		config:        shard.GetConfig(),
-		mutex:         locks.NewPriorityMutex(),
-		transaction:   NewTransaction(shard),
+		shard:          shard,
+		workflowKey:    workflowKey,
+		logger:         logger,
+		metricsHandler: shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextOperation)),
+		timeSource:     shard.GetTimeSource(),
+		config:         shard.GetConfig(),
+		mutex:          locks.NewPriorityMutex(),
+		transaction:    NewTransaction(shard),
 		stats: &persistencespb.ExecutionStats{
 			HistorySize: 0,
 		},
@@ -214,7 +214,7 @@ func (c *ContextImpl) Unlock(
 }
 
 func (c *ContextImpl) Clear() {
-	c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.WorkflowContextCleared)
+	c.metricsHandler.Counter(metrics.WorkflowContextCleared.MetricName.String()).Record(1)
 	if c.MutableState != nil {
 		c.MutableState.GetQueryRegistry().Clear()
 	}
@@ -368,7 +368,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		return err
 	}
 	NotifyWorkflowSnapshotTasks(engine, newWorkflow, newMutableState.GetNamespaceEntry().ActiveClusterName())
-	emitStateTransitionCount(c.metricsClient, newMutableState)
+	emitStateTransitionCount(c.metricsHandler, newMutableState)
 
 	return nil
 }
@@ -477,9 +477,9 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}
 	}
 
-	emitStateTransitionCount(c.metricsClient, resetMutableState)
-	emitStateTransitionCount(c.metricsClient, newMutableState)
-	emitStateTransitionCount(c.metricsClient, currentMutableState)
+	emitStateTransitionCount(c.metricsHandler, resetMutableState)
+	emitStateTransitionCount(c.metricsHandler, newMutableState)
+	emitStateTransitionCount(c.metricsHandler, currentMutableState)
 
 	return nil
 }
@@ -650,13 +650,13 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 	}
 
-	emitStateTransitionCount(c.metricsClient, c.MutableState)
-	emitStateTransitionCount(c.metricsClient, newMutableState)
+	emitStateTransitionCount(c.metricsHandler, c.MutableState)
+	emitStateTransitionCount(c.metricsHandler, newMutableState)
 
 	// finally emit session stats
 	namespace := c.GetNamespace()
 	emitWorkflowHistoryStats(
-		c.metricsClient,
+		c.metricsHandler,
 		namespace,
 		int(c.GetHistorySize()),
 		int(c.MutableState.GetNextEventID()-1),
@@ -929,15 +929,15 @@ func (c *ContextImpl) enforceSizeCheck(
 }
 
 func emitStateTransitionCount(
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	mutableState MutableState,
 ) {
 	if mutableState == nil {
 		return
 	}
 
-	metricsClient.Scope(
-		metrics.WorkflowContextScope,
-		metrics.NamespaceTag(mutableState.GetNamespaceEntry().Name().String()),
-	).RecordDistribution(metrics.StateTransitionCount, int(mutableState.GetExecutionInfo().StateTransitionCount))
+	metricsHandler.Histogram(
+		metrics.StateTransitionCount.MetricName.String(),
+		metrics.StateTransitionCount.Unit,
+	).Record(mutableState.GetExecutionInfo().StateTransitionCount)
 }

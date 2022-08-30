@@ -66,7 +66,6 @@ type (
 		logger                 log.Logger
 		archivalMetadata       carchiver.ArchivalMetadata
 		clusterMetadata        cluster.Metadata
-		metricsClient          metrics.Client
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
 		metadataManager        persistence.MetadataManager
@@ -86,7 +85,7 @@ type (
 
 		membershipMonitor membership.Monitor
 
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 
 		status           int32
 		stopC            chan struct{}
@@ -129,7 +128,6 @@ func NewService(
 	esClient esclient.Client,
 	archivalMetadata carchiver.ArchivalMetadata,
 	clusterMetadata cluster.Metadata,
-	metricsClient metrics.Client,
 	clientBean client.Bean,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	namespaceRegistry namespace.Registry,
@@ -138,7 +136,7 @@ func NewService(
 	persistenceBean persistenceClient.Bean,
 	membershipMonitor membership.Monitor,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
@@ -160,7 +158,6 @@ func NewService(
 		logger:                    logger,
 		archivalMetadata:          archivalMetadata,
 		clusterMetadata:           clusterMetadata,
-		metricsClient:             metricsClient,
 		clientBean:                clientBean,
 		clusterMetadataManager:    clusterMetadataManager,
 		namespaceRegistry:         namespaceRegistry,
@@ -411,7 +408,7 @@ func (s *Service) startParentClosePolicyProcessor() {
 	params := &parentclosepolicy.BootstrapParams{
 		Config:           *s.config.ParentCloseCfg,
 		SdkClientFactory: s.sdkClientFactory,
-		MetricsClient:    s.metricsClient,
+		MetricsHandler:   s.metricsHandler,
 		Logger:           s.logger,
 		ClientBean:       s.clientBean,
 		CurrentCluster:   s.clusterMetadata.GetCurrentClusterName(),
@@ -430,7 +427,7 @@ func (s *Service) startScanner() {
 		s.logger,
 		s.config.ScannerCfg,
 		s.sdkClientFactory.GetSystemClient(s.logger),
-		s.metricsClient,
+		s.metricsHandler,
 		s.executionManager,
 		s.taskManager,
 		s.historyClient,
@@ -453,7 +450,7 @@ func (s *Service) startReplicator() {
 		s.clusterMetadata,
 		s.clientBean,
 		s.logger,
-		s.metricsClient,
+		s.metricsHandler,
 		s.hostInfo,
 		s.workerServiceResolver,
 		s.namespaceReplicationQueue,
@@ -465,7 +462,7 @@ func (s *Service) startReplicator() {
 func (s *Service) startArchiver() {
 	historyClient := s.clientBean.GetHistoryClient()
 	bc := &archiver.BootstrapContainer{
-		MetricsClient:    s.metricsClient,
+		MetricsHandler:   s.metricsHandler,
 		Logger:           s.logger,
 		HistoryV2Manager: s.executionManager,
 		NamespaceCache:   s.namespaceRegistry,

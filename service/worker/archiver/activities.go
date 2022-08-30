@@ -26,6 +26,7 @@ package archiver
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -58,12 +59,15 @@ var (
 func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err error) {
 	ctx = headers.SetCallerName(ctx, request.Namespace)
 	container := ctx.Value(bootstrapContainerKey).(*BootstrapContainer)
-	scope := container.MetricsClient.Scope(metrics.ArchiverUploadHistoryActivityScope, metrics.NamespaceTag(request.Namespace))
-	sw := scope.StartTimer(metrics.ServiceLatency)
+	metricsHandler := container.MetricsHandler.WithTags(
+		metrics.OperationTag(metrics.ArchiverUploadHistoryActivityOperation),
+		metrics.NamespaceTag(request.Namespace),
+	)
+	startTime := time.Now()
 	defer func() {
-		sw.Stop()
+		metricsHandler.Timer(metrics.ServiceLatency.MetricName.String()).Record(time.Since(startTime))
 		if err == errUploadNonRetryable {
-			scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
+			metricsHandler.Counter(metrics.ArchiverNonRetryableErrorCount.MetricName.String()).Record(1)
 		}
 	}()
 	logger := tagLoggerWithHistoryRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)
@@ -101,12 +105,15 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err error) {
 	ctx = headers.SetCallerName(ctx, request.Namespace)
 	container := ctx.Value(bootstrapContainerKey).(*BootstrapContainer)
-	scope := container.MetricsClient.Scope(metrics.ArchiverDeleteHistoryActivityScope, metrics.NamespaceTag(request.Namespace))
-	sw := scope.StartTimer(metrics.ServiceLatency)
+	metricsHandler := container.MetricsHandler.WithTags(
+		metrics.OperationTag(metrics.ArchiverDeleteHistoryActivityOperation),
+		metrics.NamespaceTag(request.Namespace),
+	)
+	startTime := time.Now()
 	defer func() {
-		sw.Stop()
-		if err == errDeleteNonRetryable {
-			scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
+		metricsHandler.Timer(metrics.ServiceLatency.MetricName.String()).Record(time.Since(startTime))
+		if err == errUploadNonRetryable {
+			metricsHandler.Counter(metrics.ArchiverNonRetryableErrorCount.MetricName.String()).Record(1)
 		}
 	}()
 	_, err = container.HistoryClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
@@ -138,12 +145,15 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err error) {
 	ctx = headers.SetCallerName(ctx, request.Namespace)
 	container := ctx.Value(bootstrapContainerKey).(*BootstrapContainer)
-	scope := container.MetricsClient.Scope(metrics.ArchiverArchiveVisibilityActivityScope, metrics.NamespaceTag(request.Namespace))
-	sw := scope.StartTimer(metrics.ServiceLatency)
+	metricsHandler := container.MetricsHandler.WithTags(
+		metrics.OperationTag(metrics.ArchiverArchiveVisibilityActivityOperation),
+		metrics.NamespaceTag(request.Namespace),
+	)
+	startTime := time.Now()
 	defer func() {
-		sw.Stop()
-		if err == errArchiveVisibilityNonRetryable {
-			scope.IncCounter(metrics.ArchiverNonRetryableErrorCount)
+		metricsHandler.Timer(metrics.ServiceLatency.MetricName.String()).Record(time.Since(startTime))
+		if err == errUploadNonRetryable {
+			metricsHandler.Counter(metrics.ArchiverNonRetryableErrorCount.MetricName.String()).Record(1)
 		}
 	}()
 	logger := tagLoggerWithVisibilityRequest(tagLoggerWithActivityInfo(container.Logger, activity.GetInfo(ctx)), &request)

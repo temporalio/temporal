@@ -552,7 +552,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			if rawHistoryQueryEnabled {
 				historyBlob, _, err = wh.getRawHistory(
 					ctx,
-					wh.metricsScope(ctx),
+					wh.getMetricsHandler(ctx),
 					namespaceID,
 					*execution,
 					lastFirstEventID,
@@ -571,7 +571,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			} else {
 				history, _, err = wh.getHistory(
 					ctx,
-					wh.metricsScope(ctx),
+					wh.getMetricsHandler(ctx),
 					namespaceID,
 					namespace.Name(request.GetNamespace()),
 					*execution,
@@ -607,7 +607,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			if rawHistoryQueryEnabled {
 				historyBlob, continuationToken.PersistenceToken, err = wh.getRawHistory(
 					ctx,
-					wh.metricsScope(ctx),
+					wh.getMetricsHandler(ctx),
 					namespaceID,
 					*execution,
 					continuationToken.FirstEventId,
@@ -620,7 +620,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			} else {
 				history, continuationToken.PersistenceToken, err = wh.getHistory(
 					ctx,
-					wh.metricsScope(ctx),
+					wh.getMetricsHandler(ctx),
 					namespaceID,
 					namespace.Name(request.GetNamespace()),
 					*execution,
@@ -788,7 +788,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 	// return all events
 	history, continuationToken.PersistenceToken, continuationToken.NextEventId, err = wh.getHistoryReverse(
 		ctx,
-		wh.metricsScope(ctx),
+		wh.getMetricsHandler(ctx),
 		namespaceID,
 		namespace.Name(request.GetNamespace()),
 		*execution,
@@ -1018,7 +1018,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 		namespaceId.String(),
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondWorkflowTaskFailed"),
 	); err != nil {
@@ -1033,7 +1033,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 			tag.WorkflowID(taskToken.GetWorkflowId()),
 			tag.WorkflowRunID(taskToken.GetRunId()),
 		)
-		wh.metricsScope(ctx).IncCounter(metrics.ServiceErrNonDeterministicCounter)
+		wh.getMetricsHandler(ctx).Counter(metrics.ServiceErrNonDeterministicCounter.MetricName.String()).Record(1)
 	}
 
 	_, err = wh.historyClient.RespondWorkflowTaskFailed(ctx, &historyservice.RespondWorkflowTaskFailedRequest{
@@ -1173,7 +1173,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		namespaceId.String(),
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeat"),
 	); err != nil {
@@ -1264,7 +1264,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		namespaceID.String(),
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RecordActivityTaskHeartbeatById"),
 	); err != nil {
@@ -1343,7 +1343,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 		namespaceId.String(),
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskCompleted"),
 	); err != nil {
@@ -1436,7 +1436,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		namespaceID.String(),
 		taskToken.GetWorkflowId(),
 		runID,
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskCompletedById"),
 	); err != nil {
@@ -1523,7 +1523,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 			namespaceID.String(),
 			taskToken.GetWorkflowId(),
 			taskToken.GetRunId(),
-			wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+			wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 			wh.throttledLogger,
 			tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
 		); err != nil {
@@ -1542,7 +1542,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		namespaceID.String(),
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
 	); err != nil {
@@ -1628,7 +1628,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 			namespaceID.String(),
 			taskToken.GetWorkflowId(),
 			runID,
-			wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+			wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 			wh.throttledLogger,
 			tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
 		); err != nil {
@@ -1647,7 +1647,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		namespaceID.String(),
 		taskToken.GetWorkflowId(),
 		runID,
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
 	); err != nil {
@@ -1714,7 +1714,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		namespaceID.String(),
 		taskToken.GetWorkflowId(),
 		taskToken.GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskCanceled"),
 	); err != nil {
@@ -1806,7 +1806,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		namespaceID.String(),
 		taskToken.GetWorkflowId(),
 		runID,
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondActivityTaskCanceledById"),
 	); err != nil {
@@ -1920,7 +1920,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		namespaceID.String(),
 		request.GetWorkflowExecution().GetWorkflowId(),
 		request.GetWorkflowExecution().GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("SignalWorkflowExecution"),
 	); err != nil {
@@ -2555,7 +2555,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		namespaceId.String(),
 		"",
 		"",
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("RespondQueryTaskCompleted"),
 	); err != nil {
@@ -2663,7 +2663,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		namespaceID.String(),
 		request.GetExecution().GetWorkflowId(),
 		request.GetExecution().GetRunId(),
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("QueryWorkflow")); err != nil {
 		return nil, err
@@ -3194,7 +3194,7 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		namespaceID.String(),
 		workflowID,
 		"", // don't have runid yet
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("UpdateSchedule"),
 	); err != nil {
@@ -3265,7 +3265,7 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		namespaceID.String(),
 		workflowID,
 		"", // don't have runid yet
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("PatchSchedule"),
 	); err != nil {
@@ -3327,7 +3327,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		namespaceID.String(),
 		workflowID,
 		"",
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		wh.getMetricsHandler(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		wh.throttledLogger,
 		tag.BlobSizeViolationOperation("ListScheduleMatchingTimes")); err != nil {
 		return nil, err
@@ -3594,7 +3594,7 @@ func (wh *WorkflowHandler) StopBatchOperation(
 
 func (wh *WorkflowHandler) getRawHistory(
 	ctx context.Context,
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 	firstEventID int64,
@@ -3628,7 +3628,7 @@ func (wh *WorkflowHandler) getRawHistory(
 
 	if len(resp.NextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
+			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.MetricName.String()).Record(1)
 			wh.logger.Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -3656,7 +3656,7 @@ func (wh *WorkflowHandler) getRawHistory(
 
 func (wh *WorkflowHandler) getHistory(
 	ctx context.Context,
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 	namespaceID namespace.ID,
 	namespace namespace.Name,
 	execution commonpb.WorkflowExecution,
@@ -3692,7 +3692,7 @@ func (wh *WorkflowHandler) getHistory(
 		return nil, nil, err
 	}
 
-	scope.RecordDistribution(metrics.HistorySize, size)
+	metricsHandler.Histogram(metrics.HistorySize.MetricName.String(), metrics.HistorySize.Unit).Record(int64(size))
 
 	isLastPage := len(nextPageToken) == 0
 	if err := wh.verifyHistoryIsComplete(
@@ -3702,7 +3702,7 @@ func (wh *WorkflowHandler) getHistory(
 		isFirstPage,
 		isLastPage,
 		int(pageSize)); err != nil {
-		scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
+		metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.MetricName.String()).Record(1)
 		wh.logger.Error("getHistory: incomplete history",
 			tag.WorkflowNamespaceID(namespaceID.String()),
 			tag.WorkflowID(execution.GetWorkflowId()),
@@ -3712,7 +3712,7 @@ func (wh *WorkflowHandler) getHistory(
 
 	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-			scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
+			metricsHandler.Counter(metrics.ServiceErrIncompleteHistoryCounter.MetricName.String()).Record(1)
 			wh.logger.Error("getHistory error",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
@@ -3735,7 +3735,7 @@ func (wh *WorkflowHandler) getHistory(
 
 func (wh *WorkflowHandler) getHistoryReverse(
 	ctx context.Context,
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 	namespaceID namespace.ID,
 	namespace namespace.Name,
 	execution commonpb.WorkflowExecution,
@@ -3770,7 +3770,7 @@ func (wh *WorkflowHandler) getHistoryReverse(
 		return nil, nil, 0, err
 	}
 
-	scope.RecordDistribution(metrics.HistorySize, size)
+	metricsHandler.Histogram(metrics.HistorySize.MetricName.String(), metrics.HistorySize.Unit).Record(int64(size))
 
 	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
 		return nil, nil, 0, err
@@ -3962,7 +3962,7 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 		}()
 		history, persistenceToken, err = wh.getHistory(
 			ctx,
-			wh.metricsScope(ctx),
+			wh.getMetricsHandler(ctx),
 			namespaceID,
 			namespaceEntry.Name(),
 			*matchingResp.GetWorkflowExecution(),
@@ -4222,8 +4222,8 @@ func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 	return nil
 }
 
-func (wh *WorkflowHandler) metricsScope(ctx context.Context) metrics.Scope {
-	return interceptor.MetricsScope(ctx, wh.logger)
+func (wh *WorkflowHandler) getMetricsHandler(ctx context.Context) metrics.Handler {
+	return interceptor.MetricsHandler(ctx, wh.logger)
 }
 
 func (wh *WorkflowHandler) makeFakeContinuedAsNewEvent(

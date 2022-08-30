@@ -51,7 +51,7 @@ type (
 		PersistenceNamespaceMaxQPS PersistenceNamespaceMaxQps
 		EnablePriorityRateLimiting EnablePriorityRateLimiting
 		ClusterName                ClusterName
-		MetricsClient              metrics.Client
+		MetricsHandler             metrics.Handler
 		Logger                     log.Logger
 	}
 
@@ -86,7 +86,7 @@ func FactoryProvider(
 		requestRatelimiter,
 		serialization.NewSerializer(),
 		string(params.ClusterName),
-		params.MetricsClient,
+		params.MetricsHandler,
 		params.Logger,
 	)
 }

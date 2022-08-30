@@ -354,6 +354,7 @@ package {{.ServiceName}}
 
 import (
 	"context"
+	"time"
 
 	"{{.ServicePackagePath}}"
 	"google.golang.org/grpc"
@@ -369,9 +370,10 @@ func (c *metricClient) {{.Method}}(
 	opts ...grpc.CallOption,
 ) (_ {{.ResponseType}}, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.{{.MetricPrefix}}{{.Method}}Scope)
+	metricsHandler := c.startMetricsRecording(metrics.{{.MetricPrefix}}{{.Method}}Operation)
+	startTime := time.Now()
 	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
+		c.finishMetricsRecording(metricsHandler, time.Since(startTime), retError)
 	}()
 
 	return c.client.{{.Method}}(ctx, request, opts...)

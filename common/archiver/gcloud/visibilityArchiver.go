@@ -94,16 +94,19 @@ func NewVisibilityArchiver(container *archiver.VisibilityBootstrapContainer, con
 // Please make sure your implementation is lossless. If any in-memory batching mechanism is used, then those batched records will be lost during server restarts.
 // This method will be invoked when workflow closes. Note that because of conflict resolution, it is possible for a workflow to through the closing process multiple times, which means that this method can be invoked more than once after a workflow closes.
 func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiverspb.VisibilityRecord, opts ...archiver.ArchiveOption) (err error) {
-	scope := v.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.NamespaceTag(request.Namespace))
+	mHandler := v.container.MetricsHandler.WithTags(
+		metrics.OperationTag(metrics.VisibilityArchiverOperation),
+		metrics.NamespaceTag(request.Namespace),
+	)
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
-	sw := scope.StartTimer(metrics.ServiceLatency)
+	startTime := time.Now()
 	defer func() {
-		sw.Stop()
+		mHandler.Timer(metrics.ServiceLatency.MetricName.String()).Record(time.Since(startTime))
 		if err != nil {
 			if isRetryableError(err) {
-				scope.IncCounter(metrics.VisibilityArchiverArchiveTransientErrorCount)
+				mHandler.Counter(metrics.VisibilityArchiverArchiveTransientErrorCount.MetricName.String()).Record(1)
 			} else {
-				scope.IncCounter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount)
+				mHandler.Counter(metrics.VisibilityArchiverArchiveNonRetryableErrorCount.MetricName.String()).Record(1)
 				if featureCatalog.NonRetryableError != nil {
 					err = featureCatalog.NonRetryableError()
 				}
@@ -147,7 +150,7 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 		return errRetryable
 	}
 
-	scope.IncCounter(metrics.VisibilityArchiveSuccessCount)
+	mHandler.Counter(metrics.VisibilityArchiveSuccessCount.MetricName.String()).Record(1)
 	return nil
 }
 

@@ -152,7 +152,7 @@ func HistoryScavengerActivity(
 		ctx.historyClient,
 		hbd,
 		ctx.cfg.HistoryScannerDataMinAge,
-		ctx.metricsClient,
+		ctx.metricsHandler,
 		ctx.logger,
 	)
 	return scavenger.Run(activityCtx)
@@ -163,7 +163,7 @@ func TaskQueueScavengerActivity(
 	activityCtx context.Context,
 ) error {
 	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
-	scavenger := taskqueue.NewScavenger(ctx.taskManager, ctx.metricsClient, ctx.logger)
+	scavenger := taskqueue.NewScavenger(ctx.taskManager, ctx.metricsHandler, ctx.logger)
 	ctx.logger.Info("Starting task queue scavenger")
 	scavenger.Start()
 	for scavenger.Alive() {
@@ -184,11 +184,10 @@ func ExecutionsScavengerActivity(
 ) error {
 	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
 
-	metricsClient := ctx.metricsClient
 	scavenger := executions.NewScavenger(
 		ctx.cfg.Persistence.NumHistoryShards,
 		ctx.executionManager,
-		metricsClient,
+		ctx.metricsHandler,
 		ctx.logger,
 	)
 	scavenger.Start()

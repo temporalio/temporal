@@ -72,7 +72,7 @@ func loadMutableStateForTransferTask(
 	ctx context.Context,
 	wfContext workflow.Context,
 	transferTask tasks.Task,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	logger = tasks.InitializeLogger(transferTask, logger)
@@ -81,7 +81,7 @@ func loadMutableStateForTransferTask(
 		wfContext,
 		transferTask,
 		getTransferTaskEventIDAndRetryable,
-		metricsClient.Scope(metrics.TransferQueueProcessorScope),
+		metricsHandler.WithTags(metrics.OperationTag(metrics.TransferQueueProcessorOperation)),
 		logger,
 	)
 	if err != nil {
@@ -116,7 +116,7 @@ func loadMutableStateForTimerTask(
 	ctx context.Context,
 	wfContext workflow.Context,
 	timerTask tasks.Task,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	logger = tasks.InitializeLogger(timerTask, logger)
@@ -125,7 +125,7 @@ func loadMutableStateForTimerTask(
 		wfContext,
 		timerTask,
 		getTimerTaskEventIDAndRetryable,
-		metricsClient.Scope(metrics.TimerQueueProcessorScope),
+		metricsHandler.WithTags(metrics.OperationTag(metrics.TimerQueueProcessorOperation)),
 		logger,
 	)
 }
@@ -135,7 +135,7 @@ func LoadMutableStateForTask(
 	wfContext workflow.Context,
 	task tasks.Task,
 	taskEventIDAndRetryable func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) (int64, bool),
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 
@@ -152,7 +152,7 @@ func LoadMutableStateForTask(
 		return mutableState, nil
 	}
 
-	scope.IncCounter(metrics.StaleMutableStateCounter)
+	metricsHandler.Counter(metrics.StaleMutableStateCounter.MetricName.String()).Record(1)
 	wfContext.Clear()
 
 	mutableState, err = wfContext.LoadWorkflowExecution(ctx)
@@ -161,7 +161,7 @@ func LoadMutableStateForTask(
 	}
 	// after refresh, still mutable state's next event ID <= task's event ID
 	if eventID >= mutableState.GetNextEventID() {
-		scope.IncCounter(metrics.TaskSkipped)
+		metricsHandler.Counter(metrics.TaskSkipped.MetricName.String()).Record(1)
 		logger.Info("Task Processor: task event ID >= MS NextEventID, skip.",
 			tag.WorkflowNextEventID(mutableState.GetNextEventID()),
 		)

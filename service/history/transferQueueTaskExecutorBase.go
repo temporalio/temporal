@@ -63,8 +63,7 @@ type (
 		cache                    workflow.Cache
 		archivalClient           archiver.Client
 		logger                   log.Logger
-		metricProvider           metrics.MetricsHandler
-		metricsClient            metrics.Client
+		metricsHandler           metrics.Handler
 		historyClient            historyservice.HistoryServiceClient
 		matchingClient           matchingservice.MatchingServiceClient
 		config                   *configs.Config
@@ -78,7 +77,7 @@ func newTransferQueueTaskExecutorBase(
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
@@ -88,8 +87,7 @@ func newTransferQueueTaskExecutorBase(
 		cache:                    workflowCache,
 		archivalClient:           archivalClient,
 		logger:                   logger,
-		metricProvider:           metricProvider,
-		metricsClient:            shard.GetMetricsClient(),
+		metricsHandler:           metricsHandler,
 		historyClient:            shard.GetHistoryClient(),
 		matchingClient:           matchingClient,
 		config:                   shard.GetConfig(),
@@ -255,7 +253,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}

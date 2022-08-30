@@ -76,7 +76,7 @@ func SignalWithStartWorkflowExecution(
 		shard.GetTimeSource().Now(),
 	)
 	request := startRequest.StartRequest
-	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistorySignalWithStartWorkflowExecutionScope, shard, shard.GetMetricsClient())
+	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistorySignalWithStartWorkflowExecutionOperation, shard, shard.GetMetricsHandler())
 	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, shard, namespaceEntry, "SignalWithStartWorkflowExecution")
 	if err != nil {
 		return nil, err

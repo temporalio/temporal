@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -65,7 +66,7 @@ type (
 		esConfig          *esclient.Config
 		esClient          esclient.Client
 		sdkClientFactory  sdk.ClientFactory
-		metricsClient     metrics.Client
+		metricsHandler    metrics.Handler
 		saProvider        searchattribute.Provider
 		saManager         searchattribute.Manager
 		healthServer      *health.Server
@@ -79,7 +80,7 @@ type (
 		EsClient          esclient.Client
 		Logger            log.Logger
 		sdkClientFactory  sdk.ClientFactory
-		MetricsClient     metrics.Client
+		MetricsHandler    metrics.Handler
 		SaProvider        searchattribute.Provider
 		SaManager         searchattribute.Manager
 		healthServer      *health.Server
@@ -100,7 +101,7 @@ func NewOperatorHandlerImpl(
 		esConfig:          args.EsConfig,
 		esClient:          args.EsClient,
 		sdkClientFactory:  args.sdkClientFactory,
-		metricsClient:     args.MetricsClient,
+		metricsHandler:    args.MetricsHandler,
 		saProvider:        args.SaProvider,
 		saManager:         args.SaManager,
 		healthServer:      args.healthServer,
@@ -136,8 +137,10 @@ func (h *OperatorHandlerImpl) Stop() {
 func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *operatorservice.AddSearchAttributesRequest) (_ *operatorservice.AddSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 
-	scope, sw := h.startRequestProfile(metrics.OperatorAddSearchAttributesScope)
-	defer sw.Stop()
+	metricsHandler, startTime := h.startRequestProfile(metrics.OperatorAddSearchAttributesOperation)
+	defer func() {
+		metricsHandler.Timer(metrics.ServiceLatency.MetricName.String()).Record(time.Since(startTime))
+	}()
 
 	// validate request
 	if request == nil {
@@ -191,11 +194,11 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 	// Wait for workflow to complete.
 	err = run.Get(ctx, nil)
 	if err != nil {
-		scope.IncCounter(metrics.AddSearchAttributesWorkflowFailuresCount)
+		metricsHandler.Counter(metrics.AddSearchAttributesWorkflowFailuresCount.MetricName.String()).Record(1)
 		execution := &commonpb.WorkflowExecution{WorkflowId: addsearchattributes.WorkflowName, RunId: run.GetRunID()}
 		return nil, serviceerror.NewSystemWorkflow(execution, err)
 	}
-	scope.IncCounter(metrics.AddSearchAttributesWorkflowSuccessCount)
+	metricsHandler.Counter(metrics.AddSearchAttributesWorkflowSuccessCount.MetricName.String()).Record(1)
 
 	return &operatorservice.AddSearchAttributesResponse{}, nil
 }
@@ -276,8 +279,10 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(ctx context.Context, request 
 func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *operatorservice.DeleteNamespaceRequest) (_ *operatorservice.DeleteNamespaceResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 
-	scope, sw := h.startRequestProfile(metrics.OperatorDeleteNamespaceScope)
-	defer sw.Stop()
+	metricsHandler, startTime := h.startRequestProfile(metrics.OperatorDeleteNamespaceOperation)
+	defer func() {
+		metricsHandler.Timer(metrics.ServiceLatency.MetricName.String()).Record(time.Since(startTime))
+	}()
 
 	// validate request
 	if request == nil {
@@ -315,11 +320,11 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
 	err = run.Get(ctx, &wfResult)
 	if err != nil {
-		scope.IncCounter(metrics.DeleteNamespaceWorkflowFailuresCount)
+		metricsHandler.Counter(metrics.DeleteNamespaceWorkflowFailuresCount.MetricName.String()).Record(1)
 		execution := &commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}
 		return nil, serviceerror.NewSystemWorkflow(execution, err)
 	}
-	scope.IncCounter(metrics.DeleteNamespaceWorkflowSuccessCount)
+	metricsHandler.Counter(metrics.DeleteNamespaceWorkflowSuccessCount.MetricName.String()).Record(1)
 
 	return &operatorservice.DeleteNamespaceResponse{
 		DeletedNamespace: wfResult.DeletedNamespace.String(),
@@ -394,9 +399,8 @@ func (h *OperatorHandlerImpl) ListClusterMembers(
 }
 
 // startRequestProfile initiates recording of request metrics
-func (h *OperatorHandlerImpl) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
-	metricsScope := h.metricsClient.Scope(scope)
-	sw := metricsScope.StartTimer(metrics.ServiceLatency)
-	metricsScope.IncCounter(metrics.ServiceRequests)
-	return metricsScope, sw
+func (h *OperatorHandlerImpl) startRequestProfile(operation string) (metrics.Handler, time.Time) {
+	metricsHandler := h.metricsHandler.WithTags(metrics.OperationTag(operation))
+	metricsHandler.Counter(metrics.ServiceRequests.MetricName.String()).Record(1)
+	return metricsHandler, time.Now()
 }

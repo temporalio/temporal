@@ -44,10 +44,10 @@ type (
 
 	initParams struct {
 		fx.In
-		EsClient      esclient.Client
-		Manager       searchattribute.Manager
-		MetricsClient metrics.Client
-		Logger        log.Logger
+		EsClient       esclient.Client
+		Manager        searchattribute.Manager
+		MetricsHandler metrics.Handler
+		Logger         log.Logger
 	}
 
 	fxResult struct {
@@ -61,6 +61,8 @@ var Module = fx.Options(
 )
 
 func NewResult(params initParams) fxResult {
+	mHandler := params.MetricsHandler.WithTags(metrics.OperationTag(metrics.AddSearchAttributesWorkflowOperation))
+	params.MetricsHandler = mHandler
 	component := &addSearchAttributes{
 		initParams: params,
 	}
@@ -81,9 +83,9 @@ func (wc *addSearchAttributes) DedicatedWorkerOptions() *workercommon.DedicatedW
 
 func (wc *addSearchAttributes) activities() *activities {
 	return &activities{
-		esClient:      wc.EsClient,
-		saManager:     wc.Manager,
-		metricsClient: wc.MetricsClient,
-		logger:        wc.Logger,
+		esClient:       wc.EsClient,
+		saManager:      wc.Manager,
+		metricsHandler: wc.MetricsHandler,
+		logger:         wc.Logger,
 	}
 }

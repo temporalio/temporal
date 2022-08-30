@@ -49,7 +49,7 @@ type (
 		shard          shard.Context
 		cache          workflow.Cache
 		logger         log.Logger
-		metricProvider metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		visibilityMgr  manager.VisibilityManager
 	}
 )
@@ -61,13 +61,13 @@ func newVisibilityQueueTaskExecutor(
 	workflowCache workflow.Cache,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *visibilityQueueTaskExecutor {
 	return &visibilityQueueTaskExecutor{
 		shard:          shard,
 		cache:          workflowCache,
 		logger:         logger,
-		metricProvider: metricProvider,
+		metricsHandler: metricsHandler,
 		visibilityMgr:  visibilityMgr,
 	}
 }
@@ -75,10 +75,10 @@ func newVisibilityQueueTaskExecutor(
 func (t *visibilityQueueTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.MetricsHandler, error) {
+) (metrics.Handler, error) {
 	task := executable.GetTask()
 	taskType := queues.GetVisibilityTaskTypeTagValue(task)
-	metricsProvider := t.metricProvider.WithTags(
+	metricsProvider := t.metricsHandler.WithTags(
 		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility

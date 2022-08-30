@@ -53,7 +53,7 @@ type (
 		frontendHandler    Handler
 		logger             log.Logger
 		clientBean         client.Bean
-		metricsClient      metrics.Client
+		metricsHandler     metrics.Handler
 		timeSource         clock.TimeSource
 	}
 )
@@ -64,7 +64,7 @@ func NewDCRedirectionHandler(
 	policy config.DCRedirectionPolicy,
 	logger log.Logger,
 	clientBean client.Bean,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
@@ -84,7 +84,7 @@ func NewDCRedirectionHandler(
 		frontendHandler:    wfHandler,
 		logger:             logger,
 		clientBean:         clientBean,
-		metricsClient:      metricsClient,
+		metricsHandler:     metricsHandler,
 		timeSource:         timeSource,
 	}
 }
@@ -114,7 +114,7 @@ func (handler *DCRedirectionHandlerImpl) DeprecateNamespace(
 
 	var cluster = handler.currentClusterName
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionDeprecateNamespaceScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionDeprecateNamespaceOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -130,7 +130,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeNamespace(
 
 	var cluster = handler.currentClusterName
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeNamespaceScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeNamespaceOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -146,7 +146,7 @@ func (handler *DCRedirectionHandlerImpl) ListNamespaces(
 
 	var cluster = handler.currentClusterName
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionListNamespacesScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListNamespacesOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -162,7 +162,7 @@ func (handler *DCRedirectionHandlerImpl) RegisterNamespace(
 
 	var cluster = handler.currentClusterName
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRegisterNamespaceScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRegisterNamespaceOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -178,7 +178,7 @@ func (handler *DCRedirectionHandlerImpl) UpdateNamespace(
 
 	var cluster = handler.currentClusterName
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateNamespaceScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateNamespaceOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -198,7 +198,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeTaskQueue(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeTaskQueueScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeTaskQueueOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -232,7 +232,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeWorkflowExecution(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeWorkflowExecutionScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeWorkflowExecutionOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -266,7 +266,7 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkflowExecutionHistoryScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkflowExecutionHistoryOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -300,7 +300,7 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistoryReverse(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkflowExecutionHistoryReverseScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkflowExecutionHistoryReverseOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -334,7 +334,7 @@ func (handler *DCRedirectionHandlerImpl) ListArchivedWorkflowExecutions(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionListArchivedWorkflowExecutionsScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListArchivedWorkflowExecutionsOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -368,7 +368,7 @@ func (handler *DCRedirectionHandlerImpl) ListClosedWorkflowExecutions(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionListClosedWorkflowExecutionsScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListClosedWorkflowExecutionsOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -402,7 +402,7 @@ func (handler *DCRedirectionHandlerImpl) ListOpenWorkflowExecutions(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionListOpenWorkflowExecutionsScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListOpenWorkflowExecutionsOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -436,7 +436,7 @@ func (handler *DCRedirectionHandlerImpl) ListWorkflowExecutions(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionListWorkflowExecutionsScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListWorkflowExecutionsOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -470,7 +470,7 @@ func (handler *DCRedirectionHandlerImpl) ScanWorkflowExecutions(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionScanWorkflowExecutionsScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionScanWorkflowExecutionsOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -503,7 +503,7 @@ func (handler *DCRedirectionHandlerImpl) CountWorkflowExecutions(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionCountWorkflowExecutionsScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionCountWorkflowExecutionsOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -535,7 +535,7 @@ func (handler *DCRedirectionHandlerImpl) GetSearchAttributes(
 
 	var cluster = handler.currentClusterName
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetSearchAttributesScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetSearchAttributesOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -553,7 +553,7 @@ func (handler *DCRedirectionHandlerImpl) PollActivityTaskQueue(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionPollActivityTaskQueueScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionPollActivityTaskQueueOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -587,7 +587,7 @@ func (handler *DCRedirectionHandlerImpl) PollWorkflowTaskQueue(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionPollWorkflowTaskQueueScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionPollWorkflowTaskQueueOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -620,7 +620,7 @@ func (handler *DCRedirectionHandlerImpl) QueryWorkflow(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionQueryWorkflowScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionQueryWorkflowOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -654,7 +654,7 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeat(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRecordActivityTaskHeartbeatScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRecordActivityTaskHeartbeatOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -693,7 +693,7 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeatById(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRecordActivityTaskHeartbeatByIdScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRecordActivityTaskHeartbeatByIdOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -727,7 +727,7 @@ func (handler *DCRedirectionHandlerImpl) RequestCancelWorkflowExecution(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRequestCancelWorkflowExecutionScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRequestCancelWorkflowExecutionOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -761,7 +761,7 @@ func (handler *DCRedirectionHandlerImpl) ResetStickyTaskQueue(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionResetStickyTaskQueueScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionResetStickyTaskQueueOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -795,7 +795,7 @@ func (handler *DCRedirectionHandlerImpl) ResetWorkflowExecution(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionResetWorkflowExecutionScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionResetWorkflowExecutionOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -829,7 +829,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceled(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCanceledScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCanceledOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -868,7 +868,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceledById(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCanceledByIdScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCanceledByIdOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -902,7 +902,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompleted(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCompletedScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCompletedOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -941,7 +941,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompletedById(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCompletedByIdScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskCompletedByIdOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -975,7 +975,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailed(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskFailedScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskFailedOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1014,7 +1014,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailedById(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskFailedByIdScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondActivityTaskFailedByIdOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1048,7 +1048,7 @@ func (handler *DCRedirectionHandlerImpl) RespondWorkflowTaskCompleted(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondWorkflowTaskCompletedScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondWorkflowTaskCompletedOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1087,7 +1087,7 @@ func (handler *DCRedirectionHandlerImpl) RespondWorkflowTaskFailed(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondWorkflowTaskFailedScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondWorkflowTaskFailedOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1126,7 +1126,7 @@ func (handler *DCRedirectionHandlerImpl) RespondQueryTaskCompleted(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondQueryTaskCompletedScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionRespondQueryTaskCompletedOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1165,7 +1165,7 @@ func (handler *DCRedirectionHandlerImpl) SignalWithStartWorkflowExecution(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionSignalWithStartWorkflowExecutionScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionSignalWithStartWorkflowExecutionOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1199,7 +1199,7 @@ func (handler *DCRedirectionHandlerImpl) SignalWorkflowExecution(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionSignalWorkflowExecutionScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionSignalWorkflowExecutionOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1232,7 +1232,7 @@ func (handler *DCRedirectionHandlerImpl) StartWorkflowExecution(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionStartWorkflowExecutionScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionStartWorkflowExecutionOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1266,7 +1266,7 @@ func (handler *DCRedirectionHandlerImpl) TerminateWorkflowExecution(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionTerminateWorkflowExecutionScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionTerminateWorkflowExecutionOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1300,7 +1300,7 @@ func (handler *DCRedirectionHandlerImpl) ListTaskQueuePartitions(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionListTaskQueuePartitionsScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListTaskQueuePartitionsOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1349,7 +1349,7 @@ func (handler *DCRedirectionHandlerImpl) CreateSchedule(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionCreateScheduleScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionCreateScheduleOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1382,7 +1382,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeSchedule(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeScheduleScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeScheduleOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1415,7 +1415,7 @@ func (handler *DCRedirectionHandlerImpl) UpdateSchedule(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateScheduleScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateScheduleOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1448,7 +1448,7 @@ func (handler *DCRedirectionHandlerImpl) PatchSchedule(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionPatchScheduleScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionPatchScheduleOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1481,7 +1481,7 @@ func (handler *DCRedirectionHandlerImpl) ListScheduleMatchingTimes(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionListScheduleMatchingTimesScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListScheduleMatchingTimesOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1514,7 +1514,7 @@ func (handler *DCRedirectionHandlerImpl) DeleteSchedule(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionDeleteScheduleScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionDeleteScheduleOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1547,7 +1547,7 @@ func (handler *DCRedirectionHandlerImpl) ListSchedules(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionListSchedulesScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListSchedulesOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1580,7 +1580,7 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkerBuildIdOrdering(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateWorkerBuildIdOrderingScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateWorkerBuildIdOrderingOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1613,7 +1613,7 @@ func (handler *DCRedirectionHandlerImpl) GetWorkerBuildIdOrdering(
 	var err error
 	var cluster string
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkerBuildIdOrderingScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkerBuildIdOrderingOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1647,7 +1647,7 @@ func (handler *DCRedirectionHandlerImpl) UpdateWorkflow(
 		cluster string
 	)
 
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateWorkflowScope)
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateWorkflowOperation)
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
@@ -1700,14 +1700,14 @@ func (handler *DCRedirectionHandlerImpl) StopBatchOperation(
 }
 
 func (handler *DCRedirectionHandlerImpl) beforeCall(
-	scope int,
-) (metrics.Scope, time.Time) {
+	operation string,
+) (metrics.Handler, time.Time) {
 
-	return handler.metricsClient.Scope(scope), handler.timeSource.Now()
+	return handler.metricsHandler.WithTags(metrics.OperationTag(operation)), handler.timeSource.Now()
 }
 
 func (handler *DCRedirectionHandlerImpl) afterCall(
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 	startTime time.Time,
 	cluster string,
 	retError *error,
@@ -1715,10 +1715,11 @@ func (handler *DCRedirectionHandlerImpl) afterCall(
 
 	log.CapturePanic(handler.logger, retError)
 
-	scope = scope.Tagged(metrics.TargetClusterTag(cluster))
-	scope.IncCounter(metrics.ClientRedirectionRequests)
-	scope.RecordTimer(metrics.ClientRedirectionLatency, handler.timeSource.Now().Sub(startTime))
+	metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(cluster))
+	metricsHandler.Counter(metrics.ClientRedirectionRequests.MetricName.String()).Record(1)
+	metricsHandler.Timer(metrics.ClientRedirectionLatency.MetricName.String()).Record(handler.timeSource.Now().Sub(startTime))
+
 	if *retError != nil {
-		scope.IncCounter(metrics.ClientRedirectionFailures)
+		metricsHandler.Counter(metrics.ClientRedirectionFailures.MetricName.String()).Record(1)
 	}
 }

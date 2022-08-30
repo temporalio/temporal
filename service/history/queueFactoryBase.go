@@ -46,7 +46,7 @@ type (
 		NamespaceRegistry namespace.Registry
 		ClusterMetadata   cluster.Metadata
 		Config            *configs.Config
-		MetricsHandler    metrics.MetricsHandler
+		MetricsHandler    metrics.Handler
 		Logger            resource.SnTaggedLogger
 	}
 

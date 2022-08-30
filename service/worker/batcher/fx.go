@@ -57,9 +57,9 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsClient metrics.Client
-		Logger        log.Logger
-		ClientFactory sdk.ClientFactory
+		MetricsHandler metrics.Handler
+		Logger         log.Logger
+		ClientFactory  sdk.ClientFactory
 	}
 
 	fxResult struct {
@@ -76,6 +76,8 @@ func NewResult(
 	dc *dynamicconfig.Collection,
 	params activityDeps,
 ) fxResult {
+	mHandler := params.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherOperation))
+	params.MetricsHandler = mHandler
 	return fxResult{
 		Component: &workerComponent{
 			activityDeps:       params,

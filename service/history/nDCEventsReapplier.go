@@ -50,19 +50,19 @@ type (
 	}
 
 	nDCEventsReapplierImpl struct {
-		metricsClient metrics.Client
-		logger        log.Logger
+		metricsHandler metrics.Handler
+		logger         log.Logger
 	}
 )
 
 func newNDCEventsReapplier(
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *nDCEventsReapplierImpl {
 
 	return &nDCEventsReapplierImpl{
-		metricsClient: metricsClient,
-		logger:        logger,
+		metricsHandler: metricsHandler,
+		logger:         logger,
 	}
 }
 

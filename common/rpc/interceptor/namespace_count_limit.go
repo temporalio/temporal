@@ -88,9 +88,8 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 		count := atomic.AddInt32(counter, int32(token))
 		defer atomic.AddInt32(counter, -int32(token))
 
-		scope := MetricsScope(ctx, ni.logger)
-		scope.UpdateGauge(metrics.ServicePendingRequests, float64(count))
-
+		metricsHandler := MetricsHandler(ctx, ni.logger)
+		metricsHandler.Gauge(metrics.ServicePendingRequests.MetricName.String()).Record(float64(count))
 		if int(count) > ni.countFn(nsName.String()) {
 			return nil, ErrNamespaceCountLimitServerBusy
 		}

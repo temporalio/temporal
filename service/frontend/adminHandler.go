@@ -113,7 +113,7 @@ type (
 		historyClient               historyservice.HistoryServiceClient
 		sdkClientFactory            sdk.ClientFactory
 		membershipMonitor           membership.Monitor
-		metricsClient               metrics.Client
+		metricsHandler              metrics.Handler
 		namespaceRegistry           namespace.Registry
 		saProvider                  searchattribute.Provider
 		saManager                   searchattribute.Manager
@@ -140,7 +140,7 @@ type (
 		sdkClientFactory                    sdk.ClientFactory
 		MembershipMonitor                   membership.Monitor
 		ArchiverProvider                    provider.ArchiverProvider
-		MetricsClient                       metrics.Client
+		MetricsHandler                      metrics.Handler
 		NamespaceRegistry                   namespace.Registry
 		SaProvider                          searchattribute.Provider
 		SaManager                           searchattribute.Manager
@@ -203,7 +203,7 @@ func NewAdminHandler(
 		historyClient:               args.HistoryClient,
 		sdkClientFactory:            args.sdkClientFactory,
 		membershipMonitor:           args.MembershipMonitor,
-		metricsClient:               args.MetricsClient,
+		metricsHandler:              args.MetricsHandler,
 		namespaceRegistry:           args.NamespaceRegistry,
 		saProvider:                  args.SaProvider,
 		saManager:                   args.SaManager,
@@ -651,8 +651,11 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, request *adminservice.GetWorkflowExecutionRawHistoryV2Request) (_ *adminservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope)
-	defer sw.Stop()
+	metricsHandler := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Operation)
+	startTime := time.Now()
+	defer func() {
+		metricsHandler.Timer(metrics.ServiceLatency.MetricName.String()).Record(time.Since(startTime))
+	}()
 
 	if err := adh.validateGetWorkflowExecutionRawHistoryV2Request(
 		request,
@@ -664,7 +667,6 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	if err != nil {
 		return nil, err
 	}
-	scope = scope.Tagged(metrics.NamespaceTag(ns.Name().String()))
 
 	execution := request.Execution
 	var pageToken *tokenspb.RawHistoryContinuation
@@ -753,10 +755,17 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	size := rawHistoryResponse.Size
 	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
 	// namespaces along with the individual namespaces stats
-	adh.metricsClient.
-		Scope(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope).
-		RecordDistribution(metrics.HistorySize, size)
-	scope.RecordDistribution(metrics.HistorySize, size)
+	adh.metricsHandler.Histogram(
+		metrics.HistorySize.MetricName.String(),
+		metrics.HistorySize.Unit,
+	).Record(int64(size))
+	adh.metricsHandler.Histogram(
+		metrics.HistorySize.MetricName.String(),
+		metrics.HistorySize.Unit,
+	).Record(
+		int64(size),
+		metrics.NamespaceTag(ns.Name().String()),
+	)
 
 	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
@@ -1660,11 +1669,10 @@ func (adh *AdminHandler) setRequestDefaultValueAndGetTargetVersionHistory(
 }
 
 // startRequestProfile initiates recording of request metrics
-func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
-	metricsScope := adh.metricsClient.Scope(scope)
-	sw := metricsScope.StartTimer(metrics.ServiceLatency)
-	metricsScope.IncCounter(metrics.ServiceRequests)
-	return metricsScope, sw
+func (adh *AdminHandler) startRequestProfile(operation string) metrics.Handler {
+	metricsHandler := adh.metricsHandler.WithTags(metrics.OperationTag(operation))
+	metricsHandler.Counter(metrics.ServiceRequests.MetricName.String()).Record(1)
+	return metricsHandler
 }
 
 // TODO (alex): remove this func in 1.18+ together with `namespace` field in corresponding protos and namespace_validator.go.

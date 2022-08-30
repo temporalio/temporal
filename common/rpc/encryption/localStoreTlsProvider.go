@@ -64,16 +64,16 @@ type localStoreTlsProvider struct {
 	cachedFrontendClientConfig      *tls.Config
 	cachedRemoteClusterClientConfig map[string]*tls.Config
 
-	ticker *time.Ticker
-	logger log.Logger
-	stop   chan bool
-	scope  metrics.Scope
+	ticker         *time.Ticker
+	logger         log.Logger
+	stop           chan bool
+	metricsHandler metrics.Handler
 }
 
 var _ TLSConfigProvider = (*localStoreTlsProvider)(nil)
 var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
 
-func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope metrics.Scope, logger log.Logger, certProviderFactory CertProviderFactory,
+func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, metricsHandler metrics.Handler, logger log.Logger, certProviderFactory CertProviderFactory,
 ) (TLSConfigProvider, error) {
 
 	internodeProvider := certProviderFactory(&tlsConfig.Internode, nil, nil, tlsConfig.RefreshInterval, logger)
@@ -100,7 +100,7 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope metrics.Scope, lo
 		remoteClusterClientCertProvider: remoteClusterClientCertProvider,
 		RWMutex:                         sync.RWMutex{},
 		settings:                        tlsConfig,
-		scope:                           scope,
+		metricsHandler:                  metricsHandler,
 		logger:                          logger,
 		cachedRemoteClusterClientConfig: make(map[string]*tls.Config),
 	}
@@ -458,9 +458,9 @@ func (s *localStoreTlsProvider) checkCertExpiration() {
 			s.logger.Error(fmt.Sprintf("error while checking for certificate expiration: %v", err))
 			return
 		}
-		if s.scope != nil {
-			s.scope.UpdateGauge(metrics.TlsCertsExpired, float64(len(expired)))
-			s.scope.UpdateGauge(metrics.TlsCertsExpiring, float64(len(expiring)))
+		if s.metricsHandler != nil {
+			s.metricsHandler.Gauge(metrics.TlsCertsExpired.MetricName.String()).Record(float64(len(expired)))
+			s.metricsHandler.Gauge(metrics.TlsCertsExpiring.MetricName.String()).Record(float64(len(expiring)))
 		}
 		s.logCerts(expired, true, errorTime)
 		s.logCerts(expiring, false, errorTime)

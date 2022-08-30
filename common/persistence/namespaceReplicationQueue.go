@@ -58,7 +58,7 @@ func NewNamespaceReplicationQueue(
 	queue Queue,
 	serializer serialization.Serializer,
 	clusterName string,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (NamespaceReplicationQueue, error) {
 
@@ -77,7 +77,7 @@ func NewNamespaceReplicationQueue(
 	return &namespaceReplicationQueueImpl{
 		queue:               queue,
 		clusterName:         clusterName,
-		metricsClient:       metricsClient,
+		metricsHandler:      metricsHandler,
 		logger:              logger,
 		ackNotificationChan: make(chan bool),
 		done:                make(chan bool),
@@ -90,7 +90,7 @@ type (
 	namespaceReplicationQueueImpl struct {
 		queue               Queue
 		clusterName         string
-		metricsClient       metrics.Client
+		metricsHandler      metrics.Handler
 		logger              log.Logger
 		ackLevelUpdated     bool
 		ackNotificationChan chan bool
@@ -159,11 +159,11 @@ func (q *namespaceReplicationQueueImpl) PublishToDLQ(ctx context.Context, task *
 		return err
 	}
 
-	q.metricsClient.Scope(
-		metrics.PersistenceNamespaceReplicationQueueScope,
-	).UpdateGauge(
-		metrics.NamespaceReplicationDLQMaxLevelGauge,
+	q.metricsHandler.Gauge(
+		metrics.NamespaceReplicationDLQMaxLevelGauge.MetricName.String(),
+	).Record(
 		float64(messageID),
+		metrics.OperationTag(metrics.PersistenceNamespaceReplicationQueueOperation),
 	)
 	return nil
 }
@@ -409,9 +409,12 @@ func (q *namespaceReplicationQueueImpl) purgeAckedMessages(
 	if err != nil {
 		return fmt.Errorf("failed to purge messages: %v", err)
 	}
-	q.metricsClient.
-		Scope(metrics.PersistenceNamespaceReplicationQueueScope).
-		UpdateGauge(metrics.NamespaceReplicationTaskAckLevelGauge, float64(*minAckLevel))
+	q.metricsHandler.Gauge(
+		metrics.NamespaceReplicationTaskAckLevelGauge.MetricName.String(),
+	).Record(
+		float64(*minAckLevel),
+		metrics.OperationTag(metrics.PersistenceNamespaceReplicationQueueOperation),
+	)
 	return nil
 }
 

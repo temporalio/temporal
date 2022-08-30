@@ -145,9 +145,8 @@ type (
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
 		matchingClient    matchingservice.MatchingServiceClient
-		metricsClient     metrics.Client
+		metricsHandler    metrics.Handler // namespace/taskqueue tagged metric handler
 		namespace         namespace.Name
-		metricScope       metrics.Scope // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory *pollerHistory
 		// outstandingPollsMap is needed to keep track of all outstanding pollers for a
@@ -206,17 +205,18 @@ func newTaskQueueManager(
 		tag.WorkflowTaskQueueName(taskQueue.name),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
 		tag.WorkflowNamespace(nsName.String()))
-	metricsScope := metrics.GetPerTaskQueueScope(
-		e.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope),
+	metricsHandler := metrics.GetPerTaskQueueTags(
+		e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingTaskQueueMgrOperation)),
 		nsName.String(),
 		taskQueue.name,
 		taskQueueKind,
-	).Tagged(metrics.TaskQueueTypeTag(taskQueue.taskType))
+	)
+	metricsHandler = metricsHandler.WithTags(metrics.TaskQueueTypeTag(taskQueue.taskType))
 	tlMgr := &taskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
 		namespaceRegistry:    e.namespaceRegistry,
 		matchingClient:       e.matchingClient,
-		metricsClient:        e.metricsClient,
+		metricsHandler:       metricsHandler,
 		taskQueueID:          taskQueue,
 		taskQueueKind:        taskQueueKind,
 		logger:               logger,
@@ -229,7 +229,6 @@ func newTaskQueueManager(
 		signalFatalProblem:   e.unloadTaskQueue,
 		clusterMeta:          clusterMeta,
 		namespace:            nsName,
-		metricScope:          metricsScope,
 		initializedError:     future.NewFuture[struct{}](),
 		metadataInitialFetch: future.NewFuture[struct{}](),
 		metadataPoller: metadataPoller{
@@ -252,7 +251,7 @@ func newTaskQueueManager(
 	if tlMgr.isFowardingAllowed(taskQueue, taskQueueKind) {
 		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, taskQueue, taskQueueKind, e.matchingClient)
 	}
-	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.metricScope)
+	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.metricsHandler)
 	for _, opt := range opts {
 		opt(tlMgr)
 	}
@@ -269,7 +268,7 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	}
 	var condfail *persistence.ConditionFailedError
 	if errors.As(err, &condfail) {
-		c.metricScope.IncCounter(metrics.ConditionFailedErrorPerTaskQueueCounter)
+		c.metricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.MetricName.String()).Record(1)
 		c.signalFatalProblem(c)
 		return true
 	}
@@ -289,7 +288,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.taskReader.Start()
 	go c.fetchMetadataFromRootPartitionOnInit(context.TODO())
 	c.logger.Info("", tag.LifeCycleStarted)
-	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
+	c.metricsHandler.Counter(metrics.TaskQueueStartedCounter.MetricName.String()).Record(1)
 }
 
 func (c *taskQueueManagerImpl) Stop() {
@@ -316,7 +315,7 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
 	c.logger.Info("", tag.LifeCycleStopped)
-	c.metricScope.IncCounter(metrics.TaskQueueStoppedCounter)
+	c.metricsHandler.Counter(metrics.TaskQueueStoppedCounter.MetricName.String()).Record(1)
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -344,7 +343,7 @@ func (c *taskQueueManagerImpl) AddTask(
 
 	if c.QueueID().IsRoot() && !c.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
 		// Only checks recent pollers in the root partition
-		c.metricScope.IncCounter(metrics.NoRecentPollerTasksPerTaskQueueCounter)
+		c.metricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.MetricName.String()).Record(1)
 	}
 
 	taskInfo := params.taskInfo

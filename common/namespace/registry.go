@@ -153,7 +153,7 @@ type (
 		persistence             Persistence
 		globalNamespacesEnabled bool
 		clock                   Clock
-		metricsClient           metrics.Client
+		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		lastRefreshTime         atomic.Value
 		refreshInterval         dynamicconfig.DurationPropertyFn
@@ -183,7 +183,7 @@ func NewRegistry(
 	persistence Persistence,
 	enableGlobalNamespaces bool,
 	refreshInterval dynamicconfig.DurationPropertyFn,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) Registry {
 	reg := &registry{
@@ -191,7 +191,7 @@ func NewRegistry(
 		persistence:             persistence,
 		globalNamespacesEnabled: enableGlobalNamespaces,
 		clock:                   clock.NewRealTimeSource(),
-		metricsClient:           metricsClient,
+		metricsHandler:          metricsHandler,
 		logger:                  logger,
 		cacheNameToID:           cache.New(cacheMaxSize, &cacheOpts),
 		cacheByID:               cache.New(cacheMaxSize, &cacheOpts),
@@ -581,13 +581,11 @@ func (r *registry) getNamespaceChangeCallbacks() ([]PrepareCallbackFn, []Callbac
 func (r *registry) triggerNamespaceChangePrepareCallback(
 	prepareCallbacks []PrepareCallbackFn,
 ) {
-	sw := r.metricsClient.StartTimer(
-		metrics.NamespaceCacheScope, metrics.NamespaceCachePrepareCallbacksLatency)
-	defer sw.Stop()
-
+	startTime := time.Now()
 	for _, prepareCallback := range prepareCallbacks {
 		prepareCallback()
 	}
+	r.metricsHandler.Timer(metrics.NamespaceCachePrepareCallbacksLatency.MetricName.String()).Record(time.Since(startTime))
 }
 
 func (r *registry) triggerNamespaceChangeCallback(
@@ -595,14 +593,12 @@ func (r *registry) triggerNamespaceChangeCallback(
 	oldNamespaces []*Namespace,
 	newNamespaces []*Namespace,
 ) {
-
-	sw := r.metricsClient.StartTimer(
-		metrics.NamespaceCacheScope, metrics.NamespaceCacheCallbacksLatency)
-	defer sw.Stop()
-
+	startTime := time.Now()
 	for _, callback := range callbacks {
 		callback(oldNamespaces, newNamespaces)
 	}
+	r.metricsHandler.Timer(metrics.NamespaceCacheCallbacksLatency.MetricName.String()).Record(time.Since(startTime))
+
 }
 
 // This is https://pkg.go.dev/golang.org/x/exp/maps#Values except that it works

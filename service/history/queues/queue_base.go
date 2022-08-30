@@ -70,7 +70,7 @@ type (
 		monitor        *monitorImpl
 		mitigator      *mitigatorImpl
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 
 		paginationFnProvider  PaginationFnProvider
 		executableInitializer ExecutableInitializer
@@ -110,7 +110,7 @@ func newQueueBase(
 	options *Options,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *queueBase {
 	var readerScopes map[int32][]Scope
 	var exclusiveHighWatermark tasks.Key

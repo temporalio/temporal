@@ -33,81 +33,85 @@ import (
 )
 
 func emitWorkflowHistoryStats(
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	namespace namespace.Name,
 	historySize int,
 	historyCount int,
 ) {
 
-	executionScope := metricsClient.Scope(metrics.ExecutionStatsScope, metrics.NamespaceTag(namespace.String()))
-	executionScope.RecordDistribution(metrics.HistorySize, historySize)
-	executionScope.RecordDistribution(metrics.HistoryCount, historyCount)
+	executionmetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionStatsOperation), metrics.NamespaceTag(namespace.String()))
+	executionmetricsHandler.Histogram(metrics.HistorySize.MetricName.String(), metrics.HistorySize.Unit).Record(int64(historySize))
+	executionmetricsHandler.Histogram(metrics.HistoryCount.MetricName.String(), metrics.HistoryCount.Unit).Record(int64(historyCount))
 }
 
 func emitMutableStateStatus(
-	scope metrics.Scope,
+	metricsHandler metrics.Handler,
 	stats *persistence.MutableStateStatistics,
 ) {
 	if stats == nil {
 		return
 	}
 
-	scope.RecordDistribution(metrics.MutableStateSize, stats.TotalSize)
-	scope.RecordDistribution(metrics.ExecutionInfoSize, stats.ExecutionInfoSize)
-	scope.RecordDistribution(metrics.ExecutionStateSize, stats.ExecutionStateSize)
+	metricsHandler.Histogram(metrics.MutableStateSize.MetricName.String(), metrics.MutableStateSize.Unit).Record(int64(stats.TotalSize))
+	metricsHandler.Histogram(metrics.ExecutionInfoSize.MetricName.String(), metrics.ExecutionInfoSize.Unit).Record(int64(stats.ExecutionInfoSize))
+	metricsHandler.Histogram(metrics.ExecutionStateSize.MetricName.String(), metrics.ExecutionStateSize.Unit).Record(int64(stats.ExecutionStateSize))
 
-	scope.RecordDistribution(metrics.ActivityInfoSize, stats.ActivityInfoSize)
-	scope.RecordDistribution(metrics.ActivityInfoCount, stats.ActivityInfoCount)
+	metricsHandler.Histogram(metrics.ActivityInfoSize.MetricName.String(), metrics.ActivityInfoSize.Unit).Record(int64(stats.ActivityInfoSize))
+	metricsHandler.Histogram(metrics.ActivityInfoCount.MetricName.String(), metrics.ActivityInfoCount.Unit).Record(int64(stats.ActivityInfoCount))
 
-	scope.RecordDistribution(metrics.TimerInfoSize, stats.TimerInfoSize)
-	scope.RecordDistribution(metrics.TimerInfoCount, stats.TimerInfoCount)
+	metricsHandler.Histogram(metrics.TimerInfoSize.MetricName.String(), metrics.TimerInfoSize.Unit).Record(int64(stats.TimerInfoSize))
+	metricsHandler.Histogram(metrics.TimerInfoCount.MetricName.String(), metrics.TimerInfoCount.Unit).Record(int64(stats.TimerInfoCount))
 
-	scope.RecordDistribution(metrics.ChildInfoSize, stats.ChildInfoSize)
-	scope.RecordDistribution(metrics.ChildInfoCount, stats.ChildInfoCount)
+	metricsHandler.Histogram(metrics.ChildInfoSize.MetricName.String(), metrics.ChildInfoSize.Unit).Record(int64(stats.ChildInfoSize))
+	metricsHandler.Histogram(metrics.ChildInfoCount.MetricName.String(), metrics.ChildInfoCount.Unit).Record(int64(stats.ChildInfoCount))
 
-	scope.RecordDistribution(metrics.RequestCancelInfoSize, stats.RequestCancelInfoSize)
-	scope.RecordDistribution(metrics.RequestCancelInfoCount, stats.RequestCancelInfoCount)
+	metricsHandler.Histogram(metrics.RequestCancelInfoSize.MetricName.String(), metrics.RequestCancelInfoSize.Unit).Record(int64(stats.RequestCancelInfoSize))
+	metricsHandler.Histogram(metrics.RequestCancelInfoCount.MetricName.String(), metrics.RequestCancelInfoCount.Unit).Record(int64(stats.RequestCancelInfoCount))
 
-	scope.RecordDistribution(metrics.SignalInfoSize, stats.SignalInfoSize)
-	scope.RecordDistribution(metrics.SignalInfoCount, stats.SignalInfoCount)
+	metricsHandler.Histogram(metrics.SignalInfoSize.MetricName.String(), metrics.SignalInfoSize.Unit).Record(int64(stats.SignalInfoSize))
+	metricsHandler.Histogram(metrics.SignalInfoCount.MetricName.String(), metrics.SignalInfoCount.Unit).Record(int64(stats.SignalInfoCount))
 
-	scope.RecordDistribution(metrics.BufferedEventsSize, stats.BufferedEventsSize)
-	scope.RecordDistribution(metrics.BufferedEventsCount, stats.BufferedEventsCount)
+	metricsHandler.Histogram(metrics.BufferedEventsSize.MetricName.String(), metrics.BufferedEventsSize.Unit).Record(int64(stats.BufferedEventsSize))
+	metricsHandler.Histogram(metrics.BufferedEventsCount.MetricName.String(), metrics.BufferedEventsCount.Unit).Record(int64(stats.BufferedEventsCount))
 
 	if stats.HistoryStatistics != nil {
-		scope.RecordDistribution(metrics.HistorySize, stats.HistoryStatistics.SizeDiff)
-		scope.RecordDistribution(metrics.HistoryCount, stats.HistoryStatistics.CountDiff)
+		metricsHandler.Histogram(metrics.HistorySize.MetricName.String(), metrics.HistorySize.Unit).Record(int64(stats.HistoryStatistics.SizeDiff))
+		metricsHandler.Histogram(metrics.HistoryCount.MetricName.String(), metrics.HistoryCount.Unit).Record(int64(stats.HistoryStatistics.CountDiff))
 	}
 
 	for category, taskCount := range stats.TaskCountByCategory {
-		scope.Tagged(metrics.TaskCategoryTag(category)).RecordDistribution(metrics.TaskCount, taskCount)
+		metricsHandler.Histogram(metrics.TaskCount.MetricName.String(), metrics.TaskCount.Unit).Record(
+			int64(taskCount),
+			metrics.TaskCategoryTag(category),
+		)
+
 	}
 }
 
 func emitWorkflowCompletionStats(
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	namespace namespace.Name,
 	taskQueue string,
 	status enumspb.WorkflowExecutionStatus,
 ) {
-	scope := metricsClient.Scope(
-		metrics.WorkflowCompletionStatsScope,
+	scope := metricsHandler.WithTags(
+		metrics.OperationTag(metrics.WorkflowCompletionStatsOperation),
 		metrics.NamespaceTag(namespace.String()),
 		metrics.TaskQueueTag(taskQueue),
 	)
 
 	switch status {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED:
-		scope.IncCounter(metrics.WorkflowSuccessCount)
+		scope.Counter(metrics.WorkflowSuccessCount.MetricName.String()).Record(1)
 	case enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED:
-		scope.IncCounter(metrics.WorkflowCancelCount)
+		scope.Counter(metrics.WorkflowCancelCount.MetricName.String()).Record(1)
 	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:
-		scope.IncCounter(metrics.WorkflowFailedCount)
+		scope.Counter(metrics.WorkflowFailedCount.MetricName.String()).Record(1)
 	case enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
-		scope.IncCounter(metrics.WorkflowTimeoutCount)
+		scope.Counter(metrics.WorkflowTimeoutCount.MetricName.String()).Record(1)
 	case enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED:
-		scope.IncCounter(metrics.WorkflowTerminateCount)
+		scope.Counter(metrics.WorkflowTerminateCount.MetricName.String()).Record(1)
 	case enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
-		scope.IncCounter(metrics.WorkflowContinuedAsNewCount)
+		scope.Counter(metrics.WorkflowContinuedAsNewCount.MetricName.String()).Record(1)
 	}
 }

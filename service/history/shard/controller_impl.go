@@ -68,7 +68,6 @@ type (
 		contextTaggedLogger log.Logger
 		throttledLogger     log.Logger
 		config              *configs.Config
-		metricsScope        metrics.Scope
 
 		sync.RWMutex
 		historyShards               map[int32]*ContextImpl
@@ -78,8 +77,8 @@ type (
 		clientBean                  client.Bean
 		historyClient               historyservice.HistoryServiceClient
 		historyServiceResolver      membership.ServiceResolver
-		metricsClient               metrics.Client
-		metricsHandler              metrics.MetricsHandler
+		metricsHandler              metrics.Handler
+		metricsScope                metrics.Handler
 		payloadSerializer           serialization.Serializer
 		timeSource                  clock.TimeSource
 		namespaceRegistry           namespace.Registry
@@ -170,37 +169,43 @@ func (c *ControllerImpl) GetShardByNamespaceWorkflow(
 func (c *ControllerImpl) GetShardByID(
 	shardID int32,
 ) (Context, error) {
-	sw := c.metricsScope.StartTimer(metrics.GetEngineForShardLatency)
-	defer sw.Stop()
+	startTime := c.timeSource.Now()
+	defer func() {
+		c.metricsScope.Timer(metrics.GetEngineForShardLatency.MetricName.String()).Record(c.timeSource.Now().Sub(startTime))
+	}()
+
 	return c.getOrCreateShardContext(shardID)
 }
 
 func (c *ControllerImpl) CloseShardByID(shardID int32) {
-	sw := c.metricsScope.StartTimer(metrics.RemoveEngineForShardLatency)
-	defer sw.Stop()
+	startTime := c.timeSource.Now()
+	defer func() {
+		c.metricsScope.Timer(metrics.RemoveEngineForShardLatency.MetricName.String()).Record(c.timeSource.Now().Sub(startTime))
+	}()
 
 	shard, newNumShards := c.removeShard(shardID, nil)
 	// Stop the current shard, if it exists.
 	if shard != nil {
 		shard.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext, tag.ShardID(shardID))
 		shard.finishStop()
-		c.metricsScope.IncCounter(metrics.ShardContextRemovedCounter)
+		c.metricsScope.Counter(metrics.ShardContextRemovedCounter.MetricName.String()).Record(1)
 		shard.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardContext, tag.Number(newNumShards))
 	}
 }
 
 func (c *ControllerImpl) shardClosedCallback(shard *ContextImpl) {
-	sw := c.metricsScope.StartTimer(metrics.RemoveEngineForShardLatency)
-	defer sw.Stop()
-
-	c.metricsScope.IncCounter(metrics.ShardContextClosedCounter)
+	startTime := c.timeSource.Now()
+	defer func() {
+		c.metricsScope.Timer(metrics.RemoveEngineForShardLatency.MetricName.String()).Record(c.timeSource.Now().Sub(startTime))
+	}()
+	c.metricsScope.Counter(metrics.ShardContextClosedCounter.MetricName.String()).Record(1)
 
 	_, newNumShards := c.removeShard(shard.shardID, shard)
 
 	// Whether shard was in the shards map or not, in both cases we should stop it.
 	shard.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext, tag.ShardID(shard.shardID))
 	shard.finishStop()
-	c.metricsScope.IncCounter(metrics.ShardContextRemovedCounter)
+	c.metricsScope.Counter(metrics.ShardContextRemovedCounter.MetricName.String()).Record(1)
 	shard.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardContext, tag.Number(newNumShards))
 }
 
@@ -256,7 +261,6 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 		c.persistenceShardManager,
 		c.clientBean,
 		c.historyClient,
-		c.metricsClient,
 		c.metricsHandler,
 		c.payloadSerializer,
 		c.timeSource,
@@ -272,7 +276,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 	}
 	shard.start()
 	c.historyShards[shardID] = shard
-	c.metricsScope.IncCounter(metrics.ShardContextCreatedCounter)
+	c.metricsScope.Counter(metrics.ShardContextCreatedCounter.MetricName.String()).Record(1)
 
 	shard.contextTaggedLogger.Info("", tag.LifeCycleStarted, tag.ComponentShardContext)
 	return shard, nil
@@ -320,7 +324,7 @@ func (c *ControllerImpl) shardManagementPump() {
 		case <-acquireTicker.C:
 			c.acquireShards()
 		case changedEvent := <-c.membershipUpdateCh:
-			c.metricsScope.IncCounter(metrics.MembershipChangedCounter)
+			c.metricsScope.Counter(metrics.MembershipChangedCounter.MetricName.String()).Record(1)
 
 			c.contextTaggedLogger.Info("", tag.ValueRingMembershipChangedEvent,
 				tag.NumberProcessed(len(changedEvent.HostsAdded)),
@@ -332,9 +336,11 @@ func (c *ControllerImpl) shardManagementPump() {
 }
 
 func (c *ControllerImpl) acquireShards() {
-	c.metricsScope.IncCounter(metrics.AcquireShardsCounter)
-	sw := c.metricsScope.StartTimer(metrics.AcquireShardsLatency)
-	defer sw.Stop()
+	c.metricsScope.Counter(metrics.AcquireShardsCounter.MetricName.String()).Record(1)
+	startTime := c.timeSource.Now()
+	defer func() {
+		c.metricsScope.Timer(metrics.AcquireShardsLatency.MetricName.String()).Record(c.timeSource.Now().Sub(startTime))
+	}()
 
 	tryAcquire := func(shardID int32) {
 		info, err := c.historyServiceResolver.Lookup(convert.Int32ToString(shardID))
@@ -349,7 +355,7 @@ func (c *ControllerImpl) acquireShards() {
 		}
 		shard, err := c.GetShardByID(shardID)
 		if err != nil {
-			c.metricsScope.IncCounter(metrics.GetEngineForShardErrorCounter)
+			c.metricsScope.Counter(metrics.GetEngineForShardErrorCounter.MetricName.String()).Record(1)
 			c.contextTaggedLogger.Error("Unable to create history shard context", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 			return
 		}
@@ -399,7 +405,7 @@ LoopSubmit:
 	c.RLock()
 	numOfOwnedShards := len(c.historyShards)
 	c.RUnlock()
-	c.metricsScope.UpdateGauge(metrics.NumShardsGauge, float64(numOfOwnedShards))
+	c.metricsScope.Gauge(metrics.NumShardsGauge.MetricName.String()).Record(float64(numOfOwnedShards))
 }
 
 func (c *ControllerImpl) doShutdown() {

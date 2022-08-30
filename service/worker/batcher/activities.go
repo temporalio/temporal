@@ -82,7 +82,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		if err := activity.GetHeartbeatDetails(ctx, &hbd); err == nil {
 			startOver = false
 		} else {
-			a.MetricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
+			a.MetricsHandler.Counter(metrics.BatcherProcessorFailures.MetricName.String()).Record(1)
 			logger.Error("Failed to recover from last heartbeat, start over from beginning", tag.Error(err))
 		}
 	}
@@ -101,7 +101,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
 	for i := 0; i < a.getOperationConcurrency(batchParams.Concurrency); i++ {
-		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.MetricsClient, logger)
+		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.MetricsHandler, logger)
 	}
 
 	for {
@@ -192,7 +192,7 @@ func startTaskProcessor(
 	respCh chan error,
 	limiter *rate.Limiter,
 	sdkClient sdkclient.Client,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) {
 	for {
@@ -223,7 +223,7 @@ func startTaskProcessor(
 					})
 			}
 			if err != nil {
-				metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
+				metricsHandler.Counter(metrics.BatcherProcessorFailures.MetricName.String()).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
 
 				_, ok := batchParams._nonRetryableErrors[err.Error()]
@@ -235,7 +235,7 @@ func startTaskProcessor(
 					taskCh <- task
 				}
 			} else {
-				metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorSuccess)
+				metricsHandler.Counter(metrics.BatcherProcessorSuccess.MetricName.String()).Record(1)
 				respCh <- nil
 			}
 		}

@@ -67,7 +67,7 @@ func newTimerQueueActiveProcessor(
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricHandler metrics.Handler,
 	singleProcessor bool,
 ) *timerQueueActiveProcessorImpl {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
@@ -99,7 +99,7 @@ func newTimerQueueActiveProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationTimerActiveQueueProcessor)),
+		metricHandler.WithTags(metrics.OperationTag(queues.OperationTimerActiveQueueProcessor)),
 	)
 
 	timerTaskFilter := func(task tasks.Task) bool {
@@ -111,7 +111,7 @@ func newTimerQueueActiveProcessor(
 		workflowDeleteManager,
 		processor,
 		logger,
-		metricProvider,
+		metricHandler,
 		config,
 		matchingClient,
 	)
@@ -146,7 +146,7 @@ func newTimerQueueActiveProcessor(
 				),
 				matchingClient,
 				logger,
-				metricProvider,
+				metricHandler,
 				// note: the cluster name is for calculating time for standby tasks,
 				// here we are basically using current cluster time
 				// this field will be deprecated soon, currently exists so that
@@ -161,7 +161,7 @@ func newTimerQueueActiveProcessor(
 	}
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
-		metrics.TimerActiveQueueProcessorScope,
+		metrics.TimerActiveQueueProcessorOperation,
 		shard,
 		ackLevel,
 		timeNow,
@@ -187,7 +187,7 @@ func newTimerQueueActiveProcessor(
 	)
 
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
-		metrics.TimerActiveQueueProcessorScope,
+		metrics.TimerActiveQueueProcessorOperation,
 		shard,
 		workflowCache,
 		processor,
@@ -216,7 +216,7 @@ func newTimerQueueFailoverProcessor(
 	taskAllocator taskAllocator,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricHandler metrics.Handler,
 ) (func(ackLevel tasks.Key) error, *timerQueueActiveProcessorImpl) {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
@@ -261,7 +261,7 @@ func newTimerQueueFailoverProcessor(
 		workflowDeleteManager,
 		processor,
 		logger,
-		metricProvider,
+		metricHandler,
 		shard.GetConfig(),
 		matchingClient,
 	)
@@ -275,7 +275,7 @@ func newTimerQueueFailoverProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationTimerActiveQueueProcessor)),
+		metricHandler.WithTags(metrics.OperationTag(queues.OperationTimerActiveQueueProcessor)),
 	)
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(
@@ -305,7 +305,7 @@ func newTimerQueueFailoverProcessor(
 	)
 
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
-		metrics.TimerActiveQueueProcessorScope,
+		metrics.TimerActiveQueueProcessorOperation,
 		shard,
 		workflowCache,
 		processor,

@@ -195,7 +195,7 @@ func ValidateStart(
 		namespaceName,
 		workflowID,
 		"",
-		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		interceptor.MetricsHandler(ctx, logger).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		throttledLogger,
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
@@ -209,7 +209,7 @@ func ValidateStart(
 		namespaceName,
 		workflowID,
 		"",
-		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		interceptor.MetricsHandler(ctx, logger).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		throttledLogger,
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
@@ -281,25 +281,22 @@ func ValidateStartWorkflowExecutionRequest(
 
 func OverrideStartWorkflowExecutionRequest(
 	request *workflowservice.StartWorkflowExecutionRequest,
-	metricsScope int,
+	operation string,
 	shard shard.Context,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 ) {
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
 
 	namespace := request.GetNamespace()
-
+	metricsScope := metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(namespace))
 	workflowRunTimeout := common.OverrideWorkflowRunTimeout(
 		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
 		timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
 	)
 	if workflowRunTimeout != timestamp.DurationValue(request.GetWorkflowRunTimeout()) {
 		request.WorkflowRunTimeout = timestamp.DurationPtr(workflowRunTimeout)
-		metricsClient.Scope(
-			metricsScope,
-			metrics.NamespaceTag(namespace),
-		).IncCounter(metrics.WorkflowRunTimeoutOverrideCount)
+		metricsScope.Counter(metrics.WorkflowRunTimeoutOverrideCount.MetricName.String()).Record(1)
 	}
 
 	workflowTaskStartToCloseTimeout := common.OverrideWorkflowTaskTimeout(
@@ -310,9 +307,6 @@ func OverrideStartWorkflowExecutionRequest(
 	)
 	if workflowTaskStartToCloseTimeout != timestamp.DurationValue(request.GetWorkflowTaskTimeout()) {
 		request.WorkflowTaskTimeout = timestamp.DurationPtr(workflowTaskStartToCloseTimeout)
-		metricsClient.Scope(
-			metricsScope,
-			metrics.NamespaceTag(namespace),
-		).IncCounter(metrics.WorkflowTaskTimeoutOverrideCount)
+		metricsScope.Counter(metrics.WorkflowTaskTimeoutOverrideCount.MetricName.String()).Record(1)
 	}
 }

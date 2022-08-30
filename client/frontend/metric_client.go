@@ -25,6 +25,8 @@
 package frontend
 
 import (
+	"time"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -37,37 +39,37 @@ var _ workflowservice.WorkflowServiceClient = (*metricClient)(nil)
 
 type metricClient struct {
 	client          workflowservice.WorkflowServiceClient
-	metricsClient   metrics.Client
+	metricsHandler  metrics.Handler
 	throttledLogger log.Logger
 }
 
 // NewMetricClient creates a new instance of workflowservice.WorkflowServiceClient that emits metrics
 func NewMetricClient(
 	client workflowservice.WorkflowServiceClient,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	throttledLogger log.Logger,
 ) workflowservice.WorkflowServiceClient {
 	return &metricClient{
 		client:          client,
-		metricsClient:   metricsClient,
+		metricsHandler:  metricsHandler,
 		throttledLogger: throttledLogger,
 	}
 }
 
 func (c *metricClient) startMetricsRecording(
-	metricScope int,
-) (metrics.Scope, metrics.Stopwatch) {
-	scope := c.metricsClient.Scope(metricScope)
-	scope.IncCounter(metrics.ClientRequests)
-	stopwatch := scope.StartTimer(metrics.ClientLatency)
-	return scope, stopwatch
+	operationName string,
+) metrics.Handler {
+	handler := c.metricsHandler.WithTags(metrics.OperationTag(operationName))
+	handler.Counter(metrics.ClientRequests.MetricName.String()).Record(1)
+	return handler
 }
 
 func (c *metricClient) finishMetricsRecording(
-	scope metrics.Scope,
-	stopwatch metrics.Stopwatch,
+	handler metrics.Handler,
+	latency time.Duration,
 	err error,
 ) {
+	handler.Timer(metrics.ClientLatency.MetricName.String()).Record(latency)
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.Canceled,
@@ -81,7 +83,6 @@ func (c *metricClient) finishMetricsRecording(
 		default:
 			c.throttledLogger.Info("frontend client encountered error", tag.Error(err), tag.ErrorType(err))
 		}
-		scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ClientFailures)
+		handler.Counter(metrics.ClientFailures.MetricName.String()).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
-	stopwatch.Stop()
 }

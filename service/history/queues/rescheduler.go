@@ -71,7 +71,7 @@ type (
 		scheduler      Scheduler
 		timeSource     clock.TimeSource
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 
 		status     int32
 		shutdownCh chan struct{}
@@ -90,7 +90,7 @@ func NewRescheduler(
 	scheduler Scheduler,
 	timeSource clock.TimeSource,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 ) *reschedulerImpl {
 	return &reschedulerImpl{
 		scheduler:      scheduler,

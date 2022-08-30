@@ -127,16 +127,19 @@ func (h *historyArchiver) Archive(
 	request *archiver.ArchiveHistoryRequest,
 	opts ...archiver.ArchiveOption,
 ) (err error) {
-	scope := h.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.NamespaceTag(request.Namespace))
+	mHandler := h.container.MetricsHandler.WithTags(
+		metrics.OperationTag(metrics.HistoryArchiverOperation),
+		metrics.NamespaceTag(request.Namespace),
+	)
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
-	sw := scope.StartTimer(metrics.ServiceLatency)
+	startTime := time.Now()
 	defer func() {
-		sw.Stop()
+		mHandler.Timer(metrics.ServiceLatency.MetricName.String()).Record(time.Since(startTime))
 		if err != nil {
 			if common.IsPersistenceTransientError(err) || isRetryableError(err) {
-				scope.IncCounter(metrics.HistoryArchiverArchiveTransientErrorCount)
+				mHandler.Counter(metrics.HistoryArchiverArchiveTransientErrorCount.MetricName.String()).Record(1)
 			} else {
-				scope.IncCounter(metrics.HistoryArchiverArchiveNonRetryableErrorCount)
+				mHandler.Counter(metrics.HistoryArchiverArchiveNonRetryableErrorCount.MetricName.String()).Record(1)
 				if featureCatalog.NonRetryableError != nil {
 					err = featureCatalog.NonRetryableError()
 				}
@@ -169,7 +172,7 @@ func (h *historyArchiver) Archive(
 				// this may happen even in the middle of iterating history as two archival signals
 				// can be processed concurrently.
 				logger.Info(archiver.ArchiveSkippedInfoMsg)
-				scope.IncCounter(metrics.HistoryArchiverDuplicateArchivalsCount)
+				mHandler.Counter(metrics.HistoryArchiverDuplicateArchivalsCount.MetricName.String()).Record(1)
 				return nil
 			}
 
@@ -206,7 +209,7 @@ func (h *historyArchiver) Archive(
 		}
 		blobSize := int64(binary.Size(encodedHistoryBlob))
 		if exists {
-			scope.IncCounter(metrics.HistoryArchiverBlobExistsCount)
+			mHandler.Counter(metrics.HistoryArchiverBlobExistsCount.MetricName.String()).Record(1)
 		} else {
 			if err := upload(ctx, h.s3cli, URI, key, encodedHistoryBlob); err != nil {
 				if isRetryableError(err) {
@@ -217,7 +220,7 @@ func (h *historyArchiver) Archive(
 				return err
 			}
 			progress.uploadedSize += blobSize
-			scope.RecordDistribution(metrics.HistoryArchiverBlobSize, int(blobSize))
+			mHandler.Histogram(metrics.HistoryArchiverBlobSize.MetricName.String(), metrics.HistoryArchiverBlobSize.Unit).Record(blobSize)
 		}
 
 		progress.historySize += blobSize
@@ -225,9 +228,9 @@ func (h *historyArchiver) Archive(
 		saveHistoryIteratorState(ctx, featureCatalog, historyIterator, &progress)
 	}
 
-	scope.RecordDistribution(metrics.HistoryArchiverTotalUploadSize, int(progress.uploadedSize))
-	scope.RecordDistribution(metrics.HistoryArchiverHistorySize, int(progress.historySize))
-	scope.IncCounter(metrics.HistoryArchiverArchiveSuccessCount)
+	mHandler.Histogram(metrics.HistoryArchiverTotalUploadSize.MetricName.String(), metrics.HistoryArchiverBlobSize.Unit).Record(progress.uploadedSize)
+	mHandler.Histogram(metrics.HistoryArchiverHistorySize.MetricName.String(), metrics.HistoryArchiverBlobSize.Unit).Record(progress.historySize)
+	mHandler.Counter(metrics.HistoryArchiverArchiveSuccessCount.MetricName.String()).Record(1)
 	return nil
 }
 

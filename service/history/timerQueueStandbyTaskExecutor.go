@@ -66,7 +66,7 @@ func newTimerQueueStandbyTaskExecutor(
 	nDCHistoryResender xdc.NDCHistoryResender,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	clusterName string,
 	config *configs.Config,
 ) queues.Executor {
@@ -77,7 +77,7 @@ func newTimerQueueStandbyTaskExecutor(
 			workflowDeleteManager,
 			matchingClient,
 			logger,
-			metricProvider,
+			metricsHandler,
 			config,
 		),
 		clusterName:        clusterName,
@@ -88,10 +88,10 @@ func newTimerQueueStandbyTaskExecutor(
 func (t *timerQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.MetricsHandler, error) {
+) (metrics.Handler, error) {
 	task := executable.GetTask()
 	taskType := queues.GetStandbyTimerTaskTypeTagValue(task)
-	metricsProvider := t.metricProvider.WithTags(
+	metricsProvider := t.metricsHandler.WithTags(
 		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
@@ -456,7 +456,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, executionContext, timerTask, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, executionContext, timerTask, t.metricsHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -506,9 +506,12 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return err
 	}
 
-	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientRequests)
-	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientLatency)
-	defer stopwatch.Stop()
+	scope := t.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTimerTaskOperation))
+	scope.Counter(metrics.ClientRequests.MetricName.String()).Record(1)
+	start := time.Now()
+	defer func() {
+		scope.Timer(metrics.ClientLatency.MetricName.String()).Record(time.Since(start))
+	}()
 
 	adminClient, err := t.shard.GetRemoteAdminClient(remoteClusterName)
 	if err != nil {

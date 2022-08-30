@@ -551,13 +551,12 @@ func CheckEventBlobSizeLimit(
 	namespace string,
 	workflowID string,
 	runID string,
-	scope metrics.Scope,
+	metricHandler metrics.Handler,
 	logger log.Logger,
 	blobSizeViolationOperationTag tag.ZapTag,
 ) error {
 
-	scope.RecordDistribution(metrics.EventBlobSize, actualSize)
-
+	metricHandler.Histogram(metrics.EventBlobSize.MetricName.String(), metrics.EventBlobSize.Unit).Record(int64(actualSize))
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob data size exceeds the warning limit.",

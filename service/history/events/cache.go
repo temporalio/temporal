@@ -59,11 +59,11 @@ type (
 
 	CacheImpl struct {
 		cache.Cache
-		eventsMgr     persistence.ExecutionManager
-		disabled      bool
-		logger        log.Logger
-		metricsClient metrics.Client
-		shardID       int32
+		eventsMgr      persistence.ExecutionManager
+		disabled       bool
+		logger         log.Logger
+		metricsHandler metrics.Handler
+		shardID        int32
 	}
 )
 
@@ -81,19 +81,19 @@ func NewEventsCache(
 	eventsMgr persistence.ExecutionManager,
 	disabled bool,
 	logger log.Logger,
-	metrics metrics.Client,
+	metricsHandler metrics.Handler,
 ) *CacheImpl {
 	opts := &cache.Options{}
 	opts.InitialCapacity = initialCount
 	opts.TTL = ttl
 
 	return &CacheImpl{
-		Cache:         cache.New(maxCount, opts),
-		eventsMgr:     eventsMgr,
-		disabled:      disabled,
-		logger:        log.With(logger, tag.ComponentEventsCache),
-		metricsClient: metrics,
-		shardID:       shardID,
+		Cache:          cache.New(maxCount, opts),
+		eventsMgr:      eventsMgr,
+		disabled:       disabled,
+		logger:         log.With(logger, tag.ComponentEventsCache),
+		metricsHandler: metricsHandler,
+		shardID:        shardID,
 	}
 }
 
@@ -111,9 +111,12 @@ func (e *CacheImpl) validateKey(key EventKey) bool {
 }
 
 func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
-	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheRequests)
-	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetEventScope, metrics.CacheLatency)
-	defer sw.Stop()
+	mHandler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventOperation))
+	mHandler.Counter(metrics.CacheRequests.MetricName.String()).Record(1)
+	startTime := time.Now()
+	defer func() {
+		mHandler.Timer(metrics.CacheLatency.MetricName.String()).Record(time.Since(startTime))
+	}()
 
 	validKey := e.validateKey(key)
 
@@ -125,10 +128,10 @@ func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int
 		}
 	}
 
-	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheMissCounter)
+	mHandler.Counter(metrics.CacheMissCounter.MetricName.String()).Record(1)
 	event, err := e.getHistoryEventFromStore(ctx, key, firstEventID, branchToken)
 	if err != nil {
-		e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheFailures)
+		mHandler.Counter(metrics.CacheFailures.MetricName.String()).Record(1)
 		e.logger.Error("Cache unable to retrieve event from store",
 			tag.Error(err),
 			tag.WorkflowID(key.WorkflowID),
@@ -146,9 +149,12 @@ func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int
 }
 
 func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
-	e.metricsClient.IncCounter(metrics.EventsCachePutEventScope, metrics.CacheRequests)
-	sw := e.metricsClient.StartTimer(metrics.EventsCachePutEventScope, metrics.CacheLatency)
-	defer sw.Stop()
+	mHandler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCachePutEventOperation))
+	mHandler.Counter(metrics.CacheRequests.MetricName.String()).Record(1)
+	startTime := time.Now()
+	defer func() {
+		mHandler.Timer(metrics.CacheLatency.MetricName.String()).Record(time.Since(startTime))
+	}()
 
 	if !e.validateKey(key) {
 		return
@@ -157,9 +163,12 @@ func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
 }
 
 func (e *CacheImpl) DeleteEvent(key EventKey) {
-	e.metricsClient.IncCounter(metrics.EventsCacheDeleteEventScope, metrics.CacheRequests)
-	sw := e.metricsClient.StartTimer(metrics.EventsCacheDeleteEventScope, metrics.CacheLatency)
-	defer sw.Stop()
+	mHandler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheDeleteEventOperation))
+	mHandler.Counter(metrics.CacheRequests.MetricName.String()).Record(1)
+	startTime := time.Now()
+	defer func() {
+		mHandler.Timer(metrics.CacheLatency.MetricName.String()).Record(time.Since(startTime))
+	}()
 
 	e.validateKey(key) // just for log message, delete anyway
 	e.Delete(key)
@@ -172,9 +181,12 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	branchToken []byte,
 ) (*historypb.HistoryEvent, error) {
 
-	e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheRequests)
-	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetFromStoreScope, metrics.CacheLatency)
-	defer sw.Stop()
+	mHandler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetFromStoreOperation))
+	mHandler.Counter(metrics.CacheRequests.MetricName.String()).Record(1)
+	startTime := time.Now()
+	defer func() {
+		mHandler.Timer(metrics.CacheLatency.MetricName.String()).Record(time.Since(startTime))
+	}()
 
 	response, err := e.eventsMgr.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
@@ -190,10 +202,10 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	case *serviceerror.DataLoss:
 		// log event
 		e.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(key.NamespaceID.String()), tag.WorkflowID(key.WorkflowID), tag.WorkflowRunID(key.RunID))
-		e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheFailures)
+		mHandler.Counter(metrics.CacheFailures.MetricName.String()).Record(1)
 		return nil, err
 	default:
-		e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheFailures)
+		mHandler.Counter(metrics.CacheFailures.MetricName.String()).Record(1)
 		return nil, err
 	}
 

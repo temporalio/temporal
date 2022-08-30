@@ -27,6 +27,8 @@ package parentclosepolicy
 import (
 	"context"
 
+	"go.temporal.io/server/common/log/tag"
+
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -35,7 +37,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/sdk"
 )
@@ -55,8 +56,8 @@ type (
 	BootstrapParams struct {
 		// SdkSystemClient is an instance of temporal service client
 		SdkClientFactory sdk.ClientFactory
-		// MetricsClient is an instance of metrics object for emitting stats
-		MetricsClient metrics.Client
+		// MetricsHandler is an instance of metrics object for emitting stats
+		MetricsHandler metrics.Handler
 		// Logger is the logger
 		Logger log.Logger
 		// Config contains the configuration for scanner
@@ -71,7 +72,7 @@ type (
 	Processor struct {
 		svcClientFactory sdk.ClientFactory
 		clientBean       client.Bean
-		metricsClient    metrics.Client
+		metricsHandler   metrics.Handler
 		cfg              Config
 		logger           log.Logger
 		currentCluster   string
@@ -82,7 +83,7 @@ type (
 func New(params *BootstrapParams) *Processor {
 	return &Processor{
 		svcClientFactory: params.SdkClientFactory,
-		metricsClient:    params.MetricsClient,
+		metricsHandler:   params.MetricsHandler.WithTags(metrics.OperationTag(metrics.ParentClosePolicyProcessorOperation)),
 		cfg:              params.Config,
 		logger:           log.With(params.Logger, tag.ComponentBatcher),
 		clientBean:       params.ClientBean,

@@ -80,14 +80,14 @@ func getAPIMetricsScopes(apiNames map[string]string, scopeDefs map[int]scopeDefi
 	return apiNameToScope
 }
 
-func FrontendAPIMetricsScopes() map[string]int {
-	return getAPIMetricsScopes(frontendAPIMetricsNames(), ScopeDefs[Frontend])
+func FrontendAPIMetricsScopes() map[string]string {
+	return frontendAPIMetricsNames()
 }
 
-func MatchingAPIMetricsScopes() map[string]int {
-	return getAPIMetricsScopes(matchingAPIMetricsNames(), ScopeDefs[Matching])
+func MatchingAPIMetricsScopes() map[string]string {
+	return matchingAPIMetricsNames()
 }
 
-func HistoryAPIMetricsScopes() map[string]int {
-	return getAPIMetricsScopes(historyAPIMetricsNames(), ScopeDefs[History])
+func HistoryAPIMetricsScopes() map[string]string {
+	return historyAPIMetricsNames()
 }

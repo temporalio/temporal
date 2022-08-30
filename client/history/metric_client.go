@@ -25,6 +25,8 @@
 package history
 
 import (
+	"time"
+
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -37,7 +39,7 @@ var _ historyservice.HistoryServiceClient = (*metricClient)(nil)
 
 type metricClient struct {
 	client          historyservice.HistoryServiceClient
-	metricsClient   metrics.Client
+	metricsHandler  metrics.Handler
 	logger          log.Logger
 	throttledLogger log.Logger
 }
@@ -45,32 +47,32 @@ type metricClient struct {
 // NewMetricClient creates a new instance of historyservice.HistoryServiceClient that emits metrics
 func NewMetricClient(
 	client historyservice.HistoryServiceClient,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	throttledLogger log.Logger,
 ) historyservice.HistoryServiceClient {
 	return &metricClient{
 		client:          client,
-		metricsClient:   metricsClient,
+		metricsHandler:  metricsHandler,
 		logger:          logger,
 		throttledLogger: throttledLogger,
 	}
 }
 
 func (c *metricClient) startMetricsRecording(
-	metricScope int,
-) (metrics.Scope, metrics.Stopwatch) {
-	scope := c.metricsClient.Scope(metricScope)
-	scope.IncCounter(metrics.ClientRequests)
-	stopwatch := scope.StartTimer(metrics.ClientLatency)
-	return scope, stopwatch
+	operationName string,
+) metrics.Handler {
+	handler := c.metricsHandler.WithTags(metrics.OperationTag(operationName))
+	handler.Counter(metrics.ClientRequests.MetricName.String()).Record(1)
+	return handler
 }
 
 func (c *metricClient) finishMetricsRecording(
-	scope metrics.Scope,
-	stopwatch metrics.Stopwatch,
+	handler metrics.Handler,
+	latency time.Duration,
 	err error,
 ) {
+	handler.Timer(metrics.ClientLatency.MetricName.String()).Record(latency)
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.Canceled,
@@ -84,7 +86,6 @@ func (c *metricClient) finishMetricsRecording(
 		default:
 			c.throttledLogger.Info("history client encountered error", tag.Error(err), tag.ErrorType(err))
 		}
-		scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ClientFailures)
+		handler.Counter(metrics.ClientFailures.MetricName.String()).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
-	stopwatch.Stop()
 }

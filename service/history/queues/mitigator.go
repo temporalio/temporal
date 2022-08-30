@@ -46,7 +46,7 @@ type (
 
 		monitor        Monitor
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 		maxReaderCount dynamicconfig.IntPropertyFn
 
 		// map key is alert type, used for deduping
@@ -58,7 +58,7 @@ type (
 func newMitigator(
 	monitor Monitor,
 	logger log.Logger,
-	metricsHandler metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	maxReaderCount dynamicconfig.IntPropertyFn,
 ) *mitigatorImpl {
 	return &mitigatorImpl{

@@ -82,7 +82,7 @@ type (
 	RuntimeMetricsReporterParams struct {
 		fx.In
 
-		Provider   metrics.MetricsHandler
+		Provider   metrics.Handler
 		Logger     SnTaggedLogger
 		InstanceID InstanceID `optional:"true"`
 	}
@@ -116,7 +116,7 @@ var Module = fx.Options(
 	membership.HostInfoProviderModule,
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
-	fx.Provide(MetricsClientProvider),
+	//fx.Provide(MetricsClientProvider),
 )
 
 var DefaultOptions = fx.Options(
@@ -181,7 +181,7 @@ func SearchAttributeManagerProvider(
 
 func NamespaceRegistryProvider(
 	logger SnTaggedLogger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
 	metadataManager persistence.MetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
@@ -190,7 +190,7 @@ func NamespaceRegistryProvider(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
 		dynamicCollection.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
-		metricsClient,
+		metricsHandler,
 		logger,
 	)
 }
@@ -199,7 +199,7 @@ func ClientFactoryProvider(
 	factoryProvider client.FactoryProvider,
 	rpcFactory common.RPCFactory,
 	membershipMonitor membership.Monitor,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	dynamicCollection *dynamicconfig.Collection,
 	persistenceConfig *config.Persistence,
 	logger SnTaggedLogger,
@@ -208,7 +208,7 @@ func ClientFactoryProvider(
 	return factoryProvider.NewFactory(
 		rpcFactory,
 		membershipMonitor,
-		metricsClient,
+		metricsHandler,
 		dynamicCollection,
 		persistenceConfig.NumHistoryShards,
 		logger,
@@ -300,26 +300,26 @@ func RuntimeMetricsReporterProvider(
 
 func VisibilityBootstrapContainerProvider(
 	logger SnTaggedLogger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
 ) *archiver.VisibilityBootstrapContainer {
 	return &archiver.VisibilityBootstrapContainer{
 		Logger:          logger,
-		MetricsClient:   metricsClient,
+		MetricsHandler:  metricsHandler,
 		ClusterMetadata: clusterMetadata,
 	}
 }
 
 func HistoryBootstrapContainerProvider(
 	logger SnTaggedLogger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
 	executionManager persistence.ExecutionManager,
 ) *archiver.HistoryBootstrapContainer {
 	return &archiver.HistoryBootstrapContainer{
 		ExecutionManager: executionManager,
 		Logger:           logger,
-		MetricsClient:    metricsClient,
+		MetricsHandler:   metricsHandler,
 		ClusterMetadata:  clusterMetadata,
 	}
 }
@@ -362,11 +362,10 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient 
 	)
 }
 
-// TODO: rework to depend on...
-func MetricsClientProvider(logger log.Logger, serviceName ServiceName, provider metrics.MetricsHandler) metrics.Client {
-	serviceIdx := metrics.GetMetricsServiceIdx(string(serviceName), logger)
-	return metrics.NewClient(provider, serviceIdx)
-}
+//func MetricsHandlerProvider(logger log.Logger, serviceName ServiceName, provider metrics.MetricsHandler) metrics.MetricsHandler {
+//	serviceIdx := metrics.GetMetricsServiceIdx(string(serviceName), logger)
+//	return metrics.NewClient(provider, serviceIdx)
+//}
 
 func PersistenceConfigProvider(persistenceConfig config.Persistence, dc *dynamicconfig.Collection) *config.Persistence {
 	persistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
@@ -388,7 +387,7 @@ func ArchiverProviderProvider(cfg *config.Config) provider.ArchiverProvider {
 	return provider.NewArchiverProvider(cfg.Archival.History.Provider, cfg.Archival.Visibility.Provider)
 }
 
-func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.TLSConfigProvider, provider metrics.MetricsHandler) (sdk.ClientFactory, error) {
+func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.TLSConfigProvider, provider metrics.Handler) (sdk.ClientFactory, error) {
 	tlsFrontendConfig, err := tlsConfigProvider.GetFrontendClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)

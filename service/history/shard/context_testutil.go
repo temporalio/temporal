@@ -82,7 +82,7 @@ func NewTestContext(
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
 		executionManager:    resourceTest.ExecutionMgr,
-		metricsClient:       resourceTest.MetricsClient,
+		metricsHandler:      resourceTest.MetricsHandler,
 		eventsCache:         eventsCache,
 		config:              config,
 		contextTaggedLogger: resourceTest.GetLogger(),

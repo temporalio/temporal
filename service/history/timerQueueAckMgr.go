@@ -50,12 +50,12 @@ var (
 
 type (
 	timerQueueAckMgrImpl struct {
-		scope               int
+		operation           string
 		isFailover          bool
 		shard               shard.Context
 		executionMgr        persistence.ExecutionManager
 		logger              log.Logger
-		metricsClient       metrics.Client
+		metricsHandler      metrics.Handler
 		config              *configs.Config
 		timeNow             timeNow
 		updateTimerAckLevel updateTimerAckLevel
@@ -95,7 +95,7 @@ type (
 var _ timerQueueAckMgr = (*timerQueueAckMgrImpl)(nil)
 
 func newTimerQueueAckMgr(
-	scope int,
+	operation string,
 	shard shard.Context,
 	minLevel time.Time,
 	timeNow timeNow,
@@ -107,11 +107,11 @@ func newTimerQueueAckMgr(
 	ackLevel := tasks.NewKey(minLevel, 0)
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
-		scope:                  scope,
+		operation:              operation,
 		isFailover:             false,
 		shard:                  shard,
 		executionMgr:           shard.GetExecutionManager(),
-		metricsClient:          shard.GetMetricsClient(),
+		metricsHandler:         shard.GetMetricsHandler(),
 		logger:                 logger,
 		config:                 shard.GetConfig(),
 		timeNow:                timeNow,
@@ -146,11 +146,11 @@ func newTimerQueueFailoverAckMgr(
 	ackLevel := tasks.NewKey(minLevel, 0)
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
-		scope:                  metrics.TimerActiveQueueProcessorScope,
+		operation:              metrics.TimerActiveQueueProcessorOperation,
 		isFailover:             true,
 		shard:                  shard,
 		executionMgr:           shard.GetExecutionManager(),
-		metricsClient:          shard.GetMetricsClient(),
+		metricsHandler:         shard.GetMetricsHandler(),
 		logger:                 logger,
 		config:                 shard.GetConfig(),
 		timeNow:                timeNow,
@@ -291,7 +291,8 @@ func (t *timerQueueAckMgrImpl) getAckLevel() tasks.Key {
 }
 
 func (t *timerQueueAckMgrImpl) updateAckLevel() error {
-	t.metricsClient.IncCounter(t.scope, metrics.AckLevelUpdateCounter)
+	t.metricsHandler.Counter(metrics.AckLevelUpdateCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(t.operation))
 
 	t.Lock()
 	ackLevel := t.ackLevel
@@ -305,11 +306,17 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() error {
 	if pendingTasks > warnPendingTasks {
 		t.logger.Warn("Too many pending tasks.")
 	}
-	switch t.scope {
-	case metrics.TimerActiveQueueProcessorScope:
-		t.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTimerActivePendingTasksTimer, pendingTasks)
-	case metrics.TimerStandbyQueueProcessorScope:
-		t.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTimerStandbyPendingTasksTimer, pendingTasks)
+	switch t.operation {
+	case metrics.TimerActiveQueueProcessorOperation:
+		t.metricsHandler.Histogram(
+			metrics.ShardInfoTimerActivePendingTasksTimer.MetricName.String(),
+			metrics.ShardInfoTimerActivePendingTasksTimer.Unit,
+		).Record(int64(pendingTasks), metrics.OperationTag(metrics.ShardInfoOperation))
+	case metrics.TimerStandbyQueueProcessorOperation:
+		t.metricsHandler.Histogram(
+			metrics.ShardInfoTimerStandbyPendingTasksTimer.MetricName.String(),
+			metrics.ShardInfoTimerStandbyPendingTasksTimer.Unit,
+		).Record(int64(pendingTasks), metrics.OperationTag(metrics.ShardInfoOperation))
 	}
 
 MoveAckLevelLoop:
@@ -340,7 +347,8 @@ MoveAckLevelLoop:
 
 	t.Unlock()
 	if err := t.updateTimerAckLevel(ackLevel); err != nil {
-		t.metricsClient.IncCounter(t.scope, metrics.AckLevelUpdateFailedCounter)
+		t.metricsHandler.Counter(metrics.AckLevelUpdateFailedCounter.MetricName.String()).Record(
+			1, metrics.OperationTag(t.operation))
 		t.logger.Error("Error updating timer ack level for shard", tag.Error(err))
 		return err
 	}

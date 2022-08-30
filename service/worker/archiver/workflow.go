@@ -41,21 +41,22 @@ type dynamicConfigResult struct {
 }
 
 func archivalWorkflow(ctx workflow.Context, carryover []ArchiveRequest) error {
-	return archivalWorkflowHelper(ctx, globalLogger, globalMetricsClient, globalConfig, nil, nil, carryover)
+	return archivalWorkflowHelper(ctx, globalLogger, globalMetricsHandler, globalConfig, nil, nil, carryover)
 }
 
 func archivalWorkflowHelper(
 	ctx workflow.Context,
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	config *Config,
 	handler Handler, // enables tests to inject mocks
 	pump Pump, // enables tests to inject mocks
 	carryover []ArchiveRequest,
 ) error {
-	metricsClient = NewReplayMetricsClient(metricsClient, ctx)
-	metricsClient.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStartedCount)
-	sw := metricsClient.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ServiceLatency)
+	metricsHandler = NewReplayMetricsHandler(metricsHandler, ctx)
+	metricsHandler = metricsHandler.WithTags(metrics.OperationTag(metrics.ArchiverArchivalWorkflowOperation))
+	metricsHandler.Counter(metrics.ArchiverWorkflowStartedCount.MetricName.String()).Record(1)
+	startTime := workflow.Now(ctx)
 	workflowInfo := workflow.GetInfo(ctx)
 	logger = log.With(
 		logger,
@@ -83,27 +84,30 @@ func archivalWorkflowHelper(
 		}).Get(&dcResult)
 	requestCh := workflow.NewBufferedChannel(ctx, dcResult.ArchivalsPerIteration)
 	if handler == nil {
-		handler = NewHandler(ctx, logger, metricsClient, dcResult.ArchiverConcurrency, requestCh)
+		handler = NewHandler(ctx, logger, metricsHandler, dcResult.ArchiverConcurrency, requestCh)
 	}
-	handlerSW := metricsClient.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency)
+	handlerStartTime := workflow.Now(ctx)
 	handler.Start()
 	signalCh := workflow.GetSignalChannel(ctx, signalName)
 	if pump == nil {
-		pump = NewPump(ctx, logger, metricsClient, carryover, dcResult.TimelimitPerIteration, dcResult.ArchivalsPerIteration, requestCh, signalCh)
+		pump = NewPump(ctx, logger, metricsHandler, carryover, dcResult.TimelimitPerIteration, dcResult.ArchivalsPerIteration, requestCh, signalCh)
 	}
 	pumpResult := pump.Run()
-	metricsClient.AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(len(pumpResult.PumpedHashes)))
+	metricsHandler.Counter(metrics.ArchiverNumPumpedRequestsCount.MetricName.String()).Record(int64(len(pumpResult.PumpedHashes)))
 	handledHashes := handler.Finished()
-	handlerSW.Stop()
-	metricsClient.AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(len(handledHashes)))
+	handlerEndTime := workflow.Now(ctx)
+	metricsHandler.Timer(metrics.ArchiverHandleAllRequestsLatency.MetricName.String()).Record(handlerEndTime.Sub(handlerStartTime))
+	metricsHandler.Counter(metrics.ArchiverNumHandledRequestsCount.MetricName.String()).Record(int64(len(handledHashes)))
+
 	if !hashesEqual(pumpResult.PumpedHashes, handledHashes) {
 		logger.Error("handled archival requests do not match pumped archival requests")
-		metricsClient.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverPumpedNotEqualHandledCount)
+		metricsHandler.Counter(metrics.ArchiverPumpedNotEqualHandledCount.MetricName.String()).Record(1)
 	}
 	if pumpResult.TimeoutWithoutSignals {
 		logger.Info("workflow stopping because pump did not get any signals within timeout threshold")
-		metricsClient.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStoppingCount)
-		sw.Stop()
+		metricsHandler.Counter(metrics.ArchiverWorkflowStoppingCount.MetricName.String()).Record(1)
+		endTime := workflow.Now(ctx).Sub(startTime)
+		metricsHandler.Timer(metrics.ServiceLatency.MetricName.String()).Record(endTime)
 		return nil
 	}
 	for {
@@ -116,6 +120,7 @@ func archivalWorkflowHelper(
 	logger.Info("archival system workflow continue as new")
 	ctx = workflow.WithWorkflowRunTimeout(ctx, workflowRunTimeout)
 	ctx = workflow.WithWorkflowTaskTimeout(ctx, workflowTaskTimeout)
-	sw.Stop()
+	endTime := workflow.Now(ctx).Sub(startTime)
+	metricsHandler.Timer(metrics.ServiceLatency.MetricName.String()).Record(endTime)
 	return workflow.NewContinueAsNewError(ctx, archivalWorkflowFnName, pumpResult.UnhandledCarryover)
 }

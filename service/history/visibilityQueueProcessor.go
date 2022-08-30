@@ -60,7 +60,7 @@ type (
 		visibilityTaskFilter     taskFilter
 		ownedScheduler           queues.Scheduler // this is the scheduler owned by this visibility queue processor
 		logger                   log.Logger
-		metricsClient            metrics.Client
+		metricsHandler           metrics.Handler
 
 		// from transferQueueProcessorImpl
 		config   *configs.Config
@@ -78,13 +78,12 @@ func newVisibilityQueueProcessor(
 	scheduler queues.Scheduler,
 	priorityAssigner queues.PriorityAssigner,
 	visibilityMgr manager.VisibilityManager,
-	metricProvider metrics.MetricsHandler,
+	metricsHandler metrics.Handler,
 	hostRateLimiter quotas.RateLimiter,
 ) queues.Queue {
 
 	config := shard.GetConfig()
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
-	metricsClient := shard.GetMetricsClient()
 
 	options := &QueueProcessorOptions{
 		BatchSize:                          config.VisibilityTaskBatchSize,
@@ -94,7 +93,7 @@ func newVisibilityQueueProcessor(
 		UpdateAckIntervalJitterCoefficient: config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
 		MaxReschdulerSize:                  config.VisibilityProcessorMaxReschedulerSize,
 		PollBackoffInterval:                config.VisibilityProcessorPollBackoffInterval,
-		MetricScope:                        metrics.VisibilityQueueProcessorScope,
+		Operation:                          metrics.VisibilityQueueProcessorOperation,
 	}
 	visibilityTaskFilter := func(taskInfo tasks.Task) bool {
 		return true
@@ -122,7 +121,7 @@ func newVisibilityQueueProcessor(
 		visibilityQueueShutdown:  visibilityQueueShutdown,
 		visibilityTaskFilter:     visibilityTaskFilter,
 		logger:                   logger,
-		metricsClient:            metricsClient,
+		metricsHandler:           metricsHandler,
 
 		config:       config,
 		ackLevel:     ackLevel,
@@ -138,7 +137,7 @@ func newVisibilityQueueProcessor(
 		workflowCache,
 		visibilityMgr,
 		logger,
-		metricProvider,
+		metricsHandler,
 	)
 
 	if scheduler == nil {
@@ -150,7 +149,7 @@ func newVisibilityQueueProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
+		metricsHandler.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
 	)
 
 	queueAckMgr := newQueueAckMgr(
@@ -298,7 +297,8 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 		return nil
 	}
 
-	t.metricsClient.IncCounter(metrics.VisibilityQueueProcessorScope, metrics.TaskBatchCompleteCounter)
+	t.metricsHandler.Counter(metrics.TaskBatchCompleteCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.VisibilityQueueProcessorOperation))
 
 	if lowerAckLevel < upperAckLevel {
 		ctx, cancel := newQueueIOContext()

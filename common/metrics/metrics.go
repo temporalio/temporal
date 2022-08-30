@@ -34,11 +34,11 @@ import (
 // https://github.com/temporalio/sdk-go/blob/master/internal/common/metrics/handler.go
 // and adapted to depend on golang.org/x/exp/event
 type (
-	// MetricsHandler represents the main dependency for instrumentation
-	MetricsHandler interface {
+	// Handler represents the main dependency for instrumentation
+	Handler interface {
 		// WithTags creates a new MetricProvder with provided []Tag
 		// Tags are merged with registered Tags from the source MetricsHandler
-		WithTags(...Tag) MetricsHandler
+		WithTags(...Tag) Handler
 
 		// Counter obtains a counter for the given name and MetricOptions.
 		Counter(string) CounterMetric

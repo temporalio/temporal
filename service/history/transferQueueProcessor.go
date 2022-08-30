@@ -66,8 +66,7 @@ type (
 		sdkClientFactory          sdk.ClientFactory
 		taskAllocator             taskAllocator
 		config                    *configs.Config
-		metricProvider            metrics.MetricsHandler
-		metricsClient             metrics.Client
+		metricHandler             metrics.Handler
 		clientBean                client.Bean
 		matchingClient            matchingservice.MatchingServiceClient
 		historyClient             historyservice.HistoryServiceClient
@@ -95,7 +94,7 @@ func newTransferQueueProcessor(
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
-	metricProvider metrics.MetricsHandler,
+	metricHandler metrics.Handler,
 	hostRateLimiter quotas.RateLimiter,
 ) queues.Queue {
 
@@ -116,8 +115,7 @@ func newTransferQueueProcessor(
 		sdkClientFactory:   sdkClientFactory,
 		taskAllocator:      taskAllocator,
 		config:             config,
-		metricProvider:     metricProvider,
-		metricsClient:      shard.GetMetricsClient(),
+		metricHandler:      metricHandler,
 		clientBean:         clientBean,
 		matchingClient:     matchingClient,
 		historyClient:      historyClient,
@@ -143,7 +141,7 @@ func newTransferQueueProcessor(
 				config.TransferProcessorMaxPollRPS,
 			),
 			logger,
-			metricProvider,
+			metricHandler,
 			singleProcessor,
 		),
 		standbyTaskProcessors: make(map[string]*transferQueueStandbyProcessorImpl),
@@ -250,7 +248,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 			t.config.TransferProcessorFailoverMaxPollRPS,
 		),
 		t.logger,
-		t.metricProvider,
+		t.metricHandler,
 	)
 
 	// NOTE: READ REF BEFORE MODIFICATION
@@ -347,8 +345,8 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 		return nil
 	}
 
-	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.TaskBatchCompleteCounter)
-
+	t.metricHandler.Counter(metrics.TaskBatchCompleteCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.TransferQueueProcessorOperation))
 	if lowerAckLevel < upperAckLevel {
 		ctx, cancel := newQueueIOContext()
 		defer cancel()
@@ -410,7 +408,7 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 					t.config.TransferProcessorMaxPollRPS,
 				),
 				t.logger,
-				t.metricProvider,
+				t.metricHandler,
 				t.matchingClient,
 			)
 			processor.Start()

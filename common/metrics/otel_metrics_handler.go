@@ -45,7 +45,7 @@ type otelMetricsHandler struct {
 	excludeTags excludeTags
 }
 
-var _ MetricsHandler = (*otelMetricsHandler)(nil)
+var _ Handler = (*otelMetricsHandler)(nil)
 
 func NewOtelMetricsHandler(l log.Logger, o OpenTelemetryProvider, cfg ClientConfig) *otelMetricsHandler {
 	return &otelMetricsHandler{
@@ -54,9 +54,9 @@ func NewOtelMetricsHandler(l log.Logger, o OpenTelemetryProvider, cfg ClientConf
 	}
 }
 
-// WithTags creates a new MetricProvder with provided []Tag
+// WithTags creates a new metric handler with provided []Tag
 // Tags are merged with registered Tags from the source MetricsHandler
-func (omp *otelMetricsHandler) WithTags(tags ...Tag) MetricsHandler {
+func (omp *otelMetricsHandler) WithTags(tags ...Tag) Handler {
 	return &otelMetricsHandler{
 		provider:    omp.provider,
 		excludeTags: omp.excludeTags,

@@ -51,7 +51,7 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsClient  metrics.Client
+		MetricsHandler metrics.Handler
 		Logger         log.Logger
 		HistoryClient  historyservice.HistoryServiceClient
 		FrontendClient workflowservice.WorkflowServiceClient `name:"localFrontendClient"`
@@ -71,6 +71,8 @@ func NewResult(
 	dcCollection *dynamicconfig.Collection,
 	params activityDeps,
 ) fxResult {
+	mHandler := params.MetricsHandler.WithTags(metrics.OperationTag(metrics.TaskSchedulerOperation))
+	params.MetricsHandler = mHandler
 	return fxResult{
 		Component: &workerComponent{
 			activityDeps: params,

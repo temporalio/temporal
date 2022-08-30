@@ -43,13 +43,13 @@ type (
 	// Outstanding tasks map uses the task id sequencer as the key, which is used by updateAckLevel to move the ack level
 	// for the shard when all preceding tasks are acknowledged.
 	queueAckMgrImpl struct {
-		isFailover    bool
-		shard         shard.Context
-		options       *QueueProcessorOptions
-		processor     processor
-		logger        log.Logger
-		metricsClient metrics.Client
-		finishedChan  chan struct{}
+		isFailover     bool
+		shard          shard.Context
+		options        *QueueProcessorOptions
+		processor      processor
+		logger         log.Logger
+		metricsHandler metrics.Handler
+		finishedChan   chan struct{}
 
 		sync.RWMutex
 		outstandingExecutables map[int64]queues.Executable
@@ -85,7 +85,7 @@ func newQueueAckMgr(
 		readLevel:              ackLevel,
 		ackLevel:               ackLevel,
 		logger:                 logger,
-		metricsClient:          shard.GetMetricsClient(),
+		metricsHandler:         shard.GetMetricsHandler(),
 		finishedChan:           nil,
 		executableInitializer:  executableInitializer,
 	}
@@ -109,7 +109,7 @@ func newQueueFailoverAckMgr(
 		readLevel:              ackLevel,
 		ackLevel:               ackLevel,
 		logger:                 logger,
-		metricsClient:          shard.GetMetricsClient(),
+		metricsHandler:         shard.GetMetricsHandler(),
 		finishedChan:           make(chan struct{}, 1),
 		executableInitializer:  executableInitializer,
 	}
@@ -175,7 +175,10 @@ func (a *queueAckMgrImpl) getFinishedChan() <-chan struct{} {
 }
 
 func (a *queueAckMgrImpl) updateQueueAckLevel() error {
-	a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateCounter)
+	a.metricsHandler.Counter(metrics.AckLevelUpdateCounter.MetricName.String()).Record(
+		1,
+		metrics.OperationTag(a.options.Operation),
+	)
 
 	a.Lock()
 	ackLevel := a.ackLevel
@@ -185,21 +188,33 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() error {
 	taskIDs := maps.Keys(a.outstandingExecutables)
 	util.SortSlice(taskIDs)
 
-	pendingTasks := len(taskIDs)
+	pendingTasks := int64(len(a.outstandingExecutables))
 	if pendingTasks > warnPendingTasks {
 		a.logger.Warn("Too many pending tasks")
 	}
 
-	metricsScope := a.metricsClient.Scope(metrics.ShardInfoScope)
-	switch a.options.MetricScope {
-	case metrics.ReplicatorQueueProcessorScope:
-		metricsScope.RecordDistribution(metrics.ShardInfoReplicationPendingTasksTimer, pendingTasks)
-	case metrics.TransferActiveQueueProcessorScope:
-		metricsScope.RecordDistribution(metrics.ShardInfoTransferActivePendingTasksTimer, pendingTasks)
-	case metrics.TransferStandbyQueueProcessorScope:
-		metricsScope.RecordDistribution(metrics.ShardInfoTransferStandbyPendingTasksTimer, pendingTasks)
-	case metrics.VisibilityQueueProcessorScope:
-		metricsScope.RecordDistribution(metrics.ShardInfoVisibilityPendingTasksTimer, pendingTasks)
+	metricsScope := a.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoOperation))
+	switch a.options.Operation {
+	case metrics.ReplicatorQueueProcessorOperation:
+		metricsScope.Histogram(
+			metrics.ShardInfoReplicationPendingTasksTimer.MetricName.String(),
+			metrics.ShardInfoReplicationPendingTasksTimer.Unit,
+		).Record(pendingTasks)
+	case metrics.TransferActiveQueueProcessorOperation:
+		metricsScope.Histogram(
+			metrics.ShardInfoTransferActivePendingTasksTimer.MetricName.String(),
+			metrics.ShardInfoTransferActivePendingTasksTimer.Unit,
+		).Record(pendingTasks)
+	case metrics.TransferStandbyQueueProcessorOperation:
+		metricsScope.Histogram(
+			metrics.ShardInfoTransferStandbyPendingTasksTimer.MetricName.String(),
+			metrics.ShardInfoTransferStandbyPendingTasksTimer.Unit,
+		).Record(pendingTasks)
+	case metrics.VisibilityQueueProcessorOperation:
+		metricsScope.Histogram(
+			metrics.ShardInfoVisibilityPendingTasksTimer.MetricName.String(),
+			metrics.ShardInfoVisibilityPendingTasksTimer.Unit,
+		).Record(pendingTasks)
 	}
 
 MoveAckLevelLoop:
@@ -230,7 +245,10 @@ MoveAckLevelLoop:
 
 	a.Unlock()
 	if err := a.processor.updateAckLevel(ackLevel); err != nil {
-		a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateFailedCounter)
+		a.metricsHandler.Counter(metrics.AckLevelUpdateFailedCounter.MetricName.String()).Record(
+			1,
+			metrics.OperationTag(a.options.Operation),
+		)
 		a.logger.Error("Error updating ack level for shard", tag.Error(err), tag.OperationFailed)
 		return err
 	}

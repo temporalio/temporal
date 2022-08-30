@@ -69,7 +69,7 @@ type (
 		config             *configs.Config
 		historyCache       workflow.Cache
 		executionMgr       persistence.ExecutionManager
-		metricsClient      metrics.Client
+		metricsHandler     metrics.Handler
 		logger             log.Logger
 		retryPolicy        backoff.RetryPolicy
 		pageSize           int
@@ -106,7 +106,7 @@ func NewAckManager(
 		config:             shard.GetConfig(),
 		historyCache:       historyCache,
 		executionMgr:       executionMgr,
-		metricsClient:      shard.GetMetricsClient(),
+		metricsHandler:     shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorOperation)),
 		logger:             log.With(logger, tag.ComponentReplicatorQueue),
 		retryPolicy:        retryPolicy,
 		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize(),
@@ -230,25 +230,18 @@ func (p *ackMgrImpl) GetTasks(
 	}
 
 	// Note this is a very rough indicator of how much the remote DC is behind on this shard.
-	p.metricsClient.Scope(
-		metrics.ReplicatorQueueProcessorScope,
-		metrics.TargetClusterTag(pollingCluster),
-	).RecordDistribution(
-		metrics.ReplicationTasksLag,
-		int(maxTaskID-lastTaskID),
-	)
-
-	p.metricsClient.RecordDistribution(
-		metrics.ReplicatorQueueProcessorScope,
-		metrics.ReplicationTasksFetched,
-		len(replicationTasks),
-	)
-
-	p.metricsClient.RecordDistribution(
-		metrics.ReplicatorQueueProcessorScope,
-		metrics.ReplicationTasksReturned,
-		len(replicationTasks),
-	)
+	p.metricsHandler.Histogram(
+		metrics.ReplicationTasksLag.MetricName.String(),
+		metrics.ReplicationTasksLag.Unit,
+	).Record(maxTaskID - lastTaskID)
+	p.metricsHandler.Histogram(
+		metrics.ReplicationTasksFetched.MetricName.String(),
+		metrics.ReplicationTasksFetched.Unit,
+	).Record(int64(p.pageSize))
+	p.metricsHandler.Histogram(
+		metrics.ReplicationTasksReturned.MetricName.String(),
+		metrics.ReplicationTasksReturned.Unit,
+	).Record(int64(len(replicationTasks)))
 
 	return &replicationspb.ReplicationMessages{
 		ReplicationTasks:       replicationTasks,

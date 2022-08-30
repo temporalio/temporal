@@ -161,7 +161,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		executionManager  persistence.ExecutionManager
 		serializer        serialization.Serializer
-		metricsClient     metrics.Client
+		metricsHandler    metrics.Handler
 		workflowResetter  workflowResetter
 		eventsReapplier   nDCEventsReapplier
 		logger            log.Logger
@@ -187,7 +187,7 @@ func newNDCTransactionMgr(
 		clusterMetadata:   shard.GetClusterMetadata(),
 		executionManager:  shard.GetExecutionManager(),
 		serializer:        shard.GetPayloadSerializer(),
-		metricsClient:     shard.GetMetricsClient(),
+		metricsHandler:    shard.GetMetricsHandler(),
 		workflowResetter: newWorkflowResetter(
 			shard,
 			historyCache,
@@ -331,7 +331,10 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(workflowID),
 			)
-			r.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
+			r.metricsHandler.Counter(metrics.EventReapplySkippedCount.MetricName.String()).Record(
+				1,
+				metrics.OperationTag(metrics.HistoryReapplyEventsOperation),
+			)
 			return persistence.UpdateWorkflowModeBypassCurrent, workflow.TransactionPolicyPassive, nil
 		}
 

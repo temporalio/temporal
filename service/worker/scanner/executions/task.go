@@ -55,7 +55,7 @@ type (
 	task struct {
 		shardID          int32
 		executionManager persistence.ExecutionManager
-		metrics          metrics.Client
+		metricsHandler   metrics.Handler
 		logger           log.Logger
 		scavenger        *Scavenger
 
@@ -69,7 +69,7 @@ type (
 func newTask(
 	shardID int32,
 	executionManager persistence.ExecutionManager,
-	metrics metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 	scavenger *Scavenger,
 	rateLimiter quotas.RateLimiter,
@@ -78,9 +78,9 @@ func newTask(
 		shardID:          shardID,
 		executionManager: executionManager,
 
-		metrics:   metrics,
-		logger:    logger,
-		scavenger: scavenger,
+		metricsHandler: metricsHandler,
+		logger:         logger,
+		scavenger:      scavenger,
 
 		ctx:         context.Background(), // TODO: use context from ExecutionsScavengerActivity
 		rateLimiter: rateLimiter,
@@ -108,7 +108,7 @@ func (t *task) Run() executor.TaskStatus {
 		printValidationResult(
 			mutableState,
 			t.validate(mutableState),
-			t.metrics,
+			t.metricsHandler,
 			t.logger,
 		)
 	}
@@ -180,24 +180,21 @@ func (t *task) getPaginationFn() collection.PaginationFn[*persistencespb.Workflo
 func printValidationResult(
 	mutableState *MutableState,
 	results []MutableStateValidationResult,
-	metricClient metrics.Client,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) {
-
-	metricsScope := metricClient.Scope(metrics.ExecutionsScavengerScope).Tagged(
+	handler := metricsHandler.WithTags(
+		metrics.OperationTag(metrics.ExecutionsScavengerOperation),
 		metrics.FailureTag(""),
 	)
-	metricsScope.IncCounter(metrics.ScavengerValidationRequestsCount)
+	handler.Counter(metrics.ScavengerValidationRequestsCount.MetricName.String()).Record(1)
 	if len(results) == 0 {
 		return
 	}
 
-	metricsScope.IncCounter(metrics.ScavengerValidationFailuresCount)
+	handler.Counter(metrics.ScavengerValidationFailuresCount.MetricName.String()).Record(1)
 	for _, result := range results {
-		metricsScope.Tagged(
-			metrics.FailureTag(result.failureType),
-		).IncCounter(metrics.ScavengerValidationFailuresCount)
-
+		handler.Counter(metrics.ScavengerValidationFailuresCount.MetricName.String()).Record(1, metrics.FailureTag(result.failureType))
 		logger.Error(
 			"validation failed for execution.",
 			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),

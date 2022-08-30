@@ -50,7 +50,7 @@ type (
 	Handler struct {
 		engine            Engine
 		config            *Config
-		metricsClient     metrics.Client
+		metricsHandler    metrics.Handler
 		logger            log.Logger
 		startWG           sync.WaitGroup
 		throttledLogger   log.Logger
@@ -75,13 +75,13 @@ func NewHandler(
 	historyClient historyservice.HistoryServiceClient,
 	matchingRawClient matchingservice.MatchingServiceClient,
 	matchingServiceResolver membership.ServiceResolver,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 ) *Handler {
 	handler := &Handler{
 		config:          config,
-		metricsClient:   metricsClient,
+		metricsHandler:  metricsHandler,
 		logger:          logger,
 		throttledLogger: throttledLogger,
 		engine: NewEngine(
@@ -90,7 +90,7 @@ func NewHandler(
 			matchingRawClient, // Use non retry client inside matching
 			config,
 			logger,
-			metricsClient,
+			metricsHandler,
 			namespaceRegistry,
 			matchingServiceResolver,
 			clusterMetadata,
@@ -139,14 +139,14 @@ func (h *Handler) newHandlerContext(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	taskQueue *taskqueuepb.TaskQueue,
-	scope int,
+	operation string,
 ) *handlerContext {
 	return newHandlerContext(
 		ctx,
 		h.namespaceName(namespaceID),
 		taskQueue,
-		h.metricsClient,
-		scope,
+		h.metricsHandler,
+		operation,
 		h.logger,
 	)
 }
@@ -162,7 +162,7 @@ func (h *Handler) AddActivityTask(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
 		request.GetTaskQueue(),
-		metrics.MatchingAddActivityTaskScope,
+		metrics.MatchingAddActivityTaskOperation,
 	)
 
 	if request.GetForwardedSource() != "" {
@@ -171,7 +171,7 @@ func (h *Handler) AddActivityTask(
 
 	syncMatch, err := h.engine.AddActivityTask(hCtx, request)
 	if syncMatch {
-		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskQueue, time.Since(startT))
+		hCtx.metricsHandler.Timer(metrics.SyncMatchLatencyPerTaskQueue.MetricName.String()).Record(time.Since(startT))
 	}
 
 	return &matchingservice.AddActivityTaskResponse{}, err
@@ -188,7 +188,7 @@ func (h *Handler) AddWorkflowTask(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
 		request.GetTaskQueue(),
-		metrics.MatchingAddWorkflowTaskScope,
+		metrics.MatchingAddWorkflowTaskOperation,
 	)
 
 	if request.GetForwardedSource() != "" {
@@ -197,7 +197,7 @@ func (h *Handler) AddWorkflowTask(
 
 	syncMatch, err := h.engine.AddWorkflowTask(hCtx, request)
 	if syncMatch {
-		hCtx.scope.RecordTimer(metrics.SyncMatchLatencyPerTaskQueue, time.Since(startT))
+		hCtx.metricsHandler.Timer(metrics.SyncMatchLatencyPerTaskQueue.MetricName.String()).Record(time.Since(startT))
 	}
 	return &matchingservice.AddWorkflowTaskResponse{}, err
 }
@@ -212,7 +212,7 @@ func (h *Handler) PollActivityTaskQueue(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
 		request.GetPollRequest().GetTaskQueue(),
-		metrics.MatchingPollActivityTaskQueueScope,
+		metrics.MatchingPollActivityTaskQueueOperation,
 	)
 
 	if request.GetForwardedSource() != "" {
@@ -241,7 +241,7 @@ func (h *Handler) PollWorkflowTaskQueue(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
 		request.GetPollRequest().GetTaskQueue(),
-		metrics.MatchingPollWorkflowTaskQueueScope,
+		metrics.MatchingPollWorkflowTaskQueueOperation,
 	)
 
 	if request.GetForwardedSource() != "" {
@@ -270,7 +270,7 @@ func (h *Handler) QueryWorkflow(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
 		request.GetTaskQueue(),
-		metrics.MatchingQueryWorkflowScope,
+		metrics.MatchingQueryWorkflowOperation,
 	)
 
 	if request.GetForwardedSource() != "" {
@@ -291,7 +291,7 @@ func (h *Handler) RespondQueryTaskCompleted(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
 		request.GetTaskQueue(),
-		metrics.MatchingRespondQueryTaskCompletedScope,
+		metrics.MatchingRespondQueryTaskCompletedOperation,
 	)
 
 	err := h.engine.RespondQueryTaskCompleted(hCtx, request)
@@ -306,7 +306,7 @@ func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
 		request.GetTaskQueue(),
-		metrics.MatchingCancelOutstandingPollScope,
+		metrics.MatchingCancelOutstandingPollOperation,
 	)
 
 	err := h.engine.CancelOutstandingPoll(hCtx, request)
@@ -325,7 +325,7 @@ func (h *Handler) DescribeTaskQueue(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
 		request.GetDescRequest().GetTaskQueue(),
-		metrics.MatchingDescribeTaskQueueScope,
+		metrics.MatchingDescribeTaskQueueOperation,
 	)
 
 	response, err := h.engine.DescribeTaskQueue(hCtx, request)
@@ -342,8 +342,8 @@ func (h *Handler) ListTaskQueuePartitions(
 		ctx,
 		namespace.Name(request.GetNamespace()),
 		request.GetTaskQueue(),
-		h.metricsClient,
-		metrics.MatchingListTaskQueuePartitionsScope,
+		h.metricsHandler,
+		metrics.MatchingListTaskQueuePartitionsOperation,
 		h.logger,
 	)
 
@@ -364,7 +364,7 @@ func (h *Handler) UpdateWorkerBuildIdOrdering(
 			Name: request.Request.GetTaskQueue(),
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		metrics.MatchingUpdateWorkerBuildIdOrderingScope,
+		metrics.MatchingUpdateWorkerBuildIdOrderingOperation,
 	)
 
 	return h.engine.UpdateWorkerBuildIdOrdering(hCtx, request)
@@ -383,7 +383,7 @@ func (h *Handler) GetWorkerBuildIdOrdering(
 			Name: request.Request.GetTaskQueue(),
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		metrics.MatchingGetWorkerBuildIdOrderingScope,
+		metrics.MatchingGetWorkerBuildIdOrderingOperation,
 	)
 
 	return h.engine.GetWorkerBuildIdOrdering(hCtx, request)
@@ -402,7 +402,7 @@ func (h *Handler) InvalidateTaskQueueMetadata(
 			Name: request.GetTaskQueue(),
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		metrics.MatchingInvalidateTaskQueueMetadataScope,
+		metrics.MatchingInvalidateTaskQueueMetadataOperation,
 	)
 
 	return h.engine.InvalidateTaskQueueMetadata(hCtx, request)
@@ -420,7 +420,7 @@ func (h *Handler) GetTaskQueueMetadata(
 			Name: request.GetTaskQueue(),
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		metrics.MatchingGetTaskQueueMetadataScope,
+		metrics.MatchingGetTaskQueueMetadataOperation,
 	)
 
 	return h.engine.GetTaskQueueMetadata(hCtx, request)
@@ -435,10 +435,13 @@ func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 }
 
 func (h *Handler) reportForwardedPerTaskQueueCounter(hCtx *handlerContext, namespaceId namespace.ID) {
-	hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
-	h.metricsClient.
-		Scope(metrics.MatchingAddWorkflowTaskScope).
-		Tagged(metrics.NamespaceTag(h.namespaceName(namespaceId).String())).
-		Tagged(metrics.ServiceRoleTag(metrics.MatchingRoleTagValue)).
-		IncCounter(metrics.MatchingClientForwardedCounter)
+	hCtx.metricsHandler.Counter(metrics.ForwardedPerTaskQueueCounter.MetricName.String()).Record(1)
+	h.metricsHandler.Counter(
+		metrics.MatchingClientForwardedCounter.MetricName.String(),
+	).Record(
+		1,
+		metrics.OperationTag(metrics.MatchingAddWorkflowTaskOperation),
+		metrics.NamespaceTag(h.namespaceName(namespaceId).String()),
+		metrics.ServiceRoleTag(metrics.MatchingRoleTagValue),
+	)
 }

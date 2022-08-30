@@ -63,7 +63,7 @@ type (
 	}
 
 	Executor interface {
-		Execute(context.Context, Executable) (metrics.MetricsHandler, error)
+		Execute(context.Context, Executable) (metrics.Handler, error)
 	}
 
 	// TaskFilter determines if the given task should be executed
@@ -109,7 +109,7 @@ type (
 		loadTime                      time.Time
 		userLatency                   time.Duration
 		logger                        log.Logger
-		metricsProvider               metrics.MetricsHandler
+		metricsHandler                metrics.Handler
 		criticalRetryAttempt          dynamicconfig.IntPropertyFn
 		namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
 		queueType                     QueueType
@@ -149,7 +149,7 @@ func NewExecutable(
 				return tasks.Tags(task)
 			},
 		),
-		metricsProvider:               metrics.NoopMetricsHandler,
+		metricsHandler:                metrics.NoopMetricsHandler,
 		queueType:                     queueType,
 		criticalRetryAttempt:          criticalRetryAttempt,
 		filter:                        filter,
@@ -180,7 +180,7 @@ func (e *executableImpl) Execute() error {
 	startTime := e.timeSource.Now()
 
 	var err error
-	e.metricsProvider, err = e.executor.Execute(ctx, e)
+	e.metricsHandler, err = e.executor.Execute(ctx, e)
 
 	var userLatency time.Duration
 	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
@@ -188,9 +188,9 @@ func (e *executableImpl) Execute() error {
 	}
 	e.userLatency += userLatency
 
-	e.metricsProvider.Counter(TaskRequests).Record(1, metrics.TaskPriorityTag(e.priority.String()))
-	e.metricsProvider.Timer(TaskProcessingLatency).Record(time.Since(startTime))
-	e.metricsProvider.Timer(TaskNoUserProcessingLatency).Record(time.Since(startTime) - userLatency)
+	e.metricsHandler.Counter(TaskRequests).Record(1, metrics.TaskPriorityTag(e.priority.String()))
+	e.metricsHandler.Timer(TaskProcessingLatency).Record(time.Since(startTime))
+	e.metricsHandler.Timer(TaskNoUserProcessingLatency).Record(time.Since(startTime) - userLatency)
 	return err
 }
 
@@ -202,7 +202,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 			e.attempt++
 			if e.attempt > e.criticalRetryAttempt() {
-				e.metricsProvider.Histogram(TaskAttempt, metrics.Dimensionless).Record(int64(e.attempt))
+				e.metricsHandler.Histogram(TaskAttempt, metrics.Dimensionless).Record(int64(e.attempt))
 				e.logger.Error("Critical error processing task, retrying.", tag.Error(err), tag.OperationCritical)
 			}
 		}
@@ -222,17 +222,17 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	if err == consts.ErrTaskRetry {
-		e.metricsProvider.Counter(TaskStandbyRetryCounter).Record(1)
+		e.metricsHandler.Counter(TaskStandbyRetryCounter).Record(1)
 		return err
 	}
 
 	if err == consts.ErrWorkflowBusy {
-		e.metricsProvider.Counter(TaskWorkflowBusyCounter).Record(1)
+		e.metricsHandler.Counter(TaskWorkflowBusyCounter).Record(1)
 		return err
 	}
 
 	if err == consts.ErrTaskDiscarded {
-		e.metricsProvider.Counter(TaskDiscarded).Record(1)
+		e.metricsHandler.Counter(TaskDiscarded).Record(1)
 		return nil
 	}
 
@@ -241,14 +241,14 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 		if e.timeSource.Now().Sub(e.loadTime) > 2*e.namespaceCacheRefreshInterval() {
-			e.metricsProvider.Counter(TaskNotActiveCounter).Record(1)
+			e.metricsHandler.Counter(TaskNotActiveCounter).Record(1)
 			return nil
 		}
 
 		return err
 	}
 
-	e.metricsProvider.Counter(TaskFailures).Record(1)
+	e.metricsHandler.Counter(TaskFailures).Record(1)
 
 	e.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
 	return err
@@ -303,9 +303,9 @@ func (e *executableImpl) Ack() {
 	e.state = ctasks.TaskStateAcked
 
 	if e.shouldProcess {
-		e.metricsProvider.Histogram(TaskAttempt, metrics.Dimensionless).Record(int64(e.attempt))
+		e.metricsHandler.Histogram(TaskAttempt, metrics.Dimensionless).Record(int64(e.attempt))
 
-		priorityTaggedProvider := e.metricsProvider.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
+		priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
 		priorityTaggedProvider.Timer(TaskLatency).Record(time.Since(e.loadTime))
 		priorityTaggedProvider.Timer(TaskQueueLatency).Record(time.Since(e.GetVisibilityTime()))
 		priorityTaggedProvider.Timer(TaskUserLatency).Record(e.userLatency)

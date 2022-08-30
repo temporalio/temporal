@@ -61,10 +61,10 @@ type (
 
 	CacheImpl struct {
 		cache.Cache
-		shard         shard.Context
-		logger        log.Logger
-		metricsClient metrics.Client
-		config        *configs.Config
+		shard          shard.Context
+		logger         log.Logger
+		metricsHandler metrics.Handler
+		config         *configs.Config
 	}
 
 	NewCacheFn func(shard shard.Context) Cache
@@ -85,11 +85,11 @@ func NewCache(shard shard.Context) Cache {
 	opts.Pin = true
 
 	return &CacheImpl{
-		Cache:         cache.New(config.HistoryCacheMaxSize(), opts),
-		shard:         shard,
-		logger:        log.With(shard.GetLogger(), tag.ComponentHistoryCache),
-		metricsClient: shard.GetMetricsClient(),
-		config:        config,
+		Cache:          cache.New(config.HistoryCacheMaxSize(), opts),
+		shard:          shard,
+		logger:         log.With(shard.GetLogger(), tag.ComponentHistoryCache),
+		metricsHandler: shard.GetMetricsHandler(),
+		config:         config,
 	}
 }
 
@@ -104,17 +104,18 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 		return nil, nil, err
 	}
 
-	scope := metrics.HistoryCacheGetOrCreateScope
-	c.metricsClient.IncCounter(scope, metrics.CacheRequests)
+	metricsHandler := c.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryCacheGetOrCreateOperation))
+	metricsHandler.Counter(metrics.CacheRequests.MetricName.String()).Record(1)
 	start := time.Now()
-	sw := c.metricsClient.StartTimer(scope, metrics.CacheLatency)
-	defer sw.Stop()
+	defer func() {
+		metricsHandler.Timer(metrics.CacheLatency.MetricName.String()).Record(time.Since(start))
+	}()
 
 	weCtx, weReleaseFunc, err := c.getOrCreateWorkflowExecutionInternal(
 		ctx,
 		namespaceID,
 		execution,
-		scope,
+		metricsHandler,
 		false,
 		caller,
 	)
@@ -128,7 +129,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
-	scope int,
+	metricsHandler metrics.Handler,
 	forceClearContext bool,
 	caller CallerType,
 ) (Context, ReleaseCacheFunc, error) {
@@ -136,12 +137,12 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	key := definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
 	workflowCtx, cacheHit := c.Get(key).(Context)
 	if !cacheHit {
-		c.metricsClient.IncCounter(scope, metrics.CacheMissCounter)
+		metricsHandler.Counter(metrics.CacheMissCounter.MetricName.String()).Record(1)
 		// Let's create the workflow execution workflowCtx
 		workflowCtx = NewContext(c.shard, key, c.logger)
 		elem, err := c.PutIfNotExist(key, workflowCtx)
 		if err != nil {
-			c.metricsClient.IncCounter(scope, metrics.CacheFailures)
+			metricsHandler.Counter(metrics.CacheFailures.MetricName.String()).Record(1)
 			return nil, nil, err
 		}
 		workflowCtx = elem.(Context)
@@ -154,8 +155,8 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	if err := workflowCtx.Lock(ctx, caller); err != nil {
 		// ctx is done before lock can be acquired
 		c.Release(key)
-		c.metricsClient.IncCounter(scope, metrics.CacheFailures)
-		c.metricsClient.IncCounter(scope, metrics.AcquireLockFailedCounter)
+		metricsHandler.Counter(metrics.CacheFailures.MetricName.String()).Record(1)
+		metricsHandler.Counter(metrics.AcquireLockFailedCounter.MetricName.String()).Record(1)
 		return nil, nil, err
 	}
 	return workflowCtx, releaseFunc, nil

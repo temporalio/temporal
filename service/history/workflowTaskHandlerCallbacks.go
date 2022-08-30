@@ -78,7 +78,7 @@ type (
 		historyEngine          *historyEngineImpl
 		namespaceRegistry      namespace.Registry
 		tokenSerializer        common.TaskTokenSerializer
-		metricsClient          metrics.Client
+		metricsHandler         metrics.Handler
 		logger                 log.Logger
 		throttledLogger        log.Logger
 		commandAttrValidator   *commandAttrValidator
@@ -95,7 +95,7 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 		historyEngine:      historyEngine,
 		namespaceRegistry:  historyEngine.shard.GetNamespaceRegistry(),
 		tokenSerializer:    historyEngine.tokenSerializer,
-		metricsClient:      historyEngine.metricsClient,
+		metricsHandler:     historyEngine.metricsHandler,
 		logger:             historyEngine.logger,
 		throttledLogger:    historyEngine.throttledLogger,
 		commandAttrValidator: newCommandAttrValidator(
@@ -182,12 +182,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			}
 
 			workflowTask, isRunning := mutableState.GetWorkflowTaskInfo(scheduledEventID)
-			metricsScope := handler.metricsClient.Scope(metrics.HistoryRecordWorkflowTaskStartedScope)
+			metricsScope := handler.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedOperation))
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				metricsScope.IncCounter(metrics.StaleMutableStateCounter)
+				metricsScope.Counter(metrics.StaleMutableStateCounter.MetricName.String()).Record(1)
 				// Reload workflow execution history
 				// ErrStaleState will trigger updateWorkflow function to reload the mutable state
 				return nil, consts.ErrStaleState
@@ -233,13 +233,15 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(*workflowTask.ScheduledTime)
 			namespaceName := namespaceEntry.Name()
 			taskQueue := workflowTask.TaskQueue
-			metrics.GetPerTaskQueueScope(
+			metrics.GetPerTaskQueueTags(
 				metricsScope,
 				namespaceName.String(),
 				taskQueue.GetName(),
 				taskQueue.GetKind(),
-			).Tagged(metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW)).
-				RecordTimer(metrics.TaskScheduleToStartLatency, workflowScheduleToStartLatency)
+			).Timer(metrics.TaskScheduleToStartLatency.MetricName.String()).Record(
+				workflowScheduleToStartLatency,
+				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+			)
 
 			resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowTask, req.PollRequest.GetIdentity())
 			if err != nil {
@@ -321,13 +323,14 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 	scheduledEventID := token.GetScheduledEventId()
 
+	scope := handler.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 	workflowContext, err := handler.historyEngine.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		token.Clock,
 		func(mutableState workflow.MutableState) bool {
 			_, ok := mutableState.GetWorkflowTaskInfo(scheduledEventID)
 			if !ok && scheduledEventID >= mutableState.GetNextEventID() {
-				handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.StaleMutableStateCounter)
+				scope.Counter(metrics.StaleMutableStateCounter.MetricName.String()).Record(1)
 				return false
 			}
 			return true
@@ -361,7 +364,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	startedEventID := currentWorkflowTask.StartedEventID
 	maxResetPoints := handler.config.MaxAutoResetPoints(namespaceEntry.Name().String())
 	if msBuilder.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(msBuilder.GetExecutionInfo().AutoResetPoints.Points) {
-		handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.AutoResetPointsLimitExceededCounter)
+		scope.Counter(metrics.AutoResetPointsLimitExceededCounter.MetricName.String()).Record(1)
 	}
 
 	workflowTaskHeartbeating := request.GetForceCreateNewWorkflowTask() && len(request.Commands) == 0
@@ -373,8 +376,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		origSchedTime := timestamp.TimeValue(currentWorkflowTask.OriginalScheduledTime)
 		if origSchedTime.UnixNano() > 0 && handler.timeSource.Now().After(origSchedTime.Add(timeout)) {
 			workflowTaskHeartbeatTimeout = true
-			scope := handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace.String()))
-			scope.IncCounter(metrics.WorkflowTaskHeartbeatTimeoutCounter)
+			scope.Counter(metrics.WorkflowTaskHeartbeatTimeoutCounter.MetricName.String()).Record(
+				1, metrics.NamespaceTag(namespace.String()))
 			completedEvent, err = msBuilder.AddWorkflowTaskTimedOutEvent(currentWorkflowTask.ScheduledEventID, currentWorkflowTask.StartedEventID)
 			if err != nil {
 				return nil, err
@@ -404,11 +407,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	hasUnhandledEvents = msBuilder.HasBufferedEvents()
 
 	if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskQueue == nil {
-		handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteWorkflowTaskWithStickyDisabledCounter)
+		scope.Counter(metrics.CompleteWorkflowTaskWithStickyDisabledCounter.MetricName.String()).Record(1)
 		executionInfo.StickyTaskQueue = ""
 		executionInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(0)
 	} else {
-		handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteWorkflowTaskWithStickyEnabledCounter)
+		scope.Counter(metrics.CompleteWorkflowTaskWithStickyEnabledCounter.MetricName.String()).Record(1)
 		executionInfo.StickyTaskQueue = request.StickyAttributes.WorkerTaskQueue.GetName()
 		executionInfo.StickyScheduleToStartTimeout = request.StickyAttributes.GetScheduleToStartTimeout()
 	}
@@ -431,7 +434,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			msBuilder,
 			handler.historyEngine.searchAttributesValidator,
 			executionStats,
-			handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace.String())),
+			scope.WithTags(metrics.NamespaceTag(namespace.String())),
 			handler.throttledLogger,
 		)
 
@@ -443,7 +446,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			workflowSizeChecker,
 			handler.logger,
 			handler.namespaceRegistry,
-			handler.metricsClient,
+			handler.metricsHandler,
 			handler.config,
 			handler.shard,
 			handler.searchAttributesMapper,
@@ -470,7 +473,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	if wtFailedCause != nil {
-		handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.FailedWorkflowTasksCounter)
+		scope.Counter(metrics.FailedWorkflowTasksCounter.MetricName.String()).Record(1)
 		handler.logger.Info("Failing the workflow task.",
 			tag.Value(wtFailedCause.Message()),
 			tag.WorkflowID(token.GetWorkflowId()),
@@ -547,7 +550,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 	if updateErr != nil {
 		if persistence.IsConflictErr(updateErr) {
-			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.ConcurrencyUpdateFailureCounter)
+			scope.Counter(metrics.ConcurrencyUpdateFailureCounter.MetricName.String()).Record(1)
 		}
 
 		// if updateErr resulted in TransactionSizeLimitError then fail workflow
@@ -711,8 +714,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 	workflowID := msBuilder.GetExecutionInfo().WorkflowId
 	runID := msBuilder.GetExecutionState().GetRunId()
 
-	scope := handler.metricsClient.Scope(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
+	scope := handler.metricsHandler.WithTags(
+		metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation),
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
 		metrics.CommandTypeTag("ConsistentQuery"))
 
@@ -756,7 +759,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 					tag.WorkflowRunID(runID),
 					tag.QueryID(id),
 					tag.Error(err))
-				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
+				scope.Counter(metrics.QueryRegistryInvalidStateCount.MetricName.String()).Record(1)
 			}
 		} else {
 			succeededCompletionState := &workflow.QueryCompletionState{
@@ -771,7 +774,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 					tag.WorkflowRunID(runID),
 					tag.QueryID(id),
 					tag.Error(err))
-				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
+				scope.Counter(metrics.QueryRegistryInvalidStateCount.MetricName.String()).Record(1)
 			}
 		}
 	}
@@ -792,7 +795,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 					tag.WorkflowRunID(runID),
 					tag.QueryID(id),
 					tag.Error(err))
-				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
+				scope.Counter(metrics.QueryRegistryInvalidStateCount.MetricName.String()).Record(1)
 			}
 		}
 	}

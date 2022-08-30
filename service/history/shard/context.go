@@ -62,8 +62,7 @@ type (
 		GetEventsCache() events.Cache
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
-		GetMetricsClient() metrics.Client
-		GetMetricsHandler() metrics.MetricsHandler
+		GetMetricsHandler() metrics.Handler
 		GetTimeSource() clock.TimeSource
 
 		GetEngine(ctx context.Context) (Engine, error)

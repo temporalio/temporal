@@ -78,7 +78,7 @@ type (
 
 		logger            log.Logger
 		namespaceRegistry namespace.Registry
-		metricsClient     metrics.Client
+		metricsHandler    metrics.Handler
 		config            *configs.Config
 		shard             shard.Context
 		tokenSerializer   common.TaskTokenSerializer
@@ -111,7 +111,7 @@ func newWorkflowTaskHandler(
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	config *configs.Config,
 	shard shard.Context,
 	searchAttributesMapper searchattribute.Mapper,
@@ -137,7 +137,7 @@ func newWorkflowTaskHandler(
 
 		logger:            logger,
 		namespaceRegistry: namespaceRegistry,
-		metricsClient:     metricsClient,
+		metricsHandler:    metricsHandler,
 		config:            config,
 		shard:             shard,
 		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
@@ -238,10 +238,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*handleCommandResponse, error) {
 
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeScheduleActivityCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeScheduleActivityCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -364,11 +362,12 @@ func (handler *workflowTaskHandlerImpl) handlePostCommandEagerExecuteActivity(
 		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
 	}
 
-	handler.metricsClient.Scope(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
+	handler.metricsHandler.Counter(metrics.ActivityEagerExecutionCounter.MetricName.String()).Record(
+		1,
+		metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation),
 		metrics.NamespaceTag(string(handler.mutableState.GetNamespaceEntry().Name())),
 		metrics.TaskQueueTag(ai.TaskQueue),
-	).IncCounter(metrics.ActivityEagerExecutionCounter)
+	)
 
 	return func(resp *historyservice.RespondWorkflowTaskCompletedResponse) error {
 		resp.ActivityTasks = append(resp.ActivityTasks, activityTask)
@@ -381,10 +380,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 	attr *commandpb.RequestCancelActivityTaskCommandAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeCancelActivityCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeCancelActivityCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -434,10 +431,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 	attr *commandpb.StartTimerCommandAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeStartTimerCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeStartTimerCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -462,10 +457,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	attr *commandpb.CompleteWorkflowExecutionCommandAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeCompleteWorkflowCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeCompleteWorkflowCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	if handler.hasBufferedEvents {
 		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -491,10 +484,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsClient.IncCounter(
-			metrics.HistoryRespondWorkflowTaskCompletedScope,
-			metrics.MultipleCompletionCommandsCounter,
-		)
+		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.MetricName.String()).Record(
+			1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 		handler.logger.Warn(
 			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION),
@@ -528,10 +519,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 	attr *commandpb.FailWorkflowExecutionCommandAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeFailWorkflowCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeFailWorkflowCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	if handler.hasBufferedEvents {
 		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -557,10 +546,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsClient.IncCounter(
-			metrics.HistoryRespondWorkflowTaskCompletedScope,
-			metrics.MultipleCompletionCommandsCounter,
-		)
+		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.MetricName.String()).Record(
+			1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 		handler.logger.Warn(
 			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION),
@@ -608,10 +595,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 	attr *commandpb.CancelTimerCommandAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeCancelTimerCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeCancelTimerCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -645,10 +630,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 	attr *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeCancelWorkflowCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeCancelWorkflowCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	if handler.hasBufferedEvents {
 		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -664,10 +647,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsClient.IncCounter(
-			metrics.HistoryRespondWorkflowTaskCompletedScope,
-			metrics.MultipleCompletionCommandsCounter,
-		)
+		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.MetricName.String()).Record(
+			1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 		handler.logger.Warn(
 			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION),
@@ -685,10 +666,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	attr *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeCancelExternalWorkflowCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeCancelExternalWorkflowCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -727,10 +706,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
 	attr *commandpb.RecordMarkerCommandAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeRecordMarkerCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeRecordMarkerCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -759,10 +736,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	attr *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeContinueAsNewCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeContinueAsNewCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	if handler.hasBufferedEvents {
 		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
@@ -820,10 +795,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		handler.metricsClient.IncCounter(
-			metrics.HistoryRespondWorkflowTaskCompletedScope,
-			metrics.MultipleCompletionCommandsCounter,
-		)
+		handler.metricsHandler.Counter(metrics.MultipleCompletionCommandsCounter.MetricName.String()).Record(
+			1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 		handler.logger.Warn(
 			"Multiple completion commands",
 			tag.WorkflowCommandType(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION),
@@ -861,10 +834,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	_ context.Context,
 	attr *commandpb.StartChildWorkflowExecutionCommandAttributes,
 ) error {
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeChildWorkflowCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeChildWorkflowCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	parentNamespaceEntry := handler.mutableState.GetNamespaceEntry()
 	parentNamespaceID := parentNamespaceEntry.ID()
@@ -958,10 +929,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	attr *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeSignalExternalWorkflowCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeSignalExternalWorkflowCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
@@ -1008,10 +977,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	attr *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeUpsertWorkflowSearchAttributesCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeUpsertWorkflowSearchAttributesCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -1072,10 +1039,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
 	attr *commandpb.ModifyWorkflowPropertiesCommandAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(
-		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeModifyWorkflowPropertiesCounter,
-	)
+	handler.metricsHandler.Counter(metrics.CommandTypeModifyWorkflowPropertiesCounter.MetricName.String()).Record(
+		1, metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedOperation))
 
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()

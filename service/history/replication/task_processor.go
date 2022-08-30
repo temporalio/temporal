@@ -81,7 +81,7 @@ type (
 		historyEngine           shard.Engine
 		historySerializer       serialization.Serializer
 		config                  *configs.Config
-		metricsClient           metrics.Client
+		metricsHandler          metrics.Handler
 		logger                  log.Logger
 		replicationTaskExecutor TaskExecutor
 
@@ -112,7 +112,7 @@ func NewTaskProcessor(
 	shard shard.Context,
 	historyEngine shard.Engine,
 	config *configs.Config,
-	metricsClient metrics.Client,
+	metricsHandler metrics.Handler,
 	replicationTaskFetcher taskFetcher,
 	replicationTaskExecutor TaskExecutor,
 	eventSerializer serialization.Serializer,
@@ -139,7 +139,7 @@ func NewTaskProcessor(
 		historyEngine:           historyEngine,
 		historySerializer:       eventSerializer,
 		config:                  config,
-		metricsClient:           metricsClient,
+		metricsHandler:          metricsHandler,
 		logger:                  shard.GetLogger(),
 		replicationTaskExecutor: replicationTaskExecutor,
 		rateLimiter: quotas.NewMultiRateLimiter([]quotas.RateLimiter{
@@ -206,7 +206,10 @@ func (p *taskProcessorImpl) eventLoop() {
 		case <-syncShardTimer.C:
 			if err := p.handleSyncShardStatus(syncShardTask); err != nil {
 				p.logger.Error("unable to sync shard status", tag.Error(err))
-				p.metricsClient.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteFailure)
+				p.metricsHandler.Counter(metrics.SyncShardFromRemoteFailure.MetricName.String()).Record(
+					1,
+					metrics.OperationTag(metrics.HistorySyncShardStatusOperation),
+				)
 			}
 			syncShardTimer.Reset(backoff.JitDuration(
 				p.config.ShardSyncMinInterval(),
@@ -244,9 +247,9 @@ func (p *taskProcessorImpl) pollProcessReplicationTasks() (retError error) {
 		taskCreationTime := replicationTask.GetVisibilityTime()
 		if taskCreationTime != nil {
 			now := p.shard.GetTimeSource().Now()
-			p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope).RecordTimer(
-				metrics.ReplicationLatency,
+			p.metricsHandler.Timer(metrics.ReplicationLatency.MetricName.String()).Record(
 				now.Sub(*taskCreationTime),
+				metrics.OperationTag(metrics.ReplicationTaskFetcherOperation),
 			)
 		}
 		if err = p.applyReplicationTask(replicationTask); err != nil {
@@ -306,7 +309,10 @@ func (p *taskProcessorImpl) handleSyncShardStatus(
 		return nil
 	}
 
-	p.metricsClient.Scope(metrics.HistorySyncShardStatusScope).IncCounter(metrics.SyncShardFromRemoteCounter)
+	p.metricsHandler.Counter(metrics.SyncShardFromRemoteCounter.MetricName.String()).Record(
+		1,
+		metrics.OperationTag(metrics.HistorySyncShardStatusOperation),
+	)
 	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
 	defer cancel()
 	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
@@ -325,8 +331,8 @@ func (p *taskProcessorImpl) handleReplicationTask(
 	_ = p.rateLimiter.Wait(ctx)
 
 	operation := func() error {
-		scope, err := p.replicationTaskExecutor.Execute(ctx, replicationTask, false)
-		p.emitTaskMetrics(scope, err)
+		taskType, err := p.replicationTaskExecutor.Execute(ctx, replicationTask, false)
+		p.emitTaskMetrics(taskType, err)
 		return err
 	}
 	return backoff.ThrottleRetry(operation, p.taskRetryPolicy, p.isRetryableError)
@@ -345,20 +351,21 @@ func (p *taskProcessorImpl) handleReplicationDLQTask(
 		tag.WorkflowRunID(request.TaskInfo.GetRunId()),
 		tag.TaskID(request.TaskInfo.GetTaskId()),
 	)
-	p.metricsClient.Scope(
-		metrics.ReplicationDLQStatsScope,
+	p.metricsHandler.Gauge(metrics.ReplicationDLQMaxLevelGauge.MetricName.String()).Record(
+		float64(request.TaskInfo.GetTaskId()),
+		metrics.OperationTag(metrics.ReplicationDLQStatsOperation),
 		metrics.TargetClusterTag(p.sourceCluster),
 		metrics.InstanceTag(convert.Int32ToString(p.shard.GetShardID())),
-	).UpdateGauge(
-		metrics.ReplicationDLQMaxLevelGauge,
-		float64(request.TaskInfo.GetTaskId()),
 	)
 	// The following is guaranteed to success or retry forever until processor is shutdown.
 	return backoff.ThrottleRetry(func() error {
 		err := p.shard.GetExecutionManager().PutReplicationTaskToDLQ(ctx, request)
 		if err != nil {
 			p.logger.Error("failed to enqueue replication task to DLQ", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ReplicationTaskFetcherScope, metrics.ReplicationDLQFailed)
+			p.metricsHandler.Counter(metrics.ReplicationDLQFailed.MetricName.String()).Record(
+				1,
+				metrics.OperationTag(metrics.ReplicationTaskFetcherOperation),
+			)
 		}
 		return err
 	}, p.dlqRetryPolicy, p.isRetryableError)
@@ -490,40 +497,43 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 	}
 }
 
-func (p *taskProcessorImpl) emitTaskMetrics(scope int, err error) {
-	metricsScope := p.metricsClient.Scope(scope)
+func (p *taskProcessorImpl) emitTaskMetrics(operation string, err error) {
+	metricsScope := p.metricsHandler.WithTags(metrics.OperationTag(operation))
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
-		metricsScope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
+		metricsScope.Counter(metrics.ServiceErrContextTimeoutCounter.MetricName.String()).Record(1)
 		return
 	}
 
 	// Also update counter to distinguish between type of failures
 	switch err := err.(type) {
 	case nil:
-		metricsScope.IncCounter(metrics.ReplicationTasksApplied)
+		metricsScope.Counter(metrics.ReplicationTasksApplied.MetricName.String()).Record(1)
 	case *serviceerrors.ShardOwnershipLost:
-		metricsScope.IncCounter(metrics.ServiceErrShardOwnershipLostCounter)
-		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
+		metricsScope.Counter(metrics.ServiceErrShardOwnershipLostCounter.MetricName.String()).Record(1)
+		metricsScope.Counter(metrics.ReplicationTasksFailed.MetricName.String()).Record(1)
 	case *serviceerror.InvalidArgument:
-		metricsScope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
-		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
+		metricsScope.Counter(metrics.ServiceErrInvalidArgumentCounter.MetricName.String()).Record(1)
+		metricsScope.Counter(metrics.ReplicationTasksFailed.MetricName.String()).Record(1)
 	case *serviceerror.NamespaceNotActive:
-		metricsScope.IncCounter(metrics.ServiceErrNamespaceNotActiveCounter)
-		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
+		metricsScope.Counter(metrics.ServiceErrNamespaceNotActiveCounter.MetricName.String()).Record(1)
+		metricsScope.Counter(metrics.ReplicationTasksFailed.MetricName.String()).Record(1)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		metricsScope.IncCounter(metrics.ServiceErrExecutionAlreadyStartedCounter)
-		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
+		metricsScope.Counter(metrics.ServiceErrExecutionAlreadyStartedCounter.MetricName.String()).Record(1)
+		metricsScope.Counter(metrics.ReplicationTasksFailed.MetricName.String()).Record(1)
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
-		metricsScope.IncCounter(metrics.ServiceErrNotFoundCounter)
-		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
+		metricsScope.Counter(metrics.ServiceErrNotFoundCounter.MetricName.String()).Record(1)
+		metricsScope.Counter(metrics.ReplicationTasksFailed.MetricName.String()).Record(1)
 	case *serviceerror.ResourceExhausted:
-		metricsScope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)
-		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
+		metricsScope.Counter(metrics.ServiceErrResourceExhaustedCounter.MetricName.String()).Record(
+			1,
+			metrics.ResourceExhaustedCauseTag(err.Cause),
+		)
+		metricsScope.Counter(metrics.ReplicationTasksFailed.MetricName.String()).Record(1)
 	case *serviceerrors.RetryReplication:
-		metricsScope.IncCounter(metrics.ServiceErrRetryTaskCounter)
-		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
+		metricsScope.Counter(metrics.ServiceErrRetryTaskCounter.MetricName.String()).Record(1)
+		metricsScope.Counter(metrics.ReplicationTasksFailed.MetricName.String()).Record(1)
 	default:
-		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
+		metricsScope.Counter(metrics.ReplicationTasksFailed.MetricName.String()).Record(1)
 	}
 }
 

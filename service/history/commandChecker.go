@@ -79,7 +79,7 @@ type (
 		mutableState              workflow.MutableState
 		searchAttributesValidator *searchattribute.Validator
 		executionStats            *persistencespb.ExecutionStats
-		metricsScope              metrics.Scope
+		metricsHandler            metrics.Handler
 		logger                    log.Logger
 	}
 )
@@ -117,7 +117,7 @@ func newWorkflowSizeChecker(
 	mutableState workflow.MutableState,
 	searchAttributesValidator *searchattribute.Validator,
 	executionStats *persistencespb.ExecutionStats,
-	metricsScope metrics.Scope,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *workflowSizeChecker {
 	return &workflowSizeChecker{
@@ -133,7 +133,7 @@ func newWorkflowSizeChecker(
 		mutableState:              mutableState,
 		searchAttributesValidator: searchAttributesValidator,
 		executionStats:            executionStats,
-		metricsScope:              metricsScope,
+		metricsHandler:            metricsHandler,
 		logger:                    logger,
 	}
 }
@@ -153,7 +153,7 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 		executionInfo.NamespaceId,
 		executionInfo.WorkflowId,
 		executionState.RunId,
-		c.metricsScope.Tagged(commandTypeTag),
+		c.metricsHandler.WithTags(commandTypeTag),
 		c.logger,
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
 	)
@@ -187,7 +187,7 @@ func (c *workflowSizeChecker) failWorkflowIfMemoSizeExceedsLimit(
 		executionInfo.NamespaceId,
 		executionInfo.WorkflowId,
 		executionState.RunId,
-		c.metricsScope.Tagged(commandTypeTag),
+		c.metricsHandler.WithTags(commandTypeTag),
 		c.logger,
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
 	)
@@ -211,7 +211,13 @@ func (c *workflowSizeChecker) failWorkflowIfSearchAttributesSizeExceedsLimit(
 	namespace namespace.Name,
 	commandTypeTag metrics.Tag,
 ) (bool, error) {
-	c.metricsScope.Tagged(commandTypeTag).RecordDistribution(metrics.SearchAttributesSize, searchAttributes.Size())
+	c.metricsHandler.Histogram(
+		metrics.SearchAttributesSize.MetricName.String(),
+		metrics.SearchAttributesSize.Unit,
+	).Record(
+		int64(searchAttributes.Size()),
+		commandTypeTag,
+	)
 
 	err := c.searchAttributesValidator.ValidateSize(searchAttributes, namespace.String())
 	if err == nil {
