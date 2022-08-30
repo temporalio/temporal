@@ -44,7 +44,7 @@ const (
 	ClientNameCLI           = "temporal-cli"
 	ClientNameUI            = "temporal-ui"
 
-	ServerVersion = "1.17.3"
+	ServerVersion = "1.17.5"
 
 	// SupportedServerVersions is used by CLI and inter role communication.
 	SupportedServerVersions = ">=1.0.0 <2.0.0"
