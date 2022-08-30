@@ -419,7 +419,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	c.frontendApp = feApp
 	c.frontendService = frontendService
 	c.frontendNamespaceRegistry = namespaceRegistry
-	connection := rpcFactory.CreateFrontendGRPCConnection(c.FrontendGRPCAddress())
+	connection := rpcFactory.CreateLocalFrontendGRPCConnection(c.FrontendGRPCAddress())
 	c.frontendClient = NewFrontendClient(connection)
 	c.adminClient = NewAdminClient(connection)
 	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
@@ -767,7 +767,11 @@ func (c *rpcFactoryImpl) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, e
 	return nil, nil
 }
 
-func (c *rpcFactoryImpl) CreateFrontendGRPCConnection(hostName string) *grpc.ClientConn {
+func (c *rpcFactoryImpl) CreateRemoteFrontendGRPCConnection(hostName string) *grpc.ClientConn {
+	return c.CreateGRPCConnection(hostName)
+}
+
+func (c *rpcFactoryImpl) CreateLocalFrontendGRPCConnection(hostName string) *grpc.ClientConn {
 	return c.CreateGRPCConnection(hostName)
 }
 

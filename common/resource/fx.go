@@ -415,7 +415,6 @@ func RPCFactoryProvider(
 	logger log.Logger,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
-	clusterMetadata *cluster.Config,
 	traceInterceptor telemetry.ClientTraceInterceptor,
 ) common.RPCFactory {
 	svcCfg := cfg.Services[string(svcName)]
@@ -425,7 +424,6 @@ func RPCFactoryProvider(
 		logger,
 		tlsConfigProvider,
 		dc,
-		clusterMetadata,
 		[]grpc.UnaryClientInterceptor{
 			grpc.UnaryClientInterceptor(traceInterceptor),
 		},
