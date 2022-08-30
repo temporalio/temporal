@@ -113,22 +113,22 @@ func getTaskTypeTagValue(
 	switch task.GetCategory() {
 	case tasks.CategoryTransfer:
 		if isActive {
-			return GetActiveTransferTaskTypeTagValue(task)
+			return getActiveTransferTaskTypeTagValue(task)
 		}
-		return GetStandbyTransferTaskTypeTagValue(task)
+		return getStandbyTransferTaskTypeTagValue(task)
 	case tasks.CategoryTimer:
 		if isActive {
-			return GetActiveTimerTaskTypeTagValue(task)
+			return getActiveTimerTaskTypeTagValue(task)
 		}
-		return GetStandbyTimerTaskTypeTagValue(task)
+		return getStandbyTimerTaskTypeTagValue(task)
 	case tasks.CategoryVisibility:
-		return GetVisibilityTaskTypeTagValue(task)
+		return getVisibilityTaskTypeTagValue(task)
 	default:
 		return task.GetType().String()
 	}
 }
 
-func GetActiveTransferTaskTypeTagValue(
+func getActiveTransferTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	switch task.(type) {
@@ -151,7 +151,7 @@ func GetActiveTransferTaskTypeTagValue(
 	}
 }
 
-func GetStandbyTransferTaskTypeTagValue(
+func getStandbyTransferTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	switch task.(type) {
@@ -174,7 +174,7 @@ func GetStandbyTransferTaskTypeTagValue(
 	}
 }
 
-func GetActiveTimerTaskTypeTagValue(
+func getActiveTimerTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	switch task.(type) {
@@ -197,7 +197,7 @@ func GetActiveTimerTaskTypeTagValue(
 	}
 }
 
-func GetStandbyTimerTaskTypeTagValue(
+func getStandbyTimerTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	switch task.(type) {
@@ -220,7 +220,7 @@ func GetStandbyTimerTaskTypeTagValue(
 	}
 }
 
-func GetVisibilityTaskTypeTagValue(
+func getVisibilityTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	switch task.(type) {
