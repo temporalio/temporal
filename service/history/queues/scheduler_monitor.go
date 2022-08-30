@@ -127,6 +127,12 @@ func (m *schedulerMonitor) RecordStart(executable Executable) {
 
 	stats := m.getOrCreateScheduleStatsLocked(taskChanKey)
 
+	// The latency we want to measure is the duration between
+	// two task start time for one task channel.
+	// However, it's possible that the second task is only queued
+	// long after the first task is started. In that case, the
+	// latency becomes the duration between schedule to start time
+	// for the second task.
 	latency := util.Min(
 		startTime.Sub(stats.lastStartTime),
 		startTime.Sub(executable.GetScheduledTime()),

@@ -43,8 +43,8 @@ const (
 	TaskStandbyRetryCounter     = "task_errors_standby_retry_counter"
 	TaskWorkflowBusyCounter     = "task_errors_workflow_busy"
 	TaskNotActiveCounter        = "task_errors_not_active_counter"
-	TaskLoadLatency             = "task_latency_load"                     // latency for loading task into memory
-	TaskScheduleLatency         = "task_latency_schedule"                 // latency for scheduling task one time (from submission to procesing)
+	TaskLoadLatency             = "task_latency_load"                     // latency from task generation to task loading (persistence scheduleToStart)
+	TaskScheduleLatency         = "task_latency_schedule"                 // latency from task submission to in-memory queue to processing (in-memory scheduleToStart)
 	TaskProcessingLatency       = "task_latency_processing"               // latency for processing task one time
 	TaskNoUserProcessingLatency = "task_latency_processing_nouserlatency" // same as TaskProcessingLatency, but excludes workflow lock latency
 	TaskLatency                 = "task_latency"                          // task in-memory latency across multiple attempts
