@@ -180,7 +180,7 @@ func (s *schedulerImpl) Start() {
 }
 
 func (s *schedulerImpl) Stop() {
-	if s.channelWeightFn != nil {
+	if s.channelWeightUpdateCh != nil {
 		s.namespaceRegistry.UnregisterNamespaceChangeCallback(s)
 
 		// note we can't close the channelWeightUpdateCh here
