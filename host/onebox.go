@@ -702,7 +702,7 @@ func (c *temporalImpl) GetExecutionManager() persistence.ExecutionManager {
 func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	client.OverrideValue(dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
 
-	if c.workerConfig.EnableIndexer {
+	if c.esConfig != nil {
 		client.OverrideValue(dynamicconfig.AdvancedVisibilityWritingMode, visibility.AdvancedVisibilityWritingModeDual)
 	}
 	if c.historyConfig.HistoryCountLimitWarn != 0 {
