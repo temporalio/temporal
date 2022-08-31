@@ -27,6 +27,7 @@ package host
 import (
 	"flag"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,26 +48,19 @@ import (
 	"go.temporal.io/server/common/payload"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/worker/scheduler"
 )
 
 /*
 stuff to test:
 
-create schedule,
-	check that it starts a workflow,
-	check that it starts _another_ workflow (can check status w/frontend),
-	describe it,
-	list it,
-	update it,
-		check that it starts a workflow again,
-		describe it again,
-		list it again,
+create schedule
 	pause
 		check pause in describe
 		check pause search attr
-	terminate it
 
-create schedule with bad schedule spec, check for eager error
+checkvarious validation errors
 
 use some dataconverter for input, check that it starts okay
 
@@ -77,9 +71,6 @@ check: what happens to a lp watcher on worker restart?
 	restart the worker
 	terminate the wf
 	check that new one starts immediately
-
-search attribute mapping:
-	create, update, search
 
 describe updates running workflows:
 	@every 30s
@@ -151,46 +142,50 @@ func (s *scheduleIntegrationSuite) TestScheduleBase() {
 	sid := "sched-test-base"
 	wid := "sched-test-base-wf"
 	wt := "sched-test-base-wt"
-	req := &workflowservice.CreateScheduleRequest{
-		Namespace:  s.namespace,
-		ScheduleId: sid,
-		Schedule: &schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{
-					{Interval: timestamp.DurationPtr(3 * time.Second)},
-				},
+	wt2 := "sched-test-base-wt2"
+
+	// switch this to test with search attribute mapper
+	// csa := "AliasForCustomKeywordField"
+	csa := "CustomKeywordField"
+
+	wfMemo := payload.EncodeString("workflow memo")
+	wfSAValue := payload.EncodeString("workflow sa value")
+	schMemo := payload.EncodeString("schedule memo")
+	schSAValue := payload.EncodeString("schedule sa value")
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: timestamp.DurationPtr(3 * time.Second)},
 			},
-			Action: &schedulepb.ScheduleAction{
-				Action: &schedulepb.ScheduleAction_StartWorkflow{
-					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-						WorkflowId:   wid,
-						WorkflowType: &commonpb.WorkflowType{Name: wt},
-						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
-						Memo: &commonpb.Memo{
-							Fields: map[string]*commonpb.Payload{
-								"wfmemo1": payload.EncodeString("workflow memo"),
-							},
-						},
-						SearchAttributes: &commonpb.SearchAttributes{
-							IndexedFields: map[string]*commonpb.Payload{
-								"CustomKeywordField": payload.EncodeString("workflow value"),
-							},
-						},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					Memo: &commonpb.Memo{
+						Fields: map[string]*commonpb.Payload{"wfmemo1": wfMemo},
+					},
+					SearchAttributes: &commonpb.SearchAttributes{
+						IndexedFields: map[string]*commonpb.Payload{csa: wfSAValue},
 					},
 				},
 			},
 		},
-		Identity:  "test",
-		RequestId: uuid.New(),
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
 		Memo: &commonpb.Memo{
-			Fields: map[string]*commonpb.Payload{
-				"schedmemo1": payload.EncodeString("schedule memo"),
-			},
+			Fields: map[string]*commonpb.Payload{"schedmemo1": schMemo},
 		},
 		SearchAttributes: &commonpb.SearchAttributes{
-			IndexedFields: map[string]*commonpb.Payload{
-				"CustomKeywordField": payload.EncodeString("schedule value"),
-			},
+			IndexedFields: map[string]*commonpb.Payload{csa: schSAValue},
 		},
 	}
 
@@ -203,6 +198,15 @@ func (s *scheduleIntegrationSuite) TestScheduleBase() {
 		return nil
 	}
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+	runs2 := 0
+	workflow2Fn := func(ctx workflow.Context) error {
+		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			runs2++
+			return nil
+		})
+		return nil
+	}
+	s.worker.RegisterWorkflowWithOptions(workflow2Fn, workflow.RegisterOptions{Name: wt2})
 
 	// create
 
@@ -210,8 +214,9 @@ func (s *scheduleIntegrationSuite) TestScheduleBase() {
 	_, err := s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
 
-	// sleep until we see two runs
+	// sleep until we see two runs, plus a bit more
 	s.Eventually(func() bool { return runs == 2 }, 8*time.Second, 200*time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	// describe
 
@@ -221,22 +226,28 @@ func (s *scheduleIntegrationSuite) TestScheduleBase() {
 	})
 	s.NoError(err)
 
-	s.Equal(req.Schedule.Spec, describeResp.Schedule.Spec)
+	s.Equal(schedule.Spec, describeResp.Schedule.Spec)
 	s.Equal(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, describeResp.Schedule.Policies.OverlapPolicy) // set to default value
 
-	s.Equal(req.SearchAttributes.IndexedFields["CustomKeywordField"].Data, describeResp.SearchAttributes.IndexedFields["CustomKeywordField"].Data)
-	s.Equal(req.Memo.Fields["schedmemo1"].Data, describeResp.Memo.Fields["schedmemo1"].Data)
+	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(schMemo.Data, describeResp.Memo.Fields["schedmemo1"].Data)
+	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
 
 	s.DurationNear(describeResp.Info.CreateTime.Sub(createTime), 0, 500*time.Millisecond)
 	s.EqualValues(2, describeResp.Info.ActionCount)
 	s.EqualValues(0, describeResp.Info.MissedCatchupWindow)
 	s.EqualValues(0, describeResp.Info.OverlapSkipped)
-	s.LessOrEqual(len(describeResp.Info.RunningWorkflows), 1) // should be short-lived but we might catch one if we get unlucky
+	s.EqualValues(0, len(describeResp.Info.RunningWorkflows))
 	s.EqualValues(2, len(describeResp.Info.RecentActions))
+	action0 := describeResp.Info.RecentActions[0]
+	s.WithinRange(*action0.ScheduleTime, createTime, time.Now())
+	s.True(action0.ScheduleTime.UnixNano()%int64(3*time.Second) == 0)
+	s.DurationNear(action0.ActualTime.Sub(*action0.ScheduleTime), 0, 100*time.Millisecond)
 
 	// list
 
-	s.Eventually(func() bool {
+	s.Eventually(func() bool { // wait for visibility
 		listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
 			Namespace:       s.namespace,
 			MaximumPageSize: 5,
@@ -247,17 +258,89 @@ func (s *scheduleIntegrationSuite) TestScheduleBase() {
 		s.NoError(err)
 		entry := listResp.Schedules[0]
 		s.Equal(sid, entry.ScheduleId)
-		s.Equalf(req.SearchAttributes.IndexedFields["CustomKeywordField"].Data, entry.SearchAttributes.GetIndexedFields()["CustomKeywordField"].GetData(),
-			"missing search attributes, value is %#v", entry.SearchAttributes)
-		s.Equal(req.Memo.Fields["schedmemo1"].Data, entry.Memo.Fields["schedmemo1"].Data)
-		s.Equal(req.Schedule.Spec, entry.Info.Spec)
+		s.Equal(schSAValue.Data, entry.SearchAttributes.IndexedFields[csa].Data)
+		s.Equal(schMemo.Data, entry.Memo.Fields["schedmemo1"].Data)
+		s.Equal(schedule.Spec, entry.Info.Spec)
 		s.Equal(wt, entry.Info.WorkflowType.Name)
 		s.False(entry.Info.Paused)
-		s.Equal(describeResp.Info.RecentActions, entry.Info.RecentActions) // 2-3 is below the limit where list entry might be cut off
+		s.Equal(describeResp.Info.RecentActions, entry.Info.RecentActions) // 2 is below the limit where list entry might be cut off
 		return true
 	}, 3*time.Second, 200*time.Millisecond)
 
+	// list workflows
+
+	wfResp, err := s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  5,
+		Query:     "",
+	})
+	s.NoError(err)
+	s.EqualValues(2, len(wfResp.Executions), "should see only two completed workflows, _not_ the schedule itself")
+	ex0 := wfResp.Executions[0]
+	s.True(strings.HasPrefix(ex0.Execution.WorkflowId, wid))
+	s.True(ex0.Execution.RunId == describeResp.Info.RecentActions[0].GetStartWorkflowResult().RunId ||
+		ex0.Execution.RunId == describeResp.Info.RecentActions[1].GetStartWorkflowResult().RunId)
+	s.Equal(wt, ex0.Type.Name)
+	s.Nil(ex0.ParentExecution) // not a child workflow
+	s.Equal(wfMemo.Data, ex0.Memo.Fields["wfmemo1"].Data)
+	s.Equal(wfSAValue.Data, ex0.SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(payload.EncodeString(sid).Data, ex0.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledById].Data)
+	var ex0StartTime time.Time
+	s.NoError(payload.Decode(ex0.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledStartTime], &ex0StartTime))
+	s.WithinRange(ex0StartTime, createTime, time.Now())
+	s.True(ex0StartTime.UnixNano()%int64(3*time.Second) == 0)
+
+	// list workflows with namespace division (implementation details here, not public api)
+
+	wfResp, err = s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  5,
+		Query:     fmt.Sprintf("%s = \"%s\"", searchattribute.TemporalNamespaceDivision, scheduler.NamespaceDivision),
+	})
+	s.NoError(err)
+	s.EqualValues(1, len(wfResp.Executions), "should see scheduler workflow")
+	ex0 = wfResp.Executions[0]
+	s.Equal(scheduler.WorkflowType, ex0.Type.Name)
+
 	// update
+
+	schedule.Spec.Interval[0].Phase = timestamp.DurationPtr(1 * time.Second)
+	schedule.Action.GetStartWorkflow().WorkflowType.Name = wt2
+
+	updateTime := time.Now()
+	_, err = s.engine.UpdateSchedule(NewContext(), &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+	})
+	s.NoError(err)
+
+	// wait for one new run
+	s.Eventually(func() bool { return runs2 == 1 }, 4*time.Second, 200*time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
+
+	// describe again
+	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+
+	s.Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(schMemo.Data, describeResp.Memo.Fields["schedmemo1"].Data)
+	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
+	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
+
+	s.DurationNear(describeResp.Info.UpdateTime.Sub(updateTime), 0, 500*time.Millisecond)
+	s.EqualValues(3, len(describeResp.Info.RecentActions))
+	action2 := describeResp.Info.RecentActions[2]
+	s.True(action2.ScheduleTime.UnixNano()%int64(3*time.Second) == 1000000000, action2.ScheduleTime.UnixNano())
+
+	// pause (TODO)
+
+	// finally delete
 
 	_, err = s.engine.DeleteSchedule(NewContext(), &workflowservice.DeleteScheduleRequest{
 		Namespace:  s.namespace,
