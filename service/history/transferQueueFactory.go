@@ -170,6 +170,7 @@ func (f *transferQueueFactory) CreateQueue(
 				},
 				MonitorOptions: queues.MonitorOptions{
 					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+					SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 				},
 				MaxPollRPS:                          f.Config.TransferProcessorMaxPollRPS,
 				MaxPollInterval:                     f.Config.TransferProcessorMaxPollInterval,

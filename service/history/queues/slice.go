@@ -43,6 +43,7 @@ type (
 		SplitByPredicate(tasks.Predicate) (pass Slice, fail Slice)
 		CanMergeWithSlice(Slice) bool
 		MergeWithSlice(Slice) []Slice
+		CompactWithSlice(Slice) Slice
 		ShrinkRange()
 		SelectTasks(readerID int32, batchSize int) ([]Executable, error)
 		MoreTasks() bool
@@ -274,6 +275,36 @@ func (s *SliceImpl) appendIterator(
 	}
 
 	return append(iterators, iterator)
+}
+
+func (s *SliceImpl) CompactWithSlice(slice Slice) Slice {
+	s.stateSanityCheck()
+
+	incomingSlice, ok := slice.(*SliceImpl)
+	if !ok {
+		panic(fmt.Sprintf("Unable to compact queue slice of type %T with type %T", s, slice))
+	}
+	incomingSlice.stateSanityCheck()
+
+	compactedScope := NewScope(
+		NewRange(
+			tasks.MinKey(s.scope.Range.InclusiveMin, incomingSlice.scope.Range.InclusiveMin),
+			tasks.MaxKey(s.scope.Range.ExclusiveMax, incomingSlice.scope.Range.ExclusiveMax),
+		),
+		tasks.OrPredicates(s.scope.Predicate, incomingSlice.scope.Predicate),
+	)
+
+	compactedTaskTracker := s.executableTracker.merge(incomingSlice.executableTracker)
+	compactedIterators := s.mergeIterators(incomingSlice)
+
+	s.destroy()
+	incomingSlice.destroy()
+
+	return s.newSlice(
+		compactedScope,
+		compactedIterators,
+		compactedTaskTracker,
+	)
 }
 
 func (s *SliceImpl) ShrinkRange() {

@@ -88,6 +88,13 @@ func (m *mitigatorImpl) Mitigate(alert Alert) Action {
 			m.logger,
 		)
 		alertAttributes = alert.AlertAttributesReaderStuck
+	case AlertTypeSliceCount:
+		action = newSliceCountAction(
+			alert.AlertAttributesSliceCount,
+			m.monitor,
+			func() { m.resolve(AlertTypeSliceCount) },
+		)
+		alertAttributes = alert.AlertAttributesSliceCount
 	default:
 		m.logger.Error("Unknown queue alert type", tag.QueueAlertType(alert.AlertType.String()))
 		return nil

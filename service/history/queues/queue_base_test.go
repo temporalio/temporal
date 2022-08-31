@@ -74,6 +74,10 @@ var testQueueOptions = &Options{
 		MaxPendingTasksCount: dynamicconfig.GetIntPropertyFn(100),
 		PollBackoffInterval:  dynamicconfig.GetDurationPropertyFn(200 * time.Millisecond),
 	},
+	MonitorOptions: MonitorOptions{
+		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
+	},
 	MaxPollRPS:                          dynamicconfig.GetIntPropertyFn(20),
 	MaxPollInterval:                     dynamicconfig.GetDurationPropertyFn(time.Minute * 5),
 	MaxPollIntervalJitterCoefficient:    dynamicconfig.GetFloatPropertyFn(0.15),

@@ -83,6 +83,7 @@ type Config struct {
 	StandbyTaskMissingEventsDiscardDelay dynamicconfig.DurationPropertyFn
 
 	QueueReaderStuckCriticalAttempts dynamicconfig.IntPropertyFn
+	QueueCriticalSlicesCount         dynamicconfig.IntPropertyFn
 	QueueMaxReaderCount              dynamicconfig.IntPropertyFn
 
 	// TimerQueueProcessor settings
@@ -309,6 +310,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		StandbyTaskMissingEventsDiscardDelay: dc.GetDurationProperty(dynamicconfig.StandbyTaskMissingEventsDiscardDelay, 15*time.Minute),
 
 		QueueReaderStuckCriticalAttempts: dc.GetIntProperty(dynamicconfig.QueueReaderStuckCriticalAttempts, 2),
+		QueueCriticalSlicesCount:         dc.GetIntProperty(dynamicconfig.QueueCriticalSlicesCount, 50),
 		QueueMaxReaderCount:              dc.GetIntProperty(dynamicconfig.QueueMaxReaderCount, 2),
 
 		TimerTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),

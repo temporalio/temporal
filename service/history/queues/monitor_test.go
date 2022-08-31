@@ -55,7 +55,8 @@ func (s *monitorSuite) SetupTest() {
 
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled,
 		&MonitorOptions{
-			ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(3),
+			ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+			SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 		},
 	)
 	s.alertCh = s.monitor.AlertCh()
@@ -92,6 +93,42 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 				now.Truncate(monitorWatermarkPrecision),
 				0,
 			),
+		},
+	}, *alert)
+}
+
+func (s *monitorSuite) TestSliceCount() {
+	s.Equal(0, s.monitor.GetTotalSliceCount())
+	s.Equal(0, s.monitor.GetSliceCount(DefaultReaderId))
+
+	threshold := s.monitor.options.SliceCountCriticalThreshold()
+	s.monitor.SetSliceCount(DefaultReaderId, threshold/2)
+	s.Equal(threshold/2, s.monitor.GetTotalSliceCount())
+	select {
+	case <-s.alertCh:
+		s.Fail("should not trigger alert")
+	default:
+	}
+
+	s.monitor.SetSliceCount(DefaultReaderId, threshold*2)
+	s.Equal(threshold*2, s.monitor.GetTotalSliceCount())
+	alert := <-s.alertCh
+	s.Equal(Alert{
+		AlertType: AlertTypeSliceCount,
+		AlertAttributesSliceCount: &AlertAttributesSlicesCount{
+			CurrentSliceCount:  threshold * 2,
+			CriticalSliceCount: threshold,
+		},
+	}, *alert)
+
+	s.monitor.SetSliceCount(DefaultReaderId+1, 1)
+	s.Equal(threshold*2+1, s.monitor.GetTotalSliceCount())
+	alert = <-s.alertCh
+	s.Equal(Alert{
+		AlertType: AlertTypeSliceCount,
+		AlertAttributesSliceCount: &AlertAttributesSlicesCount{
+			CurrentSliceCount:  threshold*2 + 1,
+			CriticalSliceCount: threshold,
 		},
 	}, *alert)
 }
