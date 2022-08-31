@@ -81,6 +81,13 @@ func NewVisibilityQueueFactory(
 				params.Config.VisibilityProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
 			),
+			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
+				NewHostRateLimiterRateFn(
+					params.Config.VisibilityProcessorMaxPollHostRPS,
+					params.Config.PersistenceMaxQPS,
+				),
+				params.Config.QueueMaxReaderCount(),
+			),
 		},
 	}
 }
@@ -116,6 +123,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 				MonitorOptions: queues.MonitorOptions{
 					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
 				},
+				MaxPollRPS:                          f.Config.VisibilityProcessorMaxPollRPS,
 				MaxPollInterval:                     f.Config.VisibilityProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.VisibilityProcessorMaxPollIntervalJitterCoefficient,
 				CheckpointInterval:                  f.Config.VisibilityProcessorUpdateAckInterval,
@@ -123,10 +131,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 				MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 				TaskMaxRetryCount:                   f.Config.VisibilityTaskMaxRetryCount,
 			},
-			newQueueProcessorRateLimiter(
-				f.HostRateLimiter,
-				f.Config.VisibilityProcessorMaxPollRPS,
-			),
+			f.HostReaderRateLimiter,
 			logger,
 			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
 		)

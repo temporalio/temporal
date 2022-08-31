@@ -91,6 +91,7 @@ type (
 		ReaderOptions
 		MonitorOptions
 
+		MaxPollRPS                          dynamicconfig.IntPropertyFn
 		MaxPollInterval                     dynamicconfig.DurationPropertyFn
 		MaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
 		CheckpointInterval                  dynamicconfig.DurationPropertyFn
@@ -108,7 +109,7 @@ func newQueueBase(
 	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
-	rateLimiter quotas.RateLimiter,
+	hostReaderRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
 	metricsHandler metrics.MetricsHandler,
 ) *queueBase {
@@ -165,7 +166,11 @@ func newQueueBase(
 			scheduler,
 			rescheduler,
 			timeSource,
-			rateLimiter,
+			newShardReaderRateLimiter(
+				options.MaxPollRPS,
+				hostReaderRateLimiter,
+				options.MaxReaderCount(),
+			),
 			monitor,
 			logger,
 			metricsHandler,

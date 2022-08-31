@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/predicates"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -439,7 +438,7 @@ func (s *readerSuite) newTestReader(
 		s.mockScheduler,
 		s.mockRescheduler,
 		clock.NewRealTimeSource(),
-		quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 20 }),
+		NewReaderPriorityRateLimiter(func() float64 { return 20 }, 1),
 		s.monitor,
 		s.logger,
 		s.metricsHandler,

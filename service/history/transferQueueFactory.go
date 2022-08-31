@@ -91,6 +91,13 @@ func NewTransferQueueFactory(
 				params.Config.TransferProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
 			),
+			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
+				NewHostRateLimiterRateFn(
+					params.Config.TransferProcessorMaxPollHostRPS,
+					params.Config.PersistenceMaxQPS,
+				),
+				params.Config.QueueMaxReaderCount(),
+			),
 		},
 	}
 }
@@ -162,6 +169,7 @@ func (f *transferQueueFactory) CreateQueue(
 				MonitorOptions: queues.MonitorOptions{
 					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
 				},
+				MaxPollRPS:                          f.Config.TransferProcessorMaxPollRPS,
 				MaxPollInterval:                     f.Config.TransferProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.TransferProcessorMaxPollIntervalJitterCoefficient,
 				CheckpointInterval:                  f.Config.TransferProcessorUpdateAckInterval,
@@ -169,10 +177,7 @@ func (f *transferQueueFactory) CreateQueue(
 				MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 				TaskMaxRetryCount:                   f.Config.TransferTaskMaxRetryCount,
 			},
-			newQueueProcessorRateLimiter(
-				f.HostRateLimiter,
-				f.Config.TransferProcessorMaxPollRPS,
-			),
+			f.HostReaderRateLimiter,
 			logger,
 			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferQueueProcessor)),
 		)
