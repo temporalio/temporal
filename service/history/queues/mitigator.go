@@ -109,4 +109,5 @@ func (m *mitigatorImpl) resolve(alertType AlertType) {
 		tag.QueueAlertType(alertType.String()),
 		tag.QueueAlertAttributes(attributes),
 	)
+	m.metricsHandler.Counter(QueueActionCounter).Record(1, metrics.QueueAlertTypeTag(alertType.String()))
 }

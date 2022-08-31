@@ -150,7 +150,7 @@ func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
 func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState() {
 	persistenceState := &persistencespb.QueueState{
 		ReaderStates: map[int32]*persistencespb.QueueReaderState{
-			defaultReaderId: {
+			DefaultReaderId: {
 				Scopes: []*persistencespb.QueueSliceScope{
 					{
 						Range: &persistencespb.QueueSliceRange{
@@ -303,7 +303,7 @@ func (s *queueBaseSuite) TestStartStop() {
 func (s *queueBaseSuite) TestProcessNewRange() {
 	queueState := &queueState{
 		readerScopes: map[int32][]Scope{
-			defaultReaderId: {},
+			DefaultReaderId: {},
 		},
 		exclusiveReaderHighWatermark: tasks.MinimumKey,
 	}
@@ -340,7 +340,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 	s.True(base.nonReadableScope.Range.Equals(NewRange(tasks.MinimumKey, tasks.MaximumKey)))
 
 	base.processNewRange()
-	defaultReader, ok := base.readerGroup.ReaderByID(defaultReaderId)
+	defaultReader, ok := base.readerGroup.ReaderByID(DefaultReaderId)
 	s.True(ok)
 	scopes := defaultReader.Scopes()
 	s.Len(scopes, 1)
@@ -353,7 +353,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 func (s *queueBaseSuite) TestCompleteTaskAndPersistState() {
 	scopeMinKey := tasks.MaximumKey
 	readerScopes := map[int32][]Scope{}
-	for _, readerID := range []int32{defaultReaderId, 2, 3} {
+	for _, readerID := range []int32{DefaultReaderId, 2, 3} {
 		scopes := NewRandomScopes(10)
 		readerScopes[readerID] = scopes
 		if len(scopes) != 0 {

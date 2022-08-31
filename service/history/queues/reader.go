@@ -330,7 +330,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	}
 
 	loadSlice := r.nextReadSlice.Value.(Slice)
-	tasks, err := loadSlice.SelectTasks(r.options.BatchSize())
+	tasks, err := loadSlice.SelectTasks(r.readerID, r.options.BatchSize())
 	if err != nil {
 		r.logger.Error("Queue reader unable to retrieve tasks", tag.Error(err))
 		if common.IsResourceExhausted(err) {
@@ -406,6 +406,7 @@ func (r *ReaderImpl) submit(
 		return
 	}
 
+	executable.SetScheduledTime(now)
 	if !r.scheduler.TrySubmit(executable) {
 		executable.Reschedule()
 	}

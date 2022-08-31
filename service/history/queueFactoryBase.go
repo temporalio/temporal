@@ -29,6 +29,7 @@ import (
 
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -46,6 +47,7 @@ type (
 		NamespaceRegistry namespace.Registry
 		ClusterMetadata   cluster.Metadata
 		Config            *configs.Config
+		TimeSource        clock.TimeSource
 		MetricsHandler    metrics.MetricsHandler
 		Logger            resource.SnTaggedLogger
 	}

@@ -36,7 +36,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/server/api/enums/v1"
 	backoff "go.temporal.io/server/common/backoff"
-	log "go.temporal.io/server/common/log"
 	metrics "go.temporal.io/server/common/metrics"
 	tasks "go.temporal.io/server/common/tasks"
 	tasks0 "go.temporal.io/server/service/history/tasks"
@@ -187,6 +186,20 @@ func (mr *MockExecutableMockRecorder) GetRunID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRunID", reflect.TypeOf((*MockExecutable)(nil).GetRunID))
 }
 
+// GetScheduledTime mocks base method.
+func (m *MockExecutable) GetScheduledTime() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetScheduledTime")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// GetScheduledTime indicates an expected call of GetScheduledTime.
+func (mr *MockExecutableMockRecorder) GetScheduledTime() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetScheduledTime", reflect.TypeOf((*MockExecutable)(nil).GetScheduledTime))
+}
+
 // GetTask mocks base method.
 func (m *MockExecutable) GetTask() tasks0.Task {
 	m.ctrl.T.Helper()
@@ -299,20 +312,6 @@ func (mr *MockExecutableMockRecorder) IsRetryableError(err interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRetryableError", reflect.TypeOf((*MockExecutable)(nil).IsRetryableError), err)
 }
 
-// Logger mocks base method.
-func (m *MockExecutable) Logger() log.Logger {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Logger")
-	ret0, _ := ret[0].(log.Logger)
-	return ret0
-}
-
-// Logger indicates an expected call of Logger.
-func (mr *MockExecutableMockRecorder) Logger() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logger", reflect.TypeOf((*MockExecutable)(nil).Logger))
-}
-
 // Nack mocks base method.
 func (m *MockExecutable) Nack(err error) {
 	m.ctrl.T.Helper()
@@ -363,6 +362,18 @@ func (m *MockExecutable) RetryPolicy() backoff.RetryPolicy {
 func (mr *MockExecutableMockRecorder) RetryPolicy() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryPolicy", reflect.TypeOf((*MockExecutable)(nil).RetryPolicy))
+}
+
+// SetScheduledTime mocks base method.
+func (m *MockExecutable) SetScheduledTime(arg0 time.Time) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetScheduledTime", arg0)
+}
+
+// SetScheduledTime indicates an expected call of SetScheduledTime.
+func (mr *MockExecutableMockRecorder) SetScheduledTime(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetScheduledTime", reflect.TypeOf((*MockExecutable)(nil).SetScheduledTime), arg0)
 }
 
 // SetTaskID mocks base method.
