@@ -30,8 +30,8 @@ var defaultNumTaskQueuePartitions = []ConstrainedValue{
 	// The per-ns worker task queue in all namespaces should only have one partition, since
 	// we'll only run one worker per task queue.
 	{
-		Constraints: map[string]any{
-			TaskQueueName.String(): primitives.PerNSWorkerTaskQueue,
+		Constraints: Constraints{
+			TaskQueueName: primitives.PerNSWorkerTaskQueue,
 		},
 		Value: 1,
 	},

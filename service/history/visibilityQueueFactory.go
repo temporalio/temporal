@@ -63,6 +63,8 @@ func NewVisibilityQueueFactory(
 				NamespaceWeights: params.Config.VisibilityProcessorSchedulerRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
+			params.TimeSource,
+			params.MetricsHandler,
 			params.Logger,
 		)
 	}
@@ -80,6 +82,13 @@ func NewVisibilityQueueFactory(
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.VisibilityProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
+			),
+			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
+				NewHostRateLimiterRateFn(
+					params.Config.VisibilityProcessorMaxPollHostRPS,
+					params.Config.PersistenceMaxQPS,
+				),
+				params.Config.QueueMaxReaderCount(),
 			),
 		},
 	}
@@ -116,7 +125,9 @@ func (f *visibilityQueueFactory) CreateQueue(
 				MonitorOptions: queues.MonitorOptions{
 					PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
 					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+					SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 				},
+				MaxPollRPS:                          f.Config.VisibilityProcessorMaxPollRPS,
 				MaxPollInterval:                     f.Config.VisibilityProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.VisibilityProcessorMaxPollIntervalJitterCoefficient,
 				CheckpointInterval:                  f.Config.VisibilityProcessorUpdateAckInterval,
@@ -124,10 +135,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 				MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 				TaskMaxRetryCount:                   f.Config.VisibilityTaskMaxRetryCount,
 			},
-			newQueueProcessorRateLimiter(
-				f.HostRateLimiter,
-				f.Config.VisibilityProcessorMaxPollRPS,
-			),
+			f.HostReaderRateLimiter,
 			logger,
 			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
 		)

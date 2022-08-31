@@ -22,27 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package dynamicconfig
+package tasks
 
 import (
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common"
 )
 
 type (
-	// noopClient is a dummy implementation of dynamicconfig Client interface, all operations will always return default values.
-	noopClient struct {
-		*basicClient
+	Monitor[T Task] interface {
+		common.Daemon
+
+		RecordStart(T)
+
+		// Add more methods here to monitor
+		// other task processing events
 	}
 )
-
-// NewNoopClient creates a nop client
-func NewNoopClient() *noopClient {
-	return &noopClient{
-		basicClient: newBasicClient(log.NewNoopLogger()),
-	}
-}
-
-// NewNoopCollection creates a new nop collection
-func NewNoopCollection() *Collection {
-	return NewCollection(NewNoopClient(), log.NewNoopLogger())
-}

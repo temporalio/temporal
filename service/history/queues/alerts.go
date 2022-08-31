@@ -36,6 +36,7 @@ type (
 		AlertType                            AlertType
 		AlertAttributesQueuePendingTaskCount *AlertAttributesQueuePendingTaskCount
 		AlertAttributesReaderStuck           *AlertAttributesReaderStuck
+		AlertAttributesSliceCount            *AlertAttributesSlicesCount
 	}
 
 	AlertType int
@@ -49,12 +50,18 @@ type (
 		ReaderID         int32
 		CurrentWatermark tasks.Key
 	}
+
+	AlertAttributesSlicesCount struct {
+		CurrentSliceCount  int
+		CriticalSliceCount int
+	}
 )
 
 const (
 	AlertTypeUnspecified AlertType = iota
 	AlertTypeQueuePendingTaskCount
 	AlertTypeReaderStuck
+	AlertTypeSliceCount
 )
 
 var (
@@ -62,6 +69,7 @@ var (
 		0: "Unspecified",
 		1: "QueuePendingTaskCount",
 		2: "ReaderStuck",
+		3: "SliceCount",
 	}
 )
 

@@ -34,6 +34,8 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/exp/slices"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
@@ -41,7 +43,6 @@ import (
 	"go.temporal.io/server/common/predicates"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/tasks"
-	"golang.org/x/exp/slices"
 )
 
 type (
@@ -66,12 +67,13 @@ func (s *sliceSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	s.executableInitializer = func(t tasks.Task) Executable {
-		return NewExecutable(t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
+	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
+		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 	})
 }
 
@@ -288,6 +290,44 @@ func (s *sliceSuite) TestMergeWithSlice_DifferentMinMaxKey() {
 	s.validateMergedSlice(slice, incomingSlice, mergedSlices, totalExecutables)
 }
 
+func (s *sliceSuite) TestCompactWithSlice() {
+	r1 := NewRandomRange()
+	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	slice1 := s.newTestSlice(r1, namespaceIDs, nil)
+	totalExecutables := len(slice1.pendingExecutables)
+
+	r2 := NewRandomRange()
+	taskTypes := []enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT, enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT}
+	slice2 := s.newTestSlice(r2, nil, taskTypes)
+	totalExecutables += len(slice2.pendingExecutables)
+
+	s.validateSliceState(slice1)
+	s.validateSliceState(slice2)
+
+	compactedSlice := slice1.CompactWithSlice(slice2).(*SliceImpl)
+	compactedRange := compactedSlice.Scope().Range
+	s.True(compactedRange.ContainsRange(r1))
+	s.True(compactedRange.ContainsRange(r2))
+	s.Equal(
+		tasks.MinKey(r1.InclusiveMin, r2.InclusiveMin),
+		compactedRange.InclusiveMin,
+	)
+	s.Equal(
+		tasks.MaxKey(r1.ExclusiveMax, r2.ExclusiveMax),
+		compactedRange.ExclusiveMax,
+	)
+	s.True(
+		tasks.OrPredicates(slice1.scope.Predicate, slice2.scope.Predicate).
+			Equals(compactedSlice.scope.Predicate),
+	)
+
+	s.validateSliceState(compactedSlice)
+	s.Len(compactedSlice.pendingExecutables, totalExecutables)
+
+	s.Panics(func() { slice1.stateSanityCheck() })
+	s.Panics(func() { slice2.stateSanityCheck() })
+}
+
 func (s *sliceSuite) TestShrinkRange() {
 	r := NewRandomRange()
 	predicate := predicates.Universal[tasks.Task]()
@@ -373,7 +413,7 @@ func (s *sliceSuite) TestSelectTasks_NoError() {
 
 		executables := make([]Executable, 0, numTasks)
 		for {
-			selectedExecutables, err := slice.SelectTasks(batchSize)
+			selectedExecutables, err := slice.SelectTasks(DefaultReaderId, batchSize)
 			s.NoError(err)
 			if len(selectedExecutables) == 0 {
 				break
@@ -418,10 +458,10 @@ func (s *sliceSuite) TestSelectTasks_Error_NoLoadedTasks() {
 	}
 
 	slice := NewSlice(paginationFnProvider, s.executableInitializer, s.monitor, NewScope(r, predicate))
-	_, err := slice.SelectTasks(100)
+	_, err := slice.SelectTasks(DefaultReaderId, 100)
 	s.Error(err)
 
-	executables, err := slice.SelectTasks(100)
+	executables, err := slice.SelectTasks(DefaultReaderId, 100)
 	s.NoError(err)
 	s.Len(executables, numTasks)
 	s.Empty(slice.iterators)
@@ -461,7 +501,7 @@ func (s *sliceSuite) TestSelectTasks_Error_WithLoadedTasks() {
 	}
 
 	slice := NewSlice(paginationFnProvider, s.executableInitializer, s.monitor, NewScope(r, predicate))
-	executables, err := slice.SelectTasks(100)
+	executables, err := slice.SelectTasks(DefaultReaderId, 100)
 	s.NoError(err)
 	s.Len(executables, numTasks)
 	s.True(slice.MoreTasks())

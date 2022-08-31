@@ -208,8 +208,7 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 }
 
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
-	cc := dynamicconfig.NewMutableEphemeralClient()
-	cfg := NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.RangeSize = 1 // TaskID block size
 	var leaseErr error = nil
 	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
@@ -633,7 +632,7 @@ func TestTaskQueueSubPartitionPollsPeriodically(t *testing.T) {
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
-	tqCfg.config.MetadataPollFrequency = func(opts ...dynamicconfig.FilterOption) time.Duration {
+	tqCfg.config.MetadataPollFrequency = func() time.Duration {
 		return time.Millisecond * 10
 	}
 
@@ -668,7 +667,7 @@ func TestTaskQueueSubPartitionDoesNotPollIfNoDataThenPollsWhenInvalidated(t *tes
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
-	tqCfg.config.MetadataPollFrequency = func(opts ...dynamicconfig.FilterOption) time.Duration {
+	tqCfg.config.MetadataPollFrequency = func() time.Duration {
 		return time.Millisecond * 10
 	}
 
@@ -720,7 +719,7 @@ func TestTaskQueueManagerWaitInitFailThenPass(t *testing.T) {
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
-	tqCfg.config.MetadataPollFrequency = func(opts ...dynamicconfig.FilterOption) time.Duration {
+	tqCfg.config.MetadataPollFrequency = func() time.Duration {
 		return time.Millisecond * 10
 	}
 
@@ -766,7 +765,7 @@ func TestFetchingVersioningDataErrorsIfNeverFetchedFromRootSuccessfully(t *testi
 	require.NoError(t, err)
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
-	tqCfg.config.MetadataPollFrequency = func(opts ...dynamicconfig.FilterOption) time.Duration {
+	tqCfg.config.MetadataPollFrequency = func() time.Duration {
 		return time.Millisecond * 10
 	}
 

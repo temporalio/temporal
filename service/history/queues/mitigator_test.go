@@ -109,3 +109,27 @@ func (s *mitigatorSuite) TestReaderWatermarkAlert() {
 	s.NotNil(action)
 	s.IsType(&actionReaderStuck{}, action)
 }
+
+func (s *mitigatorSuite) TestSliceCountAlert() {
+	alert := Alert{
+		AlertType: AlertTypeSliceCount,
+		AlertAttributesSliceCount: &AlertAttributesSlicesCount{
+			CurrentSliceCount:  1000,
+			CriticalSliceCount: 500,
+		},
+	}
+
+	action := s.mitigator.Mitigate(alert)
+	s.IsType(&actionSliceCount{}, action)
+
+	s.Nil(
+		s.mitigator.Mitigate(alert),
+		"mitigator should have only one outstanding action for slice count alert",
+	)
+
+	action.(*actionSliceCount).completionFn()
+
+	action = s.mitigator.Mitigate(alert)
+	s.NotNil(action)
+	s.IsType(&actionSliceCount{}, action)
+}

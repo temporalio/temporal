@@ -167,7 +167,6 @@ func GrpcServerOptionsProvider(
 		rpc.ServiceErrorInterceptor,
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
-		retryableInterceptor.Intercept,
 		telemetryInterceptor.Intercept,
 		namespaceValidatorInterceptor.Intercept,
 		namespaceCountLimiterInterceptor.Intercept,

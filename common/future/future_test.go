@@ -190,3 +190,16 @@ func (s *futureSuite) TestSetReadyGet_Parallel() {
 
 	endWG.Wait()
 }
+
+func (s *futureSuite) TestGetWhenContextCanceled() {
+	s.False(s.future.Ready())
+	s.future.Set(s.value, s.err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	s.True(s.future.Ready())
+	value, err := s.future.Get(ctx)
+	s.NoError(err, "When .Ready(), .Get() should return the value even if the context is canceled")
+	s.Equal(s.value, value)
+}

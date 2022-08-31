@@ -45,7 +45,7 @@ import (
 )
 
 const (
-	defaultReaderId = 0
+	DefaultReaderId = 0
 
 	// Non-default readers will use critical pending task count * this coefficient
 	// as its max pending task count so that their loading will never trigger pending
@@ -96,6 +96,7 @@ type (
 		ReaderOptions
 		MonitorOptions
 
+		MaxPollRPS                          dynamicconfig.IntPropertyFn
 		MaxPollInterval                     dynamicconfig.DurationPropertyFn
 		MaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
 		CheckpointInterval                  dynamicconfig.DurationPropertyFn
@@ -113,7 +114,7 @@ func newQueueBase(
 	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
-	rateLimiter quotas.RateLimiter,
+	hostReaderRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
 	metricsHandler metrics.MetricsHandler,
 ) *queueBase {
@@ -145,8 +146,9 @@ func newQueueBase(
 	monitor := newMonitor(category.Type(), &options.MonitorOptions)
 	mitigator := newMitigator(monitor, logger, metricsHandler, options.MaxReaderCount)
 
-	executableInitializer := func(t tasks.Task) Executable {
+	executableInitializer := func(readerID int32, t tasks.Task) Executable {
 		return NewExecutable(
+			readerID,
 			t,
 			nil,
 			executor,
@@ -164,11 +166,11 @@ func newQueueBase(
 
 	readerInitializer := func(readerID int32, slices []Slice) Reader {
 		readerOptions := options.ReaderOptions // make a copy
-		if readerID != defaultReaderId {
+		if readerID != DefaultReaderId {
 			// non-default reader should not trigger task unloading
 			// otherwise those readers will keep loading, hit pending task count limit, unload, throttle, load, etc...
 			// use a limit lower than the critical pending task count instead
-			readerOptions.MaxPendingTasksCount = func(...dynamicconfig.FilterOption) int {
+			readerOptions.MaxPendingTasksCount = func() int {
 				return int(float64(options.PendingTasksCriticalCount()) * nonDefaultReaderMaxPendingTaskCoefficient)
 			}
 		}
@@ -180,7 +182,11 @@ func newQueueBase(
 			scheduler,
 			rescheduler,
 			timeSource,
-			rateLimiter,
+			newShardReaderRateLimiter(
+				options.MaxPollRPS,
+				hostReaderRateLimiter,
+				options.MaxReaderCount(),
+			),
 			monitor,
 			logger,
 			metricsHandler,
@@ -309,9 +315,9 @@ func (p *queueBase) processNewRange() {
 		newReadScope,
 	)
 
-	reader, ok := p.readerGroup.ReaderByID(defaultReaderId)
+	reader, ok := p.readerGroup.ReaderByID(DefaultReaderId)
 	if !ok {
-		p.readerGroup.NewReader(defaultReaderId, newSlice)
+		p.readerGroup.NewReader(DefaultReaderId, newSlice)
 	} else {
 		reader.MergeSlices(newSlice)
 	}
@@ -345,6 +351,8 @@ func (p *queueBase) checkpoint() {
 			newInclusiveLowWatermark = tasks.MinKey(newInclusiveLowWatermark, scope.Range.InclusiveMin)
 		}
 	}
+	p.metricsHandler.Histogram(QueueReaderCountHistogram, metrics.Dimensionless).Record(int64(len(readerScopes)))
+	p.metricsHandler.Histogram(QueueSliceCountHistogram, metrics.Dimensionless).Record(int64(totalSlices))
 
 	// NOTE: Must range complete task first.
 	// Otherwise, if state is updated first, later deletion fails and shard get reloaded

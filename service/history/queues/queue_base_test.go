@@ -62,7 +62,7 @@ type (
 
 		config         *configs.Config
 		options        *Options
-		rateLimiter    quotas.RateLimiter
+		rateLimiter    quotas.RequestRateLimiter
 		logger         log.Logger
 		metricsHandler metrics.MetricsHandler
 	}
@@ -76,8 +76,10 @@ var testQueueOptions = &Options{
 	},
 	MonitorOptions: MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
-		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(10),
+		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 	},
+	MaxPollRPS:                          dynamicconfig.GetIntPropertyFn(20),
 	MaxPollInterval:                     dynamicconfig.GetDurationPropertyFn(time.Minute * 5),
 	MaxPollIntervalJitterCoefficient:    dynamicconfig.GetFloatPropertyFn(0.15),
 	CheckpointInterval:                  dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond),
@@ -104,7 +106,7 @@ func (s *queueBaseSuite) SetupTest() {
 
 	s.config = tests.NewDynamicConfig()
 	s.options = testQueueOptions
-	s.rateLimiter = quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 20 })
+	s.rateLimiter = NewReaderPriorityRateLimiter(func() float64 { return 20 }, s.options.MaxReaderCount())
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 }
@@ -153,7 +155,7 @@ func (s *queueBaseSuite) TestNewProcessBase_NoPreviousState() {
 func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState() {
 	persistenceState := &persistencespb.QueueState{
 		ReaderStates: map[int32]*persistencespb.QueueReaderState{
-			defaultReaderId: {
+			DefaultReaderId: {
 				Scopes: []*persistencespb.QueueSliceScope{
 					{
 						Range: &persistencespb.QueueSliceRange{
@@ -306,7 +308,7 @@ func (s *queueBaseSuite) TestStartStop() {
 func (s *queueBaseSuite) TestProcessNewRange() {
 	queueState := &queueState{
 		readerScopes: map[int32][]Scope{
-			defaultReaderId: {},
+			DefaultReaderId: {},
 		},
 		exclusiveReaderHighWatermark: tasks.MinimumKey,
 	}
@@ -343,7 +345,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 	s.True(base.nonReadableScope.Range.Equals(NewRange(tasks.MinimumKey, tasks.MaximumKey)))
 
 	base.processNewRange()
-	defaultReader, ok := base.readerGroup.ReaderByID(defaultReaderId)
+	defaultReader, ok := base.readerGroup.ReaderByID(DefaultReaderId)
 	s.True(ok)
 	scopes := defaultReader.Scopes()
 	s.Len(scopes, 1)
@@ -356,7 +358,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 func (s *queueBaseSuite) TestCompleteTaskAndPersistState() {
 	scopeMinKey := tasks.MaximumKey
 	readerScopes := map[int32][]Scope{}
-	for _, readerID := range []int32{defaultReaderId, 2, 3} {
+	for _, readerID := range []int32{DefaultReaderId, 2, 3} {
 		scopes := NewRandomScopes(10)
 		readerScopes[readerID] = scopes
 		if len(scopes) != 0 {

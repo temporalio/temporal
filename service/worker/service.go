@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/archiver"
+	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 	"go.temporal.io/server/service/worker/replicator"
 	"go.temporal.io/server/service/worker/scanner"
@@ -109,6 +110,8 @@ type (
 		PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 		EnableBatcher                         dynamicconfig.BoolPropertyFn
+		BatcherRPS                            dynamicconfig.IntPropertyFnWithNamespaceFilter
+		BatcherConcurrency                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableParentClosePolicyWorker         dynamicconfig.BoolPropertyFn
 		PerNamespaceWorkerCount               dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -278,6 +281,9 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				90*24*time.Hour,
 			),
 		},
+		EnableBatcher:      dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
+		BatcherRPS:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherRPS, batcher.DefaultRPS),
+		BatcherConcurrency: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherConcurrency, batcher.DefaultConcurrency),
 		EnableParentClosePolicyWorker: dc.GetBoolProperty(
 			dynamicconfig.EnableParentClosePolicyWorker,
 			true,
@@ -364,6 +370,9 @@ func (s *Service) Start() {
 	if s.config.EnableParentClosePolicyWorker() {
 		s.startParentClosePolicyProcessor()
 	}
+	if s.config.EnableBatcher() {
+		s.startBatcher()
+	}
 
 	s.workerManager.Start()
 	s.perNamespaceWorkerManager.Start(
@@ -420,6 +429,21 @@ func (s *Service) startParentClosePolicyProcessor() {
 	if err := processor.Start(); err != nil {
 		s.logger.Fatal(
 			"error starting parentclosepolicy processor",
+			tag.Error(err),
+		)
+	}
+}
+
+func (s *Service) startBatcher() {
+	if err := batcher.New(
+		s.metricsClient,
+		s.logger,
+		s.sdkClientFactory,
+		s.config.BatcherRPS,
+		s.config.BatcherConcurrency,
+	).Start(); err != nil {
+		s.logger.Fatal(
+			"error starting batcher worker",
 			tag.Error(err),
 		)
 	}

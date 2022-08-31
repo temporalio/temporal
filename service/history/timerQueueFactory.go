@@ -70,6 +70,8 @@ func NewTimerQueueFactory(
 				NamespaceWeights: params.Config.TimerProcessorSchedulerRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
+			params.TimeSource,
+			params.MetricsHandler,
 			params.Logger,
 		)
 	}
@@ -87,6 +89,13 @@ func NewTimerQueueFactory(
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.TimerProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
+			),
+			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
+				NewHostRateLimiterRateFn(
+					params.Config.TimerProcessorMaxPollHostRPS,
+					params.Config.PersistenceMaxQPS,
+				),
+				params.Config.QueueMaxReaderCount(),
 			),
 		},
 	}
@@ -172,7 +181,9 @@ func (f *timerQueueFactory) CreateQueue(
 				MonitorOptions: queues.MonitorOptions{
 					PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
 					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+					SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 				},
+				MaxPollRPS:                          f.Config.TimerProcessorMaxPollRPS,
 				MaxPollInterval:                     f.Config.TimerProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.TimerProcessorMaxPollIntervalJitterCoefficient,
 				CheckpointInterval:                  f.Config.TimerProcessorUpdateAckInterval,
@@ -180,10 +191,7 @@ func (f *timerQueueFactory) CreateQueue(
 				MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 				TaskMaxRetryCount:                   f.Config.TimerTaskMaxRetryCount,
 			},
-			newQueueProcessorRateLimiter(
-				f.HostRateLimiter,
-				f.Config.TimerProcessorMaxPollRPS,
-			),
+			f.HostReaderRateLimiter,
 			logger,
 			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTimerQueueProcessor)),
 		)

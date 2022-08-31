@@ -51,6 +51,10 @@ type (
 		GetReaderWatermark(readerID int32) (tasks.Key, bool)
 		SetReaderWatermark(readerID int32, watermark tasks.Key)
 
+		GetTotalSliceCount() int
+		GetSliceCount(readerID int32) int
+		SetSliceCount(readerID int32, count int)
+
 		RemoveSlice(slice Slice)
 		// RemoveReader(readerID int32)
 
@@ -61,12 +65,14 @@ type (
 	MonitorOptions struct {
 		PendingTasksCriticalCount   dynamicconfig.IntPropertyFn
 		ReaderStuckCriticalAttempts dynamicconfig.IntPropertyFn
+		SliceCountCriticalThreshold dynamicconfig.IntPropertyFn
 	}
 
 	monitorImpl struct {
 		sync.Mutex
 
 		totalPendingTaskCount int
+		totalSliceCount       int
 
 		readerStats map[int32]readerStats
 		sliceStats  map[Slice]sliceStats
@@ -79,8 +85,8 @@ type (
 	}
 
 	readerStats struct {
-		progress readerProgess
-		// sliceCount int
+		progress   readerProgess
+		sliceCount int
 	}
 
 	readerProgess struct {
@@ -160,7 +166,7 @@ func (m *monitorImpl) GetReaderWatermark(readerID int32) (tasks.Key, bool) {
 
 func (m *monitorImpl) SetReaderWatermark(readerID int32, watermark tasks.Key) {
 	// TODO: currently only tracking default reader progress for scheduled queue
-	if readerID != defaultReaderId || m.categoryType != tasks.CategoryTypeScheduled {
+	if readerID != DefaultReaderId || m.categoryType != tasks.CategoryTypeScheduled {
 		return
 	}
 
@@ -190,6 +196,50 @@ func (m *monitorImpl) SetReaderWatermark(readerID int32, watermark tasks.Key) {
 			AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
 				ReaderID:         readerID,
 				CurrentWatermark: stats.progress.watermark,
+			},
+		})
+	}
+}
+
+func (m *monitorImpl) GetTotalSliceCount() int {
+	m.Lock()
+	defer m.Unlock()
+
+	count := 0
+	for _, stats := range m.readerStats {
+		count += stats.sliceCount
+	}
+
+	return count
+}
+
+func (m *monitorImpl) GetSliceCount(readerID int32) int {
+	m.Lock()
+	defer m.Unlock()
+
+	if stats, ok := m.readerStats[readerID]; ok {
+		return stats.sliceCount
+	}
+	return 0
+}
+
+func (m *monitorImpl) SetSliceCount(readerID int32, count int) {
+	m.Lock()
+	defer m.Unlock()
+
+	stats := m.readerStats[readerID]
+	m.totalSliceCount = m.totalSliceCount - stats.sliceCount + count
+
+	stats.sliceCount = count
+	m.readerStats[readerID] = stats
+
+	criticalSliceCount := m.options.SliceCountCriticalThreshold()
+	if criticalSliceCount > 0 && m.totalSliceCount > criticalSliceCount {
+		m.sendAlertLocked(&Alert{
+			AlertType: AlertTypeSliceCount,
+			AlertAttributesSliceCount: &AlertAttributesSlicesCount{
+				CurrentSliceCount:  m.totalSliceCount,
+				CriticalSliceCount: criticalSliceCount,
 			},
 		})
 	}
