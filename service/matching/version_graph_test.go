@@ -513,11 +513,16 @@ func TestLimitsMaxSize(t *testing.T) {
 	assert.Equal(t, mkVerId("50.24"), lastNode.GetVersion())
 }
 
-// TODO: Fuzz no forks -- any node can only be pointed at by one incompatible and one compat node
+type pointedAtBy struct {
+	byIncompat bool
+	byCompat   bool
+}
 
-func FuzzVersionGraphEnsureNoSameTypeDefaults(f *testing.F) {
-	f.Fuzz(func(t *testing.T, numUpdates, willPickCompatMod, compatModTarget uint8) {
+func FuzzVersionGraphNeverHasForks(f *testing.F) {
+	f.Fuzz(func(t *testing.T,
+		numUpdates, willPickCompatMod, compatModTarget, numAddExistings, addExistingMod uint8, allowErrors bool) {
 		addedNodes := make([]*taskqueuepb.VersionId, 0, numUpdates)
+		inSomeCompatBranch := make(map[string]struct{})
 		data := &persistencepb.VersioningData{}
 
 		for i := uint8(0); i < numUpdates; i++ {
@@ -530,12 +535,82 @@ func FuzzVersionGraphEnsureNoSameTypeDefaults(f *testing.F) {
 				numUpdates%willPickCompatMod == 0 &&
 				uint8(len(addedNodes)) > numUpdates%compatModTarget {
 				compatTarget := addedNodes[numUpdates%compatModTarget]
+				//t.Log(fmt.Sprintf("Setting %s to be compatible with %s", id, compatTarget))
 				req.PreviousCompatible = compatTarget
+				if !allowErrors {
+					inSomeCompatBranch[id.GetWorkerBuildId()] = struct{}{}
+					req.BecomeDefault = false
+				}
 			}
 			addedNodes = append(addedNodes, id)
 			err := UpdateVersionsGraph(data, req, 0)
-			assert.NoError(t, err)
+			if !allowErrors {
+				assert.NoError(t, err)
+			}
 			assert.NotNil(t, ToBuildIdOrderingResponse(data, 0))
 		}
+
+		if len(addedNodes) > 0 {
+			for i := uint8(0); i < numAddExistings; i++ {
+				if addExistingMod == 0 {
+					continue
+				}
+				existing := addedNodes[uint8(len(addedNodes)-1)%addExistingMod]
+				req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+					VersionId:     existing,
+					BecomeDefault: true,
+				}
+				if !allowErrors {
+					// Only nodes which are a leaf compat node, or not in a compat branch, can be shuffled to front
+					_, isInCompatBranch := inSomeCompatBranch[existing.GetWorkerBuildId()]
+					isLeaf := false
+					for _, node := range data.GetCompatibleLeaves() {
+						if node.GetVersion().GetWorkerBuildId() == existing.GetWorkerBuildId() {
+							isLeaf = true
+							break
+						}
+					}
+					//t.Log(existing.GetWorkerBuildId(), isInCompatBranch, isLeaf, toDot(data))
+					if isInCompatBranch && !isLeaf {
+						continue
+					}
+				}
+				err := UpdateVersionsGraph(data, req, 0)
+				if !allowErrors {
+					assert.NoError(t, err)
+				}
+			}
+		}
+
+		// Verify no node is pointed at by more than 1 incompat note and 1 compat node
+		pointedAt := make(map[string]*pointedAtBy)
+		visitor := func(node *taskqueuepb.VersionIdNode) {
+			bid := node.GetVersion().GetWorkerBuildId()
+			existingVal, inMap := pointedAt[bid]
+			if !inMap {
+				pointedAt[bid] = &pointedAtBy{
+					byCompat:   false,
+					byIncompat: false,
+				}
+				existingVal = pointedAt[bid]
+			}
+			if node.GetPreviousCompatible() != nil {
+				if existingVal.byCompat {
+					f.Errorf("Node %s is pointed at by more than 1 compat node", bid)
+				}
+				pointedAt[bid].byCompat = true
+			}
+			if node.GetPreviousIncompatible() != nil {
+				if existingVal.byIncompat {
+					f.Errorf("Node %s is pointed at by more than 1 incompat node", bid)
+				}
+				pointedAt[bid].byIncompat = true
+			}
+		}
+		visitor(data.GetCurrentDefault())
+		for _, node := range data.GetCompatibleLeaves() {
+			visitor(node)
+		}
+
 	})
 }

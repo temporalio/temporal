@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 
@@ -154,7 +155,7 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 			// It does not make sense to introduce a version which is the new overall default, but is somehow also
 			// supposed to be compatible with some existing version, as that would necessarily imply that the newly
 			// added version is somehow both compatible and incompatible with the same target version.
-			return serviceerror.NewInvalidArgument("adding a new default version which is compatible " +
+			return serviceerror.NewInvalidArgument("adding a new default version which is compatible" +
 				" with any version other than the existing default is not allowed.")
 		}
 		if curDefault != nil {
@@ -331,4 +332,36 @@ func _findInNode(
 		return _findInNode(node.GetPreviousIncompatible(), versionIds, mode, node, nextCompat)
 	}
 	return nil, nextIncompat, nextCompat
+}
+
+// For graph visualization purposes while debugging
+func toDot(data *persistence.VersioningData) string {
+	var buf bytes.Buffer
+	buf.WriteString("digraph {\n")
+	buf.WriteString("// Default\n")
+	node := data.GetCurrentDefault()
+	buf.WriteString(fmt.Sprintf("  %s [label=\"%s\"];\n", node.GetVersion().GetWorkerBuildId(), node.GetVersion().GetWorkerBuildId()))
+	buf.WriteString("// Compatible leafs\n")
+	for _, node := range data.GetCompatibleLeaves() {
+		buf.WriteString(fmt.Sprintf("  %s [label=\"%s\"];\n", node.GetVersion().GetWorkerBuildId(), node.GetVersion().GetWorkerBuildId()))
+	}
+
+	for _, node := range data.GetCompatibleLeaves() {
+		writeEdgesForNode(&buf, node)
+	}
+	writeEdgesForNode(&buf, data.GetCurrentDefault())
+
+	buf.WriteString("}\n")
+	return buf.String()
+}
+
+func writeEdgesForNode(buf *bytes.Buffer, node *taskqueuepb.VersionIdNode) {
+	if node.GetPreviousCompatible() != nil {
+		buf.WriteString(fmt.Sprintf("  %s -> %s [label=\"compat\"];\n", node.GetVersion().GetWorkerBuildId(), node.GetPreviousCompatible().GetVersion().GetWorkerBuildId()))
+		writeEdgesForNode(buf, node.GetPreviousCompatible())
+	}
+	if node.GetPreviousIncompatible() != nil {
+		buf.WriteString(fmt.Sprintf("  %s -> %s [label=\"incompat\"];\n", node.GetVersion().GetWorkerBuildId(), node.GetPreviousIncompatible().GetVersion().GetWorkerBuildId()))
+		writeEdgesForNode(buf, node.GetPreviousIncompatible())
+	}
 }
