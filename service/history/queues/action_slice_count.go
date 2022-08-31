@@ -127,11 +127,13 @@ func (a *actionSliceCount) appendCompactCandidatesForReader(
 	// calculate distance between two slices
 	var prevRange *Range
 	reader.WalkSlices(func(s Slice) {
+		currentRange := s.Scope().Range
+
 		if prevRange == nil {
+			prevRange = &currentRange
 			return
 		}
 
-		currentRange := s.Scope().Range
 		candidates = append(candidates, compactCandidate{
 			slice:    s,
 			distance: currentRange.InclusiveMin.Sub(prevRange.ExclusiveMax),
