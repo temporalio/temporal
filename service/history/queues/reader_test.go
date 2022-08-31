@@ -74,11 +74,13 @@ func (s *readerSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 
-	s.executableInitializer = func(t tasks.Task) Executable {
-		return NewExecutable(t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
+	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
+		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
-		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(1000),
+		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
+		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 	})
 }
 
@@ -175,7 +177,7 @@ func (s *readerSuite) TestMergeSlices() {
 	incomingScopes := NewRandomScopes(rand.Intn(10))
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableInitializer, incomingScope))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableInitializer, s.monitor, incomingScope))
 	}
 
 	reader.MergeSlices(incomingSlices...)
@@ -275,7 +277,10 @@ func (s *readerSuite) TestLoadAndSubmitTasks_TooManyPendingTasks() {
 
 	reader := s.newTestReader(scopes, nil)
 
-	s.mockRescheduler.EXPECT().Len().Return(reader.options.MaxPendingTasksCount() * 2).Times(1)
+	s.monitor.SetSlicePendingTaskCount(
+		reader.slices.Front().Value.(Slice),
+		reader.options.MaxPendingTasksCount(),
+	)
 
 	// should be no-op
 	reader.loadAndSubmitTasks()
@@ -390,10 +395,12 @@ func (s *readerSuite) TestSubmitTask() {
 
 	pastFireTime := reader.timeSource.Now().Add(-time.Minute)
 	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
+	mockExecutable.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
 	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(true).Times(1)
 	reader.submit(mockExecutable)
 
 	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
+	mockExecutable.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
 	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(false).Times(1)
 	mockExecutable.EXPECT().Reschedule().Times(1)
 	reader.submit(mockExecutable)
@@ -423,12 +430,12 @@ func (s *readerSuite) newTestReader(
 ) *ReaderImpl {
 	slices := make([]Slice, 0, len(scopes))
 	for _, scope := range scopes {
-		slice := NewSlice(paginationFnProvider, s.executableInitializer, scope)
+		slice := NewSlice(paginationFnProvider, s.executableInitializer, s.monitor, scope)
 		slices = append(slices, slice)
 	}
 
 	return NewReader(
-		defaultReaderId,
+		DefaultReaderId,
 		slices,
 		&ReaderOptions{
 			BatchSize:            dynamicconfig.GetIntPropertyFn(10),

@@ -73,6 +73,8 @@ func NewTransferQueueFactory(
 				NamespaceWeights: params.Config.TransferProcessorSchedulerRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
+			params.TimeSource,
+			params.MetricsHandler,
 			params.Logger,
 		)
 	}
@@ -163,11 +165,13 @@ func (f *transferQueueFactory) CreateQueue(
 			&queues.Options{
 				ReaderOptions: queues.ReaderOptions{
 					BatchSize:            f.Config.TransferTaskBatchSize,
-					MaxPendingTasksCount: f.Config.TransferProcessorMaxReschedulerSize,
+					MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
 					PollBackoffInterval:  f.Config.TransferProcessorPollBackoffInterval,
 				},
 				MonitorOptions: queues.MonitorOptions{
+					PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
 					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+					SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 				},
 				MaxPollRPS:                          f.Config.TransferProcessorMaxPollRPS,
 				MaxPollInterval:                     f.Config.TransferProcessorMaxPollInterval,

@@ -56,6 +56,7 @@ type (
 		SplitSlices(SliceSplitter)
 		MergeSlices(...Slice)
 		ClearSlices(SlicePredicate)
+		CompactSlices(SlicePredicate)
 		ShrinkSlices()
 
 		Pause(time.Duration)
@@ -127,7 +128,7 @@ func NewReader(
 		timeSource:     timeSource,
 		ratelimiter:    ratelimiter,
 		monitor:        monitor,
-		logger:         logger,
+		logger:         log.With(logger, tag.QueueReaderID(readerID)),
 		metricsHandler: metricsHandler,
 
 		status:     common.DaemonStatusInitialized,
@@ -223,6 +224,7 @@ func (r *ReaderImpl) SplitSlices(splitter SliceSplitter) {
 	r.slices = splitSlices
 
 	r.resetNextReadSliceLocked()
+	r.monitor.SetSliceCount(r.readerID, r.slices.Len())
 }
 
 func (r *ReaderImpl) MergeSlices(incomingSlices ...Slice) {
@@ -261,20 +263,69 @@ func (r *ReaderImpl) MergeSlices(incomingSlices ...Slice) {
 	r.slices = mergedSlices
 
 	r.resetNextReadSliceLocked()
+	r.monitor.SetSliceCount(r.readerID, r.slices.Len())
 }
 
-func (r *ReaderImpl) ClearSlices(selector SlicePredicate) {
+func (r *ReaderImpl) ClearSlices(predicate SlicePredicate) {
 	r.Lock()
 	defer r.Unlock()
 
 	for element := r.slices.Front(); element != nil; element = element.Next() {
 		slice := element.Value.(Slice)
-		if selector(slice) {
+		if predicate(slice) {
 			slice.Clear()
 		}
 	}
 
 	r.resetNextReadSliceLocked()
+}
+
+func (r *ReaderImpl) CompactSlices(predicate SlicePredicate) {
+	r.Lock()
+	defer r.Unlock()
+
+	var prev *list.Element
+	var next *list.Element
+	for element := r.slices.Front(); element != nil; element = next {
+		next = element.Next()
+
+		slice := element.Value.(Slice)
+		if prev == nil || !predicate(slice) {
+			prev = element
+			continue
+		}
+
+		compacted := r.slices.InsertAfter(
+			prev.Value.(Slice).CompactWithSlice(slice),
+			element,
+		)
+
+		r.slices.Remove(prev)
+		r.slices.Remove(element)
+
+		prev = compacted
+	}
+
+	r.resetNextReadSliceLocked()
+	r.monitor.SetSliceCount(r.readerID, r.slices.Len())
+}
+
+func (r *ReaderImpl) ShrinkSlices() {
+	r.Lock()
+	defer r.Unlock()
+
+	var next *list.Element
+	for element := r.slices.Front(); element != nil; element = next {
+		next = element.Next()
+
+		slice := element.Value.(Slice)
+		slice.ShrinkRange()
+		if scope := slice.Scope(); scope.IsEmpty() {
+			r.slices.Remove(element)
+		}
+	}
+
+	r.monitor.SetSliceCount(r.readerID, r.slices.Len())
 }
 
 func (r *ReaderImpl) Pause(duration time.Duration) {
@@ -299,7 +350,9 @@ func (r *ReaderImpl) pauseLocked(duration time.Duration) {
 }
 
 func (r *ReaderImpl) eventLoop() {
-	defer r.shutdownWG.Done()
+	defer func() {
+		r.shutdownWG.Done()
+	}()
 
 	for {
 		select {
@@ -330,7 +383,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	}
 
 	loadSlice := r.nextReadSlice.Value.(Slice)
-	tasks, err := loadSlice.SelectTasks(r.options.BatchSize())
+	tasks, err := loadSlice.SelectTasks(r.readerID, r.options.BatchSize())
 	if err != nil {
 		r.logger.Error("Queue reader unable to retrieve tasks", tag.Error(err))
 		if common.IsResourceExhausted(err) {
@@ -356,22 +409,6 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 
 	if r.nextReadSlice = r.nextReadSlice.Next(); r.nextReadSlice != nil {
 		r.notify()
-	}
-}
-
-func (r *ReaderImpl) ShrinkSlices() {
-	r.Lock()
-	defer r.Unlock()
-
-	var next *list.Element
-	for element := r.slices.Front(); element != nil; element = next {
-		next = element.Next()
-
-		slice := element.Value.(Slice)
-		slice.ShrinkRange()
-		if scope := slice.Scope(); scope.IsEmpty() {
-			r.slices.Remove(element)
-		}
 	}
 }
 
@@ -406,13 +443,14 @@ func (r *ReaderImpl) submit(
 		return
 	}
 
+	executable.SetScheduledTime(now)
 	if !r.scheduler.TrySubmit(executable) {
 		executable.Reschedule()
 	}
 }
 
 func (r *ReaderImpl) verifyPendingTaskSize() bool {
-	return r.rescheduler.Len() < r.options.MaxPendingTasksCount()
+	return r.monitor.GetTotalPendingTaskCount() < r.options.MaxPendingTasksCount()
 }
 
 func appendSlice(

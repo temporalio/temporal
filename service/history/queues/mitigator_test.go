@@ -62,6 +62,30 @@ func (s *mitigatorSuite) SetupTest() {
 	)
 }
 
+func (s *mitigatorSuite) TestQueuePendingTaskAlert() {
+	alert := Alert{
+		AlertType: AlertTypeQueuePendingTaskCount,
+		AlertAttributesQueuePendingTaskCount: &AlertAttributesQueuePendingTaskCount{
+			CurrentPendingTaskCount:   1000,
+			CiriticalPendingTaskCount: 500,
+		},
+	}
+
+	action := s.mitigator.Mitigate(alert)
+	s.IsType(&actionQueuePendingTask{}, action)
+
+	s.Nil(
+		s.mitigator.Mitigate(alert),
+		"mitigator should have only one outstanding action for pending task alert",
+	)
+
+	action.(*actionQueuePendingTask).completionFn()
+
+	action = s.mitigator.Mitigate(alert)
+	s.NotNil(action)
+	s.IsType(&actionQueuePendingTask{}, action)
+}
+
 func (s *mitigatorSuite) TestReaderWatermarkAlert() {
 	alert := Alert{
 		AlertType: AlertTypeReaderStuck,
@@ -84,4 +108,28 @@ func (s *mitigatorSuite) TestReaderWatermarkAlert() {
 	action = s.mitigator.Mitigate(alert)
 	s.NotNil(action)
 	s.IsType(&actionReaderStuck{}, action)
+}
+
+func (s *mitigatorSuite) TestSliceCountAlert() {
+	alert := Alert{
+		AlertType: AlertTypeSliceCount,
+		AlertAttributesSliceCount: &AlertAttributesSlicesCount{
+			CurrentSliceCount:  1000,
+			CriticalSliceCount: 500,
+		},
+	}
+
+	action := s.mitigator.Mitigate(alert)
+	s.IsType(&actionSliceCount{}, action)
+
+	s.Nil(
+		s.mitigator.Mitigate(alert),
+		"mitigator should have only one outstanding action for slice count alert",
+	)
+
+	action.(*actionSliceCount).completionFn()
+
+	action = s.mitigator.Mitigate(alert)
+	s.NotNil(action)
+	s.IsType(&actionSliceCount{}, action)
 }

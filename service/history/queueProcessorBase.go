@@ -292,6 +292,7 @@ func (p *queueProcessorBase) throttle(duration time.Duration) {
 func (p *queueProcessorBase) submitTask(
 	executable queues.Executable,
 ) {
+	executable.SetScheduledTime(p.timeSource.Now())
 	if !p.scheduler.TrySubmit(executable) {
 		executable.Reschedule()
 	}

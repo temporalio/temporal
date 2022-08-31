@@ -358,6 +358,7 @@ func (t *timerQueueProcessorBase) verifyReschedulerSize() bool {
 func (t *timerQueueProcessorBase) submitTask(
 	executable queues.Executable,
 ) {
+	executable.SetScheduledTime(t.timeSource.Now())
 	if !t.scheduler.TrySubmit(executable) {
 		executable.Reschedule()
 	}

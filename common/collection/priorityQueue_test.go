@@ -55,6 +55,30 @@ func (s *PriorityQueueSuite) SetupTest() {
 	s.pq = NewPriorityQueue(testPriorityQueueItemCompareLess)
 }
 
+func (s *PriorityQueueSuite) TestNewPriorityQueueWithItems() {
+	items := []*testPriorityQueueItem{
+		{value: 10},
+		{value: 3},
+		{value: 5},
+		{value: 4},
+		{value: 1},
+		{value: 16},
+		{value: -10},
+	}
+	s.pq = NewPriorityQueueWithItems(
+		testPriorityQueueItemCompareLess,
+		items,
+	)
+
+	expected := []int{-10, 1, 3, 4, 5, 10, 16}
+	result := []int{}
+
+	for !s.pq.IsEmpty() {
+		result = append(result, s.pq.Remove().value)
+	}
+	s.Equal(expected, result)
+}
+
 func (s *PriorityQueueSuite) TestInsertAndPop() {
 	s.pq.Add(&testPriorityQueueItem{10})
 	s.pq.Add(&testPriorityQueueItem{3})

@@ -196,6 +196,7 @@ func newTransferQueueActiveProcessor(
 		logger,
 		func(t tasks.Task) queues.Executable {
 			return queues.NewExecutable(
+				queues.DefaultReaderId,
 				t,
 				transferTaskFilter,
 				taskExecutor,
@@ -334,6 +335,7 @@ func newTransferQueueFailoverProcessor(
 		logger,
 		func(t tasks.Task) queues.Executable {
 			return queues.NewExecutable(
+				queues.DefaultReaderId,
 				t,
 				transferTaskFilter,
 				taskExecutor,

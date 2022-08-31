@@ -22,61 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues
+package tasks
 
 import (
-	"strconv"
-
-	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/common"
 )
 
 type (
-	// Alert is created by a Monitor when some statistics of the Queue is abnormal
-	Alert struct {
-		AlertType                            AlertType
-		AlertAttributesQueuePendingTaskCount *AlertAttributesQueuePendingTaskCount
-		AlertAttributesReaderStuck           *AlertAttributesReaderStuck
-		AlertAttributesSliceCount            *AlertAttributesSlicesCount
-	}
+	Monitor[T Task] interface {
+		common.Daemon
 
-	AlertType int
+		RecordStart(T)
 
-	AlertAttributesQueuePendingTaskCount struct {
-		CurrentPendingTaskCount   int
-		CiriticalPendingTaskCount int
-	}
-
-	AlertAttributesReaderStuck struct {
-		ReaderID         int32
-		CurrentWatermark tasks.Key
-	}
-
-	AlertAttributesSlicesCount struct {
-		CurrentSliceCount  int
-		CriticalSliceCount int
+		// Add more methods here to monitor
+		// other task processing events
 	}
 )
-
-const (
-	AlertTypeUnspecified AlertType = iota
-	AlertTypeQueuePendingTaskCount
-	AlertTypeReaderStuck
-	AlertTypeSliceCount
-)
-
-var (
-	alertTypeNames = map[AlertType]string{
-		0: "Unspecified",
-		1: "QueuePendingTaskCount",
-		2: "ReaderStuck",
-		3: "SliceCount",
-	}
-)
-
-func (a AlertType) String() string {
-	s, ok := alertTypeNames[a]
-	if ok {
-		return s
-	}
-	return strconv.Itoa(int(a))
-}

@@ -70,6 +70,8 @@ func NewTimerQueueFactory(
 				NamespaceWeights: params.Config.TimerProcessorSchedulerRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
+			params.TimeSource,
+			params.MetricsHandler,
 			params.Logger,
 		)
 	}
@@ -173,11 +175,13 @@ func (f *timerQueueFactory) CreateQueue(
 			&queues.Options{
 				ReaderOptions: queues.ReaderOptions{
 					BatchSize:            f.Config.TimerTaskBatchSize,
-					MaxPendingTasksCount: f.Config.TimerProcessorMaxReschedulerSize,
+					MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
 					PollBackoffInterval:  f.Config.TimerProcessorPollBackoffInterval,
 				},
 				MonitorOptions: queues.MonitorOptions{
+					PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
 					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+					SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 				},
 				MaxPollRPS:                          f.Config.TimerProcessorMaxPollRPS,
 				MaxPollInterval:                     f.Config.TimerProcessorMaxPollInterval,
