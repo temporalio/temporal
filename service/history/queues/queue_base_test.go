@@ -75,6 +75,7 @@ var testQueueOptions = &Options{
 		PollBackoffInterval:  dynamicconfig.GetDurationPropertyFn(200 * time.Millisecond),
 	},
 	MonitorOptions: MonitorOptions{
+		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
 		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 	},

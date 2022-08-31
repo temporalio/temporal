@@ -44,6 +44,10 @@ type (
 	// Monitor tracks Queue statistics and sends an Alert to the AlertCh
 	// if any statistics becomes abnormal
 	Monitor interface {
+		GetTotalPendingTaskCount() int
+		GetSlicePendingTaskCount(slice Slice) int
+		SetSlicePendingTaskCount(slice Slice, count int)
+
 		GetReaderWatermark(readerID int32) (tasks.Key, bool)
 		SetReaderWatermark(readerID int32, watermark tasks.Key)
 
@@ -51,11 +55,15 @@ type (
 		GetSliceCount(readerID int32) int
 		SetSliceCount(readerID int32, count int)
 
+		RemoveSlice(slice Slice)
+		// RemoveReader(readerID int32)
+
 		AlertCh() <-chan *Alert
 		Close()
 	}
 
 	MonitorOptions struct {
+		PendingTasksCriticalCount   dynamicconfig.IntPropertyFn
 		ReaderStuckCriticalAttempts dynamicconfig.IntPropertyFn
 		SliceCountCriticalThreshold dynamicconfig.IntPropertyFn
 	}
@@ -63,9 +71,11 @@ type (
 	monitorImpl struct {
 		sync.Mutex
 
-		totalSliceCount int
+		totalPendingTaskCount int
+		totalSliceCount       int
 
 		readerStats map[int32]readerStats
+		sliceStats  map[Slice]sliceStats
 
 		categoryType tasks.CategoryType
 		options      *MonitorOptions
@@ -83,6 +93,10 @@ type (
 		watermark tasks.Key
 		attempts  int
 	}
+
+	sliceStats struct {
+		pendingTaskCount int
+	}
 )
 
 func newMonitor(
@@ -91,10 +105,50 @@ func newMonitor(
 ) *monitorImpl {
 	return &monitorImpl{
 		readerStats:  make(map[int32]readerStats),
+		sliceStats:   make(map[Slice]sliceStats),
 		categoryType: categoryType,
 		options:      options,
 		alertCh:      make(chan *Alert, alertChSize),
 		shutdownCh:   make(chan struct{}),
+	}
+}
+
+func (m *monitorImpl) GetTotalPendingTaskCount() int {
+	m.Lock()
+	defer m.Unlock()
+
+	return m.totalPendingTaskCount
+}
+
+func (m *monitorImpl) GetSlicePendingTaskCount(slice Slice) int {
+	m.Lock()
+	defer m.Unlock()
+
+	if stats, ok := m.sliceStats[slice]; ok {
+		return stats.pendingTaskCount
+	}
+	return 0
+}
+
+func (m *monitorImpl) SetSlicePendingTaskCount(slice Slice, count int) {
+	m.Lock()
+	defer m.Unlock()
+
+	stats := m.sliceStats[slice]
+	m.totalPendingTaskCount = m.totalPendingTaskCount - stats.pendingTaskCount + count
+
+	stats.pendingTaskCount = count
+	m.sliceStats[slice] = stats
+
+	criticalTotalTasks := m.options.PendingTasksCriticalCount()
+	if criticalTotalTasks > 0 && m.totalPendingTaskCount > criticalTotalTasks {
+		m.sendAlertLocked(&Alert{
+			AlertType: AlertTypeQueuePendingTaskCount,
+			AlertAttributesQueuePendingTaskCount: &AlertAttributesQueuePendingTaskCount{
+				CurrentPendingTaskCount:   m.totalPendingTaskCount,
+				CiriticalPendingTaskCount: criticalTotalTasks,
+			},
+		})
 	}
 }
 
@@ -189,6 +243,19 @@ func (m *monitorImpl) SetSliceCount(readerID int32, count int) {
 			},
 		})
 	}
+}
+
+func (m *monitorImpl) RemoveSlice(slice Slice) {
+	m.Lock()
+	defer m.Unlock()
+
+	stats, ok := m.sliceStats[slice]
+	if !ok {
+		return
+	}
+
+	m.totalPendingTaskCount -= stats.pendingTaskCount
+	delete(m.sliceStats, slice)
 }
 
 func (m *monitorImpl) AlertCh() <-chan *Alert {

@@ -30,10 +30,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-const (
-	targetLoadFactor = 0.8
-)
-
 type (
 	actionSliceCount struct {
 		attributes   *AlertAttributesSlicesCount

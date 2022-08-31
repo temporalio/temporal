@@ -33,12 +33,18 @@ import (
 type (
 	// Alert is created by a Monitor when some statistics of the Queue is abnormal
 	Alert struct {
-		AlertType                  AlertType
-		AlertAttributesReaderStuck *AlertAttributesReaderStuck
-		AlertAttributesSliceCount  *AlertAttributesSlicesCount
+		AlertType                            AlertType
+		AlertAttributesQueuePendingTaskCount *AlertAttributesQueuePendingTaskCount
+		AlertAttributesReaderStuck           *AlertAttributesReaderStuck
+		AlertAttributesSliceCount            *AlertAttributesSlicesCount
 	}
 
 	AlertType int
+
+	AlertAttributesQueuePendingTaskCount struct {
+		CurrentPendingTaskCount   int
+		CiriticalPendingTaskCount int
+	}
 
 	AlertAttributesReaderStuck struct {
 		ReaderID         int32
@@ -53,6 +59,7 @@ type (
 
 const (
 	AlertTypeUnspecified AlertType = iota
+	AlertTypeQueuePendingTaskCount
 	AlertTypeReaderStuck
 	AlertTypeSliceCount
 )
@@ -60,8 +67,9 @@ const (
 var (
 	alertTypeNames = map[AlertType]string{
 		0: "Unspecified",
-		1: "ReaderStuck",
-		2: "SliceCount",
+		1: "QueuePendingTaskCount",
+		2: "ReaderStuck",
+		3: "SliceCount",
 	}
 )
 

@@ -81,6 +81,14 @@ func (m *mitigatorImpl) Mitigate(alert Alert) Action {
 	var action Action
 	var alertAttributes interface{}
 	switch alert.AlertType {
+	case AlertTypeQueuePendingTaskCount:
+		action = newQueuePendingTaskAction(
+			alert.AlertAttributesQueuePendingTaskCount,
+			m.monitor,
+			m.maxReaderCount(),
+			func() { m.resolve(AlertTypeQueuePendingTaskCount) },
+		)
+		alertAttributes = alert.AlertAttributesQueuePendingTaskCount
 	case AlertTypeReaderStuck:
 		action = newReaderStuckAction(
 			alert.AlertAttributesReaderStuck,

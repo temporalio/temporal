@@ -55,6 +55,7 @@ func (s *monitorSuite) SetupTest() {
 
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled,
 		&MonitorOptions{
+			PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 			ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
 			SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 		},
@@ -64,6 +65,48 @@ func (s *monitorSuite) SetupTest() {
 
 func (s *monitorSuite) TearDownTest() {
 	s.monitor.Close()
+}
+
+func (s *monitorSuite) TestPendingTasksStats() {
+	s.Equal(0, s.monitor.GetTotalPendingTaskCount())
+	s.Equal(0, s.monitor.GetSlicePendingTaskCount(&SliceImpl{}))
+
+	threshold := s.monitor.options.PendingTasksCriticalCount()
+
+	slice1 := &SliceImpl{}
+	s.monitor.SetSlicePendingTaskCount(slice1, threshold/2)
+	s.Equal(threshold/2, s.monitor.GetSlicePendingTaskCount(slice1))
+	select {
+	case <-s.alertCh:
+		s.Fail("should not trigger alert")
+	default:
+	}
+
+	s.monitor.SetSlicePendingTaskCount(slice1, threshold*2)
+	s.Equal(threshold*2, s.monitor.GetTotalPendingTaskCount())
+	alert := <-s.alertCh
+	s.Equal(Alert{
+		AlertType: AlertTypeQueuePendingTaskCount,
+		AlertAttributesQueuePendingTaskCount: &AlertAttributesQueuePendingTaskCount{
+			CurrentPendingTaskCount:   threshold * 2,
+			CiriticalPendingTaskCount: threshold,
+		},
+	}, *alert)
+
+	slice2 := &SliceImpl{}
+	s.monitor.SetSlicePendingTaskCount(slice2, 1)
+	s.Equal(threshold*2+1, s.monitor.GetTotalPendingTaskCount())
+	alert = <-s.alertCh
+	s.Equal(Alert{
+		AlertType: AlertTypeQueuePendingTaskCount,
+		AlertAttributesQueuePendingTaskCount: &AlertAttributesQueuePendingTaskCount{
+			CurrentPendingTaskCount:   threshold*2 + 1,
+			CiriticalPendingTaskCount: threshold,
+		},
+	}, *alert)
+
+	s.monitor.RemoveSlice(slice1)
+	s.Equal(1, s.monitor.GetTotalPendingTaskCount())
 }
 
 func (s *monitorSuite) TestReaderWatermarkStats() {
