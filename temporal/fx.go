@@ -655,12 +655,19 @@ func ApplyClusterMetadataConfigProvider(
 		}
 
 		// Allow updating cluster metadata if global namespace is disabled
+		updateClusterMetadata := false
+		currentMetadata := resp.ClusterMetadata
 		if !resp.IsGlobalNamespaceEnabled && clusterData.EnableGlobalNamespace {
-			currentMetadata := resp.ClusterMetadata
 			currentMetadata.IsGlobalNamespaceEnabled = clusterData.EnableGlobalNamespace
 			currentMetadata.InitialFailoverVersion = clusterInfo.InitialFailoverVersion
 			currentMetadata.FailoverVersionIncrement = clusterData.FailoverVersionIncrement
-
+			updateClusterMetadata = true
+		}
+		if resp.ClusterAddress != clusterInfo.RPCAddress {
+			currentMetadata.ClusterAddress = clusterInfo.RPCAddress
+			updateClusterMetadata = true
+		}
+		if updateClusterMetadata {
 			applied, err = clusterMetadataManager.SaveClusterMetadata(
 				ctx,
 				&persistence.SaveClusterMetadataRequest{
@@ -670,7 +677,10 @@ func ApplyClusterMetadataConfigProvider(
 			if !applied || err != nil {
 				return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while updating cluster metadata: %w", err)
 			}
-		} else if resp.IsGlobalNamespaceEnabled != clusterData.EnableGlobalNamespace {
+		}
+
+		// Verify current cluster metadata
+		if resp.IsGlobalNamespaceEnabled && !clusterData.EnableGlobalNamespace {
 			logger.Warn(
 				mismatchLogMessage,
 				tag.Key("clusterMetadata.EnableGlobalNamespace"),
@@ -678,8 +688,6 @@ func ApplyClusterMetadataConfigProvider(
 				tag.Value(resp.IsGlobalNamespaceEnabled))
 			config.ClusterMetadata.EnableGlobalNamespace = resp.IsGlobalNamespaceEnabled
 		}
-
-		// Verify current cluster metadata
 		persistedShardCount := resp.HistoryShardCount
 		if config.Persistence.NumHistoryShards != persistedShardCount {
 			logger.Warn(
