@@ -66,7 +66,7 @@ func PersistenceMaxQpsFn(
 	maxQps dynamicconfig.IntPropertyFn,
 	globalMaxQps dynamicconfig.IntPropertyFn,
 ) persistenceClient.PersistenceMaxQps {
-	return func(...dynamicconfig.FilterOption) int {
+	return func() int {
 		// if globalMaxQps() > 0 {
 		// 	// TODO: We have a bootstrap issue to correctly find memberCount.  Membership relies on
 		// 	// persistence to bootstrap membership ring, so we cannot have persistence rely on membership

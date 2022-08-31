@@ -24,19 +24,31 @@
 
 package dynamicconfig
 
-import (
-	"testing"
+import "go.temporal.io/server/common/log"
 
-	"github.com/stretchr/testify/assert"
-
-	"go.temporal.io/server/common/log"
+type (
+	// StaticClient is a simple implementation of Client that just looks up in a map.
+	// Values can be either plain values or []ConstrainedValue for a constrained value.
+	StaticClient map[Key]any
 )
 
-func BenchmarkGetIntProperty(b *testing.B) {
-	client := newInMemoryClient()
-	cln := NewCollection(client, log.NewNoopLogger())
-	for i := 0; i < b.N; i++ {
-		size := cln.GetIntProperty(MatchingMaxTaskBatchSize, 10)
-		assert.Equal(b, 10, size())
+func (s StaticClient) GetValue(key Key) []ConstrainedValue {
+	if v, ok := s[key]; ok {
+		if cvs, ok := v.([]ConstrainedValue); ok {
+			return cvs
+		}
+		return []ConstrainedValue{{Value: v}}
 	}
+	return nil
+}
+
+// NewNoopClient returns a Client that has no keys (a Collection using it will always return
+// default values).
+func NewNoopClient() Client {
+	return StaticClient(nil)
+}
+
+// NewNoopCollection creates a new noop collection.
+func NewNoopCollection() *Collection {
+	return NewCollection(NewNoopClient(), log.NewNoopLogger())
 }

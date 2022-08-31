@@ -44,7 +44,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -279,7 +278,7 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// test checksum is invalidated
 			loadErrors = loadErrorsFunc()
-			s.mockConfig.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
+			s.mockConfig.MutableStateChecksumInvalidateBefore = func() float64 {
 				return float64((s.mutableState.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) + 1)
 			}
 			s.mutableState, err = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
@@ -288,7 +287,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			s.Nil(s.mutableState.checksum)
 
 			// revert the config value for the next test case
-			s.mockConfig.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
+			s.mockConfig.MutableStateChecksumInvalidateBefore = func() float64 {
 				return float64(0)
 			}
 		})
@@ -309,14 +308,14 @@ func (s *mutableStateSuite) TestChecksumProbabilities() {
 }
 
 func (s *mutableStateSuite) TestChecksumShouldInvalidate() {
-	s.mockConfig.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 { return 0 }
+	s.mockConfig.MutableStateChecksumInvalidateBefore = func() float64 { return 0 }
 	s.False(s.mutableState.shouldInvalidateCheckum())
 	s.mutableState.executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
-	s.mockConfig.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
+	s.mockConfig.MutableStateChecksumInvalidateBefore = func() float64 {
 		return float64((s.mutableState.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) + 1)
 	}
 	s.True(s.mutableState.shouldInvalidateCheckum())
-	s.mockConfig.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
+	s.mockConfig.MutableStateChecksumInvalidateBefore = func() float64 {
 		return float64((s.mutableState.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) - 1)
 	}
 	s.False(s.mutableState.shouldInvalidateCheckum())
