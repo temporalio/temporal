@@ -101,7 +101,7 @@ func TestNewDefaultGraphUpdateCompatWithCurDefault(t *testing.T) {
 	}
 
 	req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
-		VersionId:          mkVerId("2"),
+		VersionId:          mkVerId("1.1"),
 		PreviousCompatible: mkVerId("1"),
 		BecomeDefault:      true,
 	}
@@ -110,11 +110,13 @@ func TestNewDefaultGraphUpdateCompatWithCurDefault(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.True(t, data.CurrentDefault.Version.Equal(req.VersionId))
-	assert.Equal(t, "2", data.CurrentDefault.Version.GetWorkerBuildId())
+	assert.Equal(t, "1.1", data.CurrentDefault.Version.GetWorkerBuildId())
 	assert.Equal(t, n1, data.CurrentDefault.PreviousCompatible)
 	assert.Equal(t, "1", data.CurrentDefault.PreviousCompatible.Version.GetWorkerBuildId())
 	assert.Equal(t, n0, data.CurrentDefault.PreviousIncompatible)
 	assert.Equal(t, "0", data.CurrentDefault.PreviousIncompatible.Version.GetWorkerBuildId())
+	// The node is *not* added to compatible leaves, since it replaces the current default.
+	assert.Empty(t, data.GetCompatibleLeaves())
 }
 
 func TestNewDefaultGraphUpdateCompatWithSomethingElse(t *testing.T) {
@@ -238,7 +240,7 @@ func TestAddingNewNodeWithNoLinksNotAllowed(t *testing.T) {
 	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
 }
 
-func TestUnsetCurrentDefault(t *testing.T) {
+func TestCannotUnsetDefault(t *testing.T) {
 	n1 := mkVerIdNode("1")
 	data := &persistencepb.VersioningData{
 		CurrentDefault: n1,
@@ -249,17 +251,17 @@ func TestUnsetCurrentDefault(t *testing.T) {
 	}
 
 	err := UpdateVersionsGraph(data, req, 0)
-	assert.NoError(t, err)
-
-	assert.Nil(t, data.CurrentDefault)
+	assert.Error(t, err)
 }
 
-func TestUnsetCurrentDefaultPreviousIncompatBecomesDefault(t *testing.T) {
+func TestDropMiddleIncomat(t *testing.T) {
 	n0 := mkVerIdNode("0")
 	n1 := mkVerIdNode("1")
 	n1.PreviousIncompatible = n0
+	n2 := mkVerIdNode("2")
+	n2.PreviousIncompatible = n1
 	data := &persistencepb.VersioningData{
-		CurrentDefault: n1,
+		CurrentDefault: n2,
 	}
 
 	req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
@@ -267,38 +269,168 @@ func TestUnsetCurrentDefaultPreviousIncompatBecomesDefault(t *testing.T) {
 	}
 
 	err := UpdateVersionsGraph(data, req, 0)
-	assert.NoError(t, err)
-
-	assert.True(t, data.CurrentDefault.Version.Equal(n0.Version))
-	assert.Equal(t, "0", data.CurrentDefault.Version.GetWorkerBuildId())
+	assert.Error(t, err)
 }
 
-func TestUnsetCurrentDefaultPreviousCompatBecomesDefault(t *testing.T) {
+func TestAddingSameVersionAsDefaultAgainIsIdempotent(t *testing.T) {
+	data := &persistencepb.VersioningData{}
+
+	req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		VersionId:     mkVerId("1"),
+		BecomeDefault: true,
+	}
+	err := UpdateVersionsGraph(data, req, 0)
+	assert.NoError(t, err)
+
+	err = UpdateVersionsGraph(data, req, 0)
+	assert.NoError(t, err)
+	assert.Nil(t, data.CurrentDefault.GetPreviousIncompatible())
+}
+
+func TestReorderMiddleIncompat(t *testing.T) {
+	n0 := mkVerIdNode("0")
+	n1 := mkVerIdNode("1")
+	n1.PreviousIncompatible = n0
+	n2 := mkVerIdNode("2")
+	n2.PreviousIncompatible = n1
+	data := &persistencepb.VersioningData{
+		CurrentDefault: n2,
+	}
+
+	req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		VersionId:     mkVerId("1"),
+		BecomeDefault: true,
+	}
+
+	err := UpdateVersionsGraph(data, req, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, "1", data.CurrentDefault.Version.GetWorkerBuildId())
+	assert.Equal(t, "2", data.CurrentDefault.PreviousIncompatible.Version.GetWorkerBuildId())
+	assert.Equal(t, "0", data.CurrentDefault.PreviousIncompatible.PreviousIncompatible.Version.GetWorkerBuildId())
+	assert.Nil(t, data.CurrentDefault.PreviousIncompatible.PreviousIncompatible.PreviousIncompatible)
+}
+
+func TestAddExistingVerInCompatBranchAsNewDefault(t *testing.T) {
 	n0 := mkVerIdNode("0")
 	n1 := mkVerIdNode("1")
 	n1d1 := mkVerIdNode("1.1")
 	n1.PreviousIncompatible = n0
 	n1d1.PreviousCompatible = n1
+	n2 := mkVerIdNode("2")
+	n2.PreviousIncompatible = n1
 	data := &persistencepb.VersioningData{
-		CurrentDefault: n1d1,
+		CurrentDefault:   n2,
+		CompatibleLeaves: []*taskqueuepb.VersionIdNode{n1d1},
 	}
 
 	req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
-		VersionId: mkVerId("1.1"),
+		VersionId:     mkVerId("1.1"),
+		BecomeDefault: true,
 	}
-
 	err := UpdateVersionsGraph(data, req, 0)
 	assert.NoError(t, err)
 
-	assert.True(t, data.CurrentDefault.Version.Equal(n1.Version))
-	assert.Equal(t, "1", data.CurrentDefault.Version.GetWorkerBuildId())
+	assert.Equal(t, "1.1", data.CurrentDefault.Version.GetWorkerBuildId())
+	assert.Equal(t, "2", data.CurrentDefault.PreviousIncompatible.Version.GetWorkerBuildId())
+	assert.Equal(t, "1", data.CurrentDefault.PreviousCompatible.Version.GetWorkerBuildId())
+	assert.Equal(t, "0", data.CurrentDefault.PreviousIncompatible.PreviousIncompatible.Version.GetWorkerBuildId())
+	assert.Nil(t, data.CurrentDefault.PreviousIncompatible.PreviousIncompatible.PreviousIncompatible)
+
+	req = &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		VersionId:          mkVerId("1.2"),
+		PreviousCompatible: mkVerId("1.1"),
+	}
+	err = UpdateVersionsGraph(data, req, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, "1.1", data.CurrentDefault.Version.GetWorkerBuildId())
+	assert.Equal(t, "1.2", data.CompatibleLeaves[0].Version.GetWorkerBuildId())
+	assert.Equal(t, "1.1", data.CompatibleLeaves[0].PreviousCompatible.Version.GetWorkerBuildId())
 }
 
-func TestDropCompatibleLeaf(t *testing.T) {
+func setupCross(t *testing.T) *persistencepb.VersioningData {
+	data := &persistencepb.VersioningData{}
+	req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		VersionId:     mkVerId("0"),
+		BecomeDefault: true,
+	}
+	err := UpdateVersionsGraph(data, req, 0)
+	assert.NoError(t, err)
+	req = &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		VersionId:     mkVerId("1"),
+		BecomeDefault: true,
+	}
+	err = UpdateVersionsGraph(data, req, 0)
+	assert.NoError(t, err)
+	req = &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		VersionId:          mkVerId("1.1"),
+		PreviousCompatible: mkVerId("1"),
+		BecomeDefault:      true,
+	}
+	err = UpdateVersionsGraph(data, req, 0)
+	assert.NoError(t, err)
+	req = &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		VersionId:     mkVerId("2"),
+		BecomeDefault: true,
+	}
+	err = UpdateVersionsGraph(data, req, 0)
+	assert.NoError(t, err)
+	req = &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		VersionId:          mkVerId("1.2"),
+		PreviousCompatible: mkVerId("1.1"),
+	}
+	err = UpdateVersionsGraph(data, req, 0)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "2", data.CurrentDefault.Version.GetWorkerBuildId())
+	assert.Equal(t, "1.1", data.CurrentDefault.PreviousIncompatible.Version.GetWorkerBuildId())
+	assert.Equal(t, "1.2", data.CompatibleLeaves[0].Version.GetWorkerBuildId())
+	return data
+}
+
+// This test makes the following change to the graph:
+//
+//	       1.0                        1.0
+//	        │                          │
+//	        │                          │
+//	0.0────1.1────2.0                 1.1
+//	        │                          │
+//	        │                          │
+//	       1.2          0.0────2.0────1.2
+func TestMoveCompatBranchPointedInMiddleToBeDefault(t *testing.T) {
+	data := setupCross(t)
+
+	// Move the 1.x compat branch to the front
+	req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		VersionId:     mkVerId("1.2"),
+		BecomeDefault: true,
+	}
+	err := UpdateVersionsGraph(data, req, 0)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "1.2", data.CurrentDefault.Version.GetWorkerBuildId())
+	assert.Equal(t, "1.1", data.CurrentDefault.PreviousCompatible.Version.GetWorkerBuildId())
+	assert.Equal(t, "2", data.CurrentDefault.PreviousIncompatible.Version.GetWorkerBuildId())
+	assert.Equal(t, "0", data.CurrentDefault.PreviousIncompatible.PreviousIncompatible.Version.GetWorkerBuildId())
+}
+
+func TestCannotMoveOlderCompatVersionToBeDefault(t *testing.T) {
+	data := setupCross(t)
+
+	// It's not allowed to make 1.1 the default, since that would really make 1.2 the real default, because
+	// it's compat with 1.1, but that's not what the user said, and we want to be explicit.
+	req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		VersionId:     mkVerId("1.1"),
+		BecomeDefault: true,
+	}
+	err := UpdateVersionsGraph(data, req, 0)
+	assert.Error(t, err)
+}
+
+func TestDoesNotForkCompatBranch(t *testing.T) {
 	n0 := mkVerIdNode("0")
 	n1 := mkVerIdNode("1")
-	n1d1 := mkVerIdNode("1.1")
 	n1.PreviousIncompatible = n0
+	n1d1 := mkVerIdNode("1.1")
 	n1d1.PreviousCompatible = n1
 	data := &persistencepb.VersioningData{
 		CurrentDefault:   n1,
@@ -306,16 +438,15 @@ func TestDropCompatibleLeaf(t *testing.T) {
 	}
 
 	req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
-		VersionId: mkVerId("1.1"),
+		VersionId:          mkVerId("1.2"),
+		PreviousCompatible: mkVerId("1"),
 	}
 
 	err := UpdateVersionsGraph(data, req, 0)
 	assert.NoError(t, err)
-
-	assert.True(t, data.CurrentDefault.Version.Equal(n1.Version))
+	assert.Equal(t, "1.2", data.CompatibleLeaves[0].Version.GetWorkerBuildId())
+	assert.Equal(t, "1.1", data.CompatibleLeaves[0].PreviousCompatible.Version.GetWorkerBuildId())
 	assert.Equal(t, "1", data.CurrentDefault.Version.GetWorkerBuildId())
-	assert.Equal(t, 1, len(data.CompatibleLeaves))
-	assert.Equal(t, "1", data.CompatibleLeaves[0].Version.GetWorkerBuildId())
 }
 
 func TestCompatibleTargetsNotFound(t *testing.T) {
@@ -381,6 +512,8 @@ func TestLimitsMaxSize(t *testing.T) {
 	}
 	assert.Equal(t, mkVerId("50.24"), lastNode.GetVersion())
 }
+
+// TODO: Fuzz no forks -- any node can only be pointed at by one incompatible and one compat node
 
 func FuzzVersionGraphEnsureNoSameTypeDefaults(f *testing.F) {
 	f.Fuzz(func(t *testing.T, numUpdates, willPickCompatMod, compatModTarget uint8) {
