@@ -128,9 +128,12 @@ func (a *actionSliceCount) appendCompactCandidatesForReader(
 	var prevRange *Range
 	reader.WalkSlices(func(s Slice) {
 		currentRange := s.Scope().Range
+		defer func() {
+			prevRange = &currentRange
+		}()
 
 		if prevRange == nil {
-			prevRange = &currentRange
+
 			return
 		}
 
@@ -138,7 +141,6 @@ func (a *actionSliceCount) appendCompactCandidatesForReader(
 			slice:    s,
 			distance: currentRange.InclusiveMin.Sub(prevRange.ExclusiveMax),
 		})
-		prevRange = &currentRange
 	})
 
 	return candidates
