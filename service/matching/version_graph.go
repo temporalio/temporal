@@ -335,6 +335,8 @@ func _findInNode(
 }
 
 // For graph visualization purposes while debugging
+//
+//lint:ignore U1000 Only needed for debugging purposes
 func toDot(data *persistence.VersioningData) string {
 	var buf bytes.Buffer
 	buf.WriteString("digraph {\n")
