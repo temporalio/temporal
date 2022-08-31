@@ -244,26 +244,23 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) notifyDispatcher() {
 	}
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler[T, K]) shouldUpdateWeight() bool {
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) receiveWeightUpdateNotification() bool {
 	if s.options.ChannelWeightUpdateCh == nil {
 		return false
 	}
 
 	select {
 	case <-s.options.ChannelWeightUpdateCh:
-		return true
+		// drain the channel as we don't know the channel size
+		for {
+			select {
+			case <-s.options.ChannelWeightUpdateCh:
+			default:
+				return true
+			}
+		}
 	default:
 		return false
-	}
-}
-
-func (s *InterleavedWeightedRoundRobinScheduler[T, K]) drainWeightUpdateCh() {
-	for {
-		select {
-		case <-s.options.ChannelWeightUpdateCh:
-		default:
-			return
-		}
 	}
 }
 
@@ -275,9 +272,8 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) updateChannelWeightLocked
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) dispatchTasksWithWeight() {
 	for s.hasRemainingTasks() {
-		if s.shouldUpdateWeight() {
+		if s.receiveWeightUpdateNotification() {
 			s.Lock()
-			s.drainWeightUpdateCh()
 			s.updateChannelWeightLocked()
 			s.flattenWeightedChannelsLocked()
 			s.Unlock()

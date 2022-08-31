@@ -37,7 +37,8 @@ var (
 	}
 
 	DefaultStandbyTaskPriorityWeight = map[tasks.Priority]int{
-		tasks.PriorityHigh: 2,
+		// we basically treat standby tasks as low prority tasks
+		tasks.PriorityHigh: 1,
 		tasks.PriorityLow:  1,
 	}
 )
