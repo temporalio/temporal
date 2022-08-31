@@ -67,10 +67,10 @@ testGetMapPropertyKey:
   constraints: {}
 - value: "1"
   constraints:
-    taskQueueName: random taskqueue
+    namespace: random-namespace
 testGetStringPropertyKey:
 - value: some random string
   constraints: {}
 - value: constrained-string
   constraints:
-    taskQueueName: random taskqueue
+    namespace: random-namespace

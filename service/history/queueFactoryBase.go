@@ -56,6 +56,9 @@ type (
 		HostScheduler        queues.Scheduler
 		HostPriorityAssigner queues.PriorityAssigner
 		HostRateLimiter      quotas.RateLimiter
+
+		// used by multi-cursor queue reader
+		HostReaderRateLimiter quotas.RequestRateLimiter
 	}
 
 	QueueFactoriesLifetimeHookParams struct {
@@ -122,12 +125,19 @@ func NewQueueHostRateLimiter(
 	fallBackRPS dynamicconfig.IntPropertyFn,
 ) quotas.RateLimiter {
 	return quotas.NewDefaultOutgoingRateLimiter(
-		func() float64 {
-			if maxPollHostRps := hostRPS(); maxPollHostRps > 0 {
-				return float64(maxPollHostRps)
-			}
-
-			return float64(fallBackRPS())
-		},
+		NewHostRateLimiterRateFn(hostRPS, fallBackRPS),
 	)
+}
+
+func NewHostRateLimiterRateFn(
+	hostRPS dynamicconfig.IntPropertyFn,
+	fallBackRPS dynamicconfig.IntPropertyFn,
+) quotas.RateFn {
+	return func() float64 {
+		if maxPollHostRps := hostRPS(); maxPollHostRps > 0 {
+			return float64(maxPollHostRps)
+		}
+
+		return float64(fallBackRPS())
+	}
 }

@@ -153,9 +153,10 @@ func NewTestRingpopCluster(
 			return nil
 		}
 		rpWrapper := NewRingPop(ringPop, time.Second*2, logger)
+		_, port, _ := SplitHostPortTyped(cluster.hostAddrs[i])
 		cluster.rings[i] = NewRingpopMonitor(
 			serviceName,
-			map[string]int{serviceName: 0},
+			map[string]int{serviceName: int(port)}, // use same port for "grpc" port
 			rpWrapper,
 			logger,
 			mockMgr,

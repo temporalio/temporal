@@ -90,6 +90,13 @@ func NewTimerQueueFactory(
 				params.Config.TimerProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
 			),
+			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
+				NewHostRateLimiterRateFn(
+					params.Config.TimerProcessorMaxPollHostRPS,
+					params.Config.PersistenceMaxQPS,
+				),
+				params.Config.QueueMaxReaderCount(),
+			),
 		},
 	}
 }
@@ -174,6 +181,7 @@ func (f *timerQueueFactory) CreateQueue(
 				MonitorOptions: queues.MonitorOptions{
 					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
 				},
+				MaxPollRPS:                          f.Config.TimerProcessorMaxPollRPS,
 				MaxPollInterval:                     f.Config.TimerProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.TimerProcessorMaxPollIntervalJitterCoefficient,
 				CheckpointInterval:                  f.Config.TimerProcessorUpdateAckInterval,
@@ -181,10 +189,7 @@ func (f *timerQueueFactory) CreateQueue(
 				MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 				TaskMaxRetryCount:                   f.Config.TimerTaskMaxRetryCount,
 			},
-			newQueueProcessorRateLimiter(
-				f.HostRateLimiter,
-				f.Config.TimerProcessorMaxPollRPS,
-			),
+			f.HostReaderRateLimiter,
 			logger,
 			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTimerQueueProcessor)),
 		)

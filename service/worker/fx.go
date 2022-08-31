@@ -105,10 +105,9 @@ func ConfigProvider(
 }
 
 func FrontendClientProvider(
-	cfg *config.Config,
 	clientFactory client.Factory,
 ) (workflowservice.WorkflowServiceClient, error) {
-	return clientFactory.NewFrontendClient(cfg.PublicClient.HostPort)
+	return clientFactory.NewLocalFrontendClient()
 }
 
 func VisibilityManagerProvider(

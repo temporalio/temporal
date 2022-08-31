@@ -62,7 +62,7 @@ type (
 
 		config         *configs.Config
 		options        *Options
-		rateLimiter    quotas.RateLimiter
+		rateLimiter    quotas.RequestRateLimiter
 		logger         log.Logger
 		metricsHandler metrics.MetricsHandler
 	}
@@ -74,10 +74,12 @@ var testQueueOptions = &Options{
 		MaxPendingTasksCount: dynamicconfig.GetIntPropertyFn(100),
 		PollBackoffInterval:  dynamicconfig.GetDurationPropertyFn(200 * time.Millisecond),
 	},
+	MaxPollRPS:                          dynamicconfig.GetIntPropertyFn(20),
 	MaxPollInterval:                     dynamicconfig.GetDurationPropertyFn(time.Minute * 5),
 	MaxPollIntervalJitterCoefficient:    dynamicconfig.GetFloatPropertyFn(0.15),
 	CheckpointInterval:                  dynamicconfig.GetDurationPropertyFn(100 * time.Millisecond),
 	CheckpointIntervalJitterCoefficient: dynamicconfig.GetFloatPropertyFn(0.15),
+	MaxReaderCount:                      dynamicconfig.GetIntPropertyFn(5),
 	TaskMaxRetryCount:                   dynamicconfig.GetIntPropertyFn(100),
 }
 
@@ -99,7 +101,7 @@ func (s *queueBaseSuite) SetupTest() {
 
 	s.config = tests.NewDynamicConfig()
 	s.options = testQueueOptions
-	s.rateLimiter = quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 20 })
+	s.rateLimiter = NewReaderPriorityRateLimiter(func() float64 { return 20 }, s.options.MaxReaderCount())
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 }

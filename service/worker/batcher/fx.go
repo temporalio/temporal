@@ -33,14 +33,14 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
 
 const (
 	// BatchWFTypeName is the workflow type
-	BatchWFTypeName = "temporal-sys-batch-workflow"
+	BatchWFTypeName   = "temporal-sys-batch-workflow"
+	NamespaceDivision = "TemporalBatcher"
 	// DefaultRPS is the default RPS
 	DefaultRPS = 50
 	// DefaultConcurrency is the default concurrency
@@ -89,7 +89,7 @@ func NewResult(
 func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	namespaceName := ns.Name().String()
 	enableFeature := s.enabledFeature(namespaceName)
-	enablePerNSWorker := s.enabledPerNSWorker(namespaceName) || namespaceName == primitives.SystemLocalNamespace
+	enablePerNSWorker := s.enabledPerNSWorker(namespaceName)
 	return &workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: enableFeature && enablePerNSWorker,
 	}

@@ -33,8 +33,8 @@ import (
 // These mock functions are for tests to use config properties that are dynamic
 
 // GetIntPropertyFn returns value as IntPropertyFn
-func GetIntPropertyFn(value int) func(opts ...FilterOption) int {
-	return func(...FilterOption) int { return value }
+func GetIntPropertyFn(value int) func() int {
+	return func() int { return value }
 }
 
 // GetIntPropertyFilteredByNamespace returns values as IntPropertyFnWithNamespaceFilters
@@ -48,13 +48,13 @@ func GetIntPropertyFilteredByTaskQueueInfo(value int) func(namespace string, tas
 }
 
 // GetFloatPropertyFn returns value as FloatPropertyFn
-func GetFloatPropertyFn(value float64) func(opts ...FilterOption) float64 {
-	return func(...FilterOption) float64 { return value }
+func GetFloatPropertyFn(value float64) func() float64 {
+	return func() float64 { return value }
 }
 
 // GetBoolPropertyFn returns value as BoolPropertyFn
-func GetBoolPropertyFn(value bool) func(opts ...FilterOption) bool {
-	return func(...FilterOption) bool { return value }
+func GetBoolPropertyFn(value bool) func() bool {
+	return func() bool { return value }
 }
 
 // GetBoolPropertyFnFilteredByNamespace returns value as BoolPropertyFnWithNamespaceFilters
@@ -68,8 +68,8 @@ func GetDurationPropertyFnFilteredByNamespace(value time.Duration) func(namespac
 }
 
 // GetDurationPropertyFn returns value as DurationPropertyFn
-func GetDurationPropertyFn(value time.Duration) func(opts ...FilterOption) time.Duration {
-	return func(...FilterOption) time.Duration { return value }
+func GetDurationPropertyFn(value time.Duration) func() time.Duration {
+	return func() time.Duration { return value }
 }
 
 // GetDurationPropertyFnFilteredByTaskQueueInfo returns value as DurationPropertyFnWithTaskQueueInfoFilters
@@ -78,13 +78,13 @@ func GetDurationPropertyFnFilteredByTaskQueueInfo(value time.Duration) func(name
 }
 
 // GetStringPropertyFn returns value as StringPropertyFn
-func GetStringPropertyFn(value string) func(opts ...FilterOption) string {
-	return func(...FilterOption) string { return value }
+func GetStringPropertyFn(value string) func() string {
+	return func() string { return value }
 }
 
 // GetMapPropertyFn returns value as MapPropertyFn
-func GetMapPropertyFn(value map[string]interface{}) func(opts ...FilterOption) map[string]interface{} {
-	return func(...FilterOption) map[string]interface{} { return value }
+func GetMapPropertyFn(value map[string]interface{}) func() map[string]interface{} {
+	return func() map[string]interface{} { return value }
 }
 
 // GetMapPropertyFnWithNamespaceFilter returns value as MapPropertyFn
