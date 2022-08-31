@@ -67,49 +67,6 @@ func (m *MockFactory) EXPECT() *MockFactoryMockRecorder {
 	return m.recorder
 }
 
-// NewAdminClientWithTimeout mocks base method.
-func (m *MockFactory) NewAdminClientWithTimeout(rpcAddress string, timeout, largeTimeout time.Duration) v10.AdminServiceClient {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewAdminClientWithTimeout", rpcAddress, timeout, largeTimeout)
-	ret0, _ := ret[0].(v10.AdminServiceClient)
-	return ret0
-}
-
-// NewAdminClientWithTimeout indicates an expected call of NewAdminClientWithTimeout.
-func (mr *MockFactoryMockRecorder) NewAdminClientWithTimeout(rpcAddress, timeout, largeTimeout interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewAdminClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewAdminClientWithTimeout), rpcAddress, timeout, largeTimeout)
-}
-
-// NewFrontendClient mocks base method.
-func (m *MockFactory) NewFrontendClient(rpcAddress string) (v1.WorkflowServiceClient, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewFrontendClient", rpcAddress)
-	ret0, _ := ret[0].(v1.WorkflowServiceClient)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// NewFrontendClient indicates an expected call of NewFrontendClient.
-func (mr *MockFactoryMockRecorder) NewFrontendClient(rpcAddress interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewFrontendClient", reflect.TypeOf((*MockFactory)(nil).NewFrontendClient), rpcAddress)
-}
-
-// NewFrontendClientWithTimeout mocks base method.
-func (m *MockFactory) NewFrontendClientWithTimeout(rpcAddress string, timeout, longPollTimeout time.Duration) v1.WorkflowServiceClient {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewFrontendClientWithTimeout", rpcAddress, timeout, longPollTimeout)
-	ret0, _ := ret[0].(v1.WorkflowServiceClient)
-	return ret0
-}
-
-// NewFrontendClientWithTimeout indicates an expected call of NewFrontendClientWithTimeout.
-func (mr *MockFactoryMockRecorder) NewFrontendClientWithTimeout(rpcAddress, timeout, longPollTimeout interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewFrontendClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewFrontendClientWithTimeout), rpcAddress, timeout, longPollTimeout)
-}
-
 // NewHistoryClient mocks base method.
 func (m *MockFactory) NewHistoryClient() (v11.HistoryServiceClient, error) {
 	m.ctrl.T.Helper()
@@ -140,6 +97,51 @@ func (mr *MockFactoryMockRecorder) NewHistoryClientWithTimeout(timeout interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewHistoryClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewHistoryClientWithTimeout), timeout)
 }
 
+// NewLocalAdminClientWithTimeout mocks base method.
+func (m *MockFactory) NewLocalAdminClientWithTimeout(timeout, largeTimeout time.Duration) (v10.AdminServiceClient, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewLocalAdminClientWithTimeout", timeout, largeTimeout)
+	ret0, _ := ret[0].(v10.AdminServiceClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewLocalAdminClientWithTimeout indicates an expected call of NewLocalAdminClientWithTimeout.
+func (mr *MockFactoryMockRecorder) NewLocalAdminClientWithTimeout(timeout, largeTimeout interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewLocalAdminClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewLocalAdminClientWithTimeout), timeout, largeTimeout)
+}
+
+// NewLocalFrontendClient mocks base method.
+func (m *MockFactory) NewLocalFrontendClient() (v1.WorkflowServiceClient, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewLocalFrontendClient")
+	ret0, _ := ret[0].(v1.WorkflowServiceClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewLocalFrontendClient indicates an expected call of NewLocalFrontendClient.
+func (mr *MockFactoryMockRecorder) NewLocalFrontendClient() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewLocalFrontendClient", reflect.TypeOf((*MockFactory)(nil).NewLocalFrontendClient))
+}
+
+// NewLocalFrontendClientWithTimeout mocks base method.
+func (m *MockFactory) NewLocalFrontendClientWithTimeout(timeout, longPollTimeout time.Duration) (v1.WorkflowServiceClient, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewLocalFrontendClientWithTimeout", timeout, longPollTimeout)
+	ret0, _ := ret[0].(v1.WorkflowServiceClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewLocalFrontendClientWithTimeout indicates an expected call of NewLocalFrontendClientWithTimeout.
+func (mr *MockFactoryMockRecorder) NewLocalFrontendClientWithTimeout(timeout, longPollTimeout interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewLocalFrontendClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewLocalFrontendClientWithTimeout), timeout, longPollTimeout)
+}
+
 // NewMatchingClient mocks base method.
 func (m *MockFactory) NewMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (v12.MatchingServiceClient, error) {
 	m.ctrl.T.Helper()
@@ -168,6 +170,49 @@ func (m *MockFactory) NewMatchingClientWithTimeout(namespaceIDToName NamespaceID
 func (mr *MockFactoryMockRecorder) NewMatchingClientWithTimeout(namespaceIDToName, timeout, longPollTimeout interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewMatchingClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewMatchingClientWithTimeout), namespaceIDToName, timeout, longPollTimeout)
+}
+
+// NewRemoteAdminClientWithTimeout mocks base method.
+func (m *MockFactory) NewRemoteAdminClientWithTimeout(rpcAddress string, timeout, largeTimeout time.Duration) v10.AdminServiceClient {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewRemoteAdminClientWithTimeout", rpcAddress, timeout, largeTimeout)
+	ret0, _ := ret[0].(v10.AdminServiceClient)
+	return ret0
+}
+
+// NewRemoteAdminClientWithTimeout indicates an expected call of NewRemoteAdminClientWithTimeout.
+func (mr *MockFactoryMockRecorder) NewRemoteAdminClientWithTimeout(rpcAddress, timeout, largeTimeout interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewRemoteAdminClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewRemoteAdminClientWithTimeout), rpcAddress, timeout, largeTimeout)
+}
+
+// NewRemoteFrontendClient mocks base method.
+func (m *MockFactory) NewRemoteFrontendClient(rpcAddress string) (v1.WorkflowServiceClient, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewRemoteFrontendClient", rpcAddress)
+	ret0, _ := ret[0].(v1.WorkflowServiceClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewRemoteFrontendClient indicates an expected call of NewRemoteFrontendClient.
+func (mr *MockFactoryMockRecorder) NewRemoteFrontendClient(rpcAddress interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewRemoteFrontendClient", reflect.TypeOf((*MockFactory)(nil).NewRemoteFrontendClient), rpcAddress)
+}
+
+// NewRemoteFrontendClientWithTimeout mocks base method.
+func (m *MockFactory) NewRemoteFrontendClientWithTimeout(rpcAddress string, timeout, longPollTimeout time.Duration) v1.WorkflowServiceClient {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewRemoteFrontendClientWithTimeout", rpcAddress, timeout, longPollTimeout)
+	ret0, _ := ret[0].(v1.WorkflowServiceClient)
+	return ret0
+}
+
+// NewRemoteFrontendClientWithTimeout indicates an expected call of NewRemoteFrontendClientWithTimeout.
+func (mr *MockFactoryMockRecorder) NewRemoteFrontendClientWithTimeout(rpcAddress, timeout, longPollTimeout interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewRemoteFrontendClientWithTimeout", reflect.TypeOf((*MockFactory)(nil).NewRemoteFrontendClientWithTimeout), rpcAddress, timeout, longPollTimeout)
 }
 
 // MockFactoryProvider is a mock of FactoryProvider interface.
@@ -205,4 +250,57 @@ func (m *MockFactoryProvider) NewFactory(rpcFactory common.RPCFactory, monitor m
 func (mr *MockFactoryProviderMockRecorder) NewFactory(rpcFactory, monitor, metricsClient, dc, numberOfHistoryShards, logger, throttledLogger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewFactory", reflect.TypeOf((*MockFactoryProvider)(nil).NewFactory), rpcFactory, monitor, metricsClient, dc, numberOfHistoryShards, logger, throttledLogger)
+}
+
+// MockkeyResolver is a mock of keyResolver interface.
+type MockkeyResolver struct {
+	ctrl     *gomock.Controller
+	recorder *MockkeyResolverMockRecorder
+}
+
+// MockkeyResolverMockRecorder is the mock recorder for MockkeyResolver.
+type MockkeyResolverMockRecorder struct {
+	mock *MockkeyResolver
+}
+
+// NewMockkeyResolver creates a new mock instance.
+func NewMockkeyResolver(ctrl *gomock.Controller) *MockkeyResolver {
+	mock := &MockkeyResolver{ctrl: ctrl}
+	mock.recorder = &MockkeyResolverMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockkeyResolver) EXPECT() *MockkeyResolverMockRecorder {
+	return m.recorder
+}
+
+// GetAllAddresses mocks base method.
+func (m *MockkeyResolver) GetAllAddresses() ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllAddresses")
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAllAddresses indicates an expected call of GetAllAddresses.
+func (mr *MockkeyResolverMockRecorder) GetAllAddresses() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllAddresses", reflect.TypeOf((*MockkeyResolver)(nil).GetAllAddresses))
+}
+
+// Lookup mocks base method.
+func (m *MockkeyResolver) Lookup(key string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Lookup", key)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Lookup indicates an expected call of Lookup.
+func (mr *MockkeyResolverMockRecorder) Lookup(key interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lookup", reflect.TypeOf((*MockkeyResolver)(nil).Lookup), key)
 }

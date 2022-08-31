@@ -86,7 +86,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 	candidates := make([]compactCandidate, 0, currentSliceCount)
 	for readerID, reader := range readers {
 		// first try only compacting slices in non-default reader
-		if readerID == defaultReaderId {
+		if readerID == DefaultReaderId {
 			continue
 		}
 
@@ -104,7 +104,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 	// note here the comparision is against CriticalSliceCount, not preferredSliceCount
 	remainingToCompact := currentSliceCount - len(sliceToCompact) - a.attributes.CriticalSliceCount
 	if remainingToCompact > 0 {
-		candidates = a.appendCompactCandidatesForReader(nil, readers[defaultReaderId])
+		candidates = a.appendCompactCandidatesForReader(nil, readers[DefaultReaderId])
 		a.sortCompactCandidates(candidates)
 		for _, candidate := range candidates[:util.Min(remainingToCompact, len(candidates))] {
 			sliceToCompact[candidate.slice] = struct{}{}

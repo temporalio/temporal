@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/predicates"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -75,8 +74,8 @@ func (s *readerSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 
-	s.executableInitializer = func(t tasks.Task) Executable {
-		return NewExecutable(t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
+	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
+		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
@@ -392,10 +391,12 @@ func (s *readerSuite) TestSubmitTask() {
 
 	pastFireTime := reader.timeSource.Now().Add(-time.Minute)
 	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
+	mockExecutable.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
 	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(true).Times(1)
 	reader.submit(mockExecutable)
 
 	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
+	mockExecutable.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
 	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(false).Times(1)
 	mockExecutable.EXPECT().Reschedule().Times(1)
 	reader.submit(mockExecutable)
@@ -430,7 +431,7 @@ func (s *readerSuite) newTestReader(
 	}
 
 	return NewReader(
-		defaultReaderId,
+		DefaultReaderId,
 		slices,
 		&ReaderOptions{
 			BatchSize:            dynamicconfig.GetIntPropertyFn(10),
@@ -440,7 +441,7 @@ func (s *readerSuite) newTestReader(
 		s.mockScheduler,
 		s.mockRescheduler,
 		clock.NewRealTimeSource(),
-		quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 20 }),
+		NewReaderPriorityRateLimiter(func() float64 { return 20 }, 1),
 		s.monitor,
 		s.logger,
 		s.metricsHandler,

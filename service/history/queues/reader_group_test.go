@@ -60,13 +60,13 @@ func (s *readerGroupSuite) SetupTest() {
 }
 
 func (s *readerGroupSuite) TestStartStop() {
-	r := s.readerGroup.NewReader(defaultReaderId)
+	r := s.readerGroup.NewReader(DefaultReaderId)
 	s.Equal(common.DaemonStatusInitialized, r.(*testReader).status)
 
 	s.readerGroup.Start()
 	s.Equal(common.DaemonStatusStarted, r.(*testReader).status)
 
-	r = s.readerGroup.NewReader(defaultReaderId + 1)
+	r = s.readerGroup.NewReader(DefaultReaderId + 1)
 	s.Equal(common.DaemonStatusStarted, r.(*testReader).status)
 
 	s.readerGroup.Stop()
@@ -76,14 +76,14 @@ func (s *readerGroupSuite) TestStartStop() {
 		s.Equal(common.DaemonStatusStopped, r.(*testReader).status)
 	}
 
-	r = s.readerGroup.NewReader(defaultReaderId + 2)
+	r = s.readerGroup.NewReader(DefaultReaderId + 2)
 	s.Equal(common.DaemonStatusInitialized, r.(*testReader).status)
 }
 
 func (s *readerGroupSuite) TestAddGetReader() {
 	s.Empty(s.readerGroup.Readers())
 
-	r, ok := s.readerGroup.ReaderByID(defaultReaderId)
+	r, ok := s.readerGroup.ReaderByID(DefaultReaderId)
 	s.False(ok)
 	s.Nil(r)
 
@@ -100,7 +100,7 @@ func (s *readerGroupSuite) TestAddGetReader() {
 	}
 
 	s.Panics(func() {
-		s.readerGroup.NewReader(defaultReaderId)
+		s.readerGroup.NewReader(DefaultReaderId)
 	})
 }
 

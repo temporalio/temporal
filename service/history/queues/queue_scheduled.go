@@ -65,7 +65,7 @@ func NewScheduledQueue(
 	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
-	rateLimiter quotas.RateLimiter,
+	hostRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
 	metricsHandler metrics.MetricsHandler,
 ) *scheduledQueue {
@@ -121,7 +121,7 @@ func NewScheduledQueue(
 			priorityAssigner,
 			executor,
 			options,
-			rateLimiter,
+			hostRateLimiter,
 			logger,
 			metricsHandler,
 		),

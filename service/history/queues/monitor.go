@@ -112,7 +112,7 @@ func (m *monitorImpl) GetReaderWatermark(readerID int32) (tasks.Key, bool) {
 
 func (m *monitorImpl) SetReaderWatermark(readerID int32, watermark tasks.Key) {
 	// TODO: currently only tracking default reader progress for scheduled queue
-	if readerID != defaultReaderId || m.categoryType != tasks.CategoryTypeScheduled {
+	if readerID != DefaultReaderId || m.categoryType != tasks.CategoryTypeScheduled {
 		return
 	}
 

@@ -73,6 +73,8 @@ func NewTransferQueueFactory(
 				NamespaceWeights: params.Config.TransferProcessorSchedulerRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
+			params.TimeSource,
+			params.MetricsHandler,
 			params.Logger,
 		)
 	}
@@ -90,6 +92,13 @@ func NewTransferQueueFactory(
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.TransferProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
+			),
+			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
+				NewHostRateLimiterRateFn(
+					params.Config.TransferProcessorMaxPollHostRPS,
+					params.Config.PersistenceMaxQPS,
+				),
+				params.Config.QueueMaxReaderCount(),
 			),
 		},
 	}
@@ -163,6 +172,7 @@ func (f *transferQueueFactory) CreateQueue(
 					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
 					SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 				},
+				MaxPollRPS:                          f.Config.TransferProcessorMaxPollRPS,
 				MaxPollInterval:                     f.Config.TransferProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.TransferProcessorMaxPollIntervalJitterCoefficient,
 				CheckpointInterval:                  f.Config.TransferProcessorUpdateAckInterval,
@@ -170,10 +180,7 @@ func (f *transferQueueFactory) CreateQueue(
 				MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 				TaskMaxRetryCount:                   f.Config.TransferTaskMaxRetryCount,
 			},
-			newQueueProcessorRateLimiter(
-				f.HostRateLimiter,
-				f.Config.TransferProcessorMaxPollRPS,
-			),
+			f.HostReaderRateLimiter,
 			logger,
 			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferQueueProcessor)),
 		)

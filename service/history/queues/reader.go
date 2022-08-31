@@ -82,7 +82,7 @@ type (
 		scheduler      Scheduler
 		rescheduler    Rescheduler
 		timeSource     clock.TimeSource
-		ratelimiter    quotas.RateLimiter
+		ratelimiter    quotas.RequestRateLimiter
 		monitor        Monitor
 		logger         log.Logger
 		metricsHandler metrics.MetricsHandler
@@ -97,6 +97,8 @@ type (
 
 		throttleTimer *time.Timer
 		retrier       backoff.Retrier
+
+		rateLimiterRequest quotas.Request
 	}
 )
 
@@ -107,7 +109,7 @@ func NewReader(
 	scheduler Scheduler,
 	rescheduler Rescheduler,
 	timeSource clock.TimeSource,
-	ratelimiter quotas.RateLimiter,
+	ratelimiter quotas.RequestRateLimiter,
 	monitor Monitor,
 	logger log.Logger,
 	metricsHandler metrics.MetricsHandler,
@@ -140,6 +142,8 @@ func NewReader(
 			common.CreateReadTaskRetryPolicy(),
 			backoff.SystemClock,
 		),
+
+		rateLimiterRequest: newReaderRequest(readerID),
 	}
 }
 
@@ -361,7 +365,7 @@ func (r *ReaderImpl) eventLoop() {
 }
 
 func (r *ReaderImpl) loadAndSubmitTasks() {
-	_ = r.ratelimiter.Wait(context.Background())
+	_ = r.ratelimiter.Wait(context.Background(), r.rateLimiterRequest)
 
 	r.Lock()
 	defer r.Unlock()
@@ -379,7 +383,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	}
 
 	loadSlice := r.nextReadSlice.Value.(Slice)
-	tasks, err := loadSlice.SelectTasks(r.options.BatchSize())
+	tasks, err := loadSlice.SelectTasks(r.readerID, r.options.BatchSize())
 	if err != nil {
 		r.logger.Error("Queue reader unable to retrieve tasks", tag.Error(err))
 		if common.IsResourceExhausted(err) {
@@ -439,6 +443,7 @@ func (r *ReaderImpl) submit(
 		return
 	}
 
+	executable.SetScheduledTime(now)
 	if !r.scheduler.TrySubmit(executable) {
 		executable.Reschedule()
 	}

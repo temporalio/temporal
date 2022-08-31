@@ -28,8 +28,10 @@ package queues
 
 import (
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
@@ -86,6 +88,8 @@ type (
 func NewNamespacePriorityScheduler(
 	options NamespacePrioritySchedulerOptions,
 	namespaceRegistry namespace.Registry,
+	timeSource clock.TimeSource,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) Scheduler {
 	taskChannelKeyFn := func(e Executable) TaskChannelKey {
@@ -113,6 +117,13 @@ func NewNamespacePriorityScheduler(
 				ChannelWeightFn:  channelWeightFn,
 			},
 			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
+				newSchedulerMonitor(
+					taskChannelKeyFn,
+					namespaceRegistry,
+					timeSource,
+					metricsHandler,
+					defaultSchedulerMonitorOptions,
+				),
 				fifoSchedulerOptions,
 				logger,
 			)),
@@ -139,6 +150,7 @@ func NewFIFOScheduler(
 
 	return &schedulerImpl{
 		Scheduler: tasks.NewFIFOScheduler[Executable](
+			noopScheduleMonitor,
 			fifoSchedulerOptions,
 			logger,
 		),
