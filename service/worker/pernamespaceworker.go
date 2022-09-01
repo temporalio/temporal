@@ -348,6 +348,13 @@ func (w *perNamespaceWorker) startWorker(
 	// other defaults are already large enough.
 	sdkoptions.MaxConcurrentWorkflowTaskPollers = 2 * multiplicity
 	sdkoptions.MaxConcurrentActivityTaskPollers = 2 * multiplicity
+	sdkoptions.OnFatalError = func(error) {
+		// if the sdk sees a fatal error (e.g. namespace does not exist), it will log it and
+		// Stop() the worker. that means we should not call Stop() ourself.
+		w.lock.Lock()
+		defer w.lock.Unlock()
+		w.worker = nil
+	}
 
 	sdkworker := w.wm.sdkWorkerFactory.New(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
 	for _, cmp := range components {
