@@ -55,12 +55,7 @@ import (
 /*
 stuff to test:
 
-create schedule
-	pause
-		check pause in describe
-		check pause search attr
-
-checkvarious validation errors
+check various validation errors
 
 use some dataconverter for input, check that it starts okay
 
@@ -338,7 +333,40 @@ func (s *scheduleIntegrationSuite) TestScheduleBase() {
 	action2 := describeResp.Info.RecentActions[2]
 	s.True(action2.ScheduleTime.UnixNano()%int64(3*time.Second) == 1000000000, action2.ScheduleTime.UnixNano())
 
-	// pause (TODO)
+	// pause
+
+	_, err = s.engine.PatchSchedule(NewContext(), &workflowservice.PatchScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			Pause: "because I said so",
+		},
+		Identity:  "test",
+		RequestId: uuid.New(),
+	})
+
+	time.Sleep(3*time.Second + 100*time.Millisecond)
+	s.Equal(1, runs2, "has not run again")
+
+	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+
+	s.True(describeResp.Schedule.State.Paused)
+	s.Equal("because I said so", describeResp.Schedule.State.Notes)
+
+	listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+		Namespace:       s.namespace,
+		MaximumPageSize: 5,
+	})
+	s.NoError(err)
+	s.Equal(1, len(listResp.Schedules))
+	entry := listResp.Schedules[0]
+	s.Equal(sid, entry.ScheduleId)
+	s.True(entry.Info.Paused)
+	s.Equal("because I said so", entry.Info.Notes)
 
 	// finally delete
 
@@ -348,4 +376,19 @@ func (s *scheduleIntegrationSuite) TestScheduleBase() {
 		Identity:   "test",
 	})
 	s.NoError(err)
+
+	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.Error(err)
+
+	s.Eventually(func() bool { // wait for visibility
+		listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
+			Namespace:       s.namespace,
+			MaximumPageSize: 5,
+		})
+		s.NoError(err)
+		return len(listResp.Schedules) == 0
+	}, 3*time.Second, 200*time.Millisecond)
 }
