@@ -1562,7 +1562,7 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 		s.NoError(err)
 
 		tlMgr.Start()
-		tlMgr.WaitUntilInitialized()
+		tlMgr.WaitUntilInitialized(context.TODO())
 		tlMgr.Stop()
 
 		getTasksCount := s.taskManager.getGetTasksCount(tlID) - prevGetTasksCount
