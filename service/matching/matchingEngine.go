@@ -233,7 +233,10 @@ func (e *matchingEngineImpl) getTaskQueueManager(ctx context.Context, taskQueue 
 		e.taskQueuesLock.Unlock()
 	}
 
-	tqm.WaitUntilInitialized()
+	err := tqm.WaitUntilInitialized(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	return tqm, nil
 }

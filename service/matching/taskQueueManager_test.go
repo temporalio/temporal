@@ -74,7 +74,8 @@ func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
 func TestSyncMatchLeasingUnavailable(t *testing.T) {
 	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t))
 	tqm.Start()
-	tqm.WaitUntilInitialized()
+	err := tqm.WaitUntilInitialized(context.TODO())
+	require.Nil(t, err)
 	defer tqm.Stop()
 	poller, _ := runOneShotPoller(context.Background(), tqm)
 	defer poller.Cancel()
@@ -92,7 +93,8 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	cfg.RangeSize = 1 // TaskID block size
 	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t))
 	tqm.Start()
-	tqm.WaitUntilInitialized()
+	err := tqm.WaitUntilInitialized(context.TODO())
+	require.Nil(t, err)
 	defer tqm.Stop()
 
 	// TQM started succesfully with an ID block of size 1. Perform one send
@@ -119,7 +121,7 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 func TestReadLevelAckLevel(t *testing.T) {
 	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t))
 	tqm.Start()
-	tqm.WaitUntilInitialized()
+	tqm.WaitUntilInitialized(context.TODO())
 	defer tqm.Stop()
 	readLevel := tqm.dbTaskManager.taskReader.getReadLevel()
 	ackLevel := tqm.dbTaskManager.taskReader.getReadLevel()
@@ -227,7 +229,7 @@ func TestDescribeTaskQueue(t *testing.T) {
 	// Create taskQueue Manager and set taskQueue state
 	tlm := mustCreateTestTaskQueueManager(t, controller)
 	tlm.Start()
-	tlm.WaitUntilInitialized()
+	tlm.WaitUntilInitialized(context.TODO())
 	defer tlm.Stop()
 
 	for i := int64(0); i < taskCount; i++ {
@@ -289,7 +291,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	// Idle
 	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
-	tlm.WaitUntilInitialized()
+	tlm.WaitUntilInitialized(context.TODO())
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 
@@ -340,7 +342,7 @@ func TestAddTaskStandby(t *testing.T) {
 		},
 	)
 	tlm.Start()
-	tlm.WaitUntilInitialized()
+	tlm.WaitUntilInitialized(context.TODO())
 	// stop taskWriter so that we can check if there's any call to it
 	// otherwise the task persist process is async and hard to test
 	tlm.dbTaskManager.Stop()
@@ -394,7 +396,7 @@ func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartitionOnInit(t *tes
 			tqm.matchingClient = mockMatchingClient
 		})
 	subTq.Start()
-	subTq.WaitUntilInitialized()
+	subTq.WaitUntilInitialized(context.TODO())
 	verDat, err := subTq.GetVersioningData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data, verDat)
@@ -472,7 +474,7 @@ func TestTaskQueueRootPartitionNotifiesChildrenOfInvalidation(t *testing.T) {
 		})
 
 	rootTq.Start()
-	rootTq.WaitUntilInitialized()
+	rootTq.WaitUntilInitialized(context.TODO())
 	// Make a change, mock verifies children are invalidated
 	require.NoError(t, rootTq.MutateVersioningData(ctx, func(vd *persistencespb.VersioningData) error {
 		*vd = persistencespb.VersioningData{
@@ -605,7 +607,7 @@ func TestTaskQueueManagerWaitInitFailThenPass(t *testing.T) {
 
 	tq.Start()
 	// This does not error even if initial metadata fetch fails (and it does, here)
-	tq.WaitUntilInitialized()
+	tq.WaitUntilInitialized(context.TODO())
 	// Wait long enough for poller retry to happen
 	time.Sleep(time.Millisecond * 15)
 	// Need to make sure both calls have happened *before* calling to get data, as it would make a call if the second
@@ -638,7 +640,7 @@ func TestFetchingVersioningDataErrorsIfNeverFetchedFromRootSuccessfully(t *testi
 			tqm.matchingClient = mockMatchingClient
 		})
 	subTq.Start()
-	subTq.WaitUntilInitialized()
+	subTq.WaitUntilInitialized(context.TODO())
 	for i := 0; i < 10; i++ {
 		_, err := subTq.GetVersioningData(ctx)
 		require.Error(t, err)
@@ -670,7 +672,7 @@ func TestActivityQueueGetsVersioningDataFromWorkflowQueue(t *testing.T) {
 			tqm.matchingClient = mockMatchingClient
 		})
 	actTq.Start()
-	actTq.WaitUntilInitialized()
+	actTq.WaitUntilInitialized(context.TODO())
 
 	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 1)
 	require.NoError(t, err)
@@ -684,7 +686,7 @@ func TestActivityQueueGetsVersioningDataFromWorkflowQueue(t *testing.T) {
 			tqm.matchingClient = mockMatchingClient
 		})
 	actTqPart.Start()
-	actTqPart.WaitUntilInitialized()
+	actTqPart.WaitUntilInitialized(context.TODO())
 
 	verDat, err := actTq.GetVersioningData(ctx)
 	require.NoError(t, err)
