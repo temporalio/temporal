@@ -355,7 +355,7 @@ func (s *queueBaseSuite) TestProcessNewRange() {
 	s.True(base.nonReadableScope.Range.Equals(NewRange(scopes[0].Range.ExclusiveMax, tasks.MaximumKey)))
 }
 
-func (s *queueBaseSuite) TestCompleteTaskAndPersistState() {
+func (s *queueBaseSuite) TestCompleteTaskAndPersistState_WithPendingTasks() {
 	scopeMinKey := tasks.MaximumKey
 	readerScopes := map[int32][]Scope{}
 	for _, readerID := range []int32{DefaultReaderId, 2, 3} {
@@ -413,10 +413,10 @@ func (s *queueBaseSuite) TestCompleteTaskAndPersistState() {
 				s.Equal(mockShard.GetShardID(), request.ShardID)
 				s.Equal(base.category, request.TaskCategory)
 				if base.category.Type() == tasks.CategoryTypeScheduled {
-					s.Equal(tasks.NewKey(currentLowWatermark.FireTime, 0), request.InclusiveMinTaskKey)
+					s.True(request.InclusiveMinTaskKey.FireTime.Equal(currentLowWatermark.FireTime))
 					s.True(request.ExclusiveMaxTaskKey.FireTime.Equal(scopeMinKey.FireTime))
 				} else {
-					s.Equal(currentLowWatermark, request.InclusiveMinTaskKey)
+					s.True(request.InclusiveMinTaskKey.CompareTo(currentLowWatermark) == 0)
 					s.True(request.ExclusiveMaxTaskKey.CompareTo(scopeMinKey) == 0)
 				}
 
@@ -434,4 +434,82 @@ func (s *queueBaseSuite) TestCompleteTaskAndPersistState() {
 	base.checkpoint()
 
 	s.True(scopeMinKey.CompareTo(base.inclusiveLowWatermark) == 0)
+}
+
+func (s *queueBaseSuite) TestCompleteTaskAndPersistState_NoPendingTasks() {
+	readerScopes := map[int32][]Scope{}
+	for _, readerID := range []int32{DefaultReaderId, 2, 3} {
+		readerScopes[readerID] = []Scope{}
+	}
+	exclusiveReaderHighWatermark := NewRandomKey()
+	queueState := &queueState{
+		readerScopes:                 readerScopes,
+		exclusiveReaderHighWatermark: exclusiveReaderHighWatermark,
+	}
+	persistenceState := ToPersistenceQueueState(queueState)
+
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistence.ShardInfoWithFailover{
+			ShardInfo: &persistencespb.ShardInfo{
+				ShardId: 0,
+				RangeId: 10,
+				QueueStates: map[int32]*persistencespb.QueueState{
+					tasks.CategoryIDTimer: persistenceState,
+				},
+			},
+		},
+		s.config,
+	)
+	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
+	base := newQueueBase(
+		mockShard,
+		tasks.CategoryTimer,
+		nil,
+		s.mockScheduler,
+		NewNoopPriorityAssigner(),
+		nil,
+		s.options,
+		s.rateLimiter,
+		s.logger,
+		s.metricsHandler,
+	)
+	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
+
+	s.True(exclusiveReaderHighWatermark.CompareTo(base.inclusiveLowWatermark) == 0)
+
+	// set to a smaller value so that delete will be triggered
+	currentLowWatermark := tasks.MinimumKey
+	base.inclusiveLowWatermark = currentLowWatermark
+
+	gomock.InOrder(
+		mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(ctx context.Context, request *persistence.RangeCompleteHistoryTasksRequest) error {
+				s.Equal(mockShard.GetShardID(), request.ShardID)
+				s.Equal(base.category, request.TaskCategory)
+				s.True(request.InclusiveMinTaskKey.CompareTo(currentLowWatermark) == 0)
+				if base.category.Type() == tasks.CategoryTypeScheduled {
+					s.True(request.InclusiveMinTaskKey.FireTime.Equal(currentLowWatermark.FireTime))
+					s.True(request.ExclusiveMaxTaskKey.FireTime.Equal(exclusiveReaderHighWatermark.FireTime))
+				} else {
+					s.True(request.InclusiveMinTaskKey.CompareTo(currentLowWatermark) == 0)
+					s.True(request.ExclusiveMaxTaskKey.CompareTo(exclusiveReaderHighWatermark) == 0)
+				}
+
+				return nil
+			},
+		).Times(1),
+		mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, request *persistence.UpdateShardRequest) error {
+				s.Equal(persistenceState, request.ShardInfo.QueueStates[tasks.CategoryIDTimer])
+				return nil
+			},
+		).Times(1),
+	)
+
+	base.checkpoint()
+
+	s.True(exclusiveReaderHighWatermark.CompareTo(base.inclusiveLowWatermark) == 0)
 }

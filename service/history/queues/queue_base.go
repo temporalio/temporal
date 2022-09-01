@@ -339,54 +339,67 @@ func (p *queueBase) checkpoint() {
 		}
 	}()
 
-	totalSlices := 0
 	readerScopes := make(map[int32][]Scope)
-	newInclusiveLowWatermark := tasks.MaximumKey
+	newInclusiveLowWatermark := p.nonReadableScope.Range.InclusiveMin
 	for id, reader := range p.readerGroup.Readers() {
 		reader.ShrinkSlices()
 		scopes := reader.Scopes()
 
-		totalSlices += len(scopes)
 		readerScopes[id] = scopes
 		for _, scope := range scopes {
 			newInclusiveLowWatermark = tasks.MinKey(newInclusiveLowWatermark, scope.Range.InclusiveMin)
 		}
 	}
 	p.metricsHandler.Histogram(QueueReaderCountHistogram, metrics.Dimensionless).Record(int64(len(readerScopes)))
-	p.metricsHandler.Histogram(QueueSliceCountHistogram, metrics.Dimensionless).Record(int64(totalSlices))
+	p.metricsHandler.Histogram(QueueSliceCountHistogram, metrics.Dimensionless).Record(int64(p.monitor.GetTotalSliceCount()))
+	p.metricsHandler.Histogram(PendingTasksCounter, metrics.Dimensionless).Record(int64(p.monitor.GetTotalPendingTaskCount()))
 
 	// NOTE: Must range complete task first.
 	// Otherwise, if state is updated first, later deletion fails and shard get reloaded
 	// some tasks will never be deleted.
-	if newInclusiveLowWatermark != tasks.MaximumKey && newInclusiveLowWatermark.CompareTo(p.inclusiveLowWatermark) > 0 {
-		p.metricsHandler.Counter(TaskBatchCompleteCounter).Record(1)
-
-		persistenceMinTaskKey := p.inclusiveLowWatermark
-		persistenceMaxTaskKey := newInclusiveLowWatermark
-		if p.category.Type() == tasks.CategoryTypeScheduled {
-			persistenceMinTaskKey = tasks.NewKey(p.inclusiveLowWatermark.FireTime, 0)
-			persistenceMaxTaskKey = tasks.NewKey(newInclusiveLowWatermark.FireTime, 0)
-		}
-
-		ctx, cancel := newQueueIOContext()
-		defer cancel()
-
-		if err = p.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:             p.shard.GetShardID(),
-			TaskCategory:        p.category,
-			InclusiveMinTaskKey: persistenceMinTaskKey,
-			ExclusiveMaxTaskKey: persistenceMaxTaskKey,
-		}); err != nil {
-			p.logger.Error("Error range completing queue task", tag.Error(err))
+	if newInclusiveLowWatermark.CompareTo(p.inclusiveLowWatermark) > 0 {
+		err = p.rangeCompleteTasks(p.inclusiveLowWatermark, newInclusiveLowWatermark)
+		if err != nil {
 			return
 		}
 
 		p.inclusiveLowWatermark = newInclusiveLowWatermark
 	}
 
+	err = p.updateQueueState(readerScopes)
+}
+
+func (p *queueBase) rangeCompleteTasks(
+	oldInclusiveMinTaskKey tasks.Key,
+	newInclusiveMinTaskKey tasks.Key,
+) error {
+	p.metricsHandler.Counter(TaskBatchCompleteCounter).Record(1)
+
+	if p.category.Type() == tasks.CategoryTypeScheduled {
+		oldInclusiveMinTaskKey.TaskID = 0
+		newInclusiveMinTaskKey.TaskID = 0
+	}
+
+	ctx, cancel := newQueueIOContext()
+	defer cancel()
+
+	if err := p.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
+		ShardID:             p.shard.GetShardID(),
+		TaskCategory:        p.category,
+		InclusiveMinTaskKey: oldInclusiveMinTaskKey,
+		ExclusiveMaxTaskKey: newInclusiveMinTaskKey,
+	}); err != nil {
+		p.logger.Error("Error range completing queue task", tag.Error(err))
+		return err
+	}
+	return nil
+}
+
+func (p *queueBase) updateQueueState(
+	readerScopes map[int32][]Scope,
+) error {
 	p.metricsHandler.Counter(AckLevelUpdateCounter).Record(1)
-	// p.metricsHandler.Histogram(PendingTasksCounter, metrics.Dimensionless).Record(int64(p.monitor.GetPendingTasksCount()))
-	err = p.shard.UpdateQueueState(p.category, ToPersistenceQueueState(&queueState{
+	err := p.shard.UpdateQueueState(p.category, ToPersistenceQueueState(&queueState{
 		readerScopes:                 readerScopes,
 		exclusiveReaderHighWatermark: p.nonReadableScope.Range.InclusiveMin,
 	}))
@@ -394,6 +407,7 @@ func (p *queueBase) checkpoint() {
 		p.metricsHandler.Counter(AckLevelUpdateFailedCounter).Record(1)
 		p.logger.Error("Error updating queue state", tag.Error(err), tag.OperationFailed)
 	}
+	return err
 }
 
 func (p *queueBase) handleAlert(alert *Alert) {
