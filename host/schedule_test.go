@@ -41,6 +41,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
@@ -53,39 +54,31 @@ import (
 )
 
 /*
-stuff to test:
+more tests to write:
 
-check various validation errors
+various validation errors
 
-use some dataconverter for input, check that it starts okay
+overlap policies, esp. buffer
 
-check last completion result and last error
+last completion result and last error
 
-check: what happens to a lp watcher on worker restart?
+worker restart/long-poll activity failure:
 	get it in a state where it's waiting for a wf to exit, say with bufferone
-	restart the worker
+	restart the worker/force activity to fail
 	terminate the wf
 	check that new one starts immediately
-
-describe updates running workflows:
-	@every 30s
-	workflow has 2s timeout
-	let it start
-	describe and see it running
-	let it time out
-	describe again and see it stopped
-
 */
 
 type (
 	scheduleIntegrationSuite struct {
 		*require.Assertions
 		IntegrationBase
-		hostPort  string
-		sdkClient sdkclient.Client
-		worker    worker.Worker
-		esClient  esclient.IntegrationTestsClient
-		taskQueue string
+		hostPort      string
+		sdkClient     sdkclient.Client
+		worker        worker.Worker
+		esClient      esclient.IntegrationTestsClient
+		taskQueue     string
+		dataConverter converter.DataConverter
 	}
 )
 
@@ -113,9 +106,11 @@ func (s *scheduleIntegrationSuite) TearDownSuite() {
 
 func (s *scheduleIntegrationSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.dataConverter = newTestDataConverter()
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:  s.hostPort,
-		Namespace: s.namespace,
+		HostPort:      s.hostPort,
+		Namespace:     s.namespace,
+		DataConverter: s.dataConverter,
 	})
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
@@ -133,13 +128,13 @@ func (s *scheduleIntegrationSuite) TearDownTest() {
 	s.sdkClient.Close()
 }
 
-func (s *scheduleIntegrationSuite) TestScheduleBase() {
-	sid := "sched-test-base"
-	wid := "sched-test-base-wf"
-	wt := "sched-test-base-wt"
-	wt2 := "sched-test-base-wt2"
+func (s *scheduleIntegrationSuite) TestBasics() {
+	sid := "sched-test-basics"
+	wid := "sched-test-basics-wf"
+	wt := "sched-test-basics-wt"
+	wt2 := "sched-test-basics-wt2"
 
-	// switch this to test with search attribute mapper
+	// switch this to test with search attribute mapper:
 	// csa := "AliasForCustomKeywordField"
 	csa := "CustomKeywordField"
 
@@ -188,7 +183,7 @@ func (s *scheduleIntegrationSuite) TestScheduleBase() {
 	workflowFn := func(ctx workflow.Context) error {
 		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
 			runs++
-			return nil
+			return 0
 		})
 		return nil
 	}
@@ -197,7 +192,7 @@ func (s *scheduleIntegrationSuite) TestScheduleBase() {
 	workflow2Fn := func(ctx workflow.Context) error {
 		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
 			runs2++
-			return nil
+			return 0
 		})
 		return nil
 	}
@@ -391,4 +386,144 @@ func (s *scheduleIntegrationSuite) TestScheduleBase() {
 		s.NoError(err)
 		return len(listResp.Schedules) == 0
 	}, 3*time.Second, 200*time.Millisecond)
+}
+
+func (s *scheduleIntegrationSuite) TestInput() {
+	sid := "sched-test-input"
+	wid := "sched-test-input-wf"
+	wt := "sched-test-input-wt"
+
+	type myData struct {
+		Stuff  string
+		Things []int
+	}
+
+	input1 := &myData{
+		Stuff:  "here's some data",
+		Things: []int{7, 8, 9},
+	}
+	input2 := map[int]float64{11: 1.4375}
+	inputPayloads, err := s.dataConverter.ToPayloads(input1, input2)
+	s.NoError(err)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: timestamp.DurationPtr(3 * time.Second)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					Input:        inputPayloads,
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+	}
+
+	runs := 0
+	workflowFn := func(ctx workflow.Context, arg1 *myData, arg2 map[int]float64) error {
+		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			s.Equal(*input1, *arg1)
+			s.Equal(input2, arg2)
+			runs++
+			return 0
+		})
+		return nil
+	}
+	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	_, err = s.engine.CreateSchedule(NewContext(), req)
+	s.NoError(err)
+	s.Eventually(func() bool { return runs == 1 }, 4*time.Second, 200*time.Millisecond)
+}
+
+func (s *scheduleIntegrationSuite) TestRefresh() {
+	sid := "sched-test-refresh"
+	wid := "sched-test-refresh-wf"
+	wt := "sched-test-refresh-wt"
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{
+					Interval: timestamp.DurationPtr(30 * time.Second),
+					// start within two seconds
+					Phase: timestamp.DurationPtr(time.Duration((time.Now().Unix()+2)%30) * time.Second),
+				},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:               wid,
+					WorkflowType:             &commonpb.WorkflowType{Name: wt},
+					TaskQueue:                &taskqueuepb.TaskQueue{Name: s.taskQueue},
+					WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.New(),
+	}
+
+	started := 0
+	workflowFn := func(ctx workflow.Context) error {
+		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
+			started++
+			return 0
+		})
+		workflow.Sleep(ctx, 10*time.Second)
+		return nil
+	}
+	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+
+	_, err := s.engine.CreateSchedule(NewContext(), req)
+	s.NoError(err)
+	s.Eventually(func() bool { return started == 1 }, 3*time.Second, 100*time.Millisecond)
+
+	// workflow has started but is now sleeping. it will timeout in 2 seconds.
+
+	describeResp, err := s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	s.EqualValues(1, len(describeResp.Info.RunningWorkflows))
+
+	events1 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+
+	time.Sleep(3 * time.Second)
+	// now it has timed out, but the scheduler hasn't noticed yet. we can prove it by checking
+	// its history.
+
+	events2 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	s.Equal(len(events1), len(events2))
+
+	// when we describe we'll force a refresh and see it timed out
+	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.namespace,
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	s.EqualValues(0, len(describeResp.Info.RunningWorkflows))
+
+	// scheduler has done some stuff
+	events3 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
+	s.Greater(len(events3), len(events2))
 }
