@@ -72,12 +72,13 @@ func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, na
 }
 
 // SubstituteAliases replaces aliases with actual field names for custom search attributes.
-func SubstituteAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) error {
+func SubstituteAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
-		return nil
+		return nil, nil
 	}
 
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
+	mapped := false
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
 		if !IsMappable(saName) {
 			newIndexedFields[saName] = saPayload
@@ -86,11 +87,18 @@ func SubstituteAliases(mapper Mapper, searchAttributes *commonpb.SearchAttribute
 
 		fieldName, err := mapper.GetFieldName(saName, namespace)
 		if err != nil {
-			return err
+			return nil, err
+		}
+		if fieldName != saName {
+			mapped = true
 		}
 		newIndexedFields[fieldName] = saPayload
 	}
 
-	searchAttributes.IndexedFields = newIndexedFields
-	return nil
+	// If no alias was mapped, return nil to save on clone operation on caller side.
+	if !mapped {
+		return nil, nil
+	}
+
+	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
 }
