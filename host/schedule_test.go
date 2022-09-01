@@ -353,7 +353,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	s.NoError(err)
 
 	time.Sleep(3*time.Second + 100*time.Millisecond)
-	s.Equal(1, atomic.LoadInt32(&runs2), "has not run again")
+	s.EqualValues(1, atomic.LoadInt32(&runs2), "has not run again")
 
 	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.namespace,
