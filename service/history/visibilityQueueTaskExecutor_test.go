@@ -497,8 +497,8 @@ func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 		s.mockShard.GetTimeSource(),
 		nil,
 		nil,
+		metrics.NoopMetricsHandler,
 		nil,
-		queues.QueueTypeVisibility,
 		nil,
 	)
 }

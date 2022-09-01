@@ -1205,8 +1205,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) newTaskExecutable(
 		s.mockShard.GetTimeSource(),
 		nil,
 		nil,
+		metrics.NoopMetricsHandler,
 		nil,
-		queues.QueueTypeStandbyTransfer,
 		nil,
 	)
 }

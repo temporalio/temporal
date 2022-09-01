@@ -55,6 +55,10 @@ func (c *WeightedChannel[T]) Weight() int {
 	return c.weight
 }
 
+func (c *WeightedChannel[T]) SetWeight(newWeight int) {
+	c.weight = newWeight
+}
+
 func (c *WeightedChannel[T]) Len() int {
 	return len(c.channel)
 }

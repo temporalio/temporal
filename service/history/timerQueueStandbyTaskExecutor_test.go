@@ -1551,8 +1551,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) newTaskExecutable(
 		s.mockShard.GetTimeSource(),
 		nil,
 		nil,
+		metrics.NoopMetricsHandler,
 		nil,
-		queues.QueueTypeStandbyTimer,
 		nil,
 	)
 }

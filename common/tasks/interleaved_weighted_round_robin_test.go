@@ -45,6 +45,9 @@ type (
 		controller        *gomock.Controller
 		mockFIFOScheduler *MockScheduler[*testTask]
 
+		channelKeyToWeight    map[int]int
+		channelWeightUpdateCh chan struct{}
+
 		scheduler *InterleavedWeightedRoundRobinScheduler[*testTask, int]
 	}
 
@@ -72,18 +75,20 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockFIFOScheduler = NewMockScheduler[*testTask](s.controller)
 
-	channelKeyToWeight := map[int]int{
+	s.channelKeyToWeight = map[int]int{
 		0: 5,
 		1: 3,
 		2: 2,
 		3: 1,
 	}
+	s.channelWeightUpdateCh = make(chan struct{})
 	logger := log.NewTestLogger()
 
 	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions[*testTask, int]{
-			TaskChannelKeyFn: func(task *testTask) int { return task.channelKey },
-			ChannelWeightFn:  func(key int) int { return channelKeyToWeight[key] },
+			TaskChannelKeyFn:      func(task *testTask) int { return task.channelKey },
+			ChannelWeightFn:       func(key int) int { return s.channelKeyToWeight[key] },
+			ChannelWeightUpdateCh: s.channelWeightUpdateCh,
 		},
 		Scheduler[*testTask](s.mockFIFOScheduler),
 		logger,
@@ -291,6 +296,58 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule
 	testWaitGroup.Wait()
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 	s.Len(submittedTasks, numSubmitter*numTasks)
+}
+
+func (s *interleavedWeightedRoundRobinSchedulerSuite) TestUpdateWeight() {
+	s.mockFIFOScheduler.EXPECT().Start()
+	s.scheduler.Start()
+	s.mockFIFOScheduler.EXPECT().Stop()
+
+	var taskWG sync.WaitGroup
+	s.mockFIFOScheduler.EXPECT().Submit(gomock.Any()).Do(func(task Task) {
+		taskWG.Done()
+	}).AnyTimes()
+
+	// need to manually set the number of pending task to 1
+	// so schedule by task priority logic will execute
+	atomic.AddInt64(&s.scheduler.numInflightTask, 1)
+
+	mockTask0 := newTestTask(s.controller, 0)
+	mockTask1 := newTestTask(s.controller, 1)
+	mockTask2 := newTestTask(s.controller, 2)
+	mockTask3 := newTestTask(s.controller, 3)
+
+	taskWG.Add(4)
+	s.scheduler.Submit(mockTask0)
+	s.scheduler.Submit(mockTask1)
+	s.scheduler.Submit(mockTask2)
+	s.scheduler.Submit(mockTask3)
+
+	channelWeights := []int{}
+	for _, channel := range s.scheduler.channels() {
+		channelWeights = append(channelWeights, channel.Weight())
+	}
+	s.Equal([]int{5, 5, 5, 3, 5, 3, 2, 5, 3, 2, 1}, channelWeights)
+
+	// trigger weight update
+	s.channelKeyToWeight = map[int]int{
+		0: 8,
+		1: 5,
+		2: 1,
+		3: 1,
+	}
+	s.channelWeightUpdateCh <- struct{}{}
+
+	taskWG.Add(1)
+	s.scheduler.Submit(mockTask0)
+
+	channelWeights = []int{}
+	for _, channel := range s.scheduler.channels() {
+		channelWeights = append(channelWeights, channel.Weight())
+	}
+	s.Equal([]int{8, 8, 8, 8, 5, 8, 5, 8, 5, 8, 5, 8, 5, 1, 1}, channelWeights)
+
+	taskWG.Wait()
 }
 
 func newTestTask(

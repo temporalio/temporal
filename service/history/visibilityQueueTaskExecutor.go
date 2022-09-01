@@ -75,27 +75,22 @@ func newVisibilityQueueTaskExecutor(
 func (t *visibilityQueueTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.MetricsHandler, error) {
-	task := executable.GetTask()
-	taskType := queues.GetVisibilityTaskTypeTagValue(task)
-	metricsProvider := t.metricProvider.WithTags(
-		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
-		metrics.TaskTypeTag(taskType),
-		metrics.OperationTag(taskType), // for backward compatibility
-	)
-
-	switch task := task.(type) {
+) (bool, error) {
+	var err error
+	switch task := executable.GetTask().(type) {
 	case *tasks.StartExecutionVisibilityTask:
-		return metricsProvider, t.processStartExecution(ctx, task)
+		err = t.processStartExecution(ctx, task)
 	case *tasks.UpsertExecutionVisibilityTask:
-		return metricsProvider, t.processUpsertExecution(ctx, task)
+		err = t.processUpsertExecution(ctx, task)
 	case *tasks.CloseExecutionVisibilityTask:
-		return metricsProvider, t.processCloseExecution(ctx, task)
+		err = t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionVisibilityTask:
-		return metricsProvider, t.processDeleteExecution(ctx, task)
+		err = t.processDeleteExecution(ctx, task)
 	default:
-		return metricsProvider, errUnknownVisibilityTask
+		err = errUnknownVisibilityTask
 	}
+
+	return true, err
 }
 
 func (t *visibilityQueueTaskExecutor) processStartExecution(

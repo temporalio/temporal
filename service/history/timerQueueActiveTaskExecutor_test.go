@@ -1498,8 +1498,8 @@ func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(
 		s.mockShard.GetTimeSource(),
 		nil,
 		nil,
+		metrics.NoopMetricsHandler,
 		nil,
-		queues.QueueTypeActiveTimer,
 		nil,
 	)
 }

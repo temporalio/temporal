@@ -36,7 +36,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/server/api/enums/v1"
 	backoff "go.temporal.io/server/common/backoff"
-	metrics "go.temporal.io/server/common/metrics"
 	tasks "go.temporal.io/server/common/tasks"
 	tasks0 "go.temporal.io/server/service/history/tasks"
 )
@@ -324,20 +323,6 @@ func (mr *MockExecutableMockRecorder) Nack(err interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Nack", reflect.TypeOf((*MockExecutable)(nil).Nack), err)
 }
 
-// QueueType mocks base method.
-func (m *MockExecutable) QueueType() QueueType {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueueType")
-	ret0, _ := ret[0].(QueueType)
-	return ret0
-}
-
-// QueueType indicates an expected call of QueueType.
-func (mr *MockExecutableMockRecorder) QueueType() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueType", reflect.TypeOf((*MockExecutable)(nil).QueueType))
-}
-
 // Reschedule mocks base method.
 func (m *MockExecutable) Reschedule() {
 	m.ctrl.T.Helper()
@@ -450,10 +435,10 @@ func (m *MockExecutor) EXPECT() *MockExecutorMockRecorder {
 }
 
 // Execute mocks base method.
-func (m *MockExecutor) Execute(arg0 context.Context, arg1 Executable) (metrics.MetricsHandler, error) {
+func (m *MockExecutor) Execute(arg0 context.Context, arg1 Executable) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", arg0, arg1)
-	ret0, _ := ret[0].(metrics.MetricsHandler)
+	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

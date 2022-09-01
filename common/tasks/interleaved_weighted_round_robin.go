@@ -39,8 +39,9 @@ type (
 	// InterleavedWeightedRoundRobinSchedulerOptions is the config for
 	// interleaved weighted round robin scheduler
 	InterleavedWeightedRoundRobinSchedulerOptions[T Task, K comparable] struct {
-		TaskChannelKeyFn TaskChannelKeyFn[T, K]
-		ChannelWeightFn  ChannelWeightFn[K]
+		TaskChannelKeyFn      TaskChannelKeyFn[T, K]
+		ChannelWeightFn       ChannelWeightFn[K]
+		ChannelWeightUpdateCh chan struct{}
 	}
 
 	// TaskChannelKeyFn is the function for mapping a task to its task channel (key)
@@ -206,6 +207,11 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 	channel = NewWeightedChannel[T](weight, WeightedChannelDefaultSize)
 	s.weightedChannels[channelKey] = channel
 
+	s.flattenWeightedChannelsLocked()
+	return channel
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) flattenWeightedChannelsLocked() {
 	weightedChannels := make(WeightedChannels[T], 0, len(s.weightedChannels))
 	for _, weightedChan := range s.weightedChannels {
 		weightedChannels = append(weightedChannels, weightedChan)
@@ -220,8 +226,6 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 		}
 	}
 	s.iwrrChannels.Store(iwrrChannels)
-
-	return channel
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) channels() WeightedChannels[T] {
@@ -240,8 +244,41 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) notifyDispatcher() {
 	}
 }
 
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) receiveWeightUpdateNotification() bool {
+	if s.options.ChannelWeightUpdateCh == nil {
+		return false
+	}
+
+	select {
+	case <-s.options.ChannelWeightUpdateCh:
+		// drain the channel as we don't know the channel size
+		for {
+			select {
+			case <-s.options.ChannelWeightUpdateCh:
+			default:
+				return true
+			}
+		}
+	default:
+		return false
+	}
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) updateChannelWeightLocked() {
+	for channelKey, weightedChannel := range s.weightedChannels {
+		weightedChannel.SetWeight(s.options.ChannelWeightFn(channelKey))
+	}
+}
+
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) dispatchTasksWithWeight() {
 	for s.hasRemainingTasks() {
+		if s.receiveWeightUpdateNotification() {
+			s.Lock()
+			s.updateChannelWeightLocked()
+			s.flattenWeightedChannelsLocked()
+			s.Unlock()
+		}
+
 		weightedChannels := s.channels()
 		s.doDispatchTasksWithWeight(weightedChannels)
 	}

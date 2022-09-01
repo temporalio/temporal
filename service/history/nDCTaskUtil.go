@@ -197,15 +197,3 @@ func getTimerTaskEventIDAndRetryable(
 
 	return eventID, retryable
 }
-
-func getNamespaceTagByID(
-	registry namespace.Registry,
-	namespaceID string,
-) metrics.Tag {
-	namespaceName, err := registry.GetNamespaceName(namespace.ID(namespaceID))
-	if err != nil {
-		return metrics.NamespaceUnknownTag()
-	}
-
-	return metrics.NamespaceTag(namespaceName.String())
-}
