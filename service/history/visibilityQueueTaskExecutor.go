@@ -75,9 +75,17 @@ func newVisibilityQueueTaskExecutor(
 func (t *visibilityQueueTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (bool, error) {
+) ([]metrics.Tag, bool, error) {
+	task := executable.GetTask()
+	taskType := queues.GetVisibilityTaskTypeTagValue(task)
+	metricsTags := []metrics.Tag{
+		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType), // for backward compatibility
+	}
+
 	var err error
-	switch task := executable.GetTask().(type) {
+	switch task := task.(type) {
 	case *tasks.StartExecutionVisibilityTask:
 		err = t.processStartExecution(ctx, task)
 	case *tasks.UpsertExecutionVisibilityTask:
@@ -90,7 +98,7 @@ func (t *visibilityQueueTaskExecutor) Execute(
 		err = errUnknownVisibilityTask
 	}
 
-	return true, err
+	return metricsTags, true, err
 }
 
 func (t *visibilityQueueTaskExecutor) processStartExecution(

@@ -101,10 +101,10 @@ func (s *executableSuite) TestExecute_TaskExecuted() {
 		return true
 	})
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(true, errors.New("some random error"))
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, true, errors.New("some random error"))
 	s.Error(executable.Execute())
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(true, nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, true, nil)
 	s.NoError(executable.Execute())
 }
 
@@ -118,7 +118,7 @@ func (s *executableSuite) TestExecute_UserLatency() {
 		metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency, expectedUserLatency)
 	}
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(true, nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(nil, true, nil)
 	s.NoError(executable.Execute())
 	s.Equal(time.Duration(expectedUserLatency), executable.(*executableImpl).userLatency)
 }

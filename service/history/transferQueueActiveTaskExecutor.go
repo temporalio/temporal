@@ -111,9 +111,17 @@ func newTransferQueueActiveTaskExecutor(
 func (t *transferQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (bool, error) {
+) ([]metrics.Tag, bool, error) {
+	task := executable.GetTask()
+	taskType := queues.GetActiveTransferTaskTypeTagValue(task)
+	metricsTags := []metrics.Tag{
+		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType), // for backward compatibility
+	}
+
 	var err error
-	switch task := executable.GetTask().(type) {
+	switch task := task.(type) {
 	case *tasks.ActivityTask:
 		err = t.processActivityTask(ctx, task)
 	case *tasks.WorkflowTask:
@@ -134,7 +142,7 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 		err = errUnknownTransferTask
 	}
 
-	return true, err
+	return metricsTags, true, err
 }
 
 func (t *transferQueueActiveTaskExecutor) processActivityTask(
