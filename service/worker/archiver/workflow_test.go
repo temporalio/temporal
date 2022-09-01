@@ -41,7 +41,7 @@ import (
 )
 
 var (
-	workflowTestMetrics *metrics.MockClient
+	workflowTestMetrics *metrics.MockHandler
 	workflowTestLogger  log.Logger
 	workflowTestHandler *MockHandler
 	workflowTestPump    *MockPump
@@ -71,7 +71,8 @@ func TestWorkflowSuite(t *testing.T) {
 func (s *workflowSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
-	workflowTestMetrics = metrics.NewMockClient(s.controller)
+	workflowTestMetrics = metrics.NewMockHandler(s.controller)
+	workflowTestMetrics.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverArchivalWorkflowOperation)).Return(workflowTestMetrics).AnyTimes()
 	workflowTestLogger = log.NewNoopLogger()
 	workflowTestHandler = NewMockHandler(s.controller)
 	workflowTestPump = NewMockPump(s.controller)
@@ -87,12 +88,14 @@ func (s *workflowSuite) TearDownTest() {
 }
 
 func (s *workflowSuite) TestArchivalWorkflow_Fail_HashesDoNotEqual() {
-	workflowTestMetrics.EXPECT().IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStartedCount)
-	workflowTestMetrics.EXPECT().StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ServiceLatency).Return(metrics.NoopStopwatch)
-	workflowTestMetrics.EXPECT().StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency).Return(metrics.NoopStopwatch)
-	workflowTestMetrics.EXPECT().AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(3))
-	workflowTestMetrics.EXPECT().AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(3))
-	workflowTestMetrics.EXPECT().IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverPumpedNotEqualHandledCount)
+	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverWorkflowStartedCount.MetricName.String()).Return(metrics.NoopMetricsCounter)
+	workflowTestMetrics.EXPECT().Timer(metrics.ServiceLatency.MetricName.String()).Return(metrics.NoopMetricsTimer)
+	workflowTestMetrics.EXPECT().Timer(metrics.ArchiverHandleAllRequestsLatency.MetricName.String()).Return(metrics.NoopMetricsTimer)
+	counterMetric := metrics.NewMockCounterMetric(s.controller)
+	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumPumpedRequestsCount.MetricName.String()).Return(counterMetric)
+	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumHandledRequestsCount.MetricName.String()).Return(counterMetric)
+	counterMetric.EXPECT().Record(int64(3)).Times(2)
+	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverPumpedNotEqualHandledCount.MetricName.String()).Return(metrics.NoopMetricsCounter)
 	workflowTestHandler.EXPECT().Start()
 	workflowTestHandler.EXPECT().Finished().Return([]uint64{9, 7, 0})
 	workflowTestPump.EXPECT().Run().Return(PumpResult{
@@ -111,12 +114,14 @@ func (s *workflowSuite) TestArchivalWorkflow_Fail_HashesDoNotEqual() {
 }
 
 func (s *workflowSuite) TestArchivalWorkflow_Exit_TimeoutWithoutSignals() {
-	workflowTestMetrics.EXPECT().IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStartedCount)
-	workflowTestMetrics.EXPECT().StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ServiceLatency).Return(metrics.NoopStopwatch)
-	workflowTestMetrics.EXPECT().StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency).Return(metrics.NoopStopwatch)
-	workflowTestMetrics.EXPECT().AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(0))
-	workflowTestMetrics.EXPECT().AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(0))
-	workflowTestMetrics.EXPECT().IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStoppingCount)
+	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverWorkflowStartedCount.MetricName.String()).Return(metrics.NoopMetricsCounter)
+	workflowTestMetrics.EXPECT().Timer(metrics.ServiceLatency.MetricName.String()).Return(metrics.NoopMetricsTimer)
+	workflowTestMetrics.EXPECT().Timer(metrics.ArchiverHandleAllRequestsLatency.MetricName.String()).Return(metrics.NoopMetricsTimer)
+	counterMetric := metrics.NewMockCounterMetric(s.controller)
+	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumPumpedRequestsCount.MetricName.String()).Return(counterMetric)
+	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumHandledRequestsCount.MetricName.String()).Return(counterMetric)
+	counterMetric.EXPECT().Record(int64(0)).Times(2)
+	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverWorkflowStoppingCount.MetricName.String()).Return(metrics.NoopMetricsCounter)
 	workflowTestHandler.EXPECT().Start()
 	workflowTestHandler.EXPECT().Finished().Return([]uint64{})
 	workflowTestPump.EXPECT().Run().Return(PumpResult{
@@ -134,11 +139,13 @@ func (s *workflowSuite) TestArchivalWorkflow_Exit_TimeoutWithoutSignals() {
 }
 
 func (s *workflowSuite) TestArchivalWorkflow_Success() {
-	workflowTestMetrics.EXPECT().IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStartedCount)
-	workflowTestMetrics.EXPECT().StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ServiceLatency).Return(metrics.NoopStopwatch)
-	workflowTestMetrics.EXPECT().StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverHandleAllRequestsLatency).Return(metrics.NoopStopwatch)
-	workflowTestMetrics.EXPECT().AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumPumpedRequestsCount, int64(5))
-	workflowTestMetrics.EXPECT().AddCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverNumHandledRequestsCount, int64(5))
+	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverWorkflowStartedCount.MetricName.String()).Return(metrics.NoopMetricsCounter)
+	workflowTestMetrics.EXPECT().Timer(metrics.ServiceLatency.MetricName.String()).Return(metrics.NoopMetricsTimer)
+	workflowTestMetrics.EXPECT().Timer(metrics.ArchiverHandleAllRequestsLatency.MetricName.String()).Return(metrics.NoopMetricsTimer)
+	counterMetric := metrics.NewMockCounterMetric(s.controller)
+	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumPumpedRequestsCount.MetricName.String()).Return(counterMetric)
+	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumHandledRequestsCount.MetricName.String()).Return(counterMetric)
+	counterMetric.EXPECT().Record(int64(5)).Times(2)
 	workflowTestHandler.EXPECT().Start()
 	workflowTestHandler.EXPECT().Finished().Return([]uint64{1, 2, 3, 4, 5})
 	workflowTestPump.EXPECT().Run().Return(PumpResult{
@@ -159,7 +166,7 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
 	logger := log.NewTestLogger()
 	globalLogger = workflowTestLogger
-
+	globalMetricsHandler = metrics.NoopMetricsHandler
 	globalConfig = &Config{
 		ArchiverConcurrency:           dynamicconfig.GetIntPropertyFn(50),
 		ArchivalsPerIteration:         dynamicconfig.GetIntPropertyFn(1000),

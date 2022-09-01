@@ -25,6 +25,7 @@
 package client
 
 import (
+	"go.temporal.io/server/common/namespace"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/cluster"
@@ -53,6 +54,7 @@ type (
 		ClusterName                ClusterName
 		MetricsHandler             metrics.Handler
 		Logger                     log.Logger
+		Cache                      namespace.Registry
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory

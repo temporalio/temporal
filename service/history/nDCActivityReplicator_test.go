@@ -131,11 +131,11 @@ func (s *activityReplicatorSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
+		metricsHandler:     s.mockShard.GetMetricsHandler(),
 		timeSource:         s.mockShard.GetTimeSource(),
 		eventNotifier: events.NewNotifier(
 			clock.NewRealTimeSource(),
-			metrics.NoopClient,
+			metrics.NoopMetricsHandler,
 			func(namespace.ID, string) int32 { return 1 },
 		),
 		queueProcessors: map[tasks.Category]queues.Queue{

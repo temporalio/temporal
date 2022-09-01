@@ -26,6 +26,7 @@ package metrics
 
 import (
 	"fmt"
+	"github.com/uber-go/tally/v4"
 	"strconv"
 	"strings"
 
@@ -249,3 +250,10 @@ func OperationTag(value string) Tag {
 func StringTag(key string, value string) Tag {
 	return &tagImpl{key: key, value: value}
 }
+
+var sanitizer = tally.NewSanitizer(tally.SanitizeOptions{
+	NameCharacters:       tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
+	KeyCharacters:        tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
+	ValueCharacters:      tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
+	ReplacementCharacter: '_',
+})

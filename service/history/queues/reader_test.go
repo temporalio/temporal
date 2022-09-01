@@ -54,7 +54,7 @@ type (
 		mockRescheduler *MockRescheduler
 
 		logger                log.Logger
-		metricsHandler        metrics.MetricsHandler
+		metricsHandler        metrics.Handler
 		executableInitializer ExecutableInitializer
 		monitor               *monitorImpl
 	}

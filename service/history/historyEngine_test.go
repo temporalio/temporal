@@ -154,7 +154,7 @@ func (s *engineSuite) SetupTest() {
 		s.mockShard.GetExecutionManager(),
 		false,
 		s.mockShard.GetLogger(),
-		s.mockShard.GetMetricsClient(),
+		s.mockShard.GetMetricsHandler(),
 	)
 	s.mockShard.SetEventsCacheForTesting(s.eventsCache)
 
@@ -174,7 +174,7 @@ func (s *engineSuite) SetupTest() {
 
 	eventNotifier := events.NewNotifier(
 		clock.NewRealTimeSource(),
-		s.mockShard.Resource.MetricsClient,
+		s.mockShard.Resource.MetricsHandler,
 		func(namespaceID namespace.ID, workflowID string) int32 {
 			key := namespaceID.String() + "_" + workflowID
 			return int32(len(key))
@@ -187,7 +187,7 @@ func (s *engineSuite) SetupTest() {
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.mockShard.GetLogger(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
+		metricsHandler:     s.mockShard.GetMetricsHandler(),
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		eventNotifier:      eventNotifier,
 		config:             s.config,

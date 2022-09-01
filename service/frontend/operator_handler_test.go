@@ -80,7 +80,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.ESClient,
 		s.mockResource.Logger,
 		s.mockResource.GetSDKClientFactory(),
-		s.mockResource.GetMetricsClient(),
+		s.mockResource.GetMetricsHandler(),
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetSearchAttributesManager(),
 		health.NewServer(),

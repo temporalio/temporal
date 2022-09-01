@@ -154,7 +154,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetSDKClientFactory(),
 		s.mockResource.GetMembershipMonitor(),
 		s.mockResource.GetArchiverProvider(),
-		s.mockResource.GetMetricsClient(),
+		s.mockResource.GetMetricsHandler(),
 		s.mockResource.GetNamespaceRegistry(),
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetSearchAttributesManager(),

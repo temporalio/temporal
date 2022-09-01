@@ -64,7 +64,7 @@ type (
 		options        *Options
 		rateLimiter    quotas.RateLimiter
 		logger         log.Logger
-		metricsHandler metrics.MetricsHandler
+		metricsHandler metrics.Handler
 	}
 )
 

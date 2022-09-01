@@ -236,7 +236,7 @@ func TelemetryInterceptorProvider(
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
-		metrics.FrontendAPIMetricsScopes(),
+		metrics.Frontend,
 		logger,
 	)
 }

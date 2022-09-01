@@ -113,11 +113,11 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		throttledLogger:    s.logger,
-		metricsClient:      metrics.NoopClient,
+		metricsHandler:     metrics.NoopMetricsHandler,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		config:             config,
 		timeSource:         mockShard.GetTimeSource(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopClient, func(namespace.ID, string) int32 { return 1 }),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		searchAttributesValidator: searchattribute.NewValidator(
 			searchattribute.NewTestProvider(),
 			mockShard.Resource.SearchAttributesMapper,

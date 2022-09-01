@@ -179,7 +179,7 @@ func TelemetryInterceptorProvider(
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
-		metrics.HistoryAPIMetricsScopes(),
+		metrics.History,
 		logger,
 	)
 }

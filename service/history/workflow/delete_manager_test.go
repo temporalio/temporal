@@ -95,7 +95,7 @@ func (s *deleteManagerWorkflowSuite) SetupTest() {
 
 	config := tests.NewDynamicConfig()
 	s.mockShardContext = shard.NewMockContext(s.controller)
-	s.mockShardContext.EXPECT().GetMetricsClient().Return(metrics.NoopClient).AnyTimes()
+	s.mockShardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 	s.mockShardContext.EXPECT().GetNamespaceRegistry().Return(s.mockNamespaceRegistry).AnyTimes()
 	s.mockShardContext.EXPECT().GetClusterMetadata().Return(s.mockMetadata).AnyTimes()
 

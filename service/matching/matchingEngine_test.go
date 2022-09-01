@@ -120,8 +120,8 @@ func (s *matchingEngineSuite) SetupTest() {
 		context.Background(),
 		matchingTestNamespace,
 		&taskqueuepb.TaskQueue{Name: matchingTestTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		metrics.NoopClient,
-		metrics.MatchingTaskQueueMgrScope,
+		metrics.NoopMetricsHandler,
+		metrics.MatchingTaskQueueMgrOperation,
 		log.NewNoopLogger(),
 	)
 
@@ -150,7 +150,7 @@ func newMatchingEngine(
 		taskQueues:        make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:    make(map[taskQueueCounterKey]int),
 		logger:            logger,
-		metricsClient:     metrics.NoopClient,
+		metricsHandler:    metrics.NoopMetricsHandler,
 		matchingClient:    mockMatchingClient,
 		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
 		config:            config,
@@ -732,7 +732,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	// So we can get snapshots
 	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsClient = metrics.NewClient(metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope), metrics.Matching)
+	s.matchingEngine.metricsHandler = metrics.NoopMetricsHandler
 
 	var err error
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
@@ -940,7 +940,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	dispatchLimitFn func(int, int64) float64,
 ) int64 {
 	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsClient = metrics.NewClient(metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope), metrics.Matching)
+	s.matchingEngine.metricsHandler = metrics.NoopMetricsHandler
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}

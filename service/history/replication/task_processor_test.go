@@ -145,7 +145,7 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
-	metricsClient := metrics.NoopClient
+	metricsClient := metrics.NoopMetricsHandler
 
 	s.replicationTaskProcessor = NewTaskProcessor(
 		s.mockShard,

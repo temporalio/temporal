@@ -99,8 +99,8 @@ func (s *historyArchiverSuite) TearDownSuite() {
 func (s *historyArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.container = &archiver.HistoryBootstrapContainer{
-		Logger:        log.NewNoopLogger(),
-		MetricsClient: metrics.NoopClient,
+		Logger:         log.NewNoopLogger(),
+		MetricsHandler: metrics.NoopMetricsHandler,
 	}
 
 	s.controller = gomock.NewController(s.T())

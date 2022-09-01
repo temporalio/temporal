@@ -45,10 +45,10 @@ type (
 	metricsContextKey struct{}
 
 	TelemetryInterceptor struct {
-		namespaceRegistry   namespace.Registry
-		metricsHandler      metrics.Handler
-		methodToMetricsName map[string]string
-		logger              log.Logger
+		namespaceRegistry namespace.Registry
+		metricsHandler    metrics.Handler
+		serviceRole       metrics.ServiceIdx
+		logger            log.Logger
 	}
 )
 
@@ -90,14 +90,14 @@ var (
 func NewTelemetryInterceptor(
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
-	methodToMetricsName map[string]string,
+	serviceRole metrics.ServiceIdx,
 	logger log.Logger,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
-		namespaceRegistry:   namespaceRegistry,
-		metricsHandler:      metricsHandler,
-		methodToMetricsName: methodToMetricsName,
-		logger:              logger,
+		namespaceRegistry: namespaceRegistry,
+		metricsHandler:    metricsHandler,
+		serviceRole:       serviceRole,
+		logger:            logger,
 	}
 }
 
@@ -159,7 +159,7 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 	metricsHandler metrics.Handler,
 	result interface{},
 ) {
-	if actionScope, ok := grpcActions[methodName]; !ok || actionScope != ti.methodToMetricsName[methodName] {
+	if _, ok := grpcActions[methodName]; !ok || ti.serviceRole != metrics.Frontend {
 		// grpcActions checks that methodName is the one that we care about.
 		// ti.scopes verifies that the scope is the one we intended to emit action metrics.
 		// This is necessary because TelemetryInterceptor is used for all services. Different service could have same

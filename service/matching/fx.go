@@ -75,7 +75,7 @@ func TelemetryInterceptorProvider(
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
 		metricsHandler,
-		metrics.MatchingAPIMetricsScopes(),
+		metrics.Matching,
 		logger,
 	)
 }

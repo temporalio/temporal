@@ -81,7 +81,7 @@ func TestTallyScope(t *testing.T) {
 	assert.EqualValues(t, map[string]string{}, histograms["test.transmission+"].Tags())
 }
 
-func recordTallyMetrics(mp MetricsHandler) {
+func recordTallyMetrics(mp Handler) {
 	c := mp.Counter("hits")
 	g := mp.Gauge("temp")
 	d := mp.Timer("latency")

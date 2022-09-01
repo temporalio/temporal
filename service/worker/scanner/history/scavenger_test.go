@@ -51,7 +51,7 @@ type (
 		suite.Suite
 
 		logger log.Logger
-		metric metrics.Client
+		metric metrics.Handler
 
 		numShards int32
 	}
@@ -77,7 +77,7 @@ func TestScavengerTestSuite(t *testing.T) {
 
 func (s *ScavengerTestSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
-	s.metric = metrics.NoopClient
+	s.metric = metrics.NoopMetricsHandler
 	s.numShards = 512
 }
 

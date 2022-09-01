@@ -97,7 +97,7 @@ func NewTestController(
 		clientBean:                  resource.GetClientBean(),
 		historyClient:               resource.GetHistoryClient(),
 		historyServiceResolver:      resource.GetHistoryServiceResolver(),
-		metricsClient:               resource.GetMetricsClient(),
+		metricsHandler:              resource.GetMetricsHandler(),
 		payloadSerializer:           resource.GetPayloadSerializer(),
 		timeSource:                  resource.GetTimeSource(),
 		namespaceRegistry:           resource.GetNamespaceRegistry(),
@@ -111,7 +111,7 @@ func NewTestController(
 		membershipUpdateCh: make(chan *membership.ChangedEvent, 10),
 		engineFactory:      engineFactory,
 		shutdownCh:         make(chan struct{}),
-		metricsScope:       resource.GetMetricsClient().Scope(metrics.HistoryShardControllerScope),
+		metricsScope:       resource.GetMetricsHandler(),
 		historyShards:      make(map[int32]*ContextImpl),
 	}
 }
