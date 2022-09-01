@@ -236,18 +236,26 @@ func (c *temporalImpl) Start() error {
 }
 
 func (c *temporalImpl) Stop() {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	if c.enableWorker() {
 		c.shutdownWG.Add(1)
-		c.workerApp.Stop(context.Background())
+		c.workerApp.Stop(ctx)
 	}
 
 	c.shutdownWG.Add(3)
 
-	c.frontendApp.Stop(context.Background())
+	c.frontendApp.Stop(ctx)
 	for _, historyApp := range c.historyApps {
-		historyApp.Stop(context.Background())
+		historyApp.Stop(ctx)
 	}
-	c.matchingApp.Stop(context.Background())
+	c.matchingApp.Stop(ctx)
+
+	if ctx.Err() != nil {
+		c.logger.Warn("server did not shut down in 15s")
+		// TODO: we should fail the test in this case
+	}
 
 	close(c.shutdownCh)
 	c.shutdownWG.Wait()
