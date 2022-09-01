@@ -163,6 +163,7 @@ func newTransferQueueStandbyProcessor(
 		logger,
 		func(t tasks.Task) queues.Executable {
 			return queues.NewExecutable(
+				queues.DefaultReaderId,
 				t,
 				transferTaskFilter,
 				taskExecutor,

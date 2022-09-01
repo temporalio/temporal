@@ -67,7 +67,7 @@ const (
 	// CacheRefreshFailureRetryInterval is the wait time
 	// if refreshment encounters error
 	CacheRefreshFailureRetryInterval = 1 * time.Second
-	CacheRefreshPageSize             = 200
+	CacheRefreshPageSize             = 1000
 )
 
 const (

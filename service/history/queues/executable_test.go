@@ -230,6 +230,7 @@ func (s *executableSuite) newTestExecutable(
 	filter TaskFilter,
 ) Executable {
 	return NewExecutable(
+		DefaultReaderId,
 		tasks.NewFakeTask(
 			definition.NewWorkflowKey(
 				tests.NamespaceID.String(),

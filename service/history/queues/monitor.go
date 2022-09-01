@@ -44,21 +44,38 @@ type (
 	// Monitor tracks Queue statistics and sends an Alert to the AlertCh
 	// if any statistics becomes abnormal
 	Monitor interface {
+		GetTotalPendingTaskCount() int
+		GetSlicePendingTaskCount(slice Slice) int
+		SetSlicePendingTaskCount(slice Slice, count int)
+
 		GetReaderWatermark(readerID int32) (tasks.Key, bool)
 		SetReaderWatermark(readerID int32, watermark tasks.Key)
+
+		GetTotalSliceCount() int
+		GetSliceCount(readerID int32) int
+		SetSliceCount(readerID int32, count int)
+
+		RemoveSlice(slice Slice)
+		// RemoveReader(readerID int32)
 
 		AlertCh() <-chan *Alert
 		Close()
 	}
 
 	MonitorOptions struct {
+		PendingTasksCriticalCount   dynamicconfig.IntPropertyFn
 		ReaderStuckCriticalAttempts dynamicconfig.IntPropertyFn
+		SliceCountCriticalThreshold dynamicconfig.IntPropertyFn
 	}
 
 	monitorImpl struct {
 		sync.Mutex
 
-		readerStats
+		totalPendingTaskCount int
+		totalSliceCount       int
+
+		readerStats map[int32]readerStats
+		sliceStats  map[Slice]sliceStats
 
 		categoryType tasks.CategoryType
 		options      *MonitorOptions
@@ -68,12 +85,17 @@ type (
 	}
 
 	readerStats struct {
-		progressByReader map[int32]*readerProgess
+		progress   readerProgess
+		sliceCount int
 	}
 
 	readerProgess struct {
 		watermark tasks.Key
 		attempts  int
+	}
+
+	sliceStats struct {
+		pendingTaskCount int
 	}
 )
 
@@ -82,9 +104,8 @@ func newMonitor(
 	options *MonitorOptions,
 ) *monitorImpl {
 	return &monitorImpl{
-		readerStats: readerStats{
-			progressByReader: make(map[int32]*readerProgess),
-		},
+		readerStats:  make(map[int32]readerStats),
+		sliceStats:   make(map[Slice]sliceStats),
 		categoryType: categoryType,
 		options:      options,
 		alertCh:      make(chan *Alert, alertChSize),
@@ -92,20 +113,60 @@ func newMonitor(
 	}
 }
 
+func (m *monitorImpl) GetTotalPendingTaskCount() int {
+	m.Lock()
+	defer m.Unlock()
+
+	return m.totalPendingTaskCount
+}
+
+func (m *monitorImpl) GetSlicePendingTaskCount(slice Slice) int {
+	m.Lock()
+	defer m.Unlock()
+
+	if stats, ok := m.sliceStats[slice]; ok {
+		return stats.pendingTaskCount
+	}
+	return 0
+}
+
+func (m *monitorImpl) SetSlicePendingTaskCount(slice Slice, count int) {
+	m.Lock()
+	defer m.Unlock()
+
+	stats := m.sliceStats[slice]
+	m.totalPendingTaskCount = m.totalPendingTaskCount - stats.pendingTaskCount + count
+
+	stats.pendingTaskCount = count
+	m.sliceStats[slice] = stats
+
+	criticalTotalTasks := m.options.PendingTasksCriticalCount()
+	if criticalTotalTasks > 0 && m.totalPendingTaskCount > criticalTotalTasks {
+		m.sendAlertLocked(&Alert{
+			AlertType: AlertTypeQueuePendingTaskCount,
+			AlertAttributesQueuePendingTaskCount: &AlertAttributesQueuePendingTaskCount{
+				CurrentPendingTaskCount:   m.totalPendingTaskCount,
+				CiriticalPendingTaskCount: criticalTotalTasks,
+			},
+		})
+	}
+}
+
 func (m *monitorImpl) GetReaderWatermark(readerID int32) (tasks.Key, bool) {
 	m.Lock()
 	defer m.Unlock()
 
-	progress, ok := m.progressByReader[readerID]
+	stats, ok := m.readerStats[readerID]
 	if !ok {
 		return tasks.MinimumKey, false
 	}
-	return progress.watermark, true
+
+	return stats.progress.watermark, true
 }
 
 func (m *monitorImpl) SetReaderWatermark(readerID int32, watermark tasks.Key) {
 	// TODO: currently only tracking default reader progress for scheduled queue
-	if readerID != defaultReaderId || m.categoryType != tasks.CategoryTypeScheduled {
+	if readerID != DefaultReaderId || m.categoryType != tasks.CategoryTypeScheduled {
 		return
 	}
 
@@ -115,32 +176,86 @@ func (m *monitorImpl) SetReaderWatermark(readerID int32, watermark tasks.Key) {
 	watermark.FireTime = watermark.FireTime.Truncate(monitorWatermarkPrecision)
 	watermark.TaskID = 0
 
-	progress := m.progressByReader[readerID]
-	if progress == nil {
-		m.progressByReader[readerID] = &readerProgess{
+	stats := m.readerStats[readerID]
+	if stats.progress.watermark.CompareTo(watermark) != 0 {
+		stats.progress = readerProgess{
 			watermark: watermark,
 			attempts:  1,
 		}
-		return
-	}
-	if progress.watermark.CompareTo(watermark) != 0 {
-		progress.watermark = watermark
-		progress.attempts = 1
+		m.readerStats[readerID] = stats
 		return
 	}
 
-	progress.attempts++
+	stats.progress.attempts++
+	m.readerStats[readerID] = stats
 
 	ciriticalAttempts := m.options.ReaderStuckCriticalAttempts()
-	if ciriticalAttempts > 0 && progress.attempts >= ciriticalAttempts {
+	if ciriticalAttempts > 0 && stats.progress.attempts >= ciriticalAttempts {
 		m.sendAlertLocked(&Alert{
 			AlertType: AlertTypeReaderStuck,
 			AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
 				ReaderID:         readerID,
-				CurrentWatermark: progress.watermark,
+				CurrentWatermark: stats.progress.watermark,
 			},
 		})
 	}
+}
+
+func (m *monitorImpl) GetTotalSliceCount() int {
+	m.Lock()
+	defer m.Unlock()
+
+	count := 0
+	for _, stats := range m.readerStats {
+		count += stats.sliceCount
+	}
+
+	return count
+}
+
+func (m *monitorImpl) GetSliceCount(readerID int32) int {
+	m.Lock()
+	defer m.Unlock()
+
+	if stats, ok := m.readerStats[readerID]; ok {
+		return stats.sliceCount
+	}
+	return 0
+}
+
+func (m *monitorImpl) SetSliceCount(readerID int32, count int) {
+	m.Lock()
+	defer m.Unlock()
+
+	stats := m.readerStats[readerID]
+	m.totalSliceCount = m.totalSliceCount - stats.sliceCount + count
+
+	stats.sliceCount = count
+	m.readerStats[readerID] = stats
+
+	criticalSliceCount := m.options.SliceCountCriticalThreshold()
+	if criticalSliceCount > 0 && m.totalSliceCount > criticalSliceCount {
+		m.sendAlertLocked(&Alert{
+			AlertType: AlertTypeSliceCount,
+			AlertAttributesSliceCount: &AlertAttributesSlicesCount{
+				CurrentSliceCount:  m.totalSliceCount,
+				CriticalSliceCount: criticalSliceCount,
+			},
+		})
+	}
+}
+
+func (m *monitorImpl) RemoveSlice(slice Slice) {
+	m.Lock()
+	defer m.Unlock()
+
+	stats, ok := m.sliceStats[slice]
+	if !ok {
+		return
+	}
+
+	m.totalPendingTaskCount -= stats.pendingTaskCount
+	delete(m.sliceStats, slice)
 }
 
 func (m *monitorImpl) AlertCh() <-chan *Alert {

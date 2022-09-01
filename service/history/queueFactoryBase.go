@@ -29,6 +29,7 @@ import (
 
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -46,6 +47,7 @@ type (
 		NamespaceRegistry namespace.Registry
 		ClusterMetadata   cluster.Metadata
 		Config            *configs.Config
+		TimeSource        clock.TimeSource
 		MetricsHandler    metrics.MetricsHandler
 		Logger            resource.SnTaggedLogger
 	}
@@ -54,6 +56,9 @@ type (
 		HostScheduler        queues.Scheduler
 		HostPriorityAssigner queues.PriorityAssigner
 		HostRateLimiter      quotas.RateLimiter
+
+		// used by multi-cursor queue reader
+		HostReaderRateLimiter quotas.RequestRateLimiter
 	}
 
 	QueueFactoriesLifetimeHookParams struct {
@@ -120,12 +125,19 @@ func NewQueueHostRateLimiter(
 	fallBackRPS dynamicconfig.IntPropertyFn,
 ) quotas.RateLimiter {
 	return quotas.NewDefaultOutgoingRateLimiter(
-		func() float64 {
-			if maxPollHostRps := hostRPS(); maxPollHostRps > 0 {
-				return float64(maxPollHostRps)
-			}
-
-			return float64(fallBackRPS())
-		},
+		NewHostRateLimiterRateFn(hostRPS, fallBackRPS),
 	)
+}
+
+func NewHostRateLimiterRateFn(
+	hostRPS dynamicconfig.IntPropertyFn,
+	fallBackRPS dynamicconfig.IntPropertyFn,
+) quotas.RateFn {
+	return func() float64 {
+		if maxPollHostRps := hostRPS(); maxPollHostRps > 0 {
+			return float64(maxPollHostRps)
+		}
+
+		return float64(fallBackRPS())
+	}
 }

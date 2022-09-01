@@ -486,5 +486,19 @@ func (s *visibilityQueueTaskExecutorSuite) createPersistenceMutableState(
 func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 	task tasks.Task,
 ) queues.Executable {
-	return queues.NewExecutable(task, nil, s.visibilityQueueTaskExecutor, nil, nil, queues.NewNoopPriorityAssigner(), s.mockShard.GetTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil, nil)
+	return queues.NewExecutable(
+		queues.DefaultReaderId,
+		task,
+		nil,
+		s.visibilityQueueTaskExecutor,
+		nil,
+		nil,
+		queues.NewNoopPriorityAssigner(),
+		s.mockShard.GetTimeSource(),
+		nil,
+		nil,
+		metrics.NoopMetricsHandler,
+		nil,
+		nil,
+	)
 }

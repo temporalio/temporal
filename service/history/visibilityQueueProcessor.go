@@ -161,6 +161,7 @@ func newVisibilityQueueProcessor(
 		logger,
 		func(t tasks.Task) queues.Executable {
 			return queues.NewExecutable(
+				queues.DefaultReaderId,
 				t,
 				visibilityTaskFilter,
 				taskExecutor,

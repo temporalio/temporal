@@ -37,7 +37,6 @@ import (
 	"google.golang.org/grpc/examples/helloworld/helloworld"
 	"google.golang.org/grpc/peer"
 
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
@@ -83,10 +82,6 @@ var (
 			MaxJoinDuration:  5,
 			BroadcastAddress: localhostIPv4,
 		},
-	}
-	clusterMetadata = &cluster.Config{
-		CurrentClusterName: "test",
-		ClusterInformation: map[string]cluster.ClusterInformation{"test": {RPCAddress: localhostIPv4 + ":1234"}},
 	}
 )
 

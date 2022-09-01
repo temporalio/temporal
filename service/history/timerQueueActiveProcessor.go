@@ -168,6 +168,7 @@ func newTimerQueueActiveProcessor(
 		currentClusterName,
 		func(t tasks.Task) queues.Executable {
 			return queues.NewExecutable(
+				queues.DefaultReaderId,
 				t,
 				timerTaskFilter,
 				taskExecutor,
@@ -286,6 +287,7 @@ func newTimerQueueFailoverProcessor(
 		logger,
 		func(t tasks.Task) queues.Executable {
 			return queues.NewExecutable(
+				queues.DefaultReaderId,
 				t,
 				timerTaskFilter,
 				taskExecutor,

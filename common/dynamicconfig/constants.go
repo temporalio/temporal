@@ -24,45 +24,19 @@
 
 package dynamicconfig
 
-import (
-	enumspb "go.temporal.io/api/enums/v1"
-)
-
-// Key represents a key/property stored in dynamic config
-type Key string
-
 func (k Key) String() string {
 	return string(k)
 }
 
 const (
-	unknownKey Key = "unknownKey"
-
-	// dynamic config for tests
-	testGetPropertyKey                                = "testGetPropertyKey"
-	testCaseInsensitivePropertyKey                    = "testCaseInsensitivePropertyKey"
-	testGetIntPropertyKey                             = "testGetIntPropertyKey"
-	testGetFloat64PropertyKey                         = "testGetFloat64PropertyKey"
-	testGetDurationPropertyKey                        = "testGetDurationPropertyKey"
-	testGetBoolPropertyKey                            = "testGetBoolPropertyKey"
-	testGetStringPropertyKey                          = "testGetStringPropertyKey"
-	testGetMapPropertyKey                             = "testGetMapPropertyKey"
-	testGetIntPropertyFilteredByNamespaceKey          = "testGetIntPropertyFilteredByNamespaceKey"
-	testGetDurationPropertyFilteredByNamespaceKey     = "testGetDurationPropertyFilteredByNamespaceKey"
-	testGetIntPropertyFilteredByTaskQueueInfoKey      = "testGetIntPropertyFilteredByTaskQueueInfoKey"
-	testGetDurationPropertyFilteredByTaskQueueInfoKey = "testGetDurationPropertyFilteredByTaskQueueInfoKey"
-	testGetDurationPropertyStructuredDefaults         = "testGetDurationPropertyStructuredDefaults"
-	testGetBoolPropertyFilteredByNamespaceIDKey       = "testGetBoolPropertyFilteredByNamespaceIDKey"
-	testGetBoolPropertyFilteredByTaskQueueInfoKey     = "testGetBoolPropertyFilteredByTaskQueueInfoKey"
-
-	// key for admin
+	// keys for admin
 
 	// AdminMatchingNamespaceToPartitionDispatchRate is the max qps of any task queue partition for a given namespace
 	AdminMatchingNamespaceToPartitionDispatchRate = "admin.matchingNamespaceToPartitionDispatchRate"
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate = "admin.matchingNamespaceTaskqueueToPartitionDispatchRate"
 
-	// key for system
+	// keys for system
 
 	// StandardVisibilityPersistenceMaxReadQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for read.
 	StandardVisibilityPersistenceMaxReadQPS = "system.standardVisibilityPersistenceMaxReadQPS"
@@ -118,7 +92,7 @@ const (
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
 
-	// key for size limit
+	// keys for size limit
 
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError = "limit.blobSize.error"
@@ -146,7 +120,7 @@ const (
 	// which would cause the graph size to exceed this number will result in the oldest versions being dropped.
 	VersionGraphNodeLimit = "limit.versionGraphNodeSize"
 
-	// key for frontend
+	// keys for frontend
 
 	// FrontendPersistenceMaxQPS is the max qps frontend host can query DB
 	FrontendPersistenceMaxQPS = "frontend.persistenceMaxQPS"
@@ -249,7 +223,7 @@ const (
 	// Must be not greater than 256 and number of worker cores in the cluster.
 	DeleteNamespaceConcurrentDeleteExecutionsActivities = "frontend.deleteNamespaceConcurrentDeleteExecutionsActivities"
 
-	// key for matching
+	// keys for matching
 
 	// MatchingRPS is request rate per second for each matching host
 	MatchingRPS = "matching.rps"
@@ -302,7 +276,7 @@ const (
 	// MatchingUseOldRouting is whether to use old task queue routing (name only) instead of namespace+name+type.
 	MatchingUseOldRouting = "matching.useOldRouting"
 
-	// key for history
+	// keys for history
 
 	// HistoryRPS is request rate per second for each history host
 	HistoryRPS = "history.rps"
@@ -342,10 +316,22 @@ const (
 	// StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
 	// before discarding the task
 	StandbyTaskMissingEventsDiscardDelay = "history.standbyTaskMissingEventsDiscardDelay"
+	// QueuePendingTaskCriticalCount is the max number of pending task in one queue
+	// before triggering queue slice splitting and unloading
+	QueuePendingTaskCriticalCount = "history.queuePendingTaskCriticalCount"
 	// QueueReaderStuckCriticalAttempts is the max number of task loading attempts for a certain task range
 	// before that task range is split into a separate slice to unblock loading for later range.
 	// currently only work for scheduled queues and the task range is 1s.
 	QueueReaderStuckCriticalAttempts = "history.queueReaderStuckCriticalAttempts"
+	// QueueCriticalSlicesCount is the max number of slices in one queue
+	// before force compacting slices
+	QueueCriticalSlicesCount = "history.queueCriticalSlicesCount"
+	// QueuePendingTaskMaxCount is the max number of task pending tasks in one queue before stop
+	// loading new tasks into memory. While QueuePendingTaskCriticalCount won't stop task loading
+	// for the entire queue but only trigger a queue action to unload tasks. Ideally this max count
+	// limit should not be hit and task unloading should happen once critical count is exceeded. But
+	// since queue action is async, we need this hard limit.
+	QueuePendingTaskMaxCount = "history.queuePendingTasksMaxCount"
 	// QueueMaxReaderCount is the max number of readers in one multi-cursor queue
 	QueueMaxReaderCount = "history.queueMaxReaderCount"
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
@@ -584,7 +570,7 @@ const (
 	// ReplicationTaskProcessorShardQPS is the qps of task processing rate limiter on shard level
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
 
-	// key for worker
+	// keys for worker
 
 	// WorkerPersistenceMaxQPS is the max qps worker host can query DB
 	WorkerPersistenceMaxQPS = "worker.persistenceMaxQPS"
@@ -662,77 +648,3 @@ const (
 	// WorkerEnableScheduler controls whether to start the worker for scheduled workflows
 	WorkerEnableScheduler = "worker.enableScheduler"
 )
-
-// Filter represents a filter on the dynamic config key
-type Filter int
-
-func (f Filter) String() string {
-	if f <= unknownFilter || f >= lastFilterTypeForTest {
-		return filters[unknownFilter]
-	}
-	return filters[f]
-}
-
-var filters = []string{
-	"unknownFilter",
-	"namespace",
-	"namespaceID",
-	"taskQueueName",
-	"taskType",
-	"shardID",
-}
-
-const (
-	unknownFilter Filter = iota
-	// Namespace is the namespace name
-	Namespace
-	// NamespaceID is the namespace Id
-	NamespaceID
-	// TaskQueueName is the taskqueue name
-	TaskQueueName
-	// TaskType is the task type (0:Workflow, 1:Activity)
-	TaskType
-	// ShardID is the shard id
-	ShardID
-
-	// lastFilterTypeForTest must be the last one in this const group for testing purpose
-	lastFilterTypeForTest
-)
-
-// FilterOption is used to provide filters for dynamic config keys
-type FilterOption func(filterMap map[Filter]interface{})
-
-// TaskQueueFilter filters by task queue name
-func TaskQueueFilter(name string) FilterOption {
-	return func(filterMap map[Filter]interface{}) {
-		filterMap[TaskQueueName] = name
-	}
-}
-
-// NamespaceFilter filters by namespace name
-func NamespaceFilter(name string) FilterOption {
-	return func(filterMap map[Filter]interface{}) {
-		filterMap[Namespace] = name
-	}
-}
-
-// NamespaceIDFilter filters by namespace id
-func NamespaceIDFilter(namespaceID string) FilterOption {
-	return func(filterMap map[Filter]interface{}) {
-		filterMap[NamespaceID] = namespaceID
-	}
-}
-
-// TaskTypeFilter filters by task type
-func TaskTypeFilter(taskType enumspb.TaskQueueType) FilterOption {
-	return func(filterMap map[Filter]interface{}) {
-		filterMap[TaskType] = enumspb.TaskQueueType_name[int32(taskType)]
-	}
-}
-
-// ShardIDFilter filters by shard id
-func ShardIDFilter(shardID int32) FilterOption {
-	return func(filterMap map[Filter]interface{}) {
-		filterMap[ShardID] = shardID
-	}
-}

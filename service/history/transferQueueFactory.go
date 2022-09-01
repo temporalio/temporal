@@ -75,6 +75,8 @@ func NewTransferQueueFactory(
 				StandbyNamespaceWeights: params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
+			params.TimeSource,
+			params.MetricsHandler,
 			params.Logger,
 		)
 	}
@@ -86,6 +88,13 @@ func NewTransferQueueFactory(
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.TransferProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
+			),
+			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
+				NewHostRateLimiterRateFn(
+					params.Config.TransferProcessorMaxPollHostRPS,
+					params.Config.PersistenceMaxQPS,
+				),
+				params.Config.QueueMaxReaderCount(),
 			),
 		},
 	}
@@ -152,12 +161,15 @@ func (f *transferQueueFactory) CreateQueue(
 			&queues.Options{
 				ReaderOptions: queues.ReaderOptions{
 					BatchSize:            f.Config.TransferTaskBatchSize,
-					MaxPendingTasksCount: f.Config.TransferProcessorMaxReschedulerSize,
+					MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
 					PollBackoffInterval:  f.Config.TransferProcessorPollBackoffInterval,
 				},
 				MonitorOptions: queues.MonitorOptions{
+					PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
 					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+					SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 				},
+				MaxPollRPS:                          f.Config.TransferProcessorMaxPollRPS,
 				MaxPollInterval:                     f.Config.TransferProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.TransferProcessorMaxPollIntervalJitterCoefficient,
 				CheckpointInterval:                  f.Config.TransferProcessorUpdateAckInterval,
@@ -165,10 +177,7 @@ func (f *transferQueueFactory) CreateQueue(
 				MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 				TaskMaxRetryCount:                   f.Config.TransferTaskMaxRetryCount,
 			},
-			newQueueProcessorRateLimiter(
-				f.HostRateLimiter,
-				f.Config.TransferProcessorMaxPollRPS,
-			),
+			f.HostReaderRateLimiter,
 			logger,
 			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferQueueProcessor)),
 		)

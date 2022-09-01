@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -215,7 +214,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 func (s *controllerSuite) TestAcquireShardsConcurrently() {
 	numShards := int32(10)
 	s.config.NumberOfShards = numShards
-	s.config.AcquireShardConcurrency = func(opts ...dynamicconfig.FilterOption) int {
+	s.config.AcquireShardConcurrency = func() int {
 		return 10
 	}
 

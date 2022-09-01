@@ -27,6 +27,7 @@ package queues
 import (
 	"fmt"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -43,13 +44,19 @@ type (
 		SplitByPredicate(tasks.Predicate) (pass Slice, fail Slice)
 		CanMergeWithSlice(Slice) bool
 		MergeWithSlice(Slice) []Slice
+		CompactWithSlice(Slice) Slice
 		ShrinkRange()
-		SelectTasks(int) ([]Executable, error)
+		SelectTasks(readerID int32, batchSize int) ([]Executable, error)
 		MoreTasks() bool
+		TaskStats() TaskStats
 		Clear()
 	}
 
-	ExecutableInitializer func(tasks.Task) Executable
+	TaskStats struct {
+		PendingPerNamespace map[namespace.ID]int
+	}
+
+	ExecutableInitializer func(readerID int32, t tasks.Task) Executable
 
 	SliceImpl struct {
 		paginationFnProvider  PaginationFnProvider
@@ -61,12 +68,14 @@ type (
 		iterators []Iterator
 
 		*executableTracker
+		monitor Monitor
 	}
 )
 
 func NewSlice(
 	paginationFnProvider PaginationFnProvider,
 	executableInitializer ExecutableInitializer,
+	monitor Monitor,
 	scope Scope,
 ) *SliceImpl {
 	return &SliceImpl{
@@ -77,6 +86,7 @@ func NewSlice(
 			NewIterator(paginationFnProvider, scope.Range),
 		},
 		executableTracker: newExecutableTracker(),
+		monitor:           monitor,
 	}
 }
 
@@ -276,6 +286,36 @@ func (s *SliceImpl) appendIterator(
 	return append(iterators, iterator)
 }
 
+func (s *SliceImpl) CompactWithSlice(slice Slice) Slice {
+	s.stateSanityCheck()
+
+	incomingSlice, ok := slice.(*SliceImpl)
+	if !ok {
+		panic(fmt.Sprintf("Unable to compact queue slice of type %T with type %T", s, slice))
+	}
+	incomingSlice.stateSanityCheck()
+
+	compactedScope := NewScope(
+		NewRange(
+			tasks.MinKey(s.scope.Range.InclusiveMin, incomingSlice.scope.Range.InclusiveMin),
+			tasks.MaxKey(s.scope.Range.ExclusiveMax, incomingSlice.scope.Range.ExclusiveMax),
+		),
+		tasks.OrPredicates(s.scope.Predicate, incomingSlice.scope.Predicate),
+	)
+
+	compactedTaskTracker := s.executableTracker.merge(incomingSlice.executableTracker)
+	compactedIterators := s.mergeIterators(incomingSlice)
+
+	s.destroy()
+	incomingSlice.destroy()
+
+	return s.newSlice(
+		compactedScope,
+		compactedIterators,
+		compactedTaskTracker,
+	)
+}
+
 func (s *SliceImpl) ShrinkRange() {
 	s.stateSanityCheck()
 
@@ -295,14 +335,18 @@ func (s *SliceImpl) ShrinkRange() {
 	}
 
 	s.scope.Range.InclusiveMin = newRangeMin
+
+	s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
 }
 
-func (s *SliceImpl) SelectTasks(batchSize int) ([]Executable, error) {
+func (s *SliceImpl) SelectTasks(readerID int32, batchSize int) ([]Executable, error) {
 	s.stateSanityCheck()
 
 	if len(s.iterators) == 0 {
 		return []Executable{}, nil
 	}
+
+	defer s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
 
 	executables := make([]Executable, 0, batchSize)
 	for len(executables) < batchSize && len(s.iterators) != 0 {
@@ -328,7 +372,7 @@ func (s *SliceImpl) SelectTasks(batchSize int) ([]Executable, error) {
 				continue
 			}
 
-			executable := s.executableInitializer(task)
+			executable := s.executableInitializer(readerID, task)
 			s.executableTracker.add(executable)
 			executables = append(executables, executable)
 		} else {
@@ -345,6 +389,14 @@ func (s *SliceImpl) MoreTasks() bool {
 	return len(s.iterators) != 0
 }
 
+func (s *SliceImpl) TaskStats() TaskStats {
+	s.stateSanityCheck()
+
+	return TaskStats{
+		PendingPerNamespace: s.executableTracker.pendingPerNamesapce,
+	}
+}
+
 func (s *SliceImpl) Clear() {
 	s.stateSanityCheck()
 
@@ -354,12 +406,15 @@ func (s *SliceImpl) Clear() {
 		NewIterator(s.paginationFnProvider, s.scope.Range),
 	}
 	s.executableTracker.clear()
+
+	s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
 }
 
 func (s *SliceImpl) destroy() {
 	s.destroyed = true
 	s.iterators = nil
 	s.executableTracker = nil
+	s.monitor.RemoveSlice(s)
 }
 
 func (s *SliceImpl) stateSanityCheck() {
@@ -379,6 +434,7 @@ func (s *SliceImpl) newSlice(
 		scope:                 scope,
 		iterators:             iterators,
 		executableTracker:     tracker,
+		monitor:               s.monitor,
 	}
 }
 

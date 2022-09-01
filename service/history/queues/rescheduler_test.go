@@ -101,6 +101,7 @@ func (s *rescheudulerSuite) TestStartStop() {
 
 	for i := 0; i != numTasks; i++ {
 		mockExecutable := NewMockExecutable(s.controller)
+		mockExecutable.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
 		mockExecutable.EXPECT().State().Return(ctasks.TaskStatePending).Times(1)
 		rescheduler.Add(
 			mockExecutable,
@@ -146,6 +147,7 @@ func (s *rescheudulerSuite) TestReschedule_NoRescheduleLimit() {
 	numExecutable := 10
 	for i := 0; i != numExecutable/2; i++ {
 		mockTask := NewMockExecutable(s.controller)
+		mockTask.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
 		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).Times(1)
 		s.rescheduler.Add(
 			mockTask,
@@ -174,6 +176,7 @@ func (s *rescheudulerSuite) TestReschedule_TaskChanFull() {
 	numExecutable := 10
 	for i := 0; i != numExecutable; i++ {
 		mockTask := NewMockExecutable(s.controller)
+		mockTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
 		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).MaxTimes(1)
 		s.rescheduler.Add(
 			mockTask,

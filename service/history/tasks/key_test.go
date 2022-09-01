@@ -152,3 +152,20 @@ func (s *taskKeySuite) TestNext() {
 	s.Equal(NewKey(time.Unix(0, math.MaxInt64), 0), NewKey(time.Unix(0, math.MaxInt64-1), math.MaxInt64).Next())
 	s.Equal(NewKey(time.Unix(0, math.MaxInt64), 1), NewKey(time.Unix(0, math.MaxInt64), 0).Next())
 }
+
+func (s *taskKeySuite) TestSub() {
+	s.Equal(
+		NewKey(time.Unix(0, math.MaxInt64), 1),
+		MaximumKey.Sub(NewKey(time.Unix(0, 0), math.MaxInt64-1)),
+	)
+
+	s.Equal(
+		NewKey(time.Unix(0, math.MaxInt64), 0),
+		MaximumKey.Sub(NewKey(time.Unix(0, 0), math.MaxInt64)),
+	)
+
+	s.Equal(
+		NewKey(time.Unix(0, 0), 1),
+		NewKey(time.Unix(0, math.MaxInt64), 1).Sub(NewKey(time.Unix(0, math.MaxInt64), 0)),
+	)
+}

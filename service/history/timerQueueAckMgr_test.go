@@ -159,7 +159,21 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 		s.logger,
 		s.clusterName,
 		func(task tasks.Task) queues.Executable {
-			return queues.NewExecutable(task, nil, nil, nil, nil, queues.NewNoopPriorityAssigner(), s.mockShard.GetTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil, nil)
+			return queues.NewExecutable(
+				queues.DefaultReaderId,
+				task,
+				nil,
+				nil,
+				nil,
+				nil,
+				queues.NewNoopPriorityAssigner(),
+				s.mockShard.GetTimeSource(),
+				nil,
+				nil,
+				metrics.NoopMetricsHandler,
+				nil,
+				nil,
+			)
 		},
 	)
 }
@@ -647,7 +661,21 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 		},
 		s.logger,
 		func(task tasks.Task) queues.Executable {
-			return queues.NewExecutable(task, nil, nil, nil, nil, queues.NewNoopPriorityAssigner(), s.mockShard.GetTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil, nil)
+			return queues.NewExecutable(
+				queues.DefaultReaderId,
+				task,
+				nil,
+				nil,
+				nil,
+				nil,
+				queues.NewNoopPriorityAssigner(),
+				s.mockShard.GetTimeSource(),
+				nil,
+				nil,
+				metrics.NoopMetricsHandler,
+				nil,
+				nil,
+			)
 		},
 	)
 }

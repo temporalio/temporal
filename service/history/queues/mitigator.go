@@ -81,6 +81,14 @@ func (m *mitigatorImpl) Mitigate(alert Alert) Action {
 	var action Action
 	var alertAttributes interface{}
 	switch alert.AlertType {
+	case AlertTypeQueuePendingTaskCount:
+		action = newQueuePendingTaskAction(
+			alert.AlertAttributesQueuePendingTaskCount,
+			m.monitor,
+			m.maxReaderCount(),
+			func() { m.resolve(AlertTypeQueuePendingTaskCount) },
+		)
+		alertAttributes = alert.AlertAttributesQueuePendingTaskCount
 	case AlertTypeReaderStuck:
 		action = newReaderStuckAction(
 			alert.AlertAttributesReaderStuck,
@@ -88,6 +96,13 @@ func (m *mitigatorImpl) Mitigate(alert Alert) Action {
 			m.logger,
 		)
 		alertAttributes = alert.AlertAttributesReaderStuck
+	case AlertTypeSliceCount:
+		action = newSliceCountAction(
+			alert.AlertAttributesSliceCount,
+			m.monitor,
+			func() { m.resolve(AlertTypeSliceCount) },
+		)
+		alertAttributes = alert.AlertAttributesSliceCount
 	default:
 		m.logger.Error("Unknown queue alert type", tag.QueueAlertType(alert.AlertType.String()))
 		return nil
@@ -109,4 +124,5 @@ func (m *mitigatorImpl) resolve(alertType AlertType) {
 		tag.QueueAlertType(alertType.String()),
 		tag.QueueAlertAttributes(attributes),
 	)
+	m.metricsHandler.Counter(QueueActionCounter).Record(1, metrics.QueueAlertTypeTag(alertType.String()))
 }

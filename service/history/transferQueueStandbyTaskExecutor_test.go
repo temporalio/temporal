@@ -1194,5 +1194,19 @@ func (s *transferQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
 func (s *transferQueueStandbyTaskExecutorSuite) newTaskExecutable(
 	task tasks.Task,
 ) queues.Executable {
-	return queues.NewExecutable(task, nil, s.transferQueueStandbyTaskExecutor, nil, nil, queues.NewNoopPriorityAssigner(), s.mockShard.GetTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil, nil)
+	return queues.NewExecutable(
+		queues.DefaultReaderId,
+		task,
+		nil,
+		s.transferQueueStandbyTaskExecutor,
+		nil,
+		nil,
+		queues.NewNoopPriorityAssigner(),
+		s.mockShard.GetTimeSource(),
+		nil,
+		nil,
+		metrics.NoopMetricsHandler,
+		nil,
+		nil,
+	)
 }

@@ -242,6 +242,7 @@ func (r *reschedulerImpl) reschedule() {
 				continue
 			}
 
+			executable.SetScheduledTime(now)
 			submitted := r.scheduler.TrySubmit(executable)
 			if !submitted {
 				r.timerGate.Update(now.Add(taskChanFullBackoff))
