@@ -28,6 +28,7 @@ import (
 	"flag"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -47,6 +48,7 @@ import (
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -93,15 +95,20 @@ func (s *scheduleIntegrationSuite) SetupSuite() {
 	if TestFlags.FrontendAddr != "" {
 		s.hostPort = TestFlags.FrontendAddr
 	}
-	// ES setup so we can test search attributes
-	s.esClient = CreateESClient(&s.Suite, s.testClusterConfig.ESConfig, s.Logger)
-	PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.testClusterConfig.ESConfig.Version), "test-visibility-template")
-	CreateIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
+	// sqlite tests are run without elasticsearch
+	if TestFlags.PersistenceDriver != sqlite.PluginName {
+		// ES setup so we can test search attributes
+		s.esClient = CreateESClient(&s.Suite, s.testClusterConfig.ESConfig, s.Logger)
+		PutIndexTemplate(&s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.testClusterConfig.ESConfig.Version), "test-visibility-template")
+		CreateIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
+	}
 }
 
 func (s *scheduleIntegrationSuite) TearDownSuite() {
 	s.tearDownSuite()
-	DeleteIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
+	if s.esClient != nil {
+		DeleteIndex(&s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
+	}
 }
 
 func (s *scheduleIntegrationSuite) SetupTest() {
@@ -129,6 +136,11 @@ func (s *scheduleIntegrationSuite) TearDownTest() {
 }
 
 func (s *scheduleIntegrationSuite) TestBasics() {
+	// sqlite tests are run without elasticsearch
+	if s.esClient == nil {
+		s.T().Skip()
+	}
+
 	sid := "sched-test-basics"
 	wid := "sched-test-basics-wf"
 	wt := "sched-test-basics-wt"
@@ -179,19 +191,18 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 		},
 	}
 
-	runs := 0
+	var runs, runs2 int32
 	workflowFn := func(ctx workflow.Context) error {
 		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-			runs++
+			atomic.AddInt32(&runs, 1)
 			return 0
 		})
 		return nil
 	}
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
-	runs2 := 0
 	workflow2Fn := func(ctx workflow.Context) error {
 		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-			runs2++
+			atomic.AddInt32(&runs2, 1)
 			return 0
 		})
 		return nil
@@ -205,7 +216,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	s.NoError(err)
 
 	// sleep until we see two runs, plus a bit more
-	s.Eventually(func() bool { return runs == 2 }, 8*time.Second, 200*time.Millisecond)
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 8*time.Second, 200*time.Millisecond)
 	time.Sleep(100 * time.Millisecond)
 
 	// describe
@@ -233,7 +244,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	action0 := describeResp.Info.RecentActions[0]
 	s.WithinRange(*action0.ScheduleTime, createTime, time.Now())
 	s.True(action0.ScheduleTime.UnixNano()%int64(3*time.Second) == 0)
-	s.DurationNear(action0.ActualTime.Sub(*action0.ScheduleTime), 0, 100*time.Millisecond)
+	s.DurationNear(action0.ActualTime.Sub(*action0.ScheduleTime), 0, 500*time.Millisecond)
 
 	// list
 
@@ -308,7 +319,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	s.NoError(err)
 
 	// wait for one new run
-	s.Eventually(func() bool { return runs2 == 1 }, 4*time.Second, 200*time.Millisecond)
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs2) == 1 }, 4*time.Second, 200*time.Millisecond)
 	time.Sleep(100 * time.Millisecond)
 
 	// describe again
@@ -339,9 +350,10 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 		Identity:  "test",
 		RequestId: uuid.New(),
 	})
+	s.NoError(err)
 
 	time.Sleep(3*time.Second + 100*time.Millisecond)
-	s.Equal(1, runs2, "has not run again")
+	s.Equal(1, atomic.LoadInt32(&runs2), "has not run again")
 
 	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.namespace,
@@ -431,12 +443,12 @@ func (s *scheduleIntegrationSuite) TestInput() {
 		RequestId:  uuid.New(),
 	}
 
-	runs := 0
+	var runs int32
 	workflowFn := func(ctx workflow.Context, arg1 *myData, arg2 map[int]float64) error {
 		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
 			s.Equal(*input1, *arg1)
 			s.Equal(input2, arg2)
-			runs++
+			atomic.AddInt32(&runs, 1)
 			return 0
 		})
 		return nil
@@ -445,7 +457,7 @@ func (s *scheduleIntegrationSuite) TestInput() {
 
 	_, err = s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
-	s.Eventually(func() bool { return runs == 1 }, 4*time.Second, 200*time.Millisecond)
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 4*time.Second, 200*time.Millisecond)
 }
 
 func (s *scheduleIntegrationSuite) TestRefresh() {
@@ -482,10 +494,10 @@ func (s *scheduleIntegrationSuite) TestRefresh() {
 		RequestId:  uuid.New(),
 	}
 
-	started := 0
+	var runs int32
 	workflowFn := func(ctx workflow.Context) error {
 		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-			started++
+			atomic.AddInt32(&runs, 1)
 			return 0
 		})
 		workflow.Sleep(ctx, 10*time.Second)
@@ -495,7 +507,7 @@ func (s *scheduleIntegrationSuite) TestRefresh() {
 
 	_, err := s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
-	s.Eventually(func() bool { return started == 1 }, 3*time.Second, 100*time.Millisecond)
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 3*time.Second, 100*time.Millisecond)
 
 	// workflow has started but is now sleeping. it will timeout in 2 seconds.
 
