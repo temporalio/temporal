@@ -51,6 +51,7 @@ type (
 		UpdateAckInterval            dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		IdleTaskqueueCheckInterval   dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		MaxTaskqueueIdleTime         dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		EnableDbTaskManager          dynamicconfig.BoolPropertyFnWithTaskQueueInfoFilters
 		DbTaskDeletionInterval       dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		DbTaskUpdateAckInterval      dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		DbTaskUpdateQueueInterval    dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -95,6 +96,7 @@ type (
 		UpdateAckInterval          func() time.Duration
 		IdleTaskqueueCheckInterval func() time.Duration
 		MaxTaskqueueIdleTime       func() time.Duration
+		EnableDbTaskManager        func() bool
 		DbTaskDeletionInterval     func() time.Duration
 		DbTaskUpdateAckInterval    func() time.Duration
 		DbTaskUpdateQueueInterval  func() time.Duration
@@ -141,6 +143,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		IdleTaskqueueCheckInterval:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingIdleTaskqueueCheckInterval, 5*time.Minute),
 		MaxTaskqueueIdleTime:                  dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MaxTaskqueueIdleTime, 5*time.Minute),
 		LongPollExpirationInterval:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingLongPollExpirationInterval, time.Minute),
+		EnableDbTaskManager:                   dc.GetBoolPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingEnableDbTaskManager, true),
 		DbTaskDeletionInterval:                dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingDbTaskDeletionInterval, time.Second*10),
 		DbTaskUpdateAckInterval:               dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingDbTaskUpdateAckInterval, time.Minute),
 		DbTaskUpdateQueueInterval:             dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingDbTaskUpdateQueueInterval, time.Minute),
@@ -181,6 +184,9 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Nam
 		},
 		MaxTaskqueueIdleTime: func() time.Duration {
 			return config.MaxTaskqueueIdleTime(namespace.String(), taskQueueName, taskType)
+		},
+		EnableDbTaskManager: func() bool {
+			return config.EnableDbTaskManager(namespace.String(), taskQueueName, taskType)
 		},
 		DbTaskDeletionInterval: func() time.Duration {
 			return config.DbTaskDeletionInterval(namespace.String(), taskQueueName, taskType)

@@ -273,6 +273,8 @@ const (
 	MatchingForwarderMaxChildrenPerNode = "matching.forwarderMaxChildrenPerNode"
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
+	// MatchingEnableDbTaskManager controls if DB tasks are managed by DB task manager or old db.go
+	MatchingEnableDbTaskManager = "matching.enableDbTaskManager"
 	// MatchingDbTaskDeletionInterval is how frequent acked db tasks get deleted
 	MatchingDbTaskDeletionInterval = "matching.dbTaskDeletionInterval"
 	// MatchingDbTaskUpdateAckInterval is how frequent acked task ID gets updated in memory
