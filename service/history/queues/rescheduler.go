@@ -166,23 +166,27 @@ func (r *reschedulerImpl) Reschedule(
 	defer r.Unlock()
 
 	now := r.timeSource.Now()
+	updatedRescheduleTime := false
 	for key, pq := range r.pqMap {
 		if _, ok := namespaceIDs[key.NamespaceID]; !ok {
 			continue
 		}
 
+		updatedRescheduleTime = true
 		// set reschedule time for all tasks in this pq to be now
-		newPQ := r.newPriorityQueue()
+		items := make([]rescheduledExecuable, 0, pq.Len())
 		for !pq.IsEmpty() {
 			rescheduled := pq.Remove()
 			rescheduled.rescheduleTime = now
-			newPQ.Add(rescheduled)
+			items = append(items, rescheduled)
 		}
-		r.pqMap[key] = newPQ
+		r.pqMap[key] = r.newPriorityQueue(items)
 	}
 
 	// then update timer gate to trigger the actual reschedule
-	r.timerGate.Update(now)
+	if updatedRescheduleTime {
+		r.timerGate.Update(now)
+	}
 }
 
 func (r *reschedulerImpl) Len() int {
@@ -291,13 +295,24 @@ func (r *reschedulerImpl) getOrCreatePQLocked(
 		return pq
 	}
 
-	pq := r.newPriorityQueue()
+	pq := r.newPriorityQueue(nil)
 	r.pqMap[key] = pq
 	return pq
 }
 
-func (r *reschedulerImpl) newPriorityQueue() collection.Queue[rescheduledExecuable] {
-	return collection.NewPriorityQueue((func(this rescheduledExecuable, that rescheduledExecuable) bool {
-		return this.rescheduleTime.Before(that.rescheduleTime)
-	}))
+func (r *reschedulerImpl) newPriorityQueue(
+	items []rescheduledExecuable,
+) collection.Queue[rescheduledExecuable] {
+	if items == nil {
+		return collection.NewPriorityQueue(r.rescheduledExecuableCompareLess)
+	}
+
+	return collection.NewPriorityQueueWithItems(r.rescheduledExecuableCompareLess, items)
+}
+
+func (r *reschedulerImpl) rescheduledExecuableCompareLess(
+	this rescheduledExecuable,
+	that rescheduledExecuable,
+) bool {
+	return this.rescheduleTime.Before(that.rescheduleTime)
 }

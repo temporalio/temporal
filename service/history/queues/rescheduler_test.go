@@ -26,6 +26,7 @@ package queues
 
 import (
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -217,5 +218,38 @@ func (s *rescheudulerSuite) TestReschedule_DropCancelled() {
 
 	s.timeSource.Update(now.Add(rescheduleInterval))
 	s.rescheduler.reschedule()
+	s.Equal(0, s.rescheduler.Len())
+}
+
+func (s *rescheudulerSuite) TestImmdiateReschedule() {
+	now := time.Now()
+	s.timeSource.Update(now)
+	namespaceID := s.mockScheduler.TaskChannelKeyFn()(nil).NamespaceID
+
+	s.rescheduler.Start()
+	defer s.rescheduler.Stop()
+
+	numTask := 10
+	taskWG := &sync.WaitGroup{}
+	taskWG.Add(numTask)
+	for i := 0; i != numTask; i++ {
+		mockTask := NewMockExecutable(s.controller)
+		mockTask.EXPECT().State().Return(ctasks.TaskStatePending).Times(1)
+		mockTask.EXPECT().SetScheduledTime(gomock.Any()).AnyTimes()
+		s.rescheduler.Add(
+			mockTask,
+			now.Add(time.Minute+time.Duration(rand.Int63n(time.Minute.Nanoseconds()))),
+		)
+	}
+
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
+		taskWG.Done()
+		return true
+	}).Times(numTask)
+
+	s.rescheduler.Reschedule(map[string]struct{}{
+		namespaceID: {},
+	})
+	taskWG.Wait()
 	s.Equal(0, s.rescheduler.Len())
 }
