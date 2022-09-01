@@ -266,3 +266,14 @@ func (p *scheduledQueue) lookAheadTask() {
 
 	// no look ahead task, wait for max poll interval or new task notification
 }
+
+// IsTimeExpired checks if the testing time is equal or before
+// the reference time. The precision of the comparison is millisecond.
+func IsTimeExpired(
+	referenceTime time.Time,
+	testingTime time.Time,
+) bool {
+	referenceTime = referenceTime.Truncate(scheduledTaskPrecision)
+	testingTime = testingTime.Truncate(scheduledTaskPrecision)
+	return !testingTime.After(referenceTime)
+}
