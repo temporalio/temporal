@@ -41,13 +41,15 @@ type (
 	}
 )
 
-// ApplyAliases replaces field names with alias names for custom search attributes.
-func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) error {
+// ApplyAliases replaces field names with alias names for custom search attributes and returns new SearchAttributes struct.
+// If no replacement where made, it returns nil which means that original SearchAttributes should be used.
+func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
-		return nil
+		return nil, nil
 	}
 
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
+	mapped := false
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
 		if !IsMappable(saName) {
 			newIndexedFields[saName] = saPayload
@@ -62,16 +64,23 @@ func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, na
 				// goes through up to SDK, which shutdowns worker when it receives serviceerror.InvalidArgument as poll response.
 				continue
 			}
-			return err
+			return nil, err
+		}
+		if aliasName != saName {
+			mapped = true
 		}
 		newIndexedFields[aliasName] = saPayload
 	}
 
-	searchAttributes.IndexedFields = newIndexedFields
-	return nil
+	// If no field name was mapped, return nil to save on clone operation on caller side.
+	if !mapped {
+		return nil, nil
+	}
+	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
 }
 
-// SubstituteAliases replaces aliases with actual field names for custom search attributes.
+// SubstituteAliases replaces aliases with actual field names for custom search attributes and returns new SearchAttributes struct.
+// If no replacement where made, it returns nil which means that original SearchAttributes should be used.
 func SubstituteAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
 		return nil, nil

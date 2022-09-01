@@ -73,7 +73,7 @@ func Test_ApplyAliases(t *testing.T) {
 			"wrong_field": {Data: []byte("data23")}, // Wrong unknown name must be ignored.
 		},
 	}
-	err := ApplyAliases(&TestMapper{}, sa, "error-namespace")
+	sa, err := ApplyAliases(&TestMapper{}, sa, "error-namespace")
 	assert.Error(t, err)
 	var internalErr *serviceerror.Internal
 	assert.ErrorAs(t, err, &internalErr)
@@ -84,7 +84,7 @@ func Test_ApplyAliases(t *testing.T) {
 			"wrong_field": {Data: []byte("data23")}, // Wrong unknown name must be ignored.
 		},
 	}
-	err = ApplyAliases(&TestMapper{}, sa, "unknown-namespace")
+	sa, err = ApplyAliases(&TestMapper{}, sa, "unknown-namespace")
 	assert.NoError(t, err)
 	assert.Len(t, sa.GetIndexedFields(), 0)
 
@@ -95,7 +95,7 @@ func Test_ApplyAliases(t *testing.T) {
 			"wrong_field": {Data: []byte("data23")}, // Wrong unknown name must be ignored.
 		},
 	}
-	err = ApplyAliases(&TestMapper{}, sa, "test-namespace")
+	sa, err = ApplyAliases(&TestMapper{}, sa, "test-namespace")
 	assert.NoError(t, err)
 	assert.Len(t, sa.GetIndexedFields(), 2)
 	assert.EqualValues(t, "data1", sa.GetIndexedFields()["alias_of_field1"].GetData())
@@ -105,9 +105,9 @@ func Test_ApplyAliases(t *testing.T) {
 	sa = &commonpb.SearchAttributes{
 		IndexedFields: nil,
 	}
-	err = ApplyAliases(&TestMapper{}, sa, "error-namespace")
+	sa, err = ApplyAliases(&TestMapper{}, sa, "error-namespace")
 	assert.NoError(t, err)
-	err = ApplyAliases(&TestMapper{}, sa, "unknown-namespace")
+	sa, err = ApplyAliases(&TestMapper{}, sa, "unknown-namespace")
 	assert.NoError(t, err)
 }
 

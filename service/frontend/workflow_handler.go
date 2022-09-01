@@ -2757,9 +2757,12 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 		}
 		searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), saTypeMap)
-		err = searchattribute.ApplyAliases(wh.saMapper, response.GetWorkflowExecutionInfo().GetSearchAttributes(), request.GetNamespace())
+		mappedSearchAttributes, err := searchattribute.ApplyAliases(wh.saMapper, response.GetWorkflowExecutionInfo().GetSearchAttributes(), request.GetNamespace())
 		if err != nil {
 			return nil, err
+		}
+		if mappedSearchAttributes != nil {
+			response.GetWorkflowExecutionInfo().SearchAttributes = mappedSearchAttributes
 		}
 	}
 
@@ -3092,14 +3095,18 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	}
 
 	// map search attributes
-	if sa := executionInfo.GetSearchAttributes(); sa != nil {
+	if sas := executionInfo.GetSearchAttributes(); sas != nil {
 		saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.config.ESIndexName, false)
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 		}
-		searchattribute.ApplyTypeMap(sa, saTypeMap)
-		if err = searchattribute.ApplyAliases(wh.saMapper, sa, request.GetNamespace()); err != nil {
+		searchattribute.ApplyTypeMap(sas, saTypeMap)
+		mappedSas, err := searchattribute.ApplyAliases(wh.saMapper, sas, request.GetNamespace())
+		if err != nil {
 			return nil, err
+		}
+		if mappedSas != nil {
+			executionInfo.SearchAttributes = mappedSas
 		}
 	}
 
@@ -4162,9 +4169,12 @@ func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.H
 		}
 		if searchAttributes != nil {
 			searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
-			err = searchattribute.ApplyAliases(wh.saMapper, searchAttributes, namespace.String())
+			mappedSearchAttributes, err := searchattribute.ApplyAliases(wh.saMapper, searchAttributes, namespace.String())
 			if err != nil {
 				return err
+			}
+			if mappedSearchAttributes != nil {
+				searchAttributes.IndexedFields = mappedSearchAttributes.IndexedFields
 			}
 		}
 	}
