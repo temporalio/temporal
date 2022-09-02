@@ -29,6 +29,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -82,6 +83,7 @@ func (s *clientSuite) SetupTest() {
 		s.sdkClientFactory,
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
+		dynamicconfig.GetDurationPropertyFn(1*time.Second),
 		s.archiverProvider,
 	).(*client)
 }

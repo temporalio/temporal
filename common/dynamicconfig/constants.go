@@ -501,6 +501,8 @@ const (
 	NumArchiveSystemWorkflows = "history.numArchiveSystemWorkflows"
 	// ArchiveRequestRPS is the rate limit on the number of archive request per second
 	ArchiveRequestRPS = "history.archiveRequestRPS"
+	// ArchiveSignalTimeout is the signal timeout used when starting an archive system workflow
+	ArchiveSignalTimeout = "history.archiveSignalTimeout"
 	// DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
 	// the user has not specified an explicit RetryPolicy
 	DefaultActivityRetryPolicy = "history.defaultActivityRetryPolicy"
