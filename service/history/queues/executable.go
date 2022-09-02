@@ -64,7 +64,7 @@ type (
 	Executor interface {
 		// TODO: remove isActive return value after deprecating
 		// active/standby queue processing logic
-		Execute(context.Context, Executable) (isActive bool, err error)
+		Execute(context.Context, Executable) (tags []metrics.Tag, isActive bool, err error)
 	}
 
 	// TaskFilter determines if the given task should be executed
@@ -185,17 +185,13 @@ func (e *executableImpl) Execute() error {
 
 	ctx := metrics.AddMetricsContext(context.Background())
 	namespace, _ := e.namespaceRegistry.GetNamespaceName(namespace.ID(e.GetNamespaceID()))
+
 	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
 
 	startTime := e.timeSource.Now()
 
-	isActive, err := e.executor.Execute(ctx, e)
-	taskType := getTaskTypeTagValue(e.Task, isActive)
-	e.taggedMetricsHandler = e.metricsHandler.WithTags(
-		metrics.NamespaceTag(namespace.String()),
-		metrics.TaskTypeTag(taskType),
-		metrics.OperationTag(taskType),
-	)
+	metricsTags, isActive, err := e.executor.Execute(ctx, e)
+	e.taggedMetricsHandler = e.metricsHandler.WithTags(metricsTags...)
 
 	if isActive != e.lastActiveness {
 		// namespace did a failover, reset task attempt

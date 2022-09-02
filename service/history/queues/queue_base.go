@@ -159,7 +159,7 @@ func newQueueBase(
 			timeSource,
 			shard.GetNamespaceRegistry(),
 			logger,
-			metricsHandler, // TODO: verify it's ok override tag values
+			metricsHandler,
 			options.TaskMaxRetryCount,
 			shard.GetConfig().NamespaceCacheRefreshInterval,
 		)

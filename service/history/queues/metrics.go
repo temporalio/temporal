@@ -114,29 +114,7 @@ const (
 	TaskTypeTimerStandbyTaskDeleteHistoryEvent     = "TimerStandbyTaskDeleteHistoryEvent"
 )
 
-func getTaskTypeTagValue(
-	task tasks.Task,
-	isActive bool,
-) string {
-	switch task.GetCategory() {
-	case tasks.CategoryTransfer:
-		if isActive {
-			return getActiveTransferTaskTypeTagValue(task)
-		}
-		return getStandbyTransferTaskTypeTagValue(task)
-	case tasks.CategoryTimer:
-		if isActive {
-			return getActiveTimerTaskTypeTagValue(task)
-		}
-		return getStandbyTimerTaskTypeTagValue(task)
-	case tasks.CategoryVisibility:
-		return getVisibilityTaskTypeTagValue(task)
-	default:
-		return task.GetType().String()
-	}
-}
-
-func getActiveTransferTaskTypeTagValue(
+func GetActiveTransferTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	switch task.(type) {
@@ -159,7 +137,7 @@ func getActiveTransferTaskTypeTagValue(
 	}
 }
 
-func getStandbyTransferTaskTypeTagValue(
+func GetStandbyTransferTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	switch task.(type) {
@@ -182,7 +160,7 @@ func getStandbyTransferTaskTypeTagValue(
 	}
 }
 
-func getActiveTimerTaskTypeTagValue(
+func GetActiveTimerTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	switch task.(type) {
@@ -205,7 +183,7 @@ func getActiveTimerTaskTypeTagValue(
 	}
 }
 
-func getStandbyTimerTaskTypeTagValue(
+func GetStandbyTimerTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	switch task.(type) {
@@ -228,7 +206,7 @@ func getStandbyTimerTaskTypeTagValue(
 	}
 }
 
-func getVisibilityTaskTypeTagValue(
+func GetVisibilityTaskTypeTagValue(
 	task tasks.Task,
 ) string {
 	switch task.(type) {

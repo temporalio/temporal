@@ -91,9 +91,17 @@ func newTimerQueueActiveTaskExecutor(
 func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (bool, error) {
+) ([]metrics.Tag, bool, error) {
+	task := executable.GetTask()
+	taskType := queues.GetActiveTimerTaskTypeTagValue(task)
+	metricsTags := []metrics.Tag{
+		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType), // for backward compatibility
+	}
+
 	var err error
-	switch task := executable.GetTask().(type) {
+	switch task := task.(type) {
 	case *tasks.UserTimerTask:
 		err = t.executeUserTimerTimeoutTask(ctx, task)
 	case *tasks.ActivityTimeoutTask:
@@ -112,7 +120,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = errUnknownTimerTask
 	}
 
-	return true, err
+	return metricsTags, true, err
 }
 
 func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
