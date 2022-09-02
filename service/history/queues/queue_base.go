@@ -53,6 +53,18 @@ const (
 	nonDefaultReaderMaxPendingTaskCoefficient = 0.8
 
 	queueIOTimeout = 5 * time.Second
+
+	// Force creating new slice every forceNewSliceDuration
+	// so that the last slice in the default reader won't grow
+	// infinitely.
+	// The benefit of forcing new slice is:
+	// 1. As long as the last slice won't grow infinitly, task loading
+	// for that slice will complete and it's scope (both range and
+	// predicate) is able to shrink
+	// 2. Current task loading implementation can only unload the entire
+	// slice. If there's only one slice, we may unload all tasks for a
+	// given namespace.
+	forceNewSliceDuration = 5 * time.Minute
 )
 
 type (
@@ -85,6 +97,7 @@ type (
 		nonReadableScope      Scope
 		readerGroup           *ReaderGroup
 		lastPollTime          time.Time
+		nextForceNewSliceTime time.Time
 
 		checkpointRetrier backoff.Retrier
 		checkpointTimer   *time.Timer
@@ -321,6 +334,12 @@ func (p *queueBase) processNewRange() {
 	reader, ok := p.readerGroup.ReaderByID(DefaultReaderId)
 	if !ok {
 		p.readerGroup.NewReader(DefaultReaderId, newSlice)
+		return
+	}
+
+	if now := p.timeSource.Now(); now.After(p.nextForceNewSliceTime) {
+		reader.AppendSlices(newSlice)
+		p.nextForceNewSliceTime = now.Add(forceNewSliceDuration)
 	} else {
 		reader.MergeSlices(newSlice)
 	}

@@ -195,6 +195,34 @@ func (s *readerSuite) TestMergeSlices() {
 	}
 }
 
+func (s *readerSuite) TestAppendSlices() {
+	totalScopes := 10
+	scopes := NewRandomScopes(totalScopes)
+	currentScopes := scopes[:totalScopes/2]
+	reader := s.newTestReader(currentScopes, nil)
+
+	incomingScopes := scopes[totalScopes/2:]
+	incomingSlices := make([]Slice, 0, len(incomingScopes))
+	for _, incomingScope := range incomingScopes {
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableInitializer, s.monitor, incomingScope))
+	}
+
+	reader.AppendSlices(incomingSlices...)
+
+	appendedScopes := reader.Scopes()
+	s.Len(appendedScopes, totalScopes)
+	for idx, scope := range appendedScopes[:len(appendedScopes)-1] {
+		nextScope := appendedScopes[idx+1]
+		if scope.Range.ExclusiveMax.CompareTo(nextScope.Range.InclusiveMin) > 0 {
+			panic(fmt.Sprintf(
+				"Found overlapping scope in appended slices, left: %v, right: %v",
+				scope,
+				nextScope,
+			))
+		}
+	}
+}
+
 func (s *readerSuite) TestShrinkSlices() {
 	numScopes := 10
 	scopes := NewRandomScopes(numScopes)

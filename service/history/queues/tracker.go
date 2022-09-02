@@ -117,6 +117,12 @@ func (t *executableTracker) shrink() tasks.Key {
 		minPendingTaskKey = tasks.MinKey(minPendingTaskKey, key)
 	}
 
+	for namespaceID, numPending := range t.pendingPerNamesapce {
+		if numPending == 0 {
+			delete(t.pendingPerNamesapce, namespaceID)
+		}
+	}
+
 	return minPendingTaskKey
 }
 
