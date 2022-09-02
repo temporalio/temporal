@@ -89,9 +89,9 @@ type (
 
 	// WorkerConfig is the config for enabling/disabling Temporal worker
 	WorkerConfig struct {
-		EnableArchiver   bool
-		EnableIndexer    bool
-		EnableReplicator bool
+		EnableArchiver    bool
+		EnableReplicator  bool
+		StartWorkerAnyway bool
 	}
 )
 
@@ -160,7 +160,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	var (
 		esClient esclient.Client
 	)
-	if options.WorkerConfig.EnableIndexer {
+	if options.ESConfig != nil {
 		var err error
 		esClient, err = esclient.NewClient(options.ESConfig, nil, logger)
 		if err != nil {

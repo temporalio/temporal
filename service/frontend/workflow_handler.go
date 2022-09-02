@@ -44,6 +44,7 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -2896,47 +2897,8 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	if startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow(); startWorkflow != nil {
-		// validate inner start workflow request
-
-		if err := wh.validateWorkflowID(startWorkflow.WorkflowId + scheduler.AppendedTimestampForValidation); err != nil {
-			return nil, err
-		}
-
-		if startWorkflow.WorkflowType == nil || startWorkflow.WorkflowType.GetName() == "" {
-			return nil, errWorkflowTypeNotSet
-		}
-
-		if len(startWorkflow.WorkflowType.GetName()) > wh.config.MaxIDLengthLimit() {
-			return nil, errWorkflowTypeTooLong
-		}
-
-		if err := wh.validateTaskQueue(startWorkflow.TaskQueue); err != nil {
-			return nil, err
-		}
-
-		if err := wh.validateStartWorkflowTimeouts(&workflowservice.StartWorkflowExecutionRequest{
-			WorkflowExecutionTimeout: startWorkflow.WorkflowExecutionTimeout,
-			WorkflowRunTimeout:       startWorkflow.WorkflowRunTimeout,
-			WorkflowTaskTimeout:      startWorkflow.WorkflowTaskTimeout,
-		}); err != nil {
-			return nil, err
-		}
-
-		if len(startWorkflow.CronSchedule) > 0 {
-			return nil, errCronNotAllowed
-		}
-
-		if startWorkflow.WorkflowIdReusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED &&
-			startWorkflow.WorkflowIdReusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE {
-			return nil, errIDReusePolicyNotAllowed
-		}
-
-		// map search attributes to aliases here, since we don't go through the frontend when starting later
-		err = wh.processIncomingSearchAttributes(startWorkflow.GetSearchAttributes(), namespaceName)
-		if err != nil {
-			return nil, err
-		}
+	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
+		return nil, err
 	}
 
 	// size limits will be validated on history. note that the start workflow request is
@@ -2983,6 +2945,57 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	return &workflowservice.CreateScheduleResponse{
 		ConflictToken: token,
 	}, nil
+}
+
+// Validates inner start workflow request. Note that this can mutate search attributes if present.
+func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
+	namespaceName namespace.Name,
+	startWorkflow *workflowpb.NewWorkflowExecutionInfo,
+) error {
+	if startWorkflow == nil {
+		return nil
+	}
+
+	if err := wh.validateWorkflowID(startWorkflow.WorkflowId + scheduler.AppendedTimestampForValidation); err != nil {
+		return err
+	}
+
+	if startWorkflow.WorkflowType == nil || startWorkflow.WorkflowType.GetName() == "" {
+		return errWorkflowTypeNotSet
+	}
+
+	if len(startWorkflow.WorkflowType.GetName()) > wh.config.MaxIDLengthLimit() {
+		return errWorkflowTypeTooLong
+	}
+
+	if err := wh.validateTaskQueue(startWorkflow.TaskQueue); err != nil {
+		return err
+	}
+
+	if err := wh.validateStartWorkflowTimeouts(&workflowservice.StartWorkflowExecutionRequest{
+		WorkflowExecutionTimeout: startWorkflow.WorkflowExecutionTimeout,
+		WorkflowRunTimeout:       startWorkflow.WorkflowRunTimeout,
+		WorkflowTaskTimeout:      startWorkflow.WorkflowTaskTimeout,
+	}); err != nil {
+		return err
+	}
+
+	if len(startWorkflow.CronSchedule) > 0 {
+		return errCronNotAllowed
+	}
+
+	if startWorkflow.WorkflowIdReusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED &&
+		startWorkflow.WorkflowIdReusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE {
+		return errIDReusePolicyNotAllowed
+	}
+
+	// map search attributes to aliases here, since we don't go through the frontend when starting later
+	err := wh.processIncomingSearchAttributes(startWorkflow.GetSearchAttributes(), namespaceName)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Returns the schedule description and current state of an existing schedule.
@@ -3063,6 +3076,18 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		err = payloads.Decode(res.GetResponse().GetQueryResult(), &response)
 		if err != nil {
 			return err
+		}
+
+		// map action search attributes
+		if sa := response.Schedule.Action.GetStartWorkflow().SearchAttributes; sa != nil {
+			saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.config.ESIndexName, false)
+			if err != nil {
+				return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+			}
+			searchattribute.ApplyTypeMap(sa, saTypeMap)
+			if err = searchattribute.ApplyAliases(wh.saMapper, sa, request.Namespace); err != nil {
+				return err
+			}
 		}
 
 		// for all running workflows started by the schedule, we should check that they're
@@ -3170,8 +3195,13 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 
 	workflowID := scheduler.WorkflowIDPrefix + request.ScheduleId
 
+	namespaceName := namespace.Name(request.Namespace)
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
+		return nil, err
+	}
+
+	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
 		return nil, err
 	}
 

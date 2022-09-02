@@ -25,7 +25,6 @@
   workerconfig:
     enablearchiver: false
     enablereplicator: true
-    enableindexer: false
   clusterno: 0
   historyconfig:
     numhistoryshards: 1
@@ -57,7 +56,6 @@
   workerconfig:
     enablearchiver: false
     enablereplicator: true
-    enableindexer: false
   clusterno: 1
   historyconfig:
     numhistoryshards: 1
@@ -89,7 +87,6 @@
   workerconfig:
     enablearchiver: false
     enablereplicator: true
-    enableindexer: false
   clusterno: 2
   historyconfig:
     numhistoryshards: 1

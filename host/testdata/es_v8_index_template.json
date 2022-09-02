@@ -15,6 +15,9 @@
       "NamespaceId": {
         "type": "keyword"
       },
+      "TemporalNamespaceDivision": {
+        "type": "keyword"
+      },
       "WorkflowId": {
         "type": "keyword"
       },
@@ -44,6 +47,15 @@
       },
       "TemporalChangeVersion": {
         "type": "keyword"
+      },
+      "TemporalScheduledStartTime": {
+        "type": "date_nanos"
+      },
+      "TemporalScheduledById": {
+        "type": "keyword"
+      },
+      "TemporalSchedulePaused": {
+        "type": "boolean"
       },
       "CustomTextField": {
         "type": "text"

@@ -41,8 +41,6 @@ var (
 	staticOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.FrontendRPS:                                   3000,
 		dynamicconfig.FrontendESIndexMaxResultWindow:                defaultTestValueOfESIndexMaxResultWindow,
-		dynamicconfig.MatchingNumTaskqueueWritePartitions:           3,
-		dynamicconfig.MatchingNumTaskqueueReadPartitions:            3,
 		dynamicconfig.TimerProcessorHistoryArchivalSizeLimit:        5 * 1024,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts: 1,
 		dynamicconfig.AdvancedVisibilityWritingMode:                 visibility.AdvancedVisibilityWritingModeOff,
