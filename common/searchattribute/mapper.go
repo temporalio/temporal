@@ -41,8 +41,8 @@ type (
 	}
 )
 
-// ApplyAliases replaces field names with alias names for custom search attributes and returns new SearchAttributes struct.
-// If no replacement where made, it returns nil which means that original SearchAttributes should be used.
+// ApplyAliases returns SearchAttributes struct where each search attribute name is replaced with alias.
+// If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
 func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
 		return nil, nil
@@ -79,8 +79,8 @@ func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, na
 	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
 }
 
-// SubstituteAliases replaces aliases with actual field names for custom search attributes and returns new SearchAttributes struct.
-// If no replacement where made, it returns nil which means that original SearchAttributes should be used.
+// SubstituteAliases returns SearchAttributes struct where each search attribute alias is replaced with field name.
+// If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
 func SubstituteAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
 		return nil, nil

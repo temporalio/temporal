@@ -813,14 +813,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
-	substitutedSearchAttributes, err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespaceName.String())
+	mappedSearchAttributes, err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespaceName.String())
 	if err != nil {
 		handler.stopProcessing = true
 		return err
 	}
-	if substitutedSearchAttributes != nil {
+	if mappedSearchAttributes != nil {
 		newAttr := *attr
-		newAttr.SearchAttributes = substitutedSearchAttributes
+		newAttr.SearchAttributes = mappedSearchAttributes
 		attr = &newAttr
 	}
 
@@ -934,14 +934,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		return err
 	}
 
-	substitutedSearchAttributes, err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace.String())
+	mappedSearchAttributes, err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace.String())
 	if err != nil {
 		handler.stopProcessing = true
 		return err
 	}
-	if substitutedSearchAttributes != nil {
+	if mappedSearchAttributes != nil {
 		newAttr := *attr
-		newAttr.SearchAttributes = substitutedSearchAttributes
+		newAttr.SearchAttributes = mappedSearchAttributes
 		attr = &newAttr
 	}
 
@@ -1068,14 +1068,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		return err
 	}
 
-	substitutedSearchAttributes, err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace.String())
+	mappedSearchAttributes, err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace.String())
 	if err != nil {
 		handler.stopProcessing = true
 		return err
 	}
-	if substitutedSearchAttributes != nil {
+	if mappedSearchAttributes != nil {
 		newAttr := *attr
-		newAttr.SearchAttributes = substitutedSearchAttributes
+		newAttr.SearchAttributes = mappedSearchAttributes
 		attr = &newAttr
 	}
 
