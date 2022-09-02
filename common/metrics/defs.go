@@ -2428,6 +2428,7 @@ const (
 	ExecutorTasksDroppedCount
 	BatcherProcessorSuccess
 	BatcherProcessorFailures
+	BatcherOperationFailures
 	HistoryScavengerSuccessCount
 	HistoryScavengerErrorCount
 	HistoryScavengerSkipCount
@@ -2900,6 +2901,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ExecutorTasksDroppedCount:                     NewCounterDef("executor_dropped"),
 		BatcherProcessorSuccess:                       NewCounterDef("batcher_processor_requests"),
 		BatcherProcessorFailures:                      NewCounterDef("batcher_processor_errors"),
+		BatcherOperationFailures:                      NewCounterDef("batcher_operation_errors"),
 		HistoryScavengerSuccessCount:                  NewCounterDef("scavenger_success"),
 		HistoryScavengerErrorCount:                    NewCounterDef("scavenger_errors"),
 		HistoryScavengerSkipCount:                     NewCounterDef("scavenger_skips"),

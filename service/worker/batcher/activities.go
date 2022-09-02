@@ -71,11 +71,8 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	metricsClient := a.MetricsClient.Scope(metrics.BatcherScope, metrics.NamespaceTag(activityInfo.WorkflowNamespace))
 
 	if err := a.checkNamespace(batchParams.Namespace); err != nil {
-		metricsClient.IncCounter(metrics.BatcherProcessorFailures)
-		logger.Error("Failed to run batch operation due to namespace mismatch",
-			tag.Error(err),
-			tag.WorkflowID(activityInfo.WorkflowExecution.ID),
-			tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID))
+		metricsClient.IncCounter(metrics.BatcherOperationFailures)
+		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
 		return hbd, err
 	}
 
@@ -86,11 +83,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		if err := activity.GetHeartbeatDetails(ctx, &hbd); err == nil {
 			startOver = false
 		} else {
-			metricsClient.IncCounter(metrics.BatcherProcessorFailures)
-			logger.Error("Failed to recover from last heartbeat, start over from beginning",
-				tag.Error(err),
-				tag.WorkflowID(activityInfo.WorkflowExecution.ID),
-				tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID))
+			logger.Error("Failed to recover from last heartbeat, start over from beginning", tag.Error(err))
 		}
 	}
 
@@ -99,11 +92,8 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 			Query: batchParams.Query,
 		})
 		if err != nil {
-			metricsClient.IncCounter(metrics.BatcherProcessorFailures)
-			logger.Error("Failed to get estimate workflow count",
-				tag.Error(err),
-				tag.WorkflowID(activityInfo.WorkflowExecution.ID),
-				tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID))
+			metricsClient.IncCounter(metrics.BatcherOperationFailures)
+			logger.Error("Failed to get estimate workflow count", tag.Error(err))
 			return HeartBeatDetails{}, err
 		}
 		hbd.TotalEstimate = resp.GetCount()
@@ -123,11 +113,8 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 			Query:         batchParams.Query,
 		})
 		if err != nil {
-			metricsClient.IncCounter(metrics.BatcherProcessorFailures)
-			logger.Error("Failed to list workflow executions",
-				tag.Error(err),
-				tag.WorkflowID(activityInfo.WorkflowExecution.ID),
-				tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID))
+			metricsClient.IncCounter(metrics.BatcherOperationFailures)
+			logger.Error("Failed to list workflow executions", tag.Error(err))
 			return HeartBeatDetails{}, err
 		}
 		batchCount := len(resp.Executions)
@@ -160,12 +147,9 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 					break Loop
 				}
 			case <-ctx.Done():
-				metricsClient.IncCounter(metrics.BatcherProcessorFailures)
-				logger.Error("Failed to complete batch operation",
-					tag.Error(ctx.Err()),
-					tag.WorkflowID(activityInfo.WorkflowExecution.ID),
-					tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID))
-				return hbd, ctx.Err()
+				metricsClient.IncCounter(metrics.BatcherOperationFailures)
+				logger.Error("Failed to complete batch operation", tag.Error(ctx.Err()))
+				return HeartBeatDetails{}, ctx.Err()
 			}
 		}
 
