@@ -437,13 +437,9 @@ func (s *queueBaseSuite) TestCompleteTaskAndPersistState_WithPendingTasks() {
 }
 
 func (s *queueBaseSuite) TestCompleteTaskAndPersistState_NoPendingTasks() {
-	readerScopes := map[int32][]Scope{}
-	for _, readerID := range []int32{DefaultReaderId, 2, 3} {
-		readerScopes[readerID] = []Scope{}
-	}
 	exclusiveReaderHighWatermark := NewRandomKey()
 	queueState := &queueState{
-		readerScopes:                 readerScopes,
+		readerScopes:                 map[int32][]Scope{},
 		exclusiveReaderHighWatermark: exclusiveReaderHighWatermark,
 	}
 	persistenceState := ToPersistenceQueueState(queueState)
