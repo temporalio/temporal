@@ -6,7 +6,6 @@ historyconfig:
 workerconfig:
   enablearchiver: false
   enablereplicator: false
-  enableindexer: true
 esconfig:
   version: "${ES_VERSION}"
   url:

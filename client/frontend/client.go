@@ -31,10 +31,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/pborman/uuid"
 	"go.temporal.io/api/workflowservice/v1"
-
-	"go.temporal.io/server/common"
 )
 
 const (
@@ -49,19 +46,19 @@ var _ workflowservice.WorkflowServiceClient = (*clientImpl)(nil)
 type clientImpl struct {
 	timeout         time.Duration
 	longPollTimeout time.Duration
-	clients         common.ClientCache
+	client          workflowservice.WorkflowServiceClient
 }
 
 // NewClient creates a new frontend service gRPC client
 func NewClient(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
-	clients common.ClientCache,
+	client workflowservice.WorkflowServiceClient,
 ) workflowservice.WorkflowServiceClient {
 	return &clientImpl{
 		timeout:         timeout,
 		longPollTimeout: longPollTimeout,
-		clients:         clients,
+		client:          client,
 	}
 }
 
@@ -71,15 +68,4 @@ func (c *clientImpl) createContext(parent context.Context) (context.Context, con
 
 func (c *clientImpl) createLongPollContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.longPollTimeout)
-}
-
-func (c *clientImpl) getRandomClient() (workflowservice.WorkflowServiceClient, error) {
-	// generate a random shard key to do load balancing
-	key := uuid.New()
-	client, err := c.clients.GetClientForKey(key)
-	if err != nil {
-		return nil, err
-	}
-
-	return client.(workflowservice.WorkflowServiceClient), nil
 }

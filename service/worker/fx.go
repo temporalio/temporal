@@ -104,10 +104,8 @@ func ConfigProvider(
 	)
 }
 
-func FrontendClientProvider(
-	clientFactory client.Factory,
-) (workflowservice.WorkflowServiceClient, error) {
-	return clientFactory.NewLocalFrontendClient()
+func FrontendClientProvider(bean client.Bean) workflowservice.WorkflowServiceClient {
+	return bean.GetFrontendClient()
 }
 
 func VisibilityManagerProvider(

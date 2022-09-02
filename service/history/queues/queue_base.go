@@ -197,15 +197,17 @@ func newQueueBase(
 	inclusiveLowWatermark := exclusiveHighWatermark
 	readerGroup := NewReaderGroup(readerInitializer)
 	for readerID, scopes := range readerScopes {
+		if len(scopes) == 0 {
+			continue
+		}
+
 		slices := make([]Slice, 0, len(scopes))
 		for _, scope := range scopes {
 			slices = append(slices, NewSlice(paginationFnProvider, executableInitializer, monitor, scope))
 		}
 		readerGroup.NewReader(readerID, slices...)
 
-		if len(scopes) != 0 {
-			inclusiveLowWatermark = tasks.MinKey(inclusiveLowWatermark, scopes[0].Range.InclusiveMin)
-		}
+		inclusiveLowWatermark = tasks.MinKey(inclusiveLowWatermark, scopes[0].Range.InclusiveMin)
 	}
 
 	return &queueBase{
@@ -342,12 +344,17 @@ func (p *queueBase) checkpoint() {
 	totalSlices := 0
 	readerScopes := make(map[int32][]Scope)
 	newInclusiveLowWatermark := tasks.MaximumKey
-	for id, reader := range p.readerGroup.Readers() {
+	for readerID, reader := range p.readerGroup.Readers() {
 		reader.ShrinkSlices()
 		scopes := reader.Scopes()
 
+		if len(scopes) == 0 {
+			p.readerGroup.RemoveReader(readerID)
+			continue
+		}
+
 		totalSlices += len(scopes)
-		readerScopes[id] = scopes
+		readerScopes[readerID] = scopes
 		for _, scope := range scopes {
 			newInclusiveLowWatermark = tasks.MinKey(newInclusiveLowWatermark, scope.Range.InclusiveMin)
 		}

@@ -31,10 +31,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/pborman/uuid"
-
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/common"
 )
 
 var _ adminservice.AdminServiceClient = (*clientImpl)(nil)
@@ -49,19 +46,19 @@ const (
 type clientImpl struct {
 	timeout      time.Duration
 	largeTimeout time.Duration
-	clients      common.ClientCache
+	client       adminservice.AdminServiceClient
 }
 
 // NewClient creates a new admin service gRPC client
 func NewClient(
 	timeout time.Duration,
 	largeTimeout time.Duration,
-	clients common.ClientCache,
+	client adminservice.AdminServiceClient,
 ) adminservice.AdminServiceClient {
 	return &clientImpl{
 		timeout:      timeout,
 		largeTimeout: largeTimeout,
-		clients:      clients,
+		client:       client,
 	}
 }
 
@@ -74,15 +71,4 @@ func (c *clientImpl) createContextWithLargeTimeout(parent context.Context) (cont
 		return context.WithTimeout(context.Background(), c.largeTimeout)
 	}
 	return context.WithTimeout(parent, c.largeTimeout)
-}
-
-func (c *clientImpl) getRandomClient() (adminservice.AdminServiceClient, error) {
-	// generate a random shard key to do load balancing
-	key := uuid.New()
-	client, err := c.clients.GetClientForKey(key)
-	if err != nil {
-		return nil, err
-	}
-
-	return client.(adminservice.AdminServiceClient), nil
 }

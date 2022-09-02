@@ -75,7 +75,7 @@ func NewResult(
 		Component: &workerComponent{
 			activityDeps: params,
 			enabledForNs: dcCollection.GetBoolPropertyFnWithNamespaceFilter(
-				dynamicconfig.WorkerEnableScheduler, false),
+				dynamicconfig.WorkerEnableScheduler, true),
 		},
 	}
 }
