@@ -357,6 +357,10 @@ func (p *queueBase) checkpoint() {
 	// NOTE: Must range complete task first.
 	// Otherwise, if state is updated first, later deletion fails and shard get reloaded
 	// some tasks will never be deleted.
+	//
+	// Emit metric before the deletion watermark comparsion so we have the emit even if there's no task
+	// for the queue
+	p.metricsHandler.Counter(TaskBatchCompleteCounter).Record(1)
 	if newExclusiveDeletionHighWatermark.CompareTo(p.exclusiveDeletionHighWatermark) > 0 {
 		err = p.rangeCompleteTasks(p.exclusiveDeletionHighWatermark, newExclusiveDeletionHighWatermark)
 		if err != nil {
@@ -373,8 +377,6 @@ func (p *queueBase) rangeCompleteTasks(
 	oldExclusiveDeletionHighWatermark tasks.Key,
 	newExclusiveDeletionHighWatermark tasks.Key,
 ) error {
-	p.metricsHandler.Counter(TaskBatchCompleteCounter).Record(1)
-
 	if p.category.Type() == tasks.CategoryTypeScheduled {
 		oldExclusiveDeletionHighWatermark.TaskID = 0
 		newExclusiveDeletionHighWatermark.TaskID = 0
