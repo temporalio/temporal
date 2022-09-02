@@ -56,7 +56,7 @@ type (
 		SetSliceCount(readerID int32, count int)
 
 		RemoveSlice(slice Slice)
-		// RemoveReader(readerID int32)
+		RemoveReader(readerID int32)
 
 		AlertCh() <-chan *Alert
 		Close()
@@ -256,6 +256,19 @@ func (m *monitorImpl) RemoveSlice(slice Slice) {
 
 	m.totalPendingTaskCount -= stats.pendingTaskCount
 	delete(m.sliceStats, slice)
+}
+
+func (m *monitorImpl) RemoveReader(readerID int32) {
+	m.Lock()
+	defer m.Unlock()
+
+	stats, ok := m.readerStats[readerID]
+	if !ok {
+		return
+	}
+
+	m.totalSliceCount -= stats.sliceCount
+	delete(m.readerStats, readerID)
 }
 
 func (m *monitorImpl) AlertCh() <-chan *Alert {
