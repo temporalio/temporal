@@ -164,7 +164,7 @@ func (s *IntegrationBase) tearDownSuite() {
 	}
 
 	if s.testCluster != nil {
-		s.testCluster.TearDownCluster()
+		s.NoError(s.testCluster.TearDownCluster())
 		s.testCluster = nil
 	}
 
