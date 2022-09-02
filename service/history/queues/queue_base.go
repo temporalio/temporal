@@ -81,10 +81,10 @@ type (
 		paginationFnProvider  PaginationFnProvider
 		executableInitializer ExecutableInitializer
 
-		inclusiveLowWatermark tasks.Key
-		nonReadableScope      Scope
-		readerGroup           *ReaderGroup
-		lastPollTime          time.Time
+		exclusiveDeletionHighWatermark tasks.Key
+		nonReadableScope               Scope
+		readerGroup                    *ReaderGroup
+		lastPollTime                   time.Time
 
 		checkpointRetrier backoff.Retrier
 		checkpointTimer   *time.Timer
@@ -120,12 +120,12 @@ func newQueueBase(
 	metricsHandler metrics.MetricsHandler,
 ) *queueBase {
 	var readerScopes map[int32][]Scope
-	var exclusiveHighWatermark tasks.Key
+	var exclusiveReaderHighWatermark tasks.Key
 	if persistenceState, ok := shard.GetQueueState(category); ok {
 		queueState := FromPersistenceQueueState(persistenceState)
 
 		readerScopes = queueState.readerScopes
-		exclusiveHighWatermark = queueState.exclusiveReaderHighWatermark
+		exclusiveReaderHighWatermark = queueState.exclusiveReaderHighWatermark
 	} else {
 		ackLevel := shard.GetQueueAckLevel(category)
 		if category.Type() == tasks.CategoryTypeImmediate {
@@ -133,7 +133,7 @@ func newQueueBase(
 			ackLevel = ackLevel.Next()
 		}
 
-		exclusiveHighWatermark = ackLevel
+		exclusiveReaderHighWatermark = ackLevel
 	}
 
 	timeSource := shard.GetTimeSource()
@@ -194,7 +194,7 @@ func newQueueBase(
 		)
 	}
 
-	inclusiveLowWatermark := exclusiveHighWatermark
+	exclusiveDeletionHighWatermark := exclusiveReaderHighWatermark
 	readerGroup := NewReaderGroup(readerInitializer)
 	for readerID, scopes := range readerScopes {
 		slices := make([]Slice, 0, len(scopes))
@@ -204,7 +204,7 @@ func newQueueBase(
 		readerGroup.NewReader(readerID, slices...)
 
 		if len(scopes) != 0 {
-			inclusiveLowWatermark = tasks.MinKey(inclusiveLowWatermark, scopes[0].Range.InclusiveMin)
+			exclusiveDeletionHighWatermark = tasks.MinKey(exclusiveDeletionHighWatermark, scopes[0].Range.InclusiveMin)
 		}
 	}
 
@@ -227,9 +227,9 @@ func newQueueBase(
 		paginationFnProvider:  paginationFnProvider,
 		executableInitializer: executableInitializer,
 
-		inclusiveLowWatermark: inclusiveLowWatermark,
+		exclusiveDeletionHighWatermark: exclusiveDeletionHighWatermark,
 		nonReadableScope: NewScope(
-			NewRange(exclusiveHighWatermark, tasks.MaximumKey),
+			NewRange(exclusiveReaderHighWatermark, tasks.MaximumKey),
 			predicates.Universal[tasks.Task](),
 		),
 		readerGroup: readerGroup,
@@ -340,14 +340,14 @@ func (p *queueBase) checkpoint() {
 	}()
 
 	readerScopes := make(map[int32][]Scope)
-	newInclusiveLowWatermark := p.nonReadableScope.Range.InclusiveMin
+	newExclusiveDeletionHighWatermark := p.nonReadableScope.Range.InclusiveMin
 	for id, reader := range p.readerGroup.Readers() {
 		reader.ShrinkSlices()
 		scopes := reader.Scopes()
 
 		readerScopes[id] = scopes
 		for _, scope := range scopes {
-			newInclusiveLowWatermark = tasks.MinKey(newInclusiveLowWatermark, scope.Range.InclusiveMin)
+			newExclusiveDeletionHighWatermark = tasks.MinKey(newExclusiveDeletionHighWatermark, scope.Range.InclusiveMin)
 		}
 	}
 	p.metricsHandler.Histogram(QueueReaderCountHistogram, metrics.Dimensionless).Record(int64(len(readerScopes)))
@@ -357,27 +357,27 @@ func (p *queueBase) checkpoint() {
 	// NOTE: Must range complete task first.
 	// Otherwise, if state is updated first, later deletion fails and shard get reloaded
 	// some tasks will never be deleted.
-	if newInclusiveLowWatermark.CompareTo(p.inclusiveLowWatermark) > 0 {
-		err = p.rangeCompleteTasks(p.inclusiveLowWatermark, newInclusiveLowWatermark)
+	if newExclusiveDeletionHighWatermark.CompareTo(p.exclusiveDeletionHighWatermark) > 0 {
+		err = p.rangeCompleteTasks(p.exclusiveDeletionHighWatermark, newExclusiveDeletionHighWatermark)
 		if err != nil {
 			return
 		}
 
-		p.inclusiveLowWatermark = newInclusiveLowWatermark
+		p.exclusiveDeletionHighWatermark = newExclusiveDeletionHighWatermark
 	}
 
 	err = p.updateQueueState(readerScopes)
 }
 
 func (p *queueBase) rangeCompleteTasks(
-	oldInclusiveMinTaskKey tasks.Key,
-	newInclusiveMinTaskKey tasks.Key,
+	oldExclusiveDeletionHighWatermark tasks.Key,
+	newExclusiveDeletionHighWatermark tasks.Key,
 ) error {
 	p.metricsHandler.Counter(TaskBatchCompleteCounter).Record(1)
 
 	if p.category.Type() == tasks.CategoryTypeScheduled {
-		oldInclusiveMinTaskKey.TaskID = 0
-		newInclusiveMinTaskKey.TaskID = 0
+		oldExclusiveDeletionHighWatermark.TaskID = 0
+		newExclusiveDeletionHighWatermark.TaskID = 0
 	}
 
 	ctx, cancel := newQueueIOContext()
@@ -386,8 +386,8 @@ func (p *queueBase) rangeCompleteTasks(
 	if err := p.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
 		ShardID:             p.shard.GetShardID(),
 		TaskCategory:        p.category,
-		InclusiveMinTaskKey: oldInclusiveMinTaskKey,
-		ExclusiveMaxTaskKey: newInclusiveMinTaskKey,
+		InclusiveMinTaskKey: oldExclusiveDeletionHighWatermark,
+		ExclusiveMaxTaskKey: newExclusiveDeletionHighWatermark,
 	}); err != nil {
 		p.logger.Error("Error range completing queue task", tag.Error(err))
 		return err

@@ -401,11 +401,11 @@ func (s *queueBaseSuite) TestCompleteTaskAndPersistState_WithPendingTasks() {
 	)
 	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
 
-	s.True(scopeMinKey.CompareTo(base.inclusiveLowWatermark) == 0)
+	s.True(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 
 	// set to a smaller value so that delete will be triggered
 	currentLowWatermark := tasks.MinimumKey
-	base.inclusiveLowWatermark = currentLowWatermark
+	base.exclusiveDeletionHighWatermark = currentLowWatermark
 
 	gomock.InOrder(
 		mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -433,7 +433,7 @@ func (s *queueBaseSuite) TestCompleteTaskAndPersistState_WithPendingTasks() {
 
 	base.checkpoint()
 
-	s.True(scopeMinKey.CompareTo(base.inclusiveLowWatermark) == 0)
+	s.True(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 }
 
 func (s *queueBaseSuite) TestCompleteTaskAndPersistState_NoPendingTasks() {
@@ -478,11 +478,11 @@ func (s *queueBaseSuite) TestCompleteTaskAndPersistState_NoPendingTasks() {
 	)
 	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
 
-	s.True(exclusiveReaderHighWatermark.CompareTo(base.inclusiveLowWatermark) == 0)
+	s.True(exclusiveReaderHighWatermark.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 
 	// set to a smaller value so that delete will be triggered
 	currentLowWatermark := tasks.MinimumKey
-	base.inclusiveLowWatermark = currentLowWatermark
+	base.exclusiveDeletionHighWatermark = currentLowWatermark
 
 	gomock.InOrder(
 		mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -511,5 +511,5 @@ func (s *queueBaseSuite) TestCompleteTaskAndPersistState_NoPendingTasks() {
 
 	base.checkpoint()
 
-	s.True(exclusiveReaderHighWatermark.CompareTo(base.inclusiveLowWatermark) == 0)
+	s.True(exclusiveReaderHighWatermark.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 }
