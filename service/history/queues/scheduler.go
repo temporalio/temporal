@@ -181,6 +181,18 @@ func (s *schedulerImpl) Start() {
 			0,
 			func() {}, // no-op
 			func(oldNamespaces, newNamespaces []*namespace.Namespace) {
+				namespaceFailover := false
+				for idx := range oldNamespaces {
+					if oldNamespaces[idx].FailoverVersion() != newNamespaces[idx].FailoverVersion() {
+						namespaceFailover = true
+						break
+					}
+				}
+
+				if !namespaceFailover {
+					return
+				}
+
 				select {
 				case s.channelWeightUpdateCh <- struct{}{}:
 				default:

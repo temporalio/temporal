@@ -174,7 +174,7 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 		SkipSchemaUpdate:      false,
 	}
 
-	sdkClient := h.sdkClientFactory.GetSystemClient(h.logger)
+	sdkClient := h.sdkClientFactory.GetSystemClient()
 	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
@@ -297,7 +297,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 		},
 	}
 
-	sdkClient := h.sdkClientFactory.GetSystemClient(h.logger)
+	sdkClient := h.sdkClientFactory.GetSystemClient()
 	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{

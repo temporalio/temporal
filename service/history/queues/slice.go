@@ -31,6 +31,10 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+const (
+	shrinkPredicateMaxPendingNamespaces = 3
+)
+
 type (
 
 	// Slice manages the loading and status tracking of all
@@ -45,7 +49,7 @@ type (
 		CanMergeWithSlice(Slice) bool
 		MergeWithSlice(Slice) []Slice
 		CompactWithSlice(Slice) Slice
-		ShrinkRange()
+		ShrinkScope()
 		SelectTasks(readerID int32, batchSize int) ([]Executable, error)
 		MoreTasks() bool
 		TaskStats() TaskStats
@@ -316,9 +320,16 @@ func (s *SliceImpl) CompactWithSlice(slice Slice) Slice {
 	)
 }
 
-func (s *SliceImpl) ShrinkRange() {
+func (s *SliceImpl) ShrinkScope() {
 	s.stateSanityCheck()
 
+	s.shrinkRange()
+	s.shrinkPredicate()
+
+	s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
+}
+
+func (s *SliceImpl) shrinkRange() {
 	minPendingTaskKey := s.executableTracker.shrink()
 
 	minIteratorKey := tasks.MaximumKey
@@ -335,8 +346,27 @@ func (s *SliceImpl) ShrinkRange() {
 	}
 
 	s.scope.Range.InclusiveMin = newRangeMin
+}
 
-	s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
+func (s *SliceImpl) shrinkPredicate() {
+	if len(s.iterators) != 0 {
+		// predicate can't be updated if there're still
+		// tasks in persistence, as we don't know if those
+		// tasks will be filtered out or not if predicate is updated.
+		return
+	}
+
+	if len(s.executableTracker.pendingPerNamesapce) > shrinkPredicateMaxPendingNamespaces {
+		// only shrink predicate if there're few namespaces left
+		return
+	}
+
+	pendingNamespaceIDs := make([]string, 0, len(s.executableTracker.pendingPerNamesapce))
+	for namespaceID := range s.executableTracker.pendingPerNamesapce {
+		pendingNamespaceIDs = append(pendingNamespaceIDs, namespaceID.String())
+	}
+	namespacePredicate := tasks.NewNamespacePredicate(pendingNamespaceIDs)
+	s.scope.Predicate = tasks.AndPredicates(s.scope.Predicate, namespacePredicate)
 }
 
 func (s *SliceImpl) SelectTasks(readerID int32, batchSize int) ([]Executable, error) {
@@ -400,7 +430,7 @@ func (s *SliceImpl) TaskStats() TaskStats {
 func (s *SliceImpl) Clear() {
 	s.stateSanityCheck()
 
-	s.ShrinkRange()
+	s.ShrinkScope()
 
 	s.iterators = []Iterator{
 		NewIterator(s.paginationFnProvider, s.scope.Range),

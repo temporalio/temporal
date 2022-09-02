@@ -91,9 +91,17 @@ func newTimerQueueActiveTaskExecutor(
 func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (bool, error) {
+) ([]metrics.Tag, bool, error) {
+	task := executable.GetTask()
+	taskType := queues.GetActiveTimerTaskTypeTagValue(task)
+	metricsTags := []metrics.Tag{
+		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType), // for backward compatibility
+	}
+
 	var err error
-	switch task := executable.GetTask().(type) {
+	switch task := task.(type) {
 	case *tasks.UserTimerTask:
 		err = t.executeUserTimerTimeoutTask(ctx, task)
 	case *tasks.ActivityTimeoutTask:
@@ -112,7 +120,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = errUnknownTimerTask
 	}
 
-	return true, err
+	return metricsTags, true, err
 }
 
 func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
@@ -149,7 +157,7 @@ Loop:
 			return serviceerror.NewInternal(errString)
 		}
 
-		if expired := timerSequence.IsExpired(referenceTime, timerSequenceID); !expired {
+		if !queues.IsTimeExpired(referenceTime, timerSequenceID.Timestamp) {
 			// timer sequence IDs are sorted, once there is one timer
 			// sequence ID not expired, all after that wil not expired
 			break Loop
@@ -201,7 +209,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// created.
 	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 	activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
-	if isHeartBeatTask && ok && (heartbeatTimeoutVis.Before(task.GetVisibilityTime()) || heartbeatTimeoutVis.Equal(task.GetVisibilityTime())) {
+	if isHeartBeatTask && ok && queues.IsTimeExpired(task.GetVisibilityTime(), heartbeatTimeoutVis) {
 		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
 		if err := mutableState.UpdateActivity(activityInfo); err != nil {
 			return err
@@ -222,7 +230,7 @@ Loop:
 			continue Loop
 		}
 
-		if expired := timerSequence.IsExpired(referenceTime, timerSequenceID); !expired {
+		if !queues.IsTimeExpired(referenceTime, timerSequenceID.Timestamp) {
 			// timer sequence IDs are sorted, once there is one timer
 			// sequence ID not expired, all after that wil not expired
 			break Loop

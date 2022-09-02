@@ -335,11 +335,7 @@ func (w *perNamespaceWorker) startWorker(
 	multiplicity int,
 ) (sdkclient.Client, sdkworker.Worker, error) {
 	nsName := ns.Name().String()
-	// TODO: after sdk supports cloning clients to share connections, use that here
-	client, err := w.wm.sdkClientFactory.NewClient(nsName, w.wm.logger)
-	if err != nil {
-		return nil, nil, err
-	}
+	client := w.wm.sdkClientFactory.NewClient(nsName)
 
 	var sdkoptions sdkworker.Options
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(ns.Name().String()))
@@ -348,13 +344,20 @@ func (w *perNamespaceWorker) startWorker(
 	// other defaults are already large enough.
 	sdkoptions.MaxConcurrentWorkflowTaskPollers = 2 * multiplicity
 	sdkoptions.MaxConcurrentActivityTaskPollers = 2 * multiplicity
+	sdkoptions.OnFatalError = func(error) {
+		// if the sdk sees a fatal error (e.g. namespace does not exist), it will log it and
+		// Stop() the worker. that means we should not call Stop() ourself.
+		w.lock.Lock()
+		defer w.lock.Unlock()
+		w.worker = nil
+	}
 
 	sdkworker := w.wm.sdkWorkerFactory.New(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
 	for _, cmp := range components {
 		cmp.Register(sdkworker, ns)
 	}
 	// TODO: use Run() and handle post-startup errors by recreating worker
-	err = sdkworker.Start()
+	err := sdkworker.Start()
 	if err != nil {
 		client.Close()
 		return nil, nil, err

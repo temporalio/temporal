@@ -71,11 +71,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		return hbd, err
 	}
 
-	sdkClient, err := a.ClientFactory.NewClient(batchParams.Namespace, logger)
-	if err != nil {
-		logger.Error("Unable to create SDK client for namespace.", tag.Error(err), tag.WorkflowNamespace(batchParams.Namespace))
-		return hbd, err
-	}
+	sdkClient := a.ClientFactory.NewClient(batchParams.Namespace)
 
 	startOver := true
 	if activity.HasHeartbeatDetails(ctx) {

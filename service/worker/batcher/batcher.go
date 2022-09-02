@@ -80,7 +80,7 @@ func (s *Batcher) Start() error {
 	workerOpts := worker.Options{
 		BackgroundActivityContext: ctx,
 	}
-	sdkClient := s.sdkClientFactory.GetSystemClient(s.logger)
+	sdkClient := s.sdkClientFactory.GetSystemClient()
 	batchWorker := worker.New(sdkClient, taskQueueName, workerOpts)
 	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	batchWorker.RegisterActivity(&activities{
