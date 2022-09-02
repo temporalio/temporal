@@ -25,11 +25,7 @@
 package queues
 
 import (
-	"fmt"
-
-	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasks"
 )
 
@@ -39,88 +35,25 @@ type (
 		Assign(Executable) tasks.Priority
 	}
 
-	PriorityAssignerOptions struct {
-		CriticalRetryAttempts int
-	}
-
-	priorityAssignerImpl struct {
-		currentClusterName string
-		namespaceRegistry  namespace.Registry
-		options            PriorityAssignerOptions
-	}
+	priorityAssignerImpl struct{}
 
 	// noopPriorityAssigner always assign high priority to tasks
 	// it should only be used in tests
 	noopPriorityAssigner struct{}
 )
 
-func NewPriorityAssigner(
-	currentClusterName string,
-	namespaceRegistry namespace.Registry,
-	options PriorityAssignerOptions,
-) PriorityAssigner {
-	return &priorityAssignerImpl{
-		currentClusterName: currentClusterName,
-		namespaceRegistry:  namespaceRegistry,
-		options:            options,
-	}
+func NewPriorityAssigner() PriorityAssigner {
+	return &priorityAssignerImpl{}
 }
 
 func (a *priorityAssignerImpl) Assign(executable Executable) tasks.Priority {
-	/*
-		Summary:
-		- High priority: active tasks from active queue processor and no-op tasks (currently ignoring overrides)
-		- Default priority: selected task types (e.g. delete history events)
-		- Low priority: standby tasks and tasks keep retrying
-	*/
-
-	if executable.Attempt() > a.options.CriticalRetryAttempts {
-		return tasks.PriorityLow
-	}
-
-	namespaceEntry, err := a.namespaceRegistry.GetNamespaceByID(namespace.ID(executable.GetNamespaceID()))
-	if err != nil {
-		if _, ok := err.(*serviceerror.NamespaceNotFound); ok {
-			return tasks.PriorityLow
-		}
-
-		panic(fmt.Sprintf("unexpected error from GetNamespaceByID, namespaceID: %v", executable.GetNamespaceID()))
-	}
-
-	namespaceActive := namespaceEntry.ActiveInCluster(a.currentClusterName)
-	// TODO: remove QueueType() and the special logic for assgining high priority to no-op tasks
-	// after merging active/standby queue processor or performing task filtering before submitting
-	// tasks to worker pool
-	var taskActive bool
-	switch executable.QueueType() {
-	case QueueTypeActiveTransfer, QueueTypeActiveTimer:
-		taskActive = true
-	case QueueTypeStandbyTransfer, QueueTypeStandbyTimer:
-		taskActive = false
-	default:
-		taskActive = namespaceActive
-	}
-
-	if !taskActive && !namespaceActive {
-		// standby tasks
-		return tasks.PriorityLow
-	}
-
-	if (taskActive && !namespaceActive) || (!taskActive && namespaceActive) {
-		// no-op tasks, set to high priority to ack them as soon as possible
-		// don't consume rps limit
-		// ignoring overrides for some no-op standby tasks for now
-		return tasks.PriorityHigh
-	}
-
-	// active tasks for active namespaces
 	switch executable.GetType() {
 	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
 		enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
 		enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
 		// add more task types here if we believe it's ok to delay those tasks
 		// and assign them the same priority as throttled tasks
-		return tasks.PriorityMedium
+		return tasks.PriorityLow
 	}
 
 	return tasks.PriorityHigh

@@ -65,9 +65,11 @@ func NewTimerQueueFactory(
 	var hostScheduler queues.Scheduler
 	if params.Config.TimerProcessorEnablePriorityTaskScheduler() {
 		hostScheduler = queues.NewNamespacePriorityScheduler(
+			params.ClusterMetadata.GetCurrentClusterName(),
 			queues.NamespacePrioritySchedulerOptions{
-				WorkerCount:      params.Config.TimerProcessorSchedulerWorkerCount,
-				NamespaceWeights: params.Config.TimerProcessorSchedulerRoundRobinWeights,
+				WorkerCount:             params.Config.TimerProcessorSchedulerWorkerCount,
+				ActiveNamespaceWeights:  params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
+				StandbyNamespaceWeights: params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
 			params.TimeSource,
@@ -78,14 +80,8 @@ func NewTimerQueueFactory(
 	return &timerQueueFactory{
 		timerQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
-			HostScheduler: hostScheduler,
-			HostPriorityAssigner: queues.NewPriorityAssigner(
-				params.ClusterMetadata.GetCurrentClusterName(),
-				params.NamespaceRegistry,
-				queues.PriorityAssignerOptions{
-					CriticalRetryAttempts: params.Config.TimerTaskMaxRetryCount(),
-				},
-			),
+			HostScheduler:        hostScheduler,
+			HostPriorityAssigner: queues.NewPriorityAssigner(),
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.TimerProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,

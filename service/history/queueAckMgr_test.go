@@ -144,8 +144,8 @@ func (s *queueAckMgrSuite) SetupTest() {
 				s.mockShard.GetTimeSource(),
 				nil,
 				nil,
+				metrics.NoopMetricsHandler,
 				nil,
-				queues.QueueTypeActiveTransfer,
 				nil,
 			)
 		},
@@ -390,8 +390,8 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 				s.mockShard.GetTimeSource(),
 				nil,
 				nil,
+				metrics.NoopMetricsHandler,
 				nil,
-				queues.QueueTypeActiveTransfer,
 				nil,
 			)
 		},

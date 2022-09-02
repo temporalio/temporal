@@ -418,10 +418,16 @@ type (
 		S3ForcePathStyle bool    `yaml:"s3ForcePathStyle"`
 	}
 
-	// PublicClient is config for connecting to temporal frontend
+	// PublicClient is config for internal nodes (history/matching/worker) connecting to
+	// temporal frontend. There are two methods of connecting:
+	// Explicit endpoint: Supply a host:port to connect to. This can resolve to multiple IPs,
+	// or a single IP that is a load-balancer.
+	// Membership resolver (new in 1.18): Leave this empty, and other nodes will use the
+	// membership service resolver to find the frontend.
+	// TODO: remove this and always use membership resolver
 	PublicClient struct {
 		// HostPort is the host port to connect on. Host can be DNS name
-		HostPort string `yaml:"hostPort" validate:"nonzero"`
+		HostPort string `yaml:"hostPort"`
 	}
 
 	// NamespaceDefaults is the default config for each namespace

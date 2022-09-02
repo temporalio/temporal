@@ -292,6 +292,18 @@ func (mr *MockServiceResolverMockRecorder) RemoveListener(name interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveListener", reflect.TypeOf((*MockServiceResolver)(nil).RemoveListener), name)
 }
 
+// RequestRefresh mocks base method.
+func (m *MockServiceResolver) RequestRefresh() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RequestRefresh")
+}
+
+// RequestRefresh indicates an expected call of RequestRefresh.
+func (mr *MockServiceResolverMockRecorder) RequestRefresh() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestRefresh", reflect.TypeOf((*MockServiceResolver)(nil).RequestRefresh))
+}
+
 // MockHostInfoProvider is a mock of HostInfoProvider interface.
 type MockHostInfoProvider struct {
 	ctrl     *gomock.Controller

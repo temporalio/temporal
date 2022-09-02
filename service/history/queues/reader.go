@@ -174,6 +174,8 @@ func (r *ReaderImpl) Stop() {
 		return
 	}
 
+	r.monitor.RemoveReader(r.readerID)
+
 	close(r.shutdownCh)
 	if success := common.AwaitWaitGroup(&r.shutdownWG, time.Minute); !success {
 		r.logger.Warn("queue reader shutdown timed out waiting for event loop", tag.LifeCycleStopTimedout)

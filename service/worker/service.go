@@ -453,7 +453,7 @@ func (s *Service) startScanner() {
 	sc := scanner.New(
 		s.logger,
 		s.config.ScannerCfg,
-		s.sdkClientFactory.GetSystemClient(s.logger),
+		s.sdkClientFactory.GetSystemClient(),
 		s.metricsClient,
 		s.executionManager,
 		s.taskManager,

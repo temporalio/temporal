@@ -144,7 +144,6 @@ func newTransferQueueActiveProcessor(
 		matchingClient,
 	)
 	ackLevel := shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, currentClusterName).TaskID
-	queueType := queues.QueueTypeActiveTransfer
 
 	// if single cursor is enabled, then this processor is responsible for both active and standby tasks
 	// and we need to customize some parameters for ack manager and task executable
@@ -185,7 +184,6 @@ func newTransferQueueActiveProcessor(
 		)
 
 		ackLevel = shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID
-		queueType = queues.QueueTypeTransfer
 	}
 
 	queueAckMgr := newQueueAckMgr(
@@ -206,8 +204,8 @@ func newTransferQueueActiveProcessor(
 				shard.GetTimeSource(),
 				shard.GetNamespaceRegistry(),
 				logger,
+				metricProvider,
 				config.TransferTaskMaxRetryCount,
-				queueType,
 				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},
@@ -345,8 +343,8 @@ func newTransferQueueFailoverProcessor(
 				shard.GetTimeSource(),
 				shard.GetNamespaceRegistry(),
 				logger,
+				metricProvider,
 				shard.GetConfig().TransferTaskMaxRetryCount,
-				queues.QueueTypeActiveTransfer,
 				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},

@@ -68,8 +68,9 @@ type (
 	ChannelWeightFn  = tasks.ChannelWeightFn[TaskChannelKey]
 
 	NamespacePrioritySchedulerOptions struct {
-		WorkerCount      dynamicconfig.IntPropertyFn
-		NamespaceWeights dynamicconfig.MapPropertyFnWithNamespaceFilter
+		WorkerCount             dynamicconfig.IntPropertyFn
+		ActiveNamespaceWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
+		StandbyNamespaceWeights dynamicconfig.MapPropertyFnWithNamespaceFilter
 	}
 
 	FIFOSchedulerOptions struct {
@@ -79,13 +80,16 @@ type (
 
 	schedulerImpl struct {
 		tasks.Scheduler[Executable]
+		namespaceRegistry namespace.Registry
 
-		taskChannelKeyFn TaskChannelKeyFn
-		channelWeightFn  ChannelWeightFn
+		taskChannelKeyFn      TaskChannelKeyFn
+		channelWeightFn       ChannelWeightFn
+		channelWeightUpdateCh chan struct{}
 	}
 )
 
 func NewNamespacePriorityScheduler(
+	currentClusterName string,
 	options NamespacePrioritySchedulerOptions,
 	namespaceRegistry namespace.Registry,
 	timeSource clock.TimeSource,
@@ -99,12 +103,19 @@ func NewNamespacePriorityScheduler(
 		}
 	}
 	channelWeightFn := func(key TaskChannelKey) int {
-		namespaceName, _ := namespaceRegistry.GetNamespaceName(namespace.ID(key.NamespaceID))
+		namespaceWeights := options.ActiveNamespaceWeights
+
+		namespace, _ := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
+		if !namespace.ActiveInCluster(currentClusterName) {
+			namespaceWeights = options.StandbyNamespaceWeights
+		}
+
 		return configs.ConvertDynamicConfigValueToWeights(
-			options.NamespaceWeights(namespaceName.String()),
+			namespaceWeights(namespace.Name().String()),
 			logger,
 		)[key.Priority]
 	}
+	channelWeightUpdateCh := make(chan struct{}, 1)
 	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
 		QueueSize:   namespacePrioritySchedulerProcessorQueueSize,
 		WorkerCount: options.WorkerCount,
@@ -113,8 +124,9 @@ func NewNamespacePriorityScheduler(
 	return &schedulerImpl{
 		Scheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
 			tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
-				TaskChannelKeyFn: taskChannelKeyFn,
-				ChannelWeightFn:  channelWeightFn,
+				TaskChannelKeyFn:      taskChannelKeyFn,
+				ChannelWeightFn:       channelWeightFn,
+				ChannelWeightUpdateCh: channelWeightUpdateCh,
 			},
 			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
 				newSchedulerMonitor(
@@ -129,8 +141,10 @@ func NewNamespacePriorityScheduler(
 			)),
 			logger,
 		),
-		taskChannelKeyFn: taskChannelKeyFn,
-		channelWeightFn:  channelWeightFn,
+		namespaceRegistry:     namespaceRegistry,
+		taskChannelKeyFn:      taskChannelKeyFn,
+		channelWeightFn:       channelWeightFn,
+		channelWeightUpdateCh: channelWeightUpdateCh,
 	}
 }
 
@@ -154,9 +168,54 @@ func NewFIFOScheduler(
 			fifoSchedulerOptions,
 			logger,
 		),
-		taskChannelKeyFn: taskChannelKeyFn,
-		channelWeightFn:  channelWeightFn,
+		taskChannelKeyFn:      taskChannelKeyFn,
+		channelWeightFn:       channelWeightFn,
+		channelWeightUpdateCh: nil,
 	}
+}
+
+func (s *schedulerImpl) Start() {
+	if s.channelWeightUpdateCh != nil {
+		s.namespaceRegistry.RegisterNamespaceChangeCallback(
+			s,
+			0,
+			func() {}, // no-op
+			func(oldNamespaces, newNamespaces []*namespace.Namespace) {
+				namespaceFailover := false
+				for idx := range oldNamespaces {
+					if oldNamespaces[idx].FailoverVersion() != newNamespaces[idx].FailoverVersion() {
+						namespaceFailover = true
+						break
+					}
+				}
+
+				if !namespaceFailover {
+					return
+				}
+
+				select {
+				case s.channelWeightUpdateCh <- struct{}{}:
+				default:
+				}
+			},
+		)
+	}
+	s.Scheduler.Start()
+}
+
+func (s *schedulerImpl) Stop() {
+	if s.channelWeightUpdateCh != nil {
+		s.namespaceRegistry.UnregisterNamespaceChangeCallback(s)
+
+		// note we can't close the channelWeightUpdateCh here
+		// as callback may still be triggered even after unregister returns
+		// due to race condition
+		//
+		// channelWeightFn is only not nil when using host level scheduler
+		// so Stop is only called when host is shutting down, and we don't need
+		// to worry about open channels
+	}
+	s.Scheduler.Stop()
 }
 
 func (s *schedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {

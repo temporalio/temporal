@@ -104,6 +104,16 @@ func (s *readerGroupSuite) TestAddGetReader() {
 	})
 }
 
+func (s *readerGroupSuite) TestRemoveReader() {
+	s.readerGroup.Start()
+	defer s.readerGroup.Stop()
+
+	r := s.readerGroup.NewReader(DefaultReaderId)
+	s.readerGroup.RemoveReader(DefaultReaderId)
+	s.Equal(common.DaemonStatusStopped, r.(*testReader).status)
+	s.Len(s.readerGroup.Readers(), 0)
+}
+
 func newTestReader() Reader {
 	return &testReader{
 		status: common.DaemonStatusInitialized,

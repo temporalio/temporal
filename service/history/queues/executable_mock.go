@@ -324,20 +324,6 @@ func (mr *MockExecutableMockRecorder) Nack(err interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Nack", reflect.TypeOf((*MockExecutable)(nil).Nack), err)
 }
 
-// QueueType mocks base method.
-func (m *MockExecutable) QueueType() QueueType {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueueType")
-	ret0, _ := ret[0].(QueueType)
-	return ret0
-}
-
-// QueueType indicates an expected call of QueueType.
-func (mr *MockExecutableMockRecorder) QueueType() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueType", reflect.TypeOf((*MockExecutable)(nil).QueueType))
-}
-
 // Reschedule mocks base method.
 func (m *MockExecutable) Reschedule() {
 	m.ctrl.T.Helper()
@@ -450,12 +436,13 @@ func (m *MockExecutor) EXPECT() *MockExecutorMockRecorder {
 }
 
 // Execute mocks base method.
-func (m *MockExecutor) Execute(arg0 context.Context, arg1 Executable) (metrics.MetricsHandler, error) {
+func (m *MockExecutor) Execute(arg0 context.Context, arg1 Executable) ([]metrics.Tag, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", arg0, arg1)
-	ret0, _ := ret[0].(metrics.MetricsHandler)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].([]metrics.Tag)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // Execute indicates an expected call of Execute.

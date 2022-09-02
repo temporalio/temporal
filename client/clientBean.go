@@ -39,6 +39,8 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common/cluster"
 )
 
@@ -73,7 +75,7 @@ type (
 // NewClientBean provides a collection of clients
 func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, error) {
 
-	historyClient, err := factory.NewHistoryClient()
+	historyClient, err := factory.NewHistoryClientWithTimeout(history.DefaultTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +277,7 @@ func (h *clientBeanImpl) lazyInitMatchingClient(namespaceIDToName NamespaceIDToN
 	if cached := h.matchingClient.Load(); cached != nil {
 		return cached.(matchingservice.MatchingServiceClient), nil
 	}
-	client, err := h.factory.NewMatchingClient(namespaceIDToName)
+	client, err := h.factory.NewMatchingClientWithTimeout(namespaceIDToName, matching.DefaultTimeout, matching.DefaultLongPollTimeout)
 	if err != nil {
 		return nil, err
 	}

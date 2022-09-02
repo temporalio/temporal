@@ -235,7 +235,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).Return(nil)
 
-	_, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	_, _, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
 	s.Nil(err)
 }
 
@@ -289,7 +289,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 		s.createRecordWorkflowExecutionStartedRequest(s.namespace, event, visibilityTask, mutableState, backoff, taskQueueName),
 	).Return(nil)
 
-	_, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	_, _, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
 	s.Nil(err)
 }
 
@@ -338,7 +338,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 		s.createUpsertWorkflowRequest(s.namespace, visibilityTask, mutableState, taskQueueName),
 	).Return(nil)
 
-	_, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	_, _, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
 	s.NoError(err)
 }
 
@@ -403,7 +403,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessModifyWorkflowProperties()
 		s.createUpsertWorkflowRequest(s.namespace, visibilityTask, mutableState, taskQueueName),
 	).Return(nil)
 
-	_, err = s.visibilityQueueTaskExecutor.Execute(
+	_, _, err = s.visibilityQueueTaskExecutor.Execute(
 		context.Background(),
 		s.newTaskExecutable(visibilityTask),
 	)
@@ -497,8 +497,8 @@ func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 		s.mockShard.GetTimeSource(),
 		nil,
 		nil,
+		metrics.NoopMetricsHandler,
 		nil,
-		queues.QueueTypeVisibility,
 		nil,
 	)
 }

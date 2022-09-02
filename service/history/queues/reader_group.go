@@ -117,6 +117,19 @@ func (g *ReaderGroup) NewReader(readerID int32, slices ...Slice) Reader {
 	return reader
 }
 
+func (g *ReaderGroup) RemoveReader(readerID int32) {
+	g.Lock()
+	defer g.Unlock()
+
+	reader, ok := g.readerMap[readerID]
+	if !ok {
+		return
+	}
+
+	reader.Stop()
+	delete(g.readerMap, readerID)
+}
+
 func (g *ReaderGroup) isStarted() bool {
 	return atomic.LoadInt32(&g.status) == common.DaemonStatusStarted
 }
