@@ -6,4 +6,3 @@ historyconfig:
 workerconfig:
   enablearchiver: true
   enablereplicator: true
-  enableindexer: false

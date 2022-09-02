@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/predicates"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/tasks"
@@ -68,7 +69,7 @@ func (s *sliceSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
-		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
+		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil, nil)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),

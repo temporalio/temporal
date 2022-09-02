@@ -4,9 +4,7 @@ historyconfig:
   numhistoryshards: 4
   numhistoryhosts: 1
 workerconfig:
-  enablearchiver: false
-  # required to enable worker
-  enablereplicator: true
+  startworkeranyway: true
 esconfig:
   version: "${ES_VERSION}"
   url:

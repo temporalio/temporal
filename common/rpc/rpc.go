@@ -43,12 +43,13 @@ import (
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
 
-// RPCFactory is an implementation of service.RPCFactory interface
+// RPCFactory is an implementation of common.RPCFactory interface
 type RPCFactory struct {
 	config      *config.RPC
 	serviceName string
 	logger      log.Logger
 	dc          *dynamicconfig.Collection
+	frontendURL string
 
 	sync.Mutex
 	grpcListener       net.Listener
@@ -64,6 +65,7 @@ func NewFactory(
 	logger log.Logger,
 	tlsProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
+	frontendURL string,
 	clientInterceptors []grpc.UnaryClientInterceptor,
 ) *RPCFactory {
 	return &RPCFactory{
@@ -71,6 +73,7 @@ func NewFactory(
 		serviceName:        sName,
 		logger:             logger,
 		dc:                 dc,
+		frontendURL:        frontendURL,
 		tlsFactory:         tlsProvider,
 		clientInterceptors: clientInterceptors,
 	}
@@ -206,7 +209,7 @@ func (d *RPCFactory) CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc
 }
 
 // CreateLocalFrontendGRPCConnection creates connection for internal calls
-func (d *RPCFactory) CreateLocalFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (d *RPCFactory) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
@@ -217,7 +220,7 @@ func (d *RPCFactory) CreateLocalFrontendGRPCConnection(rpcAddress string) *grpc.
 		}
 	}
 
-	return d.dial(rpcAddress, tlsClientConfig)
+	return d.dial(d.frontendURL, tlsClientConfig)
 }
 
 // CreateInternodeGRPCConnection creates connection for gRPC calls

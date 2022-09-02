@@ -149,6 +149,13 @@ func (r *ringpopServiceResolver) Stop() {
 	}
 }
 
+func (r *ringpopServiceResolver) RequestRefresh() {
+	select {
+	case r.refreshChan <- struct{}{}:
+	default:
+	}
+}
+
 // Lookup finds the host in the ring responsible for serving the given key
 func (r *ringpopServiceResolver) Lookup(
 	key string,
@@ -156,10 +163,7 @@ func (r *ringpopServiceResolver) Lookup(
 
 	addr, found := r.ring().Lookup(key)
 	if !found {
-		select {
-		case r.refreshChan <- struct{}{}:
-		default:
-		}
+		r.RequestRefresh()
 		return nil, ErrInsufficientHosts
 	}
 

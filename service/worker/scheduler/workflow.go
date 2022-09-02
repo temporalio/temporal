@@ -216,6 +216,8 @@ func (s *scheduler) ensureFields() {
 	if s.Schedule.Policies == nil {
 		s.Schedule.Policies = &schedpb.SchedulePolicies{}
 	}
+	// set default so it shows up in describe output
+	s.Schedule.Policies.OverlapPolicy = s.resolveOverlapPolicy(s.Schedule.Policies.OverlapPolicy)
 	if s.Schedule.State == nil {
 		s.Schedule.State = &schedpb.ScheduleState{}
 	}
