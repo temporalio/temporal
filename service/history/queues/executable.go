@@ -388,16 +388,6 @@ func (e *executableImpl) GetPriority() ctasks.Priority {
 	return e.priority
 }
 
-func (e *executableImpl) SetPriority(priority ctasks.Priority) {
-	e.Lock()
-	defer e.Unlock()
-
-	e.priority = priority
-	if e.priority > e.lowestPriority {
-		e.lowestPriority = e.priority
-	}
-}
-
 func (e *executableImpl) Attempt() int {
 	e.Lock()
 	defer e.Unlock()
@@ -456,4 +446,7 @@ func (e *executableImpl) updatePriority() {
 	e.Lock()
 	defer e.Unlock()
 	e.priority = newPriority
+	if e.priority > e.lowestPriority {
+		e.lowestPriority = e.priority
+	}
 }

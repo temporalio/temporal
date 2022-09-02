@@ -126,6 +126,7 @@ func (r *testReader) Scopes() []Scope              { panic("not implemented") }
 func (r *testReader) WalkSlices(SliceIterator)     { panic("not implemented") }
 func (r *testReader) SplitSlices(SliceSplitter)    { panic("not implemented") }
 func (r *testReader) MergeSlices(...Slice)         { panic("not implemented") }
+func (r *testReader) AppendSlices(...Slice)        { panic("not implemented") }
 func (r *testReader) ClearSlices(SlicePredicate)   { panic("not implemented") }
 func (r *testReader) CompactSlices(SlicePredicate) { panic("not implemented") }
 func (r *testReader) ShrinkSlices()                { panic("not implemented") }
