@@ -388,7 +388,12 @@ func ArchiverProviderProvider(cfg *config.Config) provider.ArchiverProvider {
 	return provider.NewArchiverProvider(cfg.Archival.History.Provider, cfg.Archival.Visibility.Provider)
 }
 
-func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.TLSConfigProvider, provider metrics.MetricsHandler) (sdk.ClientFactory, error) {
+func SdkClientFactoryProvider(
+	cfg *config.Config,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	metricsHandler metrics.MetricsHandler,
+	logger SnTaggedLogger,
+) (sdk.ClientFactory, error) {
 	tlsFrontendConfig, err := tlsConfigProvider.GetFrontendClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
@@ -397,7 +402,8 @@ func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.T
 	return sdk.NewClientFactory(
 		cfg.PublicClient.HostPort,
 		tlsFrontendConfig,
-		sdk.NewMetricsHandler(provider),
+		metricsHandler,
+		logger,
 	), nil
 }
 
