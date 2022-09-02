@@ -81,7 +81,7 @@ func NewResult(
 			activityDeps:       params,
 			dc:                 dc,
 			enabledFeature:     dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcher, true),
-			enabledPerNSWorker: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcherPerNamespaceWorker, false),
+			enabledPerNSWorker: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcherPerNamespaceWorker, true),
 		},
 	}
 }

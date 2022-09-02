@@ -91,6 +91,8 @@ const (
 	EnableActivityEagerExecution = "system.enableActivityEagerExecution"
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
+	// EnableBatcherPerNamespaceWorker decides whether start batcher worker per namespace
+	EnableBatcherPerNamespaceWorker = "system.enableBatcherPerNamespaceWorker"
 
 	// keys for size limit
 
@@ -629,8 +631,6 @@ const (
 	HistoryScannerDataMinAge = "worker.historyScannerDataMinAge"
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher = "worker.enableBatcher"
-	// EnableBatcherPerNamespaceWorker decides whether start batcher worker per namespace
-	EnableBatcherPerNamespaceWorker = "worker.enableBatcherPerNamespaceWorker"
 	// BatcherRPS controls number the rps of batch operations
 	BatcherRPS = "worker.batcherRPS"
 	// BatcherConcurrency controls the concurrency of one batch operation

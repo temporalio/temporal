@@ -3617,6 +3617,10 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, errBatchJobIDNotSet
 	}
 
+	if !wh.config.EnableBatcher(request.Namespace) {
+		return nil, errBatchAPINotAllowed
+	}
+
 	// Validate concurrent batch operation
 	countResp, err := wh.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 		Namespace: request.GetNamespace(),
@@ -3717,6 +3721,10 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errRequestNotSet
 	}
 
+	if !wh.config.EnableBatcher(request.Namespace) {
+		return nil, errBatchAPINotAllowed
+	}
+
 	terminateReq := &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: request.GetNamespace(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -3748,6 +3756,10 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableBatcher(request.Namespace) {
+		return nil, errBatchAPINotAllowed
 	}
 
 	execution := &commonpb.WorkflowExecution{
@@ -3852,6 +3864,10 @@ func (wh *WorkflowHandler) ListBatchOperations(
 
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableBatcher(request.Namespace) {
+		return nil, errBatchAPINotAllowed
 	}
 
 	resp, err := wh.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{

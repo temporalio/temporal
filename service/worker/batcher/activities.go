@@ -67,7 +67,15 @@ func (a *activities) checkNamespace(namespace string) error {
 func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
+	activityInfo := activity.GetInfo(ctx)
+	metricsClient := a.MetricsClient.Scope(metrics.BatcherScope, metrics.NamespaceTag(activityInfo.WorkflowNamespace))
+
 	if err := a.checkNamespace(batchParams.Namespace); err != nil {
+		metricsClient.IncCounter(metrics.BatcherProcessorFailures)
+		logger.Error("Failed to run batch operation due to namespace mismatch",
+			tag.Error(err),
+			tag.WorkflowID(activityInfo.WorkflowExecution.ID),
+			tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID))
 		return hbd, err
 	}
 
@@ -78,8 +86,11 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		if err := activity.GetHeartbeatDetails(ctx, &hbd); err == nil {
 			startOver = false
 		} else {
-			a.MetricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
-			logger.Error("Failed to recover from last heartbeat, start over from beginning", tag.Error(err))
+			metricsClient.IncCounter(metrics.BatcherProcessorFailures)
+			logger.Error("Failed to recover from last heartbeat, start over from beginning",
+				tag.Error(err),
+				tag.WorkflowID(activityInfo.WorkflowExecution.ID),
+				tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID))
 		}
 	}
 
@@ -88,6 +99,11 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 			Query: batchParams.Query,
 		})
 		if err != nil {
+			metricsClient.IncCounter(metrics.BatcherProcessorFailures)
+			logger.Error("Failed to get estimate workflow count",
+				tag.Error(err),
+				tag.WorkflowID(activityInfo.WorkflowExecution.ID),
+				tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID))
 			return HeartBeatDetails{}, err
 		}
 		hbd.TotalEstimate = resp.GetCount()
@@ -97,7 +113,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
 	for i := 0; i < a.getOperationConcurrency(batchParams.Concurrency); i++ {
-		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.MetricsClient, logger)
+		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, metricsClient, logger)
 	}
 
 	for {
@@ -107,6 +123,11 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 			Query:         batchParams.Query,
 		})
 		if err != nil {
+			metricsClient.IncCounter(metrics.BatcherProcessorFailures)
+			logger.Error("Failed to list workflow executions",
+				tag.Error(err),
+				tag.WorkflowID(activityInfo.WorkflowExecution.ID),
+				tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID))
 			return HeartBeatDetails{}, err
 		}
 		batchCount := len(resp.Executions)
@@ -139,7 +160,12 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 					break Loop
 				}
 			case <-ctx.Done():
-				return HeartBeatDetails{}, ctx.Err()
+				metricsClient.IncCounter(metrics.BatcherProcessorFailures)
+				logger.Error("Failed to complete batch operation",
+					tag.Error(ctx.Err()),
+					tag.WorkflowID(activityInfo.WorkflowExecution.ID),
+					tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID))
+				return hbd, ctx.Err()
 			}
 		}
 
@@ -188,7 +214,7 @@ func startTaskProcessor(
 	respCh chan error,
 	limiter *rate.Limiter,
 	sdkClient sdkclient.Client,
-	metricsClient metrics.Client,
+	metricsClient metrics.Scope,
 	logger log.Logger,
 ) {
 	for {
@@ -219,7 +245,7 @@ func startTaskProcessor(
 					})
 			}
 			if err != nil {
-				metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
+				metricsClient.IncCounter(metrics.BatcherProcessorFailures)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
 
 				_, ok := batchParams._nonRetryableErrors[err.Error()]
@@ -231,7 +257,7 @@ func startTaskProcessor(
 					taskCh <- task
 				}
 			} else {
-				metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorSuccess)
+				metricsClient.IncCounter(metrics.BatcherProcessorSuccess)
 				respCh <- nil
 			}
 		}

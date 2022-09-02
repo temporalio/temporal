@@ -147,6 +147,8 @@ type Config struct {
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	// Enable schedule-related RPCs
+	EnableBatcher dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Batch operation dynamic configs
 	MaxConcurrentBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
@@ -212,6 +214,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 
 		EnableSchedules: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableSchedules, true),
 
+		EnableBatcher:               dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcherPerNamespaceWorker, true),
 		MaxConcurrentBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
 	}
 }
