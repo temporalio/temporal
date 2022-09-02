@@ -3,6 +3,7 @@ module go.temporal.io/server
 go 1.18
 
 replace go.temporal.io/api v1.11.1-0.20220829161602-a47c4660cfde => ../temporal-api-go
+replace go.temporal.io/sdk v1.16.0 => ../temporal-sdk-go
 
 require (
 	cloud.google.com/go/storage v1.23.0
