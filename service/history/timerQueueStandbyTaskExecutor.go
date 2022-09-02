@@ -136,10 +136,10 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 				return nil, serviceerror.NewInternal(errString)
 			}
 
-			if isExpired := timerSequence.IsExpired(
+			if queues.IsTimeExpired(
 				timerTask.GetVisibilityTime(),
-				timerSequenceID,
-			); isExpired {
+				timerSequenceID.Timestamp,
+			) {
 				return getHistoryResendInfo(mutableState)
 			}
 			// Since the user timers are already sorted, then if there is one timer which is not expired,
@@ -179,7 +179,6 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	//
 	// the overall solution is to attempt to generate a new activity timer task whenever the
 	// task passed in is safe to be throw away.
-
 	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 		timerSequence := t.getTimerSequence(mutableState)
 		updateMutableState := false
@@ -193,10 +192,10 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 				return nil, serviceerror.NewInternal(errString)
 			}
 
-			if isExpired := timerSequence.IsExpired(
+			if queues.IsTimeExpired(
 				timerTask.GetVisibilityTime(),
-				timerSequenceID,
-			); isExpired {
+				timerSequenceID.Timestamp,
+			) {
 				return getHistoryResendInfo(mutableState)
 			}
 			// Since the activity timers are already sorted, then if there is one timer which is not expired,
@@ -219,8 +218,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// created.
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 		activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
-		fireTimer := timerTask.GetVisibilityTime()
-		if isHeartBeatTask && ok && (heartbeatTimeoutVis.Before(fireTimer) || heartbeatTimeoutVis.Equal(fireTimer)) {
+		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask.GetVisibilityTime(), heartbeatTimeoutVis) {
 			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
 			if err := mutableState.UpdateActivity(activityInfo); err != nil {
 				return nil, err
