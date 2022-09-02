@@ -4808,15 +4808,17 @@ func (wh *WorkflowHandler) mapCreateScheduleRequestSearchAttributes(request *wor
 	// Shallow copy request and replace SearchAttributes fields only.
 	newRequest := *request
 	newRequest.SearchAttributes = mappedSearchAttributes
+	return &newRequest, nil
+}
 
-	// map search attributes to aliases here, since we don't go through the frontend when starting later
+func (wh *WorkflowHandler) mapCreateScheduleRequestStartWorkflowSearchAttributes(request *workflowservice.CreateScheduleRequest, namespaceName namespace.Name) (*workflowservice.CreateScheduleRequest, error) {
 	if startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow(); startWorkflow != nil {
 		mappedSearchAttributes, err := searchattribute.SubstituteAliases(wh.saMapper, startWorkflow.GetSearchAttributes(), namespaceName.String())
 		if err != nil {
 			return nil, err
 		}
 		if mappedSearchAttributes == nil {
-			return &newRequest, nil
+			return request, nil
 		}
 		newStartWorkflow := *startWorkflow
 		newStartWorkflow.SearchAttributes = mappedSearchAttributes
@@ -4825,8 +4827,10 @@ func (wh *WorkflowHandler) mapCreateScheduleRequestSearchAttributes(request *wor
 			Action: &schedpb.ScheduleAction_StartWorkflow{
 				StartWorkflow: &newStartWorkflow,
 			}}
+		newRequest := *request
 		newRequest.Schedule = &newSchedule
+		return &newRequest, nil
 	}
 
-	return &newRequest, nil
+	return request, nil
 }
