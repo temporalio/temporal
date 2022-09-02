@@ -38,13 +38,9 @@ func (c *clientImpl) AddOrUpdateRemoteCluster(
 	request *adminservice.AddOrUpdateRemoteClusterRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.AddOrUpdateRemoteCluster(ctx, request, opts...)
+	return c.client.AddOrUpdateRemoteCluster(ctx, request, opts...)
 }
 
 func (c *clientImpl) AddSearchAttributes(
@@ -52,13 +48,9 @@ func (c *clientImpl) AddSearchAttributes(
 	request *adminservice.AddSearchAttributesRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.AddSearchAttributesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.AddSearchAttributes(ctx, request, opts...)
+	return c.client.AddSearchAttributes(ctx, request, opts...)
 }
 
 func (c *clientImpl) CloseShard(
@@ -66,13 +58,9 @@ func (c *clientImpl) CloseShard(
 	request *adminservice.CloseShardRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.CloseShardResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.CloseShard(ctx, request, opts...)
+	return c.client.CloseShard(ctx, request, opts...)
 }
 
 func (c *clientImpl) DeleteWorkflowExecution(
@@ -80,13 +68,9 @@ func (c *clientImpl) DeleteWorkflowExecution(
 	request *adminservice.DeleteWorkflowExecutionRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.DeleteWorkflowExecutionResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.DeleteWorkflowExecution(ctx, request, opts...)
+	return c.client.DeleteWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeCluster(
@@ -94,13 +78,9 @@ func (c *clientImpl) DescribeCluster(
 	request *adminservice.DescribeClusterRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.DescribeClusterResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.DescribeCluster(ctx, request, opts...)
+	return c.client.DescribeCluster(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeHistoryHost(
@@ -108,13 +88,9 @@ func (c *clientImpl) DescribeHistoryHost(
 	request *adminservice.DescribeHistoryHostRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.DescribeHistoryHostResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.DescribeHistoryHost(ctx, request, opts...)
+	return c.client.DescribeHistoryHost(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeMutableState(
@@ -122,13 +98,9 @@ func (c *clientImpl) DescribeMutableState(
 	request *adminservice.DescribeMutableStateRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.DescribeMutableStateResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.DescribeMutableState(ctx, request, opts...)
+	return c.client.DescribeMutableState(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetDLQMessages(
@@ -136,13 +108,9 @@ func (c *clientImpl) GetDLQMessages(
 	request *adminservice.GetDLQMessagesRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.GetDLQMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.GetDLQMessages(ctx, request, opts...)
+	return c.client.GetDLQMessages(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetDLQReplicationMessages(
@@ -150,13 +118,9 @@ func (c *clientImpl) GetDLQReplicationMessages(
 	request *adminservice.GetDLQReplicationMessagesRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.GetDLQReplicationMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.GetDLQReplicationMessages(ctx, request, opts...)
+	return c.client.GetDLQReplicationMessages(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetNamespaceReplicationMessages(
@@ -164,13 +128,9 @@ func (c *clientImpl) GetNamespaceReplicationMessages(
 	request *adminservice.GetNamespaceReplicationMessagesRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.GetNamespaceReplicationMessages(ctx, request, opts...)
+	return c.client.GetNamespaceReplicationMessages(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetReplicationMessages(
@@ -178,13 +138,9 @@ func (c *clientImpl) GetReplicationMessages(
 	request *adminservice.GetReplicationMessagesRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.GetReplicationMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContextWithLargeTimeout(ctx)
 	defer cancel()
-	return client.GetReplicationMessages(ctx, request, opts...)
+	return c.client.GetReplicationMessages(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetSearchAttributes(
@@ -192,13 +148,9 @@ func (c *clientImpl) GetSearchAttributes(
 	request *adminservice.GetSearchAttributesRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.GetSearchAttributesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.GetSearchAttributes(ctx, request, opts...)
+	return c.client.GetSearchAttributes(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetShard(
@@ -206,13 +158,9 @@ func (c *clientImpl) GetShard(
 	request *adminservice.GetShardRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.GetShardResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.GetShard(ctx, request, opts...)
+	return c.client.GetShard(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetTaskQueueTasks(
@@ -220,13 +168,9 @@ func (c *clientImpl) GetTaskQueueTasks(
 	request *adminservice.GetTaskQueueTasksRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.GetTaskQueueTasksResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.GetTaskQueueTasks(ctx, request, opts...)
+	return c.client.GetTaskQueueTasks(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetWorkflowExecutionRawHistoryV2(
@@ -234,13 +178,9 @@ func (c *clientImpl) GetWorkflowExecutionRawHistoryV2(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 	opts ...grpc.CallOption,
 ) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
+	return c.client.GetWorkflowExecutionRawHistoryV2(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListClusterMembers(
@@ -248,13 +188,9 @@ func (c *clientImpl) ListClusterMembers(
 	request *adminservice.ListClusterMembersRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.ListClusterMembersResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.ListClusterMembers(ctx, request, opts...)
+	return c.client.ListClusterMembers(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListClusters(
@@ -262,13 +198,9 @@ func (c *clientImpl) ListClusters(
 	request *adminservice.ListClustersRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.ListClustersResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.ListClusters(ctx, request, opts...)
+	return c.client.ListClusters(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListHistoryTasks(
@@ -276,13 +208,9 @@ func (c *clientImpl) ListHistoryTasks(
 	request *adminservice.ListHistoryTasksRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.ListHistoryTasksResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.ListHistoryTasks(ctx, request, opts...)
+	return c.client.ListHistoryTasks(ctx, request, opts...)
 }
 
 func (c *clientImpl) MergeDLQMessages(
@@ -290,13 +218,9 @@ func (c *clientImpl) MergeDLQMessages(
 	request *adminservice.MergeDLQMessagesRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.MergeDLQMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.MergeDLQMessages(ctx, request, opts...)
+	return c.client.MergeDLQMessages(ctx, request, opts...)
 }
 
 func (c *clientImpl) PurgeDLQMessages(
@@ -304,13 +228,9 @@ func (c *clientImpl) PurgeDLQMessages(
 	request *adminservice.PurgeDLQMessagesRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.PurgeDLQMessagesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.PurgeDLQMessages(ctx, request, opts...)
+	return c.client.PurgeDLQMessages(ctx, request, opts...)
 }
 
 func (c *clientImpl) ReapplyEvents(
@@ -318,13 +238,9 @@ func (c *clientImpl) ReapplyEvents(
 	request *adminservice.ReapplyEventsRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.ReapplyEventsResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.ReapplyEvents(ctx, request, opts...)
+	return c.client.ReapplyEvents(ctx, request, opts...)
 }
 
 func (c *clientImpl) RebuildMutableState(
@@ -332,13 +248,9 @@ func (c *clientImpl) RebuildMutableState(
 	request *adminservice.RebuildMutableStateRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.RebuildMutableStateResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RebuildMutableState(ctx, request, opts...)
+	return c.client.RebuildMutableState(ctx, request, opts...)
 }
 
 func (c *clientImpl) RefreshWorkflowTasks(
@@ -346,13 +258,9 @@ func (c *clientImpl) RefreshWorkflowTasks(
 	request *adminservice.RefreshWorkflowTasksRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.RefreshWorkflowTasksResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RefreshWorkflowTasks(ctx, request, opts...)
+	return c.client.RefreshWorkflowTasks(ctx, request, opts...)
 }
 
 func (c *clientImpl) RemoveRemoteCluster(
@@ -360,13 +268,9 @@ func (c *clientImpl) RemoveRemoteCluster(
 	request *adminservice.RemoveRemoteClusterRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.RemoveRemoteClusterResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RemoveRemoteCluster(ctx, request, opts...)
+	return c.client.RemoveRemoteCluster(ctx, request, opts...)
 }
 
 func (c *clientImpl) RemoveSearchAttributes(
@@ -374,13 +278,9 @@ func (c *clientImpl) RemoveSearchAttributes(
 	request *adminservice.RemoveSearchAttributesRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.RemoveSearchAttributesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RemoveSearchAttributes(ctx, request, opts...)
+	return c.client.RemoveSearchAttributes(ctx, request, opts...)
 }
 
 func (c *clientImpl) RemoveTask(
@@ -388,13 +288,9 @@ func (c *clientImpl) RemoveTask(
 	request *adminservice.RemoveTaskRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.RemoveTaskResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.RemoveTask(ctx, request, opts...)
+	return c.client.RemoveTask(ctx, request, opts...)
 }
 
 func (c *clientImpl) ResendReplicationTasks(
@@ -402,11 +298,7 @@ func (c *clientImpl) ResendReplicationTasks(
 	request *adminservice.ResendReplicationTasksRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.ResendReplicationTasksResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.ResendReplicationTasks(ctx, request, opts...)
+	return c.client.ResendReplicationTasks(ctx, request, opts...)
 }

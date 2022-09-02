@@ -114,6 +114,7 @@ var Module = fx.Options(
 	fx.Provide(MatchingRawClientProvider),
 	fx.Provide(MatchingClientProvider),
 	membership.HostInfoProviderModule,
+	membership.GRPCResolverModule,
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(MetricsClientProvider),
@@ -393,14 +394,20 @@ func SdkClientFactoryProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	metricsHandler metrics.MetricsHandler,
 	logger SnTaggedLogger,
+	resolver membership.GRPCResolver,
 ) (sdk.ClientFactory, error) {
 	tlsFrontendConfig, err := tlsConfigProvider.GetFrontendClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 	}
 
+	hostPort := cfg.PublicClient.HostPort
+	if hostPort == "" {
+		hostPort = resolver.MakeURL(common.FrontendServiceName)
+	}
+
 	return sdk.NewClientFactory(
-		cfg.PublicClient.HostPort,
+		hostPort,
 		tlsFrontendConfig,
 		metricsHandler,
 		logger,
@@ -421,15 +428,21 @@ func RPCFactoryProvider(
 	logger log.Logger,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
+	resolver membership.GRPCResolver,
 	traceInterceptor telemetry.ClientTraceInterceptor,
 ) common.RPCFactory {
 	svcCfg := cfg.Services[string(svcName)]
+	hostPort := cfg.PublicClient.HostPort
+	if hostPort == "" {
+		hostPort = resolver.MakeURL(common.FrontendServiceName)
+	}
 	return rpc.NewFactory(
 		&svcCfg.RPC,
 		string(svcName),
 		logger,
 		tlsConfigProvider,
 		dc,
+		hostPort,
 		[]grpc.UnaryClientInterceptor{
 			grpc.UnaryClientInterceptor(traceInterceptor),
 		},
