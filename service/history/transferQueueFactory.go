@@ -74,7 +74,7 @@ func NewTransferQueueFactory(
 			},
 			params.NamespaceRegistry,
 			params.TimeSource,
-			params.MetricsHandler,
+			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferQueueProcessor)),
 			params.Logger,
 		)
 	}

@@ -71,7 +71,7 @@ func NewTimerQueueFactory(
 			},
 			params.NamespaceRegistry,
 			params.TimeSource,
-			params.MetricsHandler,
+			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTimerQueueProcessor)),
 			params.Logger,
 		)
 	}

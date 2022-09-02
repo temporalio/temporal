@@ -64,7 +64,7 @@ func NewVisibilityQueueFactory(
 			},
 			params.NamespaceRegistry,
 			params.TimeSource,
-			params.MetricsHandler,
+			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
 			params.Logger,
 		)
 	}
