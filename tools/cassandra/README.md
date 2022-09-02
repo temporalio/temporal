@@ -26,7 +26,7 @@ This uses Cassandra's SimpleStratagey for replication. For production, we recomm
 temporal-cassandra-tool --ep $CASSANDRA_SEEDS create -k $KEYSPACE --rf $RF
 ```
 
-See https://www.ecyrd.com/cassandracalculator for an easy way to determine how many nodes and what replication factor you will want to use.  Note that Temporal by default uses `Quorum` for read and write consistency.
+See https://www.ecyrd.com/cassandracalculator for an easy way to determine how many nodes and what replication factor you will want to use.  Note that Temporal by default uses `LOCAL_QUORUM` and `LOCAL_SERIAL` for read and write consistency.
 
 ```
 ./temporal-cassandra-tool -ep 127.0.0.1 -k temporal setup-schema -v 0.0 -- this sets up just the schema version tables with initial version of 0.0
