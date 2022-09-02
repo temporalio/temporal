@@ -266,7 +266,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 		s.False(entry.Info.Paused)
 		s.Equal(describeResp.Info.RecentActions, entry.Info.RecentActions) // 2 is below the limit where list entry might be cut off
 		return true
-	}, 3*time.Second, 200*time.Millisecond)
+	}, 10*time.Second, 1*time.Second)
 
 	// list workflows
 
@@ -397,7 +397,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 		})
 		s.NoError(err)
 		return len(listResp.Schedules) == 0
-	}, 3*time.Second, 200*time.Millisecond)
+	}, 10*time.Second, 1*time.Second)
 }
 
 func (s *scheduleIntegrationSuite) TestInput() {
