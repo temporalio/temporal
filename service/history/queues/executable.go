@@ -88,6 +88,8 @@ var (
 const (
 	// resubmitMaxAttempts is the max number of attempts we may skip rescheduler when a task is Nacked.
 	// check the comment in shouldResubmitOnNack() for more details
+	// TODO: evaluate the performance when this numbers is greatly reduced to a number like 3.
+	// especially, if that will increase the latency for workflow busy case by a lot.
 	resubmitMaxAttempts = 10
 	// resourceExhaustedResubmitMaxAttempts is the same as resubmitMaxAttempts but only applies to resource
 	// exhausted error
