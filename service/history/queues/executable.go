@@ -168,6 +168,7 @@ func NewExecutable(
 			},
 		),
 		metricsHandler:                metricsHandler,
+		taggedMetricsHandler:          metricsHandler,
 		criticalRetryAttempt:          criticalRetryAttempt,
 		filter:                        filter,
 		namespaceCacheRefreshInterval: namespaceCacheRefreshInterval,
