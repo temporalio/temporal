@@ -117,6 +117,45 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	workflowClosedVersion int64,
 ) error {
 
+	nsActive := ms.GetNamespaceEntry().ActiveInCluster(m.shard.GetClusterMetadata().GetCurrentClusterName())
+	closeTransferTaskId := ms.GetExecutionInfo().CloseTransferTaskId
+	closeTransferTaskCheckPassed := true
+	if nsActive && closeTransferTaskId != 0 {
+		// check if close execution transfer task is completed
+		fakeCloseTransferTask := &tasks.CloseExecutionTask{
+			WorkflowKey: definition.NewWorkflowKey(nsID.String(), we.GetWorkflowId(), we.GetRunId()),
+			TaskID:      closeTransferTaskId,
+		}
+		transferQueueState, ok := m.shard.GetQueueState(tasks.CategoryTransfer)
+		if !ok {
+			// backward compatible logic
+			closeTransferTaskCheckPassed = ms.GetExecutionInfo().CloseTransferTaskId <= transferQueueAckLevel
+		} else {
+
+		}
+	}
+
+	closeVisibilityTaskId := ms.GetExecutionInfo().CloseVisibilityTaskId
+	closeVisibilityTaskCheckPassed := true
+	if closeVisibilityTaskId != 0 {
+		// check if close execution visibility task is completed
+		fakeCloseVisibiltyTask := &tasks.CloseExecutionVisibilityTask{
+			WorkflowKey: definition.NewWorkflowKey(nsID.String(), we.GetWorkflowId(), we.GetRunId()),
+			TaskID:      closeVisibilityTaskId,
+		}
+		visibilityQueueState, ok := m.shard.GetQueueState(tasks.CategoryTransfer)
+		if !ok {
+			// backward compatible logic
+			closeVisibilityTaskCheckPassed = ms.GetExecutionInfo().CloseVisibilityTaskId <= visibilityQueueAckLevel
+		} else {
+
+		}
+	}
+
+	if !closeTransferTaskCheckPassed || !closeVisibilityTaskCheckPassed {
+		return consts.ErrWorkflowNotReady
+	}
+
 	// In active cluster, create `DeleteWorkflowExecutionTask` only if workflow is closed successfully
 	// and all pending transfer and visibility tasks are completed.
 	// This check is required to avoid race condition between close and delete tasks.
@@ -128,14 +167,15 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	// Unfortunately, queue ack levels are updated with delay (default 30s),
 	// therefore this API will return error if workflow is deleted within 30 seconds after close.
 	// The check is on API call side, not on task processor side, because delete visibility task doesn't have access to mutable state.
-	if (ms.GetExecutionInfo().CloseTransferTaskId != 0 && // Workflow execution still might be running in passive cluster or closed before this field was added (v1.17).
-		ms.GetExecutionInfo().CloseTransferTaskId > transferQueueAckLevel && // Transfer close task wasn't executed.
-		ms.GetNamespaceEntry().ActiveInCluster(m.shard.GetClusterMetadata().GetCurrentClusterName())) ||
-		(ms.GetExecutionInfo().CloseVisibilityTaskId != 0 && // Workflow execution still might be running in passive cluster or closed before this field was added (v1.17).
-			ms.GetExecutionInfo().CloseVisibilityTaskId > visibilityQueueAckLevel) { // Visibility close task wasn't executed.
+	//
+	// if (ms.GetExecutionInfo().CloseTransferTaskId != 0 && // Workflow execution still might be running in passive cluster or closed before this field was added (v1.17).
+	// 	ms.GetExecutionInfo().CloseTransferTaskId > transferQueueAckLevel && // Transfer close task wasn't executed.
+	// 	ms.GetNamespaceEntry().ActiveInCluster(m.shard.GetClusterMetadata().GetCurrentClusterName())) ||
+	// 	(ms.GetExecutionInfo().CloseVisibilityTaskId != 0 && // Workflow execution still might be running in passive cluster or closed before this field was added (v1.17).
+	// 		ms.GetExecutionInfo().CloseVisibilityTaskId > visibilityQueueAckLevel) { // Visibility close task wasn't executed.
 
-		return consts.ErrWorkflowNotReady
-	}
+	// 	return consts.ErrWorkflowNotReady
+	// }
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(m.shard, ms)
 
