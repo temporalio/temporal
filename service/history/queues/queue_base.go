@@ -346,20 +346,6 @@ func (p *queueBase) processNewRange() {
 }
 
 func (p *queueBase) checkpoint() {
-	var err error
-	defer func() {
-		if err == nil {
-			p.checkpointRetrier.Reset()
-			p.checkpointTimer.Reset(backoff.JitDuration(
-				p.options.CheckpointInterval(),
-				p.options.CheckpointIntervalJitterCoefficient(),
-			))
-		} else {
-			backoff := p.checkpointRetrier.NextBackOff()
-			p.checkpointTimer.Reset(backoff)
-		}
-	}()
-
 	readerScopes := make(map[int32][]Scope)
 	newExclusiveDeletionHighWatermark := p.nonReadableScope.Range.InclusiveMin
 	for readerID, reader := range p.readerGroup.Readers() {
@@ -388,15 +374,17 @@ func (p *queueBase) checkpoint() {
 	// for the queue
 	p.metricsHandler.Counter(TaskBatchCompleteCounter).Record(1)
 	if newExclusiveDeletionHighWatermark.CompareTo(p.exclusiveDeletionHighWatermark) > 0 {
-		err = p.rangeCompleteTasks(p.exclusiveDeletionHighWatermark, newExclusiveDeletionHighWatermark)
+		err := p.rangeCompleteTasks(p.exclusiveDeletionHighWatermark, newExclusiveDeletionHighWatermark)
 		if err != nil {
+			p.resetCheckpointTimer(err)
 			return
 		}
 
 		p.exclusiveDeletionHighWatermark = newExclusiveDeletionHighWatermark
 	}
 
-	err = p.updateQueueState(readerScopes)
+	err := p.updateQueueState(readerScopes)
+	p.resetCheckpointTimer(err)
 }
 
 func (p *queueBase) rangeCompleteTasks(
@@ -436,6 +424,20 @@ func (p *queueBase) updateQueueState(
 		p.logger.Error("Error updating queue state", tag.Error(err), tag.OperationFailed)
 	}
 	return err
+}
+
+func (p *queueBase) resetCheckpointTimer(checkPointErr error) {
+	if checkPointErr != nil {
+		backoff := p.checkpointRetrier.NextBackOff()
+		p.checkpointTimer.Reset(backoff)
+		return
+	}
+
+	p.checkpointRetrier.Reset()
+	p.checkpointTimer.Reset(backoff.JitDuration(
+		p.options.CheckpointInterval(),
+		p.options.CheckpointIntervalJitterCoefficient(),
+	))
 }
 
 func (p *queueBase) handleAlert(alert *Alert) {
