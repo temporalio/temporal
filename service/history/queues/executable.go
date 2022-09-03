@@ -80,14 +80,20 @@ var (
 	schedulerRetryPolicy = common.CreateTaskProcessingRetryPolicy()
 	// reschedulePolicy is the policy for determine reschedule backoff duration
 	// across multiple submissions to scheduler
-	reschedulePolicy             = common.CreateTaskReschedulePolicy()
-	taskNotReadyReschedulePolicy = common.CreateTaskNotReadyReschedulePolicy()
+	reschedulePolicy                      = common.CreateTaskReschedulePolicy()
+	taskNotReadyReschedulePolicy          = common.CreateTaskNotReadyReschedulePolicy()
+	taskResourceExhuastedReschedulePolicy = common.CreateTaskNotReadyReschedulePolicy()
 )
 
 const (
 	// resubmitMaxAttempts is the max number of attempts we may skip rescheduler when a task is Nacked.
 	// check the comment in shouldResubmitOnNack() for more details
+	// TODO: evaluate the performance when this numbers is greatly reduced to a number like 3.
+	// especially, if that will increase the latency for workflow busy case by a lot.
 	resubmitMaxAttempts = 10
+	// resourceExhaustedResubmitMaxAttempts is the same as resubmitMaxAttempts but only applies to resource
+	// exhausted error
+	resourceExhaustedResubmitMaxAttempts = 1
 )
 
 type (
@@ -112,6 +118,7 @@ type (
 		scheduledTime                 time.Time
 		userLatency                   time.Duration
 		lastActiveness                bool
+		resourceExhaustedCount        int
 		logger                        log.Logger
 		metricsHandler                metrics.MetricsHandler
 		taggedMetricsHandler          metrics.MetricsHandler
@@ -227,6 +234,12 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 			if e.attempt > e.criticalRetryAttempt() {
 				e.metricsHandler.Histogram(TaskAttempt, metrics.Dimensionless).Record(int64(e.attempt))
 				e.logger.Error("Critical error processing task, retrying.", tag.Error(err), tag.OperationCritical)
+			}
+
+			if common.IsResourceExhausted(retErr) {
+				e.resourceExhaustedCount++
+			} else {
+				e.resourceExhaustedCount = 0
 			}
 		}
 	}()
@@ -411,7 +424,12 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 	// this is an optimization for skipping rescheduler and retry the task sooner.
 	// this is useful for errors like workflow busy, which doesn't have to wait for
 	// the longer rescheduling backoff.
-	if e.Attempt() > resubmitMaxAttempts {
+	if attempt > resubmitMaxAttempts {
+		return false
+	}
+
+	if common.IsResourceExhausted(err) &&
+		e.resourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
 		return false
 	}
 
@@ -436,7 +454,15 @@ func (e *executableImpl) rescheduleTime(
 		e.timeSource.Now().Add(taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt))
 	}
 
-	return e.timeSource.Now().Add(reschedulePolicy.ComputeNextDelay(0, attempt))
+	backoff := reschedulePolicy.ComputeNextDelay(0, attempt)
+	if common.IsResourceExhausted(err) {
+		// try a different reschedule policy to slow down retry
+		// upon resource exhausted error and pick the longer backoff
+		// duration
+		backoff = util.Max(backoff, taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount))
+	}
+
+	return e.timeSource.Now().Add(backoff)
 }
 
 func (e *executableImpl) updatePriority() {
