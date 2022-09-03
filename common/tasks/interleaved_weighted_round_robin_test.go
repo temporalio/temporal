@@ -340,14 +340,13 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestUpdateWeight() {
 
 	taskWG.Add(1)
 	s.scheduler.Submit(mockTask0)
+	taskWG.Wait()
 
 	channelWeights = []int{}
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
 	}
 	s.Equal([]int{8, 8, 8, 8, 5, 8, 5, 8, 5, 8, 5, 8, 5, 1, 1}, channelWeights)
-
-	taskWG.Wait()
 }
 
 func newTestTask(
