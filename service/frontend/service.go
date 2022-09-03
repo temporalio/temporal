@@ -147,7 +147,7 @@ type Config struct {
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	// Enable schedule-related RPCs
+	// Enable batcher RPCs
 	EnableBatcher dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Batch operation dynamic configs
 	MaxConcurrentBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
