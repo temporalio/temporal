@@ -49,10 +49,9 @@ const (
 
 type (
 	workerComponent struct {
-		activityDeps       activityDeps
-		dc                 *dynamicconfig.Collection
-		enabledFeature     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		enabledPerNSWorker dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		activityDeps   activityDeps
+		dc             *dynamicconfig.Collection
+		enabledFeature dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -78,10 +77,9 @@ func NewResult(
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
-			activityDeps:       params,
-			dc:                 dc,
-			enabledFeature:     dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcher, true),
-			enabledPerNSWorker: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcherPerNamespaceWorker, true),
+			activityDeps:   params,
+			dc:             dc,
+			enabledFeature: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableBatcher, true),
 		},
 	}
 }
@@ -89,9 +87,8 @@ func NewResult(
 func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	namespaceName := ns.Name().String()
 	enableFeature := s.enabledFeature(namespaceName)
-	enablePerNSWorker := s.enabledPerNSWorker(namespaceName)
 	return &workercommon.PerNSDedicatedWorkerOptions{
-		Enabled: enableFeature && enablePerNSWorker,
+		Enabled: enableFeature,
 	}
 }
 

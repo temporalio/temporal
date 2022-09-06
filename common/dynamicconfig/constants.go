@@ -91,8 +91,6 @@ const (
 	EnableActivityEagerExecution = "system.enableActivityEagerExecution"
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
-	// EnableBatcherPerNamespaceWorker decides whether start batcher worker per namespace
-	EnableBatcherPerNamespaceWorker = "system.enableBatcherPerNamespaceWorker"
 
 	// keys for size limit
 
@@ -217,6 +215,8 @@ const (
 	FrontendEnableSchedules = "frontend.enableSchedules"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
+	// FrontendEnableBatcher enables batcher-related RPCs in the frontend
+	FrontendEnableBatcher = "frontend.enableBatcher"
 
 	// DeleteNamespaceDeleteActivityRPS is RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
