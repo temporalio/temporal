@@ -29,11 +29,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/headers"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/headers"
 
 	uberatomic "go.uber.org/atomic"
 
