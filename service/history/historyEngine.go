@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
+	respondactivitytaskcandeled "go.temporal.io/server/service/history/api/respondactivitytaskcanceled"
 	"go.temporal.io/server/service/history/api/respondactivitytaskcompleted"
 	"go.temporal.io/server/service/history/api/respondactivitytaskfailed"
 	"go.temporal.io/server/service/history/api/signalwithstartworkflow"
@@ -1121,101 +1122,8 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	ctx context.Context,
 	req *historyservice.RespondActivityTaskCanceledRequest,
-) error {
-
-	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return err
-	}
-	namespace := namespaceEntry.Name()
-
-	request := req.CancelRequest
-	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
-	if err0 != nil {
-		return consts.ErrDeserializingToken
-	}
-	if err := api.SetActivityTaskRunID(ctx, token, e.workflowConsistencyChecker); err != nil {
-		return err
-	}
-
-	var activityStartedTime time.Time
-	var taskQueue string
-	var workflowTypeName string
-	err = api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		token.Clock,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			token.NamespaceId,
-			token.WorkflowId,
-			token.RunId,
-		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
-			workflowTypeName = mutableState.GetWorkflowType().GetName()
-			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-
-			scheduledEventID := token.GetScheduledEventId()
-			if scheduledEventID == common.EmptyEventID { // client call CompleteActivityById, so get scheduledEventID by activityID
-				scheduledEventID, err0 = api.GetActivityScheduledEventID(token.GetActivityId(), mutableState)
-				if err0 != nil {
-					return nil, err0
-				}
-			}
-			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
-
-			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-			// some extreme cassandra failure cases.
-			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskCanceledScope, metrics.StaleMutableStateCounter)
-				return nil, consts.ErrStaleState
-			}
-
-			if !isRunning || ai.StartedEventId == common.EmptyEventID ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) {
-				return nil, consts.ErrActivityTaskNotFound
-			}
-
-			// sanity check if activity is requested to be cancelled
-			if !ai.CancelRequested {
-				return nil, consts.ErrActivityTaskNotCancelRequested
-			}
-
-			if _, err := mutableState.AddActivityTaskCanceledEvent(
-				scheduledEventID,
-				ai.StartedEventId,
-				ai.CancelRequestId,
-				request.Details,
-				request.Identity); err != nil {
-				// Unable to add ActivityTaskCanceled event to history
-				return nil, err
-			}
-
-			activityStartedTime = *ai.StartedTime
-			taskQueue = ai.TaskQueue
-			return &api.UpdateWorkflowAction{
-				Noop:               false,
-				CreateWorkflowTask: true,
-			}, nil
-		},
-		nil,
-		e.shard,
-		e.workflowConsistencyChecker,
-	)
-
-	if err == nil && !activityStartedTime.IsZero() {
-		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskCanceledScope).
-			Tagged(
-				metrics.NamespaceTag(namespace.String()),
-				metrics.WorkflowTypeTag(workflowTypeName),
-				metrics.ActivityTypeTag(token.ActivityType),
-				metrics.TaskQueueTag(taskQueue),
-			)
-		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
-	}
-	return err
+) (*historyservice.RespondActivityTaskCanceledResponse, error) {
+	return respondactivitytaskcandeled.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 // RecordActivityTaskHeartbeat records an hearbeat for a task.
