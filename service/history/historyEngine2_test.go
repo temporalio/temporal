@@ -1590,7 +1590,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExi
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
 
-	err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -1626,7 +1626,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
-	err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
 	s.NoError(err)
 }
 
@@ -1656,7 +1656,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
-	err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
 	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 }
 
@@ -1706,7 +1706,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
-	err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
@@ -1750,7 +1750,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
-	err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
 	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 
 	// child workflow started but not completed
@@ -1760,7 +1760,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
-	err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
 	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 
 	// child completion recorded
@@ -1781,7 +1781,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
-	err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
 	s.NoError(err)
 }
 

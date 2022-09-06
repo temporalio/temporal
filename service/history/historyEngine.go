@@ -76,6 +76,7 @@ import (
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
+	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -1303,64 +1304,9 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 
 func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
-	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
-) (retError error) {
-	namespaceID := namespace.ID(request.GetNamespaceId())
-	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
-		return err
-	}
-
-	workflowContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
-		ctx,
-		request.Clock,
-		// it's ok we have stale state when doing verification,
-		// the logic will return WorkflowNotReady error and the caller will retry
-		// this can prevent keep reloading mutable state when there's a replication lag
-		// in parent shard.
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			request.NamespaceId,
-			request.ParentExecution.WorkflowId,
-			request.ParentExecution.RunId,
-		),
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { workflowContext.GetReleaseFn()(retError) }()
-
-	mutableState := workflowContext.GetMutableState()
-	if !mutableState.IsWorkflowExecutionRunning() &&
-		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		// parent has already completed and can't be blocked after failover.
-		return nil
-	}
-
-	onCurrentBranch, err := api.IsHistoryEventOnCurrentBranch(mutableState, request.ParentInitiatedId, request.ParentInitiatedVersion)
-	if err != nil {
-		// initiated event not found on any branch
-		return consts.ErrWorkflowNotReady
-	}
-
-	if !onCurrentBranch {
-		// due to conflict resolution, the initiated event may on a different branch of the workflow.
-		// we don't have to do anything and can simply return not found error. Standby logic
-		// after seeing this error will give up verification.
-		return consts.ErrChildExecutionNotFound
-	}
-
-	ci, isRunning := mutableState.GetChildExecutionInfo(request.ParentInitiatedId)
-	if isRunning {
-		if ci.StartedEventId != common.EmptyEventID &&
-			ci.GetStartedWorkflowId() != request.ChildExecution.GetWorkflowId() {
-			// this can happen since we may not have the initiated version
-			return consts.ErrChildExecutionNotFound
-		}
-
-		return consts.ErrWorkflowNotReady
-	}
-
-	return nil
+	req *historyservice.VerifyChildExecutionCompletionRecordedRequest,
+) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
+	return verifychildworkflowcompletionrecorded.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) ReplicateEventsV2(
