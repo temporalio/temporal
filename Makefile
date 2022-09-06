@@ -117,7 +117,7 @@ update-mockgen:
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	@go install github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick@latest
+	@go install github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick@master
 # This to download sources of gogo-protobuf which are required to build proto files.
 	@GO111MODULE=off go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
@@ -149,8 +149,6 @@ install-proto-submodule:
 
 protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
-	@printf "Get proto version"
-		protoc --version
 # Run protoc separately for each directory because of different package names.
 	$(foreach PROTO_DIR,$(PROTO_DIRS),\
 		protoc --fatal_warnings $(PROTO_IMPORTS) \
