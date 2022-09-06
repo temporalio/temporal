@@ -990,12 +990,12 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.TerminateWorkflowExecution(ctx, request)
+	resp, err2 := engine.TerminateWorkflowExecution(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.TerminateWorkflowExecutionResponse{}, nil
+	return resp, nil
 }
 
 func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historyservice.DeleteWorkflowExecutionRequest) (_ *historyservice.DeleteWorkflowExecutionResponse, retError error) {
