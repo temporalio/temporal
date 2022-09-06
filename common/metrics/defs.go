@@ -1775,7 +1775,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendSignalWorkflowExecutionScope:            {operation: "SignalWorkflowExecution"},
 		FrontendSignalWithStartWorkflowExecutionScope:   {operation: "SignalWithStartWorkflowExecution"},
 		FrontendTerminateWorkflowExecutionScope:         {operation: "TerminateWorkflowExecution"},
-		FrontendDeleteWorkflowExecutionScope:            {operation: "FrontendDeleteWorkflowExecution"},
+		FrontendDeleteWorkflowExecutionScope:            {operation: "DeleteWorkflowExecution"},
 		FrontendResetWorkflowExecutionScope:             {operation: "ResetWorkflowExecution"},
 		FrontendRequestCancelWorkflowExecutionScope:     {operation: "RequestCancelWorkflowExecution"},
 		FrontendListArchivedWorkflowExecutionsScope:     {operation: "ListArchivedWorkflowExecutions"},
