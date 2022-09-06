@@ -25,6 +25,7 @@
 package queues
 
 import (
+	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
 	"golang.org/x/exp/slices"
@@ -75,61 +76,106 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 
 	// have to compact (force merge) slices to reduce slice count
 	preferredSliceCount := int(float64(a.attributes.CriticalSliceCount) * targetLoadFactor)
-	numSliceToCompact := currentSliceCount - preferredSliceCount
 
-	// find compact candidates by calculating distance between two slices
-	// and sort candidates by distance
+	isDefaultReader := func(readerID int32) bool { return readerID == DefaultReaderId }
+	isNotDefaultReader := func(readerID int32) bool { return !isDefaultReader(readerID) }
+	isUniversalPredicate := func(s Slice) bool {
+		_, ok := s.Scope().Predicate.(*predicates.UniversalImpl[tasks.Task])
+		return ok
+	}
+	isNotUniversalPredicate := func(s Slice) bool {
+		return !isUniversalPredicate(s)
+	}
+
+	if a.findAndCompactCandidates(
+		readers,
+		isNotDefaultReader,
+		isNotUniversalPredicate,
+		preferredSliceCount,
+	) {
+		return
+	}
+
+	if a.findAndCompactCandidates(
+		readers,
+		isDefaultReader,
+		isNotUniversalPredicate,
+		preferredSliceCount,
+	) {
+		return
+	}
+
+	if a.findAndCompactCandidates(
+		readers,
+		isNotDefaultReader,
+		isUniversalPredicate,
+		a.attributes.CriticalSliceCount,
+	) {
+		return
+	}
+
+	a.findAndCompactCandidates(
+		readers,
+		isDefaultReader,
+		isUniversalPredicate,
+		a.attributes.CriticalSliceCount,
+	)
+}
+
+func (a *actionSliceCount) findAndCompactCandidates(
+	readers map[int32]Reader,
+	readerPredicate func(int32) bool,
+	slicePredicate SlicePredicate,
+	targetSliceCount int,
+) bool {
+	currentSliceCount := a.monitor.GetTotalSliceCount()
+	if currentSliceCount <= targetSliceCount {
+		return true
+	}
+
 	candidates := make([]compactCandidate, 0, currentSliceCount)
 	for readerID, reader := range readers {
-		// first try only compacting slices in non-default reader
-		if readerID == DefaultReaderId {
+		if !readerPredicate(readerID) {
 			continue
 		}
 
-		candidates = a.appendCompactCandidatesForReader(candidates, reader)
-	}
-	a.sortCompactCandidates(candidates)
-
-	sliceToCompact := make(map[Slice]struct{}, numSliceToCompact)
-	for _, candidate := range candidates[:util.Min(numSliceToCompact, len(candidates))] {
-		sliceToCompact[candidate.slice] = struct{}{}
+		candidates = a.appendCompactCandidatesForReader(candidates, reader, slicePredicate)
 	}
 
-	// if there are not enough slices to compact in non-default readers,
-	// have to compact slices in the default reader
-	// note here the comparision is against CriticalSliceCount, not preferredSliceCount
-	remainingToCompact := currentSliceCount - len(sliceToCompact) - a.attributes.CriticalSliceCount
-	if remainingToCompact > 0 {
-		candidates = a.appendCompactCandidatesForReader(nil, readers[DefaultReaderId])
-		a.sortCompactCandidates(candidates)
-		for _, candidate := range candidates[:util.Min(remainingToCompact, len(candidates))] {
-			sliceToCompact[candidate.slice] = struct{}{}
+	sliceToCompact := a.pickCompactCandidates(candidates, currentSliceCount-targetSliceCount)
+
+	for readerID, reader := range readers {
+		if !readerPredicate(readerID) {
+			continue
 		}
-	}
 
-	// finally, perform the compaction
-	for _, reader := range readers {
 		reader.CompactSlices(func(s Slice) bool {
 			_, ok := sliceToCompact[s]
 			return ok
 		})
 	}
+
+	return a.monitor.GetTotalSliceCount() <= targetSliceCount
 }
 
 func (a *actionSliceCount) appendCompactCandidatesForReader(
 	candidates []compactCandidate,
 	reader Reader,
+	slicePredicate SlicePredicate,
 ) []compactCandidate {
-	// calculate distance between two slices
+	// find compact candidates by calculating distance between two slices
+	// and sort candidates by distance
 	var prevRange *Range
+	prevEligible := false
 	reader.WalkSlices(func(s Slice) {
 		currentRange := s.Scope().Range
+		currentEligible := slicePredicate(s)
 		defer func() {
 			prevRange = &currentRange
+			prevEligible = currentEligible
 		}()
 
-		if prevRange == nil {
-
+		if prevRange == nil || !prevEligible || !currentEligible {
 			return
 		}
 
@@ -142,10 +188,18 @@ func (a *actionSliceCount) appendCompactCandidatesForReader(
 	return candidates
 }
 
-func (a *actionSliceCount) sortCompactCandidates(
+func (a *actionSliceCount) pickCompactCandidates(
 	candidates []compactCandidate,
-) {
+	numSliceToCompact int,
+) map[Slice]struct{} {
 	slices.SortFunc(candidates, func(this, that compactCandidate) bool {
 		return this.distance.CompareTo(this.distance) < 0
 	})
+
+	sliceToCompact := make(map[Slice]struct{}, numSliceToCompact)
+	for _, candidate := range candidates[:util.Min(numSliceToCompact, len(candidates))] {
+		sliceToCompact[candidate.slice] = struct{}{}
+	}
+
+	return sliceToCompact
 }
