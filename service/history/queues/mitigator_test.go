@@ -43,9 +43,6 @@ type (
 		monitor   Monitor
 		mitigator *mitigatorImpl
 	}
-
-	testMonitor struct {
-	}
 )
 
 func TestMitigatorSuite(t *testing.T) {
