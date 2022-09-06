@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -65,6 +64,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/respondactivitytaskcompleted"
 	"go.temporal.io/server/service/history/api/signalwithstartworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/configs"
@@ -1243,89 +1243,8 @@ func (e *historyEngineImpl) RespondWorkflowTaskFailed(
 func (e *historyEngineImpl) RespondActivityTaskCompleted(
 	ctx context.Context,
 	req *historyservice.RespondActivityTaskCompletedRequest,
-) error {
-
-	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return err
-	}
-	namespace := namespaceEntry.Name()
-
-	request := req.CompleteRequest
-	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
-	if err0 != nil {
-		return consts.ErrDeserializingToken
-	}
-	if err := e.setActivityTaskRunID(ctx, token); err != nil {
-		return err
-	}
-
-	var activityStartedTime time.Time
-	var taskQueue string
-	var workflowTypeName string
-	err = api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		token.Clock,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			token.NamespaceId,
-			token.WorkflowId,
-			token.RunId,
-		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
-			workflowTypeName = mutableState.GetWorkflowType().GetName()
-			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-			scheduledEventID := token.GetScheduledEventId()
-			if scheduledEventID == common.EmptyEventID { // client call CompleteActivityById, so get scheduledEventID by activityID
-				scheduledEventID, err0 = getscheduledEventID(token.GetActivityId(), mutableState)
-				if err0 != nil {
-					return nil, err0
-				}
-			}
-			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
-
-			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-			// some extreme cassandra failure cases.
-			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskCompletedScope, metrics.StaleMutableStateCounter)
-				return nil, consts.ErrStaleState
-			}
-
-			if !isRunning || ai.StartedEventId == common.EmptyEventID ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) {
-				return nil, consts.ErrActivityTaskNotFound
-			}
-
-			if _, err := mutableState.AddActivityTaskCompletedEvent(scheduledEventID, ai.StartedEventId, request); err != nil {
-				// Unable to add ActivityTaskCompleted event to history
-				return nil, err
-			}
-			activityStartedTime = *ai.StartedTime
-			taskQueue = ai.TaskQueue
-			return &api.UpdateWorkflowAction{
-				Noop:               false,
-				CreateWorkflowTask: true,
-			}, nil
-		},
-		nil,
-		e.shard,
-		e.workflowConsistencyChecker,
-	)
-
-	if err == nil && !activityStartedTime.IsZero() {
-		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskCompletedScope).
-			Tagged(
-				metrics.NamespaceTag(namespace.String()),
-				metrics.WorkflowTypeTag(workflowTypeName),
-				metrics.ActivityTypeTag(token.ActivityType),
-				metrics.TaskQueueTag(taskQueue),
-			)
-		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
-	}
-	return err
+) (*historyservice.RespondActivityTaskCompletedResponse, error) {
+	return respondactivitytaskcompleted.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 // RespondActivityTaskFailed completes an activity task failure.
@@ -1345,7 +1264,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 	if err0 != nil {
 		return consts.ErrDeserializingToken
 	}
-	if err := e.setActivityTaskRunID(ctx, token); err != nil {
+	if err := api.SetActivityTaskRunID(ctx, token, e.workflowConsistencyChecker); err != nil {
 		return err
 	}
 
@@ -1370,7 +1289,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 
 			scheduledEventID := token.GetScheduledEventId()
 			if scheduledEventID == common.EmptyEventID { // client call CompleteActivityById, so get scheduledEventID by activityID
-				scheduledEventID, err0 = getscheduledEventID(token.GetActivityId(), mutableState)
+				scheduledEventID, err0 = api.GetActivityScheduledEventID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return nil, err0
 				}
@@ -1454,7 +1373,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	if err0 != nil {
 		return consts.ErrDeserializingToken
 	}
-	if err := e.setActivityTaskRunID(ctx, token); err != nil {
+	if err := api.SetActivityTaskRunID(ctx, token, e.workflowConsistencyChecker); err != nil {
 		return err
 	}
 
@@ -1479,7 +1398,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 
 			scheduledEventID := token.GetScheduledEventId()
 			if scheduledEventID == common.EmptyEventID { // client call CompleteActivityById, so get scheduledEventID by activityID
-				scheduledEventID, err0 = getscheduledEventID(token.GetActivityId(), mutableState)
+				scheduledEventID, err0 = api.GetActivityScheduledEventID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return nil, err0
 				}
@@ -1557,7 +1476,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
 	}
-	if err := e.setActivityTaskRunID(ctx, token); err != nil {
+	if err := api.SetActivityTaskRunID(ctx, token, e.workflowConsistencyChecker); err != nil {
 		return nil, err
 	}
 
@@ -1580,7 +1499,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 
 			scheduledEventID := token.GetScheduledEventId()
 			if scheduledEventID == common.EmptyEventID { // client call RecordActivityHeartbeatByID, so get scheduledEventID by activityID
-				scheduledEventID, err0 = getscheduledEventID(token.GetActivityId(), mutableState)
+				scheduledEventID, err0 = api.GetActivityScheduledEventID(token.GetActivityId(), mutableState)
 				if err0 != nil {
 					return nil, err0
 				}
@@ -2349,21 +2268,6 @@ func (e *historyEngineImpl) getActiveNamespaceEntry(
 	return api.GetActiveNamespace(e.shard, namespaceUUID)
 }
 
-func getscheduledEventID(
-	activityID string,
-	mutableState workflow.MutableState,
-) (int64, error) {
-
-	if activityID == "" {
-		return 0, serviceerror.NewInvalidArgument("activityID cannot be empty")
-	}
-	activityInfo, ok := mutableState.GetActivityByActivityID(activityID)
-	if !ok {
-		return 0, serviceerror.NewNotFound(fmt.Sprintf("cannot find pending activity with ActivityID %s, check workflow execution history for more details", activityID))
-	}
-	return activityInfo.ScheduledEventId, nil
-}
-
 func (e *historyEngineImpl) GetReplicationMessages(
 	ctx context.Context,
 	pollingCluster string,
@@ -2811,33 +2715,6 @@ func (e *historyEngineImpl) containsHistoryEvent(
 		versionhistory.NewVersionHistoryItem(reappliedEventID, reappliedEventVersion),
 	)
 	return err == nil
-}
-
-func (e *historyEngineImpl) setActivityTaskRunID(
-	ctx context.Context,
-	token *tokenspb.Task,
-) error {
-	// TODO when the following APIs are deprecated
-	//  remove this function since run ID will always be set
-	//  * RecordActivityTaskHeartbeatById
-	//  * RespondActivityTaskCanceledById
-	//  * RespondActivityTaskFailedById
-	//  * RespondActivityTaskCompletedById
-
-	if len(token.RunId) != 0 {
-		return nil
-	}
-
-	runID, err := e.workflowConsistencyChecker.GetCurrentRunID(
-		ctx,
-		token.NamespaceId,
-		token.WorkflowId,
-	)
-	if err != nil {
-		return err
-	}
-	token.RunId = runID
-	return nil
 }
 
 func historyEventOnCurrentBranch(

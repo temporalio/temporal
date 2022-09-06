@@ -485,11 +485,12 @@ func (mr *MockEngineMockRecorder) RespondActivityTaskCanceled(ctx, request inter
 }
 
 // RespondActivityTaskCompleted mocks base method.
-func (m *MockEngine) RespondActivityTaskCompleted(ctx context.Context, request *historyservice.RespondActivityTaskCompletedRequest) error {
+func (m *MockEngine) RespondActivityTaskCompleted(ctx context.Context, request *historyservice.RespondActivityTaskCompletedRequest) (*historyservice.RespondActivityTaskCompletedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RespondActivityTaskCompleted", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.RespondActivityTaskCompletedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RespondActivityTaskCompleted indicates an expected call of RespondActivityTaskCompleted.

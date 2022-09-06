@@ -350,12 +350,12 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.RespondActivityTaskCompleted(ctx, request)
+	resp, err2 := engine.RespondActivityTaskCompleted(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
+	return resp, nil
 }
 
 // RespondActivityTaskFailed - records failure of an activity task
