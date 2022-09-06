@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	"go.temporal.io/server/service/history/api/respondactivitytaskcompleted"
+	"go.temporal.io/server/service/history/api/respondactivitytaskfailed"
 	"go.temporal.io/server/service/history/api/signalwithstartworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/configs"
@@ -1111,109 +1112,8 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 func (e *historyEngineImpl) RespondActivityTaskFailed(
 	ctx context.Context,
 	req *historyservice.RespondActivityTaskFailedRequest,
-) error {
-
-	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return err
-	}
-	namespace := namespaceEntry.Name()
-
-	request := req.FailedRequest
-	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
-	if err0 != nil {
-		return consts.ErrDeserializingToken
-	}
-	if err := api.SetActivityTaskRunID(ctx, token, e.workflowConsistencyChecker); err != nil {
-		return err
-	}
-
-	var activityStartedTime time.Time
-	var taskQueue string
-	var workflowTypeName string
-	err = api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		token.Clock,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			token.NamespaceId,
-			token.WorkflowId,
-			token.RunId,
-		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
-			workflowTypeName = mutableState.GetWorkflowType().GetName()
-			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-
-			scheduledEventID := token.GetScheduledEventId()
-			if scheduledEventID == common.EmptyEventID { // client call CompleteActivityById, so get scheduledEventID by activityID
-				scheduledEventID, err0 = api.GetActivityScheduledEventID(token.GetActivityId(), mutableState)
-				if err0 != nil {
-					return nil, err0
-				}
-			}
-			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
-
-			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-			// some extreme cassandra failure cases.
-			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRespondActivityTaskFailedScope, metrics.StaleMutableStateCounter)
-				return nil, consts.ErrStaleState
-			}
-
-			if !isRunning || ai.StartedEventId == common.EmptyEventID ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) {
-				return nil, consts.ErrActivityTaskNotFound
-			}
-
-			e.logger.Debug("RespondActivityTaskFailed", tag.WorkflowScheduledEventID(scheduledEventID), tag.ActivityInfo(ai), tag.NewBoolTag("hasHeartbeatDetails", request.GetLastHeartbeatDetails() != nil))
-
-			if request.GetLastHeartbeatDetails() != nil {
-				// Save heartbeat details as progress
-				mutableState.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{
-					TaskToken: request.GetTaskToken(),
-					Details:   request.GetLastHeartbeatDetails(),
-					Identity:  request.GetIdentity(),
-					Namespace: request.GetNamespace(),
-				})
-			}
-
-			postActions := &api.UpdateWorkflowAction{}
-			failure := request.GetFailure()
-			retryState, err := mutableState.RetryActivity(ai, failure)
-			if err != nil {
-				return nil, err
-			}
-			if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
-				// no more retry, and we want to record the failure event
-				if _, err := mutableState.AddActivityTaskFailedEvent(scheduledEventID, ai.StartedEventId, failure, retryState, request.GetIdentity()); err != nil {
-					// Unable to add ActivityTaskFailed event to history
-					return nil, err
-				}
-				postActions.CreateWorkflowTask = true
-			}
-
-			activityStartedTime = *ai.StartedTime
-			taskQueue = ai.TaskQueue
-			return postActions, nil
-		},
-		nil,
-		e.shard,
-		e.workflowConsistencyChecker,
-	)
-	if err == nil && !activityStartedTime.IsZero() {
-		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskFailedScope).
-			Tagged(
-				metrics.NamespaceTag(namespace.String()),
-				metrics.WorkflowTypeTag(workflowTypeName),
-				metrics.ActivityTypeTag(token.ActivityType),
-				metrics.TaskQueueTag(taskQueue),
-			)
-		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
-	}
-	return err
+) (*historyservice.RespondActivityTaskFailedResponse, error) {
+	return respondactivitytaskfailed.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 // RespondActivityTaskCanceled completes an activity task failure.
