@@ -65,7 +65,8 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/api/signalwithstart"
+	"go.temporal.io/server/service/history/api/signalwithstartworkflow"
+	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -407,162 +408,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	ctx context.Context,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
-
-	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(startRequest.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-	namespaceID := namespaceEntry.ID()
-
-	request := startRequest.StartRequest
-	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, e.shard, e.metricsClient)
-	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, e.shard, namespaceEntry, "StartWorkflowExecution")
-	if err != nil {
-		return nil, err
-	}
-
-	workflowID := request.GetWorkflowId()
-	runID := uuid.New()
-	workflowContext, err := api.NewWorkflowWithSignal(
-		ctx,
-		e.shard,
-		namespaceEntry,
-		workflowID,
-		runID,
-		startRequest,
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	now := e.timeSource.Now()
-	newWorkflow, newWorkflowEventsSeq, err := workflowContext.GetMutableState().CloseTransactionAsSnapshot(
-		now,
-		workflow.TransactionPolicyActive,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if len(newWorkflowEventsSeq) != 1 {
-		return nil, serviceerror.NewInternal("unable to create 1st event batch")
-	}
-
-	// create as brand new
-	createMode := persistence.CreateWorkflowModeBrandNew
-	prevRunID := ""
-	prevLastWriteVersion := int64(0)
-	err = workflowContext.GetContext().CreateWorkflowExecution(
-		ctx,
-		now,
-		createMode,
-		prevRunID,
-		prevLastWriteVersion,
-		workflowContext.GetMutableState(),
-		newWorkflow,
-		newWorkflowEventsSeq,
-	)
-	if err == nil {
-		return &historyservice.StartWorkflowExecutionResponse{
-			RunId: runID,
-		}, nil
-	}
-
-	t, ok := err.(*persistence.CurrentWorkflowConditionFailedError)
-	if !ok {
-		return nil, err
-	}
-
-	// handle CurrentWorkflowConditionFailedError
-	if t.RequestID == request.GetRequestId() {
-		return &historyservice.StartWorkflowExecutionResponse{
-			RunId: t.RunID,
-		}, nil
-		// delete history is expected here because duplicate start request will create history with different rid
-	}
-
-	// create as ID reuse
-	prevRunID = t.RunID
-	prevLastWriteVersion = t.LastWriteVersion
-	if workflowContext.GetMutableState().GetCurrentVersion() < prevLastWriteVersion {
-		clusterMetadata := e.shard.GetClusterMetadata()
-		return nil, serviceerror.NewNamespaceNotActive(
-			request.GetNamespace(),
-			clusterMetadata.GetCurrentClusterName(),
-			clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion),
-		)
-	}
-
-	prevExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
-		t.RequestID,
-		prevRunID,
-		t.State,
-		t.Status,
-		workflowID,
-		runID,
-		startRequest.StartRequest.GetWorkflowIdReusePolicy(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if prevExecutionUpdateAction != nil {
-		// update prev execution and create new execution in one transaction
-		err := api.GetAndUpdateWorkflowWithNew(
-			ctx,
-			nil,
-			api.BypassMutableStateConsistencyPredicate,
-			definition.NewWorkflowKey(
-				namespaceID.String(),
-				workflowID,
-				prevRunID,
-			),
-			prevExecutionUpdateAction,
-			func() (workflow.Context, workflow.MutableState, error) {
-				workflowContext, err := api.NewWorkflowWithSignal(
-					ctx,
-					e.shard,
-					namespaceEntry,
-					workflowID,
-					runID,
-					startRequest,
-					nil)
-				if err != nil {
-					return nil, nil, err
-				}
-				return workflowContext.GetContext(), workflowContext.GetMutableState(), nil
-			},
-			e.shard,
-			e.workflowConsistencyChecker,
-		)
-		switch err {
-		case nil:
-			return &historyservice.StartWorkflowExecutionResponse{
-				RunId: runID,
-			}, nil
-		case consts.ErrWorkflowCompleted:
-			// previous workflow already closed
-			// fallthough to the logic for only creating the new workflow below
-		default:
-			return nil, err
-		}
-	}
-
-	if err = workflowContext.GetContext().CreateWorkflowExecution(
-		ctx,
-		now,
-		persistence.CreateWorkflowModeUpdateCurrent,
-		prevRunID,
-		prevLastWriteVersion,
-		workflowContext.GetMutableState(),
-		newWorkflow,
-		newWorkflowEventsSeq,
-	); err != nil {
-		return nil, err
-	}
-	return &historyservice.StartWorkflowExecutionResponse{
-		RunId: runID,
-	}, nil
+	return startworkflow.Invoke(ctx, startRequest, e.shard, e.workflowConsistencyChecker)
 }
 
 // GetMutableState retrieves the mutable state of the workflow execution
@@ -1949,7 +1795,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	signalWithStartRequest *historyservice.SignalWithStartWorkflowExecutionRequest,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
-	return signalwithstart.SignalWithStartWorkflowExecution(ctx, signalWithStartRequest, e.shard, e.workflowConsistencyChecker)
+	return signalwithstartworkflow.Invoke(ctx, signalWithStartRequest, e.shard, e.workflowConsistencyChecker)
 }
 
 func (h *historyEngineImpl) UpdateWorkflow(
