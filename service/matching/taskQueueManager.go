@@ -877,7 +877,11 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 	// It can't be nil due to removing versions, as that would result in a non-nil container with
 	// nil inner fields.
 	if !res.GetMatchedReqHash() {
-		c.dbTaskManager.taskQueueOwnership.setVersioningDataForNonRootPartition(res.GetVersioningData())
+		if c.config.EnableDbTaskManager() {
+			c.dbTaskManager.taskQueueOwnership.setVersioningDataForNonRootPartition(res.GetVersioningData())
+		} else {
+			c.db.setVersioningDataForNonRootPartition(res.GetVersioningData())
+		}
 	}
 	// We want to start the poller as long as the root partition has any kind of data (or fetching hasn't worked)
 	if res.GetMatchedReqHash() || res.GetVersioningData() != nil || err != nil {
