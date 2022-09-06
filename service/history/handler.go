@@ -828,12 +828,12 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.RequestCancelWorkflowExecution(ctx, request)
+	resp, err2 := engine.RequestCancelWorkflowExecution(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.RequestCancelWorkflowExecutionResponse{}, nil
+	return resp, nil
 }
 
 // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
