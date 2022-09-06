@@ -417,7 +417,6 @@ func (c *taskQueueManagerImpl) AddTask(
 	if c.config.EnableDbTaskManager() {
 		fut := c.dbTaskManager.BufferAndWriteTask(taskInfo)
 		_, err = fut.Get(ctx)
-		_, err = fut.Get(ctx)
 		c.signalIfFatal(err)
 		if err == nil {
 			c.dbTaskManager.signalDispatch()
