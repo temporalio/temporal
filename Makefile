@@ -149,6 +149,8 @@ install-proto-submodule:
 
 protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
+	@printf "Get proto version" \
+		protoc --version
 # Run protoc separately for each directory because of different package names.
 	$(foreach PROTO_DIR,$(PROTO_DIRS),\
 		protoc --fatal_warnings $(PROTO_IMPORTS) \
