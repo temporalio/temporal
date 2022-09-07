@@ -905,8 +905,6 @@ const (
 	OperatorRemoveRemoteClusterScope
 	// OperatorListClustersScope is the metric scope for operator.OperatorListClusters
 	OperatorListClustersScope
-	OperatorDescribeClusterScope
-	OperatorListClusterMembersScope
 	// OperatorDeleteWorkflowExecutionScope is the metric scope for operator.DeleteWorkflowExecution
 	OperatorDeleteWorkflowExecutionScope
 
@@ -1755,8 +1753,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		OperatorAddOrUpdateRemoteClusterScope: {operation: "OperatorAddOrUpdateRemoteCluster"},
 		OperatorDeleteWorkflowExecutionScope:  {operation: "OperatorDeleteWorkflowExecution"},
 		OperatorListClustersScope:             {operation: "OperatorListClusters"},
-		OperatorDescribeClusterScope:          {operation: "OperatorDescribeCluster"},
-		OperatorListClusterMembersScope:       {operation: "OperatorListClusterMembers"},
 		OperatorRemoveRemoteClusterScope:      {operation: "OperatorRemoveRemoteCluster"},
 
 		// Workflow Service API

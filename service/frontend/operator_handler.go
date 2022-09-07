@@ -348,6 +348,8 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	request *operatorservice.AddOrUpdateRemoteClusterRequest,
 ) (_ *operatorservice.AddOrUpdateRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
+	scope, sw := h.startRequestProfile(metrics.OperatorAddOrUpdateRemoteClusterScope)
+	defer sw.Stop()
 
 	adminClient := h.clientFactory.NewRemoteAdminClientWithTimeout(
 		request.GetFrontendAddress(),
@@ -358,6 +360,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	// Fetch cluster metadata from remote cluster
 	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
 	if err != nil {
+		scope.IncCounter(metrics.ServiceFailures)
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
 			errUnableConnectRemoteClusterMessage,
 			request.GetFrontendAddress(),
@@ -367,12 +370,12 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 
 	err = h.validateRemoteClusterMetadata(resp)
 	if err != nil {
+		scope.IncCounter(metrics.ServiceFailures)
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errInvalidRemoteClusterInfo, err))
 	}
 
 	var updateRequestVersion int64 = 0
-	clusterMetadataMgr := h.clusterMetadataManager
-	clusterData, err := clusterMetadataMgr.GetClusterMetadata(
+	clusterData, err := h.clusterMetadataManager.GetClusterMetadata(
 		ctx,
 		&persistence.GetClusterMetadataRequest{ClusterName: resp.GetClusterName()},
 	)
@@ -382,10 +385,11 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	case *serviceerror.NotFound:
 		updateRequestVersion = 0
 	default:
+		scope.IncCounter(metrics.ServiceFailures)
 		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToStoreClusterInfo, err))
 	}
 
-	applied, err := clusterMetadataMgr.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
+	applied, err := h.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
@@ -399,9 +403,11 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 		Version: updateRequestVersion,
 	})
 	if err != nil {
+		scope.IncCounter(metrics.ServiceFailures)
 		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToStoreClusterInfo, err))
 	}
 	if !applied {
+		scope.IncCounter(metrics.ServiceFailures)
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToStoreClusterInfo, err))
 	}
 	return &operatorservice.AddOrUpdateRemoteClusterResponse{}, nil
@@ -412,36 +418,58 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 	request *operatorservice.RemoveRemoteClusterRequest,
 ) (_ *operatorservice.RemoveRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
+	scope, sw := h.startRequestProfile(metrics.OperatorRemoveRemoteClusterScope)
+	defer sw.Stop()
 
 	if err := h.clusterMetadataManager.DeleteClusterMetadata(
 		ctx,
 		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
 	); err != nil {
+		scope.IncCounter(metrics.ServiceFailures)
 		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToDeleteClusterInfo, err))
 	}
 	return &operatorservice.RemoveRemoteClusterResponse{}, nil
-}
-
-func (h *OperatorHandlerImpl) DescribeCluster(
-	ctx context.Context,
-	request *operatorservice.DescribeClusterRequest,
-) (_ *operatorservice.DescribeClusterResponse, retError error) {
-
-	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
 }
 
 func (h *OperatorHandlerImpl) ListClusters(
 	ctx context.Context,
 	request *operatorservice.ListClustersRequest,
 ) (_ *operatorservice.ListClustersResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
-}
+	defer log.CapturePanic(h.logger, &retError)
+	scope, sw := h.startRequestProfile(metrics.OperatorListClustersScope)
+	defer sw.Stop()
 
-func (h *OperatorHandlerImpl) ListClusterMembers(
-	ctx context.Context,
-	request *operatorservice.ListClusterMembersRequest,
-) (_ *operatorservice.ListClusterMembersResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetPageSize() <= 0 {
+		request.PageSize = listClustersPageSize
+	}
+
+	resp, err := h.clusterMetadataManager.ListClusterMetadata(ctx, &persistence.ListClusterMetadataRequest{
+		PageSize:      int(request.GetPageSize()),
+		NextPageToken: request.GetNextPageToken(),
+	})
+	if err != nil {
+		scope.IncCounter(metrics.ServiceFailures)
+		return nil, err
+	}
+
+	var clusterMetadataList []*operatorservice.ClusterMetadata
+	for _, clusterResp := range resp.ClusterMetadata {
+		clusterMetadataList = append(clusterMetadataList, &operatorservice.ClusterMetadata{
+			ClusterName:            clusterResp.GetClusterName(),
+			ClusterId:              clusterResp.GetClusterId(),
+			Address:                clusterResp.GetClusterAddress(),
+			InitialFailoverVersion: clusterResp.GetInitialFailoverVersion(),
+			HistoryShardCount:      clusterResp.GetHistoryShardCount(),
+			IsConnectionEnabled:    clusterResp.GetIsConnectionEnabled(),
+		})
+	}
+	return &operatorservice.ListClustersResponse{
+		Clusters:      clusterMetadataList,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }
 
 func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservice.DescribeClusterResponse) error {
