@@ -29,7 +29,12 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
+	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
@@ -976,4 +981,76 @@ func (s *clientIntegrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	s.NoError(err)
 
 	s.NoError(err1)
+}
+
+func (s *clientIntegrationSuite) TestActivityScheduleToCloseTimeoutWithRetries() {
+	for _, opts := range []activityTimeoutTestOptions{
+		{numAppErrors: 0, timeoutErrorShouldHaveCause: false},
+		{numAppErrors: 1, timeoutErrorShouldHaveCause: true},
+		{numAppErrors: 2, timeoutErrorShouldHaveCause: true},
+	} {
+		s.T().Run(fmt.Sprintf("ActivityTimesOutAfter%dApplicationErrors", opts.numAppErrors), func(t *testing.T) {
+			s.verifyTimedOutActivityBehavior(t, opts)
+		})
+	}
+}
+
+type activityTimeoutTestOptions struct {
+	numAppErrors                int
+	timeoutErrorShouldHaveCause bool
+}
+
+func (s *clientIntegrationSuite) verifyTimedOutActivityBehavior(t *testing.T, opts activityTimeoutTestOptions) {
+	appErrors := make(chan error)
+	myActivity := func(ctx context.Context) error {
+		select {
+		case err := <-appErrors:
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	myWorkflow := func(ctx workflow.Context) error {
+		ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ScheduleToCloseTimeout: time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    time.Nanosecond,
+				BackoffCoefficient: 1.0,
+			},
+		})
+		return workflow.ExecuteActivity(ctx, myActivity).Get(ctx, nil)
+	}
+	s.worker.RegisterWorkflowWithOptions(myWorkflow, workflow.RegisterOptions{
+		Name: fmt.Sprintf("%sWorkflow", t.Name()),
+	})
+	s.worker.RegisterActivityWithOptions(myActivity, activity.RegisterOptions{
+		Name: fmt.Sprintf("%sActivity", t.Name()),
+	})
+	we, err := s.sdkClient.ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
+		ID:        uuid.New(),
+		TaskQueue: s.taskQueue,
+	}, myWorkflow)
+	require.NoError(t, err)
+	for appErrorNumber := 1; appErrorNumber <= opts.numAppErrors; appErrorNumber++ {
+		appErrors <- fmt.Errorf("appErrorNumber#%d", appErrorNumber)
+	}
+	err = we.Get(context.Background(), nil)
+	workflowExecutionErr, ok := err.(*temporal.WorkflowExecutionError)
+	require.True(t, ok)
+	activityErr, ok := workflowExecutionErr.Unwrap().(*temporal.ActivityError)
+	require.True(t, ok)
+	timeoutErr, ok := activityErr.Unwrap().(*temporal.TimeoutError)
+	require.True(t, ok)
+	require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
+	timeoutErrorCause := timeoutErr.Unwrap()
+	rootCauseShouldBe := fmt.Sprintf("a workflow that fails due to an activity hitting its ScheduleToCloseTimeout"+
+		" after it continuously returned application errors for %d attempts should have a root cause error that is", opts.numAppErrors)
+	if !opts.timeoutErrorShouldHaveCause {
+		require.NoError(t, timeoutErrorCause, rootCauseShouldBe+" a timeout error with no underlying cause")
+		return
+	}
+	require.Error(t, timeoutErrorCause, rootCauseShouldBe+" a timeout error with the latest application error as its cause")
+	appErr, ok := timeoutErrorCause.(*temporal.ApplicationError)
+	require.True(t, ok, "the activity timeout must contain the latest app error as its cause")
+	assert.EqualError(t, appErr, fmt.Sprintf("appErrorNumber#%d", opts.numAppErrors))
 }
