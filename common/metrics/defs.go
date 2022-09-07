@@ -899,11 +899,14 @@ const (
 	// OperatorListSearchAttributesScope is the metric scope for operator.ListSearchAttributes
 	OperatorListSearchAttributesScope
 	OperatorDeleteNamespaceScope
-	OperatorAddOrUpdateRemoteCluster
-	OperatorDescribeCluster
-	OperatorListClusterMembers
-	OperatorListClusters
-	OperatorRemoveRemoteCluster
+	// OperatorAddOrUpdateRemoteClusterScope is the metric scope for operator.AddOrUpdateRemoteCluster
+	OperatorAddOrUpdateRemoteClusterScope
+	// OperatorRemoveRemoteClusterScope is the metric scope for operator.RemoveRemoteCluster
+	OperatorRemoveRemoteClusterScope
+	// OperatorListClustersScope is the metric scope for operator.OperatorListClusters
+	OperatorListClustersScope
+	// OperatorDeleteWorkflowExecutionScope is the metric scope for operator.DeleteWorkflowExecution
+	OperatorDeleteWorkflowExecutionScope
 
 	NumOperatorScopes
 )
@@ -1743,15 +1746,15 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminRemoveRemoteClusterScope:              {operation: "AdminRemoveRemoteCluster"},
 		AdminDeleteWorkflowExecutionScope:          {operation: "AdminDeleteWorkflowExecution"},
 		// Operator Service API
-		OperatorAddSearchAttributesScope:    {operation: "OperatorAddSearchAttributes"},
-		OperatorRemoveSearchAttributesScope: {operation: "OperatorRemoveSearchAttributes"},
-		OperatorListSearchAttributesScope:   {operation: "OperatorListSearchAttributes"},
-		OperatorDeleteNamespaceScope:        {operation: "OperatorDeleteNamespace"},
-		OperatorAddOrUpdateRemoteCluster:    {operation: "OperatorAddOrUpdateRemoteCluster"},
-		OperatorDescribeCluster:             {operation: "OperatorDescribeCluster"},
-		OperatorListClusterMembers:          {operation: "OperatorListClusterMembers"},
-		OperatorListClusters:                {operation: "OperatorListClusters"},
-		OperatorRemoveRemoteCluster:         {operation: "OperatorRemoveRemoteCluster"},
+		OperatorAddSearchAttributesScope:      {operation: "OperatorAddSearchAttributes"},
+		OperatorRemoveSearchAttributesScope:   {operation: "OperatorRemoveSearchAttributes"},
+		OperatorListSearchAttributesScope:     {operation: "OperatorListSearchAttributes"},
+		OperatorDeleteNamespaceScope:          {operation: "OperatorDeleteNamespace"},
+		OperatorAddOrUpdateRemoteClusterScope: {operation: "OperatorAddOrUpdateRemoteCluster"},
+		OperatorDeleteWorkflowExecutionScope:  {operation: "OperatorDeleteWorkflowExecution"},
+		OperatorListClustersScope:             {operation: "OperatorListClusters"},
+		OperatorRemoveRemoteClusterScope:      {operation: "OperatorRemoveRemoteCluster"},
+
 		// Workflow Service API
 		FrontendStartWorkflowExecutionScope:             {operation: "StartWorkflowExecution"},
 		FrontendPollWorkflowTaskQueueScope:              {operation: "PollWorkflowTaskQueue"},

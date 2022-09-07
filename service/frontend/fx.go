@@ -459,6 +459,9 @@ func OperatorHandlerProvider(
 	healthServer *health.Server,
 	historyClient historyservice.HistoryServiceClient,
 	namespaceRegistry namespace.Registry,
+	clusterMetadataManager persistence.ClusterMetadataManager,
+	clusterMetadata cluster.Metadata,
+	clientFactory client.Factory,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		config,
@@ -472,6 +475,9 @@ func OperatorHandlerProvider(
 		healthServer,
 		historyClient,
 		namespaceRegistry,
+		clusterMetadataManager,
+		clusterMetadata,
+		clientFactory,
 	}
 	return NewOperatorHandlerImpl(args)
 }
