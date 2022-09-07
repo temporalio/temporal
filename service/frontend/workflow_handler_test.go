@@ -2079,6 +2079,35 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 			}, nil
 		},
 	)
+	s.mockHistoryClient.EXPECT().PollMutableState(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+		&historyservice.PollMutableStateResponse{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: jobID,
+				RunId:      uuid.New(),
+			},
+			CurrentBranchToken:  []byte{1},
+			LastFirstEventTxnId: 0,
+		}, nil)
+	encodedResult, err := payloads.Encode(batcher.HeartBeatDetails{
+		TotalEstimate: 3,
+		SuccessCount:  2,
+		ErrorCount:    1,
+	})
+	s.NoError(err)
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchReverse(gomock.Any(), gomock.Any()).Return(
+		&persistence.ReadHistoryBranchReverseResponse{
+			HistoryEvents: []*historypb.HistoryEvent{
+				{
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
+						WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{
+							Result: encodedResult,
+						},
+					},
+				},
+			},
+		}, nil)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.NameTypeMap{}, nil)
 	request := &workflowservice.DescribeBatchOperationRequest{
 		Namespace: testNamespace.String(),
 		JobId:     jobID,
@@ -2091,6 +2120,9 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 	s.Equal(now, resp.GetCloseTime())
 	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
 	s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, resp.GetState())
+	s.Equal(int64(3), resp.GetTotalOperationCount())
+	s.Equal(int64(2), resp.GetCompleteOperationCount())
+	s.Equal(int64(1), resp.GetFailureOperationCount())
 }
 
 func (s *workflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
