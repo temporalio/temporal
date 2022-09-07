@@ -87,6 +87,20 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 		return !isUniversalPredicate(s)
 	}
 
+	// peform compaction in four stages:
+	// 1. compact slices in non-default reader with non-universal predicate
+	// 2. compact slices in default reader with non-universal predicate
+	// 3. compact slices in non-default reader with universal predicate
+	// 4. compact slices in default reader with universal predicate
+	//
+	// Main reason for treating universal predicate separately is that upon compaction,
+	// the resulting predicate will be universal as well. Then in the worst case,
+	// one slice with universal predicate may "infect" all other slices and result in
+	// a very large slice with universal predicate and upon shard reload, all tasks
+	// in the slice needs to be reprocessed.
+	// So compact slices with non-univerisal predicate first to minimize the impact
+	// on other namespaces upon shard reload.
+
 	if a.findAndCompactCandidates(
 		readers,
 		isNotDefaultReader,
