@@ -390,7 +390,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	}
 	wh.logger.Debug("Start workflow execution request namespaceID.", tag.WorkflowNamespaceID(namespaceID.String()))
 
-	request, err = wh.mapStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
+	request, err = wh.unaliasStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -2012,7 +2012,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	request, err = wh.mapSignalWithStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
+	request, err = wh.unaliasSignalWithStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -2757,12 +2757,12 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 		}
 		searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), saTypeMap)
-		mappedSearchAttributes, err := searchattribute.ApplyAliases(wh.saMapper, response.GetWorkflowExecutionInfo().GetSearchAttributes(), request.GetNamespace())
+		aliasedSas, err := searchattribute.AliasFields(wh.saMapper, response.GetWorkflowExecutionInfo().GetSearchAttributes(), request.GetNamespace())
 		if err != nil {
 			return nil, err
 		}
-		if mappedSearchAttributes != nil {
-			response.GetWorkflowExecutionInfo().SearchAttributes = mappedSearchAttributes
+		if aliasedSas != nil {
+			response.GetWorkflowExecutionInfo().SearchAttributes = aliasedSas
 		}
 	}
 
@@ -2944,7 +2944,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	request, err = wh.mapCreateScheduleRequestSearchAttributes(request, namespaceName)
+	request, err = wh.unaliasCreateScheduleRequestSearchAttributes(request, namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -3094,12 +3094,12 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 		}
 		searchattribute.ApplyTypeMap(sas, saTypeMap)
-		mappedSas, err := searchattribute.ApplyAliases(wh.saMapper, sas, request.GetNamespace())
+		aliasedSas, err := searchattribute.AliasFields(wh.saMapper, sas, request.GetNamespace())
 		if err != nil {
 			return nil, err
 		}
-		if mappedSas != nil {
-			executionInfo.SearchAttributes = mappedSas
+		if aliasedSas != nil {
+			executionInfo.SearchAttributes = aliasedSas
 		}
 	}
 
@@ -3135,12 +3135,12 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 				return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 			}
 			searchattribute.ApplyTypeMap(sa, saTypeMap)
-			mappedSearchAttributes, err := searchattribute.ApplyAliases(wh.saMapper, sa, request.Namespace)
+			aliasedSas, err := searchattribute.AliasFields(wh.saMapper, sa, request.Namespace)
 			if err != nil {
 				return err
 			}
-			if mappedSearchAttributes != nil {
-				response.Schedule.Action.GetStartWorkflow().SearchAttributes = mappedSearchAttributes
+			if aliasedSas != nil {
+				response.Schedule.Action.GetStartWorkflow().SearchAttributes = aliasedSas
 			}
 		}
 
@@ -3259,7 +3259,7 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	request, err = wh.mapUpdateScheduleRequestStartWorkflowSearchAttributes(request, namespaceName)
+	request, err = wh.unaliasUpdateScheduleRequestStartWorkflowSearchAttributes(request, namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -4171,12 +4171,12 @@ func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.H
 		}
 		if searchAttributes != nil {
 			searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
-			mappedSearchAttributes, err := searchattribute.ApplyAliases(wh.saMapper, searchAttributes, namespace.String())
+			aliasedSas, err := searchattribute.AliasFields(wh.saMapper, searchAttributes, namespace.String())
 			if err != nil {
 				return err
 			}
-			if mappedSearchAttributes != nil {
-				searchAttributes.IndexedFields = mappedSearchAttributes.IndexedFields
+			if aliasedSas != nil {
+				searchAttributes.IndexedFields = aliasedSas.IndexedFields
 			}
 		}
 	}
@@ -4768,62 +4768,62 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 	return operationState
 }
 
-func (wh *WorkflowHandler) mapStartWorkflowExecutionRequestSearchAttributes(request *workflowservice.StartWorkflowExecutionRequest, namespaceName namespace.Name) (*workflowservice.StartWorkflowExecutionRequest, error) {
-	mappedSearchAttributes, err := searchattribute.SubstituteAliases(wh.saMapper, request.GetSearchAttributes(), namespaceName.String())
+func (wh *WorkflowHandler) unaliasStartWorkflowExecutionRequestSearchAttributes(request *workflowservice.StartWorkflowExecutionRequest, namespaceName namespace.Name) (*workflowservice.StartWorkflowExecutionRequest, error) {
+	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapper, request.GetSearchAttributes(), namespaceName.String())
 	if err != nil {
 		return nil, err
 	}
-	if mappedSearchAttributes == nil {
+	if unaliasedSas == nil {
 		return request, nil
 	}
 
 	// Shallow copy request and replace SearchAttributes fields only.
 	newRequest := *request
-	newRequest.SearchAttributes = mappedSearchAttributes
+	newRequest.SearchAttributes = unaliasedSas
 	return &newRequest, nil
 }
 
-func (wh *WorkflowHandler) mapSignalWithStartWorkflowExecutionRequestSearchAttributes(request *workflowservice.SignalWithStartWorkflowExecutionRequest, namespaceName namespace.Name) (*workflowservice.SignalWithStartWorkflowExecutionRequest, error) {
-	mappedSearchAttributes, err := searchattribute.SubstituteAliases(wh.saMapper, request.GetSearchAttributes(), namespaceName.String())
+func (wh *WorkflowHandler) unaliasSignalWithStartWorkflowExecutionRequestSearchAttributes(request *workflowservice.SignalWithStartWorkflowExecutionRequest, namespaceName namespace.Name) (*workflowservice.SignalWithStartWorkflowExecutionRequest, error) {
+	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapper, request.GetSearchAttributes(), namespaceName.String())
 	if err != nil {
 		return nil, err
 	}
-	if mappedSearchAttributes == nil {
+	if unaliasedSas == nil {
 		return request, nil
 	}
 
 	// Shallow copy request and replace SearchAttributes fields only.
 	newRequest := *request
-	newRequest.SearchAttributes = mappedSearchAttributes
+	newRequest.SearchAttributes = unaliasedSas
 	return &newRequest, nil
 }
 
-func (wh *WorkflowHandler) mapCreateScheduleRequestSearchAttributes(request *workflowservice.CreateScheduleRequest, namespaceName namespace.Name) (*workflowservice.CreateScheduleRequest, error) {
-	mappedSearchAttributes, err := searchattribute.SubstituteAliases(wh.saMapper, request.GetSearchAttributes(), namespaceName.String())
+func (wh *WorkflowHandler) unaliasCreateScheduleRequestSearchAttributes(request *workflowservice.CreateScheduleRequest, namespaceName namespace.Name) (*workflowservice.CreateScheduleRequest, error) {
+	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapper, request.GetSearchAttributes(), namespaceName.String())
 	if err != nil {
 		return nil, err
 	}
 
 	startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow()
-	mappedStartWorkflowSearchAttributes, err := searchattribute.SubstituteAliases(wh.saMapper, startWorkflow.GetSearchAttributes(), namespaceName.String())
+	unaliasedStartWorkflowSas, err := searchattribute.UnaliasFields(wh.saMapper, startWorkflow.GetSearchAttributes(), namespaceName.String())
 	if err != nil {
 		return nil, err
 	}
 
-	if mappedSearchAttributes == nil && mappedStartWorkflowSearchAttributes == nil {
+	if unaliasedSas == nil && unaliasedStartWorkflowSas == nil {
 		return request, nil
 	}
 
 	// Shallow copy request and replace SearchAttributes fields only.
 	newRequest := *request
 
-	if mappedSearchAttributes != nil {
-		newRequest.SearchAttributes = mappedSearchAttributes
+	if unaliasedSas != nil {
+		newRequest.SearchAttributes = unaliasedSas
 	}
 
-	if mappedStartWorkflowSearchAttributes != nil && startWorkflow != nil {
+	if unaliasedStartWorkflowSas != nil && startWorkflow != nil {
 		newStartWorkflow := *startWorkflow
-		newStartWorkflow.SearchAttributes = mappedStartWorkflowSearchAttributes
+		newStartWorkflow.SearchAttributes = unaliasedStartWorkflowSas
 		newSchedule := *request.GetSchedule()
 		newSchedule.Action = &schedpb.ScheduleAction{
 			Action: &schedpb.ScheduleAction_StartWorkflow{
@@ -4835,21 +4835,21 @@ func (wh *WorkflowHandler) mapCreateScheduleRequestSearchAttributes(request *wor
 	return &newRequest, nil
 }
 
-func (wh *WorkflowHandler) mapUpdateScheduleRequestStartWorkflowSearchAttributes(request *workflowservice.UpdateScheduleRequest, namespaceName namespace.Name) (*workflowservice.UpdateScheduleRequest, error) {
+func (wh *WorkflowHandler) unaliasUpdateScheduleRequestStartWorkflowSearchAttributes(request *workflowservice.UpdateScheduleRequest, namespaceName namespace.Name) (*workflowservice.UpdateScheduleRequest, error) {
 	startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow()
 	if startWorkflow == nil {
 		return request, nil
 	}
 
-	mappedSearchAttributes, err := searchattribute.SubstituteAliases(wh.saMapper, startWorkflow.GetSearchAttributes(), namespaceName.String())
+	unaliasedSas, err := searchattribute.UnaliasFields(wh.saMapper, startWorkflow.GetSearchAttributes(), namespaceName.String())
 	if err != nil {
 		return nil, err
 	}
-	if mappedSearchAttributes == nil {
+	if unaliasedSas == nil {
 		return request, nil
 	}
 	newStartWorkflow := *startWorkflow
-	newStartWorkflow.SearchAttributes = mappedSearchAttributes
+	newStartWorkflow.SearchAttributes = unaliasedSas
 	newSchedule := *request.GetSchedule()
 	newSchedule.Action = &schedpb.ScheduleAction{
 		Action: &schedpb.ScheduleAction_StartWorkflow{

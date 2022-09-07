@@ -41,9 +41,9 @@ type (
 	}
 )
 
-// ApplyAliases returns SearchAttributes struct where each search attribute name is replaced with alias.
+// AliasFields returns SearchAttributes struct where each search attribute name is replaced with alias.
 // If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
-func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) (*commonpb.SearchAttributes, error) {
+func AliasFields(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
 		return nil, nil
 	}
@@ -60,7 +60,7 @@ func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, na
 		if err != nil {
 			if _, isInvalidArgument := err.(*serviceerror.InvalidArgument); isInvalidArgument {
 				// Silently ignore serviceerror.InvalidArgument because it indicates unmapped field (alias was deleted, for example).
-				// IMPORTANT: ApplyAliases should never return serviceerror.InvalidArgument because it is used by Poll API and the error
+				// IMPORTANT: AliasFields should never return serviceerror.InvalidArgument because it is used by Poll API and the error
 				// goes through up to SDK, which shutdowns worker when it receives serviceerror.InvalidArgument as poll response.
 				continue
 			}
@@ -79,9 +79,9 @@ func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, na
 	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
 }
 
-// SubstituteAliases returns SearchAttributes struct where each search attribute alias is replaced with field name.
+// UnaliasFields returns SearchAttributes struct where each search attribute alias is replaced with field name.
 // If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
-func SubstituteAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) (*commonpb.SearchAttributes, error) {
+func UnaliasFields(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
 		return nil, nil
 	}

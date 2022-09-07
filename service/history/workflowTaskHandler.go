@@ -813,14 +813,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
-	mappedSearchAttributes, err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespaceName.String())
+	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespaceName.String())
 	if err != nil {
 		handler.stopProcessing = true
 		return err
 	}
-	if mappedSearchAttributes != nil {
+	if unaliasedSas != nil {
 		newAttr := *attr
-		newAttr.SearchAttributes = mappedSearchAttributes
+		newAttr.SearchAttributes = unaliasedSas
 		attr = &newAttr
 	}
 
@@ -934,14 +934,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		return err
 	}
 
-	mappedSearchAttributes, err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace.String())
+	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace.String())
 	if err != nil {
 		handler.stopProcessing = true
 		return err
 	}
-	if mappedSearchAttributes != nil {
+	if unaliasedSas != nil {
 		newAttr := *attr
-		newAttr.SearchAttributes = mappedSearchAttributes
+		newAttr.SearchAttributes = unaliasedSas
 		attr = &newAttr
 	}
 
@@ -1068,14 +1068,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		return err
 	}
 
-	mappedSearchAttributes, err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace.String())
+	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace.String())
 	if err != nil {
 		handler.stopProcessing = true
 		return err
 	}
-	if mappedSearchAttributes != nil {
+	if unaliasedSas != nil {
 		newAttr := *attr
-		newAttr.SearchAttributes = mappedSearchAttributes
+		newAttr.SearchAttributes = unaliasedSas
 		attr = &newAttr
 	}
 
