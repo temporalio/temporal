@@ -25,7 +25,6 @@
 package queues
 
 import (
-	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
 	"golang.org/x/exp/slices"
@@ -79,13 +78,8 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) {
 
 	isDefaultReader := func(readerID int32) bool { return readerID == DefaultReaderId }
 	isNotDefaultReader := func(readerID int32) bool { return !isDefaultReader(readerID) }
-	isUniversalPredicate := func(s Slice) bool {
-		_, ok := s.Scope().Predicate.(*predicates.UniversalImpl[tasks.Task])
-		return ok
-	}
-	isNotUniversalPredicate := func(s Slice) bool {
-		return !isUniversalPredicate(s)
-	}
+	isUniversalPredicate := func(s Slice) bool { return tasks.IsUniverisalPredicate(s.Scope().Predicate) }
+	isNotUniversalPredicate := func(s Slice) bool { return !isUniversalPredicate(s) }
 
 	// peform compaction in four stages:
 	// 1. compact slices in non-default reader with non-universal predicate
