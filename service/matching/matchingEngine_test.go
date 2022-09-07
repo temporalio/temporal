@@ -512,7 +512,6 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 		var err error
 		if taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 			addRequest := matchingservice.AddActivityTaskRequest{
-				SourceNamespaceId:      namespaceID.String(),
 				NamespaceId:            namespaceID.String(),
 				Execution:              execution,
 				ScheduledEventId:       scheduledEventID,
@@ -574,7 +573,6 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	s.Nil(err)
 
 	addRequest := matchingservice.AddActivityTaskRequest{
-		SourceNamespaceId:      namespaceID.String(),
 		NamespaceId:            namespaceID.String(),
 		Execution:              execution,
 		TaskQueue:              taskQueue,
@@ -618,7 +616,6 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	for i := int64(0); i < taskCount; i++ {
 		scheduledEventID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
-			SourceNamespaceId:      namespaceID.String(),
 			NamespaceId:            namespaceID.String(),
 			Execution:              workflowExecution,
 			ScheduledEventId:       scheduledEventID,
@@ -821,7 +818,6 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		time.Sleep(20 * time.Millisecond) // Necessary for sync match to happen
 
 		addRequest := matchingservice.AddActivityTaskRequest{
-			SourceNamespaceId:      namespaceID.String(),
 			NamespaceId:            namespaceID.String(),
 			Execution:              workflowExecution,
 			ScheduledEventId:       scheduledEventID,
@@ -987,7 +983,6 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			defer wg.Done()
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddActivityTaskRequest{
-					SourceNamespaceId:      namespaceID.String(),
 					NamespaceId:            namespaceID.String(),
 					Execution:              workflowExecution,
 					ScheduledEventId:       scheduledEventID,
@@ -1297,7 +1292,6 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 			engine := engines[p]
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddActivityTaskRequest{
-					SourceNamespaceId:      namespaceID.String(),
 					NamespaceId:            namespaceID.String(),
 					Execution:              workflowExecution,
 					ScheduledEventId:       scheduledEventID,
@@ -1574,7 +1568,6 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 
 	scheduledEventID := int64(0)
 	addRequest := matchingservice.AddActivityTaskRequest{
-		SourceNamespaceId:      namespaceID.String(),
 		NamespaceId:            namespaceID.String(),
 		Execution:              workflowExecution,
 		ScheduledEventId:       scheduledEventID,
@@ -1625,7 +1618,6 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	for i := int64(0); i < taskCount; i++ {
 		scheduledEventID := i * 3
 		addRequest := matchingservice.AddActivityTaskRequest{
-			SourceNamespaceId:      namespaceID.String(),
 			NamespaceId:            namespaceID.String(),
 			Execution:              workflowExecution,
 			ScheduledEventId:       scheduledEventID,
@@ -1790,7 +1782,6 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		for i := int64(0); i < taskCount; i++ {
 			scheduledEventID := i * 3
 			addRequest := matchingservice.AddActivityTaskRequest{
-				SourceNamespaceId:      namespaceID.String(),
 				NamespaceId:            namespaceID.String(),
 				Execution:              workflowExecution,
 				ScheduledEventId:       scheduledEventID,

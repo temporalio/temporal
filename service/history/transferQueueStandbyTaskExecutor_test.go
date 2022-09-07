@@ -271,7 +271,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	// resend history post action
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace:   s.namespaceEntry.Name().String(),
 		NamespaceId: s.namespaceEntry.ID().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: transferTask.WorkflowID,
@@ -414,7 +413,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 	// resend history post action
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace:   s.namespaceEntry.Name().String(),
 		NamespaceId: s.namespaceEntry.ID().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: transferTask.WorkflowID,
@@ -722,7 +720,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace:   s.namespaceEntry.Name().String(),
 		NamespaceId: s.namespaceEntry.ID().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: transferTask.WorkflowID,
@@ -878,7 +875,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace:   s.namespaceEntry.Name().String(),
 		NamespaceId: s.namespaceEntry.ID().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: transferTask.WorkflowID,
@@ -1033,7 +1029,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace:   s.namespaceEntry.Name().String(),
 		NamespaceId: s.namespaceEntry.ID().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: transferTask.WorkflowID,
