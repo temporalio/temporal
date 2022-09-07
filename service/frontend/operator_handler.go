@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker"
@@ -189,7 +190,7 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 		SkipSchemaUpdate:      false,
 	}
 
-	sdkClient := h.sdkClientFactory.GetSystemClient(h.logger)
+	sdkClient := h.sdkClientFactory.GetSystemClient()
 	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
@@ -299,7 +300,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 		return nil, errRequestNotSet
 	}
 
-	if request.GetNamespace() == common.SystemLocalNamespace {
+	if request.GetNamespace() == primitives.SystemLocalNamespace {
 		return nil, errUnableDeleteSystemNamespace
 	}
 
@@ -312,7 +313,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 		},
 	}
 
-	sdkClient := h.sdkClientFactory.GetSystemClient(h.logger)
+	sdkClient := h.sdkClientFactory.GetSystemClient()
 	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
@@ -341,35 +342,6 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 	}, nil
 }
 
-// DeleteWorkflowExecution deletes a closed workflow execution asynchronously (workflow must be completed or terminated before).
-// This method is EXPERIMENTAL and may be changed or removed in a later release.
-func (h *OperatorHandlerImpl) DeleteWorkflowExecution(ctx context.Context, request *operatorservice.DeleteWorkflowExecutionRequest) (_ *operatorservice.DeleteWorkflowExecutionResponse, retError error) {
-	defer log.CapturePanic(h.logger, &retError)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if err := validateExecution(request.WorkflowExecution); err != nil {
-		return nil, err
-	}
-
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = h.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
-		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: request.GetWorkflowExecution(),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &operatorservice.DeleteWorkflowExecutionResponse{}, nil
-}
-
 // AddOrUpdateRemoteCluster adds or updates the connection config to a remote cluster.
 func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	ctx context.Context,
@@ -377,7 +349,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 ) (_ *operatorservice.AddOrUpdateRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 
-	adminClient := h.clientFactory.NewAdminClientWithTimeout(
+	adminClient := h.clientFactory.NewRemoteAdminClientWithTimeout(
 		request.GetFrontendAddress(),
 		admin.DefaultTimeout,
 		admin.DefaultLargeTimeout,

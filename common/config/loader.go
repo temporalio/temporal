@@ -46,6 +46,8 @@ const (
 	// included a typo. This is deprecated and only here to support backwards
 	// compatibility.
 	EnvKeyAvailabilityZoneTypo = "TEMPORAL_AVAILABILTY_ZONE"
+	// EnvKeyAllowNoAuth is the environment variable key for setting no authorizer
+	EnvKeyAllowNoAuth = "TEMPORAL_ALLOW_NO_AUTH"
 )
 
 const (

@@ -32,7 +32,6 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
@@ -86,14 +85,6 @@ func NewTaskProcessorManager(
 	taskExecutorProvider TaskExecutorProvider,
 ) *taskProcessorManagerImpl {
 
-	// Intentionally use the raw client to create its own retry policy
-	historyClient := shard.GetHistoryClient()
-	historyRetryableClient := history.NewRetryableClient(
-		historyClient,
-		common.CreateReplicationServiceBusyRetryPolicy(),
-		common.IsResourceExhausted,
-	)
-
 	return &taskProcessorManagerImpl{
 		config:                        config,
 		deleteMgr:                     workflowDeleteManager,
@@ -107,7 +98,7 @@ func NewTaskProcessorManager(
 			shard.GetNamespaceRegistry(),
 			clientBean,
 			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
+				_, err := clientBean.GetHistoryClient().ReplicateEventsV2(ctx, request)
 				return err
 			},
 			shard.GetPayloadSerializer(),
@@ -268,7 +259,7 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 	defer cancel()
 
 	err := r.shard.GetExecutionManager().RangeCompleteHistoryTasks(

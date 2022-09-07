@@ -31,6 +31,14 @@ persistence:
                     keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
                     enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false" }}
                     serverName: {{ default .Env.CASSANDRA_HOST_NAME "" }}
+                {{- if .Env.CASSANDRA_ADDRESS_TRANSLATOR }}
+                addressTranslator:
+                    translator: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR "" }}
+                    {{- if .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS }}
+                    options:
+                        advertised-hostname: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS "" }}
+                    {{- end }}
+                {{- end }}
         visibility:
             cassandra:
                 {{ $visibility_seeds_default := default .Env.CASSANDRA_SEEDS "" }}
@@ -57,6 +65,14 @@ persistence:
                     keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
                     enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false" }}
                     serverName: {{ default .Env.CASSANDRA_HOST_NAME "" }}
+                {{- if .Env.CASSANDRA_ADDRESS_TRANSLATOR }}
+                addressTranslator:
+                    translator: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR "" }}
+                    {{- if .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS }}
+                    options:
+                        advertised-hostname: {{ default .Env.CASSANDRA_ADDRESS_TRANSLATOR_OPTIONS "" }}
+                    {{- end }}
+                {{- end }}
         {{- else if eq $db "mysql" }}
         default:
             sql:

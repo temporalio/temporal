@@ -89,7 +89,7 @@ type (
 			now time.Time,
 			event *historypb.HistoryEvent,
 		) error
-		GenerateWorkflowSearchAttrTasks(
+		GenerateUpsertVisibilityTask(
 			now time.Time,
 		) error
 		GenerateWorkflowResetTasks(
@@ -181,6 +181,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	if err != nil {
 		return err
 	}
+
 	closeTasks := []tasks.Task{
 		&tasks.CloseExecutionTask{
 			// TaskID is set by shard
@@ -490,10 +491,9 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateWorkflowSearchAttrTasks(
+func (r *TaskGeneratorImpl) GenerateUpsertVisibilityTask(
 	now time.Time,
 ) error {
-
 	currentVersion := r.mutableState.GetCurrentVersion()
 
 	r.mutableState.AddTasks(&tasks.UpsertExecutionVisibilityTask{

@@ -61,6 +61,7 @@ type (
 		Consistency              string
 		TLS                      *auth.TLS
 		DisableInitialHostLookup bool
+		AddressTranslator        *config.CassandraAddressTranslator
 	}
 )
 
@@ -142,6 +143,7 @@ func (cfg *CQLClientConfig) toCassandraConfig() *config.Cassandra {
 				Consistency: cfg.Consistency,
 			},
 		},
+		AddressTranslator: cfg.AddressTranslator,
 	}
 
 	return &cassandraConfig

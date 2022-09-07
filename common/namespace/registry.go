@@ -67,7 +67,7 @@ const (
 	// CacheRefreshFailureRetryInterval is the wait time
 	// if refreshment encounters error
 	CacheRefreshFailureRetryInterval = 1 * time.Second
-	CacheRefreshPageSize             = 200
+	CacheRefreshPageSize             = 1000
 )
 
 const (
@@ -220,7 +220,10 @@ func (r *registry) Start() {
 	defer atomic.StoreInt32(&r.status, running)
 
 	// initialize the cache by initial scan
-	ctx := headers.SetCallerInfo(context.Background(), headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx := headers.SetCallerInfo(
+		context.Background(),
+		headers.SystemBackgroundCallerInfo,
+	)
 
 	err := r.refreshNamespaces(ctx)
 	if err != nil {

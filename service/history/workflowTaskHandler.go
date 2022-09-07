@@ -225,6 +225,9 @@ func (handler *workflowTaskHandlerImpl) handleCommand(ctx context.Context, comma
 	case enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 		return nil, handler.handleCommandUpsertWorkflowSearchAttributes(ctx, command.GetUpsertWorkflowSearchAttributesCommandAttributes())
 
+	case enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES:
+		return nil, handler.handleCommandModifyWorkflowProperties(ctx, command.GetModifyWorkflowPropertiesCommandAttributes())
+
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
 	}
@@ -752,7 +755,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
-	_ context.Context,
+	ctx context.Context,
 	attr *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -840,6 +843,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	}
 
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
+		ctx,
 		handler.workflowTaskCompletedID,
 		handler.workflowTaskCompletedID,
 		parentNamespace,
@@ -1034,7 +1038,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	// blob size limit check
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES.String()),
-		searchAttributesSize(attr.GetSearchAttributes().GetIndexedFields()),
+		payloadsMapSize(attr.GetSearchAttributes().GetIndexedFields()),
 		"UpsertWorkflowSearchAttributesCommandAttributes exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -1063,7 +1067,62 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	return err
 }
 
-func searchAttributesSize(fields map[string]*commonpb.Payload) int {
+func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
+	_ context.Context,
+	attr *commandpb.ModifyWorkflowPropertiesCommandAttributes,
+) error {
+
+	handler.metricsClient.IncCounter(
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
+		metrics.CommandTypeModifyWorkflowPropertiesCounter,
+	)
+
+	// get namespace name
+	executionInfo := handler.mutableState.GetExecutionInfo()
+	namespaceID := namespace.ID(executionInfo.NamespaceId)
+	namespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
+	}
+	namespace := namespaceEntry.Name()
+
+	// valid properties
+	if err := handler.validateCommandAttr(
+		func() (enumspb.WorkflowTaskFailedCause, error) {
+			return handler.attrValidator.validateModifyWorkflowProperties(namespace, attr)
+		},
+	); err != nil || handler.stopProcessing {
+		return err
+	}
+
+	// blob size limit check
+	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES.String()),
+		payloadsMapSize(attr.GetUpsertedMemo().GetFields()),
+		"ModifyWorkflowPropertiesCommandAttributes exceeds size limit.",
+	)
+	if err != nil || failWorkflow {
+		handler.stopProcessing = true
+		return err
+	}
+
+	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfMemoSizeExceedsLimit(
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES.String()),
+		attr.GetUpsertedMemo().Size(),
+		"ModifyWorkflowPropertiesCommandAttributes. Memo exceeds size limit.",
+	)
+	if err != nil || failWorkflow {
+		handler.stopProcessing = true
+		return err
+	}
+
+	_, err = handler.mutableState.AddWorkflowPropertiesModifiedEvent(
+		handler.workflowTaskCompletedID, attr,
+	)
+	return err
+}
+
+func payloadsMapSize(fields map[string]*commonpb.Payload) int {
 	result := 0
 
 	for k, v := range fields {
@@ -1087,6 +1146,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
 	newStateBuilder, err := api.CreateMutableState(
+		ctx,
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
 		newRunID,
@@ -1131,6 +1191,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 	}
 
 	newStateBuilder, err := api.CreateMutableState(
+		ctx,
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
 		newRunID,

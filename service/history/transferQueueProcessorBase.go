@@ -30,10 +30,7 @@ import (
 
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	ctasks "go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -108,30 +105,22 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 	return t.transferQueueShutdown()
 }
 
-func newTransferTaskScheduler(
+func newTransferTaskShardScheduler(
 	shard shard.Context,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
-	return queues.NewScheduler(
-		queues.NewNoopPriorityAssigner(),
-		queues.SchedulerOptions{
-			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-				WorkerCount: config.TransferTaskWorkerCount,
-				QueueSize:   config.TransferTaskBatchSize(),
-			},
-			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
-				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TransferProcessorSchedulerRoundRobinWeights(), logger),
-			},
+	return queues.NewFIFOScheduler(
+		queues.FIFOSchedulerOptions{
+			WorkerCount: config.TransferTaskWorkerCount,
+			QueueSize:   config.TransferTaskBatchSize(),
 		},
-		metricProvider,
 		logger,
 	)
 }
 
 func newQueueIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), queueIOTimeout)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 	return ctx, cancel
 }

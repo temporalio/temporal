@@ -1,0 +1,16 @@
+enablearchival: false
+clusterno: 0
+historyconfig:
+  numhistoryshards: 4
+  numhistoryhosts: 1
+workerconfig:
+  enablearchiver: false
+  # required to enable worker
+  enablereplicator: true
+esconfig:
+  version: "${ES_VERSION}"
+  url:
+    scheme: "http"
+    host: "${ES_SEEDS}:9200"
+  indices:
+    visibility: test-visibility-

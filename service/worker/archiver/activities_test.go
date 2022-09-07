@@ -29,10 +29,16 @@ import (
 	"errors"
 	"testing"
 
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
 
@@ -57,8 +63,6 @@ const (
 
 var (
 	testBranchToken = []byte{1, 2, 3}
-
-	errPersistenceNonRetryable = errors.New("persistence non-retryable error")
 )
 
 type activitiesSuite struct {
@@ -74,6 +78,7 @@ type activitiesSuite struct {
 	archiverProvider   *provider.MockArchiverProvider
 	historyArchiver    *carchiver.MockHistoryArchiver
 	visibilityArchiver *carchiver.MockVisibilityArchiver
+	historyClient      *historyservicemock.MockHistoryServiceClient
 }
 
 func TestActivitiesSuite(t *testing.T) {
@@ -92,6 +97,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.visibilityArchiver = carchiver.NewMockVisibilityArchiver(s.controller)
 	s.metricsScope.EXPECT().StartTimer(metrics.ServiceLatency).Return(metrics.NoopStopwatch).MinTimes(0)
 	s.metricsScope.EXPECT().RecordTimer(gomock.Any(), gomock.Any()).MinTimes(0)
+	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 }
 
 func (s *activitiesSuite) TearDownTest() {
@@ -123,7 +129,10 @@ func (s *activitiesSuite) TestUploadHistory_Fail_InvalidURI() {
 		HistoryURI:           "some invalid URI without scheme",
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
-	s.Equal(errUploadNonRetryable.Error(), errors.Unwrap(err).Error())
+	applicationErr, ok := errors.Unwrap(err).(*temporal.ApplicationError)
+	s.True(ok)
+	s.True(applicationErr.NonRetryable())
+	s.Equal(errUploadNonRetryable.Error(), applicationErr.Error())
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
@@ -155,7 +164,10 @@ func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
 		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
-	s.Equal(errUploadNonRetryable.Error(), errors.Unwrap(err).Error())
+	applicationErr, ok := errors.Unwrap(err).(*temporal.ApplicationError)
+	s.True(ok)
+	s.True(applicationErr.NonRetryable())
+	s.Equal(errUploadNonRetryable.Error(), applicationErr.Error())
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetryableError() {
@@ -184,7 +196,10 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetryableError() {
 		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
-	s.Equal(errUploadNonRetryable.Error(), errors.Unwrap(err).Error())
+	applicationErr, ok := errors.Unwrap(err).(*temporal.ApplicationError)
+	s.True(ok)
+	s.True(applicationErr.NonRetryable())
+	s.Equal(errUploadNonRetryable.Error(), applicationErr.Error())
 }
 
 func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetryableError() {
@@ -213,7 +228,10 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetryableError() {
 		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(uploadHistoryActivity, request)
-	s.Equal(testArchiveErr.Error(), errors.Unwrap(err).Error())
+	applicationErr, ok := errors.Unwrap(err).(*temporal.ApplicationError)
+	s.True(ok)
+	s.False(applicationErr.NonRetryable())
+	s.Equal(testArchiveErr.Error(), applicationErr.Error())
 }
 
 func (s *activitiesSuite) TestUploadHistory_Success() {
@@ -244,20 +262,29 @@ func (s *activitiesSuite) TestUploadHistory_Success() {
 	s.NoError(err)
 }
 
-func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryableError() {
+func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_RetryableError() {
 	s.metricsClient.EXPECT().Scope(metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
-	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverNonRetryableErrorCount)
-	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(errPersistenceNonRetryable)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
 		MetricsClient:    s.metricsClient,
 		HistoryV2Manager: s.mockExecutionMgr,
+		HistoryClient:    s.historyClient,
 	}
 	env := s.NewTestActivityEnvironment()
 	s.registerWorkflows(env)
 	env.SetWorkerOptions(worker.Options{
 		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
 	})
+
+	s.historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: testNamespaceID,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+			RunId:      testRunID,
+		},
+		WorkflowVersion:    testCloseFailoverVersion,
+		ClosedWorkflowOnly: true,
+	}).Return(nil, &serviceerror.WorkflowNotReady{})
 	request := ArchiveRequest{
 		NamespaceID:          testNamespaceID,
 		Namespace:            testNamespace,
@@ -269,7 +296,49 @@ func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryabl
 		HistoryURI:           testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(deleteHistoryActivity, request)
-	s.Equal(errDeleteNonRetryable.Error(), errors.Unwrap(err).Error())
+	applicationErr, ok := errors.Unwrap(err).(*temporal.ApplicationError)
+	s.True(ok)
+	s.False(applicationErr.NonRetryable())
+}
+
+func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_NonRetryableError() {
+	s.metricsClient.EXPECT().Scope(metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
+	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverNonRetryableErrorCount)
+	container := &BootstrapContainer{
+		Logger:           s.logger,
+		MetricsClient:    s.metricsClient,
+		HistoryV2Manager: s.mockExecutionMgr,
+		HistoryClient:    s.historyClient,
+	}
+	env := s.NewTestActivityEnvironment()
+	s.registerWorkflows(env)
+	env.SetWorkerOptions(worker.Options{
+		BackgroundActivityContext: context.WithValue(context.Background(), bootstrapContainerKey, container),
+	})
+	s.historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: testNamespaceID,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+			RunId:      testRunID,
+		},
+		WorkflowVersion:    testCloseFailoverVersion,
+		ClosedWorkflowOnly: true,
+	}).Return(nil, &serviceerror.NotFound{})
+	request := ArchiveRequest{
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
+		WorkflowID:           testWorkflowID,
+		RunID:                testRunID,
+		BranchToken:          testBranchToken,
+		NextEventID:          testNextEventID,
+		CloseFailoverVersion: testCloseFailoverVersion,
+		HistoryURI:           testArchivalURI,
+	}
+	_, err := env.ExecuteActivity(deleteHistoryActivity, request)
+	applicationErr, ok := errors.Unwrap(err).(*temporal.ApplicationError)
+	s.True(ok)
+	s.True(applicationErr.NonRetryable())
+	s.Equal(errDeleteNonRetryable.Error(), applicationErr.Error())
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_InvalidURI() {
@@ -292,7 +361,10 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_InvalidURI() {
 		VisibilityURI: "some invalid URI without scheme",
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
-	s.Equal(errArchiveVisibilityNonRetryable.Error(), errors.Unwrap(err).Error())
+	applicationErr, ok := errors.Unwrap(err).(*temporal.ApplicationError)
+	s.True(ok)
+	s.True(applicationErr.NonRetryable())
+	s.Equal(errArchiveVisibilityNonRetryable.Error(), applicationErr.Error())
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_GetArchiverError() {
@@ -317,7 +389,10 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_GetArchiverError() 
 		VisibilityURI: testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
-	s.Equal(errArchiveVisibilityNonRetryable.Error(), errors.Unwrap(err).Error())
+	applicationErr, ok := errors.Unwrap(err).(*temporal.ApplicationError)
+	s.True(ok)
+	s.True(applicationErr.NonRetryable())
+	s.Equal(errArchiveVisibilityNonRetryable.Error(), applicationErr.Error())
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetryableError() {
@@ -343,7 +418,10 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetryable
 		VisibilityURI: testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
-	s.Equal(errArchiveVisibilityNonRetryable.Error(), errors.Unwrap(err).Error())
+	applicationErr, ok := errors.Unwrap(err).(*temporal.ApplicationError)
+	s.True(ok)
+	s.True(applicationErr.NonRetryable())
+	s.Equal(errArchiveVisibilityNonRetryable.Error(), applicationErr.Error())
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetryableError() {
@@ -369,7 +447,10 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetryableErr
 		VisibilityURI: testArchivalURI,
 	}
 	_, err := env.ExecuteActivity(archiveVisibilityActivity, request)
-	s.Equal(testArchiveErr.Error(), errors.Unwrap(err).Error())
+	applicationErr, ok := errors.Unwrap(err).(*temporal.ApplicationError)
+	s.True(ok)
+	s.False(applicationErr.NonRetryable())
+	s.Equal(testArchiveErr.Error(), applicationErr.Error())
 }
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Success() {

@@ -24,44 +24,19 @@
 
 package dynamicconfig
 
-import (
-	enumspb "go.temporal.io/api/enums/v1"
-)
-
-// Key represents a key/property stored in dynamic config
-type Key string
-
 func (k Key) String() string {
 	return string(k)
 }
 
 const (
-	unknownKey Key = "unknownKey"
-
-	// dynamic config for tests
-	testGetPropertyKey                                = "testGetPropertyKey"
-	testCaseInsensitivePropertyKey                    = "testCaseInsensitivePropertyKey"
-	testGetIntPropertyKey                             = "testGetIntPropertyKey"
-	testGetFloat64PropertyKey                         = "testGetFloat64PropertyKey"
-	testGetDurationPropertyKey                        = "testGetDurationPropertyKey"
-	testGetBoolPropertyKey                            = "testGetBoolPropertyKey"
-	testGetStringPropertyKey                          = "testGetStringPropertyKey"
-	testGetMapPropertyKey                             = "testGetMapPropertyKey"
-	testGetIntPropertyFilteredByNamespaceKey          = "testGetIntPropertyFilteredByNamespaceKey"
-	testGetDurationPropertyFilteredByNamespaceKey     = "testGetDurationPropertyFilteredByNamespaceKey"
-	testGetIntPropertyFilteredByTaskQueueInfoKey      = "testGetIntPropertyFilteredByTaskQueueInfoKey"
-	testGetDurationPropertyFilteredByTaskQueueInfoKey = "testGetDurationPropertyFilteredByTaskQueueInfoKey"
-	testGetBoolPropertyFilteredByNamespaceIDKey       = "testGetBoolPropertyFilteredByNamespaceIDKey"
-	testGetBoolPropertyFilteredByTaskQueueInfoKey     = "testGetBoolPropertyFilteredByTaskQueueInfoKey"
-
-	// key for admin
+	// keys for admin
 
 	// AdminMatchingNamespaceToPartitionDispatchRate is the max qps of any task queue partition for a given namespace
 	AdminMatchingNamespaceToPartitionDispatchRate = "admin.matchingNamespaceToPartitionDispatchRate"
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate = "admin.matchingNamespaceTaskqueueToPartitionDispatchRate"
 
-	// key for system
+	// keys for system
 
 	// StandardVisibilityPersistenceMaxReadQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for read.
 	StandardVisibilityPersistenceMaxReadQPS = "system.standardVisibilityPersistenceMaxReadQPS"
@@ -117,7 +92,7 @@ const (
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
 
-	// key for size limit
+	// keys for size limit
 
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError = "limit.blobSize.error"
@@ -145,12 +120,14 @@ const (
 	// which would cause the graph size to exceed this number will result in the oldest versions being dropped.
 	VersionGraphNodeLimit = "limit.versionGraphNodeSize"
 
-	// key for frontend
+	// keys for frontend
 
 	// FrontendPersistenceMaxQPS is the max qps frontend host can query DB
 	FrontendPersistenceMaxQPS = "frontend.persistenceMaxQPS"
 	// FrontendPersistenceGlobalMaxQPS is the max qps frontend cluster can query DB
 	FrontendPersistenceGlobalMaxQPS = "frontend.persistenceGlobalMaxQPS"
+	// FrontendPersistenceNamespaceMaxQPS is the max qps each namespace on frontend host can query DB
+	FrontendPersistenceNamespaceMaxQPS = "frontend.persistenceNamespaceMaxQPS"
 	// FrontendEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in frontend persistence client
 	FrontendEnablePersistencePriorityRateLimiting = "frontend.enablePersistencePriorityRateLimiting"
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
@@ -173,14 +150,19 @@ const (
 	// FrontendMaxNamespaceVisibilityBurstPerInstance is namespace burst limit for visibility APIs.
 	// This config is EXPERIMENTAL and may be changed or removed in a later release.
 	FrontendMaxNamespaceVisibilityBurstPerInstance = "frontend.namespaceBurst.visibility"
-	// FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster
-	FrontendGlobalNamespaceRPS = "frontend.globalNamespacerps"
+	// FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster.
+	// The limit is evenly distributed among available frontend service instances.
+	// If this is set, it overwrites per instance limit "frontend.namespaceRPS".
+	FrontendGlobalNamespaceRPS = "frontend.globalNamespaceRPS"
+	// FrontendGlobalNamespaceVisibilityRPS is workflow namespace rate limit per second for the whole cluster for visibility API.
+	// The limit is evenly distributed among available frontend service instances.
+	// If this is set, it overwrites per instance limit "frontend.namespaceRPS.visibility".
+	// This config is EXPERIMENTAL and may be changed or removed in a later release.
+	FrontendGlobalNamespaceVisibilityRPS = "frontend.globalNamespaceRPS.visibility"
 	// FrontendThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	FrontendThrottledLogRPS = "frontend.throttledLogRPS"
 	// FrontendShutdownDrainDuration is the duration of traffic drain during shutdown
 	FrontendShutdownDrainDuration = "frontend.shutdownDrainDuration"
-	// EnableClientVersionCheck enables client version check for frontend
-	EnableClientVersionCheck = "frontend.enableClientVersionCheck"
 	// FrontendMaxBadBinaries is the max number of bad binaries in namespace config
 	FrontendMaxBadBinaries = "frontend.maxBadBinaries"
 	// SendRawWorkflowHistory is whether to enable raw history retrieving
@@ -231,6 +213,10 @@ const (
 	KeepAliveTimeout = "frontend.keepAliveTimeout"
 	// FrontendEnableSchedules enables schedule-related RPCs in the frontend
 	FrontendEnableSchedules = "frontend.enableSchedules"
+	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
+	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
+	// FrontendEnableBatcher enables batcher-related RPCs in the frontend
+	FrontendEnableBatcher = "frontend.enableBatcher"
 
 	// DeleteNamespaceDeleteActivityRPS is RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
@@ -239,7 +225,7 @@ const (
 	// Must be not greater than 256 and number of worker cores in the cluster.
 	DeleteNamespaceConcurrentDeleteExecutionsActivities = "frontend.deleteNamespaceConcurrentDeleteExecutionsActivities"
 
-	// key for matching
+	// keys for matching
 
 	// MatchingRPS is request rate per second for each matching host
 	MatchingRPS = "matching.rps"
@@ -247,6 +233,8 @@ const (
 	MatchingPersistenceMaxQPS = "matching.persistenceMaxQPS"
 	// MatchingPersistenceGlobalMaxQPS is the max qps matching cluster can query DB
 	MatchingPersistenceGlobalMaxQPS = "matching.persistenceGlobalMaxQPS"
+	// MatchingPersistenceNamespaceMaxQPS is the max qps each namespace on matching host can query DB
+	MatchingPersistenceNamespaceMaxQPS = "matching.persistenceNamespaceMaxQPS"
 	// MatchingEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in matching persistence client
 	MatchingEnablePersistencePriorityRateLimiting = "matching.enablePersistencePriorityRateLimiting"
 	// MatchingMinTaskThrottlingBurstSize is the minimum burst size for task queue throttling
@@ -285,8 +273,12 @@ const (
 	MatchingForwarderMaxChildrenPerNode = "matching.forwarderMaxChildrenPerNode"
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration = "matching.shutdownDrainDuration"
+	// MatchingMetadataPollFrequency is how often non-root partitions will poll the root partition for fresh metadata
+	MatchingMetadataPollFrequency = "matching.metadataPollFrequency"
+	// MatchingUseOldRouting is whether to use old task queue routing (name only) instead of namespace+name+type.
+	MatchingUseOldRouting = "matching.useOldRouting"
 
-	// key for history
+	// keys for history
 
 	// HistoryRPS is request rate per second for each history host
 	HistoryRPS = "history.rps"
@@ -294,6 +286,8 @@ const (
 	HistoryPersistenceMaxQPS = "history.persistenceMaxQPS"
 	// HistoryPersistenceGlobalMaxQPS is the max qps history cluster can query DB
 	HistoryPersistenceGlobalMaxQPS = "history.persistenceGlobalMaxQPS"
+	// HistoryPersistenceNamespaceMaxQPS is the max qps each namespace on history host can query DB
+	HistoryPersistenceNamespaceMaxQPS = "history.persistenceNamespaceMaxQPS"
 	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
 	HistoryEnablePersistencePriorityRateLimiting = "history.enablePersistencePriorityRateLimiting"
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
@@ -324,27 +318,44 @@ const (
 	// StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
 	// before discarding the task
 	StandbyTaskMissingEventsDiscardDelay = "history.standbyTaskMissingEventsDiscardDelay"
-	// TimerTaskHighPriorityRPS is the per namespace rps limit for processing timer tasks as high priority
-	TimerTaskHighPriorityRPS = "history.timerTaskHighPriorityRPS"
+	// QueuePendingTaskCriticalCount is the max number of pending task in one queue
+	// before triggering queue slice splitting and unloading
+	QueuePendingTaskCriticalCount = "history.queuePendingTaskCriticalCount"
+	// QueueReaderStuckCriticalAttempts is the max number of task loading attempts for a certain task range
+	// before that task range is split into a separate slice to unblock loading for later range.
+	// currently only work for scheduled queues and the task range is 1s.
+	QueueReaderStuckCriticalAttempts = "history.queueReaderStuckCriticalAttempts"
+	// QueueCriticalSlicesCount is the max number of slices in one queue
+	// before force compacting slices
+	QueueCriticalSlicesCount = "history.queueCriticalSlicesCount"
+	// QueuePendingTaskMaxCount is the max number of task pending tasks in one queue before stop
+	// loading new tasks into memory. While QueuePendingTaskCriticalCount won't stop task loading
+	// for the entire queue but only trigger a queue action to unload tasks. Ideally this max count
+	// limit should not be hit and task unloading should happen once critical count is exceeded. But
+	// since queue action is async, we need this hard limit.
+	QueuePendingTaskMaxCount = "history.queuePendingTasksMaxCount"
+	// QueueMaxReaderCount is the max number of readers in one multi-cursor queue
+	QueueMaxReaderCount = "history.queueMaxReaderCount"
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
 	TimerTaskBatchSize = "history.timerTaskBatchSize"
 	// TimerTaskWorkerCount is number of task workers for timer processor
 	TimerTaskWorkerCount = "history.timerTaskWorkerCount"
 	// TimerTaskMaxRetryCount is max retry count for timer processor
 	TimerTaskMaxRetryCount = "history.timerTaskMaxRetryCount"
-	// TimerProcessorEnableSingleCursor indicates if only one timer processor should be started for both active and standby tasks
+	// TimerProcessorEnableSingleProcessor indicates if only one timer processor should be started for both active and standby tasks
 	// NOTE: this is an experimental flag for guarantee task execution and will be deprecated after multicursor solution is ready
-	TimerProcessorEnableSingleCursor = "history.timerProcessorEnableSingleCursor"
+	TimerProcessorEnableSingleProcessor = "history.timerProcessorEnableSingleProcessor"
+	// TimerProcessorEnableMultiCursor indicates if the new single processor multi-cursor timer processor implementation should be used
+	// NOTE: this flag only takes effect when history.timerProcessorEnablePriorityTaskScheduler is enabled.
+	TimerProcessorEnableMultiCursor = "history.timerProcessorEnableMultiCursor"
 	// TimerProcessorEnablePriorityTaskScheduler indicates whether host level priority task scheduler should be used for timer processor
 	TimerProcessorEnablePriorityTaskScheduler = "history.timerProcessorEnablePriorityTaskScheduler"
 	// TimerProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for timer processor
 	TimerProcessorSchedulerWorkerCount = "history.timerProcessorSchedulerWorkerCount"
-	// TimerProcessorSchedulerQueueSize is the task channel size in the host level task scheduler for timer processor
-	TimerProcessorSchedulerQueueSize = "history.timerProcessorSchedulerQueueSize"
-	// TimerProcessorSchedulerRoundRobinWeights is the priority round robin weights for timer task scheduler
-	TimerProcessorSchedulerRoundRobinWeights = "history.timerProcessorSchedulerRoundRobinWeights"
-	// TimerProcessorCompleteTimerFailureRetryCount is retry count for timer processor complete timer operation
-	TimerProcessorCompleteTimerFailureRetryCount = "history.timerProcessorCompleteTimerFailureRetryCount"
+	// TimerProcessorSchedulerActiveRoundRobinWeights is the priority round robin weights used by timer task scheduler for active namespaces
+	TimerProcessorSchedulerActiveRoundRobinWeights = "history.timerProcessorSchedulerActiveRoundRobinWeights"
+	// TimerProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights used by timer task scheduler for standby namespaces
+	TimerProcessorSchedulerStandbyRoundRobinWeights = "history.timerProcessorSchedulerStandbyRoundRobinWeights"
 	// TimerProcessorUpdateAckInterval is update interval for timer processor
 	TimerProcessorUpdateAckInterval = "history.timerProcessorUpdateAckInterval"
 	// TimerProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
@@ -371,8 +382,6 @@ const (
 	TimerProcessorHistoryArchivalSizeLimit = "history.timerProcessorHistoryArchivalSizeLimit"
 	// TimerProcessorArchivalTimeLimit is the upper time limit for inline history archival
 	TimerProcessorArchivalTimeLimit = "history.timerProcessorArchivalTimeLimit"
-	// TransferTaskHighPriorityRPS is the per namespace rps limit for processing timer tasks as high priority
-	TransferTaskHighPriorityRPS = "history.transferTaskHighPriorityRPS"
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize = "history.transferTaskBatchSize"
 	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
@@ -385,19 +394,20 @@ const (
 	TransferTaskWorkerCount = "history.transferTaskWorkerCount"
 	// TransferTaskMaxRetryCount is max times of retry for transferQueueProcessor
 	TransferTaskMaxRetryCount = "history.transferTaskMaxRetryCount"
-	// TransferProcessorEnableSingleCursor indicates if only one transfer processor should be started for both active and standby tasks
+	// TransferProcessorEnableSingleProcessor indicates if only one transfer processor should be started for both active and standby tasks
 	// NOTE: this is an experimental flag for guarantee task execution and will be deprecated after multicursor solution is ready
-	TransferProcessorEnableSingleCursor = "history.transferProcessorEnableSingleCursor"
+	TransferProcessorEnableSingleProcessor = "history.transferProcessorEnableSingleProcessor"
+	// TransferProcessorEnableMultiCursor indicates if the new single processor multi-cursor transfer processor implementation should be used
+	// NOTE: this flag only takes effect when history.transferProcessorEnablePriorityTaskScheduler is enabled.
+	TransferProcessorEnableMultiCursor = "history.transferProcessorEnableMultiCursor"
 	// TransferProcessorEnablePriorityTaskScheduler indicates whether host level priority task scheduler should be used for transferQueueProcessor
 	TransferProcessorEnablePriorityTaskScheduler = "history.transferProcessorEnablePriorityTaskScheduler"
 	// TransferProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for transferQueueProcessor
 	TransferProcessorSchedulerWorkerCount = "history.transferProcessorSchedulerWorkerCount"
-	// TransferProcessorSchedulerQueueSize is the task channel size in the host level task scheduler for transferQueueProcessor
-	TransferProcessorSchedulerQueueSize = "history.transferProcessorSchedulerQueueSize"
-	// TransferProcessorSchedulerRoundRobinWeights is the priority round robin weights for transfer task scheduler
-	TransferProcessorSchedulerRoundRobinWeights = "history.transferProcessorSchedulerRoundRobinWeights"
-	// TransferProcessorCompleteTransferFailureRetryCount is times of retry for failure
-	TransferProcessorCompleteTransferFailureRetryCount = "history.transferProcessorCompleteTransferFailureRetryCount"
+	// TransferProcessorSchedulerActiveRoundRobinWeights is the priority round robin weights used by transfer task scheduler for active namespaces
+	TransferProcessorSchedulerActiveRoundRobinWeights = "history.transferProcessorSchedulerActiveRoundRobinWeights"
+	// TransferProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights used by transfer task scheduler for standby namespaces
+	TransferProcessorSchedulerStandbyRoundRobinWeights = "history.transferProcessorSchedulerStandbyRoundRobinWeights"
 	// TransferProcessorUpdateShardTaskCount is update shard count for transferQueueProcessor
 	TransferProcessorUpdateShardTaskCount = "history.transferProcessorUpdateShardTaskCount"
 	// TransferProcessorMaxPollInterval max poll interval for transferQueueProcessor
@@ -417,12 +427,8 @@ const (
 	// TransferProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
 	TransferProcessorVisibilityArchivalTimeLimit = "history.transferProcessorVisibilityArchivalTimeLimit"
 
-	// VisibilityTaskHighPriorityRPS is the per namespace rps limit for processing timer tasks as high priority
-	VisibilityTaskHighPriorityRPS = "history.visibilityTaskHighPriorityRPS"
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"
-	// VisibilityProcessorFailoverMaxPollRPS is max poll rate per second for visibilityQueueProcessor
-	VisibilityProcessorFailoverMaxPollRPS = "history.visibilityProcessorFailoverMaxPollRPS"
 	// VisibilityProcessorMaxPollRPS is max poll rate per second for visibilityQueueProcessor
 	VisibilityProcessorMaxPollRPS = "history.visibilityProcessorMaxPollRPS"
 	// VisibilityProcessorMaxPollHostRPS is max poll rate per second for all visibilityQueueProcessor on a host
@@ -431,16 +437,17 @@ const (
 	VisibilityTaskWorkerCount = "history.visibilityTaskWorkerCount"
 	// VisibilityTaskMaxRetryCount is max times of retry for visibilityQueueProcessor
 	VisibilityTaskMaxRetryCount = "history.visibilityTaskMaxRetryCount"
+	// VisibilityProcessorEnableMultiCursor indicates if the new single processor multi-cursor visibility processor implementation should be used
+	// NOTE: this flag only takes effect when history.visibilityProcessorEnablePriorityTaskScheduler is enabled.
+	VisibilityProcessorEnableMultiCursor = "history.visibilityProcessorEnableMultiCursor"
 	// VisibilityProcessorEnablePriorityTaskScheduler indicates whether host level priority task scheduler should be used for visibilityQueueProcessor
 	VisibilityProcessorEnablePriorityTaskScheduler = "history.visibilityProcessorEnablePriorityTaskScheduler"
 	// VisibilityProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for visibilityQueueProcessor
 	VisibilityProcessorSchedulerWorkerCount = "history.visibilityProcessorSchedulerWorkerCount"
-	// VisibilityProcessorSchedulerQueueSize is the task channel size in the host level task scheduler for visibilityQueueProcessor
-	VisibilityProcessorSchedulerQueueSize = "history.visibilityProcessorSchedulerQueueSize"
-	// VisibilityProcessorSchedulerRoundRobinWeights is the priority round robin weights for visibility task scheduler
-	VisibilityProcessorSchedulerRoundRobinWeights = "history.visibilityProcessorSchedulerRoundRobinWeights"
-	// VisibilityProcessorCompleteTaskFailureRetryCount is times of retry for failure
-	VisibilityProcessorCompleteTaskFailureRetryCount = "history.visibilityProcessorCompleteTaskFailureRetryCount"
+	// VisibilityProcessorSchedulerActiveRoundRobinWeights is the priority round robin weights by visibility task scheduler for active namespaces
+	VisibilityProcessorSchedulerActiveRoundRobinWeights = "history.visibilityProcessorSchedulerActiveRoundRobinWeights"
+	// VisibilityProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights by visibility task scheduler for standby namespaces
+	VisibilityProcessorSchedulerStandbyRoundRobinWeights = "history.visibilityProcessorSchedulerStandbyRoundRobinWeights"
 	// VisibilityProcessorMaxPollInterval max poll interval for visibilityQueueProcessor
 	VisibilityProcessorMaxPollInterval = "history.visibilityProcessorMaxPollInterval"
 	// VisibilityProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
@@ -565,12 +572,14 @@ const (
 	// ReplicationTaskProcessorShardQPS is the qps of task processing rate limiter on shard level
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
 
-	// key for worker
+	// keys for worker
 
 	// WorkerPersistenceMaxQPS is the max qps worker host can query DB
 	WorkerPersistenceMaxQPS = "worker.persistenceMaxQPS"
 	// WorkerPersistenceGlobalMaxQPS is the max qps worker cluster can query DB
 	WorkerPersistenceGlobalMaxQPS = "worker.persistenceGlobalMaxQPS"
+	// WorkerPersistenceNamespaceMaxQPS is the max qps each namespace on worker host can query DB
+	WorkerPersistenceNamespaceMaxQPS = "worker.persistenceNamespaceMaxQPS"
 	// WorkerEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in worker persistence client
 	WorkerEnablePersistencePriorityRateLimiting = "worker.enablePersistencePriorityRateLimiting"
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
@@ -618,16 +627,14 @@ const (
 	HistoryScannerEnabled = "worker.historyScannerEnabled"
 	// ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner
 	ExecutionsScannerEnabled = "worker.executionsScannerEnabled"
-	// WorkerBatcherMaxConcurrentActivityExecutionSize indicates worker batcher max concurrent activity execution size
-	WorkerBatcherMaxConcurrentActivityExecutionSize = "worker.BatcherMaxConcurrentActivityExecutionSize"
-	// WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize indicates worker batcher max concurrent workflow execution size
-	WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize = "worker.BatcherMaxConcurrentWorkflowTaskExecutionSize"
-	// WorkerBatcherMaxConcurrentActivityTaskPollers indicates worker batcher max concurrent activity pollers
-	WorkerBatcherMaxConcurrentActivityTaskPollers = "worker.BatcherMaxConcurrentActivityTaskPollers"
-	// WorkerBatcherMaxConcurrentWorkflowTaskPollers indicates worker batcher max concurrent workflow pollers
-	WorkerBatcherMaxConcurrentWorkflowTaskPollers = "worker.BatcherMaxConcurrentWorkflowTaskPollers"
+	// HistoryScannerDataMinAge indicates the history scanner cleanup minimum age.
+	HistoryScannerDataMinAge = "worker.historyScannerDataMinAge"
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher = "worker.enableBatcher"
+	// BatcherRPS controls number the rps of batch operations
+	BatcherRPS = "worker.batcherRPS"
+	// BatcherConcurrency controls the concurrency of one batch operation
+	BatcherConcurrency = "worker.batcherConcurrency"
 	// WorkerParentCloseMaxConcurrentActivityExecutionSize indicates worker parent close worker max concurrent activity execution size
 	WorkerParentCloseMaxConcurrentActivityExecutionSize = "worker.ParentCloseMaxConcurrentActivityExecutionSize"
 	// WorkerParentCloseMaxConcurrentWorkflowTaskExecutionSize indicates worker parent close worker max concurrent workflow execution size
@@ -641,77 +648,3 @@ const (
 	// WorkerEnableScheduler controls whether to start the worker for scheduled workflows
 	WorkerEnableScheduler = "worker.enableScheduler"
 )
-
-// Filter represents a filter on the dynamic config key
-type Filter int
-
-func (f Filter) String() string {
-	if f <= unknownFilter || f >= lastFilterTypeForTest {
-		return filters[unknownFilter]
-	}
-	return filters[f]
-}
-
-var filters = []string{
-	"unknownFilter",
-	"namespace",
-	"namespaceID",
-	"taskQueueName",
-	"taskType",
-	"shardID",
-}
-
-const (
-	unknownFilter Filter = iota
-	// Namespace is the namespace name
-	Namespace
-	// NamespaceID is the namespace Id
-	NamespaceID
-	// TaskQueueName is the taskqueue name
-	TaskQueueName
-	// TaskType is the task type (0:Workflow, 1:Activity)
-	TaskType
-	// ShardID is the shard id
-	ShardID
-
-	// lastFilterTypeForTest must be the last one in this const group for testing purpose
-	lastFilterTypeForTest
-)
-
-// FilterOption is used to provide filters for dynamic config keys
-type FilterOption func(filterMap map[Filter]interface{})
-
-// TaskQueueFilter filters by task queue name
-func TaskQueueFilter(name string) FilterOption {
-	return func(filterMap map[Filter]interface{}) {
-		filterMap[TaskQueueName] = name
-	}
-}
-
-// NamespaceFilter filters by namespace name
-func NamespaceFilter(name string) FilterOption {
-	return func(filterMap map[Filter]interface{}) {
-		filterMap[Namespace] = name
-	}
-}
-
-// NamespaceIDFilter filters by namespace id
-func NamespaceIDFilter(namespaceID string) FilterOption {
-	return func(filterMap map[Filter]interface{}) {
-		filterMap[NamespaceID] = namespaceID
-	}
-}
-
-// TaskTypeFilter filters by task type
-func TaskTypeFilter(taskType enumspb.TaskQueueType) FilterOption {
-	return func(filterMap map[Filter]interface{}) {
-		filterMap[TaskType] = enumspb.TaskQueueType_name[int32(taskType)]
-	}
-}
-
-// ShardIDFilter filters by shard id
-func ShardIDFilter(shardID int32) FilterOption {
-	return func(filterMap map[Filter]interface{}) {
-		filterMap[ShardID] = shardID
-	}
-}

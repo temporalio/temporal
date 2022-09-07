@@ -27,7 +27,12 @@ package queues
 import (
 	"fmt"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/tasks"
+)
+
+const (
+	shrinkPredicateMaxPendingNamespaces = 3
 )
 
 type (
@@ -43,13 +48,19 @@ type (
 		SplitByPredicate(tasks.Predicate) (pass Slice, fail Slice)
 		CanMergeWithSlice(Slice) bool
 		MergeWithSlice(Slice) []Slice
-		ShrinkRange()
-		SelectTasks(int) ([]Executable, error)
+		CompactWithSlice(Slice) Slice
+		ShrinkScope()
+		SelectTasks(readerID int32, batchSize int) ([]Executable, error)
 		MoreTasks() bool
+		TaskStats() TaskStats
 		Clear()
 	}
 
-	ExecutableInitializer func(tasks.Task) Executable
+	TaskStats struct {
+		PendingPerNamespace map[namespace.ID]int
+	}
+
+	ExecutableInitializer func(readerID int32, t tasks.Task) Executable
 
 	SliceImpl struct {
 		paginationFnProvider  PaginationFnProvider
@@ -61,12 +72,14 @@ type (
 		iterators []Iterator
 
 		*executableTracker
+		monitor Monitor
 	}
 )
 
 func NewSlice(
 	paginationFnProvider PaginationFnProvider,
 	executableInitializer ExecutableInitializer,
+	monitor Monitor,
 	scope Scope,
 ) *SliceImpl {
 	return &SliceImpl{
@@ -77,6 +90,7 @@ func NewSlice(
 			NewIterator(paginationFnProvider, scope.Range),
 		},
 		executableTracker: newExecutableTracker(),
+		monitor:           monitor,
 	}
 }
 
@@ -204,26 +218,28 @@ func (s *SliceImpl) MergeWithSlice(slice Slice) []Slice {
 
 func (s *SliceImpl) mergeByRange(incomingSlice *SliceImpl) *SliceImpl {
 	mergedTaskTracker := s.executableTracker.merge(incomingSlice.executableTracker)
+	mergedIterators := s.mergeIterators(incomingSlice)
 
 	s.destroy()
 	incomingSlice.destroy()
 
 	return s.newSlice(
 		s.scope.MergeByRange(incomingSlice.scope),
-		s.mergeIterators(incomingSlice),
+		mergedIterators,
 		mergedTaskTracker,
 	)
 }
 
 func (s *SliceImpl) mergeByPredicate(incomingSlice *SliceImpl) *SliceImpl {
 	mergedTaskTracker := s.executableTracker.merge(incomingSlice.executableTracker)
+	mergedIterators := s.mergeIterators(incomingSlice)
 
 	s.destroy()
 	incomingSlice.destroy()
 
 	return s.newSlice(
 		s.scope.MergeByPredicate(incomingSlice.scope),
-		s.mergeIterators(incomingSlice),
+		mergedIterators,
 		mergedTaskTracker,
 	)
 }
@@ -274,9 +290,46 @@ func (s *SliceImpl) appendIterator(
 	return append(iterators, iterator)
 }
 
-func (s *SliceImpl) ShrinkRange() {
+func (s *SliceImpl) CompactWithSlice(slice Slice) Slice {
 	s.stateSanityCheck()
 
+	incomingSlice, ok := slice.(*SliceImpl)
+	if !ok {
+		panic(fmt.Sprintf("Unable to compact queue slice of type %T with type %T", s, slice))
+	}
+	incomingSlice.stateSanityCheck()
+
+	compactedScope := NewScope(
+		NewRange(
+			tasks.MinKey(s.scope.Range.InclusiveMin, incomingSlice.scope.Range.InclusiveMin),
+			tasks.MaxKey(s.scope.Range.ExclusiveMax, incomingSlice.scope.Range.ExclusiveMax),
+		),
+		tasks.OrPredicates(s.scope.Predicate, incomingSlice.scope.Predicate),
+	)
+
+	compactedTaskTracker := s.executableTracker.merge(incomingSlice.executableTracker)
+	compactedIterators := s.mergeIterators(incomingSlice)
+
+	s.destroy()
+	incomingSlice.destroy()
+
+	return s.newSlice(
+		compactedScope,
+		compactedIterators,
+		compactedTaskTracker,
+	)
+}
+
+func (s *SliceImpl) ShrinkScope() {
+	s.stateSanityCheck()
+
+	s.shrinkRange()
+	s.shrinkPredicate()
+
+	s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
+}
+
+func (s *SliceImpl) shrinkRange() {
 	minPendingTaskKey := s.executableTracker.shrink()
 
 	minIteratorKey := tasks.MaximumKey
@@ -295,12 +348,35 @@ func (s *SliceImpl) ShrinkRange() {
 	s.scope.Range.InclusiveMin = newRangeMin
 }
 
-func (s *SliceImpl) SelectTasks(batchSize int) ([]Executable, error) {
+func (s *SliceImpl) shrinkPredicate() {
+	if len(s.iterators) != 0 {
+		// predicate can't be updated if there're still
+		// tasks in persistence, as we don't know if those
+		// tasks will be filtered out or not if predicate is updated.
+		return
+	}
+
+	if len(s.executableTracker.pendingPerNamesapce) > shrinkPredicateMaxPendingNamespaces {
+		// only shrink predicate if there're few namespaces left
+		return
+	}
+
+	pendingNamespaceIDs := make([]string, 0, len(s.executableTracker.pendingPerNamesapce))
+	for namespaceID := range s.executableTracker.pendingPerNamesapce {
+		pendingNamespaceIDs = append(pendingNamespaceIDs, namespaceID.String())
+	}
+	namespacePredicate := tasks.NewNamespacePredicate(pendingNamespaceIDs)
+	s.scope.Predicate = tasks.AndPredicates(s.scope.Predicate, namespacePredicate)
+}
+
+func (s *SliceImpl) SelectTasks(readerID int32, batchSize int) ([]Executable, error) {
 	s.stateSanityCheck()
 
 	if len(s.iterators) == 0 {
 		return []Executable{}, nil
 	}
+
+	defer s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
 
 	executables := make([]Executable, 0, batchSize)
 	for len(executables) < batchSize && len(s.iterators) != 0 {
@@ -308,8 +384,12 @@ func (s *SliceImpl) SelectTasks(batchSize int) ([]Executable, error) {
 			task, err := s.iterators[0].Next()
 			if err != nil {
 				s.iterators[0] = s.iterators[0].Remaining()
-				// NOTE: we must return the executables here
-				return executables, err
+				if len(executables) != 0 {
+					// NOTE: we must return the executables here
+					// MoreTasks() will return true so queue reader will try to load again
+					return executables, nil
+				}
+				return nil, err
 			}
 
 			taskKey := task.GetKey()
@@ -322,7 +402,7 @@ func (s *SliceImpl) SelectTasks(batchSize int) ([]Executable, error) {
 				continue
 			}
 
-			executable := s.executableInitializer(task)
+			executable := s.executableInitializer(readerID, task)
 			s.executableTracker.add(executable)
 			executables = append(executables, executable)
 		} else {
@@ -339,21 +419,32 @@ func (s *SliceImpl) MoreTasks() bool {
 	return len(s.iterators) != 0
 }
 
+func (s *SliceImpl) TaskStats() TaskStats {
+	s.stateSanityCheck()
+
+	return TaskStats{
+		PendingPerNamespace: s.executableTracker.pendingPerNamesapce,
+	}
+}
+
 func (s *SliceImpl) Clear() {
 	s.stateSanityCheck()
 
-	s.ShrinkRange()
+	s.ShrinkScope()
 
 	s.iterators = []Iterator{
 		NewIterator(s.paginationFnProvider, s.scope.Range),
 	}
 	s.executableTracker.clear()
+
+	s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
 }
 
 func (s *SliceImpl) destroy() {
 	s.destroyed = true
 	s.iterators = nil
 	s.executableTracker = nil
+	s.monitor.RemoveSlice(s)
 }
 
 func (s *SliceImpl) stateSanityCheck() {
@@ -373,6 +464,7 @@ func (s *SliceImpl) newSlice(
 		scope:                 scope,
 		iterators:             iterators,
 		executableTracker:     tracker,
+		monitor:               s.monitor,
 	}
 }
 

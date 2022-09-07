@@ -296,7 +296,7 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()
 
-	sdkClient := c.sdkClientFactory.GetSystemClient(c.logger)
+	sdkClient := c.sdkClientFactory.GetSystemClient()
 	_, err := sdkClient.SignalWithStartWorkflow(signalCtx, workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
 	if err != nil {
 		taggedLogger.Error("failed to send signal to archival system workflow",

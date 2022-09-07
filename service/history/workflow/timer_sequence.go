@@ -69,8 +69,6 @@ type (
 	TimerSequenceIDs []TimerSequenceID
 
 	TimerSequence interface {
-		IsExpired(referenceTime time.Time, timerSequenceID TimerSequenceID) bool
-
 		CreateNextUserTimer() (bool, error)
 		CreateNextActivityTimer() (bool, error)
 
@@ -91,15 +89,6 @@ func NewTimerSequence(
 	return &timerSequenceImpl{
 		mutableState: mutableState,
 	}
-}
-
-func (t *timerSequenceImpl) IsExpired(
-	referenceTime time.Time,
-	timerSequenceID TimerSequenceID,
-) bool {
-	// TODO: Cassandra Timestamp resolution is in millisecond.
-	// Verify if it can create any problem here.
-	return !timerSequenceID.Timestamp.After(referenceTime)
 }
 
 func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {

@@ -95,6 +95,21 @@ func (c *retryableClient) DescribeTaskQueue(
 	return resp, err
 }
 
+func (c *retryableClient) GetTaskQueueMetadata(
+	ctx context.Context,
+	request *matchingservice.GetTaskQueueMetadataRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GetTaskQueueMetadataResponse, error) {
+	var resp *matchingservice.GetTaskQueueMetadataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetTaskQueueMetadata(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetWorkerBuildIdOrdering(
 	ctx context.Context,
 	request *matchingservice.GetWorkerBuildIdOrderingRequest,
@@ -104,6 +119,21 @@ func (c *retryableClient) GetWorkerBuildIdOrdering(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) InvalidateTaskQueueMetadata(
+	ctx context.Context,
+	request *matchingservice.InvalidateTaskQueueMetadataRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
+	var resp *matchingservice.InvalidateTaskQueueMetadataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.InvalidateTaskQueueMetadata(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

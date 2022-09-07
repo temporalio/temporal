@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -53,6 +54,7 @@ type (
 )
 
 func NewWorkflowWithSignal(
+	ctx context.Context,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
@@ -60,7 +62,7 @@ func NewWorkflowWithSignal(
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (WorkflowContext, error) {
-	newMutableState, err := CreateMutableState(shard, namespaceEntry, runID)
+	newMutableState, err := CreateMutableState(ctx, shard, namespaceEntry, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -112,6 +114,7 @@ func NewWorkflowWithSignal(
 }
 
 func CreateMutableState(
+	ctx context.Context,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
 	runID string,
@@ -123,7 +126,7 @@ func CreateMutableState(
 		namespaceEntry,
 		shard.GetTimeSource().Now(),
 	)
-	if err := newMutableState.SetHistoryTree(runID); err != nil {
+	if err := newMutableState.SetHistoryTree(ctx, runID); err != nil {
 		return nil, err
 	}
 	return newMutableState, nil
@@ -214,4 +217,102 @@ func ValidateStart(
 	}
 
 	return nil
+}
+
+func ValidateStartWorkflowExecutionRequest(
+	ctx context.Context,
+	request *workflowservice.StartWorkflowExecutionRequest,
+	shard shard.Context,
+	namespaceEntry *namespace.Namespace,
+	operation string,
+) error {
+
+	workflowID := request.GetWorkflowId()
+	maxIDLengthLimit := shard.GetConfig().MaxIDLengthLimit()
+
+	if len(request.GetRequestId()) == 0 {
+		return serviceerror.NewInvalidArgument("Missing request ID.")
+	}
+	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowExecutionTimeoutSeconds.")
+	}
+	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowRunTimeoutSeconds.")
+	}
+	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
+		return serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeoutSeconds.")
+	}
+	if request.TaskQueue == nil || request.TaskQueue.GetName() == "" {
+		return serviceerror.NewInvalidArgument("Missing Taskqueue.")
+	}
+	if request.WorkflowType == nil || request.WorkflowType.GetName() == "" {
+		return serviceerror.NewInvalidArgument("Missing WorkflowType.")
+	}
+	if len(request.GetNamespace()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
+	}
+	if len(request.GetWorkflowId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgument("WorkflowId exceeds length limit.")
+	}
+	if len(request.TaskQueue.GetName()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgument("TaskQueue exceeds length limit.")
+	}
+	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
+	}
+	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
+		return err
+	}
+
+	if err := ValidateStart(
+		ctx,
+		shard,
+		namespaceEntry,
+		workflowID,
+		request.GetInput().Size(),
+		request.GetMemo().Size(),
+		operation,
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func OverrideStartWorkflowExecutionRequest(
+	request *workflowservice.StartWorkflowExecutionRequest,
+	metricsScope int,
+	shard shard.Context,
+	metricsClient metrics.Client,
+) {
+	// workflow execution timeout is left as is
+	//  if workflow execution timeout == 0 -> infinity
+
+	namespace := request.GetNamespace()
+
+	workflowRunTimeout := common.OverrideWorkflowRunTimeout(
+		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
+		timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
+	)
+	if workflowRunTimeout != timestamp.DurationValue(request.GetWorkflowRunTimeout()) {
+		request.WorkflowRunTimeout = timestamp.DurationPtr(workflowRunTimeout)
+		metricsClient.Scope(
+			metricsScope,
+			metrics.NamespaceTag(namespace),
+		).IncCounter(metrics.WorkflowRunTimeoutOverrideCount)
+	}
+
+	workflowTaskStartToCloseTimeout := common.OverrideWorkflowTaskTimeout(
+		namespace,
+		timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
+		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
+		shard.GetConfig().DefaultWorkflowTaskTimeout,
+	)
+	if workflowTaskStartToCloseTimeout != timestamp.DurationValue(request.GetWorkflowTaskTimeout()) {
+		request.WorkflowTaskTimeout = timestamp.DurationPtr(workflowTaskStartToCloseTimeout)
+		metricsClient.Scope(
+			metricsScope,
+			metrics.NamespaceTag(namespace),
+		).IncCounter(metrics.WorkflowTaskTimeoutOverrideCount)
+	}
 }

@@ -82,6 +82,7 @@ var (
 		enums.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:     {},
 		enums.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION: {},
 		enums.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:  {},
+		enums.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES:         {},
 		enums.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION: {},
 	}
 )
@@ -242,16 +243,19 @@ func (ti *TelemetryInterceptor) handleError(
 
 	switch err := err.(type) {
 	// we emit service_error_with_type metrics, no need to emit specific metric for these known error types.
-	case *serviceerror.WorkflowNotReady,
+	case *serviceerror.AlreadyExists,
+		*serviceerror.CancellationAlreadyRequested,
 		*serviceerror.NamespaceInvalidState,
-		*serviceerror.InvalidArgument,
 		*serviceerror.NamespaceNotActive,
-		*serviceerror.WorkflowExecutionAlreadyStarted,
-		*serviceerror.NotFound,
 		*serviceerror.NamespaceNotFound,
 		*serviceerror.NamespaceAlreadyExists,
+		*serviceerror.InvalidArgument,
+		*serviceerror.WorkflowExecutionAlreadyStarted,
+		*serviceerror.WorkflowNotReady,
+		*serviceerror.NotFound,
 		*serviceerror.QueryFailed,
 		*serviceerror.ClientVersionNotSupported,
+		*serviceerror.ServerVersionNotSupported,
 		*serviceerror.PermissionDenied,
 		*serviceerrors.StickyWorkerUnavailable,
 		*serviceerrors.ShardOwnershipLost,
@@ -266,6 +270,7 @@ func (ti *TelemetryInterceptor) handleError(
 	// Any other errors are treated as ServiceFailures against SLA.
 	// Including below known errors and any other unknown errors.
 	//  *serviceerror.DataLoss,
+	//  *serviceerror.Internal
 	//	*serviceerror.Unavailable:
 	default:
 		scope.IncCounter(metrics.ServiceFailures)

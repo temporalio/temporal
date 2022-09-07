@@ -30,7 +30,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
@@ -51,7 +50,7 @@ import (
 var (
 	emptyTime = time.Time{}
 
-	loadTimerTaskThrottleRetryDelay = 5 * time.Second
+	loadTimerTaskThrottleRetryDelay = 3 * time.Second
 )
 
 type (
@@ -66,14 +65,13 @@ type (
 		config           *configs.Config
 		logger           log.Logger
 		metricsClient    metrics.Client
-		metricsScope     metrics.Scope
-		timerProcessor   timerProcessor
+		timerProcessor   common.Daemon
 		timerQueueAckMgr timerQueueAckMgr
 		timerGate        timer.Gate
 		timeSource       clock.TimeSource
 		rateLimiter      quotas.RateLimiter
-		retryPolicy      backoff.RetryPolicy
 		lastPollTime     time.Time
+		readTaskRetrier  backoff.Retrier
 		scheduler        queues.Scheduler
 		rescheduler      queues.Rescheduler
 
@@ -88,14 +86,13 @@ func newTimerQueueProcessorBase(
 	scope int,
 	shard shard.Context,
 	workflowCache workflow.Cache,
-	timerProcessor timerProcessor,
+	timerProcessor common.Daemon,
 	timerQueueAckMgr timerQueueAckMgr,
 	timerGate timer.Gate,
 	scheduler queues.Scheduler,
 	rescheduler queues.Rescheduler,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
-	metricsScope metrics.Scope,
 ) *timerQueueProcessorBase {
 	logger = log.With(logger, tag.ComponentTimerQueue)
 	config := shard.GetConfig()
@@ -111,7 +108,6 @@ func newTimerQueueProcessorBase(
 		config:           config,
 		logger:           logger,
 		metricsClient:    shard.GetMetricsClient(),
-		metricsScope:     metricsScope,
 		timerQueueAckMgr: timerQueueAckMgr,
 		timerGate:        timerGate,
 		timeSource:       shard.GetTimeSource(),
@@ -120,7 +116,10 @@ func newTimerQueueProcessorBase(
 		scheduler:        scheduler,
 		rescheduler:      rescheduler,
 		rateLimiter:      rateLimiter,
-		retryPolicy:      common.CreatePersistenceRetryPolicy(),
+		readTaskRetrier: backoff.NewRetrier(
+			common.CreateReadTaskRetryPolicy(),
+			backoff.SystemClock,
+		),
 	}
 
 	return base
@@ -250,7 +249,8 @@ eventLoop:
 			// timer queue ack manager indicate that all task scanned
 			// are finished and no more tasks
 			// use a separate goroutine since the caller hold the shutdownWG
-			go t.Stop()
+			// stop the entire timer queue processor, not just processor base.
+			go t.timerProcessor.Stop()
 			return nil
 		case <-t.timerGate.FireChan():
 			nextFireTime, err := t.readAndFanoutTimerTasks()
@@ -279,9 +279,10 @@ eventLoop:
 				t.config.TimerProcessorUpdateAckInterval(),
 				t.config.TimerProcessorUpdateAckIntervalJitterCoefficient(),
 			))
-			if err := t.timerQueueAckMgr.updateAckLevel(); err == shard.ErrShardClosed {
+			if err := t.timerQueueAckMgr.updateAckLevel(); shard.IsShardOwnershipLostError(err) {
 				// shard is closed, shutdown timerQProcessor and bail out
-				go t.Stop()
+				// stop the entire timer queue processor, not just processor base.
+				go t.timerProcessor.Stop()
 				return err
 			}
 		case <-t.newTimerCh:
@@ -315,9 +316,14 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) 
 	t.lastPollTime = t.timeSource.Now()
 	timerTasks, nextFireTime, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
 	if err != nil {
-		t.notifyNewTimer(time.Time{}) // re-enqueue the event
+		if common.IsResourceExhausted(err) {
+			t.notifyNewTimer(t.timeSource.Now().Add(loadTimerTaskThrottleRetryDelay))
+		} else {
+			t.notifyNewTimer(t.timeSource.Now().Add(t.readTaskRetrier.NextBackOff()))
+		}
 		return nil, err
 	}
+	t.readTaskRetrier.Reset()
 
 	for _, task := range timerTasks {
 		t.submitTask(task)
@@ -352,33 +358,22 @@ func (t *timerQueueProcessorBase) verifyReschedulerSize() bool {
 func (t *timerQueueProcessorBase) submitTask(
 	executable queues.Executable,
 ) {
-	submitted, err := t.scheduler.TrySubmit(executable)
-	if err != nil {
-		t.logger.Error("Failed to submit task", tag.Error(err))
-		executable.Reschedule()
-	} else if !submitted {
+	executable.SetScheduledTime(t.timeSource.Now())
+	if !t.scheduler.TrySubmit(executable) {
 		executable.Reschedule()
 	}
 }
 
-func newTimerTaskScheduler(
+func newTimerTaskShardScheduler(
 	shard shard.Context,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
-	return queues.NewScheduler(
-		queues.NewNoopPriorityAssigner(),
-		queues.SchedulerOptions{
-			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-				WorkerCount: config.TimerTaskWorkerCount,
-				QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
-			},
-			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
-				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TimerProcessorSchedulerRoundRobinWeights(), logger),
-			},
+	return queues.NewFIFOScheduler(
+		queues.FIFOSchedulerOptions{
+			WorkerCount: config.TimerTaskWorkerCount,
+			QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
 		},
-		metricProvider,
 		logger,
 	)
 }

@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
@@ -239,45 +240,44 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 	namespaceID string,
 	workflowID string,
 ) (WorkflowContext, error) {
-	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
-		runID, err := c.getCurrentRunID(
-			ctx,
-			shardOwnershipAsserted,
-			namespaceID,
-			workflowID,
-		)
-		if err != nil {
-			return nil, err
-		}
-		wfContext, err := c.getWorkflowContextValidatedByCheck(
-			ctx,
-			shardOwnershipAsserted,
-			consistencyPredicate,
-			definition.NewWorkflowKey(namespaceID, workflowID, runID),
-		)
-		if err != nil {
-			return nil, err
-		}
-		if wfContext.GetMutableState().IsWorkflowExecutionRunning() {
-			return wfContext, nil
-		}
-
-		currentRunID, err := c.getCurrentRunID(
-			ctx,
-			shardOwnershipAsserted,
-			namespaceID,
-			workflowID,
-		)
-		if err != nil {
-			wfContext.GetReleaseFn()(err)
-			return nil, err
-		}
-		if currentRunID == wfContext.GetRunID() {
-			return wfContext, nil
-		}
-		wfContext.GetReleaseFn()(nil)
+	runID, err := c.getCurrentRunID(
+		ctx,
+		shardOwnershipAsserted,
+		namespaceID,
+		workflowID,
+	)
+	if err != nil {
+		return nil, err
 	}
-	return nil, serviceerror.NewUnavailable("unable to locate current workflow execution")
+	wfContext, err := c.getWorkflowContextValidatedByCheck(
+		ctx,
+		shardOwnershipAsserted,
+		consistencyPredicate,
+		definition.NewWorkflowKey(namespaceID, workflowID, runID),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if wfContext.GetMutableState().IsWorkflowExecutionRunning() {
+		return wfContext, nil
+	}
+
+	currentRunID, err := c.getCurrentRunID(
+		ctx,
+		shardOwnershipAsserted,
+		namespaceID,
+		workflowID,
+	)
+	if err != nil {
+		wfContext.GetReleaseFn()(err)
+		return nil, err
+	}
+	if currentRunID == wfContext.GetRunID() {
+		return wfContext, nil
+	}
+
+	wfContext.GetReleaseFn()(nil)
+	return nil, consts.ErrLocateCurrentWorkflowExecution
 }
 
 func (c *WorkflowConsistencyCheckerImpl) getCurrentRunID(

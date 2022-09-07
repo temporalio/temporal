@@ -29,8 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/common/log"
-
 	"strings"
 
 	"github.com/gogo/protobuf/proto"
@@ -42,19 +40,20 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	persistence2 "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/log/tag"
-
-	"go.temporal.io/server/common/config"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	dc "go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -95,7 +94,7 @@ func (s *namespaceHandlerCommonSuite) TearDownSuite() {
 
 func (s *namespaceHandlerCommonSuite) SetupTest() {
 	logger := log.NewNoopLogger()
-	dcCollection := dc.NewCollection(dc.NewNoopClient(), logger)
+	dcCollection := dc.NewNoopCollection()
 	s.maxBadBinaryCount = 10
 	s.metadataMgr = s.TestBase.MetadataManager
 	s.controller = gomock.NewController(s.T())
@@ -336,7 +335,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			namespaces[resp.Namespaces[0].NamespaceInfo.GetName()] = resp.Namespaces[0]
 		}
 	}
-	delete(namespaces, common.SystemLocalNamespace)
+	delete(namespaces, primitives.SystemLocalNamespace)
 	s.Equal(map[string]*workflowservice.DescribeNamespaceResponse{
 		namespace1: &workflowservice.DescribeNamespaceResponse{
 			NamespaceInfo: &namespacepb.NamespaceInfo{
@@ -439,7 +438,7 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeri
 		0,
 		-1 * time.Hour,
 		1 * time.Millisecond,
-		10 * 365 * 24 * time.Hour,
+		30 * time.Minute,
 	} {
 		registerRequest := &workflowservice.RegisterNamespaceRequest{
 			Namespace:                        "random namespace name",
@@ -466,8 +465,23 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeri
 	}
 }
 
+func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_MaxRetentionPeriod() {
+	for _, duration := range []time.Duration{
+		10 * 365 * 24 * time.Hour,
+	} {
+		registerRequest := &workflowservice.RegisterNamespaceRequest{
+			Namespace:                        "random namespace name",
+			Description:                      "random namespace name",
+			WorkflowExecutionRetentionPeriod: &duration,
+			IsGlobalNamespace:                false,
+		}
+		_, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
+		s.Nil(err)
+	}
+}
+
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod() {
-	namespace := "random namespace name"
+	namespace := uuid.New()
 	registerRequest := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		Description:                      namespace,
@@ -478,7 +492,12 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 	s.NoError(err)
 	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 
-	for _, invalidDuration := range []time.Duration{0, -1 * time.Hour, 1 * time.Millisecond, 10 * 365 * 24 * time.Hour} {
+	for _, invalidDuration := range []time.Duration{
+		0,
+		-1 * time.Hour,
+		1 * time.Millisecond,
+		30 * time.Minute,
+	} {
 		updateRequest := &workflowservice.UpdateNamespaceRequest{
 			Namespace: namespace,
 			Config: &namespacepb.NamespaceConfig{
@@ -488,6 +507,32 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 		resp, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
 		s.Equal(errInvalidRetentionPeriod, err)
 		s.Nil(resp)
+	}
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_MaxRetentionPeriod() {
+	namespace := uuid.New()
+	registerRequest := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		Description:                      namespace,
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(10 * 24 * time.Hour),
+		IsGlobalNamespace:                false,
+	}
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
+	s.NoError(err)
+	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
+
+	for _, duration := range []time.Duration{
+		10 * 365 * 24 * time.Hour,
+	} {
+		updateRequest := &workflowservice.UpdateNamespaceRequest{
+			Namespace: namespace,
+			Config: &namespacepb.NamespaceConfig{
+				WorkflowExecutionRetentionTtl: timestamp.DurationPtr(duration),
+			},
+		}
+		_, err = s.handler.UpdateNamespace(context.Background(), updateRequest)
+		s.Nil(err)
 	}
 }
 

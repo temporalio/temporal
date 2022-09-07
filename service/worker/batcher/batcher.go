@@ -27,7 +27,6 @@ package batcher
 import (
 	"context"
 
-	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
@@ -36,62 +35,65 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 )
 
-type (
-	// Config defines the configuration for batcher
-	Config struct {
-		MaxConcurrentActivityExecutionSize     dynamicconfig.IntPropertyFn
-		MaxConcurrentWorkflowTaskExecutionSize dynamicconfig.IntPropertyFn
-		MaxConcurrentActivityTaskPollers       dynamicconfig.IntPropertyFn
-		MaxConcurrentWorkflowTaskPollers       dynamicconfig.IntPropertyFn
-	}
+const (
+	// taskQueueName is the taskqueue name
+	taskQueueName = "temporal-sys-batcher-taskqueue"
+)
 
+type (
 	// Batcher is the background sub-system that execute workflow for batch operations
 	// It is also the context object that get's passed around within the scanner workflows / activities
 	Batcher struct {
-		cfg              *Config
 		sdkClientFactory sdk.ClientFactory
 		metricsClient    metrics.Client
 		logger           log.Logger
+		rps              dynamicconfig.IntPropertyFnWithNamespaceFilter
+		concurrency      dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 )
 
 // New returns a new instance of batcher daemon Batcher
 func New(
-	cfg *Config,
 	metricsClient metrics.Client,
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
+	rps dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter,
 ) *Batcher {
 	return &Batcher{
-		cfg:              cfg,
 		sdkClientFactory: sdkClientFactory,
 		metricsClient:    metricsClient,
 		logger:           log.With(logger, tag.ComponentBatcher),
+		rps:              rps,
+		concurrency:      concurrency,
 	}
 }
 
 // Start starts the scanner
 func (s *Batcher) Start() error {
 	// start worker for batch operation workflows
-	ctx := context.WithValue(context.Background(), batcherContextKey, s)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
-
+	ctx := headers.SetCallerInfo(context.Background(), headers.SystemBackgroundCallerInfo)
 	workerOpts := worker.Options{
-		MaxConcurrentActivityExecutionSize:     s.cfg.MaxConcurrentActivityExecutionSize(),
-		MaxConcurrentWorkflowTaskExecutionSize: s.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
-		MaxConcurrentActivityTaskPollers:       s.cfg.MaxConcurrentActivityTaskPollers(),
-		MaxConcurrentWorkflowTaskPollers:       s.cfg.MaxConcurrentWorkflowTaskPollers(),
-
 		BackgroundActivityContext: ctx,
 	}
-
-	sdkClient := s.sdkClientFactory.GetSystemClient(s.logger)
-	batchWorker := worker.New(sdkClient, BatcherTaskQueueName, workerOpts)
+	sdkClient := s.sdkClientFactory.GetSystemClient()
+	batchWorker := worker.New(sdkClient, taskQueueName, workerOpts)
 	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
-	batchWorker.RegisterActivityWithOptions(BatchActivity, activity.RegisterOptions{Name: batchActivityName})
+	batchWorker.RegisterActivity(&activities{
+		activityDeps: activityDeps{
+			MetricsClient: s.metricsClient,
+			Logger:        s.logger,
+			ClientFactory: s.sdkClientFactory,
+		},
+		namespace:   primitives.SystemLocalNamespace,
+		namespaceID: primitives.SystemNamespaceID,
+		rps:         s.rps,
+		concurrency: s.concurrency,
+	})
 
 	return batchWorker.Start()
 }

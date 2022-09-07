@@ -39,7 +39,8 @@ import (
 )
 
 const (
-	WorkflowType = "temporal-sys-scheduler-workflow"
+	WorkflowType      = "temporal-sys-scheduler-workflow"
+	NamespaceDivision = "TemporalScheduler"
 )
 
 type (
@@ -74,7 +75,7 @@ func NewResult(
 		Component: &workerComponent{
 			activityDeps: params,
 			enabledForNs: dcCollection.GetBoolPropertyFnWithNamespaceFilter(
-				dynamicconfig.WorkerEnableScheduler, false),
+				dynamicconfig.WorkerEnableScheduler, true),
 		},
 	}
 }

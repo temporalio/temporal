@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -55,6 +56,7 @@ type (
 		taskWriter          *MockdbTaskWriter
 		taskReader          *MockdbTaskReader
 		store               *persistence.MockTaskManager
+		namespaceRegistry   *namespace.MockRegistry
 		ackedTaskID         int64
 		lastAllocatedTaskID int64
 		dispatchTaskFn      func(context.Context, *internalTask) error
@@ -91,6 +93,7 @@ func (s *dbTaskManagerSuite) SetupTest() {
 	s.taskWriter = NewMockdbTaskWriter(s.controller)
 	s.taskReader = NewMockdbTaskReader(s.controller)
 	s.store = persistence.NewMockTaskManager(s.controller)
+	s.namespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.ackedTaskID = rand.Int63()
 	s.lastAllocatedTaskID = s.ackedTaskID + 100
 	s.dispatchTaskFn = func(context.Context, *internalTask) error {
@@ -103,6 +106,9 @@ func (s *dbTaskManagerSuite) SetupTest() {
 	s.taskQueueKind = enumspb.TASK_QUEUE_KIND_STICKY
 	s.taskIDRangeSize = rand.Int63()
 
+	s.namespaceRegistry.EXPECT().GetNamespaceName(namespace.ID(s.namespaceID)).
+		Return(namespace.Name("namespaceName"), nil).AnyTimes()
+
 	s.dbTaskManager = newDBTaskManager(
 		persistence.TaskQueueKey{
 			NamespaceID:   s.namespaceID,
@@ -113,6 +119,7 @@ func (s *dbTaskManagerSuite) SetupTest() {
 		s.taskIDRangeSize,
 		s.dispatchTaskFn,
 		s.store,
+		s.namespaceRegistry,
 		logger,
 	)
 	s.dbTaskManager.taskQueueOwnershipProvider = func() dbTaskQueueOwnership {
@@ -224,7 +231,7 @@ func (s *dbTaskManagerSuite) TestBufferAndWriteTask_Ready() {
 	taskInfo := &persistencespb.TaskInfo{}
 	taskWriterErr := serviceerror.NewInternal("random error")
 	s.taskWriter.EXPECT().appendTask(taskInfo).Return(
-		future.NewReadyFuture[struct{}](struct{}{}, taskWriterErr),
+		future.NewReadyFuture(struct{}{}, taskWriterErr),
 	)
 	fut := s.dbTaskManager.BufferAndWriteTask(taskInfo)
 	_, err := fut.Get(context.Background())
@@ -324,12 +331,15 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadFailure() {
 	))
 
 	s.dbTaskManager.readAndDispatchTasks(context.Background())
+	timer := time.NewTimer(s.dbTaskManager.dispatchRetrier.NextBackOff())
 	select {
 	case <-s.dbTaskManager.dispatchChan:
 		// noop
-	default:
+	case <-timer.C:
 		s.Fail("dispatch channel should contain one signal")
 	}
+
+	timer.Stop()
 }
 
 func (s *dbTaskManagerSuite) TestUpdateAckTaskID() {

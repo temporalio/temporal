@@ -33,6 +33,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	uberatomic "go.uber.org/atomic"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -40,20 +42,20 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/future"
-	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/util"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -68,6 +70,14 @@ const (
 
 	// Threshold for counting a AddTask call as a no recent poller call
 	noPollerThreshold = time.Minute * 2
+)
+
+var (
+	// this retry policy is currenly only used for matching persistence operations
+	// that, if failed, the entire task queue needs to be reload
+	persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
+		WithMaximumInterval(1 * time.Second).
+		WithExpirationInterval(30 * time.Second)
 )
 
 type (
@@ -107,6 +117,8 @@ type (
 		GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error)
 		// MutateVersioningData allows callers to update versioning data for this task queue
 		MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error
+		// InvalidateMetadata allows callers to invalidate cached data on this task queue
+		InvalidateMetadata(request *matchingservice.InvalidateTaskQueueMetadataRequest) error
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
@@ -132,6 +144,7 @@ type (
 		matcher           *TaskMatcher // for matching a task producer with a poller
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
+		matchingClient    matchingservice.MatchingServiceClient
 		metricsClient     metrics.Client
 		namespace         namespace.Name
 		metricScope       metrics.Scope // namespace/taskqueue tagged metric scope
@@ -147,6 +160,18 @@ type (
 		signalFatalProblem   func(taskQueueManager)
 		clusterMeta          cluster.Metadata
 		initializedError     *future.FutureImpl[struct{}]
+		// metadataInitialFetch is fulfilled once versioning data is fetched from the root partition. If this TQ is
+		// the root partition, it is fulfilled as soon as it is fetched from db.
+		metadataInitialFetch *future.FutureImpl[struct{}]
+		metadataPoller       metadataPoller
+	}
+
+	metadataPoller struct {
+		// Ensures that we launch the goroutine for polling for updates only one time
+		running           *uberatomic.Bool
+		pollIntervalCfgFn dynamicconfig.DurationPropertyFn
+		stopChan          chan struct{}
+		tqMgr             *taskQueueManagerImpl
 	}
 )
 
@@ -176,7 +201,7 @@ func newTaskQueueManager(
 
 	taskQueueConfig := newTaskQueueConfig(taskQueue, config, nsName)
 
-	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue.name, taskQueue.taskType, taskQueueKind, e.logger)
+	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue, taskQueueKind, e.logger)
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(taskQueue.name),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
@@ -188,24 +213,32 @@ func newTaskQueueManager(
 		taskQueueKind,
 	).Tagged(metrics.TaskQueueTypeTag(taskQueue.taskType))
 	tlMgr := &taskQueueManagerImpl{
-		status:              common.DaemonStatusInitialized,
-		namespaceRegistry:   e.namespaceRegistry,
-		metricsClient:       e.metricsClient,
-		taskQueueID:         taskQueue,
-		taskQueueKind:       taskQueueKind,
-		logger:              logger,
-		db:                  db,
-		taskAckManager:      newAckManager(e.logger),
-		taskGC:              newTaskGC(db, taskQueueConfig),
-		config:              taskQueueConfig,
-		pollerHistory:       newPollerHistory(),
-		outstandingPollsMap: make(map[string]context.CancelFunc),
-		signalFatalProblem:  e.unloadTaskQueue,
-		clusterMeta:         clusterMeta,
-		namespace:           nsName,
-		metricScope:         metricsScope,
-		initializedError:    future.NewFuture[struct{}](),
+		status:               common.DaemonStatusInitialized,
+		namespaceRegistry:    e.namespaceRegistry,
+		matchingClient:       e.matchingClient,
+		metricsClient:        e.metricsClient,
+		taskQueueID:          taskQueue,
+		taskQueueKind:        taskQueueKind,
+		logger:               logger,
+		db:                   db,
+		taskAckManager:       newAckManager(e.logger),
+		taskGC:               newTaskGC(db, taskQueueConfig),
+		config:               taskQueueConfig,
+		pollerHistory:        newPollerHistory(),
+		outstandingPollsMap:  make(map[string]context.CancelFunc),
+		signalFatalProblem:   e.unloadTaskQueue,
+		clusterMeta:          clusterMeta,
+		namespace:            nsName,
+		metricScope:          metricsScope,
+		initializedError:     future.NewFuture[struct{}](),
+		metadataInitialFetch: future.NewFuture[struct{}](),
+		metadataPoller: metadataPoller{
+			running:           uberatomic.NewBool(false),
+			pollIntervalCfgFn: e.config.MetadataPollFrequency,
+			stopChan:          make(chan struct{}),
+		},
 	}
+	tlMgr.metadataPoller.tqMgr = tlMgr
 
 	tlMgr.liveness = newLiveness(
 		clock.NewRealTimeSource(),
@@ -254,6 +287,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
+	go c.fetchMetadataFromRootPartitionOnInit(context.TODO())
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
 }
@@ -271,12 +305,13 @@ func (c *taskQueueManagerImpl) Stop() {
 	// metadata. UpdateState would fail on the lease check, but don't even bother calling it.
 	ackLevel := c.taskAckManager.getAckLevel()
 	if ackLevel >= 0 {
-		ctx, cancel := newIOContext()
+		ctx, cancel := c.newIOContext()
 		defer cancel()
 
 		c.db.UpdateState(ctx, ackLevel)
 		c.taskGC.RunNow(ctx, ackLevel)
 	}
+	c.metadataPoller.Stop()
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
@@ -286,6 +321,12 @@ func (c *taskQueueManagerImpl) Stop() {
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	_, err := c.initializedError.Get(ctx)
+	if err != nil {
+		return err
+	}
+	// We don't really care if the initial fetch worked or not, anything that *requires* a bit of metadata should fail
+	// that operation if it's never fetched OK. If the initial fetch errored, the metadataPoller will have been started.
+	_, _ = c.metadataInitialFetch.Get(ctx)
 	return err
 }
 
@@ -306,37 +347,32 @@ func (c *taskQueueManagerImpl) AddTask(
 		c.metricScope.IncCounter(metrics.NoRecentPollerTasksPerTaskQueueCounter)
 	}
 
-	var syncMatch bool
-	err := executeWithRetry(ctx, func(_ context.Context) error {
-		taskInfo := params.taskInfo
+	taskInfo := params.taskInfo
 
-		namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceId()))
-		if err != nil {
-			return err
+	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceId()))
+	if err != nil {
+		return false, err
+	}
+
+	if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
+		syncMatch, err := c.trySyncMatch(ctx, params)
+		if syncMatch {
+			return syncMatch, err
 		}
+	}
 
-		syncMatch = false
-		if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-			syncMatch, err = c.trySyncMatch(ctx, params)
-			if syncMatch {
-				return err
-			}
-		}
+	if params.forwardedFrom != "" {
+		// forwarded from child partition - only do sync match
+		// child partition will persist the task when sync match fails
+		return false, errRemoteSyncMatchFailed
+	}
 
-		if params.forwardedFrom != "" {
-			// forwarded from child partition - only do sync match
-			// child partition will persist the task when sync match fails
-			return errRemoteSyncMatchFailed
-		}
-
-		_, err = c.taskWriter.appendTask(params.execution, taskInfo)
-		c.signalIfFatal(err)
-		return err
-	})
-	if !syncMatch && err == nil {
+	_, err = c.taskWriter.appendTask(params.execution, taskInfo)
+	c.signalIfFatal(err)
+	if err == nil {
 		c.taskReader.Signal()
 	}
-	return syncMatch, err
+	return false, err
 }
 
 // GetTask blocks waiting for a task.
@@ -426,14 +462,67 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 	return c.matcher.OfferQuery(ctx, task)
 }
 
+// GetVersioningData returns the versioning data for the task queue if any. If this task queue is a sub-partition and
+// has no cached data, it will explicitly attempt a fetch from the root partition.
 func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error) {
-	return c.db.GetVersioningData(ctx)
+	vd, err := c.db.GetVersioningData(ctx)
+	if errors.Is(err, errVersioningDataNotPresentOnPartition) {
+		// If this is a non-root-partition with no versioning data, this call is indicating we might expect to find
+		// some. Since we may not have started the poller, we want to explicitly attempt to fetch now, because
+		// it's possible some was added to the root partition, but it failed to invalidate this partition.
+		return c.fetchMetadataFromRootPartition(ctx)
+	}
+	return vd, err
 }
 
 func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
-	err := c.db.MutateVersioningData(ctx, mutator)
+	newDat, err := c.db.MutateVersioningData(ctx, mutator)
 	c.signalIfFatal(err)
-	return err
+	if err != nil {
+		return err
+	}
+	// We will have errored already if this was not the root workflow partition.
+	// Now notify partitions that they should fetch changed data from us
+	numParts := util.Max(c.config.NumReadPartitions(), c.config.NumWritePartitions())
+	wg := &sync.WaitGroup{}
+	for i := 0; i < numParts; i++ {
+		for _, tqt := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+			if i == 0 && tqt == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+				continue // Root workflow partition owns the data, skip it.
+			}
+			wg.Add(1)
+			go func(i int, tqt enumspb.TaskQueueType) {
+				tq := c.taskQueueID.mkName(i)
+				_, err := c.matchingClient.InvalidateTaskQueueMetadata(ctx,
+					&matchingservice.InvalidateTaskQueueMetadataRequest{
+						NamespaceId:    c.taskQueueID.namespaceID.String(),
+						TaskQueue:      tq,
+						TaskQueueType:  tqt,
+						VersioningData: newDat,
+					})
+				if err != nil {
+					c.logger.Warn("Failed to notify sub-partition of invalidated versioning data",
+						tag.WorkflowTaskQueueName(tq), tag.Error(err))
+				}
+				wg.Done()
+			}(i, tqt)
+		}
+	}
+	wg.Wait()
+	return nil
+}
+
+func (c *taskQueueManagerImpl) InvalidateMetadata(request *matchingservice.InvalidateTaskQueueMetadataRequest) error {
+	if request.GetVersioningData() != nil {
+		if c.taskQueueID.IsRoot() && c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+			// Should never happen. Root partitions do not get their versioning data invalidated.
+			c.logger.Warn("A root workflow partition was told to invalidate its versioning data, this should not happen")
+			return nil
+		}
+		c.db.setVersioningDataForNonRootPartition(request.GetVersioningData())
+		c.metadataPoller.StartIfUnstarted()
+	}
+	return nil
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
@@ -541,7 +630,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
 
 	// TODO: completeTaskFunc and task.finish() should take in a context
-	ctx, cancel := newIOContext()
+	ctx, cancel := c.newIOContext()
 	defer cancel()
 	c.taskGC.Run(ctx, ackLevel)
 }
@@ -624,9 +713,97 @@ func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
 	return c.taskQueueKind
 }
 
-func newIOContext() (context.Context, context.CancelFunc) {
+func (c *taskQueueManagerImpl) newIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(context.Background(), ioTimeout)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+
+	namespace, _ := c.namespaceRegistry.GetNamespaceName(c.taskQueueID.namespaceID)
+	ctx = headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
 
 	return ctx, cancel
+}
+
+func (c *taskQueueManagerImpl) fetchMetadataFromRootPartitionOnInit(ctx context.Context) {
+	if c.metadataInitialFetch.Ready() {
+		return
+	}
+	_, err := c.fetchMetadataFromRootPartition(ctx)
+	c.metadataInitialFetch.Set(struct{}{}, err)
+}
+
+// fetchMetadataFromRootPartition fetches metadata from root partition iff this partition is not a root partition.
+// Returns the fetched data, if fetching was necessary and successful.
+func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Context) (*persistencespb.VersioningData, error) {
+	// Nothing to do if we are the root partition of a workflow queue, since we should own the data.
+	// (for versioning - any later added metadata may need to not abort so early)
+	if c.taskQueueID.IsRoot() && c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		return nil, nil
+	}
+
+	curDat, err := c.db.GetVersioningData(ctx)
+	if err != nil && !errors.Is(err, errVersioningDataNotPresentOnPartition) {
+		return nil, err
+	}
+	curHash := HashVersioningData(curDat)
+
+	rootTqName := c.taskQueueID.GetRoot()
+	if len(curHash) == 0 {
+		// if we have no data, make sure we send a sigil value, so it's known we desire versioning data
+		curHash = []byte{0}
+	}
+	res, err := c.matchingClient.GetTaskQueueMetadata(ctx, &matchingservice.GetTaskQueueMetadataRequest{
+		NamespaceId:               c.taskQueueID.namespaceID.String(),
+		TaskQueue:                 rootTqName,
+		WantVersioningDataCurhash: curHash,
+	})
+	// If the root partition returns nil here, then that means our data matched, and we don't need to update.
+	// If it's nil because it never existed, then we'd never have any data.
+	// It can't be nil due to removing versions, as that would result in a non-nil container with
+	// nil inner fields.
+	if !res.GetMatchedReqHash() {
+		c.db.setVersioningDataForNonRootPartition(res.GetVersioningData())
+	}
+	// We want to start the poller as long as the root partition has any kind of data (or fetching hasn't worked)
+	if res.GetMatchedReqHash() || res.GetVersioningData() != nil || err != nil {
+		c.metadataPoller.StartIfUnstarted()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return res.GetVersioningData(), nil
+}
+
+// StartIfUnstarted starts the poller if it's not already started. The passed in function is called repeatedly
+// and if it returns true, the poller will shut down, at which point it may be started again.
+func (mp *metadataPoller) StartIfUnstarted() {
+	if mp.running.Load() {
+		return
+	}
+	go mp.pollLoop()
+}
+
+func (mp *metadataPoller) pollLoop() {
+	mp.running.Store(true)
+	defer mp.running.Store(false)
+	ticker := time.NewTicker(mp.pollIntervalCfgFn())
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-mp.stopChan:
+			return
+		case <-ticker.C:
+			// In case the interval has changed
+			ticker.Reset(mp.pollIntervalCfgFn())
+			dat, err := mp.tqMgr.fetchMetadataFromRootPartition(context.TODO())
+			if dat == nil && err == nil {
+				// Can stop polling since there is no versioning data. Loop will be restarted if we
+				// are told to invalidate the data, or we attempt to fetch it via GetVersioningData.
+				return
+			}
+		}
+	}
+}
+
+func (mp *metadataPoller) Stop() {
+	close(mp.stopChan)
 }

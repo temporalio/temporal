@@ -72,18 +72,6 @@ const (
 	ReadDLQMessagesPageSize = 1000
 )
 
-// This was flagged by salus as potentially hardcoded credentials. This is a false positive by the scanner and should be
-// disregarded.
-// #nosec
-const (
-	// SystemLocalNamespace is namespace name for temporal system workflows running in local cluster
-	SystemLocalNamespace = "temporal-system"
-	// SystemNamespaceID is namespace id for all temporal system workflows
-	SystemNamespaceID = "32049b68-7872-4094-8e63-d0dd59896a83"
-	// SystemNamespaceRetention is retention config for all temporal system workflows
-	SystemNamespaceRetention = time.Hour * 24 * 7
-)
-
 const (
 	// MinLongPollTimeout is the minimum context timeout for long poll API, below which
 	// the request won't be processed
@@ -91,10 +79,6 @@ const (
 	// CriticalLongPollTimeout is a threshold for the context timeout passed into long poll API,
 	// below which a warning will be logged
 	CriticalLongPollTimeout = time.Second * 20
-	// MaxWorkflowRetentionPeriod is the maximum of workflow retention when registering namespace
-	// !!! Do NOT simply decrease this number, because it is being used by history scavenger to avoid race condition against history archival.
-	// Check more details in history scanner(scavenger)
-	MaxWorkflowRetentionPeriod = 30 * time.Hour * 24
 )
 
 const (

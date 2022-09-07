@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -102,10 +101,6 @@ type (
 		Namespace     string
 		RemoteCluster string // remote cluster name
 	}
-)
-
-var (
-	historyServiceRetryPolicy = common.CreateHistoryServiceRetryPolicy()
 )
 
 func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverParams) (retErr error) {

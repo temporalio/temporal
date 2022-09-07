@@ -25,7 +25,6 @@
 package filestore
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -249,13 +248,4 @@ func historyMutated(request *archiver.ArchiveHistoryRequest, historyBatches []*h
 	}
 	lastEventID := lastEvent.GetEventId()
 	return lastFailoverVersion != request.CloseFailoverVersion || lastEventID+1 != request.NextEventID
-}
-
-func contextExpired(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-		return false
-	}
 }

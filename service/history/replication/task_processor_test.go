@@ -25,6 +25,7 @@
 package replication
 
 import (
+	"context"
 	"math/rand"
 	"testing"
 	"time"
@@ -203,8 +204,8 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_SyncActivity() {
 		VisibilityTime: &now,
 	}
 
-	s.mockReplicationTaskExecutor.EXPECT().Execute(task, false).Return(0, nil)
-	err := s.replicationTaskProcessor.handleReplicationTask(task)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(0, nil)
+	err := s.replicationTaskProcessor.handleReplicationTask(context.Background(), task)
 	s.NoError(err)
 }
 
@@ -242,8 +243,8 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_History() {
 		VisibilityTime: &now,
 	}
 
-	s.mockReplicationTaskExecutor.EXPECT().Execute(task, false).Return(0, nil)
-	err = s.replicationTaskProcessor.handleReplicationTask(task)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(0, nil)
+	err = s.replicationTaskProcessor.handleReplicationTask(context.Background(), task)
 	s.NoError(err)
 }
 
@@ -263,7 +264,7 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncActivity() {
 	}
 
 	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil)
-	err := s.replicationTaskProcessor.handleReplicationDLQTask(request)
+	err := s.replicationTaskProcessor.handleReplicationDLQTask(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -285,7 +286,7 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncWorkflowState() {
 	}
 
 	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil)
-	err := s.replicationTaskProcessor.handleReplicationDLQTask(request)
+	err := s.replicationTaskProcessor.handleReplicationDLQTask(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -309,7 +310,7 @@ func (s *taskProcessorSuite) TestHandleReplicationDLQTask_History() {
 	}
 
 	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil)
-	err := s.replicationTaskProcessor.handleReplicationDLQTask(request)
+	err := s.replicationTaskProcessor.handleReplicationDLQTask(context.Background(), request)
 	s.NoError(err)
 }
 

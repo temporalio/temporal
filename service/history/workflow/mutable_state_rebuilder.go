@@ -27,6 +27,7 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pborman/uuid"
@@ -46,6 +47,7 @@ import (
 type (
 	MutableStateRebuilder interface {
 		ApplyEvents(
+			ctx context.Context,
 			namespaceID namespace.ID,
 			requestID string,
 			execution commonpb.WorkflowExecution,
@@ -87,6 +89,7 @@ func NewMutableStateRebuilder(
 }
 
 func (b *MutableStateRebuilderImpl) ApplyEvents(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	requestID string,
 	execution commonpb.WorkflowExecution,
@@ -171,6 +174,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := b.mutableState.SetHistoryTree(
+				ctx,
 				execution.GetRunId(),
 			); err != nil {
 				return nil, err
@@ -507,7 +511,15 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 		case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 			b.mutableState.ReplicateUpsertWorkflowSearchAttributesEvent(event)
-			if err := taskGenerator.GenerateWorkflowSearchAttrTasks(
+			if err := taskGenerator.GenerateUpsertVisibilityTask(
+				timestamp.TimeValue(event.GetEventTime()),
+			); err != nil {
+				return nil, err
+			}
+
+		case enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:
+			b.mutableState.ReplicateWorkflowPropertiesModifiedEvent(event)
+			if err := taskGenerator.GenerateUpsertVisibilityTask(
 				timestamp.TimeValue(event.GetEventTime()),
 			); err != nil {
 				return nil, err
@@ -608,6 +620,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 					RunId:      newRunID,
 				}
 				_, err := newRunStateBuilder.ApplyEvents(
+					ctx,
 					namespaceID,
 					uuid.New(),
 					newExecution,
@@ -638,6 +651,10 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			enumspb.EVENT_TYPE_WORKFLOW_UPDATE_REQUESTED,
 			enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED:
 			return nil, serviceerror.NewUnimplemented("Workflow Update rebuild not implemented")
+
+		case enumspb.EVENT_TYPE_ACTIVITY_PROPERTIES_MODIFIED_EXTERNALLY,
+			enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED_EXTERNALLY:
+			return nil, serviceerror.NewUnimplemented("Workflow/activity property motification not implemented")
 
 		default:
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))

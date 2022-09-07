@@ -228,7 +228,10 @@ func (m *metadataImpl) Start() {
 	}
 
 	// TODO: specify a timeout for the context
-	ctx := headers.SetCallerInfo(context.TODO(), headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx := headers.SetCallerInfo(
+		context.TODO(),
+		headers.SystemBackgroundCallerInfo,
+	)
 	err := m.refreshClusterMetadata(ctx)
 	if err != nil {
 		m.logger.Fatal("Unable to initialize cluster metadata cache", tag.Error(err))

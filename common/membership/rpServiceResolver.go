@@ -33,7 +33,7 @@ import (
 	"time"
 
 	"github.com/temporalio/ringpop-go"
-	"github.com/uber/tchannel-go"
+	"github.com/temporalio/tchannel-go"
 
 	"github.com/dgryski/go-farm"
 	"github.com/temporalio/ringpop-go/events"
@@ -149,6 +149,13 @@ func (r *ringpopServiceResolver) Stop() {
 	}
 }
 
+func (r *ringpopServiceResolver) RequestRefresh() {
+	select {
+	case r.refreshChan <- struct{}{}:
+	default:
+	}
+}
+
 // Lookup finds the host in the ring responsible for serving the given key
 func (r *ringpopServiceResolver) Lookup(
 	key string,
@@ -156,10 +163,7 @@ func (r *ringpopServiceResolver) Lookup(
 
 	addr, found := r.ring().Lookup(key)
 	if !found {
-		select {
-		case r.refreshChan <- struct{}{}:
-		default:
-		}
+		r.RequestRefresh()
 		return nil, ErrInsufficientHosts
 	}
 
@@ -212,10 +216,8 @@ func (r *ringpopServiceResolver) Members() []*HostInfo {
 func (r *ringpopServiceResolver) HandleEvent(
 	event events.Event,
 ) {
-
 	// We only care about RingChangedEvent
-	e, ok := event.(events.RingChangedEvent)
-	if ok {
+	if _, ok := event.(events.RingChangedEvent); ok {
 		r.logger.Debug("Received a ring changed event")
 		// Note that we receive events asynchronously, possibly out of order.
 		// We cannot rely on the content of the event, rather we load everything
@@ -223,35 +225,50 @@ func (r *ringpopServiceResolver) HandleEvent(
 		if err := r.refresh(); err != nil {
 			r.logger.Error("error refreshing ring when receiving a ring changed event", tag.Error(err))
 		}
-		r.emitEvent(e)
 	}
 }
 
 func (r *ringpopServiceResolver) refresh() error {
+	var event *ChangedEvent
+	var err error
+	defer func() {
+		if event != nil {
+			r.emitEvent(event)
+		}
+	}()
 	r.refreshLock.Lock()
 	defer r.refreshLock.Unlock()
-	return r.refreshNoLock()
+	event, err = r.refreshNoLock()
+	return err
 }
 
 func (r *ringpopServiceResolver) refreshWithBackoff() error {
+	var event *ChangedEvent
+	var err error
+	defer func() {
+		if event != nil {
+			r.emitEvent(event)
+		}
+	}()
 	r.refreshLock.Lock()
 	defer r.refreshLock.Unlock()
 	if r.lastRefreshTime.After(time.Now().UTC().Add(-minRefreshInternal)) {
 		// refresh too frequently
 		return nil
 	}
-	return r.refreshNoLock()
+	event, err = r.refreshNoLock()
+	return err
 }
 
-func (r *ringpopServiceResolver) refreshNoLock() error {
+func (r *ringpopServiceResolver) refreshNoLock() (*ChangedEvent, error) {
 	addrs, err := r.getReachableMembers()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	newMembersMap, changed := r.compareMembers(addrs)
-	if !changed {
-		return nil
+	newMembersMap, changedEvent := r.compareMembers(addrs)
+	if changedEvent == nil {
+		return nil, nil
 	}
 
 	ring := newHashRing()
@@ -264,7 +281,8 @@ func (r *ringpopServiceResolver) refreshNoLock() error {
 	r.lastRefreshTime = time.Now().UTC()
 	r.ringValue.Store(ring)
 	r.logger.Info("Current reachable members", tag.Addresses(addrs))
-	return nil
+
+	return changedEvent, nil
 }
 
 func (r *ringpopServiceResolver) getReachableMembers() ([]string, error) {
@@ -301,22 +319,7 @@ func (r *ringpopServiceResolver) getReachableMembers() ([]string, error) {
 	return hostPorts, nil
 }
 
-func (r *ringpopServiceResolver) emitEvent(
-	rpEvent events.RingChangedEvent,
-) {
-
-	// Marshall the event object into the required type
-	event := &ChangedEvent{}
-	for _, addr := range rpEvent.ServersAdded {
-		event.HostsAdded = append(event.HostsAdded, NewHostInfo(addr, r.getLabelsMap()))
-	}
-	for _, addr := range rpEvent.ServersRemoved {
-		event.HostsRemoved = append(event.HostsRemoved, NewHostInfo(addr, r.getLabelsMap()))
-	}
-	for _, addr := range rpEvent.ServersUpdated {
-		event.HostsUpdated = append(event.HostsUpdated, NewHostInfo(addr, r.getLabelsMap()))
-	}
-
+func (r *ringpopServiceResolver) emitEvent(event *ChangedEvent) {
 	// Notify listeners
 	r.listenerLock.RLock()
 	defer r.listenerLock.RUnlock()
@@ -342,7 +345,7 @@ func (r *ringpopServiceResolver) refreshRingWorker() {
 			return
 		case <-r.refreshChan:
 			if err := r.refreshWithBackoff(); err != nil {
-				r.logger.Error("error periodically refreshing ring", tag.Error(err))
+				r.logger.Error("error refreshing ring by request", tag.Error(err))
 			}
 		case <-refreshTicker.C:
 			if err := r.refreshWithBackoff(); err != nil {
@@ -362,22 +365,27 @@ func (r *ringpopServiceResolver) getLabelsMap() map[string]string {
 	return labels
 }
 
-func (r *ringpopServiceResolver) compareMembers(addrs []string) (map[string]struct{}, bool) {
+func (r *ringpopServiceResolver) compareMembers(addrs []string) (map[string]struct{}, *ChangedEvent) {
+	event := &ChangedEvent{}
 	changed := false
 	newMembersMap := make(map[string]struct{}, len(addrs))
 	for _, addr := range addrs {
 		newMembersMap[addr] = struct{}{}
 		if _, ok := r.membersMap[addr]; !ok {
+			event.HostsAdded = append(event.HostsAdded, NewHostInfo(addr, r.getLabelsMap()))
 			changed = true
 		}
 	}
 	for addr := range r.membersMap {
 		if _, ok := newMembersMap[addr]; !ok {
+			event.HostsRemoved = append(event.HostsRemoved, NewHostInfo(addr, r.getLabelsMap()))
 			changed = true
-			break
 		}
 	}
-	return newMembersMap, changed
+	if changed {
+		return newMembersMap, event
+	}
+	return newMembersMap, nil
 }
 
 // BuildBroadcastHostPort return the listener hostport from an existing tchannel

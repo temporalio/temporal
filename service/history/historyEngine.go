@@ -80,7 +80,6 @@ import (
 )
 
 const (
-	conditionalRetryCount                     = 5
 	activityCancellationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
 )
 
@@ -128,23 +127,23 @@ func NewEngineWithShardContext(
 	eventNotifier events.Notifier,
 	config *configs.Config,
 	rawMatchingClient matchingservice.MatchingServiceClient,
-	newCacheFn workflow.NewCacheFn,
+	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
 	eventSerializer serialization.Serializer,
 	queueProcessorFactories []queues.Factory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tracerProvider trace.TracerProvider,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
-	historyCache := newCacheFn(shard)
 
 	workflowDeleteManager := workflow.NewDeleteManager(
 		shard,
-		historyCache,
+		workflowCache,
 		config,
 		archivalClient,
 		shard.GetTimeSource(),
@@ -168,13 +167,13 @@ func NewEngineWithShardContext(
 		rawMatchingClient:          rawMatchingClient,
 		workflowDeleteManager:      workflowDeleteManager,
 		eventSerializer:            eventSerializer,
-		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(shard, historyCache),
+		workflowConsistencyChecker: workflowConsistencyChecker,
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
 	for _, factory := range queueProcessorFactories {
-		processor := factory.CreateQueue(shard, historyEngImpl, historyCache)
+		processor := factory.CreateQueue(shard, historyEngImpl, workflowCache)
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
@@ -183,31 +182,31 @@ func NewEngineWithShardContext(
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
 			shard,
-			historyCache,
+			workflowCache,
 			executionManager,
 			logger,
 		)
 		historyEngImpl.nDCReplicator = newNDCHistoryReplicator(
 			shard,
-			historyCache,
+			workflowCache,
 			historyEngImpl.eventsReapplier,
 			logger,
 			eventSerializer,
 		)
 		historyEngImpl.nDCActivityReplicator = newNDCActivityReplicator(
 			shard,
-			historyCache,
+			workflowCache,
 			logger,
 		)
 	}
 	historyEngImpl.workflowRebuilder = NewWorkflowRebuilder(
 		shard,
-		historyCache,
+		workflowCache,
 		logger,
 	)
 	historyEngImpl.workflowResetter = newWorkflowResetter(
 		shard,
-		historyCache,
+		workflowCache,
 		logger,
 	)
 
@@ -223,7 +222,7 @@ func NewEngineWithShardContext(
 	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(
 		shard,
 		workflowDeleteManager,
-		historyCache,
+		workflowCache,
 		clientBean,
 		replicationTaskExecutorProvider,
 	)
@@ -231,7 +230,7 @@ func NewEngineWithShardContext(
 		config,
 		shard,
 		historyEngImpl,
-		historyCache,
+		workflowCache,
 		workflowDeleteManager,
 		clientBean,
 		eventSerializer,
@@ -418,8 +417,8 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	namespaceID := namespaceEntry.ID()
 
 	request := startRequest.StartRequest
-	e.overrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope)
-	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespaceEntry, "StartWorkflowExecution")
+	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, e.shard, e.metricsClient)
+	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, e.shard, namespaceEntry, "StartWorkflowExecution")
 	if err != nil {
 		return nil, err
 	}
@@ -427,6 +426,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	workflowID := request.GetWorkflowId()
 	runID := uuid.New()
 	workflowContext, err := api.NewWorkflowWithSignal(
+		ctx,
 		e.shard,
 		namespaceEntry,
 		workflowID,
@@ -521,7 +521,14 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 			),
 			prevExecutionUpdateAction,
 			func() (workflow.Context, workflow.MutableState, error) {
-				workflowContext, err := api.NewWorkflowWithSignal(e.shard, namespaceEntry, workflowID, runID, startRequest, nil)
+				workflowContext, err := api.NewWorkflowWithSignal(
+					ctx,
+					e.shard,
+					namespaceEntry,
+					workflowID,
+					runID,
+					startRequest,
+					nil)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -607,7 +614,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 ) (*historyservice.GetMutableStateResponse, error) {
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	err := validateNamespaceUUID(namespaceID)
+	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -704,7 +711,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 
 	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	err := validateNamespaceUUID(namespaceID)
+	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -998,7 +1005,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 ) (response *historyservice.DescribeMutableStateResponse, retError error) {
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	err := validateNamespaceUUID(namespaceID)
+	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1046,7 +1053,7 @@ func (e *historyEngineImpl) ResetStickyTaskQueue(
 ) (*historyservice.ResetStickyTaskQueueResponse, error) {
 
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
-	err := validateNamespaceUUID(namespaceID)
+	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1087,7 +1094,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	err := validateNamespaceUUID(namespaceID)
+	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1911,55 +1918,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	signalWithStartRequest *historyservice.SignalWithStartWorkflowExecutionRequest,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
-
-	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(signalWithStartRequest.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-	namespaceID := namespaceEntry.ID()
-
-	var currentWorkflowContext api.WorkflowContext
-	currentWorkflowContext, err = e.workflowConsistencyChecker.GetWorkflowContext(
-		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			string(namespaceID),
-			signalWithStartRequest.SignalWithStartRequest.WorkflowId,
-			"",
-		),
-	)
-	switch err.(type) {
-	case nil:
-		defer func() { currentWorkflowContext.GetReleaseFn()(retError) }()
-	case *serviceerror.NotFound:
-		currentWorkflowContext = nil
-	default:
-		return nil, err
-	}
-
-	// Start workflow and signal
-	startRequest := e.getStartRequest(namespaceID, signalWithStartRequest.SignalWithStartRequest)
-	request := startRequest.StartRequest
-	e.overrideStartWorkflowExecutionRequest(request, metrics.HistorySignalWithStartWorkflowExecutionScope)
-	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespaceEntry, "SignalWithStartWorkflowExecution")
-	if err != nil {
-		return nil, err
-	}
-	runID, err := signalwithstart.SignalWithStartWorkflow(
-		ctx,
-		e.shard,
-		namespaceEntry,
-		currentWorkflowContext,
-		startRequest,
-		signalWithStartRequest.SignalWithStartRequest,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &historyservice.SignalWithStartWorkflowExecutionResponse{
-		RunId: runID,
-	}, nil
+	return signalwithstart.SignalWithStartWorkflowExecution(ctx, signalWithStartRequest, e.shard, e.workflowConsistencyChecker)
 }
 
 func (h *historyEngineImpl) UpdateWorkflow(
@@ -2097,6 +2056,10 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	// In passive cluster, workflow executions are just deleted in regardless of its state.
 
 	if weCtx.GetMutableState().IsWorkflowExecutionRunning() {
+		if request.GetClosedWorkflowOnly() {
+			// skip delete open workflow
+			return nil
+		}
 		ns, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 		if err != nil {
 			return err
@@ -2137,6 +2100,7 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 		e.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, e.shard.GetClusterMetadata().GetCurrentClusterName()).TaskID,
 		// Use global ack level visibility queue ack level because cluster level is not updated.
 		e.shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID,
+		request.GetWorkflowVersion(),
 	)
 }
 
@@ -2240,7 +2204,7 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 ) (retError error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	if err := validateNamespaceUUID(namespaceID); err != nil {
+	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
 		return err
 	}
 
@@ -2567,141 +2531,10 @@ func (e *historyEngineImpl) NotifyNewTasks(
 	}
 }
 
-func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
-	ctx context.Context,
-	request *workflowservice.StartWorkflowExecutionRequest,
-	namespaceEntry *namespace.Namespace,
-	operation string,
-) error {
-
-	workflowID := request.GetWorkflowId()
-	maxIDLengthLimit := e.config.MaxIDLengthLimit()
-
-	if len(request.GetRequestId()) == 0 {
-		return serviceerror.NewInvalidArgument("Missing request ID.")
-	}
-	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {
-		return serviceerror.NewInvalidArgument("Invalid WorkflowExecutionTimeoutSeconds.")
-	}
-	if timestamp.DurationValue(request.GetWorkflowRunTimeout()) < 0 {
-		return serviceerror.NewInvalidArgument("Invalid WorkflowRunTimeoutSeconds.")
-	}
-	if timestamp.DurationValue(request.GetWorkflowTaskTimeout()) < 0 {
-		return serviceerror.NewInvalidArgument("Invalid WorkflowTaskTimeoutSeconds.")
-	}
-	if request.TaskQueue == nil || request.TaskQueue.GetName() == "" {
-		return serviceerror.NewInvalidArgument("Missing Taskqueue.")
-	}
-	if request.WorkflowType == nil || request.WorkflowType.GetName() == "" {
-		return serviceerror.NewInvalidArgument("Missing WorkflowType.")
-	}
-	if len(request.GetNamespace()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
-	}
-	if len(request.GetWorkflowId()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("WorkflowId exceeds length limit.")
-	}
-	if len(request.TaskQueue.GetName()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("TaskQueue exceeds length limit.")
-	}
-	if len(request.WorkflowType.GetName()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
-	}
-	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
-		return err
-	}
-
-	if err := api.ValidateStart(
-		ctx,
-		e.shard,
-		namespaceEntry,
-		workflowID,
-		request.GetInput().Size(),
-		request.GetMemo().Size(),
-		operation,
-	); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
-	request *workflowservice.StartWorkflowExecutionRequest,
-	metricsScope int,
-) {
-	// workflow execution timeout is left as is
-	//  if workflow execution timeout == 0 -> infinity
-
-	namespace := request.GetNamespace()
-
-	workflowRunTimeout := common.OverrideWorkflowRunTimeout(
-		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
-		timestamp.DurationValue(request.GetWorkflowExecutionTimeout()),
-	)
-	if workflowRunTimeout != timestamp.DurationValue(request.GetWorkflowRunTimeout()) {
-		request.WorkflowRunTimeout = timestamp.DurationPtr(workflowRunTimeout)
-		e.metricsClient.Scope(
-			metricsScope,
-			metrics.NamespaceTag(namespace),
-		).IncCounter(metrics.WorkflowRunTimeoutOverrideCount)
-	}
-
-	workflowTaskStartToCloseTimeout := common.OverrideWorkflowTaskTimeout(
-		namespace,
-		timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
-		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
-		e.config.DefaultWorkflowTaskTimeout,
-	)
-	if workflowTaskStartToCloseTimeout != timestamp.DurationValue(request.GetWorkflowTaskTimeout()) {
-		request.WorkflowTaskTimeout = timestamp.DurationPtr(workflowTaskStartToCloseTimeout)
-		e.metricsClient.Scope(
-			metricsScope,
-			metrics.NamespaceTag(namespace),
-		).IncCounter(metrics.WorkflowTaskTimeoutOverrideCount)
-	}
-}
-
-func validateNamespaceUUID(
-	namespaceUUID namespace.ID,
-) error {
-
-	if namespaceUUID == "" {
-		return serviceerror.NewInvalidArgument("Missing namespace UUID.")
-	} else if uuid.Parse(namespaceUUID.String()) == nil {
-		return serviceerror.NewInvalidArgument("Invalid namespace UUID.")
-	}
-	return nil
-}
-
 func (e *historyEngineImpl) getActiveNamespaceEntry(
 	namespaceUUID namespace.ID,
 ) (*namespace.Namespace, error) {
-
-	return getActiveNamespaceEntryFromShard(e.shard, namespaceUUID)
-}
-
-func getActiveNamespaceEntryFromShard(
-	shard shard.Context,
-	namespaceUUID namespace.ID,
-) (*namespace.Namespace, error) {
-
-	err := validateNamespaceUUID(namespaceUUID)
-	if err != nil {
-		return nil, err
-	}
-
-	namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespaceUUID)
-	if err != nil {
-		return nil, err
-	}
-	if !namespaceEntry.ActiveInCluster(shard.GetClusterMetadata().GetCurrentClusterName()) {
-		return nil, serviceerror.NewNamespaceNotActive(
-			namespaceEntry.Name().String(),
-			shard.GetClusterMetadata().GetCurrentClusterName(),
-			namespaceEntry.ActiveClusterName())
-	}
-	return namespaceEntry, nil
+	return api.GetActiveNamespace(e.shard, namespaceUUID)
 }
 
 func getscheduledEventID(
@@ -2717,33 +2550,6 @@ func getscheduledEventID(
 		return 0, serviceerror.NewNotFound(fmt.Sprintf("cannot find pending activity with ActivityID %s, check workflow execution history for more details", activityID))
 	}
 	return activityInfo.ScheduledEventId, nil
-}
-
-func (e *historyEngineImpl) getStartRequest(
-	namespaceID namespace.ID,
-	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) *historyservice.StartWorkflowExecutionRequest {
-
-	req := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                request.GetNamespace(),
-		WorkflowId:               request.GetWorkflowId(),
-		WorkflowType:             request.GetWorkflowType(),
-		TaskQueue:                request.GetTaskQueue(),
-		Input:                    request.GetInput(),
-		WorkflowExecutionTimeout: request.GetWorkflowExecutionTimeout(),
-		WorkflowRunTimeout:       request.GetWorkflowRunTimeout(),
-		WorkflowTaskTimeout:      request.GetWorkflowTaskTimeout(),
-		Identity:                 request.GetIdentity(),
-		RequestId:                request.GetRequestId(),
-		WorkflowIdReusePolicy:    request.GetWorkflowIdReusePolicy(),
-		RetryPolicy:              request.GetRetryPolicy(),
-		CronSchedule:             request.GetCronSchedule(),
-		Memo:                     request.GetMemo(),
-		SearchAttributes:         request.GetSearchAttributes(),
-		Header:                   request.GetHeader(),
-	}
-
-	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, nil, e.shard.GetTimeSource().Now())
 }
 
 func (e *historyEngineImpl) GetReplicationMessages(
@@ -3061,7 +2867,7 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	execution commonpb.WorkflowExecution,
 ) (retError error) {
 
-	err := validateNamespaceUUID(namespaceUUID)
+	err := api.ValidateNamespaceUUID(namespaceUUID)
 	if err != nil {
 		return err
 	}

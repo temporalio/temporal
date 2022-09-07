@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,9 +36,12 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/worker/scanner/taskqueue"
 )
@@ -73,11 +77,16 @@ type (
 		taskWriterProvider         taskWriterProviderFn
 		dispatchTaskFn             func(context.Context, *internalTask) error
 		store                      persistence.TaskManager
+		namespaceRegistry          namespace.Registry
 		logger                     log.Logger
 
 		dispatchChan chan struct{}
 		startupChan  chan struct{}
 		shutdownChan chan struct{}
+
+		dispatchBackoffTimerLock sync.Mutex
+		dispatchBackoffTimer     *time.Timer
+		dispatchRetrier          backoff.Retrier
 
 		taskQueueOwnership        dbTaskQueueOwnership
 		taskReader                dbTaskReader
@@ -92,6 +101,7 @@ func newDBTaskManager(
 	taskIDRangeSize int64,
 	dispatchTaskFn func(context.Context, *internalTask) error,
 	store persistence.TaskManager,
+	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 ) *dbTaskManager {
 	return &dbTaskManager{
@@ -123,13 +133,19 @@ func newDBTaskManager(
 				logger,
 			)
 		},
-		dispatchTaskFn: dispatchTaskFn,
-		store:          store,
-		logger:         logger,
+		dispatchTaskFn:    dispatchTaskFn,
+		store:             store,
+		namespaceRegistry: namespaceRegistry,
+		logger:            logger,
 
 		dispatchChan: make(chan struct{}, 1),
 		startupChan:  make(chan struct{}),
 		shutdownChan: make(chan struct{}),
+
+		dispatchRetrier: backoff.NewRetrier(
+			common.CreateReadTaskRetryPolicy(),
+			backoff.SystemClock,
+		),
 
 		taskQueueOwnership:        nil,
 		taskWriter:                nil,
@@ -148,9 +164,11 @@ func (d *dbTaskManager) Start() {
 	}
 
 	d.signalDispatch()
-	go d.acquireLoop(context.TODO())
-	go d.writerEventLoop(context.TODO())
-	go d.readerEventLoop(context.TODO())
+
+	// TODO: consider using goro.Group
+	go d.acquireLoop(context.Background())
+	go d.writerEventLoop(context.Background())
+	go d.readerEventLoop(context.Background())
 }
 
 func (d *dbTaskManager) Stop() {
@@ -173,6 +191,7 @@ func (d *dbTaskManager) acquireLoop(
 	ctx context.Context,
 ) {
 	defer close(d.startupChan)
+	ctx = d.initContext(ctx)
 
 AcquireLoop:
 	for !d.isStopped() {
@@ -192,6 +211,7 @@ func (d *dbTaskManager) writerEventLoop(
 	ctx context.Context,
 ) {
 	<-d.startupChan
+	ctx = d.initContext(ctx)
 
 	updateQueueTicker := time.NewTicker(dbTaskUpdateQueueInterval)
 	defer updateQueueTicker.Stop()
@@ -228,6 +248,7 @@ func (d *dbTaskManager) readerEventLoop(
 	ctx context.Context,
 ) {
 	<-d.startupChan
+	ctx = d.initContext(ctx)
 
 	updateAckTicker := time.NewTicker(dbTaskUpdateAckInterval)
 	defer updateAckTicker.Stop()
@@ -283,11 +304,11 @@ func (d *dbTaskManager) BufferAndWriteTask(
 	select {
 	case <-d.startupChan:
 		if d.isStopped() {
-			return future.NewReadyFuture[struct{}](struct{}{}, errDBTaskManagerNotReady)
+			return future.NewReadyFuture(struct{}{}, errDBTaskManagerNotReady)
 		}
 		return d.taskWriter.appendTask(task)
 	default:
-		return future.NewReadyFuture[struct{}](struct{}{}, errDBTaskManagerNotReady)
+		return future.NewReadyFuture(struct{}{}, errDBTaskManagerNotReady)
 	}
 }
 
@@ -299,7 +320,11 @@ func (d *dbTaskManager) readAndDispatchTasks(
 		task, err := iter.Next()
 		if err != nil {
 			d.logger.Error("dbTaskManager encountered error when fetching tasks", tag.Error(err))
-			d.signalDispatch()
+			if common.IsResourceExhausted(err) {
+				d.backoffDispatch(taskReaderThrottleRetryDelay)
+			} else {
+				d.backoffDispatch(d.dispatchRetrier.NextBackOff())
+			}
 			return
 		}
 
@@ -395,4 +420,24 @@ func (d *dbTaskManager) finishTask(
 		return
 	}
 	d.taskReader.ackTask(info.TaskId)
+}
+
+func (d *dbTaskManager) backoffDispatch(duration time.Duration) {
+	d.dispatchBackoffTimerLock.Lock()
+	defer d.dispatchBackoffTimerLock.Unlock()
+
+	if d.dispatchBackoffTimer == nil {
+		d.dispatchBackoffTimer = time.AfterFunc(duration, func() {
+			d.dispatchBackoffTimerLock.Lock()
+			defer d.dispatchBackoffTimerLock.Unlock()
+
+			d.signalDispatch() // re-enqueue the event
+			d.dispatchBackoffTimer = nil
+		})
+	}
+}
+
+func (d *dbTaskManager) initContext(ctx context.Context) context.Context {
+	namespace, _ := d.namespaceRegistry.GetNamespaceName(namespace.ID(d.taskQueueKey.NamespaceID))
+	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
 }

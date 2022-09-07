@@ -106,7 +106,8 @@ func (w *taskWriter) Start() {
 	) {
 		return
 	}
-	w.writeLoop = goro.NewHandle(context.Background())
+
+	w.writeLoop = goro.NewHandle(w.initContext())
 	w.writeLoop.Go(w.taskWriterLoop)
 }
 
@@ -123,9 +124,9 @@ func (w *taskWriter) Stop() {
 }
 
 func (w *taskWriter) initReadWriteState(ctx context.Context) error {
-	retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second)
-	retryForever.SetMaximumInterval(10 * time.Second)
-	retryForever.SetExpirationInterval(backoff.NoInterval)
+	retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second).
+		WithMaximumInterval(10 * time.Second).
+		WithExpirationInterval(backoff.NoInterval)
 
 	state, err := w.renewLeaseWithRetry(
 		ctx, retryForever, common.IsPersistenceTransientError)
@@ -217,8 +218,6 @@ func (w *taskWriter) appendTasks(
 }
 
 func (w *taskWriter) taskWriterLoop(ctx context.Context) error {
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
-
 	err := w.initReadWriteState(ctx)
 	w.tlMgr.initializedError.Set(struct{}{}, err)
 	if err != nil {
@@ -326,4 +325,10 @@ func (w *taskWriter) allocTaskIDBlock(ctx context.Context, prevBlockEnd int64) (
 		return taskIDBlock{}, err
 	}
 	return rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize), nil
+}
+
+func (w *taskWriter) initContext() context.Context {
+	namespace, _ := w.tlMgr.namespaceRegistry.GetNamespaceName(w.tlMgr.taskQueueID.namespaceID)
+
+	return headers.SetCallerInfo(context.Background(), headers.NewBackgroundCallerInfo(namespace.String()))
 }

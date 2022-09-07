@@ -30,7 +30,6 @@ package workflow
 
 import (
 	reflect "reflect"
-	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 )
@@ -86,20 +85,6 @@ func (m *MockTimerSequence) CreateNextUserTimer() (bool, error) {
 func (mr *MockTimerSequenceMockRecorder) CreateNextUserTimer() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNextUserTimer", reflect.TypeOf((*MockTimerSequence)(nil).CreateNextUserTimer))
-}
-
-// IsExpired mocks base method.
-func (m *MockTimerSequence) IsExpired(referenceTime time.Time, timerSequenceID TimerSequenceID) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsExpired", referenceTime, timerSequenceID)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// IsExpired indicates an expected call of IsExpired.
-func (mr *MockTimerSequenceMockRecorder) IsExpired(referenceTime, timerSequenceID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsExpired", reflect.TypeOf((*MockTimerSequence)(nil).IsExpired), referenceTime, timerSequenceID)
 }
 
 // LoadAndSortActivityTimers mocks base method.

@@ -45,7 +45,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -57,9 +56,14 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
-// If sticky poller is not seem in last 10s, we treat it as sticky worker unavailable
-// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
-const stickyPollerUnavailableWindow = 10 * time.Second
+const (
+	// If sticky poller is not seem in last 10s, we treat it as sticky worker unavailable
+	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
+	stickyPollerUnavailableWindow = 10 * time.Second
+
+	recordTaskStartedDefaultTimeout   = 10 * time.Second
+	recordTaskStartedSyncMatchTimeout = 1 * time.Second
+)
 
 // Implements matching.Engine
 // TODO: Switch implementation from lock/channel based to a partitioned agent
@@ -86,7 +90,7 @@ type (
 	matchingEngineImpl struct {
 		status               int32
 		taskManager          persistence.TaskManager
-		historyService       historyservice.HistoryServiceClient
+		historyClient        historyservice.HistoryServiceClient
 		matchingClient       matchingservice.MatchingServiceClient
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
@@ -107,8 +111,6 @@ var (
 	emptyPollWorkflowTaskQueueResponse = &matchingservice.PollWorkflowTaskQueueResponse{}
 	// EmptyPollActivityTaskQueueResponse is the response when there are no activity tasks to hand out
 	emptyPollActivityTaskQueueResponse = &matchingservice.PollActivityTaskQueueResponse{}
-	persistenceOperationRetryPolicy    = common.CreatePersistenceRetryPolicy()
-	historyServiceOperationRetryPolicy = common.CreateHistoryServiceRetryPolicy()
 
 	// ErrNoTasks is exported temporarily for integration test
 	ErrNoTasks    = errors.New("no tasks")
@@ -121,8 +123,9 @@ var (
 var _ Engine = (*matchingEngineImpl)(nil) // Asserts that interface is indeed implemented
 
 // NewEngine creates an instance of matching engine
-func NewEngine(taskManager persistence.TaskManager,
-	historyService historyservice.HistoryServiceClient,
+func NewEngine(
+	taskManager persistence.TaskManager,
+	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
 	config *Config,
 	logger log.Logger,
@@ -135,7 +138,7 @@ func NewEngine(taskManager persistence.TaskManager,
 	return &matchingEngineImpl{
 		status:               common.DaemonStatusInitialized,
 		taskManager:          taskManager,
-		historyService:       historyService,
+		historyClient:        historyClient,
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		taskQueues:           make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:       make(map[taskQueueCounterKey]int),
@@ -386,7 +389,7 @@ pollLoop:
 
 			// for query task, we don't need to update history to record workflow task started. but we need to know
 			// the NextEventID so front end knows what are the history events to load for this workflow task.
-			mutableStateResp, err := e.historyService.GetMutableState(hCtx.Context, &historyservice.GetMutableStateRequest{
+			mutableStateResp, err := e.historyClient.GetMutableState(hCtx.Context, &historyservice.GetMutableStateRequest{
 				NamespaceId: req.GetNamespaceId(),
 				Execution:   task.workflowExecution(),
 			})
@@ -745,6 +748,61 @@ func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
 	}, nil
 }
 
+func (e *matchingEngineImpl) InvalidateTaskQueueMetadata(
+	hCtx *handlerContext,
+	req *matchingservice.InvalidateTaskQueueMetadataRequest,
+) (*matchingservice.InvalidateTaskQueueMetadataResponse, error) {
+	taskQueue, err := newTaskQueueID(namespace.ID(req.GetNamespaceId()), req.GetTaskQueue(), req.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, false)
+	if tqMgr == nil && err == nil {
+		// Task queue is not currently loaded, so nothing to do here
+		return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	err = tqMgr.InvalidateMetadata(req)
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.InvalidateTaskQueueMetadataResponse{}, nil
+}
+
+func (e *matchingEngineImpl) GetTaskQueueMetadata(
+	hCtx *handlerContext,
+	req *matchingservice.GetTaskQueueMetadataRequest,
+) (*matchingservice.GetTaskQueueMetadataResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueueName := req.GetTaskQueue()
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+	tqMgr, err := e.getTaskQueueManager(hCtx, taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, true)
+	if err != nil {
+		return nil, err
+	}
+	resp := &matchingservice.GetTaskQueueMetadataResponse{}
+	verDatHash := req.GetWantVersioningDataCurhash()
+	// This isn't != nil, because gogoproto will round-trip serialize an empty byte array in a request
+	// into a nil field.
+	if len(verDatHash) > 0 {
+		vDat, err := tqMgr.GetVersioningData(hCtx)
+		if err != nil {
+			return nil, err
+		}
+		if !bytes.Equal(HashVersioningData(vDat), verDatHash) {
+			resp.VersioningDataResp = &matchingservice.GetTaskQueueMetadataResponse_VersioningData{
+				VersioningData: vDat,
+			}
+		}
+	}
+	return resp, nil
+}
+
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 	host, err := e.keyResolver.Lookup(partitionKey)
 	if err != nil {
@@ -934,7 +992,10 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	pollReq *workflowservice.PollWorkflowTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-	request := &historyservice.RecordWorkflowTaskStartedRequest{
+	ctx, cancel := newRecordTaskStartedContext(ctx, task)
+	defer cancel()
+
+	return e.historyClient.RecordWorkflowTaskStarted(ctx, &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
 		ScheduledEventId:  task.event.Data.GetScheduledEventId(),
@@ -942,21 +1003,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		TaskId:            task.event.GetTaskId(),
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
-	}
-	var resp *historyservice.RecordWorkflowTaskStartedResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = e.historyService.RecordWorkflowTaskStarted(ctx, request)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, historyServiceOperationRetryPolicy, func(err error) bool {
-		switch err.(type) {
-		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerrors.TaskAlreadyStarted:
-			return false
-		}
-		return true
 	})
-	return resp, err
 }
 
 func (e *matchingEngineImpl) recordActivityTaskStarted(
@@ -964,7 +1011,10 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	pollReq *workflowservice.PollActivityTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	request := &historyservice.RecordActivityTaskStartedRequest{
+	ctx, cancel := newRecordTaskStartedContext(ctx, task)
+	defer cancel()
+
+	return e.historyClient.RecordActivityTaskStarted(ctx, &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
 		ScheduledEventId:  task.event.Data.GetScheduledEventId(),
@@ -972,21 +1022,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		TaskId:            task.event.GetTaskId(),
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
-	}
-	var resp *historyservice.RecordActivityTaskStartedResponse
-	op := func(ctx context.Context) error {
-		var err error
-		resp, err = e.historyService.RecordActivityTaskStarted(ctx, request)
-		return err
-	}
-	err := backoff.ThrottleRetryContext(ctx, op, historyServiceOperationRetryPolicy, func(err error) bool {
-		switch err.(type) {
-		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerrors.TaskAlreadyStarted:
-			return false
-		}
-		return true
 	})
-	return resp, err
 }
 
 func (e *matchingEngineImpl) emitForwardedSourceStats(
@@ -1024,4 +1060,22 @@ func (m *lockableQueryTaskMap) delete(key string) {
 	m.Lock()
 	defer m.Unlock()
 	delete(m.queryTaskMap, key)
+}
+
+// newRecordTaskStartedContext creates a context for recording
+// activity or workflow task started. The parentCtx from
+// pollActivity/WorkflowTaskQueue endpoint (which is a long poll
+// API) has long timeout and unsutiable for recording task started,
+// especially if the task is doing sync match and has caller
+// (history transfer queue) waiting for response.
+func newRecordTaskStartedContext(
+	parentCtx context.Context,
+	task *internalTask,
+) (context.Context, context.CancelFunc) {
+	timeout := recordTaskStartedDefaultTimeout
+	if task.isSyncMatchTask() {
+		timeout = recordTaskStartedSyncMatchTimeout
+	}
+
+	return context.WithTimeout(parentCtx, timeout)
 }

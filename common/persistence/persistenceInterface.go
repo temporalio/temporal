@@ -141,6 +141,12 @@ type (
 		AppendHistoryNodes(ctx context.Context, request *InternalAppendHistoryNodesRequest) error
 		// DeleteHistoryNodes delete a node from history node table
 		DeleteHistoryNodes(ctx context.Context, request *InternalDeleteHistoryNodesRequest) error
+		// ParseHistoryBranchInfo parses the history branch for branch information
+		ParseHistoryBranchInfo(ctx context.Context, request *ParseHistoryBranchInfoRequest) (*ParseHistoryBranchInfoResponse, error)
+		// UpdateHistoryBranchInfo updates the history branch with branch information
+		UpdateHistoryBranchInfo(ctx context.Context, request *UpdateHistoryBranchInfoRequest) (*UpdateHistoryBranchInfoResponse, error)
+		// NewHistoryBranch initializes a new history branch
+		NewHistoryBranch(ctx context.Context, request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *InternalReadHistoryBranchRequest) (*InternalReadHistoryBranchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch
@@ -451,6 +457,8 @@ type (
 
 	// InternalAppendHistoryNodesRequest is used to append a batch of history nodes
 	InternalAppendHistoryNodesRequest struct {
+		// The raw branch token
+		BranchToken []byte
 		// True if it is the first append request to the branch
 		IsNewBranch bool
 		// The info for clean up data in background
@@ -490,6 +498,8 @@ type (
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
+		// The raw branch token
+		BranchToken []byte
 		// The base branch to fork from
 		ForkBranchInfo *persistencespb.HistoryBranch
 		// Serialized TreeInfo
@@ -504,14 +514,10 @@ type (
 		ShardID int32
 	}
 
-	// InternalForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
-	InternalForkHistoryBranchResponse struct {
-		// branchInfo to represent the new branch
-		NewBranchInfo *persistencespb.HistoryBranch
-	}
-
 	// InternalDeleteHistoryNodesRequest is used to remove a history node
 	InternalDeleteHistoryNodesRequest struct {
+		// The raw branch token
+		BranchToken []byte
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32
 		// The branch to be appended
@@ -524,6 +530,8 @@ type (
 
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch
 	InternalDeleteHistoryBranchRequest struct {
+		// The raw branch token
+		BranchToken []byte
 		// Used in sharded data stores to identify which shard to use
 		ShardID  int32
 		TreeId   string // TreeId, BranchId is used to delete target history branch itself.
@@ -540,6 +548,8 @@ type (
 
 	// InternalReadHistoryBranchRequest is used to read a history branch
 	InternalReadHistoryBranchRequest struct {
+		// The raw branch token
+		BranchToken []byte
 		// The tree of branch range to be read
 		TreeID string
 		// The branch range to be read

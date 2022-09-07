@@ -28,10 +28,20 @@ package queues
 
 import (
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/configs"
+)
+
+const (
+	// This is the task channel buffer size between
+	// weighted round robin scheduler and the actual
+	// worker pool (parallel processor).
+	namespacePrioritySchedulerProcessorQueueSize = 10
 )
 
 type (
@@ -42,69 +52,176 @@ type (
 	Scheduler interface {
 		common.Daemon
 
-		Submit(Executable) error
-		TrySubmit(Executable) (bool, error)
+		Submit(Executable)
+		TrySubmit(Executable) bool
+
+		TaskChannelKeyFn() TaskChannelKeyFn
+		ChannelWeightFn() ChannelWeightFn
 	}
 
-	SchedulerOptions struct {
-		tasks.ParallelProcessorOptions
-		tasks.InterleavedWeightedRoundRobinSchedulerOptions
+	TaskChannelKey struct {
+		NamespaceID string
+		Priority    tasks.Priority
+	}
+
+	TaskChannelKeyFn = tasks.TaskChannelKeyFn[Executable, TaskChannelKey]
+	ChannelWeightFn  = tasks.ChannelWeightFn[TaskChannelKey]
+
+	NamespacePrioritySchedulerOptions struct {
+		WorkerCount             dynamicconfig.IntPropertyFn
+		ActiveNamespaceWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
+		StandbyNamespaceWeights dynamicconfig.MapPropertyFnWithNamespaceFilter
+	}
+
+	FIFOSchedulerOptions struct {
+		WorkerCount dynamicconfig.IntPropertyFn
+		QueueSize   int
 	}
 
 	schedulerImpl struct {
-		priorityAssigner PriorityAssigner
-		wRRScheduler     tasks.Scheduler
+		tasks.Scheduler[Executable]
+		namespaceRegistry namespace.Registry
+
+		taskChannelKeyFn      TaskChannelKeyFn
+		channelWeightFn       ChannelWeightFn
+		channelWeightUpdateCh chan struct{}
 	}
 )
 
-func NewScheduler(
-	priorityAssigner PriorityAssigner,
-	options SchedulerOptions,
-	metricsProvider metrics.MetricsHandler,
+func NewNamespacePriorityScheduler(
+	currentClusterName string,
+	options NamespacePrioritySchedulerOptions,
+	namespaceRegistry namespace.Registry,
+	timeSource clock.TimeSource,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
-) *schedulerImpl {
+) Scheduler {
+	taskChannelKeyFn := func(e Executable) TaskChannelKey {
+		return TaskChannelKey{
+			NamespaceID: e.GetNamespaceID(),
+			Priority:    e.GetPriority(),
+		}
+	}
+	channelWeightFn := func(key TaskChannelKey) int {
+		namespaceWeights := options.ActiveNamespaceWeights
+
+		namespace, _ := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
+		if !namespace.ActiveInCluster(currentClusterName) {
+			namespaceWeights = options.StandbyNamespaceWeights
+		}
+
+		return configs.ConvertDynamicConfigValueToWeights(
+			namespaceWeights(namespace.Name().String()),
+			logger,
+		)[key.Priority]
+	}
+	channelWeightUpdateCh := make(chan struct{}, 1)
+	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
+		QueueSize:   namespacePrioritySchedulerProcessorQueueSize,
+		WorkerCount: options.WorkerCount,
+	}
+
 	return &schedulerImpl{
-		priorityAssigner: priorityAssigner,
-		wRRScheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
-			options.InterleavedWeightedRoundRobinSchedulerOptions,
-			tasks.NewParallelProcessor(
-				&options.ParallelProcessorOptions,
-				metricsProvider,
+		Scheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
+			tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
+				TaskChannelKeyFn:      taskChannelKeyFn,
+				ChannelWeightFn:       channelWeightFn,
+				ChannelWeightUpdateCh: channelWeightUpdateCh,
+			},
+			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
+				newSchedulerMonitor(
+					taskChannelKeyFn,
+					namespaceRegistry,
+					timeSource,
+					metricsHandler,
+					defaultSchedulerMonitorOptions,
+				),
+				fifoSchedulerOptions,
 				logger,
-			),
-			metricsProvider,
+			)),
 			logger,
 		),
+		namespaceRegistry:     namespaceRegistry,
+		taskChannelKeyFn:      taskChannelKeyFn,
+		channelWeightFn:       channelWeightFn,
+		channelWeightUpdateCh: channelWeightUpdateCh,
+	}
+}
+
+// NewFIFOScheduler is used to create shard level task scheduler
+// and always schedule tasks in fifo order regardless
+// which namespace the task belongs to.
+func NewFIFOScheduler(
+	options FIFOSchedulerOptions,
+	logger log.Logger,
+) Scheduler {
+	taskChannelKeyFn := func(_ Executable) TaskChannelKey { return TaskChannelKey{} }
+	channelWeightFn := func(_ TaskChannelKey) int { return 1 }
+	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
+		QueueSize:   options.QueueSize,
+		WorkerCount: options.WorkerCount,
+	}
+
+	return &schedulerImpl{
+		Scheduler: tasks.NewFIFOScheduler[Executable](
+			noopScheduleMonitor,
+			fifoSchedulerOptions,
+			logger,
+		),
+		taskChannelKeyFn:      taskChannelKeyFn,
+		channelWeightFn:       channelWeightFn,
+		channelWeightUpdateCh: nil,
 	}
 }
 
 func (s *schedulerImpl) Start() {
-	s.wRRScheduler.Start()
+	if s.channelWeightUpdateCh != nil {
+		s.namespaceRegistry.RegisterNamespaceChangeCallback(
+			s,
+			0,
+			func() {}, // no-op
+			func(oldNamespaces, newNamespaces []*namespace.Namespace) {
+				namespaceFailover := false
+				for idx := range oldNamespaces {
+					if oldNamespaces[idx].FailoverVersion() != newNamespaces[idx].FailoverVersion() {
+						namespaceFailover = true
+						break
+					}
+				}
+
+				if !namespaceFailover {
+					return
+				}
+
+				select {
+				case s.channelWeightUpdateCh <- struct{}{}:
+				default:
+				}
+			},
+		)
+	}
+	s.Scheduler.Start()
 }
 
 func (s *schedulerImpl) Stop() {
-	s.wRRScheduler.Stop()
+	if s.channelWeightUpdateCh != nil {
+		s.namespaceRegistry.UnregisterNamespaceChangeCallback(s)
+
+		// note we can't close the channelWeightUpdateCh here
+		// as callback may still be triggered even after unregister returns
+		// due to race condition
+		//
+		// channelWeightFn is only not nil when using host level scheduler
+		// so Stop is only called when host is shutting down, and we don't need
+		// to worry about open channels
+	}
+	s.Scheduler.Stop()
 }
 
-func (s *schedulerImpl) Submit(
-	executable Executable,
-) error {
-	if err := s.priorityAssigner.Assign(executable); err != nil {
-		executable.Logger().Error("Failed to assign task executable priority", tag.Error(err))
-		return err
-	}
-
-	s.wRRScheduler.Submit(executable)
-	return nil
+func (s *schedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
+	return s.taskChannelKeyFn
 }
 
-func (s *schedulerImpl) TrySubmit(
-	executable Executable,
-) (bool, error) {
-	if err := s.priorityAssigner.Assign(executable); err != nil {
-		executable.Logger().Error("Failed to assign task executable priority", tag.Error(err))
-		return false, err
-	}
-
-	return s.wRRScheduler.TrySubmit(executable), nil
+func (s *schedulerImpl) ChannelWeightFn() ChannelWeightFn {
+	return s.channelWeightFn
 }

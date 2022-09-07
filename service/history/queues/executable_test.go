@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/tasks"
@@ -54,10 +55,11 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller      *gomock.Controller
-		mockExecutor    *MockExecutor
-		mockScheduler   *MockScheduler
-		mockRescheduler *MockRescheduler
+		controller            *gomock.Controller
+		mockExecutor          *MockExecutor
+		mockScheduler         *MockScheduler
+		mockRescheduler       *MockRescheduler
+		mockNamespaceRegistry *namespace.MockRegistry
 
 		timeSource *clock.EventTimeSource
 	}
@@ -75,6 +77,9 @@ func (s *executableSuite) SetupTest() {
 	s.mockExecutor = NewMockExecutor(s.controller)
 	s.mockScheduler = NewMockScheduler(s.controller)
 	s.mockRescheduler = NewMockRescheduler(s.controller)
+	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
+
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
 
 	s.timeSource = clock.NewEventTimeSource()
 }
@@ -96,10 +101,10 @@ func (s *executableSuite) TestExecute_TaskExecuted() {
 		return true
 	})
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(metrics.NoopMetricsHandler, errors.New("some random error"))
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, true, errors.New("some random error"))
 	s.Error(executable.Execute())
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(metrics.NoopMetricsHandler, nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil, true, nil)
 	s.NoError(executable.Execute())
 }
 
@@ -113,7 +118,7 @@ func (s *executableSuite) TestExecute_UserLatency() {
 		metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency, expectedUserLatency)
 	}
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(metrics.NoopMetricsHandler, nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(nil, true, nil)
 	s.NoError(executable.Execute())
 	s.Equal(time.Duration(expectedUserLatency), executable.(*executableImpl).userLatency)
 }
@@ -184,7 +189,7 @@ func (s *executableSuite) TestTaskNack_Resubmit() {
 		return true
 	})
 
-	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true, nil)
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true)
 
 	executable.Nack(errors.New("some random error"))
 	s.Equal(ctasks.TaskStatePending, executable.State())
@@ -225,6 +230,7 @@ func (s *executableSuite) newTestExecutable(
 	filter TaskFilter,
 ) Executable {
 	return NewExecutable(
+		DefaultReaderId,
 		tasks.NewFakeTask(
 			definition.NewWorkflowKey(
 				tests.NamespaceID.String(),
@@ -238,10 +244,12 @@ func (s *executableSuite) newTestExecutable(
 		s.mockExecutor,
 		s.mockScheduler,
 		s.mockRescheduler,
+		NewNoopPriorityAssigner(),
 		s.timeSource,
+		s.mockNamespaceRegistry,
 		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
 		dynamicconfig.GetIntPropertyFn(100),
-		QueueTypeActiveTransfer,
 		dynamicconfig.GetDurationPropertyFn(namespaceCacheRefreshInterval),
 	)
 }

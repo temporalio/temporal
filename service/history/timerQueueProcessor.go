@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -66,6 +67,7 @@ type (
 		metricsClient              metrics.Client
 		workflowCache              workflow.Cache
 		scheduler                  queues.Scheduler
+		priorityAssigner           queues.PriorityAssigner
 		workflowDeleteManager      workflow.DeleteManager
 		ackLevel                   tasks.Key
 		hostRateLimiter            quotas.RateLimiter
@@ -85,6 +87,7 @@ func newTimerQueueProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	clientBean client.Bean,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -93,7 +96,7 @@ func newTimerQueueProcessor(
 ) queues.Queue {
 
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
-		shard.GetConfig().TimerProcessorEnableSingleCursor()
+		shard.GetConfig().TimerProcessorEnableSingleProcessor()
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
@@ -117,6 +120,7 @@ func newTimerQueueProcessor(
 		metricsClient:         shard.GetMetricsClient(),
 		workflowCache:         workflowCache,
 		scheduler:             scheduler,
+		priorityAssigner:      priorityAssigner,
 		workflowDeleteManager: workflowDeleteManager,
 		ackLevel:              shard.GetQueueAckLevel(tasks.CategoryTimer),
 		hostRateLimiter:       hostRateLimiter,
@@ -129,6 +133,7 @@ func newTimerQueueProcessor(
 			shard,
 			workflowCache,
 			scheduler,
+			priorityAssigner,
 			workflowDeleteManager,
 			matchingClient,
 			taskAllocator,
@@ -236,6 +241,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 		t.shard,
 		t.workflowCache,
 		t.scheduler,
+		t.priorityAssigner,
 		t.workflowDeleteManager,
 		namespaceIDs,
 		standbyClusterName,
@@ -285,29 +291,37 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 
 	timer := time.NewTimer(t.config.TimerProcessorCompleteTimerInterval())
 	defer timer.Stop()
+
+	completeTaskRetryPolicy := common.CreateCompleteTaskRetryPolicy()
+
 	for {
 		select {
 		case <-t.shutdownChan:
 			// before shutdown, make sure the ack level is up-to-date
-			_ = t.completeTimers()
+			if err := t.completeTimers(); err != nil {
+				t.logger.Error("Failed to complete timer task", tag.Error(err))
+			}
 			return
 		case <-timer.C:
-		CompleteLoop:
-			for attempt := 1; attempt <= t.config.TimerProcessorCompleteTimerFailureRetryCount(); attempt++ {
+			if err := backoff.ThrottleRetry(func() error {
 				err := t.completeTimers()
 				if err != nil {
-					t.logger.Info("Failed to complete timers.", tag.Error(err))
-					if err == shard.ErrShardClosed {
-						// shard is unloaded, timer processor should quit as well
-						go t.Stop()
-						return
-					}
-					backoff := time.Duration((attempt - 1) * 100)
-					time.Sleep(backoff * time.Millisecond)
-				} else {
-					break CompleteLoop
+					t.logger.Info("Failed to complete timer task", tag.Error(err))
 				}
+				return err
+			}, completeTaskRetryPolicy, func(err error) bool {
+				select {
+				case <-t.shutdownChan:
+					return false
+				default:
+				}
+				return !shard.IsShardOwnershipLostError(err)
+			}); shard.IsShardOwnershipLostError(err) {
+				// shard is unloaded, timer processor should quit as well
+				go t.Stop()
+				return
 			}
+
 			timer.Reset(t.config.TimerProcessorCompleteTimerInterval())
 		}
 	}
@@ -392,6 +406,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 				t.shard,
 				t.workflowCache,
 				t.scheduler,
+				t.priorityAssigner,
 				t.workflowDeleteManager,
 				t.matchingClient,
 				clusterName,

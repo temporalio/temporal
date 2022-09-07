@@ -47,7 +47,6 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
@@ -65,7 +64,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
@@ -98,7 +96,7 @@ type (
 		clusterMetadata               cluster.Metadata
 		archivalMetadata              archiver.ArchivalMetadata
 		hostInfoProvider              membership.HostInfoProvider
-		controller                    *shard.ControllerImpl
+		controller                    shard.Controller
 		tracer                        trace.Tracer
 	}
 
@@ -121,7 +119,7 @@ type (
 		ClusterMetadata               cluster.Metadata
 		ArchivalMetadata              archiver.ArchivalMetadata
 		HostInfoProvider              membership.HostInfoProvider
-		ShardController               *shard.ControllerImpl
+		ShardController               shard.Controller
 		EventNotifier                 events.Notifier
 		ReplicationTaskFetcherFactory replication.TaskFetcherFactory
 		TracerProvider                trace.TracerProvider
@@ -566,25 +564,16 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 	h.startWG.Wait()
 
 	itemsInCacheByIDCount, itemsInCacheByNameCount := h.namespaceRegistry.GetCacheSize()
-	status := ""
-	switch h.controller.Status() {
-	case common.DaemonStatusInitialized:
-		status = "initialized"
-	case common.DaemonStatusStarted:
-		status = "started"
-	case common.DaemonStatusStopped:
-		status = "stopped"
-	}
 
+	ownedShardIDs := h.controller.ShardIDs()
 	resp := &historyservice.DescribeHistoryHostResponse{
-		ShardsNumber: int32(h.controller.NumShards()),
-		ShardIds:     h.controller.ShardIDs(),
+		ShardsNumber: int32(len(ownedShardIDs)),
+		ShardIds:     ownedShardIDs,
 		NamespaceCache: &namespacespb.NamespaceCacheInfo{
 			ItemsInCacheByIdCount:   itemsInCacheByIDCount,
 			ItemsInCacheByNameCount: itemsInCacheByNameCount,
 		},
-		ShardControllerStatus: status,
-		Address:               h.hostInfoProvider.HostInfo().GetAddress(),
+		Address: h.hostInfoProvider.HostInfo().GetAddress(),
 	}
 	return resp, nil
 }
@@ -1099,15 +1088,7 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 		return nil, h.convertError(err)
 	}
 
-	var resp *historyservice.QueryWorkflowResponse
-	err2 := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
-		var err error
-		resp, err = engine.QueryWorkflow(ctx, request)
-		return err
-	}, common.CreateHistoryServiceRetryPolicy(), func(err error) bool {
-		return err == consts.ErrBufferedQueryCleared
-	})
-
+	resp, err2 := engine.QueryWorkflow(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}

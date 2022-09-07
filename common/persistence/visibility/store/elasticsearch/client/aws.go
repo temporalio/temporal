@@ -33,7 +33,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
-	elasticaws "github.com/olivere/elastic/aws/v4"
+	elasticaws "github.com/olivere/elastic/v7/aws/v4"
 )
 
 func NewAwsHttpClient(config ESAWSRequestSigningConfig) (*http.Client, error) {

@@ -25,10 +25,10 @@
 package tasks
 
 import (
-	"go.temporal.io/server/common/predicates"
 	"golang.org/x/exp/maps"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/predicates"
 )
 
 type (
@@ -102,4 +102,82 @@ func (t *TypePredicate) Equals(predicate Predicate) bool {
 	}
 
 	return maps.Equal(t.Types, typePrediate.Types)
+}
+
+func AndPredicates(a Predicate, b Predicate) Predicate {
+	switch a := a.(type) {
+	case *NamespacePredicate:
+		if b, ok := b.(*NamespacePredicate); ok {
+			intersection := intersect(a.NamespaceIDs, b.NamespaceIDs)
+			if len(intersection) == 0 {
+				return predicates.Empty[Task]()
+			}
+			return &NamespacePredicate{
+				NamespaceIDs: intersection,
+			}
+		}
+	case *TypePredicate:
+		if b, ok := b.(*TypePredicate); ok {
+			intersection := intersect(a.Types, b.Types)
+			if len(intersection) == 0 {
+				return predicates.Empty[Task]()
+			}
+			return &TypePredicate{
+				Types: intersection,
+			}
+		}
+	}
+
+	return predicates.And(a, b)
+}
+
+func OrPredicates(a Predicate, b Predicate) Predicate {
+	switch a := a.(type) {
+	case *NamespacePredicate:
+		if b, ok := b.(*NamespacePredicate); ok {
+			return &NamespacePredicate{
+				NamespaceIDs: union(a.NamespaceIDs, b.NamespaceIDs),
+			}
+		}
+	case *TypePredicate:
+		if b, ok := b.(*TypePredicate); ok {
+			return &TypePredicate{
+				Types: union(a.Types, b.Types),
+			}
+		}
+	}
+
+	return predicates.Or(a, b)
+}
+
+func IsUniverisalPredicate(p Predicate) bool {
+	_, ok := p.(*predicates.UniversalImpl[Task])
+	return ok
+}
+
+func IsNamespacePredicate(p Predicate) bool {
+	_, ok := p.(*NamespacePredicate)
+	return ok
+}
+
+func IsTypePredicate(p Predicate) bool {
+	_, ok := p.(*TypePredicate)
+	return ok
+}
+
+func intersect[K comparable](this, that map[K]struct{}) map[K]struct{} {
+	intersection := make(map[K]struct{})
+	for key := range this {
+		if _, ok := that[key]; ok {
+			intersection[key] = struct{}{}
+		}
+	}
+	return intersection
+}
+
+func union[K comparable](this, that map[K]struct{}) map[K]struct{} {
+	union := make(map[K]struct{}, len(this)+len(that))
+	maps.Copy(union, this)
+	maps.Copy(union, that)
+	return union
 }

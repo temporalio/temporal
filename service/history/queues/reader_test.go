@@ -25,7 +25,6 @@
 package queues
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -41,7 +40,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/predicates"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -57,6 +55,7 @@ type (
 		logger                log.Logger
 		metricsHandler        metrics.MetricsHandler
 		executableInitializer ExecutableInitializer
+		monitor               *monitorImpl
 	}
 )
 
@@ -75,9 +74,14 @@ func (s *readerSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.metricsHandler = metrics.NoopMetricsHandler
 
-	s.executableInitializer = func(t tasks.Task) Executable {
-		return NewExecutable(t, nil, nil, nil, nil, clock.NewRealTimeSource(), nil, nil, QueueTypeUnknown, nil)
+	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
+		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil, nil)
 	}
+	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
+		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
+		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
+	})
 }
 
 func (s *readerSuite) TearDownTest() {
@@ -99,9 +103,9 @@ func (s *readerSuite) TestStartLoadStop() {
 	}
 
 	doneCh := make(chan struct{})
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
 		close(doneCh)
-		return true, nil
+		return true
 	}).Times(1)
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
@@ -173,7 +177,7 @@ func (s *readerSuite) TestMergeSlices() {
 	incomingScopes := NewRandomScopes(rand.Intn(10))
 	incomingSlices := make([]Slice, 0, len(incomingScopes))
 	for _, incomingScope := range incomingScopes {
-		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableInitializer, incomingScope))
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableInitializer, s.monitor, incomingScope))
 	}
 
 	reader.MergeSlices(incomingSlices...)
@@ -184,6 +188,34 @@ func (s *readerSuite) TestMergeSlices() {
 		if scope.Range.ExclusiveMax.CompareTo(nextScope.Range.InclusiveMin) > 0 {
 			panic(fmt.Sprintf(
 				"Found overlapping scope in merged slices, left: %v, right: %v",
+				scope,
+				nextScope,
+			))
+		}
+	}
+}
+
+func (s *readerSuite) TestAppendSlices() {
+	totalScopes := 10
+	scopes := NewRandomScopes(totalScopes)
+	currentScopes := scopes[:totalScopes/2]
+	reader := s.newTestReader(currentScopes, nil)
+
+	incomingScopes := scopes[totalScopes/2:]
+	incomingSlices := make([]Slice, 0, len(incomingScopes))
+	for _, incomingScope := range incomingScopes {
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableInitializer, s.monitor, incomingScope))
+	}
+
+	reader.AppendSlices(incomingSlices...)
+
+	appendedScopes := reader.Scopes()
+	s.Len(appendedScopes, totalScopes)
+	for idx, scope := range appendedScopes[:len(appendedScopes)-1] {
+		nextScope := appendedScopes[idx+1]
+		if scope.Range.ExclusiveMax.CompareTo(nextScope.Range.InclusiveMin) > 0 {
+			panic(fmt.Sprintf(
+				"Found overlapping scope in appended slices, left: %v, right: %v",
 				scope,
 				nextScope,
 			))
@@ -244,10 +276,10 @@ func (s *readerSuite) TestThrottle() {
 	reader.Pause(delay)
 
 	doneCh := make(chan struct{})
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
 		s.True(time.Now().After(now.Add(delay)))
 		close(doneCh)
-		return true, nil
+		return true
 	}).Times(1)
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
@@ -273,7 +305,10 @@ func (s *readerSuite) TestLoadAndSubmitTasks_TooManyPendingTasks() {
 
 	reader := s.newTestReader(scopes, nil)
 
-	s.mockRescheduler.EXPECT().Len().Return(reader.options.MaxPendingTasksCount() * 2).Times(1)
+	s.monitor.SetSlicePendingTaskCount(
+		reader.slices.Front().Value.(Slice),
+		reader.options.MaxPendingTasksCount(),
+	)
 
 	// should be no-op
 	reader.loadAndSubmitTasks()
@@ -302,9 +337,9 @@ func (s *readerSuite) TestLoadAndSubmitTasks_MoreTasks() {
 	reader.timeSource = mockTimeSource
 
 	taskSubmitted := 0
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
 		taskSubmitted++
-		return true, nil
+		return true
 	}).AnyTimes()
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
@@ -332,9 +367,9 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_HasNextSlice() {
 	reader.timeSource = mockTimeSource
 
 	taskSubmitted := 0
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
 		taskSubmitted++
-		return true, nil
+		return true
 	}).AnyTimes()
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
@@ -362,9 +397,9 @@ func (s *readerSuite) TestLoadAndSubmitTasks_NoMoreTasks_NoNextSlice() {
 	reader.timeSource = mockTimeSource
 
 	taskSubmitted := 0
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) (bool, error) {
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {
 		taskSubmitted++
-		return true, nil
+		return true
 	}).AnyTimes()
 	s.mockRescheduler.EXPECT().Len().Return(0).AnyTimes()
 
@@ -386,23 +421,21 @@ func (s *readerSuite) TestSubmitTask() {
 
 	mockExecutable := NewMockExecutable(s.controller)
 
-	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(reader.timeSource.Now(), rand.Int63())).Times(1)
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(true, nil).Times(1)
+	pastFireTime := reader.timeSource.Now().Add(-time.Minute)
+	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
+	mockExecutable.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(true).Times(1)
 	reader.submit(mockExecutable)
 
-	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(reader.timeSource.Now(), rand.Int63())).Times(1)
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(false, nil).Times(1)
-	mockExecutable.EXPECT().Reschedule().Times(1)
-	reader.submit(mockExecutable)
-
-	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(reader.timeSource.Now(), rand.Int63())).Times(1)
-	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(false, errors.New("some random error")).Times(1)
+	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(pastFireTime, rand.Int63())).Times(1)
+	mockExecutable.EXPECT().SetScheduledTime(gomock.Any()).Times(1)
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Return(false).Times(1)
 	mockExecutable.EXPECT().Reschedule().Times(1)
 	reader.submit(mockExecutable)
 
 	futureFireTime := reader.timeSource.Now().Add(time.Minute)
 	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(futureFireTime, rand.Int63())).Times(1)
-	s.mockRescheduler.EXPECT().Add(mockExecutable, futureFireTime).Times(1)
+	s.mockRescheduler.EXPECT().Add(mockExecutable, futureFireTime.Add(scheduledTaskPrecision)).Times(1)
 	reader.submit(mockExecutable)
 }
 
@@ -423,10 +456,15 @@ func (s *readerSuite) newTestReader(
 	scopes []Scope,
 	paginationFnProvider PaginationFnProvider,
 ) *ReaderImpl {
+	slices := make([]Slice, 0, len(scopes))
+	for _, scope := range scopes {
+		slice := NewSlice(paginationFnProvider, s.executableInitializer, s.monitor, scope)
+		slices = append(slices, slice)
+	}
+
 	return NewReader(
-		paginationFnProvider,
-		s.executableInitializer,
-		scopes,
+		DefaultReaderId,
+		slices,
 		&ReaderOptions{
 			BatchSize:            dynamicconfig.GetIntPropertyFn(10),
 			MaxPendingTasksCount: dynamicconfig.GetIntPropertyFn(100),
@@ -435,7 +473,8 @@ func (s *readerSuite) newTestReader(
 		s.mockScheduler,
 		s.mockRescheduler,
 		clock.NewRealTimeSource(),
-		quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 20 }),
+		NewReaderPriorityRateLimiter(func() float64 { return 20 }, 1),
+		s.monitor,
 		s.logger,
 		s.metricsHandler,
 	)

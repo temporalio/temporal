@@ -31,11 +31,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 )
 
-const (
-	// All per-ns workers share one task queue
-	PerNSWorkerTaskQueue = "temporal-sys-per-ns-tq"
-)
-
 type (
 	// WorkerComponent represents a type of work needed for worker role
 	WorkerComponent interface {

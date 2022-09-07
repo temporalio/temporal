@@ -57,26 +57,3 @@ type (
 const (
 	FactoryFxGroup = "queueFactory"
 )
-
-// TODO: remove QueueType after merging active and standby
-// transfer/timer queue. Use tasks.Category instead
-// Currently need queue active/standby information
-// for assigning priority
-type (
-	QueueType int
-)
-
-const (
-	QueueTypeUnknown QueueType = iota
-	// QueueTypeTransfer is used by single cursor transfer queue, which
-	// processes both active and standby task
-	QueueTypeTransfer
-	QueueTypeActiveTransfer
-	QueueTypeStandbyTransfer
-	// QueueTypeTimer is used by single cursor timer queue, which
-	// processes both active and standby task
-	QueueTypeTimer
-	QueueTypeActiveTimer
-	QueueTypeStandbyTimer
-	QueueTypeVisibility
-)

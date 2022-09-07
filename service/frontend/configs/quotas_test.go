@@ -128,6 +128,7 @@ func (s *quotasSuite) TestExecutionAPIs() {
 		"PollActivityTaskQueue":       {},
 		"GetWorkerBuildIdOrdering":    {},
 		"UpdateWorkerBuildIdOrdering": {},
+		"DeleteWorkflowExecution":     {},
 
 		"ResetStickyTaskQueue":    {},
 		"DescribeTaskQueue":       {},
@@ -187,6 +188,11 @@ func (s *quotasSuite) TestOtherAPIs() {
 		"ListScheduleMatchingTimes": {},
 		"DeleteSchedule":            {},
 		"ListSchedules":             {},
+
+		"DescribeBatchOperation": {},
+		"ListBatchOperations":    {},
+		"StartBatchOperation":    {},
+		"StopBatchOperation":     {},
 	}
 
 	var service workflowservice.WorkflowServiceServer

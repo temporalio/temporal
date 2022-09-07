@@ -75,7 +75,7 @@ func (s *clientSuite) SetupTest() {
 	s.metricsClient.EXPECT().Scope(metrics.ArchiverClientScope, gomock.Any()).Return(s.metricsScope)
 	s.sdkClient = mocksdk.NewMockClient(s.controller)
 	s.sdkClientFactory = sdk.NewMockClientFactory(s.controller)
-	s.sdkClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(s.sdkClient).AnyTimes()
+	s.sdkClientFactory.EXPECT().GetSystemClient().Return(s.sdkClient).AnyTimes()
 	s.client = NewClient(
 		s.metricsClient,
 		log.NewNoopLogger(),
@@ -157,7 +157,6 @@ func (s *clientSuite) TestArchiveHistoryInlineSuccess() {
 	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
-
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
 			HistoryURI: "test:///history/archival",

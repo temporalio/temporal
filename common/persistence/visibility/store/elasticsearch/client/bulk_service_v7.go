@@ -31,27 +31,27 @@ import (
 )
 
 type (
-	bulkServiceV7 struct {
+	bulkServiceImpl struct {
 		esBulkService *elastic.BulkService
 	}
 )
 
-func newBulkServiceV7(esBulkService *elastic.BulkService) *bulkServiceV7 {
-	return &bulkServiceV7{
+func newBulkService(esBulkService *elastic.BulkService) *bulkServiceImpl {
+	return &bulkServiceImpl{
 		esBulkService: esBulkService,
 	}
 }
 
-func (b *bulkServiceV7) Do(ctx context.Context) error {
+func (b *bulkServiceImpl) Do(ctx context.Context) error {
 	_, err := b.esBulkService.Do(ctx)
 	return err
 }
 
-func (b *bulkServiceV7) NumberOfActions() int {
+func (b *bulkServiceImpl) NumberOfActions() int {
 	return b.esBulkService.NumberOfActions()
 }
 
-func (b *bulkServiceV7) Add(request *BulkableRequest) {
+func (b *bulkServiceImpl) Add(request *BulkableRequest) {
 	switch request.RequestType {
 	case BulkableRequestTypeIndex:
 		bulkDeleteRequest := elastic.NewBulkIndexRequest().

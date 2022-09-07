@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/addsearchattributes"
+	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -59,6 +60,7 @@ var Module = fx.Options(
 	resource.Module,
 	deletenamespace.Module,
 	scheduler.Module,
+	batcher.Module,
 	fx.Provide(
 		fx.Annotated{
 			Name:   localFrontendClient,
@@ -86,6 +88,7 @@ func PersistenceRateLimitingParamsProvider(
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
 	)
 }
@@ -101,11 +104,8 @@ func ConfigProvider(
 	)
 }
 
-func FrontendClientProvider(
-	cfg *config.Config,
-	clientFactory client.Factory,
-) (workflowservice.WorkflowServiceClient, error) {
-	return clientFactory.NewFrontendClient(cfg.PublicClient.HostPort)
+func FrontendClientProvider(bean client.Bean) workflowservice.WorkflowServiceClient {
+	return bean.GetFrontendClient()
 }
 
 func VisibilityManagerProvider(

@@ -84,6 +84,7 @@ func (ni *NamespaceRateLimitInterceptor) Intercept(
 		token,
 		namespace.String(),
 		"", // this interceptor layer does not throttle based on caller type
+		"", // this interceptor layer does not throttle based on call initiation
 	)) {
 		return nil, ErrNamespaceRateLimitServerBusy
 	}

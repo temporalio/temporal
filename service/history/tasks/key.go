@@ -112,6 +112,26 @@ func (k Key) Next() Key {
 	return NewKey(k.FireTime, k.TaskID+1)
 }
 
+func (k Key) Sub(subtrahend Key) Key {
+	borrow := int64(0)
+	differenceTaskID := k.TaskID - subtrahend.TaskID
+	if differenceTaskID < 0 {
+		borrow = 1
+		differenceTaskID += MaximumKey.TaskID
+	}
+
+	fireTime := k.FireTime.UnixNano() - borrow
+	subtrahendFireTime := subtrahend.FireTime.UnixNano()
+	if fireTime < subtrahendFireTime {
+		panic(fmt.Sprintf("Task key Sub encountered underflow: self: %v, subtrahend: %v", k, subtrahend))
+	}
+
+	return NewKey(
+		time.Unix(0, fireTime-subtrahendFireTime),
+		int64(differenceTaskID),
+	)
+}
+
 func MinKey(this Key, that Key) Key {
 	if this.CompareTo(that) < 0 {
 		return this
