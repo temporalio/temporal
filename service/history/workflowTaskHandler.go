@@ -813,9 +813,15 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
-	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespaceName.String()); err != nil {
+	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespaceName.String())
+	if err != nil {
 		handler.stopProcessing = true
 		return err
+	}
+	if unaliasedSas != nil {
+		newAttr := *attr
+		newAttr.SearchAttributes = unaliasedSas
+		attr = &newAttr
 	}
 
 	// If the workflow task has more than one completion event than just pick the first one
@@ -928,9 +934,15 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		return err
 	}
 
-	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace.String()); err != nil {
+	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace.String())
+	if err != nil {
 		handler.stopProcessing = true
 		return err
+	}
+	if unaliasedSas != nil {
+		newAttr := *attr
+		newAttr.SearchAttributes = unaliasedSas
+		attr = &newAttr
 	}
 
 	enabled := handler.config.EnableParentClosePolicy(parentNamespace.String())
@@ -1056,9 +1068,15 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		return err
 	}
 
-	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace.String()); err != nil {
+	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace.String())
+	if err != nil {
 		handler.stopProcessing = true
 		return err
+	}
+	if unaliasedSas != nil {
+		newAttr := *attr
+		newAttr.SearchAttributes = unaliasedSas
+		attr = &newAttr
 	}
 
 	_, err = handler.mutableState.AddUpsertWorkflowSearchAttributesEvent(
