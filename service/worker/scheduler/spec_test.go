@@ -44,7 +44,7 @@ func TestSpec(t *testing.T) {
 
 func (s *specSuite) checkSequenceRaw(spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
-	cs, err := newCompiledSpec(spec)
+	cs, err := NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
 		next := cs.rawNextTime(start)
@@ -55,7 +55,7 @@ func (s *specSuite) checkSequenceRaw(spec *schedpb.ScheduleSpec, start time.Time
 
 func (s *specSuite) checkSequenceFull(spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
-	cs, err := newCompiledSpec(spec)
+	cs, err := NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
 		_, next, has := cs.getNextTime(start)
