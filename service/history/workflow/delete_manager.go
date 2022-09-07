@@ -122,7 +122,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	// In passive cluster, transfer task queue check can be ignored but not visibility task queue.
 	// If visibility close task is executed after visibility record is deleted then it will resurrect record in closed state.
 	//
-	// Unfortunately, queue ack levels are updated with delay (default 30s),
+	// Unfortunately, queue states/ack levels are updated with delay (default 30s),
 	// therefore this API will return error if workflow is deleted within 30 seconds after close.
 	// The check is on API call side, not on task processor side, because delete visibility task doesn't have access to mutable state.
 

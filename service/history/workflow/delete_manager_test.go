@@ -403,7 +403,6 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask_WithQueu
 	s.mockShardContext.EXPECT().GetQueueState(tasks.CategoryTransfer).Return(transferPersistenceQueueState, true).AnyTimes()
 	s.mockShardContext.EXPECT().GetQueueState(tasks.CategoryVisibility).Return(visibilityPersistenceQueueState, true).AnyTimes()
 
-	// Both queues are right at the minimum level.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 1000}).
