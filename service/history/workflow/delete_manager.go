@@ -130,7 +130,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	nsActive := ms.GetNamespaceEntry().ActiveInCluster(currentClusterName)
 	closeTransferTaskId := ms.GetExecutionInfo().CloseTransferTaskId
 	closeTransferTaskCheckPassed := true
-	if nsActive && closeTransferTaskId != 0 {
+	if nsActive && closeTransferTaskId != 0 { // taskID == 0 if workflow still running in passive cluster or closed before this field was added (v1.17).
 		// check if close execution transfer task is completed
 		transferQueueState, ok := m.shard.GetQueueState(tasks.CategoryTransfer)
 		if !ok {
@@ -148,7 +148,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 
 	closeVisibilityTaskId := ms.GetExecutionInfo().CloseVisibilityTaskId
 	closeVisibilityTaskCheckPassed := true
-	if closeVisibilityTaskId != 0 {
+	if closeVisibilityTaskId != 0 { // taskID == 0 if workflow still running in passive cluster or closed before this field was added (v1.17).
 		// check if close execution visibility task is completed
 		visibilityQueueState, ok := m.shard.GetQueueState(tasks.CategoryVisibility)
 		if !ok {
