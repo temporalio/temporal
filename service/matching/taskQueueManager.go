@@ -330,19 +330,21 @@ func (c *taskQueueManagerImpl) StartDbTaskManagement() {
 	}
 }
 
-func (c *taskQueueManagerImpl) SwitchDbTaskManagementIfNecessary() {
+func (c *taskQueueManagerImpl) SwitchDbTaskManagementIfNecessary() bool {
 	c.dbTaskManagementLock.Lock()
 	defer c.dbTaskManagementLock.Unlock()
 	ts := time.Now()
 	if ts.Sub(c.dbTaskManagementUpdatedAt) < dbTaskManagementSwitchThreshold {
-		return
+		return c.enableDbTaskManager
 	}
 	c.dbTaskManagementUpdatedAt = ts
-	if c.enableDbTaskManager == c.config.EnableDbTaskManager() {
-		return
+	newVal := c.config.EnableDbTaskManager()
+	if c.enableDbTaskManager == newVal {
+		return c.enableDbTaskManager
 	}
 	c.StopDbTaskManagement()
 	c.StartDbTaskManagement()
+	return c.enableDbTaskManager
 }
 
 func (c *taskQueueManagerImpl) StopDbTaskManagement() {
@@ -397,7 +399,6 @@ func (c *taskQueueManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (bool, error) {
-	c.SwitchDbTaskManagementIfNecessary()
 	if params.forwardedFrom == "" {
 		// request sent by history service
 		c.liveness.markAlive(time.Now())
@@ -428,7 +429,7 @@ func (c *taskQueueManagerImpl) AddTask(
 		return false, errRemoteSyncMatchFailed
 	}
 
-	if c.config.EnableDbTaskManager() {
+	if c.SwitchDbTaskManagementIfNecessary() {
 		fut := c.dbTaskManager.BufferAndWriteTask(taskInfo)
 		_, err = fut.Get(ctx)
 		c.signalIfFatal(err)
@@ -453,7 +454,6 @@ func (c *taskQueueManagerImpl) GetTask(
 	ctx context.Context,
 	maxDispatchPerSecond *float64,
 ) (*internalTask, error) {
-	c.SwitchDbTaskManagementIfNecessary()
 	c.liveness.markAlive(time.Now())
 
 	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
@@ -508,7 +508,7 @@ func (c *taskQueueManagerImpl) GetTask(
 	}
 
 	task.namespace = c.namespace
-	if c.config.EnableDbTaskManager() {
+	if c.SwitchDbTaskManagementIfNecessary() {
 		task.backlogCountHint = c.dbTaskManager.taskReader.getBacklogCountHint()
 	} else {
 		task.backlogCountHint = c.taskAckManager.getBacklogCountHint()
@@ -540,8 +540,7 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 // GetVersioningData returns the versioning data for the task queue if any. If this task queue is a sub-partition and
 // has no cached data, it will explicitly attempt a fetch from the root partition.
 func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error) {
-	c.SwitchDbTaskManagementIfNecessary()
-	if c.config.EnableDbTaskManager() {
+	if c.SwitchDbTaskManagementIfNecessary() {
 		vd, err := c.dbTaskManager.taskQueueOwnership.GetVersioningData(ctx)
 		if errors.Is(err, errVersioningDataNotPresentOnPartition) {
 			// If this is a non-root-partition with no versioning data, this call is indicating we might expect to find
@@ -563,10 +562,9 @@ func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persiste
 }
 
 func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
-	c.SwitchDbTaskManagementIfNecessary()
 	var newDat *persistencespb.VersioningData = nil
 	var err error = nil
-	if c.config.EnableDbTaskManager() {
+	if c.SwitchDbTaskManagementIfNecessary() {
 		newDat, err = c.dbTaskManager.taskQueueOwnership.MutateVersioningData(ctx, mutator)
 	} else {
 		newDat, err = c.db.MutateVersioningData(ctx, mutator)
@@ -607,14 +605,13 @@ func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator
 }
 
 func (c *taskQueueManagerImpl) InvalidateMetadata(request *matchingservice.InvalidateTaskQueueMetadataRequest) error {
-	c.SwitchDbTaskManagementIfNecessary()
 	if request.GetVersioningData() != nil {
 		if c.taskQueueID.IsRoot() && c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 			// Should never happen. Root partitions do not get their versioning data invalidated.
 			c.logger.Warn("A root workflow partition was told to invalidate its versioning data, this should not happen")
 			return nil
 		}
-		if c.config.EnableDbTaskManager() {
+		if c.SwitchDbTaskManagementIfNecessary() {
 			c.dbTaskManager.taskQueueOwnership.setVersioningDataForNonRootPartition(request.GetVersioningData())
 		} else {
 			c.db.setVersioningDataForNonRootPartition(request.GetVersioningData())
@@ -655,13 +652,12 @@ func (c *taskQueueManagerImpl) CancelPoller(pollerID string) {
 // pollers which polled this taskqueue in last few minutes and status of taskqueue's ackManager
 // (readLevel, ackLevel, backlogCountHint and taskIDBlock).
 func (c *taskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
-	c.SwitchDbTaskManagementIfNecessary()
 	response := &matchingservice.DescribeTaskQueueResponse{Pollers: c.GetAllPollerInfo()}
 	if !includeTaskQueueStatus {
 		return response
 	}
 
-	if c.config.EnableDbTaskManager() {
+	if c.SwitchDbTaskManagementIfNecessary() {
 		taskIDBlock := rangeIDToTaskIDBlock(c.dbTaskManager.taskQueueOwnership.RangeID(), c.config.RangeSize)
 		response.TaskQueueStatus = &taskqueuepb.TaskQueueStatus{
 			ReadLevel:        c.dbTaskManager.taskReader.getReadLevel(),
@@ -691,14 +687,13 @@ func (c *taskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *m
 }
 
 func (c *taskQueueManagerImpl) String() string {
-	c.SwitchDbTaskManagementIfNecessary()
 	buf := new(bytes.Buffer)
 	if c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 		buf.WriteString("Activity")
 	} else {
 		buf.WriteString("Workflow")
 	}
-	if c.config.EnableDbTaskManager() {
+	if c.SwitchDbTaskManagementIfNecessary() {
 		rangeID := c.dbTaskManager.taskQueueOwnership.RangeID()
 		_, _ = fmt.Fprintf(buf, " task queue %v\n", c.taskQueueID.name)
 		_, _ = fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
@@ -857,7 +852,7 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartitionOnInit(ctx context.
 // fetchMetadataFromRootPartition fetches metadata from root partition iff this partition is not a root partition.
 // Returns the fetched data, if fetching was necessary and successful.
 func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Context) (*persistencespb.VersioningData, error) {
-	c.SwitchDbTaskManagementIfNecessary()
+	enableDbTaskManager := c.SwitchDbTaskManagementIfNecessary()
 	// Nothing to do if we are the root partition of a workflow queue, since we should own the data.
 	// (for versioning - any later added metadata may need to not abort so early)
 	if c.taskQueueID.IsRoot() && c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
@@ -865,7 +860,7 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 	}
 	var curDat *persistencespb.VersioningData = nil
 	var err error = nil
-	if c.config.EnableDbTaskManager() {
+	if enableDbTaskManager {
 		curDat, err = c.dbTaskManager.taskQueueOwnership.GetVersioningData(ctx)
 	} else {
 		curDat, err = c.db.GetVersioningData(ctx)
@@ -890,7 +885,7 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 	// It can't be nil due to removing versions, as that would result in a non-nil container with
 	// nil inner fields.
 	if !res.GetMatchedReqHash() {
-		if c.config.EnableDbTaskManager() {
+		if enableDbTaskManager {
 			c.dbTaskManager.taskQueueOwnership.setVersioningDataForNonRootPartition(res.GetVersioningData())
 		} else {
 			c.db.setVersioningDataForNonRootPartition(res.GetVersioningData())
