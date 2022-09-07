@@ -143,7 +143,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		IdleTaskqueueCheckInterval:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingIdleTaskqueueCheckInterval, 5*time.Minute),
 		MaxTaskqueueIdleTime:                  dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MaxTaskqueueIdleTime, 5*time.Minute),
 		LongPollExpirationInterval:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingLongPollExpirationInterval, time.Minute),
-		EnableDbTaskManager:                   dc.GetBoolPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingEnableDbTaskManager, true),
+		EnableDbTaskManager:                   dc.GetBoolPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingEnableDbTaskManager, false),
 		DbTaskDeletionInterval:                dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingDbTaskDeletionInterval, time.Second*10),
 		DbTaskUpdateAckInterval:               dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingDbTaskUpdateAckInterval, time.Minute),
 		DbTaskUpdateQueueInterval:             dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingDbTaskUpdateQueueInterval, time.Minute),
