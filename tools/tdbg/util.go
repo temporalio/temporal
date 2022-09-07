@@ -40,9 +40,11 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli/v2"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/namespace"
 )
 
 func prettyPrintJSONObject(o interface{}) {
@@ -308,4 +310,20 @@ func showNextPage() bool {
 	var input string
 	_, _ = fmt.Scanln(&input)
 	return strings.Trim(input, " ") == ""
+}
+
+func getNamespaceID(c *cli.Context, nsName namespace.Name) (namespace.ID, error) {
+	wfClient := cFactory.WorkflowClient(c)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	nsResponse, err := wfClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: nsName.String(),
+	})
+	if err != nil {
+		return namespace.EmptyID, err
+	}
+
+	return namespace.ID(nsResponse.NamespaceInfo.GetId()), nil
 }

@@ -1955,7 +1955,6 @@ func (e *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             timestamp.TimePtr(time.Time{}),
 		ActivityId:              attributes.ActivityId,
-		NamespaceId:             e.executionInfo.NamespaceId,
 		ScheduleToStartTimeout:  attributes.GetScheduleToStartTimeout(),
 		ScheduleToCloseTimeout:  scheduleToCloseTimeout,
 		StartToCloseTimeout:     attributes.GetStartToCloseTimeout(),
