@@ -3807,7 +3807,20 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 
 	executionInfo := resp.GetWorkflowExecutionInfo()
 	operationState := getBatchOperationState(executionInfo.GetStatus())
-	typePayload := executionInfo.GetMemo().GetFields()[batcher.BatchOperationTypeMemo]
+	memo := executionInfo.GetMemo().GetFields()
+	typePayload := memo[batcher.BatchOperationTypeMemo]
+	operationReason := memo[batcher.BatchReasonMemo]
+	var reason string
+	err = payload.Decode(operationReason, &reason)
+	if err != nil {
+		return nil, err
+	}
+	var identity string
+	encodedBatcherIdentity := executionInfo.GetSearchAttributes().GetIndexedFields()[searchattribute.BatcherUser]
+	err = payload.Decode(encodedBatcherIdentity, &identity)
+	if err != nil {
+		return nil, err
+	}
 	var operationTypeString string
 	err = payload.Decode(typePayload, &operationTypeString)
 	if err != nil {
@@ -3839,9 +3852,8 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		completedOpsCount = int64(hbd.SuccessCount)
 		failureOpsCount = int64(hbd.ErrorCount)
 	}
-	// batch stop reason
-	var stopReason string
-	if executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED {
+
+	if executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
 		lastHistoryResp, err := wh.GetWorkflowExecutionHistoryReverse(ctx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
 			Namespace:       request.GetNamespace(),
 			Execution:       execution,
@@ -3851,19 +3863,22 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 			return nil, err
 		}
 		historyEvents := lastHistoryResp.GetHistory().GetEvents()
-		if len(historyEvents) != 1 {
-			return nil, serviceerror.NewInternal("Cannot get batch operation terminated event.")
+		if len(historyEvents) == 0 {
+			return nil, serviceerror.NewInternal("Cannot get batch operation completed event.")
 		}
-		if historyEvents[0].EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
-			return nil, serviceerror.NewInternal("Cannot get terminated event from a terminated batch operation.")
+		if historyEvents[0].EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
+			return nil, serviceerror.NewInternal("Cannot get completed event from a closed batch operation.")
 		}
-		stopReason = historyEvents[0].GetWorkflowExecutionTerminatedEventAttributes().GetReason()
-	}
-	var identity string
-	encodedBatcherIdentity := executionInfo.GetSearchAttributes().GetIndexedFields()[searchattribute.BatcherUser]
-	err = payload.Decode(encodedBatcherIdentity, &identity)
-	if err != nil {
-		return nil, err
+		opsResult := historyEvents[0].GetWorkflowExecutionCompletedEventAttributes().GetResult()
+		var result batcher.HeartBeatDetails
+		err = payloads.Decode(opsResult, &result)
+		if err != nil {
+			return nil, err
+		}
+
+		totalOpsCount = result.TotalEstimate
+		completedOpsCount = int64(result.SuccessCount)
+		failureOpsCount = int64(result.ErrorCount)
 	}
 	return &workflowservice.DescribeBatchOperationResponse{
 		OperationType:          operationType,
@@ -3875,7 +3890,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		CompleteOperationCount: completedOpsCount,
 		FailureOperationCount:  failureOpsCount,
 		Identity:               identity,
-		Reason:                 stopReason,
+		Reason:                 reason,
 	}, nil
 }
 
