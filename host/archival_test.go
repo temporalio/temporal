@@ -97,6 +97,8 @@ func (s *integrationSuite) TestArchival_ContinueAsNew() {
 }
 
 func (s *integrationSuite) TestArchival_ArchiverWorker() {
+	s.T().SkipNow() // flaky test, skip for now, will reimplement archival feature.
+
 	s.True(s.testCluster.archiverBase.metadata.GetHistoryConfig().ClusterConfiguredForArchival())
 
 	namespaceID := s.getNamespaceID(s.archivalNamespace)
