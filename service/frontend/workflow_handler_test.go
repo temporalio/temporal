@@ -1861,6 +1861,7 @@ func (s *workflowHandlerSuite) TestGetSystemInfo() {
 	s.True(resp.Capabilities.ActivityFailureIncludeHeartbeat)
 	s.True(resp.Capabilities.SupportsSchedules)
 	s.True(resp.Capabilities.EncodedFailureAttributes)
+	s.True(resp.Capabilities.UpsertMemo)
 }
 
 func (s *workflowHandlerSuite) TestStartBatchOperation_Terminate() {
