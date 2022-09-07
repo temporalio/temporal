@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -53,7 +54,6 @@ type (
 	workflowRebuilderImpl struct {
 		shard                      shard.Context
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
-		newStateRebuilder          nDCStateRebuilderProvider
 		transaction                workflow.Transaction
 		logger                     log.Logger
 	}
@@ -69,11 +69,8 @@ func NewWorkflowRebuilder(
 	return &workflowRebuilderImpl{
 		shard:                      shard,
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(shard, workflowCache),
-		newStateRebuilder: func() nDCStateRebuilder {
-			return newNDCStateRebuilder(shard, logger)
-		},
-		transaction: workflow.NewTransaction(shard),
-		logger:      logger,
+		transaction:                workflow.NewTransaction(shard),
+		logger:                     logger,
 	}
 }
 
@@ -131,7 +128,7 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	requestID string,
 ) (workflow.MutableState, int64, error) {
 
-	rebuildMutableState, rebuildHistorySize, err := r.newStateRebuilder().rebuild(
+	rebuildMutableState, rebuildHistorySize, err := ndc.NewStateRebuilder(r.shard, r.logger).Rebuild(
 		ctx,
 		r.shard.GetTimeSource().Now(),
 		workflowKey,
