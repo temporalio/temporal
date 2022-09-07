@@ -77,6 +77,20 @@ func (c *metricClient) DeleteSchedule(
 	return c.client.DeleteSchedule(ctx, request, opts...)
 }
 
+func (c *metricClient) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.DeleteWorkflowExecutionResponse, retError error) {
+
+	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDeleteWorkflowExecutionScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	return c.client.DeleteWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) DeprecateNamespace(
 	ctx context.Context,
 	request *workflowservice.DeprecateNamespaceRequest,

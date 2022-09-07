@@ -1289,6 +1289,40 @@ func (handler *DCRedirectionHandlerImpl) TerminateWorkflowExecution(
 	return resp, err
 }
 
+// TerminateWorkflowExecution API call
+func (handler *DCRedirectionHandlerImpl) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkflowExecutionRequest,
+) (resp *workflowservice.DeleteWorkflowExecutionResponse, retError error) {
+
+	var apiName = "DeleteWorkflowExecution"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionDeleteWorkflowExecutionScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.DeleteWorkflowExecution(ctx, request)
+		default:
+			var remoteClient workflowservice.WorkflowServiceClient
+			remoteClient, err = handler.clientBean.GetRemoteFrontendClient(targetDC)
+			if err != nil {
+				return err
+			}
+			resp, err = remoteClient.DeleteWorkflowExecution(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
 // ListTaskQueuePartitions API call
 func (handler *DCRedirectionHandlerImpl) ListTaskQueuePartitions(
 	ctx context.Context,
