@@ -87,12 +87,16 @@ func NewTransferQueueFactory(
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.TransferProcessorMaxPollHostRPS,
-				params.Config.PersistenceMaxQPS,
+				params.ServiceResolver,
+				params.Config.NumberOfShards,
+				params.Config.QueueReaderStuckCriticalAttempts,
 			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.TransferProcessorMaxPollHostRPS,
-					params.Config.PersistenceMaxQPS,
+					params.ServiceResolver,
+					params.Config.NumberOfShards,
+					params.Config.QueueReaderStuckCriticalAttempts,
 				),
 				params.Config.QueueMaxReaderCount(),
 			),

@@ -32,10 +32,12 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 )
@@ -46,6 +48,7 @@ type (
 
 		NamespaceRegistry namespace.Registry
 		ClusterMetadata   cluster.Metadata
+		ServiceResolver   membership.ServiceResolver
 		Config            *configs.Config
 		TimeSource        clock.TimeSource
 		MetricsHandler    metrics.MetricsHandler
@@ -122,22 +125,37 @@ func (f *QueueFactoryBase) Stop() {
 
 func NewQueueHostRateLimiter(
 	hostRPS dynamicconfig.IntPropertyFn,
-	fallBackRPS dynamicconfig.IntPropertyFn,
+	serviceResolver membership.ServiceResolver,
+	numberOfShards int32,
+	readerStuckCriticalAttempts dynamicconfig.IntPropertyFn,
 ) quotas.RateLimiter {
 	return quotas.NewDefaultOutgoingRateLimiter(
-		NewHostRateLimiterRateFn(hostRPS, fallBackRPS),
+		NewHostRateLimiterRateFn(hostRPS, serviceResolver, numberOfShards, readerStuckCriticalAttempts),
 	)
 }
 
 func NewHostRateLimiterRateFn(
 	hostRPS dynamicconfig.IntPropertyFn,
-	fallBackRPS dynamicconfig.IntPropertyFn,
+	serviceResolver membership.ServiceResolver,
+	numberOfShards int32,
+	readerStuckCriticalAttempts dynamicconfig.IntPropertyFn,
 ) quotas.RateFn {
 	return func() float64 {
 		if maxPollHostRps := hostRPS(); maxPollHostRps > 0 {
 			return float64(maxPollHostRps)
 		}
 
-		return float64(fallBackRPS())
+		shardsPerHost := int(numberOfShards) / (numHistoryHosts(serviceResolver))
+		return float64(readerStuckCriticalAttempts() * shardsPerHost)
 	}
+}
+
+func numHistoryHosts(
+	serviceResolver membership.ServiceResolver,
+) int {
+	if serviceResolver == nil {
+		return 1
+	}
+
+	return util.Max(serviceResolver.MemberCount(), 1)
 }
