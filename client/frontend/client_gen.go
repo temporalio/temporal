@@ -63,6 +63,16 @@ func (c *clientImpl) DeleteSchedule(
 	return c.client.DeleteSchedule(ctx, request, opts...)
 }
 
+func (c *clientImpl) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkflowExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DeleteWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *clientImpl) DeprecateNamespace(
 	ctx context.Context,
 	request *workflowservice.DeprecateNamespaceRequest,

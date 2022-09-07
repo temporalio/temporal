@@ -2098,6 +2098,37 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 	return &workflowservice.TerminateWorkflowExecutionResponse{}, nil
 }
 
+// DeleteWorkflowExecution deletes a closed workflow execution asynchronously (workflow must be completed or terminated before).
+// This method is EXPERIMENTAL and may be changed or removed in a later release.
+func (wh *WorkflowHandler) DeleteWorkflowExecution(ctx context.Context, request *workflowservice.DeleteWorkflowExecutionRequest) (_ *workflowservice.DeleteWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := validateExecution(request.WorkflowExecution); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId:        namespaceID.String(),
+		WorkflowExecution:  request.GetWorkflowExecution(),
+		WorkflowVersion:    common.EmptyVersion,
+		ClosedWorkflowOnly: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteWorkflowExecutionResponse{}, nil
+}
+
 // ListOpenWorkflowExecutions is a visibility API to list the open executions in a specific namespace.
 func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, request *workflowservice.ListOpenWorkflowExecutionsRequest) (_ *workflowservice.ListOpenWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
@@ -3617,6 +3648,10 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, errBatchJobIDNotSet
 	}
 
+	if !wh.config.EnableBatcher(request.Namespace) {
+		return nil, errBatchAPINotAllowed
+	}
+
 	// Validate concurrent batch operation
 	countResp, err := wh.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 		Namespace: request.GetNamespace(),
@@ -3717,6 +3752,10 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errRequestNotSet
 	}
 
+	if !wh.config.EnableBatcher(request.Namespace) {
+		return nil, errBatchAPINotAllowed
+	}
+
 	terminateReq := &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: request.GetNamespace(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -3748,6 +3787,10 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableBatcher(request.Namespace) {
+		return nil, errBatchAPINotAllowed
 	}
 
 	execution := &commonpb.WorkflowExecution{
@@ -3852,6 +3895,10 @@ func (wh *WorkflowHandler) ListBatchOperations(
 
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableBatcher(request.Namespace) {
+		return nil, errBatchAPINotAllowed
 	}
 
 	resp, err := wh.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{

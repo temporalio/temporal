@@ -2339,3 +2339,72 @@ func TestContextNearDeadline(t *testing.T) {
 	assert.True(t, contextNearDeadline(ctx, longPollTailRoom))
 	assert.False(t, contextNearDeadline(ctx, time.Millisecond))
 }
+
+func (s *workflowHandlerSuite) Test_DeleteWorkflowExecution() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	type test struct {
+		Name     string
+		Request  *workflowservice.DeleteWorkflowExecutionRequest
+		Expected error
+	}
+	// request validation tests
+	testCases1 := []test{
+		{
+			Name:     "nil request",
+			Request:  nil,
+			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
+		},
+		{
+			Name:     "empty request",
+			Request:  &workflowservice.DeleteWorkflowExecutionRequest{},
+			Expected: &serviceerror.InvalidArgument{Message: "Execution is not set on request."},
+		},
+		{
+			Name: "empty namespace",
+			Request: &workflowservice.DeleteWorkflowExecutionRequest{
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: "test-workflow-id",
+					RunId:      "wrong-run-id",
+				},
+			},
+			Expected: &serviceerror.InvalidArgument{Message: "Invalid RunId."},
+		},
+	}
+	for _, testCase := range testCases1 {
+		s.T().Run(testCase.Name, func(t *testing.T) {
+			resp, err := wh.DeleteWorkflowExecution(ctx, testCase.Request)
+			s.Equal(testCase.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	// History call failed.
+	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("random error"))
+	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
+	resp, err := wh.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+			RunId:      "d2595cb3-3b21-4026-a3e8-17bc32fb2a2b",
+		},
+	})
+	s.Error(err)
+	s.Equal("random error", err.Error())
+	s.Nil(resp)
+
+	// Success case.
+	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
+	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
+	resp, err = wh.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+			// RunId is not required.
+		},
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+}

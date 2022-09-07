@@ -215,6 +215,8 @@ const (
 	FrontendEnableSchedules = "frontend.enableSchedules"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
+	// FrontendEnableBatcher enables batcher-related RPCs in the frontend
+	FrontendEnableBatcher = "frontend.enableBatcher"
 
 	// DeleteNamespaceDeleteActivityRPS is RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
@@ -629,8 +631,6 @@ const (
 	HistoryScannerDataMinAge = "worker.historyScannerDataMinAge"
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher = "worker.enableBatcher"
-	// EnableBatcherPerNamespaceWorker decides whether start batcher worker per namespace
-	EnableBatcherPerNamespaceWorker = "worker.enableBatcherPerNamespaceWorker"
 	// BatcherRPS controls number the rps of batch operations
 	BatcherRPS = "worker.batcherRPS"
 	// BatcherConcurrency controls the concurrency of one batch operation

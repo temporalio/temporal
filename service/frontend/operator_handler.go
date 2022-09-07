@@ -326,37 +326,6 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 	}, nil
 }
 
-// DeleteWorkflowExecution deletes a closed workflow execution asynchronously (workflow must be completed or terminated before).
-// This method is EXPERIMENTAL and may be changed or removed in a later release.
-func (h *OperatorHandlerImpl) DeleteWorkflowExecution(ctx context.Context, request *operatorservice.DeleteWorkflowExecutionRequest) (_ *operatorservice.DeleteWorkflowExecutionResponse, retError error) {
-	defer log.CapturePanic(h.logger, &retError)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if err := validateExecution(request.WorkflowExecution); err != nil {
-		return nil, err
-	}
-
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = h.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
-		NamespaceId:        namespaceID.String(),
-		WorkflowExecution:  request.GetWorkflowExecution(),
-		WorkflowVersion:    common.EmptyVersion,
-		ClosedWorkflowOnly: false,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &operatorservice.DeleteWorkflowExecutionResponse{}, nil
-}
-
 // AddOrUpdateRemoteCluster adds or updates the connection config to a remote cluster.
 func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	ctx context.Context,
