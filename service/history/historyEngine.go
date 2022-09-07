@@ -42,7 +42,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -54,7 +53,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -510,7 +508,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 
 	if prevExecutionUpdateAction != nil {
 		// update prev execution and create new execution in one transaction
-		err := e.updateWorkflowWithNew(
+		err := api.GetAndUpdateWorkflowWithNew(
 			ctx,
 			nil,
 			api.BypassMutableStateConsistencyPredicate,
@@ -534,6 +532,8 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				}
 				return workflowContext.GetContext(), workflowContext.GetMutableState(), nil
 			},
+			e.shard,
+			e.workflowConsistencyChecker,
 		)
 		switch err {
 		case nil:
@@ -1058,7 +1058,7 @@ func (e *historyEngineImpl) ResetStickyTaskQueue(
 		return nil, err
 	}
 
-	err = e.updateWorkflow(
+	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -1079,6 +1079,9 @@ func (e *historyEngineImpl) ResetStickyTaskQueue(
 				CreateWorkflowTask: false,
 			}, nil
 		},
+		nil,
+		e.shard,
+		e.workflowConsistencyChecker,
 	)
 
 	if err != nil {
@@ -1250,7 +1253,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	namespace := namespaceEntry.Name()
 
 	response := &historyservice.RecordActivityTaskStartedResponse{}
-	err = e.updateWorkflow(
+	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		request.Clock,
 		api.BypassMutableStateConsistencyPredicate,
@@ -1338,7 +1341,11 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				Noop:               false,
 				CreateWorkflowTask: false,
 			}, nil
-		})
+		},
+		nil,
+		e.shard,
+		e.workflowConsistencyChecker,
+	)
 
 	if err != nil {
 		return nil, err
@@ -1410,7 +1417,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 	var activityStartedTime time.Time
 	var taskQueue string
 	var workflowTypeName string
-	err = e.updateWorkflow(
+	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
 		api.BypassMutableStateConsistencyPredicate,
@@ -1456,7 +1463,11 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 				Noop:               false,
 				CreateWorkflowTask: true,
 			}, nil
-		})
+		},
+		nil,
+		e.shard,
+		e.workflowConsistencyChecker,
+	)
 
 	if err == nil && !activityStartedTime.IsZero() {
 		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskCompletedScope).
@@ -1495,7 +1506,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 	var activityStartedTime time.Time
 	var taskQueue string
 	var workflowTypeName string
-	err = e.updateWorkflow(
+	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
 		api.BypassMutableStateConsistencyPredicate,
@@ -1562,7 +1573,11 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 			activityStartedTime = *ai.StartedTime
 			taskQueue = ai.TaskQueue
 			return postActions, nil
-		})
+		},
+		nil,
+		e.shard,
+		e.workflowConsistencyChecker,
+	)
 	if err == nil && !activityStartedTime.IsZero() {
 		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskFailedScope).
 			Tagged(
@@ -1600,7 +1615,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	var activityStartedTime time.Time
 	var taskQueue string
 	var workflowTypeName string
-	err = e.updateWorkflow(
+	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
 		api.BypassMutableStateConsistencyPredicate,
@@ -1658,7 +1673,11 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 				Noop:               false,
 				CreateWorkflowTask: true,
 			}, nil
-		})
+		},
+		nil,
+		e.shard,
+		e.workflowConsistencyChecker,
+	)
 
 	if err == nil && !activityStartedTime.IsZero() {
 		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskCanceledScope).
@@ -1697,7 +1716,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 	}
 
 	var cancelRequested bool
-	err = e.updateWorkflow(
+	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		token.Clock,
 		api.BypassMutableStateConsistencyPredicate,
@@ -1745,7 +1764,11 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 				Noop:               false,
 				CreateWorkflowTask: false,
 			}, nil
-		})
+		},
+		nil,
+		e.shard,
+		e.workflowConsistencyChecker,
+	)
 
 	if err != nil {
 		return &historyservice.RecordActivityTaskHeartbeatResponse{}, err
@@ -1776,7 +1799,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 		runID = ""
 	}
 
-	return e.updateWorkflow(
+	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -1828,7 +1851,11 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 			}
 
 			return api.UpdateWorkflowWithNewWorkflowTask, nil
-		})
+		},
+		nil,
+		e.shard,
+		e.workflowConsistencyChecker,
+	)
 }
 
 func (e *historyEngineImpl) SignalWorkflowExecution(
@@ -1846,7 +1873,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 	parentExecution := signalRequest.ExternalWorkflowExecution
 	childWorkflowOnly := signalRequest.GetChildWorkflowOnly()
 
-	return e.updateWorkflow(
+	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -1909,7 +1936,11 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 				Noop:               false,
 				CreateWorkflowTask: createWorkflowTask,
 			}, nil
-		})
+		},
+		nil,
+		e.shard,
+		e.workflowConsistencyChecker,
+	)
 }
 
 // SignalWithStartWorkflowExecution signals current workflow (if running) or creates & signals a new workflow
@@ -1939,7 +1970,7 @@ func (e *historyEngineImpl) RemoveSignalMutableState(
 		return err
 	}
 
-	return e.updateWorkflow(
+	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -1959,7 +1990,11 @@ func (e *historyEngineImpl) RemoveSignalMutableState(
 				Noop:               false,
 				CreateWorkflowTask: false,
 			}, nil
-		})
+		},
+		nil,
+		e.shard,
+		e.workflowConsistencyChecker,
+	)
 }
 
 func (e *historyEngineImpl) TerminateWorkflowExecution(
@@ -1981,7 +2016,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 	if len(request.FirstExecutionRunId) != 0 {
 		runID = ""
 	}
-	return e.updateWorkflow(
+	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -2022,7 +2057,11 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 				request.GetIdentity(),
 				false,
 			)
-		})
+		},
+		nil,
+		e.shard,
+		e.workflowConsistencyChecker,
+	)
 }
 
 func (e *historyEngineImpl) DeleteWorkflowExecution(
@@ -2083,7 +2122,8 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 						true,
 					)
 				},
-				nil)
+				nil,
+			)
 		}
 	}
 
@@ -2118,7 +2158,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	parentInitiatedID := completionRequest.ParentInitiatedId
 	parentInitiatedVersion := completionRequest.ParentInitiatedVersion
 
-	return e.updateWorkflow(
+	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		completionRequest.Clock,
 		func(mutableState workflow.MutableState) bool {
@@ -2196,7 +2236,11 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 				Noop:               false,
 				CreateWorkflowTask: true,
 			}, nil
-		})
+		},
+		nil,
+		e.shard,
+		e.workflowConsistencyChecker,
+	)
 }
 
 func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
@@ -2426,84 +2470,6 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	}, nil
 }
 
-func (e *historyEngineImpl) updateWorkflow(
-	ctx context.Context,
-	reqClock *clockspb.VectorClock,
-	consistencyCheckFn api.MutableStateConsistencyPredicate,
-	workflowKey definition.WorkflowKey,
-	action api.UpdateWorkflowActionFunc,
-) (retError error) {
-	workflowContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
-		ctx,
-		reqClock,
-		consistencyCheckFn,
-		workflowKey,
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { workflowContext.GetReleaseFn()(retError) }()
-
-	return api.UpdateWorkflowWithNew(e.shard, ctx, workflowContext, action, nil)
-}
-
-func (e *historyEngineImpl) updateWorkflowWithNew(
-	ctx context.Context,
-	reqClock *clockspb.VectorClock,
-	consistencyCheckFn api.MutableStateConsistencyPredicate,
-	workflowKey definition.WorkflowKey,
-	action api.UpdateWorkflowActionFunc,
-	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
-) (retError error) {
-	workflowContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
-		ctx,
-		reqClock,
-		consistencyCheckFn,
-		workflowKey,
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { workflowContext.GetReleaseFn()(retError) }()
-
-	return api.UpdateWorkflowWithNew(e.shard, ctx, workflowContext, action, newWorkflowFn)
-}
-
-func (e *historyEngineImpl) failWorkflowTask(
-	ctx context.Context,
-	wfContext workflow.Context,
-	scheduledEventID int64,
-	startedEventID int64,
-	wtFailedCause *workflowTaskFailedCause,
-	request *workflowservice.RespondWorkflowTaskCompletedRequest,
-) (workflow.MutableState, error) {
-
-	// clear any updates we have accumulated so far
-	wfContext.Clear()
-
-	// Reload workflow execution so we can apply the workflow task failure event
-	mutableState, err := wfContext.LoadWorkflowExecution(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err = mutableState.AddWorkflowTaskFailedEvent(
-		scheduledEventID,
-		startedEventID,
-		wtFailedCause.failedCause,
-		failure.NewServerFailure(wtFailedCause.Message(), true),
-		request.GetIdentity(),
-		request.GetBinaryChecksum(),
-		"",
-		"",
-		0); err != nil {
-		return nil, err
-	}
-
-	// Return new builder back to the caller for further updates
-	return mutableState, nil
-}
-
 func (e *historyEngineImpl) NotifyNewHistoryEvent(
 	notification *events.Notification,
 ) {
@@ -2621,7 +2587,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 	}
 	namespaceID := namespaceEntry.ID()
 
-	return e.updateWorkflow(
+	return api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -2774,7 +2740,11 @@ func (e *historyEngineImpl) ReapplyEvents(
 				}, nil
 			}
 			return postActions, nil
-		})
+		},
+		nil,
+		e.shard,
+		e.workflowConsistencyChecker,
+	)
 }
 
 func (e *historyEngineImpl) GetDLQMessages(
