@@ -41,13 +41,15 @@ type (
 	}
 )
 
-// ApplyAliases replaces field names with alias names for custom search attributes.
-func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) error {
+// AliasFields returns SearchAttributes struct where each search attribute name is replaced with alias.
+// If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
+func AliasFields(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
-		return nil
+		return nil, nil
 	}
 
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
+	mapped := false
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
 		if !IsMappable(saName) {
 			newIndexedFields[saName] = saPayload
@@ -58,26 +60,34 @@ func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, na
 		if err != nil {
 			if _, isInvalidArgument := err.(*serviceerror.InvalidArgument); isInvalidArgument {
 				// Silently ignore serviceerror.InvalidArgument because it indicates unmapped field (alias was deleted, for example).
-				// IMPORTANT: ApplyAliases should never return serviceerror.InvalidArgument because it is used by Poll API and the error
+				// IMPORTANT: AliasFields should never return serviceerror.InvalidArgument because it is used by Poll API and the error
 				// goes through up to SDK, which shutdowns worker when it receives serviceerror.InvalidArgument as poll response.
 				continue
 			}
-			return err
+			return nil, err
+		}
+		if aliasName != saName {
+			mapped = true
 		}
 		newIndexedFields[aliasName] = saPayload
 	}
 
-	searchAttributes.IndexedFields = newIndexedFields
-	return nil
+	// If no field name was mapped, return nil to save on clone operation on caller side.
+	if !mapped {
+		return nil, nil
+	}
+	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
 }
 
-// SubstituteAliases replaces aliases with actual field names for custom search attributes.
-func SubstituteAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) error {
+// UnaliasFields returns SearchAttributes struct where each search attribute alias is replaced with field name.
+// If no replacement where made, it returns nil which means that original SearchAttributes struct should be used.
+func UnaliasFields(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
-		return nil
+		return nil, nil
 	}
 
 	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
+	mapped := false
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
 		if !IsMappable(saName) {
 			newIndexedFields[saName] = saPayload
@@ -86,11 +96,18 @@ func SubstituteAliases(mapper Mapper, searchAttributes *commonpb.SearchAttribute
 
 		fieldName, err := mapper.GetFieldName(saName, namespace)
 		if err != nil {
-			return err
+			return nil, err
+		}
+		if fieldName != saName {
+			mapped = true
 		}
 		newIndexedFields[fieldName] = saPayload
 	}
 
-	searchAttributes.IndexedFields = newIndexedFields
-	return nil
+	// If no alias was mapped, return nil to save on clone operation on caller side.
+	if !mapped {
+		return nil, nil
+	}
+
+	return &commonpb.SearchAttributes{IndexedFields: newIndexedFields}, nil
 }
