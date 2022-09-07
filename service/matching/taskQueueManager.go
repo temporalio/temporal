@@ -72,6 +72,9 @@ const (
 
 	// Threshold for counting a AddTask call as a no recent poller call
 	noPollerThreshold = time.Minute * 2
+
+	// Threshold for switching db task management
+	dbTaskManagementSwitchThreshold = time.Minute
 )
 
 var (
@@ -167,13 +170,15 @@ type (
 		metadataInitialFetch *future.FutureImpl[struct{}]
 		metadataPoller       metadataPoller
 		// TODO(deprecate)
-		db                  *taskQueueDB
-		taskWriter          *taskWriter
-		initializedError    *future.FutureImpl[struct{}]
-		taskReader          *taskReader // reads tasks from db and async matches it with poller
-		taskGC              *taskGC
-		taskAckManager      ackManager // tracks ackLevel for delivered messages
-		enableDbTaskManager bool
+		db                        *taskQueueDB
+		taskWriter                *taskWriter
+		initializedError          *future.FutureImpl[struct{}]
+		taskReader                *taskReader // reads tasks from db and async matches it with poller
+		taskGC                    *taskGC
+		taskAckManager            ackManager // tracks ackLevel for delivered messages
+		enableDbTaskManager       bool
+		dbTaskManagementLock      sync.Mutex
+		dbTaskManagementUpdatedAt time.Time
 	}
 
 	metadataPoller struct {
@@ -307,6 +312,7 @@ func (c *taskQueueManagerImpl) Start() {
 	}
 	c.liveness.Start()
 	c.StartDbTaskManagement()
+	c.dbTaskManagementUpdatedAt = time.Now()
 	go c.fetchMetadataFromRootPartitionOnInit(context.TODO())
 	c.logger.Info("", tag.LifeCycleStarted)
 	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
@@ -320,10 +326,18 @@ func (c *taskQueueManagerImpl) StartDbTaskManagement() {
 		// TODO(deprecate)
 		c.taskWriter.Start()
 		c.taskReader.Start()
+		c.initializedError.Get(context.TODO())
 	}
 }
 
 func (c *taskQueueManagerImpl) SwitchDbTaskManagementIfNecessary() {
+	c.dbTaskManagementLock.Lock()
+	defer c.dbTaskManagementLock.Unlock()
+	ts := time.Now()
+	if ts.Sub(c.dbTaskManagementUpdatedAt) < dbTaskManagementSwitchThreshold {
+		return
+	}
+	c.dbTaskManagementUpdatedAt = ts
 	if c.enableDbTaskManager == c.config.EnableDbTaskManager() {
 		return
 	}
