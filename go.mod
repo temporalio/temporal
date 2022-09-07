@@ -24,7 +24,6 @@ require (
 	github.com/jonboulle/clockwork v0.3.0
 	github.com/lib/pq v1.10.6
 	github.com/olekukonko/tablewriter v0.0.5
-	github.com/olivere/elastic v6.2.37+incompatible
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pborman/uuid v1.2.1
 	github.com/prometheus/client_golang v1.12.1
