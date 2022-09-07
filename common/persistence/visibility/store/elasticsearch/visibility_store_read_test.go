@@ -57,7 +57,7 @@ type (
 		*require.Assertions
 		controller                 *gomock.Controller
 		visibilityStore            *visibilityStore
-		mockESClient               *client.MockClientV7
+		mockESClient               *client.MockClient
 		mockProcessor              *MockProcessor
 		mockMetricsClient          *metrics.MockClient
 		mockSearchAttributesMapper *searchattribute.MockMapper
@@ -121,7 +121,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockMetricsClient = metrics.NewMockClient(s.controller)
 	s.mockProcessor = NewMockProcessor(s.controller)
-	s.mockESClient = client.NewMockClientV7(s.controller)
+	s.mockESClient = client.NewMockClient(s.controller)
 	s.mockSearchAttributesMapper = searchattribute.NewMockMapper(s.controller)
 	s.visibilityStore = NewVisibilityStore(
 		s.mockESClient,
@@ -332,7 +332,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: []interface{}{json.Number("1528358645123456789"), "qwe"},
 		PageSize:    testPageSize,
-		Sorter:      defaultSorterV7,
+		Sorter:      defaultSorter,
 	}, p)
 
 	// test request latestTime overflow
@@ -346,7 +346,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: []interface{}{json.Number("1528358645123456789"), "qwe"},
 		PageSize:    testPageSize,
-		Sorter:      defaultSorterV7,
+		Sorter:      defaultSorter,
 	}, p)
 	request = createTestRequest() // revert
 
@@ -360,7 +360,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: nil,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorterV7,
+		Sorter:      defaultSorter,
 	}, p)
 
 	// test for additional boolQuery
@@ -374,7 +374,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: nil,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorterV7,
+		Sorter:      defaultSorter,
 	}, p)
 
 	// test for search after
@@ -391,7 +391,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		SearchAfter: token.SearchAfter,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorterV7,
+		Sorter:      defaultSorter,
 	}, p)
 	request = createTestRequest() // revert
 
@@ -406,7 +406,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 		Query:       boolQuery,
 		PageSize:    testPageSize,
 		SearchAfter: nil,
-		Sorter:      defaultSorterV7,
+		Sorter:      defaultSorter,
 	}, p)
 }
 
@@ -432,7 +432,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		SearchAfter: nil,
 		PointInTime: nil,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorterV7,
+		Sorter:      defaultSorter,
 	}, p)
 	request.Query = ""
 
@@ -449,7 +449,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		SearchAfter: nil,
 		PointInTime: nil,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorterV7,
+		Sorter:      defaultSorter,
 	}, p)
 	request.Query = ""
 
@@ -503,7 +503,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 		SearchAfter: nil,
 		PointInTime: nil,
 		PageSize:    testPageSize,
-		Sorter:      defaultSorterV7,
+		Sorter:      defaultSorter,
 	}, p)
 	request.Query = ""
 
@@ -1081,76 +1081,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 	s.Equal("ListWorkflowExecutions failed: elastic: Error 500 (Internal Server Error): error reason [type=]", unavailableErr.Message)
 }
 
-func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
-	// Set v6 client for test.
-	mockESClientV6 := client.NewMockClient(s.controller)
-	s.visibilityStore.esClient = mockESClientV6
-
-	// test first page
-	mockESClientV6.EXPECT().OpenScroll(gomock.Any(), gomock.Any(), "1m").DoAndReturn(
-		func(ctx context.Context, p *client.SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
-			s.Equal(testIndex, p.Index)
-			s.Equal(
-				elastic.NewBoolQuery().Filter(
-					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
-					elastic.NewBoolQuery().Filter(elastic.NewMatchQuery("ExecutionStatus", "Terminated")),
-				).MustNot(namespaceDivisionExists),
-				p.Query,
-			)
-			return testSearchResult, nil
-		})
-	mockESClientV6.EXPECT().CloseScroll(gomock.Any(), gomock.Any()).Return(nil)
-
-	request := &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceID,
-		Namespace:   testNamespace,
-		PageSize:    10,
-		Query:       `ExecutionStatus = "Terminated"`,
-	}
-	_, err := s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
-	s.NoError(err)
-
-	// test bad request
-	request.Query = `invalid query`
-	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
-	s.Error(err)
-	_, ok := err.(*serviceerror.InvalidArgument)
-	s.True(ok)
-	s.True(strings.HasPrefix(err.Error(), "invalid query"))
-
-	// test scroll
-	scrollID := "scrollID-1"
-	testSearchResult.ScrollId = scrollID
-	mockESClientV6.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(testSearchResult, nil)
-	mockESClientV6.EXPECT().CloseScroll(gomock.Any(), gomock.Any()).Return(nil)
-
-	token := &visibilityPageToken{ScrollID: scrollID}
-	tokenBytes, err := s.visibilityStore.serializePageToken(token)
-	s.NoError(err)
-	request.NextPageToken = tokenBytes
-	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
-	s.NoError(err)
-
-	// test io.EOF error
-	mockESClientV6.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(testSearchResult, io.EOF)
-	mockESClientV6.EXPECT().CloseScroll(gomock.Any(), gomock.Any()).Return(nil)
-	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
-	s.NoError(err)
-
-	// test unavailable error
-	mockESClientV6.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
-	s.Error(err)
-	_, ok = err.(*serviceerror.Unavailable)
-	s.True(ok)
-	s.Contains(err.Error(), "ScanWorkflowExecutions failed")
-
-	// Restore v7 client.
-	s.visibilityStore.esClient = s.mockESClient
-	testSearchResult.ScrollId = ""
-}
-
-func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_Scroll() {
+func (s *ESVisibilitySuite) TestScanWorkflowExecutions_Scroll() {
 	// test first page
 	s.mockESClient.EXPECT().OpenScroll(gomock.Any(), gomock.Any(), "1m").DoAndReturn(
 		func(ctx context.Context, p *client.SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
@@ -1213,7 +1144,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_Scroll() {
 
 }
 
-func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_PIT() {
+func (s *ESVisibilitySuite) TestScanWorkflowExecutions_PIT() {
 	// test first page
 	pitID := "pitID"
 

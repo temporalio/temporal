@@ -133,7 +133,21 @@ func (s *queueAckMgrSuite) SetupTest() {
 		0,
 		s.logger,
 		func(task tasks.Task) queues.Executable {
-			return queues.NewExecutable(task, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil, queues.QueueTypeActiveTransfer, nil)
+			return queues.NewExecutable(
+				queues.DefaultReaderId,
+				task,
+				nil,
+				nil,
+				nil,
+				nil,
+				queues.NewNoopPriorityAssigner(),
+				s.mockShard.GetTimeSource(),
+				nil,
+				nil,
+				metrics.NoopMetricsHandler,
+				nil,
+				nil,
+			)
 		},
 	)
 }
@@ -365,7 +379,21 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 		0,
 		s.logger,
 		func(task tasks.Task) queues.Executable {
-			return queues.NewExecutable(task, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil, queues.QueueTypeActiveTransfer, nil)
+			return queues.NewExecutable(
+				queues.DefaultReaderId,
+				task,
+				nil,
+				nil,
+				nil,
+				nil,
+				queues.NewNoopPriorityAssigner(),
+				s.mockShard.GetTimeSource(),
+				nil,
+				nil,
+				metrics.NoopMetricsHandler,
+				nil,
+				nil,
+			)
 		},
 	)
 }

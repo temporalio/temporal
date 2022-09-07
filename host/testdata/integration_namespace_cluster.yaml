@@ -7,7 +7,6 @@ workerconfig:
   enablearchiver: false
   # required to enable worker
   enablereplicator: true
-  enableindexer: true
 esconfig:
   version: "${ES_VERSION}"
   url:

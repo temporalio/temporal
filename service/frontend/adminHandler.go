@@ -283,7 +283,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 		SkipSchemaUpdate:      request.GetSkipSchemaUpdate(),
 	}
 
-	sdkClient := adh.sdkClientFactory.GetSystemClient(adh.logger)
+	sdkClient := adh.sdkClientFactory.GetSystemClient()
 	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
@@ -372,7 +372,7 @@ func (adh *AdminHandler) GetSearchAttributes(ctx context.Context, request *admin
 func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName string, runID string) (*adminservice.GetSearchAttributesResponse, error) {
 	var lastErr error
 
-	sdkClient := adh.sdkClientFactory.GetSystemClient(adh.logger)
+	sdkClient := adh.sdkClientFactory.GetSystemClient()
 	descResp, err := sdkClient.DescribeWorkflowExecution(ctx, addsearchattributes.WorkflowName, runID)
 	var wfInfo *workflowpb.WorkflowExecutionInfo
 	if err != nil {
@@ -943,7 +943,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 ) (_ *adminservice.AddOrUpdateRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	adminClient := adh.clientFactory.NewAdminClientWithTimeout(
+	adminClient := adh.clientFactory.NewRemoteAdminClientWithTimeout(
 		request.GetFrontendAddress(),
 		admin.DefaultTimeout,
 		admin.DefaultLargeTimeout,

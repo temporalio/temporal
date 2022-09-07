@@ -30,9 +30,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/common/log"
@@ -60,8 +63,11 @@ type (
 		PollInterval time.Duration `yaml:"pollInterval"`
 	}
 
+	configValueMap map[string][]ConstrainedValue
+
 	fileBasedClient struct {
-		*basicClient
+		values          atomic.Value // configValueMap
+		logger          log.Logger
 		reader          fileReader
 		lastUpdatedTime time.Time
 		config          *FileBasedClientConfig
@@ -75,10 +81,10 @@ type (
 // NewFileBasedClient creates a file based client.
 func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
 	client := &fileBasedClient{
-		basicClient: newBasicClient(logger),
-		reader:      &osReader{},
-		config:      config,
-		doneCh:      doneCh,
+		logger: logger,
+		reader: &osReader{},
+		config: config,
+		doneCh: doneCh,
 	}
 
 	err := client.init()
@@ -91,10 +97,10 @@ func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh
 
 func NewFileBasedClientWithReader(reader fileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
 	client := &fileBasedClient{
-		basicClient: newBasicClient(logger),
-		reader:      reader,
-		config:      config,
-		doneCh:      doneCh,
+		logger: logger,
+		reader: reader,
+		config: config,
+		doneCh: doneCh,
 	}
 
 	err := client.init()
@@ -103,6 +109,11 @@ func NewFileBasedClientWithReader(reader fileReader, config *FileBasedClientConf
 	}
 
 	return client, nil
+}
+
+func (fc *fileBasedClient) GetValue(key Key) []ConstrainedValue {
+	values := fc.values.Load().(configValueMap)
+	return values[strings.ToLower(key.String())]
 }
 
 func (fc *fileBasedClient) init() error {
@@ -138,8 +149,6 @@ func (fc *fileBasedClient) update() error {
 		fc.lastUpdatedTime = time.Now().UTC()
 	}()
 
-	newValues := make(configValueMap)
-
 	info, err := fc.reader.Stat(fc.config.Filepath)
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
@@ -153,34 +162,35 @@ func (fc *fileBasedClient) update() error {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
 
-	if err = yaml.Unmarshal(confContent, newValues); err != nil {
+	var yamlValues map[string][]struct {
+		Constraints map[string]any
+		Value       any
+	}
+	if err = yaml.Unmarshal(confContent, &yamlValues); err != nil {
 		return fmt.Errorf("unable to decode dynamic config: %w", err)
 	}
 
-	err = fc.storeValues(newValues)
-
-	return err
-}
-
-func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue) error {
-	formattedNewValues := make(configValueMap, len(newValues))
-
-	// yaml will unmarshal map into map[interface{}]interface{} instead of map[string]interface{}
-	// manually convert key type to string for all values here
-	// We don't need to convert constraints as their type can't be map. If user does use a map as filter
-	// value, it won't match anyway.
-	for key, valuesSlice := range newValues {
-		for _, cv := range valuesSlice {
-			var err error
-			cv.Value, err = convertKeyTypeToString(cv.Value)
+	newValues := make(configValueMap, len(yamlValues))
+	for key, yamlCV := range yamlValues {
+		cvs := make([]ConstrainedValue, len(yamlCV))
+		for i, cv := range yamlCV {
+			// yaml will unmarshal map into map[interface{}]interface{} instead of map[string]interface{}
+			// manually convert key type to string for all values here
+			cvs[i].Value, err = convertKeyTypeToString(cv.Value)
+			if err != nil {
+				return err
+			}
+			cvs[i].Constraints, err = convertYamlConstraints(cv.Constraints)
 			if err != nil {
 				return err
 			}
 		}
-		formattedNewValues[strings.ToLower(key)] = valuesSlice
+		newValues[strings.ToLower(key)] = cvs
 	}
 
-	fc.basicClient.updateValues(formattedNewValues)
+	prev := fc.values.Swap(newValues)
+	oldValues, _ := prev.(configValueMap)
+	fc.logDiff(oldValues, newValues)
 	fc.logger.Info("Updated dynamic config")
 
 	return nil
@@ -197,6 +207,95 @@ func (fc *fileBasedClient) validateConfig(config *FileBasedClientConfig) error {
 		return fmt.Errorf("poll interval should be at least %v", minPollInterval)
 	}
 	return nil
+}
+
+func (fc *fileBasedClient) logDiff(old configValueMap, new configValueMap) {
+	for key, newValues := range new {
+		oldValues, ok := old[key]
+		if !ok {
+			for _, newValue := range newValues {
+				// new key added
+				fc.logValueDiff(key, nil, &newValue)
+			}
+		} else {
+			// compare existing keys
+			fc.logConstraintsDiff(key, oldValues, newValues)
+		}
+	}
+
+	// check for removed values
+	for key, oldValues := range old {
+		if _, ok := new[key]; !ok {
+			for _, oldValue := range oldValues {
+				fc.logValueDiff(key, &oldValue, nil)
+			}
+		}
+	}
+}
+
+func (fc *fileBasedClient) logConstraintsDiff(key string, oldValues []ConstrainedValue, newValues []ConstrainedValue) {
+	for _, oldValue := range oldValues {
+		matchFound := false
+		for _, newValue := range newValues {
+			if oldValue.Constraints == newValue.Constraints {
+				matchFound = true
+				if !reflect.DeepEqual(oldValue.Value, newValue.Value) {
+					fc.logValueDiff(key, &oldValue, &newValue)
+				}
+			}
+		}
+		if !matchFound {
+			fc.logValueDiff(key, &oldValue, nil)
+		}
+	}
+
+	for _, newValue := range newValues {
+		matchFound := false
+		for _, oldValue := range oldValues {
+			if oldValue.Constraints == newValue.Constraints {
+				matchFound = true
+			}
+		}
+		if !matchFound {
+			fc.logValueDiff(key, nil, &newValue)
+		}
+	}
+}
+
+func (fc *fileBasedClient) logValueDiff(key string, oldValue *ConstrainedValue, newValue *ConstrainedValue) {
+	logLine := &strings.Builder{}
+	logLine.Grow(128)
+	logLine.WriteString("dynamic config changed for the key: ")
+	logLine.WriteString(key)
+	logLine.WriteString(" oldValue: ")
+	fc.appendConstrainedValue(logLine, oldValue)
+	logLine.WriteString(" newValue: ")
+	fc.appendConstrainedValue(logLine, newValue)
+	fc.logger.Info(logLine.String())
+}
+
+func (fc *fileBasedClient) appendConstrainedValue(logLine *strings.Builder, value *ConstrainedValue) {
+	if value == nil {
+		logLine.WriteString("nil")
+	} else {
+		logLine.WriteString("{ constraints: {")
+		if value.Constraints.Namespace != "" {
+			logLine.WriteString(fmt.Sprintf("{Namespace:%s}", value.Constraints.Namespace))
+		}
+		if value.Constraints.NamespaceID != "" {
+			logLine.WriteString(fmt.Sprintf("{NamespaceID:%s}", value.Constraints.NamespaceID))
+		}
+		if value.Constraints.TaskQueueName != "" {
+			logLine.WriteString(fmt.Sprintf("{TaskQueueName:%s}", value.Constraints.TaskQueueName))
+		}
+		if value.Constraints.TaskQueueType != enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+			logLine.WriteString(fmt.Sprintf("{TaskQueueType:%s}", value.Constraints.TaskQueueType))
+		}
+		if value.Constraints.ShardID != 0 {
+			logLine.WriteString(fmt.Sprintf("{ShardID:%d}", value.Constraints.ShardID))
+		}
+		logLine.WriteString(fmt.Sprint("} value: ", value.Value, " }"))
+	}
 }
 
 func convertKeyTypeToString(v interface{}) (interface{}, error) {
@@ -236,6 +335,54 @@ func convertKeyTypeToStringSlice(s []interface{}) ([]interface{}, error) {
 		stringKeySlice[idx] = convertedValue
 	}
 	return stringKeySlice, nil
+}
+
+func convertYamlConstraints(m map[string]any) (Constraints, error) {
+	var cs Constraints
+	for k, v := range m {
+		switch strings.ToLower(k) {
+		case "namespace":
+			if v, ok := v.(string); ok {
+				cs.Namespace = v
+			} else {
+				return cs, fmt.Errorf("namespace constraint must be string")
+			}
+		case "namespaceid":
+			if v, ok := v.(string); ok {
+				cs.NamespaceID = v
+			} else {
+				return cs, fmt.Errorf("namespaceID constraint must be string")
+			}
+		case "taskqueuename":
+			if v, ok := v.(string); ok {
+				cs.TaskQueueName = v
+			} else {
+				return cs, fmt.Errorf("taskQueueName constraint must be string")
+			}
+		case "tasktype":
+			switch v := v.(type) {
+			case string:
+				if i, ok := enumspb.TaskQueueType_value[v]; ok && i > 0 {
+					cs.TaskQueueType = enumspb.TaskQueueType(i)
+				} else {
+					return cs, fmt.Errorf("taskType constraint must be Workflow/Activity")
+				}
+			case int:
+				cs.TaskQueueType = enumspb.TaskQueueType(v)
+			default:
+				return cs, fmt.Errorf("taskType constraint must be Workflow/Activity")
+			}
+		case "shardid":
+			if v, ok := v.(int); ok {
+				cs.ShardID = int32(v)
+			} else {
+				return cs, fmt.Errorf("shardID constraint must be integer")
+			}
+		default:
+			return cs, fmt.Errorf("unknown constraint type %q", k)
+		}
+	}
+	return cs, nil
 }
 
 func (r *osReader) ReadFile(src string) ([]byte, error) {

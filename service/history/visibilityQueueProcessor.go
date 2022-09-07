@@ -25,7 +25,6 @@
 package history
 
 import (
-	"errors"
 	"sync/atomic"
 	"time"
 
@@ -37,7 +36,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
-	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -78,6 +76,7 @@ func newVisibilityQueueProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	visibilityMgr manager.VisibilityManager,
 	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
@@ -143,7 +142,7 @@ func newVisibilityQueueProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newVisibilityTaskScheduler(shard, logger, metricProvider)
+		scheduler = newVisibilityTaskShardScheduler(shard, logger)
 		retProcessor.ownedScheduler = scheduler
 	}
 
@@ -162,15 +161,18 @@ func newVisibilityQueueProcessor(
 		logger,
 		func(t tasks.Task) queues.Executable {
 			return queues.NewExecutable(
+				queues.DefaultReaderId,
 				t,
 				visibilityTaskFilter,
 				taskExecutor,
 				scheduler,
 				rescheduler,
+				priorityAssigner,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
+				metricProvider,
 				shard.GetConfig().VisibilityTaskMaxRetryCount,
-				queues.QueueTypeVisibility,
 				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},
@@ -190,7 +192,6 @@ func newVisibilityQueueProcessor(
 			config.VisibilityProcessorMaxPollRPS,
 		),
 		logger,
-		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),
 	)
 	retProcessor.queueAckMgr = queueAckMgr
 	retProcessor.queueProcessorBase = queueProcessorBase
@@ -277,8 +278,8 @@ func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
 					return false
 				default:
 				}
-				return err != shard.ErrShardClosed
-			}); errors.Is(err, shard.ErrShardClosed) {
+				return !shard.IsShardOwnershipLostError(err)
+			}); shard.IsShardOwnershipLostError(err) {
 				// shard closed, trigger shutdown and bail out
 				t.Stop()
 				return
@@ -356,24 +357,16 @@ func (t *visibilityQueueProcessorImpl) queueShutdown() error {
 	return t.visibilityQueueShutdown()
 }
 
-func newVisibilityTaskScheduler(
+func newVisibilityTaskShardScheduler(
 	shard shard.Context,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
 ) queues.Scheduler {
 	config := shard.GetConfig()
-	return queues.NewScheduler(
-		queues.NewNoopPriorityAssigner(),
-		queues.SchedulerOptions{
-			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-				WorkerCount: config.VisibilityTaskWorkerCount,
-				QueueSize:   config.VisibilityTaskBatchSize(),
-			},
-			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
-				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.VisibilityProcessorSchedulerRoundRobinWeights(), logger),
-			},
+	return queues.NewFIFOScheduler(
+		queues.FIFOSchedulerOptions{
+			WorkerCount: config.VisibilityTaskWorkerCount,
+			QueueSize:   config.VisibilityTaskBatchSize(),
 		},
-		metricProvider,
 		logger,
 	)
 }

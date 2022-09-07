@@ -52,8 +52,8 @@ func (s *RetryPolicySuite) SetupTest() {
 }
 
 func (s *RetryPolicySuite) TestExponentialBackoff() {
-	policy := createPolicy(time.Second)
-	policy.SetMaximumInterval(10 * time.Second)
+	policy := createPolicy(time.Second).
+		WithMaximumInterval(10 * time.Second)
 
 	expectedResult := []time.Duration{1, 2, 4, 8, 10}
 	for i, d := range expectedResult {
@@ -70,8 +70,8 @@ func (s *RetryPolicySuite) TestExponentialBackoff() {
 }
 
 func (s *RetryPolicySuite) TestNumberOfAttempts() {
-	policy := createPolicy(time.Second)
-	policy.SetMaximumAttempts(5)
+	policy := createPolicy(time.Second).
+		WithMaximumAttempts(5)
 
 	r, _ := createRetrier(policy)
 	var next time.Duration
@@ -84,8 +84,8 @@ func (s *RetryPolicySuite) TestNumberOfAttempts() {
 
 // Test to make sure relative maximum interval for each retry is honoured
 func (s *RetryPolicySuite) TestMaximumInterval() {
-	policy := createPolicy(time.Second)
-	policy.SetMaximumInterval(10 * time.Second)
+	policy := createPolicy(time.Second).
+		WithMaximumInterval(10 * time.Second)
 
 	expectedResult := []time.Duration{1, 2, 4, 8, 10, 10, 10, 10, 10, 10}
 	for i, d := range expectedResult {
@@ -102,8 +102,8 @@ func (s *RetryPolicySuite) TestMaximumInterval() {
 }
 
 func (s *RetryPolicySuite) TestBackoffCoefficient() {
-	policy := createPolicy(2 * time.Second)
-	policy.SetBackoffCoefficient(1.0)
+	policy := createPolicy(2 * time.Second).
+		WithBackoffCoefficient(1.0)
 
 	r, _ := createRetrier(policy)
 	min, max := getNextBackoffRange(2 * time.Second)
@@ -115,8 +115,8 @@ func (s *RetryPolicySuite) TestBackoffCoefficient() {
 }
 
 func (s *RetryPolicySuite) TestExpirationInterval() {
-	policy := createPolicy(2 * time.Second)
-	policy.SetExpirationInterval(5 * time.Minute)
+	policy := createPolicy(2 * time.Second).
+		WithExpirationInterval(5 * time.Minute)
 
 	r, clock := createRetrier(policy)
 	clock.moveClock(6 * time.Minute)
@@ -126,8 +126,8 @@ func (s *RetryPolicySuite) TestExpirationInterval() {
 }
 
 func (s *RetryPolicySuite) TestExpirationOverflow() {
-	policy := createPolicy(2 * time.Second)
-	policy.SetExpirationInterval(5 * time.Second)
+	policy := createPolicy(2 * time.Second).
+		WithExpirationInterval(5 * time.Second)
 
 	r, clock := createRetrier(policy)
 	next := r.NextBackOff()
@@ -144,9 +144,9 @@ func (s *RetryPolicySuite) TestExpirationOverflow() {
 }
 
 func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
-	policy := NewExponentialRetryPolicy(50 * time.Millisecond)
-	policy.SetExpirationInterval(time.Minute)
-	policy.SetMaximumInterval(10 * time.Second)
+	policy := NewExponentialRetryPolicy(50 * time.Millisecond).
+		WithExpirationInterval(time.Minute).
+		WithMaximumInterval(10 * time.Second)
 
 	r, clock := createRetrier(policy)
 	expectedResult := []time.Duration{
@@ -181,9 +181,9 @@ func (s *RetryPolicySuite) TestDefaultPublishRetryPolicy() {
 }
 
 func (s *RetryPolicySuite) TestNoMaxAttempts() {
-	policy := createPolicy(50 * time.Millisecond)
-	policy.SetExpirationInterval(time.Minute)
-	policy.SetMaximumInterval(10 * time.Second)
+	policy := createPolicy(50 * time.Millisecond).
+		WithExpirationInterval(time.Minute).
+		WithMaximumInterval(10 * time.Second)
 
 	r, clock := createRetrier(policy)
 	for i := 0; i < 100; i++ {
@@ -215,11 +215,11 @@ func (c *TestClock) moveClock(duration time.Duration) {
 }
 
 func createPolicy(initialInterval time.Duration) *ExponentialRetryPolicy {
-	policy := NewExponentialRetryPolicy(initialInterval)
-	policy.SetBackoffCoefficient(2)
-	policy.SetMaximumInterval(NoInterval)
-	policy.SetExpirationInterval(NoInterval)
-	policy.SetMaximumAttempts(noMaximumAttempts)
+	policy := NewExponentialRetryPolicy(initialInterval).
+		WithBackoffCoefficient(2).
+		WithMaximumInterval(NoInterval).
+		WithExpirationInterval(NoInterval).
+		WithMaximumAttempts(noMaximumAttempts)
 
 	return policy
 }

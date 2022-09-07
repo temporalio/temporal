@@ -88,6 +88,11 @@ func buildCLI() *cli.App {
 			Usage:   "availability zone",
 			EnvVars: []string{config.EnvKeyAvailabilityZone, config.EnvKeyAvailabilityZoneTypo},
 		},
+		&cli.BoolFlag{
+			Name:    "allow-no-auth",
+			Usage:   "allow no authorizer",
+			EnvVars: []string{config.EnvKeyAllowNoAuth},
+		},
 	}
 
 	app.Commands = []*cli.Command{
@@ -120,6 +125,7 @@ func buildCLI() *cli.App {
 				zone := c.String("zone")
 				configDir := path.Join(c.String("root"), c.String("config"))
 				services := c.StringSlice("service")
+				allow_no_auth := c.Bool("allow-no-auth")
 
 				// For backward compatibility to support old flag format (i.e. `--services=frontend,history,matching`).
 				if c.IsSet("services") {
@@ -160,6 +166,13 @@ func buildCLI() *cli.App {
 				)
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to instantiate authorizer. Error: %v", err), 1)
+				}
+				if authorization.IsNoopAuthorizer(authorizer) && !allow_no_auth {
+					logger.Warn(
+						"Not using any authorizer and flag `--allow-no-auth` not detected." +
+							"Future versions will require using the flag `--allow-no-auth` " +
+							"if you do not want to set an authorizer.",
+					)
 				}
 
 				claimMapper, err := authorization.GetClaimMapperFromConfig(&cfg.Global.Authorization, logger)

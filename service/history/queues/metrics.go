@@ -34,8 +34,8 @@ import (
 
 // Metric names
 const (
-	TaskRequests                = "task_requests"
-	TaskLatency                 = "task_latency"
+	TaskRequests = "task_requests"
+
 	TaskFailures                = "task_errors"
 	TaskDiscarded               = "task_errors_discarded"
 	TaskSkipped                 = "task_skipped"
@@ -43,14 +43,28 @@ const (
 	TaskStandbyRetryCounter     = "task_errors_standby_retry_counter"
 	TaskWorkflowBusyCounter     = "task_errors_workflow_busy"
 	TaskNotActiveCounter        = "task_errors_not_active_counter"
-	TaskProcessingLatency       = "task_latency_processing"
-	TaskNoUserProcessingLatency = "task_latency_processing_nouserlatency"
-	TaskQueueLatency            = "task_latency_queue"
-	TaskNoUserLatency           = "task_latency_nouserlatency"
-	TaskUserLatency             = "task_latency_userlatency"
-	TaskNoUserQueueLatency      = "task_latency_queue_nouserlatency"
+	TaskLoadLatency             = "task_latency_load"                     // latency from task generation to task loading (persistence scheduleToStart)
+	TaskScheduleLatency         = "task_latency_schedule"                 // latency from task submission to in-memory queue to processing (in-memory scheduleToStart)
+	TaskProcessingLatency       = "task_latency_processing"               // latency for processing task one time
+	TaskNoUserProcessingLatency = "task_latency_processing_nouserlatency" // same as TaskProcessingLatency, but excludes workflow lock latency
+	TaskLatency                 = "task_latency"                          // task in-memory latency across multiple attempts
+	TaskNoUserLatency           = "task_latency_nouserlatency"            // same as TaskLatency, but excludes workflow lock latency
+	TaskQueueLatency            = "task_latency_queue"                    // task e2e latency
+	TaskNoUserQueueLatency      = "task_latency_queue_nouserlatency"      // same as TaskQueueLatency, but excludes workflow lock latency
+	TaskUserLatency             = "task_latency_userlatency"              // workflow lock latency across multiple attempts
 	TaskReschedulerPendingTasks = "task_rescheduler_pending_tasks"
 	TaskThrottledCounter        = "task_throttled_counter"
+
+	TaskBatchCompleteCounter    = "task_batch_complete_counter"
+	NewTimerNotifyCounter       = "new_timer_notifications"
+	AckLevelUpdateCounter       = "ack_level_update"
+	AckLevelUpdateFailedCounter = "ack_level_update_failed"
+	PendingTasksCounter         = "pending_tasks"
+
+	QueueScheduleLatency      = "queue_latency_schedule" // latency for scheduling 100 tasks in one task channel
+	QueueReaderCountHistogram = "queue_reader_count"
+	QueueSliceCountHistogram  = "queue_slice_count"
+	QueueActionCounter        = "queue_actions"
 )
 
 // Operation tag value for queue processors
@@ -62,7 +76,6 @@ const (
 	OperationTransferActiveQueueProcessor  = "TransferActiveQueueProcessor"
 	OperationTransferStandbyQueueProcessor = "TransferStandbyQueueProcessor"
 	OperationVisibilityQueueProcessor      = "VisibilityQueueProcessor"
-	OperationTaskPriorityAssigner          = "TaskPriorityAssigner"
 )
 
 // Task type tag value for active and standby tasks

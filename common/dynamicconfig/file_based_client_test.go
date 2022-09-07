@@ -33,14 +33,18 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/log"
 )
 
+// Note: fileBasedClientSuite also heavily tests Collection, since some tests are easier with data
+// provided from a file.
 type fileBasedClientSuite struct {
 	suite.Suite
 	*require.Assertions
-	client Client
-	doneCh chan interface{}
+	client     Client
+	collection *Collection
+	doneCh     chan interface{}
 }
 
 func TestFileBasedClientSuite(t *testing.T) {
@@ -51,10 +55,12 @@ func TestFileBasedClientSuite(t *testing.T) {
 func (s *fileBasedClientSuite) SetupSuite() {
 	var err error
 	s.doneCh = make(chan interface{})
+	logger := log.NewNoopLogger()
 	s.client, err = NewFileBasedClient(&FileBasedClientConfig{
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second * 5,
-	}, log.NewNoopLogger(), s.doneCh)
+	}, logger, s.doneCh)
+	s.collection = NewCollection(s.client, logger)
 	s.Require().NoError(err)
 }
 
@@ -67,190 +73,122 @@ func (s *fileBasedClientSuite) SetupTest() {
 }
 
 func (s *fileBasedClientSuite) TestGetValue() {
-	v, err := s.client.GetValue(testGetBoolPropertyKey, true)
-	s.NoError(err)
-	s.Equal(false, v)
+	cvs := s.client.GetValue(testGetBoolPropertyKey)
+	s.Equal(3, len(cvs))
+	s.ElementsMatch([]ConstrainedValue{
+		{Constraints: Constraints{}, Value: false},
+		{Constraints: Constraints{Namespace: "global-samples-namespace"}, Value: true},
+		{Constraints: Constraints{Namespace: "samples-namespace"}, Value: true},
+	}, cvs)
 }
 
 func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
+	cvs := s.client.GetValue(unknownKey)
+	s.Nil(cvs)
+
 	defaultValue := true
-	v, err := s.client.GetValue(unknownKey, defaultValue)
-	s.Error(err)
+	v := s.collection.GetBoolProperty(unknownKey, defaultValue)()
 	s.Equal(defaultValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
-	v, err := s.client.GetValue(testCaseInsensitivePropertyKey, false)
-	s.Nil(err)
+	cvs := s.client.GetValue(testCaseInsensitivePropertyKey)
+	s.Equal(1, len(cvs))
+
+	v := s.collection.GetBoolProperty(testCaseInsensitivePropertyKey, false)()
 	s.Equal(true, v)
-}
-
-func (s *fileBasedClientSuite) TestGetValueWithFilters() {
-	filters := []map[Filter]interface{}{{
-		Namespace: "global-samples-namespace",
-	}}
-	v, err := s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, false)
-	s.NoError(err)
-	s.Equal(true, v)
-
-	filters = []map[Filter]interface{}{{
-		Namespace: "non-exist-namespace",
-	}}
-	v, err = s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, true)
-	s.NoError(err)
-	s.Equal(false, v)
-
-	filters = []map[Filter]interface{}{{
-		Namespace:     "samples-namespace",
-		TaskQueueName: "non-exist-taskqueue",
-	}}
-	v, err = s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, false)
-	s.NoError(err)
-	s.Equal(false, v)
-}
-
-func (s *fileBasedClientSuite) TestGetValueWithFilters_UnknownFilter() {
-	filters := []map[Filter]interface{}{{
-		Namespace:     "global-samples-namespace",
-		unknownFilter: "unknown-filter",
-	}}
-	v, err := s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, false)
-	s.NoError(err)
-	s.Equal(false, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue() {
-	v, err := s.client.GetIntValue(testGetIntPropertyKey, nil, 1)
-	s.NoError(err)
+	v := s.collection.GetIntProperty(testGetIntPropertyKey, 1)()
 	s.Equal(1000, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterNotMatch() {
-	filters := []map[Filter]interface{}{{
-		Namespace: "samples-namespace",
-	}}
-	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 500)
-	s.NoError(err)
+	v := s.collection.GetIntPropertyFilteredByNamespace(testGetIntPropertyKey, 500)("samples-namespace")
 	s.Equal(1000, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_WrongType() {
 	defaultValue := 2000
-	filters := []map[Filter]interface{}{{
-		Namespace: "global-samples-namespace",
-	}}
-	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, defaultValue)
-	s.Error(err)
+	v := s.collection.GetIntPropertyFilteredByNamespace(testGetIntPropertyKey, defaultValue)("global-samples-namespace")
 	s.Equal(defaultValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByWorkflowTaskQueueInfo() {
 	expectedValue := 1001
-	filters := []map[Filter]interface{}{{
-		Namespace:     "global-samples-namespace",
-		TaskQueueName: "test-tq",
-		TaskType:      "Workflow",
-	}}
-	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 0)
-	s.NoError(err)
+	v := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByNoTaskTypeQueueInfo() {
 	expectedValue := 1003
-	filters := []map[Filter]interface{}{{
-		Namespace:     "global-samples-namespace",
-		TaskQueueName: "test-tq",
-	}}
-	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 0)
-	s.NoError(err)
+	v := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+		// this is contrived, but simulates something that doesn't match workflow or activity
+		"global-samples-namespace", "test-tq", enumspb.TaskQueueType(3),
+	)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByActivityTaskQueueInfo() {
 	expectedValue := 1002
-	filters := []map[Filter]interface{}{{
-		Namespace:     "global-samples-namespace",
-		TaskQueueName: "test-tq",
-		TaskType:      "Activity",
-	}}
-	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 0)
-	s.NoError(err)
+	v := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByTaskQueueNameOnly() {
 	expectedValue := 1005
-	filters := []map[Filter]interface{}{{
-		TaskQueueName: "other-test-tq",
-	}}
-	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 0)
-	s.NoError(err)
-	s.Equal(expectedValue, v)
-}
-
-func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchWithoutType() {
-	cln := NewCollection(s.client, log.NewNoopLogger())
-	expectedValue := 1003
-	f := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
-	// 5 is nonsense value that doesn't match either Workflow or Activity
-	v := f("global-samples-namespace", "test-tq", 5)
+	v := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+		"some-other-namespace", "other-test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_NamespaceOnly() {
-	cln := NewCollection(s.client, log.NewNoopLogger())
 	expectedValue := 1004
-	f := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
-	v := f("another-namespace", "other-test-tq", 0)
+	v := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+		"another-namespace", "test-tq", 0)
+	s.Equal(expectedValue, v)
+	expectedValue = 1005
+	v = s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+		"another-namespace", "other-test-tq", 0)
 	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchFallback() {
-	cln := NewCollection(s.client, log.NewNoopLogger())
 	// should return 1001 as the most specific match
-	f1 := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 1001)
-	v1 := f1("global-samples-namespace", "test-tq", 1)
-	f2 := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
-	v2 := f2("global-samples-namespace", "test-tq", 1)
+	v1 := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 1001)(
+		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	v2 := s.collection.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)(
+		"global-samples-namespace", "test-tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(v1, v2)
 }
 
 func (s *fileBasedClientSuite) TestGetFloatValue() {
-	v, err := s.client.GetFloatValue(testGetFloat64PropertyKey, nil, 1)
-	s.NoError(err)
+	v := s.collection.GetFloat64Property(testGetFloat64PropertyKey, 1)()
 	s.Equal(12.0, v)
 }
 
 func (s *fileBasedClientSuite) TestGetFloatValue_WrongType() {
-	filters := []map[Filter]interface{}{{
-		Namespace: "samples-namespace",
-	}}
 	defaultValue := 1.0
-	v, err := s.client.GetFloatValue(testGetFloat64PropertyKey, filters, defaultValue)
-	s.Error(err)
+	v := s.collection.GetFloatPropertyFilteredByNamespace(testGetFloat64PropertyKey, defaultValue)("samples-namespace")
 	s.Equal(defaultValue, v)
 }
 
 func (s *fileBasedClientSuite) TestGetBoolValue() {
-	v, err := s.client.GetBoolValue(testGetBoolPropertyKey, nil, true)
-	s.NoError(err)
+	v := s.collection.GetBoolProperty(testGetBoolPropertyKey, true)()
 	s.Equal(false, v)
 }
 
 func (s *fileBasedClientSuite) TestGetStringValue() {
-	filters := []map[Filter]interface{}{{
-		TaskQueueName: "random taskqueue",
-	}}
-	v, err := s.client.GetStringValue(testGetStringPropertyKey, filters, "defaultString")
-	s.NoError(err)
+	v := s.collection.GetStringPropertyFnWithNamespaceFilter(testGetStringPropertyKey, "defaultString")("random-namespace")
 	s.Equal("constrained-string", v)
 }
 
 func (s *fileBasedClientSuite) TestGetMapValue() {
 	var defaultVal map[string]interface{}
-	v, err := s.client.GetMapValue(testGetMapPropertyKey, nil, defaultVal)
-	s.NoError(err)
+	v := s.collection.GetMapProperty(testGetMapPropertyKey, defaultVal)()
 	expectedVal := map[string]interface{}{
 		"key1": "1",
 		"key2": 1,
@@ -267,36 +205,23 @@ func (s *fileBasedClientSuite) TestGetMapValue() {
 
 func (s *fileBasedClientSuite) TestGetMapValue_WrongType() {
 	var defaultVal map[string]interface{}
-	filters := []map[Filter]interface{}{{
-		TaskQueueName: "random taskqueue",
-	}}
-	v, err := s.client.GetMapValue(testGetMapPropertyKey, filters, defaultVal)
-	s.Error(err)
+	v := s.collection.GetMapPropertyFnWithNamespaceFilter(testGetMapPropertyKey, defaultVal)("random-namespace")
 	s.Equal(defaultVal, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue() {
-	v, err := s.client.GetDurationValue(testGetDurationPropertyKey, nil, time.Second)
-	s.NoError(err)
+	v := s.collection.GetDurationProperty(testGetDurationPropertyKey, time.Second)()
 	s.Equal(time.Minute, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_NotStringRepresentation() {
-	filters := []map[Filter]interface{}{{
-		Namespace: "samples-namespace",
-	}}
-	v, err := s.client.GetDurationValue(testGetDurationPropertyKey, filters, time.Second)
-	s.Error(err)
+	v := s.collection.GetDurationPropertyFilteredByNamespace(testGetDurationPropertyKey, time.Second)("samples-namespace")
 	s.Equal(time.Second, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_ParseFailed() {
-	filters := []map[Filter]interface{}{{
-		Namespace:     "samples-namespace",
-		TaskQueueName: "longIdleTimeTaskqueue",
-	}}
-	v, err := s.client.GetDurationValue(testGetDurationPropertyKey, filters, time.Second)
-	s.Error(err)
+	v := s.collection.GetDurationPropertyFilteredByTaskQueueInfo(testGetDurationPropertyKey, time.Second)(
+		"samples-namespace", "longIdleTimeTaskqueue", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(time.Second, v)
 }
 
@@ -319,82 +244,6 @@ func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
 		PollInterval: time.Second,
 	}, nil, nil)
 	s.Error(err)
-}
-
-func (s *fileBasedClientSuite) TestMatch() {
-	testCases := []struct {
-		v       *constrainedValue
-		filters map[Filter]interface{}
-		matched bool
-	}{
-		{
-			v: &constrainedValue{
-				Constraints: map[string]interface{}{},
-			},
-			filters: map[Filter]interface{}{
-				Namespace: "some random namespace",
-			},
-			matched: false,
-		},
-		{
-			v: &constrainedValue{
-				Constraints: map[string]interface{}{"some key": "some value"},
-			},
-			filters: map[Filter]interface{}{},
-			matched: false,
-		},
-		{
-			v: &constrainedValue{
-				Constraints: map[string]interface{}{"namespace": "samples-namespace"},
-			},
-			filters: map[Filter]interface{}{
-				Namespace: "some random namespace",
-			},
-			matched: false,
-		},
-		{
-			v: &constrainedValue{
-				Constraints: map[string]interface{}{
-					"namespace":     "samples-namespace",
-					"taskQueueName": "sample-task-queue",
-				},
-			},
-			filters: map[Filter]interface{}{
-				Namespace:     "samples-namespace",
-				TaskQueueName: "sample-task-queue",
-			},
-			matched: true,
-		},
-		{
-			v: &constrainedValue{
-				Constraints: map[string]interface{}{
-					"namespace":         "samples-namespace",
-					"some-other-filter": "sample-task-queue",
-				},
-			},
-			filters: map[Filter]interface{}{
-				Namespace:     "samples-namespace",
-				TaskQueueName: "sample-task-queue",
-			},
-			matched: false,
-		},
-		{
-			v: &constrainedValue{
-				Constraints: map[string]interface{}{
-					"namespace": "samples-namespace",
-				},
-			},
-			filters: map[Filter]interface{}{
-				TaskQueueName: "sample-task-queue",
-			},
-			matched: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		matched := match(tc.v, tc.filters)
-		s.Equal(tc.matched, matched)
-	}
 }
 
 type MockFileInfo struct {
@@ -478,7 +327,7 @@ testGetBoolPropertyKey:
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: { constraints: {} value: 12 } newValue: { constraints: {} value: 13 }", gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetintpropertykey oldValue: { constraints: {} value: 1000 } newValue: { constraints: {} value: 2000 }", gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetboolpropertykey oldValue: { constraints: {} value: false } newValue: { constraints: {} value: true }", gomock.Any())
-	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetboolpropertykey oldValue: { constraints: {{namespace:global-samples-namespace}} value: true } newValue: { constraints: {{namespace:global-samples-namespace}} value: false }", gomock.Any())
+	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetboolpropertykey oldValue: { constraints: {{Namespace:global-samples-namespace}} value: true } newValue: { constraints: {{Namespace:global-samples-namespace}} value: false }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
 	client.update()
 	s.NoError(err)
@@ -580,7 +429,7 @@ testGetIntPropertyKey:
 	reader.EXPECT().Stat(gomock.Any()).Return(updatedFileInfo, nil)
 	reader.EXPECT().ReadFile(gomock.Any()).Return(updatedFileData, nil)
 
-	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: nil newValue: { constraints: {{namespace:samples-namespace}} value: 22 }", gomock.Any())
+	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: nil newValue: { constraints: {{Namespace:samples-namespace}} value: 22 }", gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetintpropertykey oldValue: nil newValue: { constraints: {} value: 2000 }", gomock.Any())
 	mockLogger.EXPECT().Info(gomock.Any())
 	client.update()
@@ -607,7 +456,6 @@ testGetFloat64PropertyKey:
 - value: 22
   constraints:
     namespace: samples-namespace
-    testConstraint: testConstraintValue
 
 testGetIntPropertyKey:
 - value: 2000
@@ -621,7 +469,6 @@ testGetIntPropertyKey:
 testGetFloat64PropertyKey:
 - value: 22
   constraints:
-    testConstraint: testConstraintValue
     namespace: samples-namespace
 - value: 12
   constraints: {}
@@ -641,7 +488,7 @@ testGetFloat64PropertyKey:
 	reader.EXPECT().Stat(gomock.Any()).Return(updatedFileInfo, nil)
 	reader.EXPECT().ReadFile(gomock.Any()).Return(updatedFileData, nil)
 
-	mockLogger.EXPECT().Info(gomock.Any())
+	mockLogger.EXPECT().Info(gomock.Any()).Times(1)
 	client.update()
 	s.NoError(err)
 	close(doneCh)

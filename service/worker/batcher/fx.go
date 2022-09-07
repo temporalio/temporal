@@ -27,7 +27,6 @@ package batcher
 import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -40,7 +39,8 @@ import (
 
 const (
 	// BatchWFTypeName is the workflow type
-	BatchWFTypeName = "temporal-sys-batch-workflow"
+	BatchWFTypeName   = "temporal-sys-batch-workflow"
+	NamespaceDivision = "TemporalBatcher"
 	// DefaultRPS is the default RPS
 	DefaultRPS = 50
 	// DefaultConcurrency is the default concurrency
@@ -89,7 +89,7 @@ func NewResult(
 func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	namespaceName := ns.Name().String()
 	enableFeature := s.enabledFeature(namespaceName)
-	enablePerNSWorker := s.enabledPerNSWorker(namespaceName) || namespaceName == common.SystemLocalNamespace
+	enablePerNSWorker := s.enabledPerNSWorker(namespaceName)
 	return &workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: enableFeature && enablePerNSWorker,
 	}

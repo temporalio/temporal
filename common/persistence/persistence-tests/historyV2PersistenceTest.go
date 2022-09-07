@@ -59,15 +59,11 @@ type (
 
 const testForkRunID = "11220000-0000-f000-f000-000000000000"
 
-var historyTestRetryPolicy = createHistoryTestRetryPolicy()
-
-func createHistoryTestRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(time.Millisecond * 50)
-	policy.SetMaximumInterval(time.Second * 3)
-	policy.SetExpirationInterval(time.Second * 30)
-
-	return policy
-}
+var (
+	historyTestRetryPolicy = backoff.NewExponentialRetryPolicy(time.Millisecond * 50).
+		WithMaximumInterval(time.Second * 3).
+		WithExpirationInterval(time.Second * 30)
+)
 
 func isConditionFail(err error) bool {
 	switch err.(type) {

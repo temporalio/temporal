@@ -91,33 +91,36 @@ func newTimerQueueActiveTaskExecutor(
 func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.MetricsHandler, error) {
+) ([]metrics.Tag, bool, error) {
 	task := executable.GetTask()
 	taskType := queues.GetActiveTimerTaskTypeTagValue(task)
-	metricsProvider := t.metricProvider.WithTags(
+	metricsTags := []metrics.Tag{
 		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
-	)
+	}
 
+	var err error
 	switch task := task.(type) {
 	case *tasks.UserTimerTask:
-		return metricsProvider, t.executeUserTimerTimeoutTask(ctx, task)
+		err = t.executeUserTimerTimeoutTask(ctx, task)
 	case *tasks.ActivityTimeoutTask:
-		return metricsProvider, t.executeActivityTimeoutTask(ctx, task)
+		err = t.executeActivityTimeoutTask(ctx, task)
 	case *tasks.WorkflowTaskTimeoutTask:
-		return metricsProvider, t.executeWorkflowTaskTimeoutTask(ctx, task)
+		err = t.executeWorkflowTaskTimeoutTask(ctx, task)
 	case *tasks.WorkflowTimeoutTask:
-		return metricsProvider, t.executeWorkflowTimeoutTask(ctx, task)
+		err = t.executeWorkflowTimeoutTask(ctx, task)
 	case *tasks.ActivityRetryTimerTask:
-		return metricsProvider, t.executeActivityRetryTimerTask(ctx, task)
+		err = t.executeActivityRetryTimerTask(ctx, task)
 	case *tasks.WorkflowBackoffTimerTask:
-		return metricsProvider, t.executeWorkflowBackoffTimerTask(ctx, task)
+		err = t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
-		return metricsProvider, t.executeDeleteHistoryEventTask(ctx, task)
+		err = t.executeDeleteHistoryEventTask(ctx, task)
 	default:
-		return metricsProvider, errUnknownTimerTask
+		err = errUnknownTimerTask
 	}
+
+	return metricsTags, true, err
 }
 
 func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
@@ -154,7 +157,7 @@ Loop:
 			return serviceerror.NewInternal(errString)
 		}
 
-		if expired := timerSequence.IsExpired(referenceTime, timerSequenceID); !expired {
+		if !queues.IsTimeExpired(referenceTime, timerSequenceID.Timestamp) {
 			// timer sequence IDs are sorted, once there is one timer
 			// sequence ID not expired, all after that wil not expired
 			break Loop
@@ -206,7 +209,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// created.
 	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 	activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
-	if isHeartBeatTask && ok && (heartbeatTimeoutVis.Before(task.GetVisibilityTime()) || heartbeatTimeoutVis.Equal(task.GetVisibilityTime())) {
+	if isHeartBeatTask && ok && queues.IsTimeExpired(task.GetVisibilityTime(), heartbeatTimeoutVis) {
 		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
 		if err := mutableState.UpdateActivity(activityInfo); err != nil {
 			return err
@@ -227,7 +230,7 @@ Loop:
 			continue Loop
 		}
 
-		if expired := timerSequence.IsExpired(referenceTime, timerSequenceID); !expired {
+		if !queues.IsTimeExpired(referenceTime, timerSequenceID.Timestamp) {
 			// timer sequence IDs are sorted, once there is one timer
 			// sequence ID not expired, all after that wil not expired
 			break Loop

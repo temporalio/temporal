@@ -34,9 +34,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -49,57 +47,54 @@ type (
 	transferQueueFactoryParams struct {
 		fx.In
 
-		SchedulerParams
+		QueueFactoryBaseParams
 
 		ClientBean       client.Bean
 		ArchivalClient   archiver.Client
 		SdkClientFactory sdk.ClientFactory
 		MatchingClient   resource.MatchingClient
 		HistoryClient    historyservice.HistoryServiceClient
-		MetricsHandler   metrics.MetricsHandler
 	}
 
 	transferQueueFactory struct {
 		transferQueueFactoryParams
-		queueFactoryBase
+		QueueFactoryBase
 	}
 )
 
 func NewTransferQueueFactory(
 	params transferQueueFactoryParams,
 ) queues.Factory {
-	var scheduler queues.Scheduler
+	var hostScheduler queues.Scheduler
 	if params.Config.TransferProcessorEnablePriorityTaskScheduler() {
-		scheduler = queues.NewScheduler(
-			queues.NewPriorityAssigner(
-				params.ClusterMetadata.GetCurrentClusterName(),
-				params.NamespaceRegistry,
-				queues.PriorityAssignerOptions{
-					HighPriorityRPS:       params.Config.TransferTaskHighPriorityRPS,
-					CriticalRetryAttempts: params.Config.TransferTaskMaxRetryCount,
-				},
-				params.MetricsHandler,
-			),
-			queues.SchedulerOptions{
-				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-					WorkerCount: params.Config.TransferProcessorSchedulerWorkerCount,
-					QueueSize:   params.Config.TransferProcessorSchedulerQueueSize(),
-				},
-				InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
-					PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(params.Config.TransferProcessorSchedulerRoundRobinWeights(), params.Logger),
-				},
+		hostScheduler = queues.NewNamespacePriorityScheduler(
+			params.ClusterMetadata.GetCurrentClusterName(),
+			queues.NamespacePrioritySchedulerOptions{
+				WorkerCount:             params.Config.TransferProcessorSchedulerWorkerCount,
+				ActiveNamespaceWeights:  params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
+				StandbyNamespaceWeights: params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
 			},
-			params.MetricsHandler,
+			params.NamespaceRegistry,
+			params.TimeSource,
+			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferQueueProcessor)),
 			params.Logger,
 		)
 	}
 	return &transferQueueFactory{
 		transferQueueFactoryParams: params,
-		queueFactoryBase: queueFactoryBase{
-			scheduler: scheduler,
-			hostRateLimiter: newQueueHostRateLimiter(
+		QueueFactoryBase: QueueFactoryBase{
+			HostScheduler:        hostScheduler,
+			HostPriorityAssigner: queues.NewPriorityAssigner(),
+			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.TransferProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
+			),
+			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
+				NewHostRateLimiterRateFn(
+					params.Config.TransferProcessorMaxPollHostRPS,
+					params.Config.PersistenceMaxQPS,
+				),
+				params.Config.QueueMaxReaderCount(),
 			),
 		},
 	}
@@ -110,7 +105,7 @@ func (f *transferQueueFactory) CreateQueue(
 	engine shard.Engine,
 	workflowCache workflow.Cache,
 ) queues.Queue {
-	if f.scheduler != nil && f.Config.TransferProcessorEnableMultiCursor() {
+	if f.HostScheduler != nil && f.Config.TransferProcessorEnableMultiCursor() {
 		logger := log.With(shard.GetLogger(), tag.ComponentTransferQueue)
 
 		currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
@@ -160,24 +155,29 @@ func (f *transferQueueFactory) CreateQueue(
 		return queues.NewImmediateQueue(
 			shard,
 			tasks.CategoryTransfer,
-			f.scheduler,
+			f.HostScheduler,
+			f.HostPriorityAssigner,
 			executor,
 			&queues.Options{
 				ReaderOptions: queues.ReaderOptions{
 					BatchSize:            f.Config.TransferTaskBatchSize,
-					MaxPendingTasksCount: f.Config.TransferProcessorMaxReschedulerSize,
+					MaxPendingTasksCount: f.Config.QueuePendingTaskMaxCount,
 					PollBackoffInterval:  f.Config.TransferProcessorPollBackoffInterval,
 				},
+				MonitorOptions: queues.MonitorOptions{
+					PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
+					ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+					SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
+				},
+				MaxPollRPS:                          f.Config.TransferProcessorMaxPollRPS,
 				MaxPollInterval:                     f.Config.TransferProcessorMaxPollInterval,
 				MaxPollIntervalJitterCoefficient:    f.Config.TransferProcessorMaxPollIntervalJitterCoefficient,
 				CheckpointInterval:                  f.Config.TransferProcessorUpdateAckInterval,
 				CheckpointIntervalJitterCoefficient: f.Config.TransferProcessorUpdateAckIntervalJitterCoefficient,
+				MaxReaderCount:                      f.Config.QueueMaxReaderCount,
 				TaskMaxRetryCount:                   f.Config.TransferTaskMaxRetryCount,
 			},
-			newQueueProcessorRateLimiter(
-				f.hostRateLimiter,
-				f.Config.TransferProcessorMaxPollRPS,
-			),
+			f.HostReaderRateLimiter,
 			logger,
 			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferQueueProcessor)),
 		)
@@ -186,13 +186,14 @@ func (f *transferQueueFactory) CreateQueue(
 	return newTransferQueueProcessor(
 		shard,
 		workflowCache,
-		f.scheduler,
+		f.HostScheduler,
+		f.HostPriorityAssigner,
 		f.ClientBean,
 		f.ArchivalClient,
 		f.SdkClientFactory,
 		f.MatchingClient,
 		f.HistoryClient,
 		f.MetricsHandler,
-		f.hostRateLimiter,
+		f.HostRateLimiter,
 	)
 }

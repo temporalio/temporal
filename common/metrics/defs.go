@@ -95,6 +95,8 @@ const (
 	TaskCategoryTagName   = "task_category"
 	TaskTypeTagName       = "task_type"
 	TaskPriorityTagName   = "task_priority"
+	QueueReaderIDTagName  = "queue_reader_id"
+	QueueAlertTypeTagName = "queue_alert_type"
 	QueueTypeTagName      = "queue_type"
 	visibilityTypeTagName = "visibility_type"
 	ErrorTypeTagName      = "error_type"
@@ -450,8 +452,12 @@ const (
 	MatchingClientListTaskQueuePartitionsScope
 	// MatchingClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to matching service
 	MatchingClientUpdateWorkerBuildIdOrderingScope
-	// MatchingGetBuildIdOrdering tracks RPC calls to matching service
+	// MatchingGetWorkerBuildIdOrderingScope tracks RPC calls to matching service
 	MatchingClientGetWorkerBuildIdOrderingScope
+	// MatchingClientInvalidateTaskQueueMetadataScope tracks RPC calls to matching service
+	MatchingClientInvalidateTaskQueueMetadataScope
+	// MatchingClientGetTaskQueueMetadataScope tracks RPC calls to matching service
+	MatchingClientGetTaskQueueMetadataScope
 	// FrontendClientDeprecateNamespaceScope tracks RPC calls to frontend service
 	FrontendClientDeprecateNamespaceScope
 	// FrontendClientDescribeNamespaceScope tracks RPC calls to frontend service
@@ -556,6 +562,15 @@ const (
 	FrontendClientUpdateWorkflowScope
 	// FrontendClientGetWorkerBuildIdOrderingScope tracks RPC calls to frontend service
 	FrontendClientGetWorkerBuildIdOrderingScope
+	// FrontendClientDescribeBatchOperationScope tracks RPC calls to frontend service
+	FrontendClientDescribeBatchOperationScope
+	// FrontendClientListBatchOperationsScope tracks RPC calls to frontend service
+	FrontendClientListBatchOperationsScope
+	// FrontendClientStartBatchOperationScope tracks RPC calls to frontend service
+	FrontendClientStartBatchOperationScope
+	// FrontendClientStopBatchOperationScope tracks RPC calls to frontend service
+	FrontendClientStopBatchOperationScope
+
 	// AdminClientAddSearchAttributesScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributesScope
 	// AdminClientRemoveSearchAttributesScope tracks RPC calls to admin service
@@ -610,6 +625,7 @@ const (
 	AdminClientGetTaskQueueTasksScope
 	// AdminClientDeleteWorkflowExecutionScope tracks RPC calls to admin service
 	AdminClientDeleteWorkflowExecutionScope
+
 	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateNamespaceScope
 	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
@@ -710,6 +726,14 @@ const (
 	DCRedirectionGetWorkerBuildIdOrderingScope
 	// DCRedirectionUpdateWorkflowScope tracks RPC calls for dc redirection
 	DCRedirectionUpdateWorkflowScope
+	// DCRedirectionDescribeBatchOperationScope tracks RPC calls for dc redirection
+	DCRedirectionDescribeBatchOperationScope
+	// DCRedirectionListBatchOperationsScope tracks RPC calls for dc redirection
+	DCRedirectionListBatchOperationsScope
+	// DCRedirectionStartBatchOperationScope tracks RPC calls for dc redirection
+	DCRedirectionStartBatchOperationScope
+	// DCRedirectionStopBatchOperationScope tracks RPC calls for dc redirection
+	DCRedirectionStopBatchOperationScope
 
 	// MessagingClientPublishScope tracks Publish calls made by service to messaging layer
 	MessagingClientPublishScope
@@ -735,6 +759,10 @@ const (
 	PersistenceAppendRawHistoryNodesScope
 	// PersistenceDeleteHistoryNodesScope tracks DeleteHistoryNodes calls made by service to persistence layer
 	PersistenceDeleteHistoryNodesScope
+	// PersistenceParseHistoryBranchInfoScope tracks NewHistoryBranch calls made by service to persistence layer
+	PersistenceParseHistoryBranchInfoScope
+	// PersistenceUpdateHistoryBranchInfoScope tracks NewHistoryBranch calls made by service to persistence layer
+	PersistenceUpdateHistoryBranchInfoScope
 	// PersistenceNewHistoryBranchScope tracks NewHistoryBranch calls made by service to persistence layer
 	PersistenceNewHistoryBranchScope
 	// PersistenceReadHistoryBranchScope tracks ReadHistoryBranch calls made by service to persistence layer
@@ -985,6 +1013,14 @@ const (
 	FrontendGetWorkerBuildIdOrderingScope
 	// FrontendUpdateWorkflowScope is the metric scope for frontend.UpdateWorkflow
 	FrontendUpdateWorkflowScope
+	// FrontendDescribeBatchOperationScope is the metric scope for frontend.DescribeBatchOperation
+	FrontendDescribeBatchOperationScope
+	// FrontendListBatchOperationsScope is the metric scope for frontend.ListBatchOperations
+	FrontendListBatchOperationsScope
+	// FrontendStartBatchOperationScope is the metric scope for frontend.StartBatchOperation
+	FrontendStartBatchOperationScope
+	// FrontendStopBatchOperationScope is the metric scope for frontend.StopBatchOperation
+	FrontendStopBatchOperationScope
 
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope
@@ -1250,6 +1286,10 @@ const (
 	MatchingUpdateWorkerBuildIdOrderingScope
 	// MatchingGetWorkerBuildIdOrderingScope tracks GetWorkerBuildIdOrdering API calls received by service
 	MatchingGetWorkerBuildIdOrderingScope
+	// MatchingInvalidateTaskQueueMetadataScope tracks GetWorkerBuildIdOrdering API calls received by service
+	MatchingInvalidateTaskQueueMetadataScope
+	// MatchingGetTaskQueueMetadataScope tracks GetWorkerBuildIdOrdering API calls received by service
+	MatchingGetTaskQueueMetadataScope
 
 	NumMatchingScopes
 )
@@ -1400,6 +1440,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceAppendHistoryNodesScope:         {operation: "AppendHistoryNodes"},
 		PersistenceAppendRawHistoryNodesScope:      {operation: "AppendRawHistoryNodes"},
 		PersistenceDeleteHistoryNodesScope:         {operation: "DeleteHistoryNodes"},
+		PersistenceParseHistoryBranchInfoScope:     {operation: "ParseHistoryBranch"},
+		PersistenceUpdateHistoryBranchInfoScope:    {operation: "UpdateHistoryBranch"},
 		PersistenceNewHistoryBranchScope:           {operation: "NewHistoryBranch"},
 		PersistenceReadHistoryBranchScope:          {operation: "ReadHistoryBranch"},
 		PersistenceReadHistoryBranchReverseScope:   {operation: "ReadHistoryBranchReverse"},
@@ -1491,8 +1533,11 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingClientListTaskQueuePartitionsScope:     {operation: "MatchingClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientUpdateWorkerBuildIdOrderingScope: {operation: "MatchingClientUpdateWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientGetWorkerBuildIdOrderingScope:    {operation: "MatchingClientGetWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientInvalidateTaskQueueMetadataScope: {operation: "MatchingClientInvalidateTaskQueueMetadata", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientGetTaskQueueMetadataScope:        {operation: "MatchingClientGetTaskQueueMetadata", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 
 		FrontendClientDeprecateNamespaceScope:                 {operation: "FrontendClientDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDescribeBatchOperationScope:             {operation: "FrontendClientDescribeBatchOperation", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeNamespaceScope:                  {operation: "FrontendClientDescribeNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeTaskQueueScope:                  {operation: "FrontendClientDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeWorkflowExecutionScope:          {operation: "FrontendClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1501,6 +1546,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientGetWorkflowExecutionRawHistoryScope:     {operation: "FrontendClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientPollForWorkflowExecutionRawHistoryScope: {operation: "FrontendClientPollForWorkflowExecutionRawHistoryScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListArchivedWorkflowExecutionsScope:     {operation: "FrontendClientListArchivedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListBatchOperationsScope:                {operation: "FrontendClientListBatchOperations", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListClosedWorkflowExecutionsScope:       {operation: "FrontendClientListClosedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListNamespacesScope:                     {operation: "FrontendClientListNamespaces", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListOpenWorkflowExecutionsScope:         {operation: "FrontendClientListOpenWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1524,7 +1570,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientRespondQueryTaskCompletedScope:          {operation: "FrontendClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientSignalWithStartWorkflowExecutionScope:   {operation: "FrontendClientSignalWithStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientSignalWorkflowExecutionScope:            {operation: "FrontendClientSignalWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientStartBatchOperationScope:                {operation: "FrontendClientStartBatchOperation", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientStartWorkflowExecutionScope:             {operation: "FrontendClientStartWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientStopBatchOperationScope:                 {operation: "FrontendClientStopBatchOperation", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientTerminateWorkflowExecutionScope:         {operation: "FrontendClientTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientUpdateNamespaceScope:                    {operation: "FrontendClientUpdateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListWorkflowExecutionsScope:             {operation: "FrontendClientListWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1623,6 +1671,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionUpdateWorkerBuildIdOrderingScope:        {operation: "DCRedirectionUpdateWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionGetWorkerBuildIdOrderingScope:           {operation: "DCRedirectionGetWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionUpdateWorkflowScope:                     {operation: "DCRedirectionUpdateWorkflow", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDescribeBatchOperationScope:             {operation: "DCRedirectionDescribeBatchOperation", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListBatchOperationsScope:                {operation: "DCRedirectionListBatchOperations", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionStartBatchOperationScope:                {operation: "DCRedirectionStartBatchOperation", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionStopBatchOperationScope:                 {operation: "DCRedirectionStopBatchOperation", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 
 		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
 		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},
@@ -1747,9 +1799,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendListSchedulesScope:                      {operation: "ListSchedules"},
 		FrontendUpdateWorkerBuildIdOrderingScope:        {operation: "UpdateWorkerBuildIdOrdering"},
 		FrontendGetWorkerBuildIdOrderingScope:           {operation: "GetWorkerBuildIdOrdering"},
+		FrontendUpdateWorkflowScope:                     {operation: "UpdateWorkflow"},
+		FrontendDescribeBatchOperationScope:             {operation: "DescribeBatchOperation"},
+		FrontendListBatchOperationsScope:                {operation: "ListBatchOperations"},
+		FrontendStartBatchOperationScope:                {operation: "StartBatchOperation"},
+		FrontendStopBatchOperationScope:                 {operation: "StopBatchOperation"},
 		VersionCheckScope:                               {operation: "VersionCheck"},
 		AuthorizationScope:                              {operation: "Authorization"},
-		FrontendUpdateWorkflowScope:                     {operation: "UpdateWorkflow"},
 	},
 	// History Scope Names
 	History: {
@@ -1887,6 +1943,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingListTaskQueuePartitionsScope:     {operation: "ListTaskQueuePartitions"},
 		MatchingUpdateWorkerBuildIdOrderingScope: {operation: "UpdateWorkerBuildIdOrdering"},
 		MatchingGetWorkerBuildIdOrderingScope:    {operation: "GetWorkerBuildIdOrdering"},
+		MatchingInvalidateTaskQueueMetadataScope: {operation: "InvalidateTaskQueueMetadata"},
+		MatchingGetTaskQueueMetadataScope:        {operation: "GetTaskQueueMetadata"},
 	},
 	// Worker Scope Names
 	Worker: {
@@ -1968,6 +2026,7 @@ const (
 	PersistenceErrEntityNotExistsCounter
 	PersistenceErrNamespaceAlreadyExistsCounter
 	PersistenceErrBadRequestCounter
+	PersistenceErrResourceExhaustedCounter
 
 	ClientRequests
 	ClientFailures
@@ -1995,15 +2054,10 @@ const (
 	ArchivalConfigFailures
 
 	VisibilityPersistenceRequests
+	VisibilityPersistenceErrorWithType
 	VisibilityPersistenceFailures
 	VisibilityPersistenceLatency
-	VisibilityPersistenceInvalidArgument
 	VisibilityPersistenceResourceExhausted
-	VisibilityPersistenceConditionFailed
-	VisibilityPersistenceTimeout
-	VisibilityPersistenceNotFound
-	VisibilityPersistenceInternal
-	VisibilityPersistenceUnavailable
 
 	SequentialTaskSubmitRequest
 	SequentialTaskSubmitRequestTaskQueueExist
@@ -2131,6 +2185,7 @@ const (
 	CommandTypeChildWorkflowCounter
 	CommandTypeContinueAsNewCounter
 	CommandTypeSignalExternalWorkflowCounter
+	CommandTypeModifyWorkflowPropertiesCounter
 	CommandTypeUpsertWorkflowSearchAttributesCounter
 	ActivityEagerExecutionCounter
 	EmptyCompletionCommandsCounter
@@ -2467,6 +2522,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		PersistenceErrEntityNotExistsCounter:                NewCounterDef("persistence_errors_entity_not_exists"),
 		PersistenceErrNamespaceAlreadyExistsCounter:         NewCounterDef("persistence_errors_namespace_already_exists"),
 		PersistenceErrBadRequestCounter:                     NewCounterDef("persistence_errors_bad_request"),
+		PersistenceErrResourceExhaustedCounter:              NewCounterDef("persistence_errors_resource_exhausted"),
 		ClientRequests:                                      NewCounterDef("client_requests"),
 		ClientFailures:                                      NewCounterDef("client_errors"),
 		ClientLatency:                                       NewTimerDef("client_latency"),
@@ -2487,15 +2543,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ArchivalConfigFailures:                              NewCounterDef("archivalconfig_failures"),
 
 		VisibilityPersistenceRequests:          NewCounterDef("visibility_persistence_requests"),
+		VisibilityPersistenceErrorWithType:     NewCounterDef("visibility_persistence_error_with_type"),
 		VisibilityPersistenceFailures:          NewCounterDef("visibility_persistence_errors"),
-		VisibilityPersistenceLatency:           NewTimerDef("visibility_persistence_latency"),
-		VisibilityPersistenceInvalidArgument:   NewCounterDef("visibility_persistence_invalid_argument"),
 		VisibilityPersistenceResourceExhausted: NewCounterDef("visibility_persistence_resource_exhausted"),
-		VisibilityPersistenceConditionFailed:   NewCounterDef("visibility_persistence_condition_failed"),
-		VisibilityPersistenceTimeout:           NewCounterDef("visibility_persistence_timeout"),
-		VisibilityPersistenceNotFound:          NewCounterDef("visibility_persistence_not_found"),
-		VisibilityPersistenceInternal:          NewCounterDef("visibility_persistence_internal"),
-		VisibilityPersistenceUnavailable:       NewCounterDef("visibility_persistence_unavailable"),
+		VisibilityPersistenceLatency:           NewTimerDef("visibility_persistence_latency"),
 
 		SequentialTaskSubmitRequest:                 NewCounterDef("sequentialtask_submit_request"),
 		SequentialTaskSubmitRequestTaskQueueExist:   NewCounterDef("sequentialtask_submit_request_taskqueue_exist"),
@@ -2616,6 +2667,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CommandTypeContinueAsNewCounter:                   NewCounterDef("continue_as_new_command"),
 		CommandTypeSignalExternalWorkflowCounter:          NewCounterDef("signal_external_workflow_command"),
 		CommandTypeUpsertWorkflowSearchAttributesCounter:  NewCounterDef("upsert_workflow_search_attributes_command"),
+		CommandTypeModifyWorkflowPropertiesCounter:        NewCounterDef("modify_workflow_properties_command"),
 		CommandTypeChildWorkflowCounter:                   NewCounterDef("child_workflow_command"),
 		ActivityEagerExecutionCounter:                     NewCounterDef("activity_eager_execution"),
 		EmptyCompletionCommandsCounter:                    NewCounterDef("empty_completion_commands"),

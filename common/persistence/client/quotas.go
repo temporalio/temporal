@@ -30,12 +30,22 @@ import (
 )
 
 var (
-	CallerTypePriority = map[string]int{
-		headers.CallerTypeAPI:        0,
-		headers.CallerTypeBackground: 2,
+	CallerTypeDefaultPriority = map[string]int{
+		headers.CallerTypeAPI:        1,
+		headers.CallerTypeBackground: 3,
 	}
 
-	APIPriorityOverride = map[string]int{
+	APITypeCallOriginPriorityOverride = map[string]int{
+		"StartWorkflowExecution":           0,
+		"SignalWithStartWorkflowExecution": 0,
+		"SignalWorkflowExecution":          0,
+		"RequestCancelWorkflowExecution":   0,
+		"TerminateWorkflowExecution":       0,
+		"GetWorkflowExecutionHistory":      0,
+		"UpdateWorkflow":                   0,
+	}
+
+	BackgroundTypeAPIPriorityOverride = map[string]int{
 		"GetOrCreateShard": 0,
 		"UpdateShard":      0,
 
@@ -48,50 +58,71 @@ var (
 		// tasks for other namespaces to be loaded. So give task loading a higher
 		// priority than other background requests.
 		// NOTE: we also don't want task loading to consume all persistence request tokens,
-		// and blocks all other operations. This is done by limiting the total rps allow
-		// for this priority.
+		// and blocks all other operations. This is done by setting the queue host rps limit
+		// dynamic config.
 		// TODO: exclude certain task type from this override, like replication.
-		"GetHistoryTasks": 1,
+		"GetHistoryTasks": 2,
 	}
 
-	RequestPrioritiesOrdered = []int{0, 1, 2}
-
-	PriorityRatePercentage = map[int]float64{
-		0: 1.0,
-		1: 0.8,
-		2: 1.0,
-	}
+	RequestPrioritiesOrdered = []int{0, 1, 2, 3}
 )
 
 func NewPriorityRateLimiter(
-	maxQps PersistenceMaxQps,
+	namespaceMaxQPS PersistenceNamespaceMaxQps,
+	hostMaxQPS PersistenceMaxQps,
+) quotas.RequestRateLimiter {
+	hostRequestRateLimiter := newPriorityRateLimiter(
+		func() float64 { return float64(hostMaxQPS()) },
+	)
+
+	return quotas.NewNamespaceRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
+		if req.Caller != "" && req.Caller != headers.CallerNameSystem {
+			if namespaceMaxQPS != nil && namespaceMaxQPS(req.Caller) > 0 {
+				return quotas.NewMultiRequestRateLimiter(
+					newPriorityRateLimiter(
+						func() float64 { return float64(namespaceMaxQPS(req.Caller)) },
+					),
+					hostRequestRateLimiter,
+				)
+			}
+		}
+
+		return hostRequestRateLimiter
+	})
+}
+
+func newPriorityRateLimiter(
+	rateFn quotas.RateFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
 	for priority := range RequestPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(maxQps()) * PriorityRatePercentage[priority] },
-		)
+		rateLimiters[priority] = quotas.NewDefaultOutgoingRateLimiter(rateFn)
 	}
 
 	return quotas.NewPriorityRateLimiter(
 		func(req quotas.Request) int {
-			if priority, ok := APIPriorityOverride[req.API]; ok {
-				return priority
+			switch req.CallerType {
+			case headers.CallerTypeAPI:
+				if priority, ok := APITypeCallOriginPriorityOverride[req.Initiation]; ok {
+					return priority
+				}
+				return CallerTypeDefaultPriority[req.CallerType]
+			case headers.CallerTypeBackground:
+				if priority, ok := BackgroundTypeAPIPriorityOverride[req.API]; ok {
+					return priority
+				}
+				return CallerTypeDefaultPriority[req.CallerType]
+			default:
+				// default requests to high priority to be consistent with existing behavior
+				return RequestPrioritiesOrdered[0]
 			}
-
-			if priority, ok := CallerTypePriority[req.CallerType]; ok {
-				return priority
-			}
-
-			// default requests to high priority to be consistent with existing behavior
-			return RequestPrioritiesOrdered[0]
 		},
 		rateLimiters,
 	)
 }
 
 func NewNoopPriorityRateLimiter(
-	maxQps PersistenceMaxQps,
+	maxQPS PersistenceMaxQps,
 ) quotas.RequestRateLimiter {
 	priority := RequestPrioritiesOrdered[0]
 
@@ -99,7 +130,7 @@ func NewNoopPriorityRateLimiter(
 		func(_ quotas.Request) int { return priority },
 		map[int]quotas.RateLimiter{
 			priority: quotas.NewDefaultOutgoingRateLimiter(
-				func() float64 { return float64(maxQps()) },
+				func() float64 { return float64(maxQPS()) },
 			),
 		},
 	)

@@ -349,41 +349,6 @@ func (mr *MockprocessorMockRecorder) updateAckLevel(taskID interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateAckLevel", reflect.TypeOf((*Mockprocessor)(nil).updateAckLevel), taskID)
 }
 
-// MocktimerProcessor is a mock of timerProcessor interface.
-type MocktimerProcessor struct {
-	ctrl     *gomock.Controller
-	recorder *MocktimerProcessorMockRecorder
-}
-
-// MocktimerProcessorMockRecorder is the mock recorder for MocktimerProcessor.
-type MocktimerProcessorMockRecorder struct {
-	mock *MocktimerProcessor
-}
-
-// NewMocktimerProcessor creates a new mock instance.
-func NewMocktimerProcessor(ctrl *gomock.Controller) *MocktimerProcessor {
-	mock := &MocktimerProcessor{ctrl: ctrl}
-	mock.recorder = &MocktimerProcessorMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MocktimerProcessor) EXPECT() *MocktimerProcessorMockRecorder {
-	return m.recorder
-}
-
-// notifyNewTimers mocks base method.
-func (m *MocktimerProcessor) notifyNewTimers(timerTask []tasks.Task) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "notifyNewTimers", timerTask)
-}
-
-// notifyNewTimers indicates an expected call of notifyNewTimers.
-func (mr *MocktimerProcessorMockRecorder) notifyNewTimers(timerTask interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "notifyNewTimers", reflect.TypeOf((*MocktimerProcessor)(nil).notifyNewTimers), timerTask)
-}
-
 // MocktimerQueueAckMgr is a mock of timerQueueAckMgr interface.
 type MocktimerQueueAckMgr struct {
 	ctrl     *gomock.Controller

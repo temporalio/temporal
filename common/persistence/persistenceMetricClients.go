@@ -898,6 +898,36 @@ func (p *executionPersistenceClient) AppendRawHistoryNodes(
 	return resp, err
 }
 
+// ParseHistoryBranchInfo parses the history branch for branch information
+func (p *executionPersistenceClient) ParseHistoryBranchInfo(
+	ctx context.Context,
+	request *ParseHistoryBranchInfoRequest,
+) (*ParseHistoryBranchInfoResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceParseHistoryBranchInfoScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceParseHistoryBranchInfoScope, metrics.PersistenceLatency)
+	resp, err := p.persistence.ParseHistoryBranchInfo(ctx, request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceParseHistoryBranchInfoScope, err)
+	}
+	return resp, err
+}
+
+// UpdateHistoryBranchInfo updates the history branch with branch information
+func (p *executionPersistenceClient) UpdateHistoryBranchInfo(
+	ctx context.Context,
+	request *UpdateHistoryBranchInfoRequest,
+) (*UpdateHistoryBranchInfoResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceUpdateHistoryBranchInfoScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateHistoryBranchInfoScope, metrics.PersistenceLatency)
+	resp, err := p.persistence.UpdateHistoryBranchInfo(ctx, request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceUpdateHistoryBranchInfoScope, err)
+	}
+	return resp, err
+}
+
 // NewHistoryBranch initializes a new history branch
 func (p *executionPersistenceClient) NewHistoryBranch(
 	ctx context.Context,
@@ -1412,29 +1442,21 @@ func (c *metadataPersistenceClient) InitializeSystemNamespaces(
 func (p *metricEmitter) updateErrorMetric(scope int, err error) {
 	p.metricClient.Scope(scope, metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.PersistenceErrorWithType)
 
-	switch err.(type) {
-	case *ShardAlreadyExistError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardExistsCounter)
-	case *ShardOwnershipLostError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
-	case *CurrentWorkflowConditionFailedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrCurrentWorkflowConditionFailedCounter)
-	case *WorkflowConditionFailedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrWorkflowConditionFailedCounter)
-	case *ConditionFailedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
-	case *TimeoutError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	case *serviceerror.InvalidArgument:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrBadRequestCounter)
-	case *serviceerror.NamespaceAlreadyExists:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrNamespaceAlreadyExistsCounter)
-	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
+	switch err := err.(type) {
+	case *ShardAlreadyExistError,
+		*ShardOwnershipLostError,
+		*CurrentWorkflowConditionFailedError,
+		*WorkflowConditionFailedError,
+		*ConditionFailedError,
+		*TimeoutError,
+		*serviceerror.InvalidArgument,
+		*serviceerror.NamespaceAlreadyExists,
+		*serviceerror.NotFound,
+		*serviceerror.NamespaceNotFound:
+		// no-op
+
 	case *serviceerror.ResourceExhausted:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
+		p.metricClient.Scope(scope, metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.PersistenceErrResourceExhaustedCounter)
 	default:
 		p.logger.Error("Operation failed with internal error.", tag.Error(err), tag.MetricScope(scope))
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)

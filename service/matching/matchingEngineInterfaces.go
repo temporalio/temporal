@@ -29,7 +29,7 @@ import (
 )
 
 type (
-	// Engine exposes interfaces for clients to poll for activity and workflow tasks.
+	// Engine exposes interfaces for clients to interact with the matching engine
 	Engine interface {
 		Stop()
 		AddWorkflowTask(hCtx *handlerContext, addRequest *matchingservice.AddWorkflowTaskRequest) (syncMatch bool, err error)
@@ -43,5 +43,7 @@ type (
 		ListTaskQueuePartitions(hCtx *handlerContext, request *matchingservice.ListTaskQueuePartitionsRequest) (*matchingservice.ListTaskQueuePartitionsResponse, error)
 		UpdateWorkerBuildIdOrdering(ctx *handlerContext, request *matchingservice.UpdateWorkerBuildIdOrderingRequest) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error)
 		GetWorkerBuildIdOrdering(ctx *handlerContext, request *matchingservice.GetWorkerBuildIdOrderingRequest) (*matchingservice.GetWorkerBuildIdOrderingResponse, error)
+		InvalidateTaskQueueMetadata(ctx *handlerContext, request *matchingservice.InvalidateTaskQueueMetadataRequest) (*matchingservice.InvalidateTaskQueueMetadataResponse, error)
+		GetTaskQueueMetadata(ctx *handlerContext, request *matchingservice.GetTaskQueueMetadataRequest) (*matchingservice.GetTaskQueueMetadataResponse, error)
 	}
 )

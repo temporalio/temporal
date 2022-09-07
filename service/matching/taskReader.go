@@ -113,7 +113,7 @@ func (tr *taskReader) Signal() {
 }
 
 func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx = tr.initContext(ctx)
 
 dispatchLoop:
 	for {
@@ -154,7 +154,7 @@ dispatchLoop:
 }
 
 func (tr *taskReader) getTasksPump(ctx context.Context) error {
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx = tr.initContext(ctx)
 
 	if err := tr.tlMgr.WaitUntilInitialized(ctx); err != nil {
 		return err
@@ -314,6 +314,12 @@ func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
 	// taskID in DB may not be continuous, especially when task list ownership changes.
 	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
 	tr.scope().UpdateGauge(metrics.TaskLagPerTaskQueueGauge, float64(maxReadLevel-ackLevel))
+}
+
+func (tr *taskReader) initContext(ctx context.Context) context.Context {
+	namespace, _ := tr.tlMgr.namespaceRegistry.GetNamespaceName(tr.tlMgr.taskQueueID.namespaceID)
+
+	return headers.SetCallerInfo(ctx, headers.NewBackgroundCallerInfo(namespace.String()))
 }
 
 func (tr *taskReader) backoff(duration time.Duration) {

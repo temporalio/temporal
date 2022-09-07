@@ -60,6 +60,7 @@ func newTimerQueueActiveProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	workflowDeleteManager workflow.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
@@ -85,13 +86,12 @@ func newTimerQueueActiveProcessor(
 		)
 	}
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
-	metricsClient := shard.GetMetricsClient()
 	config := shard.GetConfig()
 
 	processor := &timerQueueActiveProcessorImpl{}
 
 	if scheduler == nil {
-		scheduler = newTimerTaskScheduler(shard, logger, metricProvider)
+		scheduler = newTimerTaskShardScheduler(shard, logger)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -116,7 +116,6 @@ func newTimerQueueActiveProcessor(
 		matchingClient,
 	)
 	ackLevel := shard.GetQueueClusterAckLevel(tasks.CategoryTimer, currentClusterName).FireTime
-	queueType := queues.QueueTypeActiveTimer
 
 	// if single cursor is enabled, then this processor is responsible for both active and standby tasks
 	// and we need to customize some parameters for ack manager and task executable
@@ -157,7 +156,6 @@ func newTimerQueueActiveProcessor(
 			logger,
 		)
 		ackLevel = shard.GetQueueAckLevel(tasks.CategoryTimer).FireTime
-		queueType = queues.QueueTypeTimer
 	}
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
@@ -170,15 +168,18 @@ func newTimerQueueActiveProcessor(
 		currentClusterName,
 		func(t tasks.Task) queues.Executable {
 			return queues.NewExecutable(
+				queues.DefaultReaderId,
 				t,
 				timerTaskFilter,
 				taskExecutor,
 				scheduler,
 				rescheduler,
+				priorityAssigner,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
+				metricProvider,
 				config.TimerTaskMaxRetryCount,
-				queueType,
 				config.NamespaceCacheRefreshInterval,
 			)
 		},
@@ -195,7 +196,6 @@ func newTimerQueueActiveProcessor(
 		rescheduler,
 		rateLimiter,
 		logger,
-		metricsClient.Scope(metrics.TimerActiveQueueProcessorScope),
 	)
 
 	return processor
@@ -205,6 +205,7 @@ func newTimerQueueFailoverProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	workflowDeleteManager workflow.DeleteManager,
 	namespaceIDs map[string]struct{},
 	standbyClusterName string,
@@ -265,7 +266,7 @@ func newTimerQueueFailoverProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newTimerTaskScheduler(shard, logger, metricProvider)
+		scheduler = newTimerTaskShardScheduler(shard, logger)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -286,15 +287,18 @@ func newTimerQueueFailoverProcessor(
 		logger,
 		func(t tasks.Task) queues.Executable {
 			return queues.NewExecutable(
+				queues.DefaultReaderId,
 				t,
 				timerTaskFilter,
 				taskExecutor,
 				scheduler,
 				rescheduler,
+				priorityAssigner,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
+				metricProvider,
 				shard.GetConfig().TimerTaskMaxRetryCount,
-				queues.QueueTypeActiveTimer,
 				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},
@@ -311,7 +315,6 @@ func newTimerQueueFailoverProcessor(
 		rescheduler,
 		rateLimiter,
 		logger,
-		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
 	)
 
 	return updateShardAckLevel, processor

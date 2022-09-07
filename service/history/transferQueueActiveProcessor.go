@@ -62,6 +62,7 @@ func newTransferQueueActiveProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -118,7 +119,7 @@ func newTransferQueueActiveProcessor(
 	}
 
 	if scheduler == nil {
-		scheduler = newTransferTaskScheduler(shard, logger, metricProvider)
+		scheduler = newTransferTaskShardScheduler(shard, logger)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -143,7 +144,6 @@ func newTransferQueueActiveProcessor(
 		matchingClient,
 	)
 	ackLevel := shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, currentClusterName).TaskID
-	queueType := queues.QueueTypeActiveTransfer
 
 	// if single cursor is enabled, then this processor is responsible for both active and standby tasks
 	// and we need to customize some parameters for ack manager and task executable
@@ -184,7 +184,6 @@ func newTransferQueueActiveProcessor(
 		)
 
 		ackLevel = shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID
-		queueType = queues.QueueTypeTransfer
 	}
 
 	queueAckMgr := newQueueAckMgr(
@@ -195,15 +194,18 @@ func newTransferQueueActiveProcessor(
 		logger,
 		func(t tasks.Task) queues.Executable {
 			return queues.NewExecutable(
+				queues.DefaultReaderId,
 				t,
 				transferTaskFilter,
 				taskExecutor,
 				scheduler,
 				rescheduler,
+				priorityAssigner,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
+				metricProvider,
 				config.TransferTaskMaxRetryCount,
-				queueType,
 				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},
@@ -220,7 +222,6 @@ func newTransferQueueActiveProcessor(
 		rescheduler,
 		rateLimiter,
 		logger,
-		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase
@@ -232,6 +233,7 @@ func newTransferQueueFailoverProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -312,7 +314,7 @@ func newTransferQueueFailoverProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newTransferTaskScheduler(shard, logger, metricProvider)
+		scheduler = newTransferTaskShardScheduler(shard, logger)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -331,15 +333,18 @@ func newTransferQueueFailoverProcessor(
 		logger,
 		func(t tasks.Task) queues.Executable {
 			return queues.NewExecutable(
+				queues.DefaultReaderId,
 				t,
 				transferTaskFilter,
 				taskExecutor,
 				scheduler,
 				rescheduler,
+				priorityAssigner,
 				shard.GetTimeSource(),
+				shard.GetNamespaceRegistry(),
 				logger,
+				metricProvider,
 				shard.GetConfig().TransferTaskMaxRetryCount,
-				queues.QueueTypeActiveTransfer,
 				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},
@@ -356,7 +361,6 @@ func newTransferQueueFailoverProcessor(
 		rescheduler,
 		rateLimiter,
 		logger,
-		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)
 	processor.queueAckMgr = queueAckMgr
 	processor.queueProcessorBase = queueProcessorBase

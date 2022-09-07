@@ -28,9 +28,8 @@ import (
 	"context"
 
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -93,7 +92,7 @@ func New(params *BootstrapParams) *Processor {
 
 // Start starts the scanner
 func (s *Processor) Start() error {
-	svcClient := s.svcClientFactory.GetSystemClient(s.logger)
+	svcClient := s.svcClientFactory.GetSystemClient()
 	processorWorker := worker.New(svcClient, processorTaskQueueName, getWorkerOptions(s))
 	processorWorker.RegisterWorkflowWithOptions(ProcessorWorkflow, workflow.RegisterOptions{Name: processorWFTypeName})
 	processorWorker.RegisterActivityWithOptions(ProcessorActivity, activity.RegisterOptions{Name: processorActivityName})
@@ -103,7 +102,7 @@ func (s *Processor) Start() error {
 
 func getWorkerOptions(p *Processor) worker.Options {
 	ctx := context.WithValue(context.Background(), processorContextKey, p)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
 	return worker.Options{
 		MaxConcurrentActivityExecutionSize:     p.cfg.MaxConcurrentActivityExecutionSize(),

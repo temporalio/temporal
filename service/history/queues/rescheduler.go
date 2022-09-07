@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
@@ -42,7 +43,10 @@ import (
 )
 
 const (
-	rescheduleFailureBackoff = 3 * time.Second
+	taskChanFullBackoff = 3 * time.Second
+
+	reschedulerPQCleanupDuration          = 3 * time.Minute
+	reschedulerPQCleanupJitterCoefficient = 0.15
 )
 
 type (
@@ -53,6 +57,11 @@ type (
 
 		// Add task executable to the rescheduler.
 		Add(task Executable, rescheduleTime time.Time)
+
+		// Reschedule triggers an immediate reschedule for provided namespace
+		// ignoring executable's reschedule time.
+		// Used by namespace failover logic
+		Reschedule(namespaceIDs map[string]struct{})
 
 		// Len returns the total number of task executables waiting to be rescheduled.
 		Len() int
@@ -73,10 +82,12 @@ type (
 		shutdownCh chan struct{}
 		shutdownWG sync.WaitGroup
 
-		timerGate timer.Gate
+		timerGate        timer.Gate
+		taskChannelKeyFn TaskChannelKeyFn
 
 		sync.Mutex
-		pq collection.Queue[rescheduledExecuable]
+		pqMap          map[TaskChannelKey]collection.Queue[rescheduledExecuable]
+		numExecutables int
 	}
 )
 
@@ -95,11 +106,10 @@ func NewRescheduler(
 		status:     common.DaemonStatusInitialized,
 		shutdownCh: make(chan struct{}),
 
-		timerGate: timer.NewLocalGate(timeSource),
+		timerGate:        timer.NewLocalGate(timeSource),
+		taskChannelKeyFn: scheduler.TaskChannelKeyFn(),
 
-		pq: collection.NewPriorityQueue((func(this rescheduledExecuable, that rescheduledExecuable) bool {
-			return this.rescheduleTime.Before(that.rescheduleTime)
-		})),
+		pqMap: make(map[TaskChannelKey]collection.Queue[rescheduledExecuable]),
 	}
 }
 
@@ -134,10 +144,12 @@ func (r *reschedulerImpl) Add(
 	rescheduleTime time.Time,
 ) {
 	r.Lock()
-	r.pq.Add(rescheduledExecuable{
+	pq := r.getOrCreatePQLocked(r.taskChannelKeyFn(executable))
+	pq.Add(rescheduledExecuable{
 		executable:     executable,
 		rescheduleTime: rescheduleTime,
 	})
+	r.numExecutables++
 	r.Unlock()
 
 	r.timerGate.Update(rescheduleTime)
@@ -147,15 +159,51 @@ func (r *reschedulerImpl) Add(
 	}
 }
 
+func (r *reschedulerImpl) Reschedule(
+	namespaceIDs map[string]struct{},
+) {
+	r.Lock()
+	defer r.Unlock()
+
+	now := r.timeSource.Now()
+	updatedRescheduleTime := false
+	for key, pq := range r.pqMap {
+		if _, ok := namespaceIDs[key.NamespaceID]; !ok {
+			continue
+		}
+
+		updatedRescheduleTime = true
+		// set reschedule time for all tasks in this pq to be now
+		items := make([]rescheduledExecuable, 0, pq.Len())
+		for !pq.IsEmpty() {
+			rescheduled := pq.Remove()
+			rescheduled.rescheduleTime = now
+			items = append(items, rescheduled)
+		}
+		r.pqMap[key] = r.newPriorityQueue(items)
+	}
+
+	// then update timer gate to trigger the actual reschedule
+	if updatedRescheduleTime {
+		r.timerGate.Update(now)
+	}
+}
+
 func (r *reschedulerImpl) Len() int {
 	r.Lock()
 	defer r.Unlock()
 
-	return r.pq.Len()
+	return r.numExecutables
 }
 
 func (r *reschedulerImpl) rescheduleLoop() {
 	defer r.shutdownWG.Done()
+
+	cleanupTimer := time.NewTimer(backoff.JitDuration(
+		reschedulerPQCleanupDuration,
+		reschedulerPQCleanupJitterCoefficient,
+	))
+	defer cleanupTimer.Stop()
 
 	for {
 		select {
@@ -164,6 +212,12 @@ func (r *reschedulerImpl) rescheduleLoop() {
 			return
 		case <-r.timerGate.FireChan():
 			r.reschedule()
+		case <-cleanupTimer.C:
+			r.cleanupPQ()
+			cleanupTimer.Reset(backoff.JitDuration(
+				reschedulerPQCleanupDuration,
+				reschedulerPQCleanupJitterCoefficient,
+			))
 		}
 	}
 
@@ -173,37 +227,46 @@ func (r *reschedulerImpl) reschedule() {
 	r.Lock()
 	defer r.Unlock()
 
-	r.metricsHandler.Histogram(TaskReschedulerPendingTasks, metrics.Dimensionless).Record(int64(r.pq.Len()))
+	r.metricsHandler.Histogram(TaskReschedulerPendingTasks, metrics.Dimensionless).Record(int64(r.numExecutables))
 
-	var failToSubmit []rescheduledExecuable
-	for !r.pq.IsEmpty() {
-		if r.timeSource.Now().Before(r.pq.Peek().rescheduleTime) {
-			break
-		}
+	now := r.timeSource.Now()
+	for _, pq := range r.pqMap {
+		for !pq.IsEmpty() {
+			rescheduled := pq.Peek()
 
-		rescheduled := r.pq.Remove()
-		executable := rescheduled.executable
-		if executable.State() == ctasks.TaskStateCancelled {
-			continue
-		}
+			if rescheduleTime := rescheduled.rescheduleTime; now.Before(rescheduleTime) {
+				r.timerGate.Update(rescheduleTime)
+				break
+			}
 
-		submitted, err := r.scheduler.TrySubmit(executable)
-		if err != nil {
-			executable.Logger().Error("Failed to reschedule task", tag.Error(err))
-		}
+			executable := rescheduled.executable
+			if executable.State() == ctasks.TaskStateCancelled {
+				pq.Remove()
+				r.numExecutables--
+				continue
+			}
 
-		if !submitted {
-			rescheduled.rescheduleTime.Add(rescheduleFailureBackoff)
-			failToSubmit = append(failToSubmit, rescheduled)
+			executable.SetScheduledTime(now)
+			submitted := r.scheduler.TrySubmit(executable)
+			if !submitted {
+				r.timerGate.Update(now.Add(taskChanFullBackoff))
+				break
+			}
+
+			pq.Remove()
+			r.numExecutables--
 		}
 	}
+}
 
-	for _, rescheduled := range failToSubmit {
-		r.pq.Add(rescheduled)
-	}
+func (r *reschedulerImpl) cleanupPQ() {
+	r.Lock()
+	defer r.Unlock()
 
-	if !r.pq.IsEmpty() {
-		r.timerGate.Update(r.pq.Peek().rescheduleTime)
+	for key, pq := range r.pqMap {
+		if pq.IsEmpty() {
+			delete(r.pqMap, key)
+		}
 	}
 }
 
@@ -211,11 +274,45 @@ func (r *reschedulerImpl) drain() {
 	r.Lock()
 	defer r.Unlock()
 
-	for !r.pq.IsEmpty() {
-		r.pq.Remove()
+	for key, pq := range r.pqMap {
+		for !pq.IsEmpty() {
+			pq.Remove()
+		}
+		delete(r.pqMap, key)
 	}
+
+	r.numExecutables = 0
 }
 
 func (r *reschedulerImpl) isStopped() bool {
 	return atomic.LoadInt32(&r.status) == common.DaemonStatusStopped
+}
+
+func (r *reschedulerImpl) getOrCreatePQLocked(
+	key TaskChannelKey,
+) collection.Queue[rescheduledExecuable] {
+	if pq, ok := r.pqMap[key]; ok {
+		return pq
+	}
+
+	pq := r.newPriorityQueue(nil)
+	r.pqMap[key] = pq
+	return pq
+}
+
+func (r *reschedulerImpl) newPriorityQueue(
+	items []rescheduledExecuable,
+) collection.Queue[rescheduledExecuable] {
+	if items == nil {
+		return collection.NewPriorityQueue(r.rescheduledExecuableCompareLess)
+	}
+
+	return collection.NewPriorityQueueWithItems(r.rescheduledExecuableCompareLess, items)
+}
+
+func (r *reschedulerImpl) rescheduledExecuableCompareLess(
+	this rescheduledExecuable,
+	that rescheduledExecuable,
+) bool {
+	return this.rescheduleTime.Before(that.rescheduleTime)
 }

@@ -30,11 +30,18 @@ import (
 	"go.temporal.io/server/common/tasks"
 )
 
-var DefaultTaskPriorityWeight = map[tasks.Priority]int{
-	tasks.PriorityHigh:   900,
-	tasks.PriorityMedium: 50,
-	tasks.PriorityLow:    25,
-}
+var (
+	DefaultActiveTaskPriorityWeight = map[tasks.Priority]int{
+		tasks.PriorityHigh: 10,
+		tasks.PriorityLow:  1,
+	}
+
+	DefaultStandbyTaskPriorityWeight = map[tasks.Priority]int{
+		// we basically treat standby tasks as low prority tasks
+		tasks.PriorityHigh: 1,
+		tasks.PriorityLow:  1,
+	}
+)
 
 func ConvertWeightsToDynamicConfigValue(
 	weights map[tasks.Priority]int,
@@ -55,7 +62,7 @@ func ConvertDynamicConfigValueToWeights(
 		priority, ok := tasks.PriorityValue[key]
 		if !ok {
 			logger.Error("Unknown key for task priority name, fallback to default weights", tag.Key(key), tag.Value(value))
-			return DefaultTaskPriorityWeight
+			return DefaultActiveTaskPriorityWeight
 		}
 
 		var intValue int
@@ -70,7 +77,7 @@ func ConvertDynamicConfigValueToWeights(
 			intValue = int(value)
 		default:
 			logger.Error("Unknown type for task priority weight, fallback to default weights", tag.Key(key), tag.Value(value))
-			return DefaultTaskPriorityWeight
+			return DefaultActiveTaskPriorityWeight
 		}
 		weights[priority] = intValue
 	}

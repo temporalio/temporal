@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -74,18 +73,6 @@ func Test_BuildPutMappingBody(t *testing.T) {
 	for _, test := range tests {
 		assert.Equal(test.expected, fmt.Sprintf("%v", buildMappingBody(test.input)))
 	}
-}
-
-func Test_ConvertV7Sorters(t *testing.T) {
-	sortersV7 := make([]elastic.Sorter, 2)
-	sortersV7[0] = elastic.NewFieldSort("test")
-	sortersV7[1] = elastic.NewFieldSort("test2")
-
-	sortersV6 := convertV7SortersToV6(sortersV7)
-	require.NotNil(t, sortersV6[0])
-	source0, err0 := sortersV6[0].Source()
-	require.NoError(t, err0)
-	require.NotNil(t, source0)
 }
 
 func TestIsResponseRetryable(t *testing.T) {

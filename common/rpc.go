@@ -36,7 +36,8 @@ type (
 		GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error)
 		GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error)
 		GetGRPCListener() net.Listener
-		CreateFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn
+		CreateRemoteFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn
+		CreateLocalFrontendGRPCConnection() *grpc.ClientConn
 		CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn
 	}
 )

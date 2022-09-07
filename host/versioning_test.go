@@ -31,6 +31,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/service/matching"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -209,4 +211,67 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	s.NoError(err)
 	s.NotNil(res2)
 	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
+}
+
+func (s *versioningIntegSuite) TestVersioningChangesPropagatedToSubPartitions() {
+	ctx := NewContext()
+	tq := "integration-versioning-sub-partitions"
+
+	res, err := s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		Namespace:     s.namespace,
+		TaskQueue:     tq,
+		VersionId:     &taskqueuepb.VersionId{WorkerBuildId: "foo"},
+		BecomeDefault: true,
+	})
+	s.NoError(err)
+	s.NotNil(res)
+
+	res2, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
+		Namespace: s.namespace,
+		TaskQueue: tq,
+	})
+	s.NoError(err)
+	s.NotNil(res2)
+	s.Equal("foo", res2.CurrentDefault.GetVersion().GetWorkerBuildId())
+
+	// Verify partitions have data
+	dcCol := dynamicconfig.NewCollection(s.testCluster.GetHost().dcClient, s.Logger)
+	partCount := dcCol.GetTaskQueuePartitionsProperty(dynamicconfig.MatchingNumTaskqueueReadPartitions)(s.namespace, tq, 0)
+	if partCount <= 1 {
+		s.T().Skip("This test makes no sense unless there are >1 partitions")
+	}
+
+	for i := 1; i < partCount; i++ {
+		subPartName, err := matching.NewTaskQueueNameWithPartition(tq, i)
+		s.NoError(err)
+		res, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
+			Namespace: s.namespace,
+			TaskQueue: subPartName.String(),
+		})
+		s.NoError(err)
+		s.NotNil(res)
+		s.Equal("foo", res.CurrentDefault.GetVersion().GetWorkerBuildId())
+	}
+
+	// Make a modification, verify it propagates to partitions
+	res, err = s.engine.UpdateWorkerBuildIdOrdering(ctx, &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		Namespace:     s.namespace,
+		TaskQueue:     tq,
+		VersionId:     &taskqueuepb.VersionId{WorkerBuildId: "foo-2"},
+		BecomeDefault: true,
+	})
+	s.NoError(err)
+	s.NotNil(res)
+
+	for i := 1; i < partCount; i++ {
+		subPartName, err := matching.NewTaskQueueNameWithPartition(tq, i)
+		s.NoError(err)
+		res, err := s.engine.GetWorkerBuildIdOrdering(ctx, &workflowservice.GetWorkerBuildIdOrderingRequest{
+			Namespace: s.namespace,
+			TaskQueue: subPartName.String(),
+		})
+		s.NoError(err)
+		s.NotNil(res)
+		s.Equal("foo-2", res.CurrentDefault.GetVersion().GetWorkerBuildId())
+	}
 }

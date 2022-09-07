@@ -37,7 +37,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -63,10 +62,7 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 		}
 	}
 
-	forkBranch, err := m.serializer.HistoryBranchFromBlob(&commonpb.DataBlob{
-		Data:         request.ForkBranchToken,
-		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-	})
+	forkBranch, err := m.getHistoryBranchInfo(ctx, request.ForkBranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -114,6 +110,7 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 	}
 
 	req := &InternalForkHistoryBranchRequest{
+		BranchToken:    request.ForkBranchToken,
 		ForkBranchInfo: forkBranch,
 		TreeInfo:       treeInfoBlob,
 		ForkNodeID:     request.ForkNodeID,
@@ -127,13 +124,18 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 		return nil, err
 	}
 
-	branchInfoBlob, err := m.serializer.HistoryBranchToBlob(newBranchInfo, enumspb.ENCODING_TYPE_PROTO3)
+	resp, err := m.UpdateHistoryBranchInfo(ctx,
+		&UpdateHistoryBranchInfoRequest{
+			BranchToken: request.ForkBranchToken,
+			BranchInfo:  newBranchInfo,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	return &ForkHistoryBranchResponse{
-		NewBranchToken: branchInfoBlob.Data,
+		NewBranchToken: resp.BranchToken,
 	}, nil
 }
 
@@ -143,7 +145,7 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 	request *DeleteHistoryBranchRequest,
 ) error {
 
-	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	branch, err := m.getHistoryBranchInfo(ctx, request.BranchToken)
 	if err != nil {
 		return err
 	}
@@ -158,7 +160,7 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 	})
 
 	// Get the entire history tree, so we know if any part of the target branch is referenced by other branches.
-	historyTreeResp, err := m.GetHistoryTree(context.TODO(), &GetHistoryTreeRequest{
+	historyTreeResp, err := m.GetHistoryTree(ctx, &GetHistoryTreeRequest{
 		TreeID:      branch.TreeId,
 		ShardID:     &request.ShardID,
 		BranchToken: request.BranchToken,
@@ -207,6 +209,7 @@ findDeleteRanges:
 	}
 
 	req := &InternalDeleteHistoryBranchRequest{
+		BranchToken:  request.BranchToken,
 		ShardID:      request.ShardID,
 		TreeId:       branch.TreeId,
 		BranchId:     branch.BranchId,
@@ -226,7 +229,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 	maxNodeID := request.NodeID + 1
 	pageSize := trimHistoryBranchPageSize
 
-	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	branch, err := m.getHistoryBranchInfo(ctx, request.BranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -255,6 +258,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 
 		nodes, token, err := m.readRawHistoryBranch(
 			ctx,
+			request.BranchToken,
 			shardID,
 			treeID,
 			branchAncestors,
@@ -300,6 +304,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 
 	for _, node := range nodesToTrim {
 		if err := m.persistence.DeleteHistoryNodes(ctx, &InternalDeleteHistoryNodesRequest{
+			BranchToken:   request.BranchToken,
 			ShardID:       shardID,
 			BranchInfo:    node.branchInfo,
 			NodeID:        node.nodeID,
@@ -319,7 +324,7 @@ func (m *executionManagerImpl) GetHistoryTree(
 ) (*GetHistoryTreeResponse, error) {
 
 	if len(request.TreeID) == 0 {
-		branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+		branch, err := m.getHistoryBranchInfo(ctx, request.BranchToken)
 		if err != nil {
 			return nil, err
 		}
@@ -340,10 +345,27 @@ func (m *executionManagerImpl) GetHistoryTree(
 	return &GetHistoryTreeResponse{Branches: branches}, nil
 }
 
+func (m *executionManagerImpl) getHistoryBranchInfo(
+	ctx context.Context,
+	branchToken []byte,
+) (*persistencespb.HistoryBranch, error) {
+	resp, err := m.persistence.ParseHistoryBranchInfo(
+		ctx,
+		&ParseHistoryBranchInfoRequest{
+			BranchToken: branchToken,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return resp.BranchInfo, err
+}
+
 func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
+	ctx context.Context,
 	request *AppendHistoryNodesRequest,
 ) (*InternalAppendHistoryNodesRequest, error) {
-	branch, err := m.serializer.HistoryBranchFromBlob(&commonpb.DataBlob{Data: request.BranchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
+	branch, err := m.getHistoryBranchInfo(ctx, request.BranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -392,6 +414,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	}
 
 	req := &InternalAppendHistoryNodesRequest{
+		BranchToken: request.BranchToken,
 		IsNewBranch: request.IsNewBranch,
 		Info:        request.Info,
 		BranchInfo:  branch,
@@ -427,9 +450,10 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 }
 
 func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
+	ctx context.Context,
 	request *AppendRawHistoryNodesRequest,
 ) (*InternalAppendHistoryNodesRequest, error) {
-	branch, err := m.serializer.HistoryBranchFromBlob(&commonpb.DataBlob{Data: request.BranchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
+	branch, err := m.getHistoryBranchInfo(ctx, request.BranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -457,6 +481,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 	}
 
 	req := &InternalAppendHistoryNodesRequest{
+		BranchToken: request.BranchToken,
 		IsNewBranch: request.IsNewBranch,
 		Info:        request.Info,
 		BranchInfo:  branch,
@@ -497,7 +522,7 @@ func (m *executionManagerImpl) AppendHistoryNodes(
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
 
-	req, err := m.serializeAppendHistoryNodesRequest(request)
+	req, err := m.serializeAppendHistoryNodesRequest(ctx, request)
 
 	if err != nil {
 		return nil, err
@@ -516,7 +541,7 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 	request *AppendRawHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
 
-	req, err := m.serializeAppendRawHistoryNodesRequest(request)
+	req, err := m.serializeAppendRawHistoryNodesRequest(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -525,6 +550,24 @@ func (m *executionManagerImpl) AppendRawHistoryNodes(
 	return &AppendHistoryNodesResponse{
 		Size: len(request.History.Data),
 	}, err
+}
+
+// ParseHistoryBranchInfo parses the history branch for branch information
+func (m *executionManagerImpl) ParseHistoryBranchInfo(
+	ctx context.Context,
+	request *ParseHistoryBranchInfoRequest,
+) (*ParseHistoryBranchInfoResponse, error) {
+
+	return m.persistence.ParseHistoryBranchInfo(ctx, request)
+}
+
+// UpdateHistoryBranchInfo updates the history branch with branch information
+func (m *executionManagerImpl) UpdateHistoryBranchInfo(
+	ctx context.Context,
+	request *UpdateHistoryBranchInfoRequest,
+) (*UpdateHistoryBranchInfoResponse, error) {
+
+	return m.persistence.UpdateHistoryBranchInfo(ctx, request)
 }
 
 // NewHistoryBranch initializes a new history branch
@@ -633,6 +676,7 @@ func (m *executionManagerImpl) GetAllHistoryTreeBranches(
 
 func (m *executionManagerImpl) readRawHistoryBranch(
 	ctx context.Context,
+	branchToken []byte,
 	shardID int32,
 	treeID string,
 	branchAncestors []*persistencespb.HistoryBranchRange,
@@ -673,6 +717,7 @@ func (m *executionManagerImpl) readRawHistoryBranch(
 	}
 	branchID := currentBranch.GetBranchId()
 	resp, err := m.persistence.ReadHistoryBranch(ctx, &InternalReadHistoryBranchRequest{
+		BranchToken:   branchToken,
 		ShardID:       shardID,
 		TreeID:        treeID,
 		BranchID:      branchID,
@@ -691,6 +736,7 @@ func (m *executionManagerImpl) readRawHistoryBranch(
 
 func (m *executionManagerImpl) readRawHistoryBranchReverse(
 	ctx context.Context,
+	branchToken []byte,
 	shardID int32,
 	treeID string,
 	branchAncestors []*persistencespb.HistoryBranchRange,
@@ -732,6 +778,7 @@ func (m *executionManagerImpl) readRawHistoryBranchReverse(
 	branchID := currentBranch.GetBranchId()
 
 	resp, err := m.persistence.ReadHistoryBranch(ctx, &InternalReadHistoryBranchRequest{
+		BranchToken:   branchToken,
 		ShardID:       shardID,
 		TreeID:        treeID,
 		BranchID:      branchID,
@@ -759,7 +806,7 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 	minNodeID := request.MinEventID
 	maxNodeID := request.MaxEventID
 
-	branch, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	branch, err := m.getHistoryBranchInfo(ctx, branchToken)
 	if err != nil {
 		return nil, nil, nil, nil, 0, err
 	}
@@ -789,6 +836,7 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 
 	nodes, token, err := m.readRawHistoryBranch(
 		ctx,
+		branchToken,
 		shardID,
 		treeID,
 		branchAncestors,
@@ -849,7 +897,7 @@ func (m *executionManagerImpl) readRawHistoryBranchReverseAndFilter(
 		maxNodeID++ // downstream code is exclusive on maxNodeID
 	}
 
-	branch, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	branch, err := m.getHistoryBranchInfo(ctx, branchToken)
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}
@@ -879,6 +927,7 @@ func (m *executionManagerImpl) readRawHistoryBranchReverseAndFilter(
 
 	nodes, token, err := m.readRawHistoryBranchReverse(
 		ctx,
+		branchToken,
 		shardID,
 		treeID,
 		branchAncestors,

@@ -25,11 +25,13 @@
 package taskqueue
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -48,6 +50,9 @@ type (
 		status   int32
 		stopC    chan struct{}
 		stopWG   sync.WaitGroup
+
+		lifecycleCtx    context.Context
+		lifecycleCancel context.CancelFunc
 	}
 
 	taskQueueState struct {
@@ -100,12 +105,20 @@ func NewScavenger(db p.TaskManager, metricsClient metrics.Client, logger log.Log
 	stopC := make(chan struct{})
 	taskExecutor := executor.NewFixedSizePoolExecutor(
 		taskQueueBatchSize, executorMaxDeferredTasks, metricsClient, metrics.TaskQueueScavengerScope)
+	lifecycleCtx, lifecycleCancel := context.WithCancel(
+		headers.SetCallerInfo(
+			context.Background(),
+			headers.SystemBackgroundCallerInfo,
+		),
+	)
 	return &Scavenger{
-		db:       db,
-		metrics:  metricsClient,
-		logger:   logger,
-		stopC:    stopC,
-		executor: taskExecutor,
+		db:              db,
+		metrics:         metricsClient,
+		logger:          logger,
+		stopC:           stopC,
+		executor:        taskExecutor,
+		lifecycleCtx:    lifecycleCtx,
+		lifecycleCancel: lifecycleCancel,
 	}
 }
 
@@ -129,6 +142,7 @@ func (s *Scavenger) Stop() {
 	}
 	s.metrics.IncCounter(metrics.TaskQueueScavengerScope, metrics.StoppedCount)
 	s.logger.Info("Taskqueue scavenger stopping")
+	s.lifecycleCancel()
 	close(s.stopC)
 	s.executor.Stop()
 	s.stopWG.Wait()
@@ -150,7 +164,7 @@ func (s *Scavenger) run() {
 
 	var pageToken []byte
 	for {
-		resp, err := s.listTaskQueue(taskQueueBatchSize, pageToken)
+		resp, err := s.listTaskQueue(s.lifecycleCtx, taskQueueBatchSize, pageToken)
 		if err != nil {
 			s.logger.Error("listTaskQueue error", tag.Error(err))
 			return

@@ -159,6 +159,36 @@ func (m *sqlExecutionStore) DeleteHistoryNodes(
 	return nil
 }
 
+// ParseHistoryBranchInfo parses the history branch for branch information
+func (m *sqlExecutionStore) ParseHistoryBranchInfo(
+	ctx context.Context,
+	request *p.ParseHistoryBranchInfoRequest,
+) (*p.ParseHistoryBranchInfoResponse, error) {
+
+	branchInfo, err := p.ParseHistoryBranchToken(request.BranchToken)
+	if err != nil {
+		return nil, err
+	}
+	return &p.ParseHistoryBranchInfoResponse{
+		BranchInfo: branchInfo,
+	}, nil
+}
+
+// UpdateHistoryBranchInfo updates the history branch with branch information
+func (m *sqlExecutionStore) UpdateHistoryBranchInfo(
+	ctx context.Context,
+	request *p.UpdateHistoryBranchInfoRequest,
+) (*p.UpdateHistoryBranchInfoResponse, error) {
+
+	branchToken, err := p.UpdateHistoryBranchToken(request.BranchToken, request.BranchInfo)
+	if err != nil {
+		return nil, err
+	}
+	return &p.UpdateHistoryBranchInfoResponse{
+		BranchToken: branchToken,
+	}, nil
+}
+
 // NewHistoryBranch initializes a new history branch
 func (m *sqlExecutionStore) NewHistoryBranch(
 	ctx context.Context,

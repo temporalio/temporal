@@ -36,10 +36,29 @@ type (
 )
 
 // NewPriorityQueue create a new priority queue
-func NewPriorityQueue[T any](compareLess func(this T, other T) bool) Queue[T] {
+func NewPriorityQueue[T any](
+	compareLess func(this T, other T) bool,
+) Queue[T] {
 	return &priorityQueueImpl[T]{
 		compareLess: compareLess,
 	}
+}
+
+// NewPriorityQueueWithItems creats a new priority queue
+// with the provided list of items.
+// PriorityQueue will take ownership of the passed in items,
+// so caller should stop modifying it.
+// The complexity is O(n) where n is the number of items
+func NewPriorityQueueWithItems[T any](
+	compareLess func(this T, other T) bool,
+	items []T,
+) Queue[T] {
+	pq := &priorityQueueImpl[T]{
+		compareLess: compareLess,
+		items:       items,
+	}
+	heap.Init(pq)
+	return pq
 }
 
 // Peek returns the top item of the priority queue

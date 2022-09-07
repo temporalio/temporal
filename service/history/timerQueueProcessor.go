@@ -67,6 +67,7 @@ type (
 		metricsClient              metrics.Client
 		workflowCache              workflow.Cache
 		scheduler                  queues.Scheduler
+		priorityAssigner           queues.PriorityAssigner
 		workflowDeleteManager      workflow.DeleteManager
 		ackLevel                   tasks.Key
 		hostRateLimiter            quotas.RateLimiter
@@ -86,6 +87,7 @@ func newTimerQueueProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	priorityAssigner queues.PriorityAssigner,
 	clientBean client.Bean,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -118,6 +120,7 @@ func newTimerQueueProcessor(
 		metricsClient:         shard.GetMetricsClient(),
 		workflowCache:         workflowCache,
 		scheduler:             scheduler,
+		priorityAssigner:      priorityAssigner,
 		workflowDeleteManager: workflowDeleteManager,
 		ackLevel:              shard.GetQueueAckLevel(tasks.CategoryTimer),
 		hostRateLimiter:       hostRateLimiter,
@@ -130,6 +133,7 @@ func newTimerQueueProcessor(
 			shard,
 			workflowCache,
 			scheduler,
+			priorityAssigner,
 			workflowDeleteManager,
 			matchingClient,
 			taskAllocator,
@@ -237,6 +241,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 		t.shard,
 		t.workflowCache,
 		t.scheduler,
+		t.priorityAssigner,
 		t.workflowDeleteManager,
 		namespaceIDs,
 		standbyClusterName,
@@ -310,8 +315,8 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 					return false
 				default:
 				}
-				return err != shard.ErrShardClosed
-			}); err == shard.ErrShardClosed {
+				return !shard.IsShardOwnershipLostError(err)
+			}); shard.IsShardOwnershipLostError(err) {
 				// shard is unloaded, timer processor should quit as well
 				go t.Stop()
 				return
@@ -401,6 +406,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 				t.shard,
 				t.workflowCache,
 				t.scheduler,
+				t.priorityAssigner,
 				t.workflowDeleteManager,
 				t.matchingClient,
 				clusterName,

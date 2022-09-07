@@ -167,7 +167,6 @@ func GrpcServerOptionsProvider(
 		rpc.ServiceErrorInterceptor,
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
-		retryableInterceptor.Intercept,
 		telemetryInterceptor.Intercept,
 		namespaceValidatorInterceptor.Intercept,
 		namespaceCountLimiterInterceptor.Intercept,
@@ -272,7 +271,7 @@ func NamespaceRateLimitInterceptorProvider(
 	visibilityRateFn := func(namespace string) float64 {
 		return namespaceRPS(
 			serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
-			serviceConfig.GlobalNamespaceRPS,
+			serviceConfig.GlobalNamespaceVisibilityRPS,
 			frontendServiceResolver,
 			namespace,
 		)
@@ -328,6 +327,7 @@ func PersistenceRateLimitingParamsProvider(
 	return service.NewPersistenceRateLimitingParams(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.PersistenceNamespaceMaxQPS,
 		serviceConfig.EnablePersistencePriorityRateLimiting,
 	)
 }

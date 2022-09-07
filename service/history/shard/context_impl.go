@@ -157,9 +157,6 @@ type (
 var _ Context = (*ContextImpl)(nil)
 
 var (
-	// ErrShardClosed is returned when shard is closed and a req cannot be processed
-	ErrShardClosed = serviceerror.NewUnavailable("shard closed")
-
 	// ErrShardStatusUnknown means we're not sure if we have the shard lock or not. This may be returned
 	// during short windows at initialization and if we've lost the connection to the database.
 	ErrShardStatusUnknown = serviceerror.NewUnavailable("shard status unknown")
@@ -1017,7 +1014,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	}()
 
 	// Wrap step 1 and 2 with function to release the lock with defer after step 2.
-	err = func() error {
+	if err = func() error {
 		s.wLock()
 		defer s.wUnlock()
 
@@ -1060,23 +1057,23 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			WorkflowID:  key.WorkflowID,
 			RunID:       key.RunID,
 		}
-		err = s.GetExecutionManager().DeleteCurrentWorkflowExecution(ctx, delCurRequest)
-		return err
-	}()
+		if err := s.GetExecutionManager().DeleteCurrentWorkflowExecution(
+			ctx,
+			delCurRequest,
+		); err != nil {
+			return err
+		}
 
-	if err != nil {
+		// Step 3. Delete workflow mutable state.
+		delRequest := &persistence.DeleteWorkflowExecutionRequest{
+			ShardID:     s.shardID,
+			NamespaceID: key.NamespaceID,
+			WorkflowID:  key.WorkflowID,
+			RunID:       key.RunID,
+		}
+		err = s.GetExecutionManager().DeleteWorkflowExecution(ctx, delRequest)
 		return err
-	}
-
-	// Step 3. Delete workflow mutable state.
-	delRequest := &persistence.DeleteWorkflowExecutionRequest{
-		ShardID:     s.shardID,
-		NamespaceID: key.NamespaceID,
-		WorkflowID:  key.WorkflowID,
-		RunID:       key.RunID,
-	}
-	err = s.GetExecutionManager().DeleteWorkflowExecution(ctx, delRequest)
-	if err != nil {
+	}(); err != nil {
 		return err
 	}
 
@@ -1091,7 +1088,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -1129,7 +1125,7 @@ func (s *ContextImpl) errorByState() error {
 	case contextStateAcquired:
 		return nil
 	case contextStateStopping, contextStateStopped:
-		return ErrShardClosed
+		return s.newShardClosedErrorWithShardID()
 	default:
 		panic("invalid state")
 	}
@@ -1802,15 +1798,15 @@ func (s *ContextImpl) acquireShard() {
 	// lifecycleCtx. The persistence operations called here use lifecycleCtx as their context,
 	// so if we were blocked in any of them, they should return immediately with a context
 	// canceled error.
-	policy := backoff.NewExponentialRetryPolicy(1 * time.Second)
-	policy.SetExpirationInterval(5 * time.Minute)
+	policy := backoff.NewExponentialRetryPolicy(1 * time.Second).
+		WithExpirationInterval(5 * time.Minute)
 
 	// Remember this value across attempts
 	ownershipChanged := false
 
 	op := func() error {
 		if !s.isValid() {
-			return ErrShardClosed
+			return s.newShardClosedErrorWithShardID()
 		}
 
 		// Initial load of shard metadata
@@ -2007,6 +2003,12 @@ func (s *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
 	return s.archivalMetadata
 }
 
+// newDetachedContext creates a detached context with the same deadline
+// and values from the given context. Detached context won't be affected
+// if the context it bases on is cancelled.
+// Use this to perform operations that should not be interrupted by caller
+// cancellation. E.g. workflow operations that, if interrupted, could result in
+// shard renewal or even ownership lost.
 func (s *ContextImpl) newDetachedContext(
 	ctx context.Context,
 ) (context.Context, context.CancelFunc, error) {
@@ -2033,9 +2035,17 @@ func (s *ContextImpl) newDetachedContext(
 
 func (s *ContextImpl) newIOContext() (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithTimeout(s.lifecycleCtx, shardIOTimeout)
-	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(headers.CallerTypeBackground))
+	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
 
 	return ctx, cancel
+}
+
+// newShardClosedErrorWithShardID when shard is closed and a req cannot be processed
+func (s *ContextImpl) newShardClosedErrorWithShardID() *persistence.ShardOwnershipLostError {
+	return &persistence.ShardOwnershipLostError{
+		ShardID: s.shardID, // immutable
+		Msg:     "shard closed",
+	}
 }
 
 func OperationPossiblySucceeded(err error) bool {

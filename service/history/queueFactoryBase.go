@@ -29,6 +29,7 @@ import (
 
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -40,19 +41,24 @@ import (
 )
 
 type (
-	SchedulerParams struct {
+	QueueFactoryBaseParams struct {
 		fx.In
 
 		NamespaceRegistry namespace.Registry
 		ClusterMetadata   cluster.Metadata
 		Config            *configs.Config
+		TimeSource        clock.TimeSource
 		MetricsHandler    metrics.MetricsHandler
 		Logger            resource.SnTaggedLogger
 	}
 
-	queueFactoryBase struct {
-		scheduler       queues.Scheduler
-		hostRateLimiter quotas.RateLimiter
+	QueueFactoryBase struct {
+		HostScheduler        queues.Scheduler
+		HostPriorityAssigner queues.PriorityAssigner
+		HostRateLimiter      quotas.RateLimiter
+
+		// used by multi-cursor queue reader
+		HostReaderRateLimiter quotas.RequestRateLimiter
 	}
 
 	QueueFactoriesLifetimeHookParams struct {
@@ -102,29 +108,36 @@ func QueueFactoryLifetimeHooks(
 	)
 }
 
-func (f *queueFactoryBase) Start() {
-	if f.scheduler != nil {
-		f.scheduler.Start()
+func (f *QueueFactoryBase) Start() {
+	if f.HostScheduler != nil {
+		f.HostScheduler.Start()
 	}
 }
 
-func (f *queueFactoryBase) Stop() {
-	if f.scheduler != nil {
-		f.scheduler.Stop()
+func (f *QueueFactoryBase) Stop() {
+	if f.HostScheduler != nil {
+		f.HostScheduler.Stop()
 	}
 }
 
-func newQueueHostRateLimiter(
+func NewQueueHostRateLimiter(
 	hostRPS dynamicconfig.IntPropertyFn,
 	fallBackRPS dynamicconfig.IntPropertyFn,
 ) quotas.RateLimiter {
 	return quotas.NewDefaultOutgoingRateLimiter(
-		func() float64 {
-			if maxPollHostRps := hostRPS(); maxPollHostRps > 0 {
-				return float64(maxPollHostRps)
-			}
-
-			return float64(fallBackRPS())
-		},
+		NewHostRateLimiterRateFn(hostRPS, fallBackRPS),
 	)
+}
+
+func NewHostRateLimiterRateFn(
+	hostRPS dynamicconfig.IntPropertyFn,
+	fallBackRPS dynamicconfig.IntPropertyFn,
+) quotas.RateFn {
+	return func() float64 {
+		if maxPollHostRps := hostRPS(); maxPollHostRps > 0 {
+			return float64(maxPollHostRps)
+		}
+
+		return float64(fallBackRPS())
+	}
 }

@@ -235,7 +235,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionClosed(gomock.Any(), gomock.Any()).Return(nil)
 
-	_, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	_, _, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
 	s.Nil(err)
 }
 
@@ -289,7 +289,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 		s.createRecordWorkflowExecutionStartedRequest(s.namespace, event, visibilityTask, mutableState, backoff, taskQueueName),
 	).Return(nil)
 
-	_, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	_, _, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
 	s.Nil(err)
 }
 
@@ -335,10 +335,78 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.EXPECT().UpsertWorkflowExecution(
 		gomock.Any(),
-		s.createUpsertWorkflowSearchAttributesRequest(s.namespace, visibilityTask, mutableState, taskQueueName),
+		s.createUpsertWorkflowRequest(s.namespace, visibilityTask, mutableState, taskQueueName),
 	).Return(nil)
 
-	_, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	_, _, err = s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(visibilityTask))
+	s.NoError(err)
+}
+
+func (s *visibilityQueueTaskExecutorSuite) TestProcessModifyWorkflowProperties() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	mutableState := workflow.TestGlobalMutableState(
+		s.mockShard,
+		s.mockShard.GetEventsCache(),
+		s.logger,
+		s.version,
+		execution.GetRunId(),
+	)
+
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	taskID := int64(59)
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+
+	visibilityTask := &tasks.UpsertExecutionVisibilityTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version: s.version,
+		TaskID:  taskID,
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(
+		mutableState,
+		wt.ScheduledEventID,
+		wt.Version,
+	)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState},
+		nil,
+	)
+	s.mockVisibilityMgr.EXPECT().UpsertWorkflowExecution(
+		gomock.Any(),
+		s.createUpsertWorkflowRequest(s.namespace, visibilityTask, mutableState, taskQueueName),
+	).Return(nil)
+
+	_, _, err = s.visibilityQueueTaskExecutor.Execute(
+		context.Background(),
+		s.newTaskExecutable(visibilityTask),
+	)
 	s.NoError(err)
 }
 
@@ -373,7 +441,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 	}
 }
 
-func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowSearchAttributesRequest(
+func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowRequest(
 	namespaceName namespace.Name,
 	task *tasks.UpsertExecutionVisibilityTask,
 	mutableState workflow.MutableState,
@@ -418,5 +486,19 @@ func (s *visibilityQueueTaskExecutorSuite) createPersistenceMutableState(
 func (s *visibilityQueueTaskExecutorSuite) newTaskExecutable(
 	task tasks.Task,
 ) queues.Executable {
-	return queues.NewExecutable(task, nil, s.visibilityQueueTaskExecutor, nil, nil, s.mockShard.GetTimeSource(), nil, nil, queues.QueueTypeVisibility, nil)
+	return queues.NewExecutable(
+		queues.DefaultReaderId,
+		task,
+		nil,
+		s.visibilityQueueTaskExecutor,
+		nil,
+		nil,
+		queues.NewNoopPriorityAssigner(),
+		s.mockShard.GetTimeSource(),
+		nil,
+		nil,
+		metrics.NoopMetricsHandler,
+		nil,
+		nil,
+	)
 }

@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -84,6 +85,13 @@ func (s *scheduledQueueSuite) SetupTest() {
 	s.scheduledQueue = NewScheduledQueue(
 		s.mockShard,
 		tasks.CategoryTimer,
+		NewFIFOScheduler(
+			FIFOSchedulerOptions{
+				WorkerCount: dynamicconfig.GetIntPropertyFn(10),
+				QueueSize:   100,
+			},
+			log.NewTestLogger(),
+		),
 		nil,
 		nil,
 		testQueueOptions,
@@ -126,6 +134,8 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider() {
 	for _, key := range testTaskKeys {
 		mockTask := tasks.NewMockTask(s.controller)
 		mockTask.EXPECT().GetKey().Return(key).AnyTimes()
+		mockTask.EXPECT().GetVisibilityTime().Return(key.FireTime).Times(1)
+		mockTask.EXPECT().SetVisibilityTime(key.FireTime.Truncate(scheduledTaskPrecision)).Times(1)
 		mockTasks = append(mockTasks, mockTask)
 
 		if r.ContainsKey(key) {

@@ -34,12 +34,12 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"golang.org/x/time/rate"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 )
 
 var (
@@ -57,7 +57,7 @@ type activities struct {
 func (a *activities) checkNamespace(namespace string) error {
 	// Ignore system namespace for backward compatibility.
 	// TODO: Remove the system namespace special handling after 1.19+
-	if namespace != a.namespace.String() && a.namespace.String() != common.SystemLocalNamespace {
+	if namespace != a.namespace.String() && a.namespace.String() != primitives.SystemLocalNamespace {
 		return errNamespaceMismatch
 	}
 	return nil
@@ -71,11 +71,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		return hbd, err
 	}
 
-	sdkClient, err := a.ClientFactory.NewClient(batchParams.Namespace, logger)
-	if err != nil {
-		logger.Error("Unable to create SDK client for namespace.", tag.Error(err), tag.WorkflowNamespace(batchParams.Namespace))
-		return hbd, err
-	}
+	sdkClient := a.ClientFactory.NewClient(batchParams.Namespace)
 
 	startOver := true
 	if activity.HasHeartbeatDetails(ctx) {

@@ -87,7 +87,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TearDownSuite
 
 func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) SetupTest() {
 	logger := log.NewNoopLogger()
-	dcCollection := dc.NewCollection(dc.NewNoopClient(), logger)
+	dcCollection := dc.NewNoopCollection()
 	s.maxBadBinaryCount = 10
 	s.metadataMgr = s.TestBase.MetadataManager
 	s.controller = gomock.NewController(s.T())

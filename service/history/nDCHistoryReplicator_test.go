@@ -129,11 +129,12 @@ func (s *nDCHistoryReplicatorSuite) TearDownTest() {
 func (s *nDCHistoryReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 	namespaceID := uuid.New()
 	namespaceName := "namespaceName"
-	historyBranch, err := serialization.HistoryBranchToBlob(&persistencespb.HistoryBranch{
+	branchInfo := &persistencespb.HistoryBranch{
 		TreeId:    uuid.New(),
 		BranchId:  uuid.New(),
 		Ancestors: nil,
-	})
+	}
+	historyBranch, err := serialization.HistoryBranchToBlob(branchInfo)
 	s.NoError(err)
 	request := &historyservice.ReplicateWorkflowStateRequest{
 		WorkflowState: &persistencespb.WorkflowMutableState{
@@ -184,6 +185,12 @@ func (s *nDCHistoryReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		gomock.Any(),
 		[]*persistence.WorkflowEvents{},
 	).Return(nil)
+	s.mockExecutionManager.EXPECT().ParseHistoryBranchInfo(gomock.Any(), gomock.Any()).Return(&persistence.ParseHistoryBranchInfoResponse{
+		BranchInfo: branchInfo,
+	}, nil)
+	s.mockExecutionManager.EXPECT().UpdateHistoryBranchInfo(gomock.Any(), gomock.Any()).Return(&persistence.UpdateHistoryBranchInfoResponse{
+		BranchToken: historyBranch.GetData(),
+	}, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: namespaceName},
 		nil,
@@ -210,7 +217,7 @@ func (s *nDCHistoryReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 func (s *nDCHistoryReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 	namespaceID := uuid.New()
 	namespaceName := "namespaceName"
-	historyBranch, err := serialization.HistoryBranchToBlob(&persistencespb.HistoryBranch{
+	branchInfo := &persistencespb.HistoryBranch{
 		TreeId:   uuid.New(),
 		BranchId: uuid.New(),
 		Ancestors: []*persistencespb.HistoryBranchRange{
@@ -225,7 +232,8 @@ func (s *nDCHistoryReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 				EndNodeId:   4,
 			},
 		},
-	})
+	}
+	historyBranch, err := serialization.HistoryBranchToBlob(branchInfo)
 	s.NoError(err)
 	request := &historyservice.ReplicateWorkflowStateRequest{
 		WorkflowState: &persistencespb.WorkflowMutableState{
@@ -335,6 +343,12 @@ func (s *nDCHistoryReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		},
 		nil,
 	)
+	s.mockExecutionManager.EXPECT().ParseHistoryBranchInfo(gomock.Any(), gomock.Any()).Return(&persistence.ParseHistoryBranchInfoResponse{
+		BranchInfo: branchInfo,
+	}, nil)
+	s.mockExecutionManager.EXPECT().UpdateHistoryBranchInfo(gomock.Any(), gomock.Any()).Return(&persistence.UpdateHistoryBranchInfoResponse{
+		BranchToken: historyBranch.GetData(),
+	}, nil).AnyTimes()
 	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History: []*historypb.History{
 			{

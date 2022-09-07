@@ -64,9 +64,9 @@ func (s *RetrySuite) TestRetrySuccess() {
 		return &someError{}
 	}
 
-	policy := NewExponentialRetryPolicy(1 * time.Millisecond)
-	policy.SetMaximumInterval(5 * time.Millisecond)
-	policy.SetMaximumAttempts(10)
+	policy := NewExponentialRetryPolicy(1 * time.Millisecond).
+		WithMaximumInterval(5 * time.Millisecond).
+		WithMaximumAttempts(10)
 
 	err := Retry(op, policy, nil)
 	s.NoError(err)
@@ -85,9 +85,9 @@ func (s *RetrySuite) TestRetryFailed() {
 		return &someError{}
 	}
 
-	policy := NewExponentialRetryPolicy(1 * time.Millisecond)
-	policy.SetMaximumInterval(5 * time.Millisecond)
-	policy.SetMaximumAttempts(5)
+	policy := NewExponentialRetryPolicy(1 * time.Millisecond).
+		WithMaximumInterval(5 * time.Millisecond).
+		WithMaximumAttempts(5)
 
 	err := Retry(op, policy, nil)
 	s.Error(err)
@@ -113,9 +113,9 @@ func (s *RetrySuite) TestIsRetryableSuccess() {
 		return false
 	}
 
-	policy := NewExponentialRetryPolicy(1 * time.Millisecond)
-	policy.SetMaximumInterval(5 * time.Millisecond)
-	policy.SetMaximumAttempts(10)
+	policy := NewExponentialRetryPolicy(1 * time.Millisecond).
+		WithMaximumInterval(5 * time.Millisecond).
+		WithMaximumAttempts(10)
 
 	err := Retry(op, policy, isRetryable)
 	s.NoError(err, "Retry count: %v", i)
@@ -135,9 +135,9 @@ func (s *RetrySuite) TestIsRetryableFailure() {
 		return &theErr
 	}
 
-	policy := NewExponentialRetryPolicy(1 * time.Millisecond)
-	policy.SetMaximumInterval(5 * time.Millisecond)
-	policy.SetMaximumAttempts(10)
+	policy := NewExponentialRetryPolicy(1 * time.Millisecond).
+		WithMaximumInterval(5 * time.Millisecond).
+		WithMaximumAttempts(10)
 
 	err := Retry(op, policy, IgnoreErrors([]error{&theErr}))
 	s.Error(err)
@@ -145,9 +145,9 @@ func (s *RetrySuite) TestIsRetryableFailure() {
 }
 
 func (s *RetrySuite) TestConcurrentRetrier() {
-	policy := NewExponentialRetryPolicy(1 * time.Millisecond)
-	policy.SetMaximumInterval(10 * time.Millisecond)
-	policy.SetMaximumAttempts(4)
+	policy := NewExponentialRetryPolicy(1 * time.Millisecond).
+		WithMaximumInterval(10 * time.Millisecond).
+		WithMaximumAttempts(4)
 
 	// Basic checks
 	retrier := NewConcurrentRetrier(policy)
@@ -227,13 +227,14 @@ func (s *RetrySuite) TestContextErrorFromSomeOtherContext() {
 
 func (s *RetrySuite) TestThrottleRetryContext() {
 	throttleInitialInterval := 100 * time.Millisecond
-	testThrottleRetryPolicy := NewExponentialRetryPolicy(throttleInitialInterval)
-	testThrottleRetryPolicy.SetMaximumInterval(throttleRetryMaxInterval)
-	testThrottleRetryPolicy.SetExpirationInterval(throttleRetryExpirationInterval)
+	testThrottleRetryPolicy := NewExponentialRetryPolicy(throttleInitialInterval).
+		WithMaximumInterval(throttleRetryMaxInterval).
+		WithExpirationInterval(throttleRetryExpirationInterval)
+	originalThrottleRetryPolicy := throttleRetryPolicy
 	throttleRetryPolicy = testThrottleRetryPolicy
 
-	policy := NewExponentialRetryPolicy(10 * time.Millisecond)
-	policy.SetMaximumAttempts(1)
+	policy := NewExponentialRetryPolicy(10 * time.Millisecond).
+		WithMaximumAttempts(1)
 
 	// test if throttle retry policy is used on resource exhausted error
 	attempt := 1
@@ -278,7 +279,7 @@ func (s *RetrySuite) TestThrottleRetryContext() {
 	s.Equal(2, attempt)
 
 	// set the default global throttle retry policy back to its original value
-	throttleRetryPolicy = createThrottleRetryPolicy()
+	throttleRetryPolicy = originalThrottleRetryPolicy
 }
 
 var retryEverything IsRetryable = nil

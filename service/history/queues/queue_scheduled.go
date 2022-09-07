@@ -62,9 +62,10 @@ func NewScheduledQueue(
 	shard shard.Context,
 	category tasks.Category,
 	scheduler Scheduler,
+	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
-	rateLimiter quotas.RateLimiter,
+	hostRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
 	metricsHandler metrics.MetricsHandler,
 ) *scheduledQueue {
@@ -87,6 +88,17 @@ func NewScheduledQueue(
 				return nil, nil, err
 			}
 
+			// The rest of the code assumes task loaded is ordered by task key, which has precision of ns for time.
+			// However for cassandra impl, the task returned is ordered by visibilitystamp column which only has
+			// ms precision, which makes tasks out of order, even across multiple loads.
+			// So truncate task key time also to ms precision to make them ordered.
+			//
+			// This however, moves task visibility time forward for 1ms and may cause timer tasks to be skipped
+			// during processing. To compensate for that, add 1ms back when scheduling the task in reader.go.
+			for _, task := range resp.Tasks {
+				task.SetVisibilityTime(task.GetVisibilityTime().Truncate(scheduledTaskPrecision))
+			}
+
 			for len(resp.Tasks) > 0 && !r.ContainsKey(resp.Tasks[0].GetKey()) {
 				resp.Tasks = resp.Tasks[1:]
 			}
@@ -106,9 +118,10 @@ func NewScheduledQueue(
 			category,
 			paginationFnProvider,
 			scheduler,
+			priorityAssigner,
 			executor,
 			options,
-			rateLimiter,
+			hostRateLimiter,
 			logger,
 			metricsHandler,
 		),
@@ -176,6 +189,7 @@ func (p *scheduledQueue) processEventLoop() {
 		case <-p.shutdownCh:
 			return
 		case <-p.newTimerCh:
+			p.metricsHandler.Counter(NewTimerNotifyCounter).Record(1)
 			p.processNewTime()
 		case <-p.timerGate.FireChan():
 			p.processNewRange()
@@ -183,6 +197,8 @@ func (p *scheduledQueue) processEventLoop() {
 			p.processPollTimer()
 		case <-p.checkpointTimer.C:
 			p.checkpoint()
+		case alert := <-p.alertCh:
+			p.handleAlert(alert)
 		}
 	}
 }
@@ -249,4 +265,15 @@ func (p *scheduledQueue) lookAheadTask() {
 	}
 
 	// no look ahead task, wait for max poll interval or new task notification
+}
+
+// IsTimeExpired checks if the testing time is equal or before
+// the reference time. The precision of the comparison is millisecond.
+func IsTimeExpired(
+	referenceTime time.Time,
+	testingTime time.Time,
+) bool {
+	referenceTime = referenceTime.Truncate(scheduledTaskPrecision)
+	testingTime = testingTime.Truncate(scheduledTaskPrecision)
+	return !testingTime.After(referenceTime)
 }

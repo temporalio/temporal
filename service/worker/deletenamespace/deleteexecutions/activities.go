@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -83,6 +84,8 @@ func NewActivities(
 }
 
 func (a *Activities) GetNextPageTokenActivity(ctx context.Context, params GetNextPageTokenParams) ([]byte, error) {
+	ctx = headers.SetCallerName(ctx, params.Namespace.String())
+
 	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   params.NamespaceID,
 		Namespace:     params.Namespace,
@@ -101,6 +104,8 @@ func (a *Activities) GetNextPageTokenActivity(ctx context.Context, params GetNex
 }
 
 func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
+	ctx = headers.SetCallerName(ctx, params.Namespace.String())
+
 	rateLimiter := quotas.NewRateLimiter(float64(params.RPS), params.RPS)
 
 	var result DeleteExecutionsActivityResult

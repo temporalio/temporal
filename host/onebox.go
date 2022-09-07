@@ -32,7 +32,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uber/tchannel-go"
 	"go.uber.org/fx"
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc"
@@ -107,7 +106,7 @@ type (
 		frontendClient                   workflowservice.WorkflowServiceClient
 		operatorClient                   operatorservice.OperatorServiceClient
 		historyClient                    historyservice.HistoryServiceClient
-		dynamicClient                    *dynamicClient
+		dcClient                         *dcClient
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
 		persistenceConfig                config.Persistence
@@ -163,13 +162,15 @@ type (
 		SpanExporters                    []otelsdktrace.SpanExporter
 		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
 	}
+
+	listenHostPort string
 )
 
 // NewTemporal returns an instance that hosts full temporal in one process
 func NewTemporal(params *TemporalParams) *temporalImpl {
-	integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
+	testDCClient := newTestDCClient(dynamicconfig.NewNoopClient())
 	for k, v := range params.DynamicConfigOverrides {
-		integrationClient.OverrideValue(k, v)
+		testDCClient.OverrideValue(k, v)
 	}
 	impl := &temporalImpl{
 		logger:                           params.Logger,
@@ -192,21 +193,21 @@ func NewTemporal(params *TemporalParams) *temporalImpl {
 		mockAdminClient:                  params.MockAdminClient,
 		namespaceReplicationTaskExecutor: params.NamespaceReplicationTaskExecutor,
 		spanExporters:                    params.SpanExporters,
-		dynamicClient:                    integrationClient,
+		dcClient:                         testDCClient,
 	}
-	impl.overrideHistoryDynamicConfig(integrationClient)
+	impl.overrideHistoryDynamicConfig(testDCClient)
 	return impl
 }
 
 func (c *temporalImpl) enableWorker() bool {
-	return c.workerConfig.EnableArchiver || c.workerConfig.EnableReplicator
+	return c.workerConfig.StartWorkerAnyway || c.workerConfig.EnableArchiver || c.workerConfig.EnableReplicator
 }
 
 func (c *temporalImpl) Start() error {
 	hosts := make(map[string][]string)
 	hosts[common.FrontendServiceName] = []string{c.FrontendGRPCAddress()}
 	hosts[common.MatchingServiceName] = []string{c.MatchingGRPCServiceAddress()}
-	hosts[common.HistoryServiceName] = c.HistoryServiceAddress(3)
+	hosts[common.HistoryServiceName] = c.HistoryServiceAddress()
 	if c.enableWorker() {
 		hosts[common.WorkerServiceName] = []string{c.WorkerGRPCServiceAddress()}
 	}
@@ -237,18 +238,26 @@ func (c *temporalImpl) Start() error {
 }
 
 func (c *temporalImpl) Stop() {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	if c.enableWorker() {
 		c.shutdownWG.Add(1)
-		c.workerApp.Stop(context.Background())
+		c.workerApp.Stop(ctx)
 	}
 
 	c.shutdownWG.Add(3)
 
-	c.frontendApp.Stop(context.Background())
+	c.frontendApp.Stop(ctx)
 	for _, historyApp := range c.historyApps {
-		historyApp.Stop(context.Background())
+		historyApp.Stop(ctx)
 	}
-	c.matchingApp.Stop(context.Background())
+	c.matchingApp.Stop(ctx)
+
+	if ctx.Err() != nil {
+		c.logger.Warn("server did not shut down in 15s")
+		// TODO: we should fail the test in this case
+	}
 
 	close(c.shutdownCh)
 	c.shutdownWG.Wait()
@@ -269,36 +278,20 @@ func (c *temporalImpl) FrontendGRPCAddress() string {
 	}
 }
 
-func (c *temporalImpl) FrontendRingpopAddress() string {
-	switch c.clusterNo {
-	case 0:
-		return "127.0.0.1:7124"
-	case 1:
-		return "127.0.0.1:8124"
-	case 2:
-		return "127.0.0.1:9124"
-	case 3:
-		return "127.0.0.1:10124"
-	default:
-		return "127.0.0.1:7124"
-	}
-}
-
-// penultimatePortDigit: 2 - ringpop, 3 - gRPC
-func (c *temporalImpl) HistoryServiceAddress(penultimatePortDigit int) []string {
+func (c *temporalImpl) HistoryServiceAddress() []string {
 	var hosts []string
-	startPort := penultimatePortDigit * 10
+	var startPort int
 	switch c.clusterNo {
 	case 0:
-		startPort += 7201
+		startPort = 7231
 	case 1:
-		startPort += 8201
+		startPort = 8231
 	case 2:
-		startPort += 9201
+		startPort = 9231
 	case 3:
-		startPort += 10201
+		startPort = 10231
 	default:
-		startPort += 7201
+		startPort = 7231
 	}
 	for i := 0; i < c.historyConfig.NumHistoryHosts; i++ {
 		port := startPort + i
@@ -324,21 +317,6 @@ func (c *temporalImpl) MatchingGRPCServiceAddress() string {
 	}
 }
 
-func (c *temporalImpl) MatchingServiceRingpopAddress() string {
-	switch c.clusterNo {
-	case 0:
-		return "127.0.0.1:7126"
-	case 1:
-		return "127.0.0.1:8126"
-	case 2:
-		return "127.0.0.1:9126"
-	case 3:
-		return "127.0.0.1:10126"
-	default:
-		return "127.0.0.1:7126"
-	}
-}
-
 func (c *temporalImpl) WorkerGRPCServiceAddress() string {
 	switch c.clusterNo {
 	case 0:
@@ -351,21 +329,6 @@ func (c *temporalImpl) WorkerGRPCServiceAddress() string {
 		return "127.0.0.1:10138"
 	default:
 		return "127.0.0.1:7138"
-	}
-}
-
-func (c *temporalImpl) WorkerServiceRingpopAddress() string {
-	switch c.clusterNo {
-	case 0:
-		return "127.0.0.1:7128"
-	case 1:
-		return "127.0.0.1:8128"
-	case 2:
-		return "127.0.0.1:9128"
-	case 3:
-		return "127.0.0.1:10128"
-	default:
-		return "127.0.0.1:7128"
 	}
 }
 
@@ -399,35 +362,29 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		}
 	}
 
-	rpcFactory := newRPCFactoryImpl(serviceName, c.FrontendGRPCAddress(), c.FrontendRingpopAddress(), c.logger)
-
 	stoppedCh := make(chan struct{})
 	var frontendService *frontend.Service
 	var clientBean client.Bean
 	var namespaceRegistry namespace.Registry
+	var rpcFactory common.RPCFactory
 	feApp := fx.New(
 		fx.Supply(
 			stoppedCh,
 			persistenceConfig,
 		),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
+		fx.Provide(func() listenHostPort { return listenHostPort(c.FrontendGRPCAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
 		fx.Provide(func() resource.NamespaceLogger { return c.logger }),
-		fx.Provide(func() common.RPCFactory { return rpcFactory }),
+		fx.Provide(newRPCFactoryImpl),
 		fx.Provide(func() membership.Monitor {
 			return newSimpleMonitor(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
-		fx.Provide(func() sdk.ClientFactory {
-			return sdk.NewClientFactory(
-				c.FrontendGRPCAddress(),
-				nil,
-				sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
-			)
-		}),
+		fx.Provide(sdkClientFactoryProvider),
 		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
 		fx.Provide(func() authorization.Authorizer { return nil }),
@@ -435,19 +392,19 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() authorization.JWTAudienceMapper { return nil }),
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
-		// Comment the line above and uncomment the line bellow to test with search attributes mapper.
+		// Comment the line above and uncomment the line below to test with search attributes mapper.
 		// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
+		fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
 		frontend.Module,
-		fx.Populate(&frontendService, &clientBean, &namespaceRegistry),
+		fx.Populate(&frontendService, &clientBean, &namespaceRegistry, &rpcFactory),
 		temporal.FxLogAdapter,
 	)
 	err = feApp.Err()
@@ -466,7 +423,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	c.frontendApp = feApp
 	c.frontendService = frontendService
 	c.frontendNamespaceRegistry = namespaceRegistry
-	connection := rpcFactory.CreateFrontendGRPCConnection(c.FrontendGRPCAddress())
+	connection := rpcFactory.CreateLocalFrontendGRPCConnection()
 	c.frontendClient = NewFrontendClient(connection)
 	c.adminClient = NewAdminClient(connection)
 	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
@@ -483,8 +440,7 @@ func (c *temporalImpl) startHistory(
 	startWG *sync.WaitGroup,
 ) {
 	serviceName := common.HistoryServiceName
-	membershipPorts := c.HistoryServiceAddress(2)
-	for i, grpcPort := range c.HistoryServiceAddress(3) {
+	for _, grpcPort := range c.HistoryServiceAddress() {
 		persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
@@ -497,8 +453,6 @@ func (c *temporalImpl) startHistory(
 			}
 		}
 
-		rpcFactory := newRPCFactoryImpl(serviceName, grpcPort, membershipPorts[i], c.logger)
-
 		stoppedCh := make(chan struct{})
 		var historyService *history.Service
 		var clientBean client.Bean
@@ -510,30 +464,25 @@ func (c *temporalImpl) startHistory(
 			),
 			fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 			fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
+			fx.Provide(func() listenHostPort { return listenHostPort(grpcPort) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() resource.ThrottledLogger { return c.logger }),
-			fx.Provide(func() common.RPCFactory { return rpcFactory }),
+			fx.Provide(newRPCFactoryImpl),
 			fx.Provide(func() membership.Monitor {
 				return newSimpleMonitor(serviceName, hosts)
 			}),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
-			fx.Provide(func() sdk.ClientFactory {
-				return sdk.NewClientFactory(
-					c.FrontendGRPCAddress(),
-					nil,
-					sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
-				)
-			}),
+			fx.Provide(sdkClientFactoryProvider),
 			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
-			// Comment the line above and uncomment the line bellow to test with search attributes mapper.
+			// Comment the line above and uncomment the line below to test with search attributes mapper.
 			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-			fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
+			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 			fx.Provide(func() log.Logger { return c.logger }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
@@ -563,7 +512,7 @@ func (c *temporalImpl) startHistory(
 		// However current interface for getting history client doesn't specify which client it needs and the tests that use this API
 		// depends on the fact that there's only one history host.
 		// Need to change those tests and modify the interface for getting history client.
-		historyConnection, err := rpc.Dial(c.HistoryServiceAddress(3)[0], nil, c.logger)
+		historyConnection, err := rpc.Dial(c.HistoryServiceAddress()[0], nil, c.logger)
 		if err != nil {
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
@@ -583,7 +532,6 @@ func (c *temporalImpl) startHistory(
 
 func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.WaitGroup) {
 	serviceName := common.MatchingServiceName
-	rpcFactory := newRPCFactoryImpl(serviceName, c.MatchingGRPCServiceAddress(), c.MatchingServiceRingpopAddress(), c.logger)
 
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
@@ -601,8 +549,9 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		),
 		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
+		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
-		fx.Provide(func() common.RPCFactory { return rpcFactory }),
+		fx.Provide(newRPCFactoryImpl),
 		fx.Provide(func() membership.Monitor {
 			return newSimpleMonitor(serviceName, hosts)
 		}),
@@ -614,7 +563,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
+		fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Supply(c.spanExporters),
 		temporal.ServiceTracingModule,
@@ -658,8 +607,6 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		}
 	}
 
-	rpcFactory := newRPCFactoryImpl(serviceName, c.WorkerGRPCServiceAddress(), c.WorkerServiceRingpopAddress(), c.logger)
-
 	clusterConfigCopy := cluster.Config{
 		EnableGlobalNamespace:    c.clusterMetadataConfig.EnableGlobalNamespace,
 		FailoverVersionIncrement: c.clusterMetadataConfig.FailoverVersionIncrement,
@@ -675,42 +622,31 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	var workerService *worker.Service
 	var clientBean client.Bean
 	var namespaceRegistry namespace.Registry
-	clientConfig := &config.Config{
-		PublicClient: config.PublicClient{
-			HostPort: c.FrontendGRPCAddress(),
-		},
-	}
 	app := fx.New(
 		fx.Supply(
 			stoppedCh,
 			persistenceConfig,
-			clientConfig,
 		),
 		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
+		fx.Provide(func() listenHostPort { return listenHostPort(c.WorkerGRPCServiceAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
-		fx.Provide(func() common.RPCFactory { return rpcFactory }),
+		fx.Provide(newRPCFactoryImpl),
 		fx.Provide(func() membership.Monitor {
 			return newSimpleMonitor(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
-		fx.Provide(func() sdk.ClientFactory {
-			return sdk.NewClientFactory(
-				c.FrontendGRPCAddress(),
-				nil,
-				sdk.NewMetricsHandler(metrics.NoopMetricsHandler),
-			)
-		}),
+		fx.Provide(sdkClientFactoryProvider),
 		fx.Provide(func() sdk.WorkerFactory { return sdk.NewWorkerFactory() }),
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
-		fx.Provide(func() dynamicconfig.Client { return c.dynamicClient }),
+		fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
@@ -747,10 +683,10 @@ func (c *temporalImpl) GetExecutionManager() persistence.ExecutionManager {
 	return c.executionManager
 }
 
-func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
+func (c *temporalImpl) overrideHistoryDynamicConfig(client *dcClient) {
 	client.OverrideValue(dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
 
-	if c.workerConfig.EnableIndexer {
+	if c.esConfig != nil {
 		client.OverrideValue(dynamicconfig.AdvancedVisibilityWritingMode, visibility.AdvancedVisibilityWritingModeDual)
 	}
 	if c.historyConfig.HistoryCountLimitWarn != 0 {
@@ -798,15 +734,27 @@ func copyPersistenceConfig(pConfig config.Persistence) (config.Persistence, erro
 	return pConfig, nil
 }
 
+func sdkClientFactoryProvider(
+	resolver membership.GRPCResolver,
+	metricsHandler metrics.MetricsHandler,
+	logger log.Logger,
+) sdk.ClientFactory {
+	return sdk.NewClientFactory(
+		resolver.MakeURL(common.FrontendServiceName),
+		nil,
+		metricsHandler,
+		logger,
+	)
+}
+
 type rpcFactoryImpl struct {
-	serviceName     string
-	grpcHostPort    string
-	ringpopHostPort string
-	logger          log.Logger
+	serviceName  string
+	grpcHostPort string
+	logger       log.Logger
+	frontendURL  string
 
 	sync.RWMutex
-	listener       net.Listener
-	ringpopChannel *tchannel.Channel
+	listener net.Listener
 }
 
 func (c *rpcFactoryImpl) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {
@@ -817,20 +765,24 @@ func (c *rpcFactoryImpl) GetInternodeGRPCServerOptions() ([]grpc.ServerOption, e
 	return nil, nil
 }
 
-func (c *rpcFactoryImpl) CreateFrontendGRPCConnection(hostName string) *grpc.ClientConn {
+func (c *rpcFactoryImpl) CreateRemoteFrontendGRPCConnection(hostName string) *grpc.ClientConn {
 	return c.CreateGRPCConnection(hostName)
+}
+
+func (c *rpcFactoryImpl) CreateLocalFrontendGRPCConnection() *grpc.ClientConn {
+	return c.CreateGRPCConnection(c.frontendURL)
 }
 
 func (c *rpcFactoryImpl) CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn {
 	return c.CreateGRPCConnection(hostName)
 }
 
-func newRPCFactoryImpl(sName, grpcHostPort, ringpopHostPort string, logger log.Logger) common.RPCFactory {
+func newRPCFactoryImpl(sName resource.ServiceName, grpcHostPort listenHostPort, logger log.Logger, resolver membership.GRPCResolver) common.RPCFactory {
 	return &rpcFactoryImpl{
-		serviceName:     sName,
-		grpcHostPort:    grpcHostPort,
-		ringpopHostPort: ringpopHostPort,
-		logger:          logger,
+		serviceName:  string(sName),
+		grpcHostPort: string(grpcHostPort),
+		logger:       logger,
+		frontendURL:  resolver.MakeURL(common.FrontendServiceName),
 	}
 }
 
@@ -856,32 +808,6 @@ func (c *rpcFactoryImpl) GetGRPCListener() net.Listener {
 	}
 
 	return c.listener
-}
-
-func (c *rpcFactoryImpl) GetRingpopChannel() *tchannel.Channel {
-	if c.ringpopChannel != nil {
-		return c.ringpopChannel
-	}
-
-	c.Lock()
-	defer c.Unlock()
-
-	if c.ringpopChannel == nil {
-		ringpopServiceName := fmt.Sprintf("%v-ringpop", c.serviceName)
-
-		var err error
-		c.ringpopChannel, err = tchannel.NewChannel(ringpopServiceName, nil)
-		if err != nil {
-			c.logger.Fatal("Failed to create ringpop TChannel", tag.Error(err))
-		}
-
-		err = c.ringpopChannel.ListenAndServe(c.ringpopHostPort)
-		if err != nil {
-			c.logger.Fatal("Failed to start ringpop ListenAndServe", tag.Error(err), tag.Address(c.ringpopHostPort))
-		}
-	}
-
-	return c.ringpopChannel
 }
 
 // CreateGRPCConnection creates connection for gRPC calls

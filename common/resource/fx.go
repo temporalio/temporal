@@ -114,6 +114,7 @@ var Module = fx.Options(
 	fx.Provide(MatchingRawClientProvider),
 	fx.Provide(MatchingClientProvider),
 	membership.HostInfoProviderModule,
+	membership.GRPCResolverModule,
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(MetricsClientProvider),
@@ -388,16 +389,28 @@ func ArchiverProviderProvider(cfg *config.Config) provider.ArchiverProvider {
 	return provider.NewArchiverProvider(cfg.Archival.History.Provider, cfg.Archival.Visibility.Provider)
 }
 
-func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.TLSConfigProvider, provider metrics.MetricsHandler) (sdk.ClientFactory, error) {
+func SdkClientFactoryProvider(
+	cfg *config.Config,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	metricsHandler metrics.MetricsHandler,
+	logger SnTaggedLogger,
+	resolver membership.GRPCResolver,
+) (sdk.ClientFactory, error) {
 	tlsFrontendConfig, err := tlsConfigProvider.GetFrontendClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 	}
 
+	hostPort := cfg.PublicClient.HostPort
+	if hostPort == "" {
+		hostPort = resolver.MakeURL(common.FrontendServiceName)
+	}
+
 	return sdk.NewClientFactory(
-		cfg.PublicClient.HostPort,
+		hostPort,
 		tlsFrontendConfig,
-		sdk.NewMetricsHandler(provider),
+		metricsHandler,
+		logger,
 	), nil
 }
 
@@ -415,17 +428,21 @@ func RPCFactoryProvider(
 	logger log.Logger,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
-	clusterMetadata *cluster.Config,
+	resolver membership.GRPCResolver,
 	traceInterceptor telemetry.ClientTraceInterceptor,
 ) common.RPCFactory {
 	svcCfg := cfg.Services[string(svcName)]
+	hostPort := cfg.PublicClient.HostPort
+	if hostPort == "" {
+		hostPort = resolver.MakeURL(common.FrontendServiceName)
+	}
 	return rpc.NewFactory(
 		&svcCfg.RPC,
 		string(svcName),
 		logger,
 		tlsConfigProvider,
 		dc,
-		clusterMetadata,
+		hostPort,
 		[]grpc.UnaryClientInterceptor{
 			grpc.UnaryClientInterceptor(traceInterceptor),
 		},

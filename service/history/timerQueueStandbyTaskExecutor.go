@@ -88,33 +88,36 @@ func newTimerQueueStandbyTaskExecutor(
 func (t *timerQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.MetricsHandler, error) {
+) ([]metrics.Tag, bool, error) {
 	task := executable.GetTask()
 	taskType := queues.GetStandbyTimerTaskTypeTagValue(task)
-	metricsProvider := t.metricProvider.WithTags(
+	metricsTags := []metrics.Tag{
 		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
-	)
+	}
 
+	var err error
 	switch task := task.(type) {
 	case *tasks.UserTimerTask:
-		return metricsProvider, t.executeUserTimerTimeoutTask(ctx, task)
+		err = t.executeUserTimerTimeoutTask(ctx, task)
 	case *tasks.ActivityTimeoutTask:
-		return metricsProvider, t.executeActivityTimeoutTask(ctx, task)
+		err = t.executeActivityTimeoutTask(ctx, task)
 	case *tasks.WorkflowTaskTimeoutTask:
-		return metricsProvider, t.executeWorkflowTaskTimeoutTask(ctx, task)
+		err = t.executeWorkflowTaskTimeoutTask(ctx, task)
 	case *tasks.WorkflowBackoffTimerTask:
-		return metricsProvider, t.executeWorkflowBackoffTimerTask(ctx, task)
+		err = t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.ActivityRetryTimerTask:
-		return metricsProvider, t.executeActivityRetryTimerTask(ctx, task)
+		err = t.executeActivityRetryTimerTask(ctx, task)
 	case *tasks.WorkflowTimeoutTask:
-		return metricsProvider, t.executeWorkflowTimeoutTask(ctx, task)
+		err = t.executeWorkflowTimeoutTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
-		return metricsProvider, t.executeDeleteHistoryEventTask(ctx, task)
+		err = t.executeDeleteHistoryEventTask(ctx, task)
 	default:
-		return metricsProvider, errUnknownTimerTask
+		err = errUnknownTimerTask
 	}
+
+	return metricsTags, false, err
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
@@ -133,10 +136,10 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 				return nil, serviceerror.NewInternal(errString)
 			}
 
-			if isExpired := timerSequence.IsExpired(
+			if queues.IsTimeExpired(
 				timerTask.GetVisibilityTime(),
-				timerSequenceID,
-			); isExpired {
+				timerSequenceID.Timestamp,
+			) {
 				return getHistoryResendInfo(mutableState)
 			}
 			// Since the user timers are already sorted, then if there is one timer which is not expired,
@@ -176,7 +179,6 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	//
 	// the overall solution is to attempt to generate a new activity timer task whenever the
 	// task passed in is safe to be throw away.
-
 	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 		timerSequence := t.getTimerSequence(mutableState)
 		updateMutableState := false
@@ -190,10 +192,10 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 				return nil, serviceerror.NewInternal(errString)
 			}
 
-			if isExpired := timerSequence.IsExpired(
+			if queues.IsTimeExpired(
 				timerTask.GetVisibilityTime(),
-				timerSequenceID,
-			); isExpired {
+				timerSequenceID.Timestamp,
+			) {
 				return getHistoryResendInfo(mutableState)
 			}
 			// Since the activity timers are already sorted, then if there is one timer which is not expired,
@@ -216,8 +218,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// created.
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 		activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
-		fireTimer := timerTask.GetVisibilityTime()
-		if isHeartBeatTask && ok && (heartbeatTimeoutVis.Before(fireTimer) || heartbeatTimeoutVis.Equal(fireTimer)) {
+		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask.GetVisibilityTime(), heartbeatTimeoutVis) {
 			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
 			if err := mutableState.UpdateActivity(activityInfo); err != nil {
 				return nil, err
