@@ -64,7 +64,7 @@ type (
 
 func NewTransferQueueFactory(
 	params transferQueueFactoryParams,
-) queues.Factory {
+) QueueFactory {
 	var hostScheduler queues.Scheduler
 	if params.Config.TransferProcessorEnablePriorityTaskScheduler() {
 		hostScheduler = queues.NewNamespacePriorityScheduler(

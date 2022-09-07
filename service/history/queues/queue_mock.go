@@ -32,9 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	shard "go.temporal.io/server/service/history/shard"
 	tasks "go.temporal.io/server/service/history/tasks"
-	workflow "go.temporal.io/server/service/history/workflow"
 )
 
 // MockQueue is a mock of Queue interface.
@@ -144,65 +142,4 @@ func (m *MockQueue) UnlockTaskProcessing() {
 func (mr *MockQueueMockRecorder) UnlockTaskProcessing() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnlockTaskProcessing", reflect.TypeOf((*MockQueue)(nil).UnlockTaskProcessing))
-}
-
-// MockFactory is a mock of Factory interface.
-type MockFactory struct {
-	ctrl     *gomock.Controller
-	recorder *MockFactoryMockRecorder
-}
-
-// MockFactoryMockRecorder is the mock recorder for MockFactory.
-type MockFactoryMockRecorder struct {
-	mock *MockFactory
-}
-
-// NewMockFactory creates a new mock instance.
-func NewMockFactory(ctrl *gomock.Controller) *MockFactory {
-	mock := &MockFactory{ctrl: ctrl}
-	mock.recorder = &MockFactoryMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockFactory) EXPECT() *MockFactoryMockRecorder {
-	return m.recorder
-}
-
-// CreateQueue mocks base method.
-func (m *MockFactory) CreateQueue(shard shard.Context, engine shard.Engine, cache workflow.Cache) Queue {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateQueue", shard, engine, cache)
-	ret0, _ := ret[0].(Queue)
-	return ret0
-}
-
-// CreateQueue indicates an expected call of CreateQueue.
-func (mr *MockFactoryMockRecorder) CreateQueue(shard, engine, cache interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateQueue", reflect.TypeOf((*MockFactory)(nil).CreateQueue), shard, engine, cache)
-}
-
-// Start mocks base method.
-func (m *MockFactory) Start() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
-}
-
-// Start indicates an expected call of Start.
-func (mr *MockFactoryMockRecorder) Start() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockFactory)(nil).Start))
-}
-
-// Stop mocks base method.
-func (m *MockFactory) Stop() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Stop")
-}
-
-// Stop indicates an expected call of Stop.
-func (mr *MockFactoryMockRecorder) Stop() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockFactory)(nil).Stop))
 }

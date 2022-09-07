@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -48,7 +49,9 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -216,7 +219,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 	s.NoError(err)
 }
 
-func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
+func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask_NoQueueState() {
 	we := commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
@@ -224,21 +227,25 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	mockMutableState := NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	mockMutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID)).AnyTimes()
+	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockShardContext.EXPECT().GetShardID().Return(int32(1)).AnyTimes()
 	s.mockShardContext.EXPECT().AddTasks(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	s.mockShardContext.EXPECT().GetQueueState(tasks.CategoryTransfer).Return(nil, false).AnyTimes()
+	s.mockShardContext.EXPECT().GetQueueState(tasks.CategoryVisibility).Return(nil, false).AnyTimes()
 
 	// Both queues are right at the minimum level.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 1001}).
 		Times(4)
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
+	s.mockShardContext.EXPECT().GetQueueClusterAckLevel(tasks.CategoryTransfer, cluster.TestCurrentClusterName).Return(tasks.NewImmediateKey(1000)).Times(1)
+	s.mockShardContext.EXPECT().GetQueueAckLevel(tasks.CategoryVisibility).Return(tasks.NewImmediateKey(1001)).Times(1)
 	err := s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
 		tests.NamespaceID,
 		we,
 		mockMutableState,
-		1000,
-		1001,
 		0,
 	)
 	s.NoError(err)
@@ -248,13 +255,12 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		CloseTransferTaskId:   0,
 		CloseVisibilityTaskId: 0}).
 		Times(2)
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
 		tests.NamespaceID,
 		we,
 		mockMutableState,
-		1000,
-		1001,
 		0,
 	)
 	s.NoError(err)
@@ -264,13 +270,13 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 0}).
 		Times(3)
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
+	s.mockShardContext.EXPECT().GetQueueClusterAckLevel(tasks.CategoryTransfer, cluster.TestCurrentClusterName).Return(tasks.NewImmediateKey(1000)).Times(1)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
 		tests.NamespaceID,
 		we,
 		mockMutableState,
-		1000,
-		1001,
 		0,
 	)
 	s.NoError(err)
@@ -279,16 +285,15 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 1001}).
-		Times(2)
+		Times(4)
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
+	s.mockShardContext.EXPECT().GetQueueClusterAckLevel(tasks.CategoryTransfer, cluster.TestCurrentClusterName).Return(tasks.NewImmediateKey(200)).Times(1)
+	s.mockShardContext.EXPECT().GetQueueAckLevel(tasks.CategoryVisibility).Return(tasks.NewImmediateKey(201)).Times(1)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
 		tests.NamespaceID,
 		we,
 		mockMutableState,
-		200,
-		201,
 		0,
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
@@ -298,13 +303,14 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 1001}).
 		Times(4)
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
+	s.mockShardContext.EXPECT().GetQueueClusterAckLevel(tasks.CategoryTransfer, cluster.TestCurrentClusterName).Return(tasks.NewImmediateKey(1000)).Times(1)
+	s.mockShardContext.EXPECT().GetQueueAckLevel(tasks.CategoryVisibility).Return(tasks.NewImmediateKey(1000)).Times(1)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
 		tests.NamespaceID,
 		we,
 		mockMutableState,
-		1000,
-		1000,
 		0,
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
@@ -313,16 +319,15 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 1001}).
-		Times(2)
+		Times(4)
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
+	s.mockShardContext.EXPECT().GetQueueClusterAckLevel(tasks.CategoryTransfer, cluster.TestCurrentClusterName).Return(tasks.NewImmediateKey(999)).Times(1)
+	s.mockShardContext.EXPECT().GetQueueAckLevel(tasks.CategoryVisibility).Return(tasks.NewImmediateKey(1001)).Times(1)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
 		tests.NamespaceID,
 		we,
 		mockMutableState,
-		999,
-		1001,
 		0,
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
@@ -331,16 +336,14 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 1001}).
-		Times(4)
-	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName)
+		Times(3)
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalStandbyNamespaceEntry)
+	s.mockShardContext.EXPECT().GetQueueAckLevel(tasks.CategoryVisibility).Return(tasks.NewImmediateKey(1001)).Times(1)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
 		tests.NamespaceID,
 		we,
 		mockMutableState,
-		999,
-		1001,
 		0,
 	)
 	s.NoError(err)
@@ -349,19 +352,71 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 1001}).
-		Times(4)
-	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName)
+		Times(3)
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalStandbyNamespaceEntry)
+	s.mockShardContext.EXPECT().GetQueueAckLevel(tasks.CategoryVisibility).Return(tasks.NewImmediateKey(1000)).Times(1)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
 		tests.NamespaceID,
 		we,
 		mockMutableState,
-		999,
-		1000,
 		0,
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
+}
+
+func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask_WithQueueState() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+	mockMutableState := NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	mockMutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID)).AnyTimes()
+	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShardContext.EXPECT().GetShardID().Return(int32(1)).AnyTimes()
+	s.mockShardContext.EXPECT().AddTasks(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	transferPersistenceQueueState := &persistencespb.QueueState{
+		ReaderStates:                 map[int32]*persistencespb.QueueReaderState{},
+		ExclusiveReaderHighWatermark: queues.ToPersistenceTaskKey(tasks.NewImmediateKey(1001)),
+	}
+	visibilityPersistenceQueueState := &persistencespb.QueueState{
+		ReaderStates: map[int32]*persistencespb.QueueReaderState{
+			queues.DefaultReaderId: {
+				Scopes: []*persistencespb.QueueSliceScope{
+					{
+						Range: queues.ToPersistenceRange(queues.NewRange(
+							tasks.NewImmediateKey(800),
+							tasks.NewImmediateKey(1200),
+						)),
+						Predicate: queues.ToPersistencePredicate(
+							tasks.NewNamespacePredicate([]string{uuid.New()}),
+						),
+					},
+				},
+			},
+		},
+		ExclusiveReaderHighWatermark: queues.ToPersistenceTaskKey(tasks.NewImmediateKey(1200)),
+	}
+
+	s.mockShardContext.EXPECT().GetQueueState(tasks.CategoryTransfer).Return(transferPersistenceQueueState, true).AnyTimes()
+	s.mockShardContext.EXPECT().GetQueueState(tasks.CategoryVisibility).Return(visibilityPersistenceQueueState, true).AnyTimes()
+
+	// Both queues are right at the minimum level.
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		CloseTransferTaskId:   1000,
+		CloseVisibilityTaskId: 1000}).
+		Times(2)
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
+	err := s.deleteManager.AddDeleteWorkflowExecutionTask(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		mockMutableState,
+		0,
+	)
+	s.NoError(err)
 }
 
 func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_ArchivalNotInline() {

@@ -25,9 +25,10 @@
 package queues
 
 import (
+	"golang.org/x/exp/slices"
+
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
-	"golang.org/x/exp/slices"
 )
 
 type (

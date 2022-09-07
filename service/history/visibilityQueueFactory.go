@@ -54,7 +54,7 @@ type (
 
 func NewVisibilityQueueFactory(
 	params visibilityQueueFactoryParams,
-) queues.Factory {
+) QueueFactory {
 	var hostScheduler queues.Scheduler
 	if params.Config.VisibilityProcessorEnablePriorityTaskScheduler() {
 		hostScheduler = queues.NewNamespacePriorityScheduler(

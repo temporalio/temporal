@@ -27,12 +27,13 @@ package queues
 import (
 	"fmt"
 
+	"golang.org/x/exp/maps"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
-	"golang.org/x/exp/maps"
 )
 
 func ToPersistenceQueueState(
