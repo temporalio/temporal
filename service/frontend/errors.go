@@ -90,4 +90,6 @@ var (
 
 	errListNotAllowed      = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
 	errSchedulesNotAllowed = serviceerror.NewPermissionDenied("Schedules are disabled on this namespace.", "")
+
+	errBatchAPINotAllowed = serviceerror.NewPermissionDenied("Batch operation feature are disabled on this namespace.", "")
 )

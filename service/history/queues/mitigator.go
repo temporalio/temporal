@@ -48,10 +48,6 @@ type (
 		logger         log.Logger
 		metricsHandler metrics.MetricsHandler
 		maxReaderCount dynamicconfig.IntPropertyFn
-
-		// map key is alert type, used for deduping
-		// map value is alert attriutes, used only for logging upon action completion
-		pendingAlerts map[AlertType]interface{}
 	}
 )
 
@@ -66,7 +62,6 @@ func newMitigator(
 		logger:         logger,
 		metricsHandler: metricsHandler,
 		maxReaderCount: maxReaderCount,
-		pendingAlerts:  make(map[AlertType]interface{}),
 	}
 }
 
@@ -74,55 +69,45 @@ func (m *mitigatorImpl) Mitigate(alert Alert) Action {
 	m.Lock()
 	defer m.Unlock()
 
-	if _, ok := m.pendingAlerts[alert.AlertType]; ok {
-		return nil
-	}
-
 	var action Action
-	var alertAttributes interface{}
 	switch alert.AlertType {
 	case AlertTypeQueuePendingTaskCount:
 		action = newQueuePendingTaskAction(
 			alert.AlertAttributesQueuePendingTaskCount,
 			m.monitor,
 			m.maxReaderCount(),
-			func() { m.resolve(AlertTypeQueuePendingTaskCount) },
+			m.newActionCompletionFn(alert.AlertType, alert.AlertAttributesQueuePendingTaskCount),
 		)
-		alertAttributes = alert.AlertAttributesQueuePendingTaskCount
 	case AlertTypeReaderStuck:
 		action = newReaderStuckAction(
 			alert.AlertAttributesReaderStuck,
-			func() { m.resolve(AlertTypeReaderStuck) },
+			m.newActionCompletionFn(alert.AlertType, alert.AlertAttributesReaderStuck),
 			m.logger,
 		)
-		alertAttributes = alert.AlertAttributesReaderStuck
 	case AlertTypeSliceCount:
 		action = newSliceCountAction(
 			alert.AlertAttributesSliceCount,
 			m.monitor,
-			func() { m.resolve(AlertTypeSliceCount) },
+			m.newActionCompletionFn(alert.AlertType, alert.AlertAttributesSliceCount),
 		)
-		alertAttributes = alert.AlertAttributesSliceCount
 	default:
 		m.logger.Error("Unknown queue alert type", tag.QueueAlertType(alert.AlertType.String()))
 		return nil
 	}
 
-	m.pendingAlerts[alert.AlertType] = alertAttributes
-
 	return action
 }
 
-func (m *mitigatorImpl) resolve(alertType AlertType) {
-	m.Lock()
-	defer m.Unlock()
-
-	attributes := m.pendingAlerts[alertType]
-	delete(m.pendingAlerts, alertType)
-
-	m.logger.Info("Action completed for queue alert",
-		tag.QueueAlertType(alertType.String()),
-		tag.QueueAlertAttributes(attributes),
-	)
-	m.metricsHandler.Counter(QueueActionCounter).Record(1, metrics.QueueAlertTypeTag(alertType.String()))
+func (m *mitigatorImpl) newActionCompletionFn(
+	alertType AlertType,
+	alertAttributes interface{},
+) func() {
+	return func() {
+		m.monitor.ResolveAlert(alertType)
+		m.logger.Info("Action completed for queue alert",
+			tag.QueueAlertType(alertType.String()),
+			tag.QueueAlertAttributes(alertAttributes),
+		)
+		m.metricsHandler.Counter(QueueActionCounter).Record(1, metrics.QueueAlertTypeTag(alertType.String()))
+	}
 }

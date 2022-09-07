@@ -120,6 +120,7 @@ func NewReader(
 	for _, slice := range slices {
 		sliceList.PushBack(slice)
 	}
+	monitor.SetSliceCount(readerID, len(slices))
 
 	return &ReaderImpl{
 		readerID:       readerID,

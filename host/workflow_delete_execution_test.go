@@ -34,7 +34,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -122,7 +121,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Competed() {
 	for _, we := range wes {
 		var err error
 		for {
-			_, err = s.operatorClient.DeleteWorkflowExecution(NewContext(), &operatorservice.DeleteWorkflowExecutionRequest{
+			_, err = s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
 				Namespace: s.namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: we.WorkflowId,
@@ -240,7 +239,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Running() {
 
 	// Delete workflow executions.
 	for _, we := range wes {
-		_, err := s.operatorClient.DeleteWorkflowExecution(NewContext(), &operatorservice.DeleteWorkflowExecutionRequest{
+		_, err := s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
 			Namespace: s.namespace,
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: we.WorkflowId,
@@ -361,7 +360,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 		})
 		s.NoError(err)
 		for {
-			_, err = s.operatorClient.DeleteWorkflowExecution(NewContext(), &operatorservice.DeleteWorkflowExecutionRequest{
+			_, err = s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
 				Namespace: s.namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: we.WorkflowId,

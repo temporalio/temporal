@@ -2098,6 +2098,37 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 	return &workflowservice.TerminateWorkflowExecutionResponse{}, nil
 }
 
+// DeleteWorkflowExecution deletes a closed workflow execution asynchronously (workflow must be completed or terminated before).
+// This method is EXPERIMENTAL and may be changed or removed in a later release.
+func (wh *WorkflowHandler) DeleteWorkflowExecution(ctx context.Context, request *workflowservice.DeleteWorkflowExecutionRequest) (_ *workflowservice.DeleteWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := validateExecution(request.WorkflowExecution); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = wh.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId:        namespaceID.String(),
+		WorkflowExecution:  request.GetWorkflowExecution(),
+		WorkflowVersion:    common.EmptyVersion,
+		ClosedWorkflowOnly: false,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteWorkflowExecutionResponse{}, nil
+}
+
 // ListOpenWorkflowExecutions is a visibility API to list the open executions in a specific namespace.
 func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, request *workflowservice.ListOpenWorkflowExecutionsRequest) (_ *workflowservice.ListOpenWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
@@ -2813,6 +2844,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			ActivityFailureIncludeHeartbeat: true,
 			SupportsSchedules:               true,
 			EncodedFailureAttributes:        true,
+			UpsertMemo:                      true,
 		},
 	}, nil
 }
@@ -3617,6 +3649,10 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, errBatchJobIDNotSet
 	}
 
+	if !wh.config.EnableBatcher(request.Namespace) {
+		return nil, errBatchAPINotAllowed
+	}
+
 	// Validate concurrent batch operation
 	countResp, err := wh.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 		Namespace: request.GetNamespace(),
@@ -3717,6 +3753,10 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errRequestNotSet
 	}
 
+	if !wh.config.EnableBatcher(request.Namespace) {
+		return nil, errBatchAPINotAllowed
+	}
+
 	terminateReq := &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: request.GetNamespace(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -3750,6 +3790,10 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		return nil, errRequestNotSet
 	}
 
+	if !wh.config.EnableBatcher(request.Namespace) {
+		return nil, errBatchAPINotAllowed
+	}
+
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: request.GetJobId(),
 		RunId:      "",
@@ -3764,7 +3808,20 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 
 	executionInfo := resp.GetWorkflowExecutionInfo()
 	operationState := getBatchOperationState(executionInfo.GetStatus())
-	typePayload := executionInfo.GetMemo().GetFields()[batcher.BatchOperationTypeMemo]
+	memo := executionInfo.GetMemo().GetFields()
+	typePayload := memo[batcher.BatchOperationTypeMemo]
+	operationReason := memo[batcher.BatchReasonMemo]
+	var reason string
+	err = payload.Decode(operationReason, &reason)
+	if err != nil {
+		return nil, err
+	}
+	var identity string
+	encodedBatcherIdentity := executionInfo.GetSearchAttributes().GetIndexedFields()[searchattribute.BatcherUser]
+	err = payload.Decode(encodedBatcherIdentity, &identity)
+	if err != nil {
+		return nil, err
+	}
 	var operationTypeString string
 	err = payload.Decode(typePayload, &operationTypeString)
 	if err != nil {
@@ -3796,9 +3853,8 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		completedOpsCount = int64(hbd.SuccessCount)
 		failureOpsCount = int64(hbd.ErrorCount)
 	}
-	// batch stop reason
-	var stopReason string
-	if executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED {
+
+	if executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
 		lastHistoryResp, err := wh.GetWorkflowExecutionHistoryReverse(ctx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
 			Namespace:       request.GetNamespace(),
 			Execution:       execution,
@@ -3808,19 +3864,22 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 			return nil, err
 		}
 		historyEvents := lastHistoryResp.GetHistory().GetEvents()
-		if len(historyEvents) != 1 {
-			return nil, serviceerror.NewInternal("Cannot get batch operation terminated event.")
+		if len(historyEvents) == 0 {
+			return nil, serviceerror.NewInternal("Cannot get batch operation completed event.")
 		}
-		if historyEvents[0].EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED {
-			return nil, serviceerror.NewInternal("Cannot get terminated event from a terminated batch operation.")
+		if historyEvents[0].EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
+			return nil, serviceerror.NewInternal("Cannot get completed event from a closed batch operation.")
 		}
-		stopReason = historyEvents[0].GetWorkflowExecutionTerminatedEventAttributes().GetReason()
-	}
-	var identity string
-	encodedBatcherIdentity := executionInfo.GetSearchAttributes().GetIndexedFields()[searchattribute.BatcherUser]
-	err = payload.Decode(encodedBatcherIdentity, &identity)
-	if err != nil {
-		return nil, err
+		opsResult := historyEvents[0].GetWorkflowExecutionCompletedEventAttributes().GetResult()
+		var result batcher.HeartBeatDetails
+		err = payloads.Decode(opsResult, &result)
+		if err != nil {
+			return nil, err
+		}
+
+		totalOpsCount = result.TotalEstimate
+		completedOpsCount = int64(result.SuccessCount)
+		failureOpsCount = int64(result.ErrorCount)
 	}
 	return &workflowservice.DescribeBatchOperationResponse{
 		OperationType:          operationType,
@@ -3832,7 +3891,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		CompleteOperationCount: completedOpsCount,
 		FailureOperationCount:  failureOpsCount,
 		Identity:               identity,
-		Reason:                 stopReason,
+		Reason:                 reason,
 	}, nil
 }
 
@@ -3852,6 +3911,10 @@ func (wh *WorkflowHandler) ListBatchOperations(
 
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableBatcher(request.Namespace) {
+		return nil, errBatchAPINotAllowed
 	}
 
 	resp, err := wh.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
