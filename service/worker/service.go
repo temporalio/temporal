@@ -278,7 +278,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 			),
 			HistoryScannerDataMinAge: dc.GetDurationProperty(
 				dynamicconfig.HistoryScannerDataMinAge,
-				90*24*time.Hour,
+				60*24*time.Hour,
 			),
 		},
 		EnableBatcher:      dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
