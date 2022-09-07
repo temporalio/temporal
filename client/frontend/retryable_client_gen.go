@@ -80,6 +80,21 @@ func (c *retryableClient) DeleteSchedule(
 	return resp, err
 }
 
+func (c *retryableClient) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkflowExecutionResponse, error) {
+	var resp *workflowservice.DeleteWorkflowExecutionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DeleteWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DeprecateNamespace(
 	ctx context.Context,
 	request *workflowservice.DeprecateNamespaceRequest,
