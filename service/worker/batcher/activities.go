@@ -67,8 +67,7 @@ func (a *activities) checkNamespace(namespace string) error {
 func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
-	activityInfo := activity.GetInfo(ctx)
-	metricsClient := a.MetricsClient.Scope(metrics.BatcherScope, metrics.NamespaceTag(activityInfo.WorkflowNamespace))
+	metricsClient := a.MetricsClient.Scope(metrics.BatcherScope, metrics.NamespaceTag(batchParams.Namespace))
 
 	if err := a.checkNamespace(batchParams.Namespace); err != nil {
 		metricsClient.IncCounter(metrics.BatcherOperationFailures)
@@ -77,7 +76,6 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	}
 
 	sdkClient := a.ClientFactory.NewClient(batchParams.Namespace)
-
 	startOver := true
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &hbd); err == nil {
