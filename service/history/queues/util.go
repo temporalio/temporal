@@ -41,6 +41,13 @@ func IsTaskAcked(
 
 	for _, scopes := range queueState.readerScopes {
 		for _, scope := range scopes {
+			if taskKey.CompareTo(scope.Range.InclusiveMin) < 0 {
+				// scopes are ordered for each reader, so if task is less the current
+				// range's min, it don't be contained by this or later scopes of this
+				// reader.
+				break
+			}
+
 			if scope.Contains(task) {
 				return false
 			}
