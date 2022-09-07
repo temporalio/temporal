@@ -34,6 +34,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	enums "go.temporal.io/api/enums/v1"
+	operatorservice "go.temporal.io/api/operatorservice/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
 	client "go.temporal.io/sdk/client"
 	converter "go.temporal.io/sdk/converter"
@@ -297,6 +298,20 @@ func (m *MockClient) ListWorkflow(arg0 context.Context, arg1 *workflowservice.Li
 func (mr *MockClientMockRecorder) ListWorkflow(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkflow", reflect.TypeOf((*MockClient)(nil).ListWorkflow), arg0, arg1)
+}
+
+// OperatorService mocks base method.
+func (m *MockClient) OperatorService() operatorservice.OperatorServiceClient {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OperatorService")
+	ret0, _ := ret[0].(operatorservice.OperatorServiceClient)
+	return ret0
+}
+
+// OperatorService indicates an expected call of OperatorService.
+func (mr *MockClientMockRecorder) OperatorService() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OperatorService", reflect.TypeOf((*MockClient)(nil).OperatorService))
 }
 
 // QueryWorkflow mocks base method.
