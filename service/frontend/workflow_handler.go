@@ -2936,6 +2936,11 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	err = wh.validateScheduleSpec(request.GetSchedule().GetSpec())
+	if err != nil {
+		return nil, err
+	}
+
 	err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
@@ -3252,6 +3257,11 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 
 	namespaceName := namespace.Name(request.Namespace)
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	err = wh.validateScheduleSpec(request.GetSchedule().GetSpec())
 	if err != nil {
 		return nil, err
 	}
@@ -4710,6 +4720,14 @@ func (wh *WorkflowHandler) trimHistoryNode(
 			tag.Error(err),
 		)
 	}
+}
+
+func (wh *WorkflowHandler) validateScheduleSpec(spec *schedpb.ScheduleSpec) error {
+	_, err := scheduler.NewCompiledSpec(spec)
+	if err != nil {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid schedule spec: %v", err))
+	}
+	return nil
 }
 
 func (wh *WorkflowHandler) decodeScheduleListInfo(memo *commonpb.Memo) *schedpb.ScheduleListInfo {
