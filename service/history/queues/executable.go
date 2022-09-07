@@ -168,6 +168,7 @@ func NewExecutable(
 			},
 		),
 		metricsHandler:                metricsHandler,
+		taggedMetricsHandler:          metricsHandler,
 		criticalRetryAttempt:          criticalRetryAttempt,
 		filter:                        filter,
 		namespaceCacheRefreshInterval: namespaceCacheRefreshInterval,
@@ -232,7 +233,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 
 			e.attempt++
 			if e.attempt > e.criticalRetryAttempt() {
-				e.metricsHandler.Histogram(TaskAttempt, metrics.Dimensionless).Record(int64(e.attempt))
+				e.taggedMetricsHandler.Histogram(TaskAttempt, metrics.Dimensionless).Record(int64(e.attempt))
 				e.logger.Error("Critical error processing task, retrying.", tag.Error(err), tag.OperationCritical)
 			}
 
@@ -258,17 +259,17 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	if err == consts.ErrTaskRetry {
-		e.metricsHandler.Counter(TaskStandbyRetryCounter).Record(1)
+		e.taggedMetricsHandler.Counter(TaskStandbyRetryCounter).Record(1)
 		return err
 	}
 
 	if err == consts.ErrWorkflowBusy {
-		e.metricsHandler.Counter(TaskWorkflowBusyCounter).Record(1)
+		e.taggedMetricsHandler.Counter(TaskWorkflowBusyCounter).Record(1)
 		return err
 	}
 
 	if err == consts.ErrTaskDiscarded {
-		e.metricsHandler.Counter(TaskDiscarded).Record(1)
+		e.taggedMetricsHandler.Counter(TaskDiscarded).Record(1)
 		return nil
 	}
 
@@ -277,14 +278,14 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 		if e.timeSource.Now().Sub(e.loadTime) > 2*e.namespaceCacheRefreshInterval() {
-			e.metricsHandler.Counter(TaskNotActiveCounter).Record(1)
+			e.taggedMetricsHandler.Counter(TaskNotActiveCounter).Record(1)
 			return nil
 		}
 
 		return err
 	}
 
-	e.metricsHandler.Counter(TaskFailures).Record(1)
+	e.taggedMetricsHandler.Counter(TaskFailures).Record(1)
 
 	e.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
 	return err
