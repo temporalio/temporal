@@ -308,6 +308,7 @@ func (m *monitorImpl) sendAlertLocked(alert *Alert) {
 		return
 	}
 
+	// dedup alerts, we only need one outstanding alert per alert type
 	if _, ok := m.pendingAlerts[alert.AlertType]; ok {
 		return
 	}
