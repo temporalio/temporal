@@ -64,6 +64,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	"go.temporal.io/server/service/history/api/respondactivitytaskcompleted"
@@ -1225,81 +1226,7 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 	ctx context.Context,
 	req *historyservice.RecordActivityTaskHeartbeatRequest,
 ) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
-
-	_, err := e.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-
-	request := req.HeartbeatRequest
-	token, err0 := e.tokenSerializer.Deserialize(request.TaskToken)
-	if err0 != nil {
-		return nil, consts.ErrDeserializingToken
-	}
-	if err := api.SetActivityTaskRunID(ctx, token, e.workflowConsistencyChecker); err != nil {
-		return nil, err
-	}
-
-	var cancelRequested bool
-	err = api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		token.Clock,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			token.NamespaceId,
-			token.WorkflowId,
-			token.RunId,
-		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
-			if !mutableState.IsWorkflowExecutionRunning() {
-				e.logger.Debug("Heartbeat failed")
-				return nil, consts.ErrWorkflowCompleted
-			}
-
-			scheduledEventID := token.GetScheduledEventId()
-			if scheduledEventID == common.EmptyEventID { // client call RecordActivityHeartbeatByID, so get scheduledEventID by activityID
-				scheduledEventID, err0 = api.GetActivityScheduledEventID(token.GetActivityId(), mutableState)
-				if err0 != nil {
-					return nil, err0
-				}
-			}
-			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
-
-			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-			// some extreme cassandra failure cases.
-			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRecordActivityTaskHeartbeatScope, metrics.StaleMutableStateCounter)
-				return nil, consts.ErrStaleState
-			}
-
-			if !isRunning || ai.StartedEventId == common.EmptyEventID ||
-				(token.GetScheduledEventId() != common.EmptyEventID && token.Attempt != ai.Attempt) {
-				return nil, consts.ErrActivityTaskNotFound
-			}
-
-			cancelRequested = ai.CancelRequested
-
-			e.logger.Debug("Activity heartbeat", tag.WorkflowScheduledEventID(scheduledEventID), tag.ActivityInfo(ai), tag.Bool(cancelRequested))
-
-			// Save progress and last HB reported time.
-			mutableState.UpdateActivityProgress(ai, request)
-
-			return &api.UpdateWorkflowAction{
-				Noop:               false,
-				CreateWorkflowTask: false,
-			}, nil
-		},
-		nil,
-		e.shard,
-		e.workflowConsistencyChecker,
-	)
-
-	if err != nil {
-		return &historyservice.RecordActivityTaskHeartbeatResponse{}, err
-	}
-
-	return &historyservice.RecordActivityTaskHeartbeatResponse{CancelRequested: cancelRequested}, nil
+	return recordactivitytaskheartbeat.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 // RequestCancelWorkflowExecution records request cancellation event for workflow execution
