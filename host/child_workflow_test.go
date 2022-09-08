@@ -265,7 +265,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		TaskQueue:           taskQueueParent,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -625,7 +625,7 @@ func (s *integrationSuite) TestRetryFailChildWorkflowExecution() {
 		TaskQueue:           taskQueueParent,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 
