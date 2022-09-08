@@ -428,12 +428,12 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.RespondActivityTaskCanceled(ctx, request)
+	resp, err2 := engine.RespondActivityTaskCanceled(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
+	return resp, nil
 }
 
 // RespondWorkflowTaskCompleted - records completion of a workflow task

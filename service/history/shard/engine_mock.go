@@ -472,11 +472,12 @@ func (mr *MockEngineMockRecorder) ResetWorkflowExecution(ctx, request interface{
 }
 
 // RespondActivityTaskCanceled mocks base method.
-func (m *MockEngine) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) error {
+func (m *MockEngine) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RespondActivityTaskCanceled", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.RespondActivityTaskCanceledResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RespondActivityTaskCanceled indicates an expected call of RespondActivityTaskCanceled.
