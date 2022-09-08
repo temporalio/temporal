@@ -1270,7 +1270,6 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			RunId:      runID,
 		}
 		return adminClient.GetWorkflowExecutionRawHistoryV2(host.NewContext(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace:         nsName.String(),
 			NamespaceId:       nsID.String(),
 			Execution:         execution,
 			StartEventId:      startEventID,

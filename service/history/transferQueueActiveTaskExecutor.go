@@ -395,7 +395,6 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 
 	err = t.processParentClosePolicy(
 		ctx,
-		task.GetNamespaceID(),
 		namespaceName.String(),
 		workflowExecution,
 		children,
@@ -1409,8 +1408,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 
 func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	ctx context.Context,
-	namespaceID string,
-	namespaceName string,
+	parentNamespaceName string,
 	parentExecution commonpb.WorkflowExecution,
 	childInfos map[int64]*persistencespb.ChildExecutionInfo,
 ) error {
@@ -1421,7 +1419,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	scope := t.metricsClient.Scope(metrics.TransferActiveTaskCloseExecutionScope)
 
 	if t.shard.GetConfig().EnableParentClosePolicyWorker() &&
-		len(childInfos) >= t.shard.GetConfig().ParentClosePolicyThreshold(namespaceName) {
+		len(childInfos) >= t.shard.GetConfig().ParentClosePolicyThreshold(parentNamespaceName) {
 
 		executions := make([]parentclosepolicy.RequestDetail, 0, len(childInfos))
 		for _, childInfo := range childInfos {
@@ -1459,8 +1457,6 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		}
 
 		request := parentclosepolicy.Request{
-			Namespace:       namespaceName,
-			NamespaceID:     namespaceID,
 			ParentExecution: parentExecution,
 			Executions:      executions,
 		}

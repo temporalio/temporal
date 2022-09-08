@@ -278,6 +278,7 @@ func ArchivalClientProvider(
 		sdkClientFactory,
 		config.NumArchiveSystemWorkflows,
 		config.ArchiveRequestRPS,
+		config.ArchiveSignalTimeout,
 		archiverProvider,
 	)
 }

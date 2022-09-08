@@ -37,7 +37,6 @@ func generatePaginationToken(
 
 	execution := request.Execution
 	return &tokenspb.RawHistoryContinuation{
-		Namespace:         request.GetNamespace(),
 		NamespaceId:       request.GetNamespaceId(),
 		WorkflowId:        execution.GetWorkflowId(),
 		RunId:             execution.GetRunId(),
@@ -56,7 +55,7 @@ func validatePaginationToken(
 ) error {
 
 	execution := request.Execution
-	if (request.GetNamespaceId() != token.GetNamespaceId() && request.GetNamespace() != token.GetNamespace()) ||
+	if request.GetNamespaceId() != token.GetNamespaceId() ||
 		execution.GetWorkflowId() != token.GetWorkflowId() ||
 		execution.GetRunId() != token.GetRunId() ||
 		request.GetStartEventId() != token.GetStartEventId() ||

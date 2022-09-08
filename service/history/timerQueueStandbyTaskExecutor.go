@@ -526,16 +526,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return consts.ErrTaskRetry
 	}
 
-	ns, err := t.registry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
-	if err != nil {
-		// This is most likely a NamespaceNotFound error. Don't log it and return error to stop retrying.
-		return err
-	}
-
 	if err = refreshTasks(
 		ctx,
 		adminClient,
-		ns.Name(),
 		namespace.ID(taskInfo.GetNamespaceID()),
 		taskInfo.GetWorkflowID(),
 		taskInfo.GetRunID(),
@@ -599,8 +592,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	activityTask := task.(*tasks.ActivityRetryTimerTask)
 
 	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-		NamespaceId:       activityTask.NamespaceID,
-		SourceNamespaceId: activityTask.NamespaceID,
+		NamespaceId: activityTask.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: activityTask.WorkflowID,
 			RunId:      activityTask.RunID,

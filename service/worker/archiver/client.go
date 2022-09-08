@@ -102,6 +102,7 @@ type (
 		logger           log.Logger
 		sdkClientFactory sdk.ClientFactory
 		numWorkflows     dynamicconfig.IntPropertyFn
+		signalTimeout    dynamicconfig.DurationPropertyFn
 		rateLimiter      quotas.RateLimiter
 		archiverProvider provider.ArchiverProvider
 	}
@@ -110,11 +111,7 @@ type (
 	ArchivalTarget int
 )
 
-const (
-	signalTimeout = 300 * time.Millisecond
-
-	tooManyRequestsErrMsg = "too many requests to archival workflow"
-)
+const tooManyRequestsErrMsg = "too many requests to archival workflow"
 
 const (
 	// ArchiveTargetHistory is the archive target for workflow history
@@ -130,6 +127,7 @@ func NewClient(
 	sdkClientFactory sdk.ClientFactory,
 	numWorkflows dynamicconfig.IntPropertyFn,
 	requestRPS dynamicconfig.IntPropertyFn,
+	signalTimeout dynamicconfig.DurationPropertyFn,
 	archiverProvider provider.ArchiverProvider,
 ) Client {
 	return &client{
@@ -140,6 +138,7 @@ func NewClient(
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(requestRPS()) },
 		),
+		signalTimeout:    signalTimeout,
 		archiverProvider: archiverProvider,
 	}
 }
@@ -293,7 +292,7 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 		WorkflowTaskTimeout:      workflowTaskTimeout,
 		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}
-	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
+	signalCtx, cancel := context.WithTimeout(context.Background(), c.signalTimeout())
 	defer cancel()
 
 	sdkClient := c.sdkClientFactory.GetSystemClient()

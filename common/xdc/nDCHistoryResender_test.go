@@ -169,7 +169,6 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace:   s.namespace.String(),
 			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -192,7 +191,6 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace:   s.namespace.String(),
 			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -348,7 +346,6 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 		NextPageToken: nextTokenOut,
 	}
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Namespace:   s.namespace.String(),
 		NamespaceId: s.namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,

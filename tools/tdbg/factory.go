@@ -38,10 +38,12 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v2"
-	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"go.temporal.io/server/api/adminservice/v1"
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
@@ -60,6 +62,7 @@ type HttpGetter interface {
 // ClientFactory is used to construct rpc clients
 type ClientFactory interface {
 	AdminClient(c *cli.Context) adminservice.AdminServiceClient
+	WorkflowClient(c *cli.Context) workflowservice.WorkflowServiceClient
 }
 
 type clientFactory struct {
@@ -80,6 +83,12 @@ func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceCli
 	connection, _ := b.createGRPCConnection(c)
 
 	return adminservice.NewAdminServiceClient(connection)
+}
+
+func (b *clientFactory) WorkflowClient(c *cli.Context) workflowservice.WorkflowServiceClient {
+	connection, _ := b.createGRPCConnection(c)
+
+	return workflowservice.NewWorkflowServiceClient(connection)
 }
 
 func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, error) {

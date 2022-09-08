@@ -267,11 +267,6 @@ func (n *NDCHistoryResenderImpl) getHistory(
 
 	logger := log.With(n.logger, tag.WorkflowRunID(runID))
 
-	ns, err := n.namespaceRegistry.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return nil, err
-	}
-
 	ctx, cancel := rpc.NewContextFromParentWithTimeoutAndVersionHeaders(ctx, resendContextTimeout)
 	defer cancel()
 
@@ -281,7 +276,6 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	}
 
 	response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Namespace:   ns.Name().String(),
 		NamespaceId: namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,

@@ -1140,9 +1140,8 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 	s.mockMatchingClient.EXPECT().AddActivityTask(
 		gomock.Any(),
 		&matchingservice.AddActivityTaskRequest{
-			NamespaceId:       activityInfo.NamespaceId,
-			SourceNamespaceId: activityInfo.NamespaceId,
-			Execution:         &execution,
+			NamespaceId: s.namespaceID.String(),
+			Execution:   &execution,
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: activityInfo.TaskQueue,
 				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
