@@ -696,7 +696,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	resetContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	resetContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	resetMutableState := workflow.NewMockMutableState(s.controller)
-	resetContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(resetMutableState, nil)
+	resetContext.EXPECT().LoadMutableState(gomock.Any()).Return(resetMutableState, nil)
 	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
 	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
 	resetContextCacheKey := definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, newRunID)

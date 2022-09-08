@@ -95,7 +95,7 @@ func (w *WorkflowContextImpl) ReloadMutableState(
 	ctx context.Context,
 ) (workflow.MutableState, error) {
 	w.context.Clear()
-	mutableState, err := w.context.LoadWorkflowExecution(ctx)
+	mutableState, err := w.context.LoadMutableState(ctx)
 	if err != nil {
 		return nil, err
 	}

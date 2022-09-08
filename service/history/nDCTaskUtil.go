@@ -139,7 +139,7 @@ func LoadMutableStateForTask(
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 
-	mutableState, err := wfContext.LoadWorkflowExecution(ctx)
+	mutableState, err := wfContext.LoadMutableState(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func LoadMutableStateForTask(
 	scope.IncCounter(metrics.StaleMutableStateCounter)
 	wfContext.Clear()
 
-	mutableState, err = wfContext.LoadWorkflowExecution(ctx)
+	mutableState, err = wfContext.LoadMutableState(ctx)
 	if err != nil {
 		return nil, err
 	}

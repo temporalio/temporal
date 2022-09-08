@@ -802,7 +802,7 @@ func (e *historyEngineImpl) getMutableState(
 	}
 	defer func() { weCtx.GetReleaseFn()(retError) }()
 
-	mutableState, err := weCtx.GetContext().LoadWorkflowExecution(ctx)
+	mutableState, err := weCtx.GetContext().LoadMutableState(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -885,7 +885,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 
 	// clear mutable state to force reload from persistence. This API returns both cached and persisted version.
 	weCtx.GetContext().Clear()
-	mutableState, err := weCtx.GetContext().LoadWorkflowExecution(ctx)
+	mutableState, err := weCtx.GetContext().LoadMutableState(ctx)
 	if err != nil {
 		return nil, err
 	}

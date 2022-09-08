@@ -114,7 +114,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadWorkflowExecution(ctx)
+	mutableState, err := weContext.LoadMutableState(ctx)
 	if err != nil {
 		return err
 	}
@@ -146,7 +146,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
 
 	// NOTE: do not access anything related mutable state after this lock release
-	// release the context lock since we no longer need mutable state builder and
+	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
@@ -180,7 +180,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadWorkflowExecution(ctx)
+	mutableState, err := weContext.LoadMutableState(ctx)
 	if err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
 
 	// NOTE: do not access anything related mutable state after this lock release
-	// release the context lock since we no longer need mutable state builder and
+	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
@@ -320,7 +320,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadWorkflowExecution(ctx)
+	mutableState, err := weContext.LoadMutableState(ctx)
 	if err != nil {
 		return err
 	}
@@ -354,7 +354,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
 
 	// NOTE: do not access anything related mutable state after this lock release
-	// release the context lock since we no longer need mutable state builder and
+	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.recordCloseExecution(

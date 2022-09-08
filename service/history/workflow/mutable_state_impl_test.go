@@ -245,7 +245,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			// create mutable state and verify checksum is generated on close
 			loadErrors = loadErrorsFunc()
 			var err error
-			s.mutableState, err = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc()) // no errors expected
 			s.EqualValues(dbState.Checksum, s.mutableState.checksum)
@@ -259,7 +259,7 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// verify checksum is verified on Load
 			dbState.Checksum = csum
-			s.mutableState, err = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc())
 
@@ -271,7 +271,7 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// modify checksum and verify Load fails
 			dbState.Checksum.Value[0]++
-			s.mutableState, err = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors+1, loadErrorsFunc())
 			s.EqualValues(dbState.Checksum, s.mutableState.checksum)
@@ -281,7 +281,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			s.mockConfig.MutableStateChecksumInvalidateBefore = func() float64 {
 				return float64((s.mutableState.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) + 1)
 			}
-			s.mutableState, err = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc())
 			s.Nil(s.mutableState.checksum)

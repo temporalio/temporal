@@ -268,7 +268,7 @@ func NewMutableState(
 	return s
 }
 
-func newMutableStateBuilderFromDB(
+func newMutableStateFromDB(
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
@@ -358,7 +358,7 @@ func NewSanitizedMutableState(
 	mutableStateRecord *persistencespb.WorkflowMutableState,
 ) (*MutableStateImpl, error) {
 
-	mutableState, err := newMutableStateBuilderFromDB(shard, eventsCache, logger, namespaceEntry, mutableStateRecord, 1)
+	mutableState, err := newMutableStateFromDB(shard, eventsCache, logger, namespaceEntry, mutableStateRecord, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -3219,7 +3219,7 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		return nil, nil, err
 	}
 
-	newStateBuilder := NewMutableState(
+	newMutableState := NewMutableState(
 		e.shard,
 		e.shard.GetEventsCache(),
 		e.logger,
@@ -3227,11 +3227,11 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
 	)
 
-	if err = newStateBuilder.SetHistoryTree(ctx, newRunID); err != nil {
+	if err = newMutableState.SetHistoryTree(ctx, newRunID); err != nil {
 		return nil, nil, err
 	}
 
-	if _, err = newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(
+	if _, err = newMutableState.addWorkflowExecutionStartedEventForContinueAsNew(
 		parentInfo,
 		newExecution,
 		e,
@@ -3255,7 +3255,7 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		return nil, nil, err
 	}
 
-	return continueAsNewEvent, newStateBuilder, nil
+	return continueAsNewEvent, newMutableState, nil
 }
 
 func rolloverAutoResetPointsWithExpiringTime(
@@ -4223,7 +4223,7 @@ func (e *MutableStateImpl) updateWithLastWriteEvent(
 ) error {
 
 	if transactionPolicy == TransactionPolicyPassive {
-		// already handled in state builder
+		// already handled in mutable state.
 		return nil
 	}
 

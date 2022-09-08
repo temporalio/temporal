@@ -129,7 +129,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 
 	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
 
-	mockWeCtx.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(mockMutableState, nil)
+	mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
@@ -172,7 +172,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 
 	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
 
-	mockWeCtx.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(mockMutableState, nil)
+	mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))

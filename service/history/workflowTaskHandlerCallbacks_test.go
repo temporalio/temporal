@@ -159,21 +159,21 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 		},
 	}
 
-	msBuilder := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shard, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(msBuilder, commonpb.WorkflowExecution{
+	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shard, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
+	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
 
-	_, err := msBuilder.AddTimeoutWorkflowEvent(
-		msBuilder.GetNextEventID(),
+	_, err := ms.AddTimeoutWorkflowEvent(
+		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
 		uuid.New(),
 	)
 	s.NoError(err)
 
-	ms := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	wfMs := workflow.TestCloneToProto(ms)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
 	err = s.workflowTaskHandlerCallback.verifyFirstWorkflowTaskScheduled(context.Background(), request)
@@ -189,19 +189,19 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 		},
 	}
 
-	msBuilder := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shard, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(msBuilder, commonpb.WorkflowExecution{
+	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shard, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
+	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
 
 	// zombie state should be treated as open
-	msBuilder.UpdateWorkflowStateStatus(
+	ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)
-	ms := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	wfMs := workflow.TestCloneToProto(ms)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
 	err := s.workflowTaskHandlerCallback.verifyFirstWorkflowTaskScheduled(context.Background(), request)
@@ -217,15 +217,15 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 		},
 	}
 
-	msBuilder := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shard, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(msBuilder, commonpb.WorkflowExecution{
+	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shard, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
+	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-	addWorkflowTaskScheduledEvent(msBuilder)
+	addWorkflowTaskScheduledEvent(ms)
 
-	ms := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	wfMs := workflow.TestCloneToProto(ms)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
 	err := s.workflowTaskHandlerCallback.verifyFirstWorkflowTaskScheduled(context.Background(), request)
@@ -241,18 +241,18 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestVerifyFirstWorkflowTaskScheduled_
 		},
 	}
 
-	msBuilder := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shard, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
-	addWorkflowExecutionStartedEvent(msBuilder, commonpb.WorkflowExecution{
+	ms := workflow.TestGlobalMutableState(s.workflowTaskHandlerCallback.shard, s.mockEventsCache, s.logger, tests.Version, tests.RunID)
+	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-	wt := addWorkflowTaskScheduledEvent(msBuilder)
-	workflowTasksStartEvent := addWorkflowTaskStartedEvent(msBuilder, wt.ScheduledEventID, "testTaskQueue", uuid.New())
+	wt := addWorkflowTaskScheduledEvent(ms)
+	workflowTasksStartEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.New())
 	wt.StartedEventID = workflowTasksStartEvent.GetEventId()
-	addWorkflowTaskCompletedEvent(msBuilder, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	addWorkflowTaskCompletedEvent(ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
-	ms := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	wfMs := workflow.TestCloneToProto(ms)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
 	err := s.workflowTaskHandlerCallback.verifyFirstWorkflowTaskScheduled(context.Background(), request)
