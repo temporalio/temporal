@@ -162,6 +162,28 @@ func (s *specSuite) TestSpecCalendarMultiple() {
 	)
 }
 
+func (s *specSuite) TestSpecCalendarAndCron() {
+	s.checkSequenceRaw(
+		&schedpb.ScheduleSpec{
+			Calendar: []*schedpb.CalendarSpec{
+				{Hour: "5,7", Minute: "23"},
+			},
+			CronString: []*schedpb.CronString{
+				{CronSpec: "55 11,13 * * *"},
+			},
+		},
+		time.Date(2022, 3, 23, 3, 0, 0, 0, time.UTC),
+		time.Date(2022, 3, 23, 5, 23, 0, 0, time.UTC),
+		time.Date(2022, 3, 23, 7, 23, 0, 0, time.UTC),
+		time.Date(2022, 3, 23, 11, 55, 0, 0, time.UTC),
+		time.Date(2022, 3, 23, 13, 55, 0, 0, time.UTC),
+		time.Date(2022, 3, 24, 5, 23, 0, 0, time.UTC),
+		time.Date(2022, 3, 24, 7, 23, 0, 0, time.UTC),
+		time.Date(2022, 3, 24, 11, 55, 0, 0, time.UTC),
+		time.Date(2022, 3, 24, 13, 55, 0, 0, time.UTC),
+	)
+}
+
 func (s *specSuite) TestSpecMixedCalendarInterval() {
 	s.checkSequenceRaw(
 		&schedpb.ScheduleSpec{
