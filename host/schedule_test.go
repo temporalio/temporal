@@ -217,7 +217,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 
 	// sleep until we see two runs, plus a bit more
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 8*time.Second, 200*time.Millisecond)
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	// describe
 
@@ -235,7 +235,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
 
-	s.DurationNear(describeResp.Info.CreateTime.Sub(createTime), 0, 500*time.Millisecond)
+	s.DurationNear(describeResp.Info.CreateTime.Sub(createTime), 0, 1*time.Second)
 	s.EqualValues(2, describeResp.Info.ActionCount)
 	s.EqualValues(0, describeResp.Info.MissedCatchupWindow)
 	s.EqualValues(0, describeResp.Info.OverlapSkipped)
@@ -244,7 +244,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	action0 := describeResp.Info.RecentActions[0]
 	s.WithinRange(*action0.ScheduleTime, createTime, time.Now())
 	s.True(action0.ScheduleTime.UnixNano()%int64(3*time.Second) == 0)
-	s.DurationNear(action0.ActualTime.Sub(*action0.ScheduleTime), 0, 500*time.Millisecond)
+	s.DurationNear(action0.ActualTime.Sub(*action0.ScheduleTime), 0, 1*time.Second)
 
 	// list
 
@@ -319,8 +319,8 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	s.NoError(err)
 
 	// wait for one new run
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs2) == 1 }, 4*time.Second, 200*time.Millisecond)
-	time.Sleep(100 * time.Millisecond)
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs2) == 1 }, 5*time.Second, 200*time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	// describe again
 	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
@@ -334,7 +334,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
 
-	s.DurationNear(describeResp.Info.UpdateTime.Sub(updateTime), 0, 500*time.Millisecond)
+	s.DurationNear(describeResp.Info.UpdateTime.Sub(updateTime), 0, 1*time.Second)
 	s.EqualValues(3, len(describeResp.Info.RecentActions))
 	action2 := describeResp.Info.RecentActions[2]
 	s.True(action2.ScheduleTime.UnixNano()%int64(3*time.Second) == 1000000000, action2.ScheduleTime.UnixNano())
@@ -352,7 +352,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	})
 	s.NoError(err)
 
-	time.Sleep(3*time.Second + 100*time.Millisecond)
+	time.Sleep(3*time.Second + 500*time.Millisecond)
 	s.EqualValues(1, atomic.LoadInt32(&runs2), "has not run again")
 
 	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
@@ -457,7 +457,7 @@ func (s *scheduleIntegrationSuite) TestInput() {
 
 	_, err = s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 4*time.Second, 200*time.Millisecond)
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 5*time.Second, 200*time.Millisecond)
 }
 
 func (s *scheduleIntegrationSuite) TestRefresh() {
@@ -507,7 +507,7 @@ func (s *scheduleIntegrationSuite) TestRefresh() {
 
 	_, err := s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 3*time.Second, 100*time.Millisecond)
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 4*time.Second, 100*time.Millisecond)
 
 	// workflow has started but is now sleeping. it will timeout in 2 seconds.
 

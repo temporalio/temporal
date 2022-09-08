@@ -69,6 +69,7 @@ var (
 		"GetWorkflowExecutionHistoryReverse": 2,
 		"GetWorkerBuildIdOrdering":           2,
 		"UpdateWorkerBuildIdOrdering":        2,
+		"DeleteWorkflowExecution":            2,
 
 		// priority 3
 		"ResetStickyTaskQueue":    3,

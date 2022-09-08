@@ -87,7 +87,13 @@ var (
 	errUnableToSaveSearchAttributesMessage            = "Unable to save search attributes: %v."
 	errUnableToStartWorkflowMessage                   = "Unable to start %s workflow: %v."
 	errWorkflowReturnedErrorMessage                   = "Workflow %s returned an error: %v."
+	errUnableConnectRemoteClusterMessage              = "Unable connect to remote cluster %s with error: %v."
+	errInvalidRemoteClusterInfo                       = "Unable connect to remote cluster with invalid config: %v."
+	errUnableToStoreClusterInfo                       = "Unable to persist cluster info with error: %v."
+	errUnableToDeleteClusterInfo                      = "Unable to delete cluster info with error: %v."
 
 	errListNotAllowed      = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
 	errSchedulesNotAllowed = serviceerror.NewPermissionDenied("Schedules are disabled on this namespace.", "")
+
+	errBatchAPINotAllowed = serviceerror.NewPermissionDenied("Batch operation feature are disabled on this namespace.", "")
 )

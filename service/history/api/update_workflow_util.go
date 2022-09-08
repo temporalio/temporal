@@ -27,9 +27,35 @@ package api
 import (
 	"context"
 
+	clockspb "go.temporal.io/server/api/clock/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
+
+func GetAndUpdateWorkflowWithNew(
+	ctx context.Context,
+	reqClock *clockspb.VectorClock,
+	consistencyCheckFn MutableStateConsistencyPredicate,
+	workflowKey definition.WorkflowKey,
+	action UpdateWorkflowActionFunc,
+	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
+	shard shard.Context,
+	workflowConsistencyChecker WorkflowConsistencyChecker,
+) (retError error) {
+	workflowContext, err := workflowConsistencyChecker.GetWorkflowContext(
+		ctx,
+		reqClock,
+		consistencyCheckFn,
+		workflowKey,
+	)
+	if err != nil {
+		return err
+	}
+	defer func() { workflowContext.GetReleaseFn()(retError) }()
+
+	return UpdateWorkflowWithNew(shard, ctx, workflowContext, action, newWorkflowFn)
+}
 
 func UpdateWorkflowWithNew(
 	shard shard.Context,

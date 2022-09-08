@@ -25,10 +25,10 @@
 package tasks
 
 import (
-	"go.temporal.io/server/common/predicates"
 	"golang.org/x/exp/maps"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/predicates"
 )
 
 type (
@@ -148,6 +148,21 @@ func OrPredicates(a Predicate, b Predicate) Predicate {
 	}
 
 	return predicates.Or(a, b)
+}
+
+func IsUniverisalPredicate(p Predicate) bool {
+	_, ok := p.(*predicates.UniversalImpl[Task])
+	return ok
+}
+
+func IsNamespacePredicate(p Predicate) bool {
+	_, ok := p.(*NamespacePredicate)
+	return ok
+}
+
+func IsTypePredicate(p Predicate) bool {
+	_, ok := p.(*TypePredicate)
+	return ok
 }
 
 func intersect[K comparable](this, that map[K]struct{}) map[K]struct{} {

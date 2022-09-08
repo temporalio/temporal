@@ -63,10 +63,10 @@ const (
 	frontendClientRetryMaxAttempts     = 2
 
 	historyClientRetryInitialInterval = 50 * time.Millisecond
-	historyClientRetryMaxAttempts     = 5
+	historyClientRetryMaxAttempts     = 2
 
 	matchingClientRetryInitialInterval = 1000 * time.Millisecond
-	matchingClientRetryMaxAttempts     = 5
+	matchingClientRetryMaxAttempts     = 2
 
 	frontendHandlerRetryInitialInterval = 200 * time.Millisecond
 	frontendHandlerRetryMaxInterval     = time.Second

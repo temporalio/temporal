@@ -22,77 +22,59 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package signalwithstart
+package resetstickytaskqueue
 
 import (
 	"context"
 
-	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 )
 
-func SignalWithStartWorkflowExecution(
+func Invoke(
 	ctx context.Context,
-	signalWithStartRequest *historyservice.SignalWithStartWorkflowExecutionRequest,
+	resetRequest *historyservice.ResetStickyTaskQueueRequest,
 	shard shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(signalWithStartRequest.GetNamespaceId()))
+) (*historyservice.ResetStickyTaskQueueResponse, error) {
+	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
+	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.ID()
 
-	var currentWorkflowContext api.WorkflowContext
-	currentWorkflowContext, err = workflowConsistencyChecker.GetWorkflowContext(
+	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
-			string(namespaceID),
-			signalWithStartRequest.SignalWithStartRequest.WorkflowId,
-			"",
+			resetRequest.NamespaceId,
+			resetRequest.Execution.WorkflowId,
+			resetRequest.Execution.RunId,
 		),
-	)
-	switch err.(type) {
-	case nil:
-		defer func() { currentWorkflowContext.GetReleaseFn()(retError) }()
-	case *serviceerror.NotFound:
-		currentWorkflowContext = nil
-	default:
-		return nil, err
-	}
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
+			if !mutableState.IsWorkflowExecutionRunning() {
+				return nil, consts.ErrWorkflowCompleted
+			}
 
-	// Start workflow and signal
-	startRequest := ConvertToStartRequest(
-		namespaceID,
-		signalWithStartRequest.SignalWithStartRequest,
-		shard.GetTimeSource().Now(),
-	)
-	request := startRequest.StartRequest
-	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistorySignalWithStartWorkflowExecutionScope, shard, shard.GetMetricsClient())
-	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, shard, namespaceEntry, "SignalWithStartWorkflowExecution")
-	if err != nil {
-		return nil, err
-	}
-	runID, err := SignalWithStartWorkflow(
-		ctx,
+			mutableState.ClearStickyness()
+			return &api.UpdateWorkflowAction{
+				Noop:               true,
+				CreateWorkflowTask: false,
+			}, nil
+		},
+		nil,
 		shard,
-		namespaceEntry,
-		currentWorkflowContext,
-		startRequest,
-		signalWithStartRequest.SignalWithStartRequest,
+		workflowConsistencyChecker,
 	)
+
 	if err != nil {
 		return nil, err
 	}
-	return &historyservice.SignalWithStartWorkflowExecutionResponse{
-		RunId: runID,
-	}, nil
+	return &historyservice.ResetStickyTaskQueueResponse{}, nil
 }

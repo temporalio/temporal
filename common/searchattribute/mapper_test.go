@@ -46,6 +46,10 @@ func (t *TestMapper) GetAlias(fieldName string, namespace string) (string, error
 	if namespace == "error-namespace" {
 		return "", serviceerror.NewInternal("mapper error")
 	} else if namespace == "test-namespace" {
+		if fieldName == "pass-through" {
+			return fieldName, nil
+		}
+
 		return "alias_of_" + fieldName, nil
 	}
 
@@ -61,19 +65,22 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 	if namespace == "error-namespace" {
 		return "", serviceerror.NewInternal("mapper error")
 	} else if namespace == "test-namespace" {
+		if alias == "pass-through" {
+			return alias, nil
+		}
 		return strings.TrimPrefix(alias, "alias_of_"), nil
 	}
 	return "", serviceerror.NewInvalidArgument("unknown namespace")
 }
 
-func Test_ApplyAliases(t *testing.T) {
+func Test_AliasFields(t *testing.T) {
 	sa := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
 			"field1":      {Data: []byte("data1")},
 			"wrong_field": {Data: []byte("data23")}, // Wrong unknown name must be ignored.
 		},
 	}
-	err := ApplyAliases(&TestMapper{}, sa, "error-namespace")
+	_, err := AliasFields(&TestMapper{}, sa, "error-namespace")
 	assert.Error(t, err)
 	var internalErr *serviceerror.Internal
 	assert.ErrorAs(t, err, &internalErr)
@@ -84,9 +91,9 @@ func Test_ApplyAliases(t *testing.T) {
 			"wrong_field": {Data: []byte("data23")}, // Wrong unknown name must be ignored.
 		},
 	}
-	err = ApplyAliases(&TestMapper{}, sa, "unknown-namespace")
+	sa, err = AliasFields(&TestMapper{}, sa, "unknown-namespace")
 	assert.NoError(t, err)
-	assert.Len(t, sa.GetIndexedFields(), 0)
+	assert.Nil(t, sa)
 
 	sa = &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
@@ -95,8 +102,9 @@ func Test_ApplyAliases(t *testing.T) {
 			"wrong_field": {Data: []byte("data23")}, // Wrong unknown name must be ignored.
 		},
 	}
-	err = ApplyAliases(&TestMapper{}, sa, "test-namespace")
+	sa, err = AliasFields(&TestMapper{}, sa, "test-namespace")
 	assert.NoError(t, err)
+	assert.NotNil(t, sa)
 	assert.Len(t, sa.GetIndexedFields(), 2)
 	assert.EqualValues(t, "data1", sa.GetIndexedFields()["alias_of_field1"].GetData())
 	assert.EqualValues(t, "data2", sa.GetIndexedFields()["alias_of_field2"].GetData())
@@ -105,19 +113,31 @@ func Test_ApplyAliases(t *testing.T) {
 	sa = &commonpb.SearchAttributes{
 		IndexedFields: nil,
 	}
-	err = ApplyAliases(&TestMapper{}, sa, "error-namespace")
+	sa, err = AliasFields(&TestMapper{}, sa, "error-namespace")
 	assert.NoError(t, err)
-	err = ApplyAliases(&TestMapper{}, sa, "unknown-namespace")
+	assert.Nil(t, sa)
+	sa, err = AliasFields(&TestMapper{}, sa, "unknown-namespace")
 	assert.NoError(t, err)
+	assert.Nil(t, sa)
+
+	// Pass through search attributes are not mapped.
+	sa = &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"pass-through": {Data: []byte("data1")},
+		},
+	}
+	sa, err = AliasFields(&TestMapper{}, sa, "test-namespace")
+	assert.NoError(t, err)
+	assert.Nil(t, sa)
 }
 
-func Test_SubstituteAliases(t *testing.T) {
+func Test_UnaliasFields(t *testing.T) {
 	sa := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
 			"alias_of_field1": {Data: []byte("data1")},
 		},
 	}
-	err := SubstituteAliases(&TestMapper{}, sa, "error-namespace")
+	_, err := UnaliasFields(&TestMapper{}, sa, "error-namespace")
 	assert.Error(t, err)
 	var internalErr *serviceerror.Internal
 	assert.ErrorAs(t, err, &internalErr)
@@ -128,7 +148,7 @@ func Test_SubstituteAliases(t *testing.T) {
 			"alias_of_field2": {Data: []byte("data2")},
 		},
 	}
-	err = SubstituteAliases(&TestMapper{}, sa, "unknown-namespace")
+	_, err = UnaliasFields(&TestMapper{}, sa, "unknown-namespace")
 	assert.Error(t, err)
 	var invalidArgumentErr *serviceerror.InvalidArgument
 	assert.ErrorAs(t, err, &invalidArgumentErr)
@@ -139,8 +159,9 @@ func Test_SubstituteAliases(t *testing.T) {
 			"alias_of_field2": {Data: []byte("data2")},
 		},
 	}
-	err = SubstituteAliases(&TestMapper{}, sa, "test-namespace")
+	sa, err = UnaliasFields(&TestMapper{}, sa, "test-namespace")
 	assert.NoError(t, err)
+	assert.NotNil(t, sa)
 	assert.Len(t, sa.GetIndexedFields(), 2)
 	assert.EqualValues(t, "data1", sa.GetIndexedFields()["field1"].GetData())
 	assert.EqualValues(t, "data2", sa.GetIndexedFields()["field2"].GetData())
@@ -152,7 +173,7 @@ func Test_SubstituteAliases(t *testing.T) {
 			"wrong_alias":     {Data: []byte("data3")},
 		},
 	}
-	err = SubstituteAliases(&TestMapper{}, sa, "test-namespace")
+	_, err = UnaliasFields(&TestMapper{}, sa, "test-namespace")
 	assert.Error(t, err)
 	assert.ErrorAs(t, err, &invalidArgumentErr)
 
@@ -160,8 +181,20 @@ func Test_SubstituteAliases(t *testing.T) {
 	sa = &commonpb.SearchAttributes{
 		IndexedFields: nil,
 	}
-	err = SubstituteAliases(&TestMapper{}, sa, "error-namespace")
+	sa, err = UnaliasFields(&TestMapper{}, sa, "error-namespace")
 	assert.NoError(t, err)
-	err = SubstituteAliases(&TestMapper{}, sa, "unknown-namespace")
+	assert.Nil(t, sa)
+	sa, err = UnaliasFields(&TestMapper{}, sa, "unknown-namespace")
 	assert.NoError(t, err)
+	assert.Nil(t, sa)
+
+	// Pass through aliases are not substituted.
+	sa = &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"pass-through": {Data: []byte("data1")},
+		},
+	}
+	sa, err = UnaliasFields(&TestMapper{}, sa, "test-namespace")
+	assert.NoError(t, err)
+	assert.Nil(t, sa)
 }

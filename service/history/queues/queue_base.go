@@ -346,10 +346,17 @@ func (p *queueBase) processNewRange() {
 }
 
 func (p *queueBase) checkpoint() {
+	for _, reader := range p.readerGroup.Readers() {
+		reader.ShrinkSlices()
+	}
+	// Run slicePredicateAction to move slices with non-universal predicate to non-default reader
+	// so that upon shard reload, task loading for those slices won't block other slices in the default
+	// reader.
+	newSlicePredicateAction(p.monitor, p.mitigator.maxReaderCount()).Run(p.readerGroup)
+
 	readerScopes := make(map[int32][]Scope)
 	newExclusiveDeletionHighWatermark := p.nonReadableScope.Range.InclusiveMin
 	for readerID, reader := range p.readerGroup.Readers() {
-		reader.ShrinkSlices()
 		scopes := reader.Scopes()
 
 		if len(scopes) == 0 {
