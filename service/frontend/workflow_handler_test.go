@@ -74,7 +74,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/batcher"
 )
@@ -994,7 +993,7 @@ func (s *workflowHandlerSuite) TestDescribeNamespace_Success_ArchivalEnabled() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	req := &workflowservice.DescribeNamespaceRequest{
-		Id: "test-namespace-id",
+		Namespace: "test-namespace",
 	}
 	result, err := wh.DescribeNamespace(context.Background(), req)
 
@@ -1005,16 +1004,6 @@ func (s *workflowHandlerSuite) TestDescribeNamespace_Success_ArchivalEnabled() {
 	s.Equal(testHistoryArchivalURI, result.Config.GetHistoryArchivalUri())
 	s.Equal(enumspb.ARCHIVAL_STATE_ENABLED, result.Config.GetVisibilityArchivalState())
 	s.Equal(testVisibilityArchivalURI, result.Config.GetVisibilityArchivalUri())
-}
-
-func (s *workflowHandlerSuite) TestDescribeNamespace_NamespaceNotSet() {
-	wh := s.getWorkflowHandler(s.newConfig())
-
-	req := &workflowservice.DescribeNamespaceRequest{}
-	result, err := wh.DescribeNamespace(context.Background(), req)
-
-	s.ErrorIs(err, interceptor.ErrNamespaceNotSet)
-	s.Nil(result)
 }
 
 func (s *workflowHandlerSuite) TestUpdateNamespace_Failure_UpdateExistingArchivalURI() {

@@ -201,9 +201,21 @@ func (s *namespaceValidatorSuite) Test_Intercept_StatusFromNamespace() {
 		// DescribeNamespace
 		{
 			state:       enumspb.NAMESPACE_STATE_UNSPECIFIED,
-			expectedErr: nil,
+			expectedErr: ErrNamespaceNotSet,
 			method:      "/temporal/DescribeNamespace",
 			req:         &workflowservice.DescribeNamespaceRequest{},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_UNSPECIFIED,
+			expectedErr: nil,
+			method:      "/temporal/DescribeNamespace",
+			req:         &workflowservice.DescribeNamespaceRequest{Id: "test-namespace-id"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_UNSPECIFIED,
+			expectedErr: nil,
+			method:      "/temporal/DescribeNamespace",
+			req:         &workflowservice.DescribeNamespaceRequest{Namespace: "test-namespace"},
 		},
 		// RegisterNamespace
 		{
@@ -400,8 +412,8 @@ func (s *namespaceValidatorSuite) Test_Intercept_DescribeNamespace_Id() {
 		return &workflowservice.DescribeNamespaceResponse{}, nil
 	})
 
-	s.NoError(err)
-	s.True(handlerCalled)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.False(handlerCalled)
 }
 
 func (s *namespaceValidatorSuite) Test_Intercept_GetClusterInfo() {

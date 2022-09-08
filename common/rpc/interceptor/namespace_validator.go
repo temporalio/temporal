@@ -142,12 +142,17 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 	}
 	namespaceName := namespace.Name(reqWithNamespace.GetNamespace())
 
-	switch req.(type) {
+	switch request := req.(type) {
 	case *workflowservice.DescribeNamespaceRequest:
-		// Special case for DescribeNamespace API which can get namespace by Id and should bypass namespace registry.
+		// Special case for DescribeNamespace API which should read namespace directly from database.
+		// Therefore, it must bypass namespace registry and validator.
+		if request.GetId() == "" && namespaceName.IsEmpty() {
+			return nil, ErrNamespaceNotSet
+		}
 		return nil, nil
 	case *workflowservice.RegisterNamespaceRequest:
-		// Special case for RegisterNamespace API. `namespace` is name of namespace that about to be registered. There is no namespace entry for it.
+		// Special case for RegisterNamespace API. `namespaceName` is name of namespace that about to be registered.
+		// There is no namespace entry for it, therefore, it must bypass namespace registry and validator.
 		if namespaceName.IsEmpty() {
 			return nil, ErrNamespaceNotSet
 		}
