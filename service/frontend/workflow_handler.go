@@ -2936,7 +2936,10 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	err = wh.validateScheduleSpec(request.GetSchedule().GetSpec())
+	if request.Schedule == nil {
+		request.Schedule = &schedpb.Schedule{}
+	}
+	err = wh.canonicalizeScheduleSpec(request.Schedule)
 	if err != nil {
 		return nil, err
 	}
@@ -3261,7 +3264,10 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
-	err = wh.validateScheduleSpec(request.GetSchedule().GetSpec())
+	if request.Schedule == nil {
+		request.Schedule = &schedpb.Schedule{}
+	}
+	err = wh.canonicalizeScheduleSpec(request.Schedule)
 	if err != nil {
 		return nil, err
 	}
@@ -4722,11 +4728,16 @@ func (wh *WorkflowHandler) trimHistoryNode(
 	}
 }
 
-func (wh *WorkflowHandler) validateScheduleSpec(spec *schedpb.ScheduleSpec) error {
-	_, err := scheduler.NewCompiledSpec(spec)
+func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedpb.Schedule) error {
+	if schedule.Spec == nil {
+		schedule.Spec = &schedpb.ScheduleSpec{}
+	}
+	compiledSpec, err := scheduler.NewCompiledSpec(schedule.Spec)
 	if err != nil {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid schedule spec: %v", err))
 	}
+	// this is safe in the presence of retries because canonicalization is idempotent
+	schedule.Spec = compiledSpec.CanonicalForm()
 	return nil
 }
 
