@@ -40,6 +40,7 @@ const (
 var (
 	ErrUnableToExecuteActivity      = errors.New("unable to execute activity")
 	ErrUnableToExecuteChildWorkflow = errors.New("unable to execute child workflow")
+	ErrUnableToSleep                = errors.New("unable to sleep")
 )
 
 func NewExecutionsStillExistError(count int) error {

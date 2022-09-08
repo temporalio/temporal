@@ -49,6 +49,11 @@ type (
 		NamespaceID namespace.ID
 		Namespace   namespace.Name
 
+		// NamespaceDeleteDelay indicates duration for how long namespace stays in database
+		// after all namespace resources (i.e. workflow executions) are deleted.
+		// Default is 0, means, namespace will be deleted immediately.
+		NamespaceDeleteDelay time.Duration
+
 		DeleteExecutionsConfig deleteexecutions.DeleteExecutionsConfig
 	}
 
@@ -150,7 +155,9 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 			Namespace:   result.DeletedNamespace,
 			NamespaceID: params.NamespaceID,
 			Config:      params.DeleteExecutionsConfig,
-		}})
+		},
+		NamespaceDeleteDelay: params.NamespaceDeleteDelay,
+	})
 	var reclaimResourcesExecution workflow.Execution
 	if err := reclaimResourcesFuture.GetChildWorkflowExecution().Get(ctx, &reclaimResourcesExecution); err != nil {
 		logger.Error("Unable to execute child workflow.", tag.WorkflowType(reclaimresources.WorkflowName), tag.Error(err))
