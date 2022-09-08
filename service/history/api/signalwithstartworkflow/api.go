@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package signalwithstart
+package signalwithstartworkflow
 
 import (
 	"context"
@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 )
 
-func SignalWithStartWorkflowExecution(
+func Invoke(
 	ctx context.Context,
 	signalWithStartRequest *historyservice.SignalWithStartWorkflowExecutionRequest,
 	shard shard.Context,
