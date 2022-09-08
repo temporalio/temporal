@@ -71,10 +71,6 @@ type (
 
 	// Request defines the request for parent close policy
 	Request struct {
-		// Deprecated: use Namespace in RequestDetail instead. Should be removed in 1.17
-		Namespace string
-		// Deprecated: use NamespaceID in RequestDetail instead. Should be removed in 1.17
-		NamespaceID     string
 		ParentExecution commonpb.WorkflowExecution
 		Executions      []RequestDetail
 	}
@@ -127,17 +123,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 
 	remoteExecutions := make(map[string][]RequestDetail)
 	for _, execution := range request.Executions {
-		namespaceId := execution.NamespaceID
-		if len(execution.NamespaceID) == 0 {
-			namespaceId = request.NamespaceID
-		}
-
-		namespace := execution.Namespace
-		if len(execution.Namespace) == 0 {
-			namespace = request.Namespace
-		}
-
-		requestCtx := headers.SetCallerName(ctx, namespace)
+		requestCtx := headers.SetCallerName(ctx, execution.Namespace)
 
 		var err error
 		switch execution.Policy {
@@ -146,9 +132,9 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 			continue
 		case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
 			_, err = client.TerminateWorkflowExecution(requestCtx, &historyservice.TerminateWorkflowExecutionRequest{
-				NamespaceId: namespaceId,
+				NamespaceId: execution.NamespaceID,
 				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
-					Namespace: namespace,
+					Namespace: execution.Namespace,
 					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 					},
@@ -161,9 +147,9 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 			})
 		case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
 			_, err = client.RequestCancelWorkflowExecution(requestCtx, &historyservice.RequestCancelWorkflowExecutionRequest{
-				NamespaceId: namespaceId,
+				NamespaceId: execution.NamespaceID,
 				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-					Namespace: namespace,
+					Namespace: execution.Namespace,
 					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 					},
