@@ -133,11 +133,15 @@ func (d *DynamicRateLimiterImpl) Burst() int {
 	return d.rateLimiter.Burst()
 }
 
+func (d *DynamicRateLimiterImpl) Refresh() {
+	d.rateLimiter.SetRateBurst(d.rateBurstFn.Rate(), d.rateBurstFn.Burst())
+}
+
 func (d *DynamicRateLimiterImpl) maybeRefresh() {
 	select {
 	case <-d.refreshTimer.C:
 		d.refreshTimer.Reset(d.refreshInterval)
-		d.rateLimiter.SetRateBurst(d.rateBurstFn.Rate(), d.rateBurstFn.Burst())
+		d.Refresh()
 
 	default:
 		// noop

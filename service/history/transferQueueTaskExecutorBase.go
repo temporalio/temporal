@@ -110,8 +110,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	activityScheduleToStartTimeout *time.Duration,
 ) error {
 	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-		NamespaceId:       task.NamespaceID,
-		SourceNamespaceId: task.NamespaceID,
+		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
 			RunId:      task.RunID,

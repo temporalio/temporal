@@ -660,7 +660,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		return nil, err
 	}
 
-	ns, err := adh.getNamespaceFromRequest(request)
+	ns, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -1124,7 +1124,7 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	if request.GetEvents() == nil {
 		return nil, errWorkflowIDNotSet
 	}
-	namespaceEntry, err := adh.getNamespaceFromRequest(request)
+	namespaceEntry, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -1299,7 +1299,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	if err := validateExecution(request.Execution); err != nil {
 		return nil, err
 	}
-	namespaceEntry, err := adh.getNamespaceFromRequest(request)
+	namespaceEntry, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -1672,27 +1672,6 @@ func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.
 	sw := metricsScope.StartTimer(metrics.ServiceLatency)
 	metricsScope.IncCounter(metrics.ServiceRequests)
 	return metricsScope, sw
-}
-
-// TODO (alex): remove this func in 1.18+ together with `namespace` field in corresponding protos and namespace_validator.go.
-func (adh *AdminHandler) getNamespaceFromRequest(request interface {
-	GetNamespace() string
-	GetNamespaceId() string
-}) (*namespace.Namespace, error) {
-
-	if request.GetNamespaceId() != "" {
-		ns, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return nil, err
-		}
-		return ns, nil
-	}
-
-	ns, err := adh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-	return ns, nil
 }
 
 func (adh *AdminHandler) getWorkflowCompletionEvent(
