@@ -309,8 +309,11 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 		Namespace: namespace.Name(request.GetNamespace()),
 		DeleteExecutionsConfig: deleteexecutions.DeleteExecutionsConfig{
 			DeleteActivityRPS:                    h.config.DeleteNamespaceDeleteActivityRPS(),
+			PageSize:                             h.config.DeleteNamespacePageSize(),
+			PagesPerExecution:                    h.config.DeleteNamespacePagesPerExecution(),
 			ConcurrentDeleteExecutionsActivities: h.config.DeleteNamespaceConcurrentDeleteExecutionsActivities(),
 		},
+		NamespaceDeleteDelay: h.config.DeleteNamespaceNamespaceDeleteDelay(),
 	}
 
 	sdkClient := h.sdkClientFactory.GetSystemClient()

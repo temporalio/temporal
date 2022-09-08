@@ -194,8 +194,8 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
 		Config: DeleteExecutionsConfig{
-			PageSize:               3,
-			PagesPerExecutionCount: 78,
+			PageSize:          3,
+			PagesPerExecution: 78,
 		},
 	})
 

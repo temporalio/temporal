@@ -46,6 +46,11 @@ const (
 type (
 	ReclaimResourcesParams struct {
 		deleteexecutions.DeleteExecutionsParams
+
+		// NamespaceDeleteDelay indicates the duration for how long ReclaimResourcesWorkflow
+		// will sleep between workflow execution and namespace deletion.
+		// Default is 0, means, workflow won't sleep.
+		NamespaceDeleteDelay time.Duration
 	}
 
 	ReclaimResourcesResult struct {
@@ -128,7 +133,15 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 		return result, err
 	}
 
-	// Step 2. Delete namespace.
+	// Step 2. Sleep before deleting namespace from database.
+	if params.NamespaceDeleteDelay > 0 {
+		err = workflow.Sleep(ctx, params.NamespaceDeleteDelay)
+		if err != nil {
+			return result, fmt.Errorf("%w: %v", errors.ErrUnableToSleep, err)
+		}
+	}
+
+	// Step 3. Delete namespace from database.
 	ctx5 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx5, a.DeleteNamespaceActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
 	if err != nil {

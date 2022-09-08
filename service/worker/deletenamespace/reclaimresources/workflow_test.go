@@ -28,6 +28,7 @@ import (
 	"context"
 	stderrors "errors"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
@@ -57,7 +58,7 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 		Config: deleteexecutions.DeleteExecutionsConfig{
 			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
-			PagesPerExecutionCount:               256,
+			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
 		PreviousSuccessCount: 0,
@@ -81,6 +82,7 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 			PreviousSuccessCount: 0,
 			PreviousErrorCount:   0,
 		},
+		NamespaceDeleteDelay: 10 * time.Hour,
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -105,7 +107,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 		Config: deleteexecutions.DeleteExecutionsConfig{
 			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
-			PagesPerExecutionCount:               256,
+			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
 		PreviousSuccessCount: 0,
@@ -151,7 +153,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 		Config: deleteexecutions.DeleteExecutionsConfig{
 			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
-			PagesPerExecutionCount:               256,
+			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
 		PreviousSuccessCount: 0,
@@ -242,7 +244,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 		Config: deleteexecutions.DeleteExecutionsConfig{
 			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
-			PagesPerExecutionCount:               256,
+			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
 		PreviousSuccessCount: 0,
@@ -313,7 +315,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 		Config: deleteexecutions.DeleteExecutionsConfig{
 			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
-			PagesPerExecutionCount:               256,
+			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
 		PreviousSuccessCount: 0,

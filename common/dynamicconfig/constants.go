@@ -218,12 +218,24 @@ const (
 	// FrontendEnableBatcher enables batcher-related RPCs in the frontend
 	FrontendEnableBatcher = "frontend.enableBatcher"
 
-	// DeleteNamespaceDeleteActivityRPS is RPS per every parallel delete executions activity.
+	// DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
+	// Default value is 100.
 	DeleteNamespaceDeleteActivityRPS = "frontend.deleteNamespaceDeleteActivityRPS"
+	// DeleteNamespacePageSize is a page size to read executions from visibility for delete executions activity.
+	// Default value is 1000.
+	DeleteNamespacePageSize = "frontend.deleteNamespaceDeletePageSize"
+	// DeleteNamespacePagesPerExecution is a number of pages before returning ContinueAsNew from delete executions activity.
+	// Default value is 256.
+	DeleteNamespacePagesPerExecution = "frontend.deleteNamespacePagesPerExecution"
 	// DeleteNamespaceConcurrentDeleteExecutionsActivities is a number of concurrent delete executions activities.
 	// Must be not greater than 256 and number of worker cores in the cluster.
+	// Default is 4.
 	DeleteNamespaceConcurrentDeleteExecutionsActivities = "frontend.deleteNamespaceConcurrentDeleteExecutionsActivities"
+	// DeleteNamespaceNamespaceDeleteDelay is a duration for how long namespace stays in database
+	// after all namespace resources (i.e. workflow executions) are deleted.
+	// Default is 0, means, namespace will be deleted immediately.
+	DeleteNamespaceNamespaceDeleteDelay = "frontend.deleteNamespaceNamespaceDeleteDelay"
 
 	// keys for matching
 
