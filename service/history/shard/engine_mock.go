@@ -655,11 +655,12 @@ func (mr *MockEngineMockRecorder) SyncShardStatus(ctx, request interface{}) *gom
 }
 
 // TerminateWorkflowExecution mocks base method.
-func (m *MockEngine) TerminateWorkflowExecution(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest) error {
+func (m *MockEngine) TerminateWorkflowExecution(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest) (*historyservice.TerminateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TerminateWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.TerminateWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // TerminateWorkflowExecution indicates an expected call of TerminateWorkflowExecution.

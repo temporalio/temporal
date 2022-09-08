@@ -72,6 +72,7 @@ import (
 	"go.temporal.io/server/service/history/api/respondactivitytaskfailed"
 	"go.temporal.io/server/service/history/api/signalwithstartworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
+	"go.temporal.io/server/service/history/api/terminateworkflow"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -1327,9 +1328,9 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 // Consistency guarantee: always write
 func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
-	signalWithStartRequest *historyservice.SignalWithStartWorkflowExecutionRequest,
+	req *historyservice.SignalWithStartWorkflowExecutionRequest,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
-	return signalwithstartworkflow.Invoke(ctx, signalWithStartRequest, e.shard, e.workflowConsistencyChecker)
+	return signalwithstartworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 func (h *historyEngineImpl) UpdateWorkflow(
@@ -1379,69 +1380,9 @@ func (e *historyEngineImpl) RemoveSignalMutableState(
 
 func (e *historyEngineImpl) TerminateWorkflowExecution(
 	ctx context.Context,
-	terminateRequest *historyservice.TerminateWorkflowExecutionRequest,
-) error {
-	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(terminateRequest.GetNamespaceId()))
-	if err != nil {
-		return err
-	}
-	namespaceID := namespaceEntry.ID()
-
-	request := terminateRequest.TerminateRequest
-	parentExecution := terminateRequest.ExternalWorkflowExecution
-	childWorkflowOnly := terminateRequest.ChildWorkflowOnly
-	workflowID := request.WorkflowExecution.WorkflowId
-	runID := request.WorkflowExecution.RunId
-	firstExecutionRunID := request.FirstExecutionRunId
-	if len(request.FirstExecutionRunId) != 0 {
-		runID = ""
-	}
-	return api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			namespaceID.String(),
-			workflowID,
-			runID,
-		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
-			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-
-			// There is a workflow execution currently running with the WorkflowID.
-			// If user passed in a FirstExecutionRunID with the request to allow terminate to work across runs then
-			// let's compare the FirstExecutionRunID on the request to make sure we terminate the correct workflow
-			// execution.
-			executionInfo := mutableState.GetExecutionInfo()
-			if len(firstExecutionRunID) > 0 && executionInfo.FirstExecutionRunId != firstExecutionRunID {
-				return nil, consts.ErrWorkflowExecutionNotFound
-			}
-
-			if childWorkflowOnly {
-				if parentExecution.GetWorkflowId() != executionInfo.ParentWorkflowId ||
-					parentExecution.GetRunId() != executionInfo.ParentRunId {
-					return nil, consts.ErrWorkflowParent
-				}
-			}
-
-			eventBatchFirstEventID := mutableState.GetNextEventID()
-
-			return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
-				mutableState,
-				eventBatchFirstEventID,
-				request.GetReason(),
-				request.GetDetails(),
-				request.GetIdentity(),
-				false,
-			)
-		},
-		nil,
-		e.shard,
-		e.workflowConsistencyChecker,
-	)
+	req *historyservice.TerminateWorkflowExecutionRequest,
+) (*historyservice.TerminateWorkflowExecutionResponse, error) {
+	return terminateworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) DeleteWorkflowExecution(
