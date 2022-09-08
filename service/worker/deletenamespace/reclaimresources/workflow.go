@@ -134,11 +134,9 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	}
 
 	// Step 2. Sleep before deleting namespace from database.
-	if params.NamespaceDeleteDelay > 0 {
-		err = workflow.Sleep(ctx, params.NamespaceDeleteDelay)
-		if err != nil {
-			return result, fmt.Errorf("%w: %v", errors.ErrUnableToSleep, err)
-		}
+	err = workflow.Sleep(ctx, params.NamespaceDeleteDelay)
+	if err != nil {
+		return result, fmt.Errorf("%w: %v", errors.ErrUnableToSleep, err)
 	}
 
 	// Step 3. Delete namespace from database.
