@@ -65,6 +65,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	"go.temporal.io/server/service/history/api/signalwithstartworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
@@ -1056,113 +1057,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordActivityTaskStartedRequest,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-
-	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(request.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-	namespace := namespaceEntry.Name()
-
-	response := &historyservice.RecordActivityTaskStartedResponse{}
-	err = api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		request.Clock,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			request.NamespaceId,
-			request.WorkflowExecution.WorkflowId,
-			request.WorkflowExecution.RunId,
-		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
-			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-
-			scheduledEventID := request.GetScheduledEventId()
-			requestID := request.GetRequestId()
-			ai, isRunning := mutableState.GetActivityInfo(scheduledEventID)
-
-			metricsScope := e.metricsClient.Scope(metrics.HistoryRecordActivityTaskStartedScope)
-
-			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-			// some extreme cassandra failure cases.
-			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				metricsScope.IncCounter(metrics.StaleMutableStateCounter)
-				return nil, consts.ErrStaleState
-			}
-
-			// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
-			// task is not outstanding than it is most probably a duplicate and complete the task.
-			if !isRunning {
-				// Looks like ActivityTask already completed as a result of another call.
-				// It is OK to drop the task at this point.
-				return nil, consts.ErrActivityTaskNotFound
-			}
-
-			scheduledEvent, err := mutableState.GetActivityScheduledEvent(ctx, scheduledEventID)
-			if err != nil {
-				return nil, err
-			}
-			response.ScheduledEvent = scheduledEvent
-			response.CurrentAttemptScheduledTime = ai.ScheduledTime
-
-			if ai.StartedEventId != common.EmptyEventID {
-				// If activity is started as part of the current request scope then return a positive response
-				if ai.RequestId == requestID {
-					response.StartedTime = ai.StartedTime
-					response.Attempt = ai.Attempt
-					return &api.UpdateWorkflowAction{
-						Noop:               false,
-						CreateWorkflowTask: false,
-					}, nil
-				}
-
-				// Looks like ActivityTask already started as a result of another call.
-				// It is OK to drop the task at this point.
-				return nil, serviceerrors.NewTaskAlreadyStarted("Activity")
-			}
-
-			if _, err := mutableState.AddActivityTaskStartedEvent(
-				ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
-			); err != nil {
-				return nil, err
-			}
-
-			scheduleToStartLatency := ai.GetStartedTime().Sub(*ai.GetScheduledTime())
-			namespaceName := namespaceEntry.Name()
-			taskQueueName := ai.GetTaskQueue()
-
-			metrics.GetPerTaskQueueScope(
-				metricsScope,
-				namespaceName.String(),
-				taskQueueName,
-				enumspb.TASK_QUEUE_KIND_NORMAL,
-			).Tagged(metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY)).
-				RecordTimer(metrics.TaskScheduleToStartLatency, scheduleToStartLatency)
-
-			response.StartedTime = ai.StartedTime
-			response.Attempt = ai.Attempt
-			response.HeartbeatDetails = ai.LastHeartbeatDetails
-
-			response.WorkflowType = mutableState.GetWorkflowType()
-			response.WorkflowNamespace = namespace.String()
-
-			return &api.UpdateWorkflowAction{
-				Noop:               false,
-				CreateWorkflowTask: false,
-			}, nil
-		},
-		nil,
-		e.shard,
-		e.workflowConsistencyChecker,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return response, err
+	return recordactivitytaskstarted.Invoke(ctx, request, e.shard, e.workflowConsistencyChecker)
 }
 
 // ScheduleWorkflowTask schedules a workflow task if no outstanding workflow task found
