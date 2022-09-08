@@ -500,11 +500,12 @@ func (mr *MockEngineMockRecorder) RespondActivityTaskCompleted(ctx, request inte
 }
 
 // RespondActivityTaskFailed mocks base method.
-func (m *MockEngine) RespondActivityTaskFailed(ctx context.Context, request *historyservice.RespondActivityTaskFailedRequest) error {
+func (m *MockEngine) RespondActivityTaskFailed(ctx context.Context, request *historyservice.RespondActivityTaskFailedRequest) (*historyservice.RespondActivityTaskFailedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RespondActivityTaskFailed", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.RespondActivityTaskFailedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RespondActivityTaskFailed indicates an expected call of RespondActivityTaskFailed.
