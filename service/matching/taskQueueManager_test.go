@@ -37,20 +37,18 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+
+	enumspb "go.temporal.io/api/enums/v1"
+
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/internal/goro"
 )
 
@@ -73,128 +71,10 @@ func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {
 	}
 }
 
-func TestDeliverBufferTasks(t *testing.T) {
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	tests := []func(tlm *taskQueueManagerImpl){
-		func(tlm *taskQueueManagerImpl) { close(tlm.taskReader.taskBuffer) },
-		func(tlm *taskQueueManagerImpl) { tlm.taskReader.gorogrp.Cancel() },
-		func(tlm *taskQueueManagerImpl) {
-			rps := 0.1
-			tlm.matcher.UpdateRatelimit(&rps)
-			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
-			err := tlm.matcher.rateLimiter.Wait(context.Background()) // consume the token
-			assert.NoError(t, err)
-			tlm.taskReader.gorogrp.Cancel()
-		},
-	}
-	for _, test := range tests {
-		tlm := mustCreateTestTaskQueueManager(t, controller)
-		tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
-		test(tlm)
-		// dispatchBufferedTasks should stop after invocation of the test function
-		tlm.taskReader.gorogrp.Wait()
-	}
-}
-
-func TestDeliverBufferTasks_NoPollers(t *testing.T) {
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	tlm := mustCreateTestTaskQueueManager(t, controller)
-	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
-	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
-	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
-	tlm.taskReader.gorogrp.Cancel()
-	tlm.taskReader.gorogrp.Wait()
-}
-
-func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	tlm := mustCreateTestTaskQueueManager(t, controller)
-	tlm.db.rangeID = int64(1)
-	tlm.db.ackLevel = int64(0)
-	tlm.taskAckManager.setAckLevel(tlm.db.ackLevel)
-	tlm.taskAckManager.setReadLevel(tlm.db.ackLevel)
-	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
-	require.Equal(t, int64(0), tlm.taskAckManager.getReadLevel())
-
-	// Add all expired tasks
-	tasks := []*persistencespb.AllocatedTaskInfo{
-		{
-			Data: &persistencespb.TaskInfo{
-				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
-			TaskId: 11,
-		},
-		{
-			Data: &persistencespb.TaskInfo{
-				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
-			TaskId: 12,
-		},
-	}
-
-	require.NoError(t, tlm.taskReader.addTasksToBuffer(context.TODO(), tasks))
-	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
-	require.Equal(t, int64(12), tlm.taskAckManager.getReadLevel())
-
-	// Now add a mix of valid and expired tasks
-	require.NoError(t, tlm.taskReader.addTasksToBuffer(context.TODO(), []*persistencespb.AllocatedTaskInfo{
-		{
-			Data: &persistencespb.TaskInfo{
-				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
-			TaskId: 13,
-		},
-		{
-			Data: &persistencespb.TaskInfo{
-				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
-			TaskId: 14,
-		},
-	}))
-	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
-	require.Equal(t, int64(14), tlm.taskAckManager.getReadLevel())
-}
-
-type testIDBlockAlloc struct {
-	rid   int64
-	alloc func() (taskQueueState, error)
-}
-
-func (a *testIDBlockAlloc) RangeID() int64 {
-	return a.rid
-}
-
-func (a *testIDBlockAlloc) RenewLease(_ context.Context) (taskQueueState, error) {
-	s, err := a.alloc()
-	if err == nil {
-		a.rid = s.rangeID
-	}
-	return s, err
-}
-
-func makeTestBlocAlloc(f func() (taskQueueState, error)) taskQueueManagerOpt {
-	return withIDBlockAllocator(&testIDBlockAlloc{alloc: f})
-}
-
 func TestSyncMatchLeasingUnavailable(t *testing.T) {
-	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			// any error other than ConditionFailedError indicates an
-			// availability problem at a lower layer so the TQM should NOT
-			// unload itself because resilient sync match is enabled.
-			return taskQueueState{}, errors.New(t.Name())
-		}))
+	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t))
 	tqm.Start()
+	tqm.WaitUntilInitialized()
 	defer tqm.Stop()
 	poller, _ := runOneShotPoller(context.Background(), tqm)
 	defer poller.Cancel()
@@ -210,12 +90,9 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.RangeSize = 1 // TaskID block size
-	var leaseErr error = nil
-	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			return taskQueueState{rangeID: 1}, leaseErr
-		}))
+	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t))
 	tqm.Start()
+	tqm.WaitUntilInitialized()
 	defer tqm.Stop()
 
 	// TQM started succesfully with an ID block of size 1. Perform one send
@@ -230,8 +107,6 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	// TQM's ID block should be empty so the next AddTask will trigger an
 	// attempt to obtain more IDs. This specific error type indicates that
 	// another service instance has become the owner of the partition
-	leaseErr = &persistence.ConditionFailedError{Msg: "should kill the tqm"}
-
 	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
 		taskInfo:  &persistencespb.TaskInfo{},
@@ -241,48 +116,39 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	require.False(t, sync)
 }
 
-func TestReaderSignaling(t *testing.T) {
-	readerNotifications := make(chan struct{}, 1)
-	clearNotifications := func() {
-		for len(readerNotifications) > 0 {
-			<-readerNotifications
-		}
-	}
+func TestReadLevelAckLevel(t *testing.T) {
 	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t))
-
-	// redirect taskReader signals into our local channel
-	tqm.taskReader.notifyC = readerNotifications
-
 	tqm.Start()
+	tqm.WaitUntilInitialized()
 	defer tqm.Stop()
-
-	// shut down the taskReader so it doesn't steal notifications from us
-	tqm.taskReader.gorogrp.Cancel()
-	tqm.taskReader.gorogrp.Wait()
-
-	clearNotifications()
-
+	readLevel := tqm.dbTaskManager.taskReader.getReadLevel()
+	ackLevel := tqm.dbTaskManager.taskReader.getReadLevel()
+	require.Equal(t, int64(0), readLevel)
+	require.Equal(t, int64(0), ackLevel)
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
 		taskInfo:  &persistencespb.TaskInfo{},
 		source:    enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
 	require.False(t, sync)
-	require.Len(t, readerNotifications, 1,
-		"Sync match failure with successful db write should signal taskReader")
-
-	clearNotifications()
-	poller, _ := runOneShotPoller(context.Background(), tqm)
-	defer poller.Cancel()
-
 	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
 		taskInfo:  &persistencespb.TaskInfo{},
 		source:    enumsspb.TASK_SOURCE_HISTORY})
 	require.NoError(t, err)
-	require.True(t, sync)
-	require.Len(t, readerNotifications, 0,
-		"Sync match should not signal taskReader")
+	require.False(t, sync)
+	poller, out := runOneShotPoller(context.Background(), tqm)
+	<-out
+	defer poller.Cancel()
+	readLevel = tqm.dbTaskManager.taskReader.getReadLevel()
+	require.Equal(t, int64(2), readLevel)
+	_, out = runOneShotPoller(context.Background(), tqm)
+	<-out
+	ackLevel = tqm.dbTaskManager.taskReader.getAckLevel()
+	require.Equal(t, int64(0), ackLevel)
+	time.Sleep(time.Minute) // dbTaskUpdateAckInterval
+	ackLevel = tqm.dbTaskManager.taskReader.getAckLevel()
+	require.Equal(t, int64(2), ackLevel)
 }
 
 // runOneShotPoller spawns a goroutine to call tqm.GetTask on the provided tqm.
@@ -351,33 +217,24 @@ func createTestTaskQueueManagerWithConfig(
 	return tlMgr.(*taskQueueManagerImpl), nil
 }
 
-func TestIsTaskAddedRecently(t *testing.T) {
-	controller := gomock.NewController(t)
-	defer controller.Finish()
-
-	tlm := mustCreateTestTaskQueueManager(t, controller)
-	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now().UTC()))
-	require.False(t, tlm.taskReader.isTaskAddedRecently(time.Now().UTC().Add(-tlm.config.MaxTaskqueueIdleTime())))
-	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now().UTC().Add(1*time.Second)))
-	require.False(t, tlm.taskReader.isTaskAddedRecently(time.Time{}))
-}
-
 func TestDescribeTaskQueue(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	startTaskID := int64(1)
 	taskCount := int64(3)
 	PollerIdentity := "test-poll"
 
 	// Create taskQueue Manager and set taskQueue state
 	tlm := mustCreateTestTaskQueueManager(t, controller)
-	tlm.db.rangeID = int64(1)
-	tlm.db.ackLevel = int64(0)
-	tlm.taskAckManager.setAckLevel(tlm.db.ackLevel)
+	tlm.Start()
+	tlm.WaitUntilInitialized()
+	defer tlm.Stop()
 
 	for i := int64(0); i < taskCount; i++ {
-		tlm.taskAckManager.addTask(startTaskID + i)
+		tlm.AddTask(context.TODO(), addTaskParams{
+			execution: &commonpb.WorkflowExecution{},
+			taskInfo:  &persistencespb.TaskInfo{},
+			source:    enumsspb.TASK_SOURCE_HISTORY})
 	}
 
 	includeTaskStatus := false
@@ -389,8 +246,6 @@ func TestDescribeTaskQueue(t *testing.T) {
 	taskQueueStatus := tlm.DescribeTaskQueue(includeTaskStatus).GetTaskQueueStatus()
 	require.NotNil(t, taskQueueStatus)
 	require.Zero(t, taskQueueStatus.GetAckLevel())
-	require.Equal(t, taskCount, taskQueueStatus.GetReadLevel())
-	require.Equal(t, taskCount, taskQueueStatus.GetBacklogCountHint())
 	taskIDBlock := taskQueueStatus.GetTaskIdBlock()
 	require.Equal(t, int64(1), taskIDBlock.GetStartId())
 	require.Equal(t, tlm.config.RangeSize, taskIDBlock.GetEndId())
@@ -398,8 +253,11 @@ func TestDescribeTaskQueue(t *testing.T) {
 	// Add a poller and complete all tasks
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity(PollerIdentity), nil)
 	for i := int64(0); i < taskCount; i++ {
-		tlm.taskAckManager.completeTask(startTaskID + i)
+		poller, out := runOneShotPoller(context.Background(), tlm)
+		<-out
+		poller.Cancel()
 	}
+	time.Sleep(time.Minute) // dbTaskUpdateAckInterval
 
 	descResp = tlm.DescribeTaskQueue(includeTaskStatus)
 	require.Equal(t, 1, len(descResp.GetPollers()))
@@ -431,6 +289,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	// Idle
 	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
+	tlm.WaitUntilInitialized()
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 
@@ -448,7 +307,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
 	tlm.Start()
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
-	tlm.taskReader.Signal()
+	tlm.dbTaskManager.signalDispatch()
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 	tlm.Stop()
@@ -481,10 +340,11 @@ func TestAddTaskStandby(t *testing.T) {
 		},
 	)
 	tlm.Start()
+	tlm.WaitUntilInitialized()
 	// stop taskWriter so that we can check if there's any call to it
 	// otherwise the task persist process is async and hard to test
-	tlm.taskWriter.Stop()
-	<-tlm.taskWriter.writeLoop.Done()
+	tlm.dbTaskManager.Stop()
+	<-tlm.dbTaskManager.shutdownChan
 
 	addTaskParam := addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
@@ -493,7 +353,7 @@ func TestAddTaskStandby(t *testing.T) {
 	}
 
 	syncMatch, err := tlm.AddTask(context.Background(), addTaskParam)
-	require.Equal(t, errShutdown, err) // task writer was stopped above
+	require.Equal(t, errDBTaskManagerNotReady, err) // task writer was stopped above
 	require.False(t, syncMatch)
 
 	addTaskParam.forwardedFrom = "from child partition"
@@ -534,7 +394,7 @@ func TestTaskQueueSubParitionFetchesVersioningInfoFromRootPartitionOnInit(t *tes
 			tqm.matchingClient = mockMatchingClient
 		})
 	subTq.Start()
-	require.NoError(t, subTq.WaitUntilInitialized(ctx))
+	subTq.WaitUntilInitialized()
 	verDat, err := subTq.GetVersioningData(ctx)
 	require.NoError(t, err)
 	require.Equal(t, data, verDat)
@@ -572,9 +432,8 @@ func TestTaskQueueSubParitionSendsCurrentHashOfVersioningDataWhenFetching(t *tes
 				Return(asResp, nil)
 			tqm.matchingClient = mockMatchingClient
 		})
-	// Cram some versioning data in there so it will have something to hash when fetching
-	subTq.db.versioningData = data
-	// Don't start it. Just explicitly call fetching function.
+	subTq.dbTaskManager.Start()
+	subTq.dbTaskManager.taskQueueOwnership.setVersioningDataForNonRootPartition(data)
 	res, err := subTq.fetchMetadataFromRootPartition(ctx)
 	require.NotNil(t, res)
 	require.NoError(t, err)
@@ -613,7 +472,7 @@ func TestTaskQueueRootPartitionNotifiesChildrenOfInvalidation(t *testing.T) {
 		})
 
 	rootTq.Start()
-	require.NoError(t, rootTq.WaitUntilInitialized(ctx))
+	rootTq.WaitUntilInitialized()
 	// Make a change, mock verifies children are invalidated
 	require.NoError(t, rootTq.MutateVersioningData(ctx, func(vd *persistencespb.VersioningData) error {
 		*vd = persistencespb.VersioningData{
@@ -651,6 +510,7 @@ func TestTaskQueueSubPartitionPollsPeriodically(t *testing.T) {
 				Return(asResp, nil).MinTimes(3)
 			tqm.matchingClient = mockMatchingClient
 		})
+	subTq.dbTaskManager.Start()
 	res, err := subTq.fetchMetadataFromRootPartition(ctx)
 	require.NotNil(t, res)
 	require.NoError(t, err)
@@ -694,6 +554,7 @@ func TestTaskQueueSubPartitionDoesNotPollIfNoDataThenPollsWhenInvalidated(t *tes
 				Return(hasDatResp, nil).MinTimes(1)
 			tqm.matchingClient = mockMatchingClient
 		})
+	subTq.dbTaskManager.Start()
 	res, err := subTq.fetchMetadataFromRootPartition(ctx)
 	require.Nil(t, res)
 	require.NoError(t, err)
@@ -744,7 +605,7 @@ func TestTaskQueueManagerWaitInitFailThenPass(t *testing.T) {
 
 	tq.Start()
 	// This does not error even if initial metadata fetch fails (and it does, here)
-	require.NoError(t, tq.WaitUntilInitialized(ctx))
+	tq.WaitUntilInitialized()
 	// Wait long enough for poller retry to happen
 	time.Sleep(time.Millisecond * 15)
 	// Need to make sure both calls have happened *before* calling to get data, as it would make a call if the second
@@ -777,7 +638,7 @@ func TestFetchingVersioningDataErrorsIfNeverFetchedFromRootSuccessfully(t *testi
 			tqm.matchingClient = mockMatchingClient
 		})
 	subTq.Start()
-	require.NoError(t, subTq.WaitUntilInitialized(ctx))
+	subTq.WaitUntilInitialized()
 	for i := 0; i < 10; i++ {
 		_, err := subTq.GetVersioningData(ctx)
 		require.Error(t, err)
@@ -809,7 +670,7 @@ func TestActivityQueueGetsVersioningDataFromWorkflowQueue(t *testing.T) {
 			tqm.matchingClient = mockMatchingClient
 		})
 	actTq.Start()
-	require.NoError(t, actTq.WaitUntilInitialized(ctx))
+	actTq.WaitUntilInitialized()
 
 	subTqId, err := newTaskQueueIDWithPartition(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, 1)
 	require.NoError(t, err)
@@ -823,7 +684,7 @@ func TestActivityQueueGetsVersioningDataFromWorkflowQueue(t *testing.T) {
 			tqm.matchingClient = mockMatchingClient
 		})
 	actTqPart.Start()
-	require.NoError(t, actTqPart.WaitUntilInitialized(ctx))
+	actTqPart.WaitUntilInitialized()
 
 	verDat, err := actTq.GetVersioningData(ctx)
 	require.NoError(t, err)
@@ -846,6 +707,7 @@ func TestMutateOnNonRootFails(t *testing.T) {
 	tqCfg := defaultTqmTestOpts(controller)
 	tqCfg.tqId = subTqId
 	subTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, tqCfg)
+	subTq.dbTaskManager.Start()
 	err = subTq.MutateVersioningData(ctx, func(data *persistencespb.VersioningData) error { return nil })
 	require.Error(t, err)
 	require.ErrorIs(t, err, errVersioningDataNoMutateNonRoot)
@@ -855,6 +717,7 @@ func TestMutateOnNonRootFails(t *testing.T) {
 	actTqCfg := defaultTqmTestOpts(controller)
 	actTqCfg.tqId = actTqId
 	actTq := mustCreateTestTaskQueueManagerWithConfig(t, controller, actTqCfg)
+	actTq.dbTaskManager.Start()
 	err = actTq.MutateVersioningData(ctx, func(data *persistencespb.VersioningData) error { return nil })
 	require.Error(t, err)
 	require.ErrorIs(t, err, errVersioningDataNoMutateNonRoot)

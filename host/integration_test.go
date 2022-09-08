@@ -28,6 +28,8 @@ import (
 	"flag"
 	"testing"
 
+	"go.temporal.io/server/common/dynamicconfig"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -44,6 +46,8 @@ type (
 )
 
 func (s *integrationSuite) SetupSuite() {
+	s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
+	s.dynamicConfigOverrides[dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance] = 100
 	s.setupSuite("testdata/integration_test_cluster.yaml")
 }
 

@@ -30,6 +30,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/namespace"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -38,10 +41,8 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/future"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/worker/scanner/taskqueue"
 )
@@ -52,10 +53,7 @@ const (
 
 	dbTaskFlushInterval = 24 * time.Millisecond
 
-	dbTaskDeletionInterval = 10 * time.Second
-
-	dbTaskUpdateAckInterval   = time.Minute
-	dbTaskUpdateQueueInterval = time.Minute
+	taskReaderThrottleRetryDelay = 3 * time.Second
 )
 
 var (
@@ -92,26 +90,38 @@ type (
 		taskReader                dbTaskReader
 		taskWriter                dbTaskWriter
 		maxDeletedTaskIDInclusive int64 // in mem only
+		dbTaskDeletionInterval    func() time.Duration
+		dbTaskUpdateAckInterval   func() time.Duration
+		dbTaskUpdateQueueInterval func() time.Duration
 	}
 )
 
 func newDBTaskManager(
-	taskQueueKey persistence.TaskQueueKey,
+	registry namespace.Registry,
+	taskQueue *taskQueueID,
 	taskQueueKind enumspb.TaskQueueKind,
 	taskIDRangeSize int64,
 	dispatchTaskFn func(context.Context, *internalTask) error,
 	store persistence.TaskManager,
-	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	dbTaskDeletionInterval func() time.Duration,
+	dbTaskUpdateAckInterval func() time.Duration,
+	dbTaskUpdateQueueInterval func() time.Duration,
 ) *dbTaskManager {
+	taskQueueKey := persistence.TaskQueueKey{
+		NamespaceID:   string(taskQueue.namespaceID),
+		TaskQueueName: taskQueue.name,
+		TaskQueueType: taskQueue.taskType,
+	}
 	return &dbTaskManager{
-		status:          common.DaemonStatusInitialized,
-		taskQueueKey:    taskQueueKey,
-		taskQueueKind:   taskQueueKind,
-		taskIDRangeSize: taskIDRangeSize,
+		namespaceRegistry: registry,
+		status:            common.DaemonStatusInitialized,
+		taskQueueKey:      taskQueueKey,
+		taskQueueKind:     taskQueueKind,
+		taskIDRangeSize:   taskIDRangeSize,
 		taskQueueOwnershipProvider: func() dbTaskQueueOwnership {
 			return newDBTaskQueueOwnership(
-				taskQueueKey,
+				taskQueue,
 				taskQueueKind,
 				taskIDRangeSize,
 				store,
@@ -133,10 +143,9 @@ func newDBTaskManager(
 				logger,
 			)
 		},
-		dispatchTaskFn:    dispatchTaskFn,
-		store:             store,
-		namespaceRegistry: namespaceRegistry,
-		logger:            logger,
+		dispatchTaskFn: dispatchTaskFn,
+		store:          store,
+		logger:         logger,
 
 		dispatchChan: make(chan struct{}, 1),
 		startupChan:  make(chan struct{}),
@@ -151,6 +160,9 @@ func newDBTaskManager(
 		taskWriter:                nil,
 		taskReader:                nil,
 		maxDeletedTaskIDInclusive: 0,
+		dbTaskDeletionInterval:    dbTaskDeletionInterval,
+		dbTaskUpdateAckInterval:   dbTaskUpdateAckInterval,
+		dbTaskUpdateQueueInterval: dbTaskUpdateQueueInterval,
 	}
 }
 
@@ -164,11 +176,10 @@ func (d *dbTaskManager) Start() {
 	}
 
 	d.signalDispatch()
-
-	// TODO: consider using goro.Group
 	go d.acquireLoop(context.Background())
 	go d.writerEventLoop(context.Background())
 	go d.readerEventLoop(context.Background())
+	<-d.startupChan
 }
 
 func (d *dbTaskManager) Stop() {
@@ -187,9 +198,7 @@ func (d *dbTaskManager) isStopped() bool {
 	return atomic.LoadInt32(&d.status) == common.DaemonStatusStopped
 }
 
-func (d *dbTaskManager) acquireLoop(
-	ctx context.Context,
-) {
+func (d *dbTaskManager) acquireLoop(ctx context.Context) {
 	defer close(d.startupChan)
 	ctx = d.initContext(ctx)
 
@@ -201,23 +210,18 @@ AcquireLoop:
 		}
 		if !common.IsPersistenceTransientError(err) {
 			d.Stop()
-			break AcquireLoop
 		}
 		time.Sleep(2 * time.Second)
 	}
 }
 
-func (d *dbTaskManager) writerEventLoop(
-	ctx context.Context,
-) {
+func (d *dbTaskManager) writerEventLoop(ctx context.Context) {
 	<-d.startupChan
 	ctx = d.initContext(ctx)
 
-	updateQueueTicker := time.NewTicker(dbTaskUpdateQueueInterval)
-	defer updateQueueTicker.Stop()
-	// TODO we should impl a more efficient method to
-	//  buffer & wait for max duration
-	//  right now simply just flush every dbTaskFlushInterval
+	updateQueueTimer := time.NewTimer(d.dbTaskUpdateQueueInterval())
+	defer updateQueueTimer.Stop()
+	// TODO: Replace buffer logic with #2970
 	flushTicker := time.NewTicker(dbTaskFlushInterval)
 	defer flushTicker.Stop()
 
@@ -232,29 +236,30 @@ func (d *dbTaskManager) writerEventLoop(
 		case <-d.taskQueueOwnership.getShutdownChan():
 			d.Stop()
 
-		case <-updateQueueTicker.C:
+		case <-updateQueueTimer.C:
+			updateQueueTimer.Reset(d.dbTaskUpdateQueueInterval())
 			d.persistTaskQueue(ctx)
 		case <-flushTicker.C:
-			d.taskWriter.flushTasks(ctx)
-			d.signalDispatch()
+			if d.taskWriter.flushTasks(ctx) {
+				d.signalDispatch()
+			}
 		case <-d.taskWriter.notifyFlushChan():
-			d.taskWriter.flushTasks(ctx)
-			d.signalDispatch()
+			if d.taskWriter.flushTasks(ctx) {
+				d.signalDispatch()
+			}
 		}
 	}
 }
 
-func (d *dbTaskManager) readerEventLoop(
-	ctx context.Context,
-) {
+func (d *dbTaskManager) readerEventLoop(ctx context.Context) {
 	<-d.startupChan
 	ctx = d.initContext(ctx)
 
-	updateAckTicker := time.NewTicker(dbTaskUpdateAckInterval)
-	defer updateAckTicker.Stop()
+	updateAckTimer := time.NewTimer(d.dbTaskUpdateAckInterval())
+	defer updateAckTimer.Stop()
 
-	dbTaskAckTicker := time.NewTicker(dbTaskDeletionInterval)
-	defer dbTaskAckTicker.Stop()
+	dbTaskAckTimer := time.NewTimer(d.dbTaskDeletionInterval())
+	defer dbTaskAckTimer.Stop()
 
 	for {
 		if d.isStopped() {
@@ -267,9 +272,11 @@ func (d *dbTaskManager) readerEventLoop(
 		case <-d.taskQueueOwnership.getShutdownChan():
 			d.Stop()
 
-		case <-updateAckTicker.C:
+		case <-updateAckTimer.C:
+			updateAckTimer.Reset(d.dbTaskUpdateAckInterval())
 			d.updateAckTaskID()
-		case <-dbTaskAckTicker.C:
+		case <-dbTaskAckTimer.C:
+			dbTaskAckTimer.Reset(d.dbTaskDeletionInterval())
 			d.deleteAckedTasks(ctx)
 		case <-d.dispatchChan:
 			d.readAndDispatchTasks(ctx)
@@ -328,11 +335,12 @@ func (d *dbTaskManager) readAndDispatchTasks(
 			return
 		}
 
-		d.mustDispatch(task)
+		d.mustDispatch(ctx, task)
 	}
 }
 
 func (d *dbTaskManager) mustDispatch(
+	ctx context.Context,
 	task *persistencespb.AllocatedTaskInfo,
 ) {
 	for !d.isStopped() {
@@ -341,7 +349,7 @@ func (d *dbTaskManager) mustDispatch(
 			return
 		}
 
-		err := d.dispatchTaskFn(context.Background(), newInternalTask(
+		err := d.dispatchTaskFn(ctx, newInternalTask(
 			task,
 			d.finishTask,
 			enumsspb.TASK_SOURCE_DB_BACKLOG,

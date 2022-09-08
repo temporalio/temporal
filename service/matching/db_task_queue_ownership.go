@@ -48,6 +48,11 @@ const (
 	dbTaskQueueOwnershipStatusLost          dbTaskQueueOwnershipStatus = 2
 )
 
+var (
+	errVersioningDataNotPresentOnPartition = serviceerror.NewInternal("versioning data is only present on root workflow partition")
+	errVersioningDataNoMutateNonRoot       = serviceerror.NewInternal("can only mutate versioning data on root workflow task queue")
+)
+
 type (
 	dbTaskQueueOwnershipStatus int
 
@@ -59,6 +64,10 @@ type (
 		getLastAllocatedTaskID() int64
 		persistTaskQueue(ctx context.Context) error
 		flushTasks(ctx context.Context, taskInfos ...*persistencespb.TaskInfo) error
+		GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error)
+		MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) (*persistencespb.VersioningData, error)
+		setVersioningDataForNonRootPartition(verDat *persistencespb.VersioningData)
+		RangeID() int64
 	}
 
 	dbTaskQueueOwnershipState struct {
@@ -76,22 +85,29 @@ type (
 		timeSource      clock.TimeSource
 		store           persistence.TaskManager
 		logger          log.Logger
+		versioningData  *persistencespb.VersioningData
 
 		sync.Mutex
-		status              dbTaskQueueOwnershipStatus
-		ownershipState      *dbTaskQueueOwnershipState
-		shutdownChan        chan struct{}
-		stateLastUpdateTime *time.Time
+		status                 dbTaskQueueOwnershipStatus
+		ownershipState         *dbTaskQueueOwnershipState
+		shutdownChan           chan struct{}
+		stateLastUpdateTime    *time.Time
+		qualifiedTaskQueueName QualifiedTaskQueueName
 	}
 )
 
 func newDBTaskQueueOwnership(
-	taskQueueKey persistence.TaskQueueKey,
+	taskQueue *taskQueueID,
 	taskQueueKind enumspb.TaskQueueKind,
 	taskIDRangeSize int64,
 	store persistence.TaskManager,
 	logger log.Logger,
 ) *dbTaskQueueOwnershipImpl {
+	taskQueueKey := persistence.TaskQueueKey{
+		NamespaceID:   string(taskQueue.namespaceID),
+		TaskQueueName: taskQueue.name,
+		TaskQueueType: taskQueue.taskType,
+	}
 	taskOwnership := &dbTaskQueueOwnershipImpl{
 		taskQueueKey:    taskQueueKey,
 		taskQueueKind:   taskQueueKind,
@@ -100,10 +116,11 @@ func newDBTaskQueueOwnership(
 		store:           store,
 		logger:          logger,
 
-		status:              dbTaskQueueOwnershipStatusUninitialized,
-		ownershipState:      nil,
-		shutdownChan:        make(chan struct{}),
-		stateLastUpdateTime: nil,
+		status:                 dbTaskQueueOwnershipStatusUninitialized,
+		ownershipState:         nil,
+		shutdownChan:           make(chan struct{}),
+		stateLastUpdateTime:    nil,
+		qualifiedTaskQueueName: taskQueue.QualifiedTaskQueueName,
 	}
 	return taskOwnership
 }
@@ -116,12 +133,20 @@ func (m *dbTaskQueueOwnershipImpl) getAckedTaskID() int64 {
 	m.Lock()
 	defer m.Unlock()
 
+	if m.status == dbTaskQueueOwnershipStatusLost {
+		return -1
+	}
+
 	return m.ownershipState.ackedTaskID
 }
 
 func (m *dbTaskQueueOwnershipImpl) updateAckedTaskID(taskID int64) {
 	m.Lock()
 	defer m.Unlock()
+
+	if m.status == dbTaskQueueOwnershipStatusLost { // lost ownership & shutdown
+		return
+	}
 
 	if m.ownershipState.ackedTaskID >= taskID {
 		return
@@ -340,4 +365,86 @@ func rangeIDToTaskIDRange(
 	taskIDRangeSize int64,
 ) (int64, int64) {
 	return (rangeID - 1) * taskIDRangeSize, rangeID * taskIDRangeSize
+}
+
+// GetVersioningData returns the versioning data for this task queue. Do not mutate the returned pointer, as doing so
+// will cause cache inconsistency.
+func (m *dbTaskQueueOwnershipImpl) GetVersioningData(
+	ctx context.Context,
+) (*persistencespb.VersioningData, error) {
+	m.Lock()
+	defer m.Unlock()
+	return m.getVersioningDataLocked(ctx)
+}
+
+func (m *dbTaskQueueOwnershipImpl) getVersioningDataLocked(
+	ctx context.Context,
+) (*persistencespb.VersioningData, error) {
+	if m.versioningData != nil {
+		return m.versioningData, nil
+	}
+
+	if !m.qualifiedTaskQueueName.IsRoot() || m.taskQueueKey.TaskQueueType != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		return nil, errVersioningDataNotPresentOnPartition
+	}
+
+	tqInfo, err := m.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
+		NamespaceID: m.taskQueueKey.NamespaceID,
+		TaskQueue:   m.taskQueueKey.TaskQueueName,
+		TaskType:    m.taskQueueKey.TaskQueueType,
+	})
+	if err != nil {
+		return nil, err
+	}
+	m.versioningData = tqInfo.TaskQueueInfo.GetVersioningData()
+
+	return tqInfo.TaskQueueInfo.GetVersioningData(), nil
+}
+
+// MutateVersioningData allows callers to update versioning data for this task queue. The pointer passed to the
+// mutating function is guaranteed to be non-nil.
+func (m *dbTaskQueueOwnershipImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) (*persistencespb.VersioningData, error) {
+	m.Lock()
+	defer m.Unlock()
+
+	if !m.qualifiedTaskQueueName.IsRoot() || m.taskQueueKey.TaskQueueType != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+		return nil, errVersioningDataNoMutateNonRoot
+	}
+
+	verDat, err := m.getVersioningDataLocked(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if verDat == nil {
+		verDat = &persistencespb.VersioningData{}
+	}
+	if err := mutator(verDat); err != nil {
+		return nil, err
+	}
+
+	queueInfo := m.taskQueueInfoLocked()
+	queueInfo.VersioningData = verDat
+
+	_, err = m.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
+		RangeID:       m.ownershipState.rangeID,
+		TaskQueueInfo: queueInfo,
+		PrevRangeID:   m.ownershipState.rangeID,
+	})
+	if err == nil {
+		m.versioningData = verDat
+	}
+	return verDat, err
+}
+
+func (m *dbTaskQueueOwnershipImpl) setVersioningDataForNonRootPartition(verDat *persistencespb.VersioningData) {
+	m.Lock()
+	defer m.Unlock()
+	m.versioningData = verDat
+}
+
+func (m *dbTaskQueueOwnershipImpl) RangeID() int64 {
+	m.Lock()
+	defer m.Unlock()
+	return m.ownershipState.rangeID
 }

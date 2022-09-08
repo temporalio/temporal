@@ -50,7 +50,7 @@ type (
 	dbTaskWriterFuture = future.Future[struct{}]
 	dbTaskWriter       interface {
 		appendTask(task *persistencespb.TaskInfo) dbTaskWriterFuture
-		flushTasks(ctx context.Context)
+		flushTasks(ctx context.Context) bool
 		notifyFlushChan() <-chan struct{}
 	}
 
@@ -107,10 +107,14 @@ func (f *dbTaskWriterImpl) appendTask(
 
 func (f *dbTaskWriterImpl) flushTasks(
 	ctx context.Context,
-) {
+) bool {
+	if len(f.taskBuffer) == 0 {
+		return false
+	}
 	for len(f.taskBuffer) > 0 {
 		f.flushTasksOnce(ctx)
 	}
+	return true
 }
 
 func (f *dbTaskWriterImpl) flushTasksOnce(

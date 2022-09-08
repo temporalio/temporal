@@ -29,9 +29,10 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/common/payload"
 
 	"github.com/emirpasic/gods/maps/treemap"
 	"github.com/gogo/protobuf/types"
@@ -61,13 +62,11 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -157,97 +156,6 @@ func newMatchingEngine(
 		namespaceRegistry: mockNamespaceCache,
 		clusterMeta:       cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
 	}
-}
-
-func (s *matchingEngineSuite) TestAckManager() {
-	m := newAckManager(s.logger)
-	m.setAckLevel(100)
-	s.EqualValues(100, m.getAckLevel())
-	s.EqualValues(100, m.getReadLevel())
-	const t1 = 200
-	const t2 = 220
-	const t3 = 320
-	const t4 = 340
-	const t5 = 360
-	const t6 = 380
-
-	m.addTask(t1)
-	s.EqualValues(100, m.getAckLevel())
-	s.EqualValues(t1, m.getReadLevel())
-
-	m.addTask(t2)
-	s.EqualValues(100, m.getAckLevel())
-	s.EqualValues(t2, m.getReadLevel())
-
-	m.completeTask(t2)
-	s.EqualValues(100, m.getAckLevel())
-	s.EqualValues(t2, m.getReadLevel())
-
-	m.completeTask(t1)
-	s.EqualValues(t2, m.getAckLevel())
-	s.EqualValues(t2, m.getReadLevel())
-
-	m.setAckLevel(300)
-	s.EqualValues(300, m.getAckLevel())
-	s.EqualValues(300, m.getReadLevel())
-
-	m.addTask(t3)
-	s.EqualValues(300, m.getAckLevel())
-	s.EqualValues(t3, m.getReadLevel())
-
-	m.addTask(t4)
-	s.EqualValues(300, m.getAckLevel())
-	s.EqualValues(t4, m.getReadLevel())
-
-	m.completeTask(t3)
-	s.EqualValues(t3, m.getAckLevel())
-	s.EqualValues(t4, m.getReadLevel())
-
-	m.completeTask(t4)
-	s.EqualValues(t4, m.getAckLevel())
-	s.EqualValues(t4, m.getReadLevel())
-
-	m.setReadLevel(t5)
-	s.EqualValues(t5, m.getReadLevel())
-
-	m.setAckLevel(t5)
-	m.setReadLevelAfterGap(t6)
-	s.EqualValues(t6, m.getReadLevel())
-	s.EqualValues(t6, m.getAckLevel())
-}
-
-func (s *matchingEngineSuite) TestAckManager_Sort() {
-	m := newAckManager(s.logger)
-	const t0 = 100
-	m.setAckLevel(t0)
-	s.EqualValues(t0, m.getAckLevel())
-	s.EqualValues(t0, m.getReadLevel())
-	const t1 = 200
-	const t2 = 220
-	const t3 = 320
-	const t4 = 340
-	const t5 = 360
-
-	m.addTask(t1)
-	m.addTask(t2)
-	m.addTask(t3)
-	m.addTask(t4)
-	m.addTask(t5)
-
-	m.completeTask(t2)
-	s.EqualValues(t0, m.getAckLevel())
-
-	m.completeTask(t1)
-	s.EqualValues(t2, m.getAckLevel())
-
-	m.completeTask(t5)
-	s.EqualValues(t2, m.getAckLevel())
-
-	m.completeTask(t4)
-	s.EqualValues(t2, m.getAckLevel())
-
-	m.completeTask(t3)
-	s.EqualValues(t5, m.getAckLevel())
 }
 
 func (s *matchingEngineSuite) TestPollActivityTaskQueuesEmptyResult() {
@@ -581,7 +489,7 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 
 	// stop the task writer explicitly
 	tlmImpl := tlm.(*taskQueueManagerImpl)
-	tlmImpl.taskWriter.Stop()
+	tlmImpl.dbTaskManager.Stop()
 
 	// now attempt to add a task
 	scheduledEventID := int64(5)
@@ -700,6 +608,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.EqualValues(serializedToken, result.TaskToken)
 		i++
 	}
+	time.Sleep(time.Minute)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 	expectedRange := int64(initialRangeID + taskCount/rangeSize)
 	if taskCount%rangeSize > 0 {
@@ -873,6 +782,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	syncCtr := snap.Counters()["test.sync_throttle_count_per_tl+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,service_name=matching,task_type=Activity,taskqueue=makeToast"]
 	s.Equal(1, int(syncCtr.Value()))                         // Check times zero rps is set = throttle counter
 	s.EqualValues(1, s.taskManager.getCreateTaskCount(tlID)) // Check times zero rps is set = Tasks stored in persistence
+	time.Sleep(time.Minute)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 	expectedRange := int64(initialRangeID + taskCount/rangeSize)
 	if taskCount%rangeSize > 0 {
@@ -942,7 +852,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
 
 	const initialRangeID = 0
-	const rangeSize = 3
+	const rangeSize = 16
 	var scheduledEventID int64 = 123
 	namespaceID := namespace.ID(uuid.New())
 	tl := "makeToast"
@@ -1085,7 +995,8 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.True(expectedRange <= s.taskManager.getTaskQueueManager(tlID).rangeID)
+	s.True(expectedRange <= s.taskManager.getTaskQueueManager(tlID).RangeID())
+	time.Sleep(time.Minute) // TODO: change to ack interval and delete internal to dynamic config instead
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 
 	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count_per_tl+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,taskqueue=makeToast"]
@@ -1108,7 +1019,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 	const workerCount = 20
 	const taskCount = 100
 	const initialRangeID = 0
-	const rangeSize = 5
+	const rangeSize = 16
 	var scheduledEventID int64 = 123
 	var startedEventID int64 = 1412
 
@@ -1205,6 +1116,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 		}()
 	}
 	wg.Wait()
+	time.Sleep(time.Minute)
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * workerCount
 	persisted := s.taskManager.getCreateTaskCount(tlID)
@@ -1214,7 +1126,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 		expectedRange++
 	}
 	// Due to conflicts some ids are skipped and more real ranges are used.
-	s.True(expectedRange <= s.taskManager.getTaskQueueManager(tlID).rangeID)
+	s.True(expectedRange <= s.taskManager.getTaskQueueManager(tlID).RangeID())
 }
 
 func (s *matchingEngineSuite) TestPollWithExpiredContext() {
@@ -1393,6 +1305,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 			}
 		}
 	}
+	time.Sleep(time.Minute)
 
 	for _, e := range engines {
 		e.Stop()
@@ -1533,6 +1446,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 			}
 		}
 	}
+	time.Sleep(time.Minute)
 
 	for _, e := range engines {
 		e.Stop()
@@ -1583,7 +1497,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.NoError(err)
 
 	ctx.finish(errors.New("test error"))
-	s.EqualValues(1, s.taskManager.getTaskCount(tlID))
+	s.EqualValues(2, s.taskManager.getTaskCount(tlID))
 	ctx2, err := s.matchingEngine.getTask(context.Background(), tlID, nil, tlKind)
 	s.NoError(err)
 
@@ -1593,7 +1507,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.Equal(ctx.event.Data.GetScheduledEventId(), ctx2.event.Data.GetScheduledEventId())
 
 	ctx2.finish(nil)
-	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
+	s.EqualValues(2, s.taskManager.getTaskCount(tlID))
 }
 
 func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
@@ -1629,104 +1543,9 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 		s.NoError(err)
 	}
 
-	tlMgr, ok := s.matchingEngine.taskQueues[*tlID].(*taskQueueManagerImpl)
+	_, ok := s.matchingEngine.taskQueues[*tlID].(*taskQueueManagerImpl)
 	s.True(ok, "taskQueueManger doesn't implement taskQueueManager interface")
 	s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
-
-	// wait until all tasks are read by the task pump and enqeued into the in-memory buffer
-	// at the end of this step, ackManager readLevel will also be equal to the buffer size
-	expectedBufSize := util.Min(cap(tlMgr.taskReader.taskBuffer), taskCount)
-	s.True(s.awaitCondition(func() bool { return len(tlMgr.taskReader.taskBuffer) == expectedBufSize }, time.Second))
-
-	// stop all goroutines that read / write tasks in the background
-	// remainder of this test works with the in-memory buffer
-	tlMgr.Stop()
-
-	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
-	// This is only for unit test purpose
-	tlMgr.taskAckManager.setReadLevel(tlMgr.taskWriter.GetMaxReadLevel())
-	tasks, readLevel, isReadBatchDone, err := tlMgr.taskReader.getTaskBatch(context.Background())
-	s.Nil(err)
-	s.EqualValues(0, len(tasks))
-	s.EqualValues(tlMgr.taskWriter.GetMaxReadLevel(), readLevel)
-	s.True(isReadBatchDone)
-
-	tlMgr.taskAckManager.setReadLevel(0)
-	tasks, readLevel, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch(context.Background())
-	s.Nil(err)
-	s.EqualValues(rangeSize, len(tasks))
-	s.EqualValues(rangeSize, readLevel)
-	s.True(isReadBatchDone)
-
-	s.setupRecordActivityTaskStartedMock(tl)
-
-	// reset the ackManager readLevel to the buffer size and consume
-	// the in-memory tasks by calling Poll API - assert ackMgr state
-	// at the end
-	tlMgr.taskAckManager.setReadLevel(int64(expectedBufSize))
-
-	// complete rangeSize events
-	for i := int64(0); i < rangeSize; i++ {
-		identity := "nobody"
-		result, err := s.matchingEngine.PollActivityTaskQueue(s.handlerContext, &matchingservice.PollActivityTaskQueueRequest{
-			NamespaceId: namespaceID.String(),
-			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
-				TaskQueue: taskQueue,
-				Identity:  identity,
-			},
-		})
-
-		s.NoError(err)
-		s.NotNil(result)
-		s.NotEqual(emptyPollActivityTaskQueueResponse, result)
-		if len(result.TaskToken) == 0 {
-			s.logger.Debug("empty poll returned")
-			continue
-		}
-	}
-	s.EqualValues(taskCount-rangeSize, s.taskManager.getTaskCount(tlID))
-	tasks, _, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch(context.Background())
-	s.Nil(err)
-	s.True(0 < len(tasks) && len(tasks) <= rangeSize)
-	s.True(isReadBatchDone)
-}
-
-func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
-	namespaceID := namespace.ID(uuid.New())
-	tl := "makeToast"
-	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	tlNormal := enumspb.TASK_QUEUE_KIND_NORMAL
-
-	const rangeSize = 10
-	const maxReadLevel = int64(120)
-	config := defaultTestConfig()
-	config.RangeSize = rangeSize
-	tlMgr0, err := newTaskQueueManager(s.matchingEngine, tlID, tlNormal, config, s.matchingEngine.clusterMeta)
-	s.NoError(err)
-
-	tlMgr, ok := tlMgr0.(*taskQueueManagerImpl)
-	s.True(ok)
-
-	tlMgr.Start()
-
-	// tlMgr.taskWriter startup is async so give it time to complete, otherwise
-	// the following few lines get clobbered as part of the taskWriter.Start()
-	time.Sleep(100 * time.Millisecond)
-
-	tlMgr.taskAckManager.setReadLevel(0)
-	atomic.StoreInt64(&tlMgr.taskWriter.maxReadLevel, maxReadLevel)
-	tasks, readLevel, isReadBatchDone, err := tlMgr.taskReader.getTaskBatch(context.Background())
-	s.Empty(tasks)
-	s.Equal(int64(rangeSize*10), readLevel)
-	s.False(isReadBatchDone)
-	s.NoError(err)
-
-	tlMgr.taskAckManager.setReadLevel(readLevel)
-	tasks, readLevel, isReadBatchDone, err = tlMgr.taskReader.getTaskBatch(context.Background())
-	s.Empty(tasks)
-	s.Equal(maxReadLevel, readLevel)
-	s.True(isReadBatchDone)
-	s.NoError(err)
 }
 
 func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
@@ -1743,105 +1562,11 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 		s.NoError(err)
 
 		tlMgr.Start()
-		// tlMgr.taskWriter startup is async so give it time to complete
-		time.Sleep(100 * time.Millisecond)
+		tlMgr.WaitUntilInitialized()
 		tlMgr.Stop()
 
 		getTasksCount := s.taskManager.getGetTasksCount(tlID) - prevGetTasksCount
 		s.LessOrEqual(getTasksCount, 1)
-	}
-}
-
-func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
-	runID := uuid.NewRandom().String()
-	workflowID := uuid.New()
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
-
-	namespaceID := namespace.ID(uuid.New())
-	tl := "task-expiry-completion-tl0"
-	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-
-	const taskCount = 20 // must be multiple of 4
-	const rangeSize = 10
-	s.matchingEngine.config.RangeSize = rangeSize
-	s.matchingEngine.config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(2)
-
-	testCases := []struct {
-		maxTimeBtwnDeletes time.Duration
-	}{
-		{time.Minute},     // test taskGC deleting due to size threshold
-		{time.Nanosecond}, // test taskGC deleting due to time condition
-	}
-
-	for _, tc := range testCases {
-		for i := int64(0); i < taskCount; i++ {
-			scheduledEventID := i * 3
-			addRequest := matchingservice.AddActivityTaskRequest{
-				NamespaceId:            namespaceID.String(),
-				Execution:              workflowExecution,
-				ScheduledEventId:       scheduledEventID,
-				TaskQueue:              taskQueue,
-				ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-			}
-			switch i % 4 {
-			case 0:
-				// simulates creating a task whose scheduledToStartTimeout is already expired
-				addRequest.ScheduleToStartTimeout = timestamp.DurationFromSeconds(-5)
-			case 2:
-				// simulates creating a task which will time out in the buffer
-				addRequest.ScheduleToStartTimeout = timestamp.DurationPtr(250 * time.Millisecond)
-			}
-			_, err := s.matchingEngine.AddActivityTask(s.handlerContext, &addRequest)
-			s.NoError(err)
-		}
-
-		tlMgr, ok := s.matchingEngine.taskQueues[*tlID].(*taskQueueManagerImpl)
-		s.True(ok, "failed to load task queue")
-		s.EqualValues(taskCount, s.taskManager.getTaskCount(tlID))
-
-		// wait until all tasks are loaded by into in-memory buffers by task queue manager
-		// the buffer size should be one less than expected because dispatcher will dequeue the head
-		// 1/4 should be thrown out because they are expired before they hit the buffer
-		s.True(s.awaitCondition(func() bool { return len(tlMgr.taskReader.taskBuffer) >= (3*taskCount/4 - 1) }, time.Second))
-
-		// ensure the 1/4 of tasks with small ScheduleToStartTimeout will be expired when they come out of the buffer
-		time.Sleep(300 * time.Millisecond)
-
-		maxTimeBetweenTaskDeletes = tc.maxTimeBtwnDeletes
-
-		s.setupRecordActivityTaskStartedMock(tl)
-
-		pollReq := &matchingservice.PollActivityTaskQueueRequest{
-			NamespaceId: namespaceID.String(),
-			PollRequest: &workflowservice.PollActivityTaskQueueRequest{TaskQueue: taskQueue, Identity: "test"},
-		}
-
-		remaining := taskCount
-		for i := 0; i < 2; i++ {
-			// verify that (1) expired tasks are not returned in poll result (2) taskCleaner deletes tasks correctly
-			for i := int64(0); i < taskCount/4; i++ {
-				result, err := s.matchingEngine.PollActivityTaskQueue(s.handlerContext, pollReq)
-				s.NoError(err)
-				s.NotNil(result)
-				s.NotEqual(result, emptyPollActivityTaskQueueResponse)
-			}
-			remaining -= taskCount / 2
-			// since every other task is expired, we expect half the tasks to be deleted
-			// after poll consumed 1/4th of what is available.
-			// however, the gc is best-effort and might not run exactly when we want it to.
-			// various thread interleavings between the two task reader threads and this one
-			// might leave the gc behind by up to 3 tasks, or ahead by up to 1.
-			delta := remaining - s.taskManager.getTaskCount(tlID)
-			s.Truef(-3 <= delta && delta <= 1, "remaining %d, getTaskCount %d", remaining, s.taskManager.getTaskCount(tlID))
-		}
-		// ensure full gc for the next case (twice in case one doesn't get the gc lock)
-		tlMgr.taskGC.RunNow(context.Background(), tlMgr.taskAckManager.getAckLevel())
-		tlMgr.taskGC.RunNow(context.Background(), tlMgr.taskAckManager.getAckLevel())
 	}
 }
 
@@ -1994,47 +1719,6 @@ func (s *matchingEngineSuite) TestActivityQueueMetadataInvalidate() {
 		VersioningData: &persistencespb.VersioningData{CurrentDefault: mkVerIdNode("hi")},
 	})
 	s.NoError(err)
-}
-
-func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
-	activityTypeName := "activity1"
-	activityID := "activityId1"
-	activityType := &commonpb.ActivityType{Name: activityTypeName}
-	activityInput := payloads.EncodeString("Activity1 Input")
-
-	// History service is using mock
-	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
-			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
-			return &historyservice.RecordActivityTaskStartedResponse{
-				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
-					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId: activityID,
-						TaskQueue: &taskqueuepb.TaskQueue{
-							Name: tlName,
-							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-						},
-						ActivityType:           activityType,
-						Input:                  activityInput,
-						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
-						ScheduleToStartTimeout: timestamp.DurationPtr(50 * time.Second),
-						StartToCloseTimeout:    timestamp.DurationPtr(50 * time.Second),
-						HeartbeatTimeout:       timestamp.DurationPtr(10 * time.Second),
-					}),
-			}, nil
-		}).AnyTimes()
-}
-
-func (s *matchingEngineSuite) awaitCondition(cond func() bool, timeout time.Duration) bool {
-	expiry := time.Now().UTC().Add(timeout)
-	for !cond() {
-		time.Sleep(time.Millisecond * 5)
-		if time.Now().UTC().After(expiry) {
-			return false
-		}
-	}
-	return true
 }
 
 func newActivityTaskScheduledEvent(eventID int64, workflowTaskCompletedEventID int64,

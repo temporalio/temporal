@@ -691,7 +691,7 @@ func (s *integrationSuite) TestTryActivityCancellationFromWorkflow() {
 				return payloads.EncodeString("Activity Cancelled"), true, nil
 			}
 			s.NoError(err)
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 		}
 		return payloads.EncodeString("Activity Result"), false, nil
 	}

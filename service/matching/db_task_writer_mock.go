@@ -74,9 +74,11 @@ func (mr *MockdbTaskWriterMockRecorder) appendTask(task interface{}) *gomock.Cal
 }
 
 // flushTasks mocks base method.
-func (m *MockdbTaskWriter) flushTasks(ctx context.Context) {
+func (m *MockdbTaskWriter) flushTasks(ctx context.Context) bool {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "flushTasks", ctx)
+	ret := m.ctrl.Call(m, "flushTasks", ctx)
+	ret0, _ := ret[0].(bool)
+	return ret0
 }
 
 // flushTasks indicates an expected call of flushTasks.

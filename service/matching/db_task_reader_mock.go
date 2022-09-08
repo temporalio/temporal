@@ -73,6 +73,48 @@ func (mr *MockdbTaskReaderMockRecorder) ackTask(taskID interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ackTask", reflect.TypeOf((*MockdbTaskReader)(nil).ackTask), taskID)
 }
 
+// getAckLevel mocks base method.
+func (m *MockdbTaskReader) getAckLevel() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getAckLevel")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// getAckLevel indicates an expected call of getAckLevel.
+func (mr *MockdbTaskReaderMockRecorder) getAckLevel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getAckLevel", reflect.TypeOf((*MockdbTaskReader)(nil).getAckLevel))
+}
+
+// getBacklogCountHint mocks base method.
+func (m *MockdbTaskReader) getBacklogCountHint() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getBacklogCountHint")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// getBacklogCountHint indicates an expected call of getBacklogCountHint.
+func (mr *MockdbTaskReaderMockRecorder) getBacklogCountHint() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getBacklogCountHint", reflect.TypeOf((*MockdbTaskReader)(nil).getBacklogCountHint))
+}
+
+// getReadLevel mocks base method.
+func (m *MockdbTaskReader) getReadLevel() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getReadLevel")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// getReadLevel indicates an expected call of getReadLevel.
+func (mr *MockdbTaskReaderMockRecorder) getReadLevel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getReadLevel", reflect.TypeOf((*MockdbTaskReader)(nil).getReadLevel))
+}
+
 // moveAckedTaskID mocks base method.
 func (m *MockdbTaskReader) moveAckedTaskID() int64 {
 	m.ctrl.T.Helper()
