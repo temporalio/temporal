@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	visibilityQueuePersistenceMaxRPSRatio = 0.3
+	visibilityQueuePersistenceMaxRPSRatio = 0.15
 )
 
 type (
