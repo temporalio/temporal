@@ -387,11 +387,12 @@ func (mr *MockEngineMockRecorder) RefreshWorkflowTasks(ctx, namespaceUUID, execu
 }
 
 // RemoveSignalMutableState mocks base method.
-func (m *MockEngine) RemoveSignalMutableState(ctx context.Context, request *historyservice.RemoveSignalMutableStateRequest) error {
+func (m *MockEngine) RemoveSignalMutableState(ctx context.Context, request *historyservice.RemoveSignalMutableStateRequest) (*historyservice.RemoveSignalMutableStateResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveSignalMutableState", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.RemoveSignalMutableStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RemoveSignalMutableState indicates an expected call of RemoveSignalMutableState.

@@ -956,12 +956,12 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.RemoveSignalMutableState(ctx, request)
+	resp, err2 := engine.RemoveSignalMutableState(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.RemoveSignalMutableStateResponse{}, nil
+	return resp, nil
 }
 
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
