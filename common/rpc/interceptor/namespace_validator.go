@@ -61,13 +61,11 @@ var (
 	allowedNamespaceStates = map[string][]enumspb.NamespaceState{
 		"StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
 		"SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
-		"DescribeNamespace":                {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
 	}
 	// If API name is not in the map above, these are allowed states for all APIs that have `namespace` or `task_token` field in the request object.
 	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
 
 	allowedMethodsDuringHandover = map[string]struct{}{
-		"DescribeNamespace":                {},
 		"UpdateNamespace":                  {},
 		"GetReplicationMessages":           {},
 		"ReplicateEventsV2":                {},
@@ -144,16 +142,10 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 	}
 	namespaceName := namespace.Name(reqWithNamespace.GetNamespace())
 
-	switch request := req.(type) {
+	switch req.(type) {
 	case *workflowservice.DescribeNamespaceRequest:
-		// Special case for DescribeNamespace API which can get namespace by Id.
-		if request.GetId() != "" {
-			return ni.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetId()))
-		}
-		if namespaceName.IsEmpty() {
-			return nil, ErrNamespaceNotSet
-		}
-		return ni.namespaceRegistry.GetNamespace(namespaceName)
+		// Special case for DescribeNamespace API which can get namespace by Id and should bypass namespace registry.
+		return nil, nil
 	case *workflowservice.RegisterNamespaceRequest:
 		// Special case for RegisterNamespace API. `namespace` is name of namespace that about to be registered. There is no namespace entry for it.
 		if namespaceName.IsEmpty() {

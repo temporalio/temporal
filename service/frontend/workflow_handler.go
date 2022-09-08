@@ -256,6 +256,10 @@ func (wh *WorkflowHandler) DescribeNamespace(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
+	if request.GetId() == "" && request.GetNamespace() == "" {
+		return nil, interceptor.ErrNamespaceNotSet
+	}
+
 	resp, err := wh.namespaceHandler.DescribeNamespace(ctx, request)
 	if err != nil {
 		return resp, err
