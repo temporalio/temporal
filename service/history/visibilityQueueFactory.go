@@ -77,6 +77,7 @@ func NewVisibilityQueueFactory(
 			HostPriorityAssigner: queues.NewPriorityAssigner(),
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.VisibilityProcessorMaxPollHostRPS,
+				params.Config.PersistenceMaxQPS,
 				params.ServiceResolver,
 				params.Config.NumberOfShards,
 				params.Config.QueueReaderStuckCriticalAttempts,
@@ -84,6 +85,7 @@ func NewVisibilityQueueFactory(
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.VisibilityProcessorMaxPollHostRPS,
+					params.Config.PersistenceMaxQPS,
 					params.ServiceResolver,
 					params.Config.NumberOfShards,
 					params.Config.QueueReaderStuckCriticalAttempts,

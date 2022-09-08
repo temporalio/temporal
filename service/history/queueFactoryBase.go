@@ -42,6 +42,10 @@ import (
 	"go.temporal.io/server/service/history/queues"
 )
 
+const (
+	queueHostRPSRatio = 0.25
+)
+
 type (
 	QueueFactoryBaseParams struct {
 		fx.In
@@ -125,17 +129,25 @@ func (f *QueueFactoryBase) Stop() {
 
 func NewQueueHostRateLimiter(
 	hostRPS dynamicconfig.IntPropertyFn,
+	persistenceMaxRPS dynamicconfig.IntPropertyFn,
 	serviceResolver membership.ServiceResolver,
 	numberOfShards int32,
 	readerStuckCriticalAttempts dynamicconfig.IntPropertyFn,
 ) quotas.RateLimiter {
 	return quotas.NewDefaultOutgoingRateLimiter(
-		NewHostRateLimiterRateFn(hostRPS, serviceResolver, numberOfShards, readerStuckCriticalAttempts),
+		NewHostRateLimiterRateFn(
+			hostRPS,
+			persistenceMaxRPS,
+			serviceResolver,
+			numberOfShards,
+			readerStuckCriticalAttempts,
+		),
 	)
 }
 
 func NewHostRateLimiterRateFn(
 	hostRPS dynamicconfig.IntPropertyFn,
+	persistenceMaxRPS dynamicconfig.IntPropertyFn,
 	serviceResolver membership.ServiceResolver,
 	numberOfShards int32,
 	readerStuckCriticalAttempts dynamicconfig.IntPropertyFn,
@@ -146,7 +158,11 @@ func NewHostRateLimiterRateFn(
 		}
 
 		shardsPerHost := int(numberOfShards) / (numHistoryHosts(serviceResolver))
-		return float64(readerStuckCriticalAttempts() * shardsPerHost)
+		maxPollHostRps := float64(readerStuckCriticalAttempts() * shardsPerHost)
+
+		// ensure queue loading won't consume all persistence tokens
+		// especially upon host restart when service resolver doesn't have the member count
+		return util.Min(maxPollHostRps, float64(persistenceMaxRPS())*queueHostRPSRatio)
 	}
 }
 
