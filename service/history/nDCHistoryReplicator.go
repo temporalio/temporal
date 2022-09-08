@@ -268,15 +268,9 @@ func (r *nDCHistoryReplicatorImpl) ApplyWorkflowState(
 		return err
 	}
 
-	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return err
-	}
-
 	lastEventTime, err := r.backfillHistory(
 		ctx,
 		request.GetRemoteCluster(),
-		ns.Name(),
 		namespaceID,
 		wid,
 		rid,
@@ -287,6 +281,12 @@ func (r *nDCHistoryReplicatorImpl) ApplyWorkflowState(
 	if err != nil {
 		return err
 	}
+
+	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return err
+	}
+
 	mutableState, err := workflow.NewSanitizedMutableState(
 		r.shard,
 		r.shard.GetEventsCache(),
@@ -830,7 +830,6 @@ func (r *nDCHistoryReplicatorImpl) notify(
 func (r *nDCHistoryReplicatorImpl) backfillHistory(
 	ctx context.Context,
 	remoteClusterName string,
-	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -862,7 +861,6 @@ func (r *nDCHistoryReplicatorImpl) backfillHistory(
 	remoteHistoryIterator := collection.NewPagingIterator(r.getHistoryFromRemotePaginationFn(
 		ctx,
 		remoteClusterName,
-		namespaceName,
 		namespaceID,
 		workflowID,
 		runID,
@@ -984,7 +982,6 @@ func sortAncestors(ans []*persistencespb.HistoryBranchRange) []*persistencespb.H
 func (r *nDCHistoryReplicatorImpl) getHistoryFromRemotePaginationFn(
 	ctx context.Context,
 	remoteClusterName string,
-	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -999,7 +996,6 @@ func (r *nDCHistoryReplicatorImpl) getHistoryFromRemotePaginationFn(
 			return nil, nil, err
 		}
 		response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace:       namespaceName.String(),
 			NamespaceId:     namespaceID.String(),
 			Execution:       &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 			EndEventId:      endEventID + 1,

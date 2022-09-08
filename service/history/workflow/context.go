@@ -856,7 +856,6 @@ func (c *ContextImpl) ReapplyEvents(
 	_, err = sourceCluster.ReapplyEvents(
 		ctx2,
 		&adminservice.ReapplyEventsRequest{
-			Namespace:         namespaceEntry.Name().String(),
 			NamespaceId:       namespaceEntry.ID().String(),
 			WorkflowExecution: execution,
 			Events:            reapplyEventsDataBlob,

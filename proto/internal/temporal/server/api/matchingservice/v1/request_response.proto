@@ -116,8 +116,7 @@ message AddWorkflowTaskResponse {
 message AddActivityTaskRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
-    // TODO: remove after 1.17 release.
-    string source_namespace_id = 3;
+    reserved 3;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 4;
     int64 scheduled_event_id = 5;
     // (-- api-linter: core::0140::prepositions=disabled
