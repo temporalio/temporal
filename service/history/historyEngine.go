@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
+	"go.temporal.io/server/service/history/api/requestcancelworkflow"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	"go.temporal.io/server/service/history/api/respondactivitytaskcompleted"
 	"go.temporal.io/server/service/history/api/respondactivitytaskfailed"
@@ -1233,81 +1234,8 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.RequestCancelWorkflowExecutionRequest,
-) error {
-
-	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
-	if err != nil {
-		return err
-	}
-	namespaceID := namespaceEntry.ID()
-
-	request := req.CancelRequest
-	parentExecution := req.ExternalWorkflowExecution
-	childWorkflowOnly := req.GetChildWorkflowOnly()
-	workflowID := request.WorkflowExecution.WorkflowId
-	runID := request.WorkflowExecution.RunId
-	firstExecutionRunID := request.FirstExecutionRunId
-	if len(firstExecutionRunID) != 0 {
-		runID = ""
-	}
-
-	return api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			namespaceID.String(),
-			workflowID,
-			runID,
-		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
-			if !mutableState.IsWorkflowExecutionRunning() {
-				// the request to cancel this workflow is a success even
-				// if the target workflow has already finished
-				return &api.UpdateWorkflowAction{
-					Noop:               true,
-					CreateWorkflowTask: false,
-				}, nil
-			}
-
-			// There is a workflow execution currently running with the WorkflowID.
-			// If user passed in a FirstExecutionRunID with the request to allow cancel to work across runs then
-			// let's compare the FirstExecutionRunID on the request to make sure we cancel the correct workflow
-			// execution.
-			executionInfo := mutableState.GetExecutionInfo()
-			if len(firstExecutionRunID) > 0 && executionInfo.FirstExecutionRunId != firstExecutionRunID {
-				return nil, consts.ErrWorkflowExecutionNotFound
-			}
-
-			if childWorkflowOnly {
-				parentWorkflowID := executionInfo.ParentWorkflowId
-				parentRunID := executionInfo.ParentRunId
-				if parentExecution.GetWorkflowId() != parentWorkflowID ||
-					parentExecution.GetRunId() != parentRunID {
-					return nil, consts.ErrWorkflowParent
-				}
-			}
-
-			isCancelRequested := mutableState.IsCancelRequested()
-			if isCancelRequested {
-				// since cancellation is idempotent
-				return &api.UpdateWorkflowAction{
-					Noop:               true,
-					CreateWorkflowTask: false,
-				}, nil
-			}
-
-			if _, err := mutableState.AddWorkflowExecutionCancelRequestedEvent(req); err != nil {
-				return nil, err
-			}
-
-			return api.UpdateWorkflowWithNewWorkflowTask, nil
-		},
-		nil,
-		e.shard,
-		e.workflowConsistencyChecker,
-	)
+) (resp *historyservice.RequestCancelWorkflowExecutionResponse, retError error) {
+	return requestcancelworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) SignalWorkflowExecution(

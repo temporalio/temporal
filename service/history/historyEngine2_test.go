@@ -595,7 +595,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Running() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
-	err := s.historyEngine.RequestCancelWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.RequestCancelWorkflowExecutionRequest{
+	_, err := s.historyEngine.RequestCancelWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			WorkflowExecution: &commonpb.WorkflowExecution{
@@ -628,7 +628,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Finished() {
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
 
-	err := s.historyEngine.RequestCancelWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.RequestCancelWorkflowExecutionRequest{
+	_, err := s.historyEngine.RequestCancelWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			WorkflowExecution: &commonpb.WorkflowExecution{
@@ -650,7 +650,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_NotFound() {
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
 
-	err := s.historyEngine.RequestCancelWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.RequestCancelWorkflowExecutionRequest{
+	_, err := s.historyEngine.RequestCancelWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			WorkflowExecution: &commonpb.WorkflowExecution{
@@ -690,7 +690,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_ParentMismatch() {
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse1, nil)
 
-	err := s.historyEngine.RequestCancelWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.RequestCancelWorkflowExecutionRequest{
+	_, err := s.historyEngine.RequestCancelWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			WorkflowExecution: &commonpb.WorkflowExecution{
