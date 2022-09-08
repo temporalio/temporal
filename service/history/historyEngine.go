@@ -29,7 +29,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -38,7 +37,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -53,12 +51,12 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/describeworkflow"
+	"go.temporal.io/server/service/history/api/reapplyevents"
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
 	"go.temporal.io/server/service/history/api/recordchildworkflowcompleted"
@@ -1114,175 +1112,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 	runID string,
 	reapplyEvents []*historypb.HistoryEvent,
 ) error {
-
-	if e.config.SkipReapplicationByNamespaceID(namespaceUUID.String()) {
-		return nil
-	}
-
-	namespaceEntry, err := e.getActiveNamespaceEntry(namespaceUUID)
-	if err != nil {
-		return err
-	}
-	namespaceID := namespaceEntry.ID()
-
-	return api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			namespaceID.String(),
-			workflowID,
-			"",
-		),
-		func(workflowContext api.WorkflowContext) (action *api.UpdateWorkflowAction, retErr error) {
-			context := workflowContext.GetContext()
-			mutableState := workflowContext.GetMutableState()
-			// Filter out reapply event from the same cluster
-			toReapplyEvents := make([]*historypb.HistoryEvent, 0, len(reapplyEvents))
-			lastWriteVersion, err := mutableState.GetLastWriteVersion()
-			if err != nil {
-				return nil, err
-			}
-			sourceMutableState := mutableState
-			if sourceMutableState.GetWorkflowKey().RunID != runID {
-				originCtx, err := e.workflowConsistencyChecker.GetWorkflowContext(
-					ctx,
-					nil,
-					api.BypassMutableStateConsistencyPredicate,
-					definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
-				)
-				if err != nil {
-					return nil, err
-				}
-				defer func() { originCtx.GetReleaseFn()(retErr) }()
-				sourceMutableState = originCtx.GetMutableState()
-			}
-
-			for _, event := range reapplyEvents {
-				if event.GetVersion() == lastWriteVersion {
-					// The reapply is from the same cluster. Ignoring.
-					continue
-				}
-				dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
-				if mutableState.IsResourceDuplicated(dedupResource) {
-					// already apply the signal
-					continue
-				}
-				versionHistories := sourceMutableState.GetExecutionInfo().GetVersionHistories()
-				if e.containsHistoryEvent(versionHistories, event.GetEventId(), event.GetVersion()) {
-					continue
-				}
-
-				toReapplyEvents = append(toReapplyEvents, event)
-			}
-			if len(toReapplyEvents) == 0 {
-				return &api.UpdateWorkflowAction{
-					Noop:               true,
-					CreateWorkflowTask: false,
-				}, nil
-			}
-
-			if !mutableState.IsWorkflowExecutionRunning() {
-				// need to reset target workflow (which is also the current workflow)
-				// to accept events to be reapplied
-				baseRunID := mutableState.GetExecutionState().GetRunId()
-				resetRunID := uuid.New()
-				baseRebuildLastEventID := mutableState.GetPreviousStartedEventID()
-
-				// TODO when https://github.com/uber/cadence/issues/2420 is finished, remove this block,
-				//  since cannot reapply event to a finished workflow which had no workflow tasks started
-				if baseRebuildLastEventID == common.EmptyEventID {
-					e.logger.Warn("cannot reapply event to a finished workflow with no workflow task",
-						tag.WorkflowNamespaceID(namespaceID.String()),
-						tag.WorkflowID(workflowID),
-					)
-					e.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
-					return &api.UpdateWorkflowAction{
-						Noop:               true,
-						CreateWorkflowTask: false,
-					}, nil
-				}
-
-				baseVersionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-				baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
-				if err != nil {
-					return nil, err
-				}
-				baseRebuildLastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
-				if err != nil {
-					return nil, err
-				}
-				baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
-				baseNextEventID := mutableState.GetNextEventID()
-
-				err = e.workflowResetter.ResetWorkflow(
-					ctx,
-					namespaceID,
-					workflowID,
-					baseRunID,
-					baseCurrentBranchToken,
-					baseRebuildLastEventID,
-					baseRebuildLastEventVersion,
-					baseNextEventID,
-					resetRunID,
-					uuid.New(),
-					ndc.NewWorkflow(
-						ctx,
-						e.shard.GetNamespaceRegistry(),
-						e.shard.GetClusterMetadata(),
-						context,
-						mutableState,
-						workflow.NoopReleaseFn,
-					),
-					ndc.EventsReapplicationResetWorkflowReason,
-					toReapplyEvents,
-					enumspb.RESET_REAPPLY_TYPE_SIGNAL,
-				)
-				switch err.(type) {
-				case *serviceerror.InvalidArgument:
-					// no-op. Usually this is due to reset workflow with pending child workflows
-					e.logger.Warn("Cannot reset workflow. Ignoring reapply events.", tag.Error(err))
-				case nil:
-					// no-op
-				default:
-					return nil, err
-				}
-				return &api.UpdateWorkflowAction{
-					Noop:               true,
-					CreateWorkflowTask: false,
-				}, nil
-			}
-
-			postActions := &api.UpdateWorkflowAction{
-				Noop:               false,
-				CreateWorkflowTask: true,
-			}
-			if mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
-				// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-				postActions.CreateWorkflowTask = false
-			}
-			reappliedEvents, err := e.eventsReapplier.ReapplyEvents(
-				ctx,
-				mutableState,
-				toReapplyEvents,
-				runID,
-			)
-			if err != nil {
-				e.logger.Error("failed to re-apply stale events", tag.Error(err))
-				return nil, err
-			}
-			if len(reappliedEvents) == 0 {
-				return &api.UpdateWorkflowAction{
-					Noop:               true,
-					CreateWorkflowTask: false,
-				}, nil
-			}
-			return postActions, nil
-		},
-		nil,
-		e.shard,
-		e.workflowConsistencyChecker,
-	)
+	return reapplyevents.Invoke(ctx, namespaceUUID, workflowID, runID, reapplyEvents, e.shard, e.workflowConsistencyChecker, e.workflowResetter, e.eventsReapplier)
 }
 
 func (e *historyEngineImpl) GetDLQMessages(
@@ -1385,18 +1215,4 @@ func (e *historyEngineImpl) GetReplicationStatus(
 	request *historyservice.GetReplicationStatusRequest,
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
 	return replicationapi.GetStatus(ctx, request, e.shard, e.replicationAckMgr)
-}
-
-func (e *historyEngineImpl) containsHistoryEvent(
-	versionHistories *historyspb.VersionHistories,
-	reappliedEventID int64,
-	reappliedEventVersion int64,
-) bool {
-	// Check if the source workflow contains the reapply event.
-	// If it does, it means the event is received in this cluster, no need to reapply.
-	_, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-		versionHistories,
-		versionhistory.NewVersionHistoryItem(reappliedEventID, reappliedEventVersion),
-	)
-	return err == nil
 }

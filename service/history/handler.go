@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -1295,7 +1296,7 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 		return nil, errShuttingDown
 	}
 
-	if err := h.validateReplicationConfig(); err != nil {
+	if err := api.ValidateReplicationConfig(h.clusterMetadata); err != nil {
 		return nil, err
 	}
 
@@ -1370,7 +1371,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 		return nil, errShuttingDown
 	}
 
-	if err := h.validateReplicationConfig(); err != nil {
+	if err := api.ValidateReplicationConfig(h.clusterMetadata); err != nil {
 		return nil, err
 	}
 
@@ -1413,7 +1414,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
-	if err := h.validateReplicationConfig(); err != nil {
+	if err := api.ValidateReplicationConfig(h.clusterMetadata); err != nil {
 		return nil, err
 	}
 
@@ -1474,7 +1475,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
-	if err := h.validateReplicationConfig(); err != nil {
+	if err := api.ValidateReplicationConfig(h.clusterMetadata); err != nil {
 		return nil, err
 	}
 
@@ -1740,7 +1741,7 @@ func (h *Handler) GetReplicationStatus(
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
-	if err := h.validateReplicationConfig(); err != nil {
+	if err := api.ValidateReplicationConfig(h.clusterMetadata); err != nil {
 		return nil, err
 	}
 
@@ -1860,13 +1861,6 @@ func (h *Handler) convertError(err error) error {
 	}
 
 	return err
-}
-
-func (h *Handler) validateReplicationConfig() error {
-	if !h.clusterMetadata.IsGlobalNamespaceEnabled() {
-		return serviceerror.NewUnavailable("The cluster has global namespace disabled. The operation is not supported.")
-	}
-	return nil
 }
 
 func validateTaskToken(taskToken *tokenspb.Task) error {
