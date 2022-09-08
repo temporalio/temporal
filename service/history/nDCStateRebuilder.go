@@ -205,7 +205,7 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 	namespaceEntry *namespace.Namespace,
 	now time.Time,
 ) (workflow.MutableState, workflow.MutableStateRebuilder) {
-	resetMutableStateBuilder := workflow.NewMutableState(
+	resetMutableState := workflow.NewMutableState(
 		r.shard,
 		r.shard.GetEventsCache(),
 		r.logger,
@@ -215,9 +215,9 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 	stateBuilder := workflow.NewMutableStateRebuilder(
 		r.shard,
 		r.logger,
-		resetMutableStateBuilder,
+		resetMutableState,
 	)
-	return resetMutableStateBuilder, stateBuilder
+	return resetMutableState, stateBuilder
 }
 
 func (r *nDCStateRebuilderImpl) applyEvents(

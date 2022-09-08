@@ -349,7 +349,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 	default:
 		// apply events, other than simple start workflow execution
 		// the continue as new + start workflow execution combination will also be processed here
-		mutableState, err := context.LoadWorkflowExecution(ctx)
+		mutableState, err := context.LoadMutableState(ctx)
 		switch err.(type) {
 		case nil:
 			// Sanity check to make only 3DC mutable state here

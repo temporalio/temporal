@@ -44,11 +44,11 @@ func TestLocalMutableState(
 	runID string,
 ) *MutableStateImpl {
 
-	msBuilder := NewMutableState(shard, eventsCache, logger, ns, time.Now().UTC())
-	msBuilder.GetExecutionInfo().ExecutionTime = msBuilder.GetExecutionInfo().StartTime
-	_ = msBuilder.SetHistoryTree(context.Background(), runID)
+	ms := NewMutableState(shard, eventsCache, logger, ns, time.Now().UTC())
+	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionInfo().StartTime
+	_ = ms.SetHistoryTree(context.Background(), runID)
 
-	return msBuilder
+	return ms
 }
 
 func TestGlobalMutableState(
@@ -59,12 +59,12 @@ func TestGlobalMutableState(
 	runID string,
 ) *MutableStateImpl {
 
-	msBuilder := NewMutableState(shard, eventsCache, logger, tests.GlobalNamespaceEntry, time.Now().UTC())
-	msBuilder.GetExecutionInfo().ExecutionTime = msBuilder.GetExecutionInfo().StartTime
-	_ = msBuilder.UpdateCurrentVersion(version, false)
-	_ = msBuilder.SetHistoryTree(context.Background(), runID)
+	ms := NewMutableState(shard, eventsCache, logger, tests.GlobalNamespaceEntry, time.Now().UTC())
+	ms.GetExecutionInfo().ExecutionTime = ms.GetExecutionInfo().StartTime
+	_ = ms.UpdateCurrentVersion(version, false)
+	_ = ms.SetHistoryTree(context.Background(), runID)
 
-	return msBuilder
+	return ms
 }
 
 func TestCloneToProto(

@@ -170,7 +170,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 		return nil, err
 	}
 
-	mutableState, err := wfContext.LoadWorkflowExecution(ctx)
+	mutableState, err := wfContext.LoadMutableState(ctx)
 	if err != nil {
 		release(err)
 		return nil, err
@@ -203,7 +203,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 		return nil, err
 	}
 
-	mutableState, err := wfContext.LoadWorkflowExecution(ctx)
+	mutableState, err := wfContext.LoadMutableState(ctx)
 	switch err.(type) {
 	case nil:
 		if consistencyPredicate(mutableState) {
@@ -211,7 +211,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 		}
 		wfContext.Clear()
 
-		mutableState, err := wfContext.LoadWorkflowExecution(ctx)
+		mutableState, err := wfContext.LoadMutableState(ctx)
 		if err != nil {
 			release(err)
 			return nil, err
