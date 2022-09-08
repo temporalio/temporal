@@ -4736,7 +4736,8 @@ func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedpb.Schedule) 
 	if err != nil {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid schedule spec: %v", err))
 	}
-	// this is safe in the presence of retries because canonicalization is idempotent
+	// This mutates a part of the request message, but it's safe even in the presence of
+	// retries (reusing the same message) because canonicalization is idempotent.
 	schedule.Spec = compiledSpec.CanonicalForm()
 	return nil
 }

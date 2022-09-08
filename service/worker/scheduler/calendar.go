@@ -377,7 +377,7 @@ func iterateRanges(ranges []*schedpb.Range, f func(i int)) {
 		if end < start {
 			end = start
 		}
-		for _ = 0; start <= end; start += step {
+		for ; start <= end; start += step {
 			f(start)
 		}
 	}
