@@ -42,6 +42,10 @@ import (
 	"go.uber.org/fx"
 )
 
+const (
+	timerQueuePersistenceMaxRPSRatio = 0.3
+)
+
 type (
 	timerQueueFactoryParams struct {
 		fx.In
@@ -85,17 +89,13 @@ func NewTimerQueueFactory(
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.TimerProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
-				params.ServiceResolver,
-				params.Config.NumberOfShards,
-				params.Config.QueueReaderStuckCriticalAttempts,
+				timerQueuePersistenceMaxRPSRatio,
 			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.TimerProcessorMaxPollHostRPS,
 					params.Config.PersistenceMaxQPS,
-					params.ServiceResolver,
-					params.Config.NumberOfShards,
-					params.Config.QueueReaderStuckCriticalAttempts,
+					timerQueuePersistenceMaxRPSRatio,
 				),
 				params.Config.QueueMaxReaderCount(),
 			),

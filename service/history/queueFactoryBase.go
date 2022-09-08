@@ -32,18 +32,12 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
-)
-
-const (
-	queueHostRPSRatio = 0.25
 )
 
 type (
@@ -52,7 +46,6 @@ type (
 
 		NamespaceRegistry namespace.Registry
 		ClusterMetadata   cluster.Metadata
-		ServiceResolver   membership.ServiceResolver
 		Config            *configs.Config
 		TimeSource        clock.TimeSource
 		MetricsHandler    metrics.MetricsHandler
@@ -130,17 +123,13 @@ func (f *QueueFactoryBase) Stop() {
 func NewQueueHostRateLimiter(
 	hostRPS dynamicconfig.IntPropertyFn,
 	persistenceMaxRPS dynamicconfig.IntPropertyFn,
-	serviceResolver membership.ServiceResolver,
-	numberOfShards int32,
-	readerStuckCriticalAttempts dynamicconfig.IntPropertyFn,
+	persistenceMaxRPSRatio float64,
 ) quotas.RateLimiter {
 	return quotas.NewDefaultOutgoingRateLimiter(
 		NewHostRateLimiterRateFn(
 			hostRPS,
 			persistenceMaxRPS,
-			serviceResolver,
-			numberOfShards,
-			readerStuckCriticalAttempts,
+			persistenceMaxRPSRatio,
 		),
 	)
 }
@@ -148,30 +137,15 @@ func NewQueueHostRateLimiter(
 func NewHostRateLimiterRateFn(
 	hostRPS dynamicconfig.IntPropertyFn,
 	persistenceMaxRPS dynamicconfig.IntPropertyFn,
-	serviceResolver membership.ServiceResolver,
-	numberOfShards int32,
-	readerStuckCriticalAttempts dynamicconfig.IntPropertyFn,
+	persistenceMaxRPSRatio float64,
 ) quotas.RateFn {
 	return func() float64 {
 		if maxPollHostRps := hostRPS(); maxPollHostRps > 0 {
 			return float64(maxPollHostRps)
 		}
 
-		shardsPerHost := int(numberOfShards) / (numHistoryHosts(serviceResolver))
-		maxPollHostRps := float64(readerStuckCriticalAttempts() * shardsPerHost)
-
 		// ensure queue loading won't consume all persistence tokens
 		// especially upon host restart when service resolver doesn't have the member count
-		return util.Min(maxPollHostRps, float64(persistenceMaxRPS())*queueHostRPSRatio)
+		return float64(persistenceMaxRPS()) * persistenceMaxRPSRatio
 	}
-}
-
-func numHistoryHosts(
-	serviceResolver membership.ServiceResolver,
-) int {
-	if serviceResolver == nil {
-		return 1
-	}
-
-	return util.Max(serviceResolver.MemberCount(), 1)
 }

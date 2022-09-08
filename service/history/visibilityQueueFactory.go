@@ -37,6 +37,10 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
+const (
+	visibilityQueuePersistenceMaxRPSRatio = 0.3
+)
+
 type (
 	visibilityQueueFactoryParams struct {
 		fx.In
@@ -78,17 +82,13 @@ func NewVisibilityQueueFactory(
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.VisibilityProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
-				params.ServiceResolver,
-				params.Config.NumberOfShards,
-				params.Config.QueueReaderStuckCriticalAttempts,
+				visibilityQueuePersistenceMaxRPSRatio,
 			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.VisibilityProcessorMaxPollHostRPS,
 					params.Config.PersistenceMaxQPS,
-					params.ServiceResolver,
-					params.Config.NumberOfShards,
-					params.Config.QueueReaderStuckCriticalAttempts,
+					visibilityQueuePersistenceMaxRPSRatio,
 				),
 				params.Config.QueueMaxReaderCount(),
 			),
