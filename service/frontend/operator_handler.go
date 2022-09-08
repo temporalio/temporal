@@ -29,20 +29,27 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"golang.org/x/exp/maps"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
-	"golang.org/x/exp/maps"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	svc "go.temporal.io/server/client"
+	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common"
+	clustermetadata "go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
@@ -56,35 +63,41 @@ import (
 var _ OperatorHandler = (*OperatorHandlerImpl)(nil)
 
 type (
-	// OperatorHandlerImpl - gRPC handler interface for operatorservice
+	// OperatorHandlerImpl - gRPC handler interface for operator service
 	OperatorHandlerImpl struct {
 		status int32
 
-		logger            log.Logger
-		config            *Config
-		esConfig          *esclient.Config
-		esClient          esclient.Client
-		sdkClientFactory  sdk.ClientFactory
-		metricsClient     metrics.Client
-		saProvider        searchattribute.Provider
-		saManager         searchattribute.Manager
-		healthServer      *health.Server
-		historyClient     historyservice.HistoryServiceClient
-		namespaceRegistry namespace.Registry
+		logger                 log.Logger
+		config                 *Config
+		esConfig               *esclient.Config
+		esClient               esclient.Client
+		sdkClientFactory       sdk.ClientFactory
+		metricsClient          metrics.Client
+		saProvider             searchattribute.Provider
+		saManager              searchattribute.Manager
+		healthServer           *health.Server
+		historyClient          historyservice.HistoryServiceClient
+		namespaceRegistry      namespace.Registry
+		clusterMetadataManager persistence.ClusterMetadataManager
+		clusterMetadata        clustermetadata.Metadata
+		clientFactory          svc.Factory
 	}
 
 	NewOperatorHandlerImplArgs struct {
-		config            *Config
-		EsConfig          *esclient.Config
-		EsClient          esclient.Client
-		Logger            log.Logger
-		sdkClientFactory  sdk.ClientFactory
-		MetricsClient     metrics.Client
-		SaProvider        searchattribute.Provider
-		SaManager         searchattribute.Manager
-		healthServer      *health.Server
-		historyClient     historyservice.HistoryServiceClient
-		namespaceRegistry namespace.Registry
+		config                 *Config
+		EsConfig               *esclient.Config
+		EsClient               esclient.Client
+		Logger                 log.Logger
+		sdkClientFactory       sdk.ClientFactory
+		MetricsClient          metrics.Client
+		SaProvider             searchattribute.Provider
+		SaManager              searchattribute.Manager
+		healthServer           *health.Server
+		historyClient          historyservice.HistoryServiceClient
+		namespaceRegistry      namespace.Registry
+		clusterMetadataManager persistence.ClusterMetadataManager
+		clusterMetadata        clustermetadata.Metadata
+		clientFactory          svc.Factory
 	}
 )
 
@@ -94,18 +107,21 @@ func NewOperatorHandlerImpl(
 ) *OperatorHandlerImpl {
 
 	handler := &OperatorHandlerImpl{
-		logger:            args.Logger,
-		status:            common.DaemonStatusInitialized,
-		config:            args.config,
-		esConfig:          args.EsConfig,
-		esClient:          args.EsClient,
-		sdkClientFactory:  args.sdkClientFactory,
-		metricsClient:     args.MetricsClient,
-		saProvider:        args.SaProvider,
-		saManager:         args.SaManager,
-		healthServer:      args.healthServer,
-		historyClient:     args.historyClient,
-		namespaceRegistry: args.namespaceRegistry,
+		logger:                 args.Logger,
+		status:                 common.DaemonStatusInitialized,
+		config:                 args.config,
+		esConfig:               args.EsConfig,
+		esClient:               args.EsClient,
+		sdkClientFactory:       args.sdkClientFactory,
+		metricsClient:          args.MetricsClient,
+		saProvider:             args.SaProvider,
+		saManager:              args.SaManager,
+		healthServer:           args.healthServer,
+		historyClient:          args.historyClient,
+		namespaceRegistry:      args.namespaceRegistry,
+		clusterMetadataManager: args.clusterMetadataManager,
+		clusterMetadata:        args.clusterMetadata,
+		clientFactory:          args.clientFactory,
 	}
 
 	return handler
@@ -331,35 +347,159 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	ctx context.Context,
 	request *operatorservice.AddOrUpdateRemoteClusterRequest,
 ) (_ *operatorservice.AddOrUpdateRemoteClusterResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+	defer log.CapturePanic(h.logger, &retError)
+	scope, sw := h.startRequestProfile(metrics.OperatorAddOrUpdateRemoteClusterScope)
+	defer sw.Stop()
+
+	adminClient := h.clientFactory.NewRemoteAdminClientWithTimeout(
+		request.GetFrontendAddress(),
+		admin.DefaultTimeout,
+		admin.DefaultLargeTimeout,
+	)
+
+	// Fetch cluster metadata from remote cluster
+	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	if err != nil {
+		scope.IncCounter(metrics.ServiceFailures)
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(
+			errUnableConnectRemoteClusterMessage,
+			request.GetFrontendAddress(),
+			err,
+		))
+	}
+
+	err = h.validateRemoteClusterMetadata(resp)
+	if err != nil {
+		scope.IncCounter(metrics.ServiceFailures)
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errInvalidRemoteClusterInfo, err))
+	}
+
+	var updateRequestVersion int64 = 0
+	clusterData, err := h.clusterMetadataManager.GetClusterMetadata(
+		ctx,
+		&persistence.GetClusterMetadataRequest{ClusterName: resp.GetClusterName()},
+	)
+	switch err.(type) {
+	case nil:
+		updateRequestVersion = clusterData.Version
+	case *serviceerror.NotFound:
+		updateRequestVersion = 0
+	default:
+		scope.IncCounter(metrics.ServiceFailures)
+		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToStoreClusterInfo, err))
+	}
+
+	applied, err := h.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
+		ClusterMetadata: persistencespb.ClusterMetadata{
+			ClusterName:              resp.GetClusterName(),
+			HistoryShardCount:        resp.GetHistoryShardCount(),
+			ClusterId:                resp.GetClusterId(),
+			ClusterAddress:           request.GetFrontendAddress(),
+			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
+			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
+			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
+			IsConnectionEnabled:      request.GetEnableRemoteClusterConnection(),
+		},
+		Version: updateRequestVersion,
+	})
+	if err != nil {
+		scope.IncCounter(metrics.ServiceFailures)
+		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToStoreClusterInfo, err))
+	}
+	if !applied {
+		scope.IncCounter(metrics.ServiceFailures)
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToStoreClusterInfo, err))
+	}
+	return &operatorservice.AddOrUpdateRemoteClusterResponse{}, nil
 }
 
 func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 	ctx context.Context,
 	request *operatorservice.RemoveRemoteClusterRequest,
 ) (_ *operatorservice.RemoveRemoteClusterResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
-}
+	defer log.CapturePanic(h.logger, &retError)
+	scope, sw := h.startRequestProfile(metrics.OperatorRemoveRemoteClusterScope)
+	defer sw.Stop()
 
-func (h *OperatorHandlerImpl) DescribeCluster(
-	ctx context.Context,
-	request *operatorservice.DescribeClusterRequest,
-) (_ *operatorservice.DescribeClusterResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+	if err := h.clusterMetadataManager.DeleteClusterMetadata(
+		ctx,
+		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
+	); err != nil {
+		scope.IncCounter(metrics.ServiceFailures)
+		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToDeleteClusterInfo, err))
+	}
+	return &operatorservice.RemoveRemoteClusterResponse{}, nil
 }
 
 func (h *OperatorHandlerImpl) ListClusters(
 	ctx context.Context,
 	request *operatorservice.ListClustersRequest,
 ) (_ *operatorservice.ListClustersResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+	defer log.CapturePanic(h.logger, &retError)
+	scope, sw := h.startRequestProfile(metrics.OperatorListClustersScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetPageSize() <= 0 {
+		request.PageSize = listClustersPageSize
+	}
+
+	resp, err := h.clusterMetadataManager.ListClusterMetadata(ctx, &persistence.ListClusterMetadataRequest{
+		PageSize:      int(request.GetPageSize()),
+		NextPageToken: request.GetNextPageToken(),
+	})
+	if err != nil {
+		scope.IncCounter(metrics.ServiceFailures)
+		return nil, err
+	}
+
+	var clusterMetadataList []*operatorservice.ClusterMetadata
+	for _, clusterResp := range resp.ClusterMetadata {
+		clusterMetadataList = append(clusterMetadataList, &operatorservice.ClusterMetadata{
+			ClusterName:            clusterResp.GetClusterName(),
+			ClusterId:              clusterResp.GetClusterId(),
+			Address:                clusterResp.GetClusterAddress(),
+			InitialFailoverVersion: clusterResp.GetInitialFailoverVersion(),
+			HistoryShardCount:      clusterResp.GetHistoryShardCount(),
+			IsConnectionEnabled:    clusterResp.GetIsConnectionEnabled(),
+		})
+	}
+	return &operatorservice.ListClustersResponse{
+		Clusters:      clusterMetadataList,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }
 
-func (h *OperatorHandlerImpl) ListClusterMembers(
-	ctx context.Context,
-	request *operatorservice.ListClusterMembersRequest,
-) (_ *operatorservice.ListClusterMembersResponse, retError error) {
-	return nil, serviceerror.NewUnimplemented("TODO: Need to get from another PR")
+func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservice.DescribeClusterResponse) error {
+	// Verify remote cluster config
+	currentClusterInfo := h.clusterMetadata
+	if metadata.GetClusterName() == currentClusterInfo.GetCurrentClusterName() {
+		// cluster name conflict
+		return serviceerror.NewInvalidArgument("Cannot update current cluster metadata from rpc calls")
+	}
+	if metadata.GetFailoverVersionIncrement() != currentClusterInfo.GetFailoverVersionIncrement() {
+		// failover version increment is mismatch with current cluster config
+		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to failover version increment mismatch")
+	}
+	if metadata.GetHistoryShardCount() != h.config.NumHistoryShards {
+		// cluster shard number not equal
+		// TODO: remove this check once we support different shard numbers
+		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to history shard number mismatch")
+	}
+	if !metadata.IsGlobalNamespaceEnabled {
+		// remote cluster doesn't support global namespace
+		return serviceerror.NewInvalidArgument("Cannot add remote cluster as global namespace is not supported")
+	}
+	for clusterName, cluster := range currentClusterInfo.GetAllClusterInfo() {
+		if clusterName != metadata.ClusterName && cluster.InitialFailoverVersion == metadata.GetInitialFailoverVersion() {
+			// initial failover version conflict
+			// best effort: race condition if a concurrent write to db with the same version.
+			return serviceerror.NewInvalidArgument("Cannot add remote cluster due to initial failover version conflict")
+		}
+	}
+	return nil
 }
 
 // startRequestProfile initiates recording of request metrics
