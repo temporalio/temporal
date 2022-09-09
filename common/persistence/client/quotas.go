@@ -84,15 +84,24 @@ func NewPriorityRateLimiter(
 
 	return quotas.NewNamespaceRateLimiter(func(req quotas.Request) quotas.RequestRateLimiter {
 		if req.Caller != "" && req.Caller != headers.CallerNameSystem {
-			if namespaceMaxQPS != nil && namespaceMaxQPS(req.Caller) > 0 {
-				return quotas.NewMultiRequestRateLimiter(
-					newPriorityRateLimiter(
-						func() float64 { return float64(namespaceMaxQPS(req.Caller)) },
-						requestPriorityFn,
-					),
-					hostRequestRateLimiter,
-				)
-			}
+			return quotas.NewMultiRequestRateLimiter(
+				newPriorityRateLimiter(
+					func() float64 {
+						if namespaceMaxQPS == nil {
+							return float64(hostMaxQPS())
+						}
+
+						namespaceQPS := float64(namespaceMaxQPS(req.Caller))
+						if namespaceQPS <= 0 {
+							return float64(hostMaxQPS())
+						}
+
+						return namespaceQPS
+					},
+					requestPriorityFn,
+				),
+				hostRequestRateLimiter,
+			)
 		}
 
 		return hostRequestRateLimiter
