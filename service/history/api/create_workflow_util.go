@@ -208,7 +208,7 @@ func ValidateStart(
 		throttledLogger,
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
-		return err
+		return common.ErrMemoSizeExceedsLimit
 	}
 
 	return nil
