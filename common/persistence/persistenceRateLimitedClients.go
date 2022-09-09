@@ -653,9 +653,11 @@ func (p *executionRateLimitedPersistenceClient) ParseHistoryBranchInfo(
 	ctx context.Context,
 	request *ParseHistoryBranchInfoRequest,
 ) (*ParseHistoryBranchInfoResponse, error) {
-	if ok := allow(ctx, "ParseHistoryBranchInfo", p.rateLimiter); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
+	// ParseHistoryBranchInfo implementation currently doesn't actually query DB
+	// TODO: uncomment if necessary
+	// if ok := allow(ctx, "ParseHistoryBranchInfo", p.rateLimiter); !ok {
+	// 	return nil, ErrPersistenceLimitExceeded
+	// }
 	return p.persistence.ParseHistoryBranchInfo(ctx, request)
 }
 
@@ -664,9 +666,11 @@ func (p *executionRateLimitedPersistenceClient) UpdateHistoryBranchInfo(
 	ctx context.Context,
 	request *UpdateHistoryBranchInfoRequest,
 ) (*UpdateHistoryBranchInfoResponse, error) {
-	if ok := allow(ctx, "UpdateHistoryBranchInfo", p.rateLimiter); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
+	// UpdateHistoryBranchInfo implementation currently doesn't actually query DB
+	// TODO: uncomment if necessary
+	// if ok := allow(ctx, "UpdateHistoryBranchInfo", p.rateLimiter); !ok {
+	// 	return nil, ErrPersistenceLimitExceeded
+	// }
 	return p.persistence.UpdateHistoryBranchInfo(ctx, request)
 }
 
@@ -675,11 +679,12 @@ func (p *executionRateLimitedPersistenceClient) NewHistoryBranch(
 	ctx context.Context,
 	request *NewHistoryBranchRequest,
 ) (*NewHistoryBranchResponse, error) {
-	if ok := allow(ctx, "NewHistoryBranch", p.rateLimiter); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-	response, err := p.persistence.NewHistoryBranch(ctx, request)
-	return response, err
+	// NewHistoryBranch implementation currently doesn't actually query DB
+	// TODO: uncomment if necessary
+	// if ok := allow(ctx, "NewHistoryBranch", p.rateLimiter); !ok {
+	// 	return nil, ErrPersistenceLimitExceeded
+	// }
+	return p.persistence.NewHistoryBranch(ctx, request)
 }
 
 // ReadHistoryBranch returns history node data for a branch

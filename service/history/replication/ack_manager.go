@@ -587,14 +587,14 @@ func (p *ackMgrImpl) processReplication(
 	}
 	defer func() { release(retError) }()
 
-	msBuilder, err := context.LoadWorkflowExecution(ctx)
+	ms, err := context.LoadMutableState(ctx)
 	switch err.(type) {
 	case nil:
-		if !processTaskIfClosed && !msBuilder.IsWorkflowExecutionRunning() {
+		if !processTaskIfClosed && !ms.IsWorkflowExecutionRunning() {
 			// workflow already finished, no need to process the replication task
 			return nil, nil
 		}
-		return action(msBuilder)
+		return action(ms)
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		return nil, nil
 	default:

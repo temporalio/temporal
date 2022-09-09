@@ -665,7 +665,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.workflowCache.PutIfNotExist(key, weContext)
@@ -739,7 +739,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.workflowCache.PutIfNotExist(key, weContext)
@@ -814,7 +814,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 
@@ -907,7 +907,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadMutableState(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.workflowCache.PutIfNotExist(key, weContext)

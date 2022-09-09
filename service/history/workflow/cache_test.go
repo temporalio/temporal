@@ -215,7 +215,7 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 	release(nil)
 
 	// since last time, the release function receive a nil error
-	// the ms builder will not be cleared
+	// the ms will not be cleared
 	ctx, release, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		namespaceID,
@@ -229,7 +229,7 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 	release(errors.New("some random error message"))
 
 	// since last time, the release function receive a non-nil error
-	// the ms builder will be cleared
+	// the ms will be cleared
 	ctx, release, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		namespaceID,
@@ -272,7 +272,7 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 			CallerTypeAPI,
 		)
 		s.Nil(err)
-		// since each time the builder is reset to nil
+		// since each time the is reset to nil
 		s.Nil(ctx.(*ContextImpl).MutableState)
 		// since we are just testing whether the release function will clear the cache
 		// all we need is a fake MutableState

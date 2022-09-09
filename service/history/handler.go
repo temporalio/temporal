@@ -350,12 +350,12 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.RespondActivityTaskCompleted(ctx, request)
+	resp, err2 := engine.RespondActivityTaskCompleted(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
+	return resp, nil
 }
 
 // RespondActivityTaskFailed - records failure of an activity task
@@ -389,12 +389,12 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.RespondActivityTaskFailed(ctx, request)
+	resp, err2 := engine.RespondActivityTaskFailed(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.RespondActivityTaskFailedResponse{}, nil
+	return resp, nil
 }
 
 // RespondActivityTaskCanceled - records failure of an activity task
@@ -428,12 +428,12 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.RespondActivityTaskCanceled(ctx, request)
+	resp, err2 := engine.RespondActivityTaskCanceled(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
+	return resp, nil
 }
 
 // RespondWorkflowTaskCompleted - records completion of a workflow task
@@ -828,12 +828,12 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.RequestCancelWorkflowExecution(ctx, request)
+	resp, err2 := engine.RequestCancelWorkflowExecution(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.RequestCancelWorkflowExecutionResponse{}, nil
+	return resp, nil
 }
 
 // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
@@ -862,12 +862,12 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.SignalWorkflowExecution(ctx, request)
+	resp, err2 := engine.SignalWorkflowExecution(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.SignalWorkflowExecutionResponse{}, nil
+	return resp, nil
 }
 
 // SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
@@ -990,12 +990,12 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.TerminateWorkflowExecution(ctx, request)
+	resp, err2 := engine.TerminateWorkflowExecution(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.TerminateWorkflowExecutionResponse{}, nil
+	return resp, nil
 }
 
 func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historyservice.DeleteWorkflowExecutionRequest) (_ *historyservice.DeleteWorkflowExecutionResponse, retError error) {

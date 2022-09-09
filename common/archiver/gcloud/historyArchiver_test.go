@@ -566,3 +566,23 @@ func (h *historyArchiverSuite) TestGet_Success_FromToken() {
 
 	h.EqualValues(4, numOfEvents)
 }
+
+func (h *historyArchiverSuite) TestGet_NoHistory() {
+
+	ctx := context.Background()
+	storageWrapper := connector.NewMockClient(h.controller)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
+	storageWrapper.EXPECT().Query(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470").Return([]string{}, nil)
+
+	historyIterator := archiver.NewMockHistoryIterator(h.controller)
+	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	request := &archiver.GetHistoryRequest{
+		NamespaceID: testNamespaceID,
+		WorkflowID:  testWorkflowID,
+		RunID:       testRunID,
+		PageSize:    2,
+	}
+
+	_, err := historyArchiver.Get(ctx, h.testArchivalURI, request)
+	h.Assert().IsType(&serviceerror.NotFound{}, err)
+}

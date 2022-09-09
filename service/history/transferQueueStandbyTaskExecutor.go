@@ -638,16 +638,9 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return consts.ErrTaskRetry
 	}
 
-	ns, err := t.registry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
-	if err != nil {
-		// This is most likely a NamespaceNotFound error. Don't log it and return error to stop retrying.
-		return err
-	}
-
 	if err = refreshTasks(
 		ctx,
 		adminClient,
-		ns.Name(),
 		namespace.ID(taskInfo.GetNamespaceID()),
 		taskInfo.GetWorkflowID(),
 		taskInfo.GetRunID(),

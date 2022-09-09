@@ -41,6 +41,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
@@ -49,7 +50,7 @@ import (
 
 // AdminShowWorkflow shows history
 func AdminShowWorkflow(c *cli.Context) error {
-	namespace, err := getRequiredOption(c, FlagNamespace)
+	nsName, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
 		return err
 	}
@@ -72,8 +73,13 @@ func AdminShowWorkflow(c *cli.Context) error {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
+	nsID, err := getNamespaceID(c, namespace.Name(nsName))
+	if err != nil {
+		return err
+	}
+
 	resp, err := client.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Namespace: namespace,
+		NamespaceId: nsID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,
@@ -501,10 +507,11 @@ func AdminDescribeHistoryHost(c *cli.Context) error {
 func AdminRefreshWorkflowTasks(c *cli.Context) error {
 	adminClient := cFactory.AdminClient(c)
 
-	namespace, err := getRequiredOption(c, FlagNamespace)
+	nsName, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
 		return err
 	}
+
 	wid, err := getRequiredOption(c, FlagWorkflowID)
 	if err != nil {
 		return err
@@ -514,8 +521,13 @@ func AdminRefreshWorkflowTasks(c *cli.Context) error {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
+	nsID, err := getNamespaceID(c, namespace.Name(nsName))
+	if err != nil {
+		return err
+	}
+
 	_, err = adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: namespace,
+		NamespaceId: nsID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: wid,
 			RunId:      rid,

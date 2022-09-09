@@ -117,7 +117,7 @@ update-mockgen:
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	@go install github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick@latest
+	@go install github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick@master
 # This to download sources of gogo-protobuf which are required to build proto files.
 	@GO111MODULE=off go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
@@ -226,7 +226,7 @@ vet:
 
 goimports-check:
 	@printf $(COLOR) "Run goimports checks..."
-	@GO_IMPORTS_OUTPUT=$$(goimports -l .); if [ -n "$${GO_IMPORTS_OUTPUT}" ]; then echo "$${GO_IMPORTS_OUTPUT}" && echo "Please run make goimports" && exit 1; fi
+	@GO_IMPORTS_OUTPUT=$$(goimports -l .); if [ -n "$${GO_IMPORTS_OUTPUT}" ]; then echo "$${GO_IMPORTS_OUTPUT}" && echo "Please run 'make goimports'" && exit 1; fi
 
 goimports:
 	@printf $(COLOR) "Run goimports..."
@@ -427,31 +427,31 @@ stop-dependencies-cdc:
 	docker-compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) down
 
 start: temporal-server
-	./temporal-server --env development-cass start
+	./temporal-server --env development-cass --allow-no-auth start
 
 start-es: temporal-server
-	./temporal-server --env development-cass-es start
+	./temporal-server --env development-cass-es --allow-no-auth start
 
 start-mysql: temporal-server
-	./temporal-server --env development-mysql start
+	./temporal-server --env development-mysql --allow-no-auth start
 
 start-mysql-es: temporal-server
-	./temporal-server --env development-mysql-es start
+	./temporal-server --env development-mysql-es --allow-no-auth start
 
 start-postgres: temporal-server
-	./temporal-server --env development-postgres start
+	./temporal-server --env development-postgres --allow-no-auth start
 
 start-sqlite: temporal-server
-	./temporal-server --env development-sqlite start
+	./temporal-server --env development-sqlite --allow-no-auth start
 
 start-cdc-active: temporal-server
-	./temporal-server --env development-active start
+	./temporal-server --env development-active --allow-no-auth start
 
 start-cdc-standby: temporal-server
-	./temporal-server --env development-standby start
+	./temporal-server --env development-standby --allow-no-auth start
 
 start-cdc-other: temporal-server
-	./temporal-server --env development-other start
+	./temporal-server --env development-other --allow-no-auth start
 
 ##### Grafana #####
 update-dashboards:

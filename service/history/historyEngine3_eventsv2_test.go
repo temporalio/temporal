@@ -177,18 +177,18 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	stickyTl := "stickyTaskQueue"
 	identity := "testIdentity"
 
-	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
+	ms := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
 		log.NewTestLogger(), we.GetRunId())
-	executionInfo := msBuilder.GetExecutionInfo()
+	executionInfo := ms.GetExecutionInfo()
 	executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	executionInfo.StickyTaskQueue = stickyTl
 
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	wt := addWorkflowTaskScheduledEvent(msBuilder)
+	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	wt := addWorkflowTaskScheduledEvent(ms)
 
-	ms := workflow.TestCloneToProto(msBuilder)
+	wfMs := workflow.TestCloneToProto(ms)
 
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
@@ -208,8 +208,8 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	}
 
 	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
-	expectedResponse.WorkflowType = msBuilder.GetWorkflowType()
-	executionInfo = msBuilder.GetExecutionInfo()
+	expectedResponse.WorkflowType = ms.GetWorkflowType()
+	executionInfo = ms.GetExecutionInfo()
 	if executionInfo.LastWorkflowTaskStartedEventId != common.EmptyEventID {
 		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartedEventId
 	}
@@ -217,13 +217,13 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	expectedResponse.ScheduledTime = wt.ScheduledTime
 	expectedResponse.StartedEventId = wt.ScheduledEventID + 1
 	expectedResponse.StickyExecutionEnabled = true
-	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
+	expectedResponse.NextEventId = ms.GetNextEventID() + 1
 	expectedResponse.Attempt = wt.Attempt
 	expectedResponse.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
 		Name: executionInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
-	expectedResponse.BranchToken, _ = msBuilder.GetCurrentBranchToken()
+	expectedResponse.BranchToken, _ = ms.GetCurrentBranchToken()
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
 	s.Nil(err)
@@ -301,15 +301,15 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		},
 	}
 
-	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
+	ms := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
 		log.NewTestLogger(), runID)
-	addWorkflowExecutionStartedEvent(msBuilder, commonpb.WorkflowExecution{
+	addWorkflowExecutionStartedEvent(ms, commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
-	_ = addWorkflowTaskScheduledEvent(msBuilder)
-	ms := workflow.TestCloneToProto(msBuilder)
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	_ = addWorkflowTaskScheduledEvent(ms)
+	wfMs := workflow.TestCloneToProto(ms)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil)

@@ -225,6 +225,9 @@ func (h *historyArchiver) Get(ctx context.Context, URI archiver.URI, request *ar
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(err.Error())
 		}
+		if highestVersion == nil {
+			return nil, serviceerror.NewNotFound(archiver.ErrHistoryNotExist.Error())
+		}
 		token = &getHistoryToken{
 			CloseFailoverVersion: *highestVersion,
 			HighestPart:          *historyhighestPart,

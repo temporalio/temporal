@@ -66,7 +66,7 @@ type (
 		hasBufferedEvents               bool
 		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
-		newStateBuilder                 workflow.MutableState
+		newMutableState                 workflow.MutableState
 		stopProcessing                  bool // should stop processing any more commands
 		mutableState                    workflow.MutableState
 		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
@@ -125,7 +125,7 @@ func newWorkflowTaskHandler(
 		hasBufferedEvents:               mutableState.HasBufferedEvents(),
 		workflowTaskFailedCause:         nil,
 		activityNotStartedCancelled:     false,
-		newStateBuilder:                 nil,
+		newMutableState:                 nil,
 		stopProcessing:                  false,
 		mutableState:                    mutableState,
 		initiatedChildExecutionsInBatch: make(map[string]struct{}),
@@ -813,9 +813,15 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
-	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespaceName.String()); err != nil {
+	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespaceName.String())
+	if err != nil {
 		handler.stopProcessing = true
 		return err
+	}
+	if unaliasedSas != nil {
+		newAttr := *attr
+		newAttr.SearchAttributes = unaliasedSas
+		attr = &newAttr
 	}
 
 	// If the workflow task has more than one completion event than just pick the first one
@@ -842,7 +848,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		}
 	}
 
-	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
+	_, newMutableState, err := handler.mutableState.AddContinueAsNewEvent(
 		ctx,
 		handler.workflowTaskCompletedID,
 		handler.workflowTaskCompletedID,
@@ -853,7 +859,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
-	handler.newStateBuilder = newStateBuilder
+	handler.newMutableState = newMutableState
 	return nil
 }
 
@@ -928,9 +934,15 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		return err
 	}
 
-	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace.String()); err != nil {
+	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace.String())
+	if err != nil {
 		handler.stopProcessing = true
 		return err
+	}
+	if unaliasedSas != nil {
+		newAttr := *attr
+		newAttr.SearchAttributes = unaliasedSas
+		attr = &newAttr
 	}
 
 	enabled := handler.config.EnableParentClosePolicy(parentNamespace.String())
@@ -1056,9 +1068,15 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		return err
 	}
 
-	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace.String()); err != nil {
+	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace.String())
+	if err != nil {
 		handler.stopProcessing = true
 		return err
+	}
+	if unaliasedSas != nil {
+		newAttr := *attr
+		newAttr.SearchAttributes = unaliasedSas
+		attr = &newAttr
 	}
 
 	_, err = handler.mutableState.AddUpsertWorkflowSearchAttributesEvent(
@@ -1145,7 +1163,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newStateBuilder, err := api.CreateMutableState(
+	newMutableState, err := api.CreateMutableState(
 		ctx,
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
@@ -1157,7 +1175,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,
 		handler.mutableState,
-		newStateBuilder,
+		newMutableState,
 		newRunID,
 		startAttr,
 		nil,
@@ -1169,7 +1187,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 		return err
 	}
 
-	handler.newStateBuilder = newStateBuilder
+	handler.newMutableState = newMutableState
 	return nil
 }
 
@@ -1190,7 +1208,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		lastCompletionResult = startAttr.LastCompletionResult
 	}
 
-	newStateBuilder, err := api.CreateMutableState(
+	newMutableState, err := api.CreateMutableState(
 		ctx,
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
@@ -1202,7 +1220,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,
 		handler.mutableState,
-		newStateBuilder,
+		newMutableState,
 		newRunID,
 		startAttr,
 		lastCompletionResult,
@@ -1214,7 +1232,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		return err
 	}
 
-	handler.newStateBuilder = newStateBuilder
+	handler.newMutableState = newMutableState
 	return nil
 }
 

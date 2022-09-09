@@ -178,7 +178,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
 
 	// NOTE: do not access anything related mutable state after this lock release
-	// release the context lock since we no longer need mutable state builder and
+	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.pushActivity(ctx, task, &timeout)
@@ -242,7 +242,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 
 	originalTaskQueue := mutableState.GetExecutionInfo().TaskQueue
 	// NOTE: do not access anything related mutable state after this lock release
-	// release the context lock since we no longer need mutable state builder and
+	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
@@ -347,7 +347,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	children := copyChildWorkflowInfos(mutableState.GetPendingChildExecutionInfos())
 
 	// NOTE: do not access anything related mutable state after this lock release.
-	// Release lock immediately since mutable state builder is not needed
+	// Release lock immediately since mutable state is not needed
 	// and the rest of logic is RPC calls, which can take time.
 	release(nil)
 
@@ -395,7 +395,6 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 
 	err = t.processParentClosePolicy(
 		ctx,
-		task.GetNamespaceID(),
 		namespaceName.String(),
 		workflowExecution,
 		children,
@@ -667,7 +666,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 
 	signalRequestID := signalInfo.GetRequestId()
 
-	// release the weContext lock since we no longer need mutable state builder and
+	// release the weContext lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(retError)
 	// remove signalRequestedID from target workflow, after Signal detail is removed from source workflow
@@ -751,7 +750,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		}
 		childClock := childInfo.Clock
 		// NOTE: do not access anything related mutable state after this lock release
-		// release the context lock since we no longer need mutable state builder and
+		// release the context lock since we no longer need mutable state and
 		// the rest of logic is making RPC call, which takes time.
 		release(nil)
 		return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, childClock)
@@ -840,7 +839,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 
 	// NOTE: do not access anything related mutable state after this lock is released.
-	// Release the context lock since we no longer need mutable state builder and
+	// Release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, &commonpb.WorkflowExecution{
@@ -1196,9 +1195,9 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 	ctx context.Context,
 	context workflow.Context,
 	createWorkflowTask bool,
-	action func(builder workflow.MutableState) error,
+	action func(workflow.MutableState) error,
 ) error {
-	mutableState, err := context.LoadWorkflowExecution(ctx)
+	mutableState, err := context.LoadMutableState(ctx)
 	if err != nil {
 		return err
 	}
@@ -1409,8 +1408,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 
 func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	ctx context.Context,
-	namespaceID string,
-	namespaceName string,
+	parentNamespaceName string,
 	parentExecution commonpb.WorkflowExecution,
 	childInfos map[int64]*persistencespb.ChildExecutionInfo,
 ) error {
@@ -1421,7 +1419,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	scope := t.metricsClient.Scope(metrics.TransferActiveTaskCloseExecutionScope)
 
 	if t.shard.GetConfig().EnableParentClosePolicyWorker() &&
-		len(childInfos) >= t.shard.GetConfig().ParentClosePolicyThreshold(namespaceName) {
+		len(childInfos) >= t.shard.GetConfig().ParentClosePolicyThreshold(parentNamespaceName) {
 
 		executions := make([]parentclosepolicy.RequestDetail, 0, len(childInfos))
 		for _, childInfo := range childInfos {
@@ -1459,8 +1457,6 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		}
 
 		request := parentclosepolicy.Request{
-			Namespace:       namespaceName,
-			NamespaceID:     namespaceID,
 			ParentExecution: parentExecution,
 			Executions:      executions,
 		}

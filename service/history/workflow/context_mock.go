@@ -187,19 +187,19 @@ func (mr *MockContextMockRecorder) LoadExecutionStats(ctx interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadExecutionStats", reflect.TypeOf((*MockContext)(nil).LoadExecutionStats), ctx)
 }
 
-// LoadWorkflowExecution mocks base method.
-func (m *MockContext) LoadWorkflowExecution(ctx context.Context) (MutableState, error) {
+// LoadMutableState mocks base method.
+func (m *MockContext) LoadMutableState(ctx context.Context) (MutableState, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LoadWorkflowExecution", ctx)
+	ret := m.ctrl.Call(m, "LoadMutableState", ctx)
 	ret0, _ := ret[0].(MutableState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// LoadWorkflowExecution indicates an expected call of LoadWorkflowExecution.
-func (mr *MockContextMockRecorder) LoadWorkflowExecution(ctx interface{}) *gomock.Call {
+// LoadMutableState indicates an expected call of LoadMutableState.
+func (mr *MockContextMockRecorder) LoadMutableState(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadWorkflowExecution", reflect.TypeOf((*MockContext)(nil).LoadWorkflowExecution), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadMutableState", reflect.TypeOf((*MockContext)(nil).LoadMutableState), ctx)
 }
 
 // Lock mocks base method.

@@ -217,7 +217,7 @@ func (h *historyArchiver) Get(
 		return nil, serviceerror.NewInternal(err.Error())
 	}
 	if !exists {
-		return nil, serviceerror.NewInvalidArgument(archiver.ErrHistoryNotExist.Error())
+		return nil, serviceerror.NewNotFound(archiver.ErrHistoryNotExist.Error())
 	}
 
 	var token *getHistoryToken

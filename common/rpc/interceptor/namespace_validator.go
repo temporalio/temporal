@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -62,13 +61,11 @@ var (
 	allowedNamespaceStates = map[string][]enumspb.NamespaceState{
 		"StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
 		"SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
-		"DescribeNamespace":                {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
 	}
 	// If API name is not in the map above, these are allowed states for all APIs that have `namespace` or `task_token` field in the request object.
 	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
 
 	allowedMethodsDuringHandover = map[string]struct{}{
-		"DescribeNamespace":                {},
 		"UpdateNamespace":                  {},
 		"GetReplicationMessages":           {},
 		"ReplicateEventsV2":                {},
@@ -147,45 +144,19 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 
 	switch request := req.(type) {
 	case *workflowservice.DescribeNamespaceRequest:
-		// Special case for DescribeNamespace API which can get namespace by Id.
-		if request.GetId() != "" {
-			return ni.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetId()))
-		}
-		if namespaceName.IsEmpty() {
+		// Special case for DescribeNamespace API which should read namespace directly from database.
+		// Therefore, it must bypass namespace registry and validator.
+		if request.GetId() == "" && namespaceName.IsEmpty() {
 			return nil, ErrNamespaceNotSet
 		}
-		return ni.namespaceRegistry.GetNamespace(namespaceName)
+		return nil, nil
 	case *workflowservice.RegisterNamespaceRequest:
-		// Special case for RegisterNamespace API. `namespace` is name of namespace that about to be registered. There is no namespace entry for it.
+		// Special case for RegisterNamespace API. `namespaceName` is name of namespace that about to be registered.
+		// There is no namespace entry for it, therefore, it must bypass namespace registry and validator.
 		if namespaceName.IsEmpty() {
 			return nil, ErrNamespaceNotSet
 		}
 		return nil, nil
-	// TODO (alex): remove 3 below cases in 1.18+ together with `namespace` field in corresponding protos.
-	case *adminservice.GetWorkflowExecutionRawHistoryV2Request:
-		if request.GetNamespaceId() != "" {
-			return ni.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
-		}
-		if namespaceName.IsEmpty() {
-			return nil, ErrNamespaceNotSet
-		}
-		return ni.namespaceRegistry.GetNamespace(namespaceName)
-	case *adminservice.ReapplyEventsRequest:
-		if request.GetNamespaceId() != "" {
-			return ni.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
-		}
-		if namespaceName.IsEmpty() {
-			return nil, ErrNamespaceNotSet
-		}
-		return ni.namespaceRegistry.GetNamespace(namespaceName)
-	case *adminservice.RefreshWorkflowTasksRequest:
-		if request.GetNamespaceId() != "" {
-			return ni.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
-		}
-		if namespaceName.IsEmpty() {
-			return nil, ErrNamespaceNotSet
-		}
-		return ni.namespaceRegistry.GetNamespace(namespaceName)
 	default:
 		// All other APIs.
 		if namespaceName.IsEmpty() {
