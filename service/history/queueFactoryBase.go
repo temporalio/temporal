@@ -145,7 +145,8 @@ func NewHostRateLimiterRateFn(
 		}
 
 		// ensure queue loading won't consume all persistence tokens
-		// especially upon host restart when service resolver doesn't have the member count
+		// especially upon host restart when we need to perform a load
+		// for all shards
 		return float64(persistenceMaxRPS()) * persistenceMaxRPSRatio
 	}
 }

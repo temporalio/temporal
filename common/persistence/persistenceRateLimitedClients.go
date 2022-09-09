@@ -1047,7 +1047,7 @@ func allow(
 	))
 }
 
-// TODO: change the value return so that it can also be used by
+// TODO: change the value returned so it can also be used by
 // persistence metrics client. For now, it's only used by rate
 // limit client, and we don't really care about the actual value
 // returned, as long as they are different from each task category.
