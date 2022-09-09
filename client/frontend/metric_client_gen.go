@@ -41,7 +41,7 @@ func (c *metricClient) CountWorkflowExecutions(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.CountWorkflowExecutionsResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientCountWorkflowExecutionsScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientCountWorkflowExecutionsScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -55,7 +55,7 @@ func (c *metricClient) CreateSchedule(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.CreateScheduleResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientCreateScheduleScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientCreateScheduleScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -69,7 +69,7 @@ func (c *metricClient) DeleteSchedule(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.DeleteScheduleResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDeleteScheduleScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientDeleteScheduleScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -83,7 +83,7 @@ func (c *metricClient) DeleteWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.DeleteWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDeleteWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientDeleteWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -97,7 +97,7 @@ func (c *metricClient) DeprecateNamespace(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.DeprecateNamespaceResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDeprecateNamespaceScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientDeprecateNamespaceScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -111,7 +111,7 @@ func (c *metricClient) DescribeBatchOperation(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.DescribeBatchOperationResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDescribeBatchOperationScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientDescribeBatchOperationScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -125,7 +125,7 @@ func (c *metricClient) DescribeNamespace(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.DescribeNamespaceResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDescribeNamespaceScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientDescribeNamespaceScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -139,7 +139,7 @@ func (c *metricClient) DescribeSchedule(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.DescribeScheduleResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDescribeScheduleScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientDescribeScheduleScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -153,7 +153,7 @@ func (c *metricClient) DescribeTaskQueue(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.DescribeTaskQueueResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDescribeTaskQueueScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientDescribeTaskQueueScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -167,7 +167,7 @@ func (c *metricClient) DescribeWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.DescribeWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientDescribeWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientDescribeWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -181,7 +181,7 @@ func (c *metricClient) GetClusterInfo(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.GetClusterInfoResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientGetClusterInfoScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientGetClusterInfoScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -195,7 +195,7 @@ func (c *metricClient) GetSearchAttributes(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.GetSearchAttributesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientGetSearchAttributesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientGetSearchAttributesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -209,7 +209,7 @@ func (c *metricClient) GetSystemInfo(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.GetSystemInfoResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientGetSystemInfoScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientGetSystemInfoScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -223,7 +223,7 @@ func (c *metricClient) GetWorkerBuildIdOrdering(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.GetWorkerBuildIdOrderingResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientGetWorkerBuildIdOrderingScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientGetWorkerBuildIdOrderingScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -237,7 +237,7 @@ func (c *metricClient) GetWorkflowExecutionHistory(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.GetWorkflowExecutionHistoryResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientGetWorkflowExecutionHistoryScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientGetWorkflowExecutionHistoryScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -251,7 +251,7 @@ func (c *metricClient) GetWorkflowExecutionHistoryReverse(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientGetWorkflowExecutionHistoryReverseScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientGetWorkflowExecutionHistoryReverseScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -265,7 +265,7 @@ func (c *metricClient) ListArchivedWorkflowExecutions(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.ListArchivedWorkflowExecutionsResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListArchivedWorkflowExecutionsScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientListArchivedWorkflowExecutionsScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -279,7 +279,7 @@ func (c *metricClient) ListBatchOperations(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.ListBatchOperationsResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListBatchOperationsScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientListBatchOperationsScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -293,7 +293,7 @@ func (c *metricClient) ListClosedWorkflowExecutions(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.ListClosedWorkflowExecutionsResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListClosedWorkflowExecutionsScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientListClosedWorkflowExecutionsScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -307,7 +307,7 @@ func (c *metricClient) ListNamespaces(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.ListNamespacesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListNamespacesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientListNamespacesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -321,7 +321,7 @@ func (c *metricClient) ListOpenWorkflowExecutions(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.ListOpenWorkflowExecutionsResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListOpenWorkflowExecutionsScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientListOpenWorkflowExecutionsScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -335,7 +335,7 @@ func (c *metricClient) ListScheduleMatchingTimes(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.ListScheduleMatchingTimesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListScheduleMatchingTimesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientListScheduleMatchingTimesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -349,7 +349,7 @@ func (c *metricClient) ListSchedules(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.ListSchedulesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListSchedulesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientListSchedulesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -363,7 +363,7 @@ func (c *metricClient) ListTaskQueuePartitions(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.ListTaskQueuePartitionsResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListTaskQueuePartitionsScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientListTaskQueuePartitionsScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -377,7 +377,7 @@ func (c *metricClient) ListWorkflowExecutions(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.ListWorkflowExecutionsResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientListWorkflowExecutionsScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientListWorkflowExecutionsScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -391,7 +391,7 @@ func (c *metricClient) PatchSchedule(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.PatchScheduleResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientPatchScheduleScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientPatchScheduleScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -405,7 +405,7 @@ func (c *metricClient) PollActivityTaskQueue(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.PollActivityTaskQueueResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientPollActivityTaskQueueScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientPollActivityTaskQueueScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -419,7 +419,7 @@ func (c *metricClient) PollWorkflowTaskQueue(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientPollWorkflowTaskQueueScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientPollWorkflowTaskQueueScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -433,7 +433,7 @@ func (c *metricClient) QueryWorkflow(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.QueryWorkflowResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientQueryWorkflowScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientQueryWorkflowScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -447,7 +447,7 @@ func (c *metricClient) RecordActivityTaskHeartbeat(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.RecordActivityTaskHeartbeatResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRecordActivityTaskHeartbeatScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientRecordActivityTaskHeartbeatScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -461,7 +461,7 @@ func (c *metricClient) RecordActivityTaskHeartbeatById(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.RecordActivityTaskHeartbeatByIdResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRecordActivityTaskHeartbeatByIdScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientRecordActivityTaskHeartbeatByIdScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -475,7 +475,7 @@ func (c *metricClient) RegisterNamespace(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.RegisterNamespaceResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRegisterNamespaceScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientRegisterNamespaceScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -489,7 +489,7 @@ func (c *metricClient) RequestCancelWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.RequestCancelWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRequestCancelWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientRequestCancelWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -503,7 +503,7 @@ func (c *metricClient) ResetStickyTaskQueue(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.ResetStickyTaskQueueResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientResetStickyTaskQueueScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientResetStickyTaskQueueScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -517,7 +517,7 @@ func (c *metricClient) ResetWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.ResetWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientResetWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientResetWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -531,7 +531,7 @@ func (c *metricClient) RespondActivityTaskCanceled(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.RespondActivityTaskCanceledResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondActivityTaskCanceledScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientRespondActivityTaskCanceledScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -545,7 +545,7 @@ func (c *metricClient) RespondActivityTaskCanceledById(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.RespondActivityTaskCanceledByIdResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondActivityTaskCanceledByIdScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientRespondActivityTaskCanceledByIdScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -559,7 +559,7 @@ func (c *metricClient) RespondActivityTaskCompleted(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondActivityTaskCompletedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientRespondActivityTaskCompletedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -573,7 +573,7 @@ func (c *metricClient) RespondActivityTaskCompletedById(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.RespondActivityTaskCompletedByIdResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondActivityTaskCompletedByIdScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientRespondActivityTaskCompletedByIdScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -587,7 +587,7 @@ func (c *metricClient) RespondActivityTaskFailed(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.RespondActivityTaskFailedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondActivityTaskFailedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientRespondActivityTaskFailedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -601,7 +601,7 @@ func (c *metricClient) RespondActivityTaskFailedById(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.RespondActivityTaskFailedByIdResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondActivityTaskFailedByIdScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientRespondActivityTaskFailedByIdScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -615,7 +615,7 @@ func (c *metricClient) RespondQueryTaskCompleted(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.RespondQueryTaskCompletedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondQueryTaskCompletedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientRespondQueryTaskCompletedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -629,7 +629,7 @@ func (c *metricClient) RespondWorkflowTaskCompleted(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.RespondWorkflowTaskCompletedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondWorkflowTaskCompletedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientRespondWorkflowTaskCompletedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -643,7 +643,7 @@ func (c *metricClient) RespondWorkflowTaskFailed(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.RespondWorkflowTaskFailedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientRespondWorkflowTaskFailedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientRespondWorkflowTaskFailedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -657,7 +657,7 @@ func (c *metricClient) ScanWorkflowExecutions(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.ScanWorkflowExecutionsResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientScanWorkflowExecutionsScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientScanWorkflowExecutionsScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -671,7 +671,7 @@ func (c *metricClient) SignalWithStartWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientSignalWithStartWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientSignalWithStartWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -685,7 +685,7 @@ func (c *metricClient) SignalWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.SignalWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientSignalWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientSignalWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -699,7 +699,7 @@ func (c *metricClient) StartBatchOperation(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.StartBatchOperationResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientStartBatchOperationScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientStartBatchOperationScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -713,7 +713,7 @@ func (c *metricClient) StartWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.StartWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientStartWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientStartWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -727,7 +727,7 @@ func (c *metricClient) StopBatchOperation(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.StopBatchOperationResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientStopBatchOperationScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientStopBatchOperationScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -741,7 +741,7 @@ func (c *metricClient) TerminateWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.TerminateWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientTerminateWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientTerminateWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -755,7 +755,7 @@ func (c *metricClient) UpdateNamespace(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.UpdateNamespaceResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientUpdateNamespaceScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientUpdateNamespaceScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -769,7 +769,7 @@ func (c *metricClient) UpdateSchedule(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.UpdateScheduleResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientUpdateScheduleScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientUpdateScheduleScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -783,7 +783,7 @@ func (c *metricClient) UpdateWorkerBuildIdOrdering(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientUpdateWorkerBuildIdOrderingScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientUpdateWorkerBuildIdOrderingScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -797,7 +797,7 @@ func (c *metricClient) UpdateWorkflow(
 	opts ...grpc.CallOption,
 ) (_ *workflowservice.UpdateWorkflowResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.FrontendClientUpdateWorkflowScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.FrontendClientUpdateWorkflowScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()

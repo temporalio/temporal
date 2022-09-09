@@ -41,7 +41,7 @@ func (c *metricClient) CancelOutstandingPoll(
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientCancelOutstandingPollScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientCancelOutstandingPollScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -55,7 +55,7 @@ func (c *metricClient) DescribeTaskQueue(
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.DescribeTaskQueueResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientDescribeTaskQueueScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientDescribeTaskQueueScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -69,7 +69,7 @@ func (c *metricClient) GetTaskQueueMetadata(
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.GetTaskQueueMetadataResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientGetTaskQueueMetadataScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientGetTaskQueueMetadataScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -83,7 +83,7 @@ func (c *metricClient) GetWorkerBuildIdOrdering(
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.GetWorkerBuildIdOrderingResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientGetWorkerBuildIdOrderingScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientGetWorkerBuildIdOrderingScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -97,7 +97,7 @@ func (c *metricClient) InvalidateTaskQueueMetadata(
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.InvalidateTaskQueueMetadataResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientInvalidateTaskQueueMetadataScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientInvalidateTaskQueueMetadataScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -111,7 +111,7 @@ func (c *metricClient) ListTaskQueuePartitions(
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.ListTaskQueuePartitionsResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientListTaskQueuePartitionsScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientListTaskQueuePartitionsScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -125,7 +125,7 @@ func (c *metricClient) RespondQueryTaskCompleted(
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.RespondQueryTaskCompletedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientRespondQueryTaskCompletedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientRespondQueryTaskCompletedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -139,7 +139,7 @@ func (c *metricClient) UpdateWorkerBuildIdOrdering(
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.UpdateWorkerBuildIdOrderingResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientUpdateWorkerBuildIdOrderingScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientUpdateWorkerBuildIdOrderingScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
