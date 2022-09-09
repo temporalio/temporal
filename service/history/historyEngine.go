@@ -72,6 +72,7 @@ import (
 	"go.temporal.io/server/service/history/api/respondactivitytaskcompleted"
 	"go.temporal.io/server/service/history/api/respondactivitytaskfailed"
 	"go.temporal.io/server/service/history/api/signalwithstartworkflow"
+	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
 	"go.temporal.io/server/service/history/configs"
@@ -1149,87 +1150,9 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 
 func (e *historyEngineImpl) SignalWorkflowExecution(
 	ctx context.Context,
-	signalRequest *historyservice.SignalWorkflowExecutionRequest,
-) error {
-
-	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(signalRequest.GetNamespaceId()))
-	if err != nil {
-		return err
-	}
-	namespaceID := namespaceEntry.ID()
-
-	request := signalRequest.SignalRequest
-	parentExecution := signalRequest.ExternalWorkflowExecution
-	childWorkflowOnly := signalRequest.GetChildWorkflowOnly()
-
-	return api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			namespaceID.String(),
-			request.WorkflowExecution.WorkflowId,
-			request.WorkflowExecution.RunId,
-		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
-			if request.GetRequestId() != "" && mutableState.IsSignalRequested(request.GetRequestId()) {
-				return &api.UpdateWorkflowAction{
-					Noop:               true,
-					CreateWorkflowTask: false,
-				}, nil
-			}
-
-			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-
-			executionInfo := mutableState.GetExecutionInfo()
-			createWorkflowTask := true
-			if mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
-				// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-				createWorkflowTask = false
-			}
-
-			if err := api.ValidateSignal(
-				ctx,
-				e.shard,
-				mutableState,
-				request.GetInput().Size(),
-				"SignalWorkflowExecution",
-			); err != nil {
-				return nil, err
-			}
-
-			if childWorkflowOnly {
-				parentWorkflowID := executionInfo.ParentWorkflowId
-				parentRunID := executionInfo.ParentRunId
-				if parentExecution.GetWorkflowId() != parentWorkflowID ||
-					parentExecution.GetRunId() != parentRunID {
-					return nil, consts.ErrWorkflowParent
-				}
-			}
-
-			if request.GetRequestId() != "" {
-				mutableState.AddSignalRequested(request.GetRequestId())
-			}
-			if _, err := mutableState.AddWorkflowExecutionSignaled(
-				request.GetSignalName(),
-				request.GetInput(),
-				request.GetIdentity(),
-				request.GetHeader()); err != nil {
-				return nil, err
-			}
-
-			return &api.UpdateWorkflowAction{
-				Noop:               false,
-				CreateWorkflowTask: createWorkflowTask,
-			}, nil
-		},
-		nil,
-		e.shard,
-		e.workflowConsistencyChecker,
-	)
+	req *historyservice.SignalWorkflowExecutionRequest,
+) (resp *historyservice.SignalWorkflowExecutionResponse, retError error) {
+	return signalworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 // SignalWithStartWorkflowExecution signals current workflow (if running) or creates & signals a new workflow

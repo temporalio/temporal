@@ -862,12 +862,12 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.SignalWorkflowExecution(ctx, request)
+	resp, err2 := engine.SignalWorkflowExecution(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.SignalWorkflowExecutionResponse{}, nil
+	return resp, nil
 }
 
 // SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
