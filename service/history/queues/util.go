@@ -25,19 +25,34 @@
 package queues
 
 import (
-	"go.temporal.io/server/common"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/service/history/tasks"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination queue_mock.go
-
-type (
-	Queue interface {
-		common.Daemon
-		Category() tasks.Category
-		NotifyNewTasks(clusterName string, tasks []tasks.Task)
-		FailoverNamespace(namespaceIDs map[string]struct{})
-		LockTaskProcessing()
-		UnlockTaskProcessing()
+func IsTaskAcked(
+	task tasks.Task,
+	persistenceQueueState *persistencespb.QueueState,
+) bool {
+	queueState := FromPersistenceQueueState(persistenceQueueState)
+	taskKey := task.GetKey()
+	if taskKey.CompareTo(queueState.exclusiveReaderHighWatermark) >= 0 {
+		return false
 	}
-)
+
+	for _, scopes := range queueState.readerScopes {
+		for _, scope := range scopes {
+			if taskKey.CompareTo(scope.Range.InclusiveMin) < 0 {
+				// scopes are ordered for each reader, so if task is less the current
+				// range's min, it can not be contained by this or later scopes of this
+				// reader.
+				break
+			}
+
+			if scope.Contains(task) {
+				return false
+			}
+		}
+	}
+
+	return true
+}

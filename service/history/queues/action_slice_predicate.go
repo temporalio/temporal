@@ -24,7 +24,9 @@
 
 package queues
 
-import "go.temporal.io/server/service/history/tasks"
+import (
+	"go.temporal.io/server/service/history/tasks"
+)
 
 const (
 	moveSliceDefaultReaderMinPendingTaskCount = 50

@@ -29,6 +29,7 @@ import (
 
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -38,9 +39,28 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
+)
+
+const (
+	QueueFactoryFxGroup = "queueFactory"
 )
 
 type (
+	QueueFactory interface {
+		common.Daemon
+
+		// TODO:
+		// 1. Remove the cache parameter after workflow cache become a host level component
+		// and it can be provided as a parameter when creating a QueueFactory instance.
+		// Currently, workflow cache is shard level, but we can't get it from shard or engine interface,
+		// as that will lead to a cycle dependency issue between shard and workflow package.
+		// 2. Move this interface to queues package after 1 is done so that there's no cycle dependency
+		// between workflow and queues package.
+		CreateQueue(shard shard.Context, engine shard.Engine, cache workflow.Cache) queues.Queue
+	}
+
 	QueueFactoryBaseParams struct {
 		fx.In
 
@@ -65,22 +85,22 @@ type (
 		fx.In
 
 		Lifecycle fx.Lifecycle
-		Factories []queues.Factory `group:"queueFactory"`
+		Factories []QueueFactory `group:"queueFactory"`
 	}
 )
 
 var QueueModule = fx.Options(
 	fx.Provide(
 		fx.Annotated{
-			Group:  queues.FactoryFxGroup,
+			Group:  QueueFactoryFxGroup,
 			Target: NewTransferQueueFactory,
 		},
 		fx.Annotated{
-			Group:  queues.FactoryFxGroup,
+			Group:  QueueFactoryFxGroup,
 			Target: NewTimerQueueFactory,
 		},
 		fx.Annotated{
-			Group:  queues.FactoryFxGroup,
+			Group:  QueueFactoryFxGroup,
 			Target: NewVisibilityQueueFactory,
 		},
 	),

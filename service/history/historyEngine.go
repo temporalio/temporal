@@ -137,7 +137,7 @@ func NewEngineWithShardContext(
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
 	eventSerializer serialization.Serializer,
-	queueProcessorFactories []queues.Factory,
+	queueProcessorFactories []QueueFactory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
@@ -1288,10 +1288,6 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 			RunId:      request.GetWorkflowExecution().GetRunId(),
 		},
 		weCtx.GetMutableState(),
-		// Use cluster ack level for transfer queue ack level because it gets updated more often.
-		e.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, e.shard.GetClusterMetadata().GetCurrentClusterName()).TaskID,
-		// Use global ack level visibility queue ack level because cluster level is not updated.
-		e.shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID,
 		request.GetWorkflowVersion(),
 	)
 }

@@ -61,7 +61,7 @@ type (
 
 func NewTimerQueueFactory(
 	params timerQueueFactoryParams,
-) queues.Factory {
+) QueueFactory {
 	var hostScheduler queues.Scheduler
 	if params.Config.TimerProcessorEnablePriorityTaskScheduler() {
 		hostScheduler = queues.NewNamespacePriorityScheduler(
