@@ -25,9 +25,12 @@
 package frontend
 
 import (
+	"context"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -55,9 +58,11 @@ func NewMetricClient(
 }
 
 func (c *metricClient) startMetricsRecording(
+	ctx context.Context,
 	metricScope int,
 ) (metrics.Scope, metrics.Stopwatch) {
-	scope := c.metricsClient.Scope(metricScope)
+	caller := headers.GetCallerInfo(ctx).CallerName
+	scope := c.metricsClient.Scope(metricScope, metrics.NamespaceTag(caller))
 	scope.IncCounter(metrics.ClientRequests)
 	stopwatch := scope.StartTimer(metrics.ClientLatency)
 	return scope, stopwatch
