@@ -28,7 +28,6 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -182,20 +181,16 @@ func ValidateStart(
 	config := shard.GetConfig()
 	logger := shard.GetLogger()
 	throttledLogger := shard.GetThrottledLogger()
-
 	namespaceName := namespaceEntry.Name().String()
-
-	blobSizeLimitWarn := config.BlobSizeLimitWarn(namespaceName)
-	blobSizeLimitError := config.BlobSizeLimitError(namespaceName)
 
 	if err := common.CheckEventBlobSizeLimit(
 		workflowInputSize,
-		blobSizeLimitWarn,
-		blobSizeLimitError,
+		config.BlobSizeLimitWarn(namespaceName),
+		config.BlobSizeLimitError(namespaceName),
 		namespaceName,
 		workflowID,
 		"",
-		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag("ValidateStart_Input")),
 		throttledLogger,
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
@@ -204,12 +199,12 @@ func ValidateStart(
 
 	if err := common.CheckEventBlobSizeLimit(
 		workflowMemoSize,
-		blobSizeLimitWarn,
-		blobSizeLimitError,
+		config.MemoSizeLimitWarn(namespaceName),
+		config.MemoSizeLimitError(namespaceName),
 		namespaceName,
 		workflowID,
 		"",
-		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag("ValidateStart_Memo")),
 		throttledLogger,
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
