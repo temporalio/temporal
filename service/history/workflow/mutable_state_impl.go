@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -2789,11 +2790,8 @@ func (e *MutableStateImpl) AddUpsertWorkflowSearchAttributesEvent(
 func (e *MutableStateImpl) ReplicateUpsertWorkflowSearchAttributesEvent(
 	event *historypb.HistoryEvent,
 ) {
-
 	upsertSearchAttr := event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes().GetIndexedFields()
-	currentSearchAttr := e.GetExecutionInfo().SearchAttributes
-
-	e.executionInfo.SearchAttributes = mergeMapOfPayload(currentSearchAttr, upsertSearchAttr)
+	e.executionInfo.SearchAttributes = payload.MergeMapOfPayload(e.executionInfo.SearchAttributes, upsertSearchAttr)
 }
 
 func (e *MutableStateImpl) AddWorkflowPropertiesModifiedEvent(
@@ -2822,26 +2820,8 @@ func (e *MutableStateImpl) ReplicateWorkflowPropertiesModifiedEvent(
 	attr := event.GetWorkflowPropertiesModifiedEventAttributes()
 	if attr.UpsertedMemo != nil {
 		upsertMemo := attr.GetUpsertedMemo().GetFields()
-		currentMemo := e.GetExecutionInfo().Memo
-		e.executionInfo.Memo = mergeMapOfPayload(currentMemo, upsertMemo)
+		e.executionInfo.Memo = payload.MergeMapOfPayload(e.executionInfo.Memo, upsertMemo)
 	}
-}
-
-func mergeMapOfPayload(
-	current map[string]*commonpb.Payload,
-	upsert map[string]*commonpb.Payload,
-) map[string]*commonpb.Payload {
-	if current == nil {
-		current = make(map[string]*commonpb.Payload)
-	}
-	for k, v := range upsert {
-		if v.Data == nil {
-			delete(current, k)
-		} else {
-			current[k] = v
-		}
-	}
-	return current
 }
 
 func (e *MutableStateImpl) AddExternalWorkflowExecutionSignaled(

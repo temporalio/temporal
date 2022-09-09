@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -794,8 +795,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	}
 
 	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfMemoSizeExceedsLimit(
+		attr.GetMemo(),
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
-		attr.GetMemo().Size(),
 		"ContinueAsNewWorkflowExecutionCommandAttributes. Memo exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -915,8 +916,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	}
 
 	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfMemoSizeExceedsLimit(
+		attr.GetMemo(),
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
-		attr.GetMemo().Size(),
 		"StartChildWorkflowExecutionCommandAttributes. Memo exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -1058,8 +1059,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		return err
 	}
 
+	// new search attributes size limit check
 	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfSearchAttributesSizeExceedsLimit(
-		attr.GetSearchAttributes(),
+		&commonpb.SearchAttributes{
+			IndexedFields: payload.MergeMapOfPayload(
+				executionInfo.SearchAttributes,
+				attr.GetSearchAttributes().GetIndexedFields(),
+			),
+		},
 		namespace,
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES.String()),
 	)
@@ -1124,9 +1131,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
 		return err
 	}
 
+	// new memo size limit check
 	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfMemoSizeExceedsLimit(
+		&commonpb.Memo{
+			Fields: payload.MergeMapOfPayload(executionInfo.Memo, attr.GetUpsertedMemo().GetFields()),
+		},
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES.String()),
-		attr.GetUpsertedMemo().Size(),
 		"ModifyWorkflowPropertiesCommandAttributes. Memo exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
