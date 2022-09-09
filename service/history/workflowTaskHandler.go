@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -1124,9 +1125,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
 		return err
 	}
 
+	newMemo := &commonpb.Memo{
+		Fields: payload.MergeMapOfPayload(executionInfo.Memo, attr.GetUpsertedMemo().GetFields()),
+	}
 	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfMemoSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES.String()),
-		attr.GetUpsertedMemo().Size(),
+		newMemo.Size(),
 		"ModifyWorkflowPropertiesCommandAttributes. Memo exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
