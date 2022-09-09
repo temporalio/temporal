@@ -51,6 +51,7 @@ func EncodeBytes(bytes []byte) *commonpb.Payload {
 	return p
 }
 
+// Encode using ProtoPayloadConverter instead of the default. value must be a proto message.
 func EncodeProto(value interface{}) (*commonpb.Payload, error) {
 	return protoDataConverter.ToPayload(value)
 }
