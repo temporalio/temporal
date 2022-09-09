@@ -142,22 +142,31 @@ func (f *QueueFactoryBase) Stop() {
 
 func NewQueueHostRateLimiter(
 	hostRPS dynamicconfig.IntPropertyFn,
-	fallBackRPS dynamicconfig.IntPropertyFn,
+	persistenceMaxRPS dynamicconfig.IntPropertyFn,
+	persistenceMaxRPSRatio float64,
 ) quotas.RateLimiter {
 	return quotas.NewDefaultOutgoingRateLimiter(
-		NewHostRateLimiterRateFn(hostRPS, fallBackRPS),
+		NewHostRateLimiterRateFn(
+			hostRPS,
+			persistenceMaxRPS,
+			persistenceMaxRPSRatio,
+		),
 	)
 }
 
 func NewHostRateLimiterRateFn(
 	hostRPS dynamicconfig.IntPropertyFn,
-	fallBackRPS dynamicconfig.IntPropertyFn,
+	persistenceMaxRPS dynamicconfig.IntPropertyFn,
+	persistenceMaxRPSRatio float64,
 ) quotas.RateFn {
 	return func() float64 {
 		if maxPollHostRps := hostRPS(); maxPollHostRps > 0 {
 			return float64(maxPollHostRps)
 		}
 
-		return float64(fallBackRPS())
+		// ensure queue loading won't consume all persistence tokens
+		// especially upon host restart when we need to perform a load
+		// for all shards
+		return float64(persistenceMaxRPS()) * persistenceMaxRPSRatio
 	}
 }
