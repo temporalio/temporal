@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	commonpb "go.temporal.io/api/common/v1"
 )
 
 type testStruct struct {
@@ -65,4 +66,17 @@ func TestToString(t *testing.T) {
 
 	result = ToString(nil)
 	assert.Equal("[]", result)
+}
+
+func TestEncodeProto(t *testing.T) {
+	assert := assert.New(t)
+
+	ex := commonpb.WorkflowExecution{WorkflowId: "wid", RunId: "asdf"}
+	p, err := EncodeProto(ex)
+	assert.NoError(err)
+	assert.Equal(1, len(p.Payloads))
+	assert.Less(len(p.Payloads[0].Data), 12)
+
+	_, err = EncodeProto("not a proto message")
+	assert.Error(err)
 }

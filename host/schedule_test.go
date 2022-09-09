@@ -253,7 +253,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 			Namespace:       s.namespace,
 			MaximumPageSize: 5,
 		})
-		if err != nil || len(listResp.Schedules) != 1 || len(listResp.Schedules[0].Info.RecentActions) < 2 {
+		if err != nil || len(listResp.Schedules) != 1 || len(listResp.Schedules[0].GetInfo().GetRecentActions()) < 2 {
 			return false
 		}
 		s.NoError(err)
@@ -276,6 +276,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 		Query:     "",
 	})
 	s.NoError(err)
+	// FIXME: correctly handle a third one
 	s.EqualValues(2, len(wfResp.Executions), "should see only two completed workflows, _not_ the schedule itself")
 	ex0 := wfResp.Executions[0]
 	s.True(strings.HasPrefix(ex0.Execution.WorkflowId, wid))

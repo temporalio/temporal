@@ -29,7 +29,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -39,7 +39,6 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/converter"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -65,6 +64,8 @@ const (
 
 	QueryNameDescribe          = "describe"
 	QueryNameListMatchingTimes = "listMatchingTimes"
+
+	MemoFieldInfo = "ScheduleInfo"
 
 	InitialConflictToken = 1
 
@@ -99,7 +100,6 @@ type (
 		RecentActionCount                 int           // The number of recent actual action results to include in Describe.
 		FutureActionCountForList          int           // The number of future action times to include in List (search attr).
 		RecentActionCountForList          int           // The number of recent actual action results to include in List (search attr).
-		MaxSearchAttrLen                  int           // Search attr length limit (should be <= server's limit).
 		IterationsBeforeContinueAsNew     int
 	}
 )
@@ -129,8 +129,7 @@ var (
 		RecentActionCount:                 10,
 		FutureActionCountForList:          5,
 		RecentActionCountForList:          5,
-		MaxSearchAttrLen:                  2000, // server default is 2048 but leave a little room
-		IterationsBeforeContinueAsNew:     501,  // weird number to compensate for historical bug, see pr #3020
+		IterationsBeforeContinueAsNew:     500,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -188,7 +187,7 @@ func (s *scheduler) run() error {
 		s.State.LastProcessedTime = timestamp.TimePtr(t2)
 		for s.processBuffer() {
 		}
-		s.updateSearchAttributes()
+		s.updateMemoAndSearchAttributes()
 		// sleep returns on any of:
 		// 1. requested time elapsed
 		// 2. we got a signal (update, request, refresh)
@@ -532,77 +531,56 @@ func (s *scheduler) incSeqNo() {
 	s.State.ConflictToken++
 }
 
-func (s *scheduler) getListInfo(shrink int) *schedpb.ScheduleListInfo {
-	specCopy := *s.Schedule.Spec
-	spec := &specCopy
-	// always clear some fields that are too large/not useful for the list view
-	spec.ExcludeCalendar = nil
-	spec.Jitter = nil
+func (s *scheduler) getListInfo() *schedpb.ScheduleListInfo {
+	// make shallow copy
+	spec := *s.Schedule.Spec
+	// clear fields that are too large/not useful for the list view
 	spec.TimezoneData = nil
 
-	recentActionCount := s.tweakables.RecentActionCountForList
-	futureActionCount := s.tweakables.FutureActionCountForList
-	notes := s.Schedule.State.Notes
-
-	// if we need to shrink it, clear/shrink some more
-	if shrink > 0 {
-		recentActionCount = 1
-		futureActionCount = 1
-		notes = ""
-	}
-	if shrink > 1 {
-		spec = nil
-	}
-
 	return &schedpb.ScheduleListInfo{
-		Spec:              spec,
+		Spec:              &spec,
 		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
-		Notes:             notes,
+		Notes:             s.Schedule.State.Notes,
 		Paused:            s.Schedule.State.Paused,
-		RecentActions:     util.SliceTail(s.Info.RecentActions, recentActionCount),
-		FutureActionTimes: s.getFutureActionTimes(futureActionCount),
+		RecentActions:     util.SliceTail(s.Info.RecentActions, s.tweakables.RecentActionCountForList),
+		FutureActionTimes: s.getFutureActionTimes(s.tweakables.FutureActionCountForList),
 	}
 }
 
-func (s *scheduler) updateSearchAttributes() {
-	dc := converter.GetDefaultDataConverter()
+func (s *scheduler) updateMemoAndSearchAttributes() {
+	newInfo := s.getListInfo()
 
-	var currentInfo, newInfo string
-	if payload := workflow.GetInfo(s.ctx).SearchAttributes.GetIndexedFields()[searchattribute.TemporalScheduleInfoJSON]; payload != nil {
-		if err := dc.FromPayload(payload, &currentInfo); err != nil {
-			s.logger.Error("error decoding current info search attr", "error", err)
-			return
+	workflowInfo := workflow.GetInfo(s.ctx)
+	currentInfoPayload := workflowInfo.Memo.GetFields()[MemoFieldInfo]
+
+	var currentInfoBytes []byte
+	var currentInfo schedpb.ScheduleListInfo
+
+	if payload.Decode(currentInfoPayload, &currentInfoBytes) != nil ||
+		currentInfo.Unmarshal(currentInfoBytes) != nil ||
+		!proto.Equal(&currentInfo, newInfo) {
+		// marshal manually to get proto encoding (default dataconverter will use json)
+		newInfoBytes, err := newInfo.Marshal()
+		if err == nil {
+			err = workflow.UpsertMemo(s.ctx, map[string]interface{}{
+				MemoFieldInfo: newInfoBytes,
+			})
+		}
+		if err != nil {
+			s.logger.Error("error updating memo", "error", err)
 		}
 	}
 
-	for shrink := 0; shrink <= 2; shrink++ {
-		var err error
-		m := &jsonpb.Marshaler{}
-		if newInfo, err = m.MarshalToString(s.getListInfo(shrink)); err != nil {
-			s.logger.Error("error encoding ScheduleListInfo", "error", err)
-			return
+	currentPausedPayload := workflowInfo.SearchAttributes.GetIndexedFields()[searchattribute.TemporalSchedulePaused]
+	var currentPaused bool
+	if payload.Decode(currentPausedPayload, &currentPaused) != nil ||
+		currentPaused != s.Schedule.State.Paused {
+		err := workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
+			searchattribute.TemporalSchedulePaused: s.Schedule.State.Paused,
+		})
+		if err != nil {
+			s.logger.Error("error updating search attributes", "error", err)
 		}
-		// encode to check size. note that the server uses len(Data) for per-attr size checks
-		if newInfoPayload, err := dc.ToPayload(newInfo); err != nil {
-			s.logger.Error("error encoding ScheduleListInfo into payload", "error", err)
-			return
-		} else if len(newInfoPayload.Data) <= s.tweakables.MaxSearchAttrLen {
-			break
-		}
-		newInfo = "{}" // fallback that can't possibly exceed the limit
-	}
-
-	// note that newInfo contains paused, so if paused changed, then newInfo will too
-	if newInfo == currentInfo {
-		return
-	}
-
-	err := workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
-		searchattribute.TemporalSchedulePaused:   s.Schedule.State.Paused,
-		searchattribute.TemporalScheduleInfoJSON: newInfo,
-	})
-	if err != nil {
-		s.logger.Error("error updating search attributes", "error", err)
 	}
 }
 

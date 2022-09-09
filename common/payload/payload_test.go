@@ -102,3 +102,15 @@ func TestMergeMapOfPayload(t *testing.T) {
 	resultMap = MergeMapOfPayload(currentMap, newMap)
 	assert.Equal(0, len(resultMap))
 }
+
+func TestEncodeProto(t *testing.T) {
+	assert := assert.New(t)
+
+	ex := commonpb.WorkflowExecution{WorkflowId: "wid", RunId: "asdf"}
+	p, err := EncodeProto(ex)
+	assert.NoError(err)
+	assert.Less(len(p.Data), 12)
+
+	_, err = EncodeProto("not a proto message")
+	assert.Error(err)
+}

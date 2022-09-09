@@ -34,6 +34,7 @@ import (
 
 var (
 	defaultDataConverter = converter.GetDefaultDataConverter()
+	protoDataConverter   = converter.NewCompositeDataConverter(converter.NewProtoPayloadConverter())
 )
 
 func EncodeString(str string) *commonpb.Payloads {
@@ -52,6 +53,10 @@ func EncodeBytes(bytes []byte) *commonpb.Payloads {
 	// Error can be safely ignored here becase []byte always can be raw encoded.
 	ps, _ := defaultDataConverter.ToPayloads(bytes)
 	return ps
+}
+
+func EncodeProto(value ...interface{}) (*commonpb.Payloads, error) {
+	return protoDataConverter.ToPayloads(value...)
 }
 
 func Encode(value ...interface{}) (*commonpb.Payloads, error) {
