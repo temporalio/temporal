@@ -158,7 +158,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{
-				{Interval: timestamp.DurationPtr(3 * time.Second)},
+				{Interval: timestamp.DurationPtr(5 * time.Second)},
 			},
 		},
 		Action: &schedulepb.ScheduleAction{
@@ -215,9 +215,9 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	_, err := s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
 
-	// sleep until we see two runs, plus a bit more
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 8*time.Second, 200*time.Millisecond)
-	time.Sleep(200 * time.Millisecond)
+	// sleep until we see two runs, plus a bit more to ensure that the second run has completed
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 12*time.Second, 500*time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	// describe
 
@@ -235,7 +235,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
 
-	s.DurationNear(describeResp.Info.CreateTime.Sub(createTime), 0, 1*time.Second)
+	s.DurationNear(describeResp.Info.CreateTime.Sub(createTime), 0, 3*time.Second)
 	s.EqualValues(2, describeResp.Info.ActionCount)
 	s.EqualValues(0, describeResp.Info.MissedCatchupWindow)
 	s.EqualValues(0, describeResp.Info.OverlapSkipped)
@@ -243,8 +243,8 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	s.EqualValues(2, len(describeResp.Info.RecentActions))
 	action0 := describeResp.Info.RecentActions[0]
 	s.WithinRange(*action0.ScheduleTime, createTime, time.Now())
-	s.True(action0.ScheduleTime.UnixNano()%int64(3*time.Second) == 0)
-	s.DurationNear(action0.ActualTime.Sub(*action0.ScheduleTime), 0, 1*time.Second)
+	s.True(action0.ScheduleTime.UnixNano()%int64(5*time.Second) == 0)
+	s.DurationNear(action0.ActualTime.Sub(*action0.ScheduleTime), 0, 3*time.Second)
 
 	// list
 
@@ -253,7 +253,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 			Namespace:       s.namespace,
 			MaximumPageSize: 5,
 		})
-		if err != nil || len(listResp.Schedules) != 1 || len(listResp.Schedules[0].Info.RecentActions) < 2 {
+		if err != nil || len(listResp.Schedules) != 1 || len(listResp.Schedules[0].GetInfo().GetRecentActions()) < 2 {
 			return false
 		}
 		s.NoError(err)
@@ -276,7 +276,10 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 		Query:     "",
 	})
 	s.NoError(err)
-	s.EqualValues(2, len(wfResp.Executions), "should see only two completed workflows, _not_ the schedule itself")
+	s.GreaterOrEqual(len(wfResp.Executions), 2) // could have had a 3rd run while waiting for visibility
+	for _, ex := range wfResp.Executions {
+		s.Equal(wt, ex.Type.Name, "should only see started workflows")
+	}
 	ex0 := wfResp.Executions[0]
 	s.True(strings.HasPrefix(ex0.Execution.WorkflowId, wid))
 	s.True(ex0.Execution.RunId == describeResp.Info.RecentActions[0].GetStartWorkflowResult().RunId ||
@@ -289,7 +292,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	var ex0StartTime time.Time
 	s.NoError(payload.Decode(ex0.SearchAttributes.IndexedFields[searchattribute.TemporalScheduledStartTime], &ex0StartTime))
 	s.WithinRange(ex0StartTime, createTime, time.Now())
-	s.True(ex0StartTime.UnixNano()%int64(3*time.Second) == 0)
+	s.True(ex0StartTime.UnixNano()%int64(5*time.Second) == 0)
 
 	// list workflows with namespace division (implementation details here, not public api)
 
@@ -319,8 +322,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	s.NoError(err)
 
 	// wait for one new run
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs2) == 1 }, 5*time.Second, 200*time.Millisecond)
-	time.Sleep(200 * time.Millisecond)
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs2) == 1 }, 7*time.Second, 500*time.Millisecond)
 
 	// describe again
 	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
@@ -334,10 +336,9 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csa].Data)
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
 
-	s.DurationNear(describeResp.Info.UpdateTime.Sub(updateTime), 0, 1*time.Second)
-	s.EqualValues(3, len(describeResp.Info.RecentActions))
-	action2 := describeResp.Info.RecentActions[2]
-	s.True(action2.ScheduleTime.UnixNano()%int64(3*time.Second) == 1000000000, action2.ScheduleTime.UnixNano())
+	s.DurationNear(describeResp.Info.UpdateTime.Sub(updateTime), 0, 3*time.Second)
+	lastAction := describeResp.Info.RecentActions[len(describeResp.Info.RecentActions)-1]
+	s.True(lastAction.ScheduleTime.UnixNano()%int64(5*time.Second) == 1000000000, lastAction.ScheduleTime.UnixNano())
 
 	// pause
 
@@ -352,7 +353,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	})
 	s.NoError(err)
 
-	time.Sleep(3*time.Second + 500*time.Millisecond)
+	time.Sleep(7 * time.Second)
 	s.EqualValues(1, atomic.LoadInt32(&runs2), "has not run again")
 
 	describeResp, err = s.engine.DescribeSchedule(NewContext(), &workflowservice.DescribeScheduleRequest{
@@ -364,6 +365,7 @@ func (s *scheduleIntegrationSuite) TestBasics() {
 	s.True(describeResp.Schedule.State.Paused)
 	s.Equal("because I said so", describeResp.Schedule.State.Notes)
 
+	// don't loop to wait for visibility, we already waited 7s from the patch
 	listResp, err := s.engine.ListSchedules(NewContext(), &workflowservice.ListSchedulesRequest{
 		Namespace:       s.namespace,
 		MaximumPageSize: 5,
@@ -470,8 +472,8 @@ func (s *scheduleIntegrationSuite) TestRefresh() {
 			Interval: []*schedulepb.IntervalSpec{
 				{
 					Interval: timestamp.DurationPtr(30 * time.Second),
-					// start within two seconds
-					Phase: timestamp.DurationPtr(time.Duration((time.Now().Unix()+2)%30) * time.Second),
+					// start within three seconds
+					Phase: timestamp.DurationPtr(time.Duration((time.Now().Unix()+3)%30) * time.Second),
 				},
 			},
 		},
@@ -481,7 +483,7 @@ func (s *scheduleIntegrationSuite) TestRefresh() {
 					WorkflowId:               wid,
 					WorkflowType:             &commonpb.WorkflowType{Name: wt},
 					TaskQueue:                &taskqueuepb.TaskQueue{Name: s.taskQueue},
-					WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+					WorkflowExecutionTimeout: timestamp.DurationPtr(3 * time.Second),
 				},
 			},
 		},
@@ -500,14 +502,14 @@ func (s *scheduleIntegrationSuite) TestRefresh() {
 			atomic.AddInt32(&runs, 1)
 			return 0
 		})
-		workflow.Sleep(ctx, 10*time.Second)
+		workflow.Sleep(ctx, 10*time.Second) // longer than execution timeout
 		return nil
 	}
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
 
 	_, err := s.engine.CreateSchedule(NewContext(), req)
 	s.NoError(err)
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 4*time.Second, 100*time.Millisecond)
+	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 6*time.Second, 200*time.Millisecond)
 
 	// workflow has started but is now sleeping. it will timeout in 2 seconds.
 
@@ -520,7 +522,7 @@ func (s *scheduleIntegrationSuite) TestRefresh() {
 
 	events1 := s.getHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(4 * time.Second)
 	// now it has timed out, but the scheduler hasn't noticed yet. we can prove it by checking
 	// its history.
 
