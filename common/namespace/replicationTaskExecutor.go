@@ -172,7 +172,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 			},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: task.ReplicationConfig.GetActiveClusterName(),
-				Clusters:          h.convertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters),
+				Clusters:          convertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters),
 			},
 			ConfigVersion:   task.GetConfigVersion(),
 			FailoverVersion: task.GetFailoverVersion(),
@@ -240,13 +240,6 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 		return err
 	}
 
-	// first we need to get the current notification version since we need to it for conditional update
-	metadata, err := h.metadataManager.GetMetadata(ctx)
-	if err != nil {
-		return err
-	}
-	notificationVersion := metadata.NotificationVersion
-
 	// plus, we need to check whether the config version is <= the config version set in the input
 	// plus, we need to check whether the failover version is <= the failover version set in the input
 	resp, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
@@ -260,6 +253,13 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 		}
 		return err
 	}
+
+	// we need to get the current notification version since we need to it for conditional update
+	metadata, err := h.metadataManager.GetMetadata(ctx)
+	if err != nil {
+		return err
+	}
+	notificationVersion := metadata.NotificationVersion
 
 	recordUpdated := false
 	request := &persistence.UpdateNamespaceRequest{
@@ -288,7 +288,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 		if task.Config.GetBadBinaries() != nil {
 			request.Namespace.Config.BadBinaries = task.Config.GetBadBinaries()
 		}
-		request.Namespace.ReplicationConfig.Clusters = h.convertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters)
+		request.Namespace.ReplicationConfig.Clusters = convertClusterReplicationConfigFromProto(task.ReplicationConfig.Clusters)
 		request.Namespace.ConfigVersion = task.GetConfigVersion()
 	}
 	if resp.Namespace.FailoverVersion < task.GetFailoverVersion() {
@@ -322,9 +322,10 @@ func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceReplicationTask(
 	return nil
 }
 
-func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFromProto(
-	input []*replicationpb.ClusterReplicationConfig) []string {
-	output := []string{}
+func convertClusterReplicationConfigFromProto(
+	input []*replicationpb.ClusterReplicationConfig,
+) []string {
+	var output []string
 	for _, cluster := range input {
 		clusterName := cluster.GetClusterName()
 		output = append(output, clusterName)
