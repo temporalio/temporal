@@ -75,6 +75,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -2963,7 +2964,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 			ConflictToken: scheduler.InitialConflictToken,
 		},
 	}
-	inputPayloads, err := payloads.EncodeProto(input)
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {
 		return nil, err
 	}
@@ -3269,7 +3270,7 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 	if len(request.ConflictToken) >= 8 {
 		input.ConflictToken = int64(binary.BigEndian.Uint64(request.ConflictToken))
 	}
-	inputPayloads, err := payloads.EncodeProto(input)
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {
 		return nil, err
 	}
@@ -3340,7 +3341,7 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, errNotesTooLong
 	}
 
-	inputPayloads, err := payloads.Encode(request.Patch)
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(request.Patch)
 	if err != nil {
 		return nil, err
 	}
@@ -3402,7 +3403,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		return nil, err
 	}
 
-	queryPayload, err := payloads.Encode(request)
+	queryPayload, err := sdk.PreferProtoDataConverter.ToPayloads(request)
 	if err != nil {
 		return nil, err
 	}
@@ -3722,7 +3723,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		CancelParams:    batcher.CancelParams{},
 		SignalParams:    signalParams,
 	}
-	inputPayload, err := payloads.Encode(input)
+	inputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {
 		return nil, err
 	}

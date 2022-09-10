@@ -26,12 +26,14 @@ package worker
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -149,7 +151,7 @@ func (s *perNsWorkerManagerSuite) TestEnabled() {
 
 	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfo("self", nil), nil)
 	cli1 := mocksdk.NewMockClient(s.controller)
-	s.cfactory.EXPECT().NewClient("ns1").Return(cli1)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
 	s.wfactory.EXPECT().New(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
 	s.cmp1.EXPECT().Register(wkr1, ns)
@@ -177,7 +179,7 @@ func (s *perNsWorkerManagerSuite) TestMultiplicity() {
 	s.serviceResolver.EXPECT().Lookup("ns3/1").Return(membership.NewHostInfo("other", nil), nil)
 	s.serviceResolver.EXPECT().Lookup("ns3/2").Return(membership.NewHostInfo("self", nil), nil)
 	cli1 := mocksdk.NewMockClient(s.controller)
-	s.cfactory.EXPECT().NewClient("ns3").Return(cli1)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns3")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
 	s.wfactory.EXPECT().New(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Do(func(_, _ any, options sdkworker.Options) {
 		s.Equal(4, options.MaxConcurrentWorkflowTaskPollers)
@@ -217,8 +219,8 @@ func (s *perNsWorkerManagerSuite) TestTwoNamespacesTwoComponents() {
 	wkr1 := mocksdk.NewMockWorker(s.controller)
 	wkr2 := mocksdk.NewMockWorker(s.controller)
 
-	s.cfactory.EXPECT().NewClient("ns1").Return(cli1)
-	s.cfactory.EXPECT().NewClient("ns2").Return(cli2)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns2")).Return(cli2)
 
 	s.wfactory.EXPECT().New(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
 	s.wfactory.EXPECT().New(cli2, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
@@ -252,7 +254,7 @@ func (s *perNsWorkerManagerSuite) TestDeleteNs() {
 
 	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfo("self", nil), nil)
 	cli1 := mocksdk.NewMockClient(s.controller)
-	s.cfactory.EXPECT().NewClient("ns1").Return(cli1)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
 	s.wfactory.EXPECT().New(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
 	s.cmp1.EXPECT().Register(wkr1, ns)
@@ -272,7 +274,7 @@ func (s *perNsWorkerManagerSuite) TestDeleteNs() {
 	nsRestored := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
 	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfo("self", nil), nil)
 	cli2 := mocksdk.NewMockClient(s.controller)
-	s.cfactory.EXPECT().NewClient("ns1").Return(cli2)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli2)
 	wkr2 := mocksdk.NewMockWorker(s.controller)
 	s.wfactory.EXPECT().New(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
 	s.cmp1.EXPECT().Register(wkr2, ns)
@@ -307,7 +309,7 @@ func (s *perNsWorkerManagerSuite) TestMembershipChanged() {
 	// now we own it
 	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfo("self", nil), nil)
 	cli1 := mocksdk.NewMockClient(s.controller)
-	s.cfactory.EXPECT().NewClient("ns1").Return(cli1)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
 	s.wfactory.EXPECT().New(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
 	s.cmp1.EXPECT().Register(wkr1, ns)
@@ -340,7 +342,7 @@ func (s *perNsWorkerManagerSuite) TestServiceResolverError() {
 	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfo("self", nil), nil)
 
 	cli1 := mocksdk.NewMockClient(s.controller)
-	s.cfactory.EXPECT().NewClient("ns1").Return(cli1)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
 	s.wfactory.EXPECT().New(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
 	s.cmp1.EXPECT().Register(wkr1, ns)
@@ -367,7 +369,7 @@ func (s *perNsWorkerManagerSuite) TestStartWorkerError() {
 	s.serviceResolver.EXPECT().Lookup("ns1/0").Return(membership.NewHostInfo("self", nil), nil).AnyTimes()
 
 	cli1 := mocksdk.NewMockClient(s.controller)
-	s.cfactory.EXPECT().NewClient("ns1").Return(cli1)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli1)
 	wkr1 := mocksdk.NewMockWorker(s.controller)
 	s.wfactory.EXPECT().New(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr1)
 	s.cmp1.EXPECT().Register(wkr1, ns)
@@ -378,7 +380,7 @@ func (s *perNsWorkerManagerSuite) TestStartWorkerError() {
 
 	// second try
 	cli2 := mocksdk.NewMockClient(s.controller)
-	s.cfactory.EXPECT().NewClient("ns1").Return(cli2)
+	s.cfactory.EXPECT().NewClient(matchOptions("ns1")).Return(cli2)
 	wkr2 := mocksdk.NewMockWorker(s.controller)
 	s.wfactory.EXPECT().New(cli1, primitives.PerNSWorkerTaskQueue, gomock.Any()).Return(wkr2)
 	s.cmp1.EXPECT().Register(wkr2, ns)
@@ -402,4 +404,15 @@ func testns(name string, state enumspb.NamespaceState) *namespace.Namespace {
 		nil,
 		"cluster",
 	)
+}
+
+type matchOptions string
+
+func (ns matchOptions) Matches(v any) bool {
+	options, ok := v.(sdkclient.Options)
+	return ok && options.Namespace == string(ns)
+}
+
+func (ns matchOptions) String() string {
+	return fmt.Sprintf("namespace=%q", string(ns))
 }

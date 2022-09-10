@@ -44,7 +44,9 @@ import (
 
 type (
 	ClientFactory interface {
-		NewClient(namespaceName string) sdkclient.Client
+		// options must include Namespace and should not include: HostPort, ConnectionOptions,
+		// MetricsHandler, or Logger (they will be overwritten)
+		NewClient(options sdkclient.Options) sdkclient.Client
 		GetSystemClient() sdkclient.Client
 	}
 
@@ -85,21 +87,19 @@ func NewClientFactory(
 	}
 }
 
-func (f *clientFactory) options(namespaceName string) sdkclient.Options {
-	return sdkclient.Options{
-		HostPort:       f.hostPort,
-		Namespace:      namespaceName,
-		MetricsHandler: f.metricsHandler,
-		Logger:         f.sdklogger,
-		ConnectionOptions: sdkclient.ConnectionOptions{
-			TLS: f.tlsConfig,
-		},
+func (f *clientFactory) options(options sdkclient.Options) sdkclient.Options {
+	options.HostPort = f.hostPort
+	options.MetricsHandler = f.metricsHandler
+	options.Logger = f.sdklogger
+	options.ConnectionOptions = sdkclient.ConnectionOptions{
+		TLS: f.tlsConfig,
 	}
+	return options
 }
 
-func (f *clientFactory) NewClient(namespaceName string) sdkclient.Client {
+func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
 	// this shouldn't fail if the first client was created successfully
-	client, err := sdkclient.NewClientFromExisting(f.GetSystemClient(), f.options(namespaceName))
+	client, err := sdkclient.NewClientFromExisting(f.GetSystemClient(), f.options(options))
 	if err != nil {
 		f.logger.Fatal("error creating sdk client", tag.Error(err))
 	}
@@ -109,7 +109,9 @@ func (f *clientFactory) NewClient(namespaceName string) sdkclient.Client {
 func (f *clientFactory) GetSystemClient() sdkclient.Client {
 	f.once.Do(func() {
 		err := backoff.ThrottleRetry(func() error {
-			sdkClient, err := sdkclient.Dial(f.options(primitives.SystemLocalNamespace))
+			sdkClient, err := sdkclient.Dial(f.options(sdkclient.Options{
+				Namespace: primitives.SystemLocalNamespace,
+			}))
 			if err != nil {
 				f.logger.Warn("error creating sdk client", tag.Error(err))
 				return err
