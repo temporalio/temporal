@@ -115,7 +115,7 @@ func (s *specSuite) TestCanonicalize() {
 		Hour:       []*schedpb.Range{{Start: 5}, {Start: 7}},
 		DayOfMonth: []*schedpb.Range{{Start: 1, End: 31}},
 		Month:      []*schedpb.Range{{Start: 1, End: 12}},
-		DayOfWeek:  []*schedpb.Range{{Start: 0, End: 7}},
+		DayOfWeek:  []*schedpb.Range{{Start: 0, End: 6}},
 		Year:       []*schedpb.Range{{Start: minCalendarYear, End: maxCalendarYear}},
 	}}
 	s.Equal(&schedpb.ScheduleSpec{

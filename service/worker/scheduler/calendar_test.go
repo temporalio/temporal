@@ -104,14 +104,23 @@ func (s *calendarSuite) TestCalendarMatch() {
 	s.True(cc.matches(time.Date(2022, time.March, 16, 12, 55, 55, 0, time.UTC)))
 
 	// different sunday representations
-	for _, dow := range []string{"0", "7", "sun", "*", "0-3", "5-7"} {
+	for _, dow := range []string{"0", "7", "sun", "*", "0-3", "5-7", "5-7/2", "6-7", "2-7/5", "0-7/7", "0/7"} {
 		cc = s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
-			Second:    "55",
-			Minute:    "55",
-			Hour:      "5",
 			DayOfWeek: dow,
-		}, pacific)
-		s.True(cc.matches(time.Date(2022, time.March, 6, 5, 55, 55, 0, pacific)))
+		}, time.UTC)
+		s.True(cc.matches(time.Date(2022, time.March, 6, 0, 0, 0, 0, time.UTC)))
+	}
+	for _, dow := range []string{"*", "5-7", "5-7/2", "6-7", "2/4", "2-7/4"} {
+		cc = s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
+			DayOfWeek: dow,
+		}, time.UTC)
+		s.True(cc.matches(time.Date(2022, time.March, 5, 0, 0, 0, 0, time.UTC)))
+	}
+	for _, dow := range []string{"0", "7", "sun", "5-7", "5-7/2", "6-7", "2-7/5", "0-7/7", "0/7"} {
+		cc = s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
+			DayOfWeek: dow,
+		}, time.UTC)
+		s.False(cc.matches(time.Date(2022, time.March, 7, 0, 0, 0, 0, time.UTC)))
 	}
 }
 
@@ -287,7 +296,7 @@ func (s *calendarSuite) TestMakeMatcher() {
 		s.NoError(err)
 		var m func(int) bool
 		if max < 63 {
-			m, err = makeBitMatcher(ranges, parseMode)
+			m, err = makeBitMatcher(ranges)
 		} else {
 			m, err = makeSliceMatcher(ranges)
 		}

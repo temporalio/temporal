@@ -102,17 +102,17 @@ func newCompiledCalendar(cal *schedpb.StructuredCalendarSpec, tz *time.Location)
 	var err error
 	if cc.year, err = makeSliceMatcher(cal.Year); err != nil {
 		return nil, err
-	} else if cc.month, err = makeBitMatcher(cal.Month, parseModeMonth); err != nil {
+	} else if cc.month, err = makeBitMatcher(cal.Month); err != nil {
 		return nil, err
-	} else if cc.dayOfMonth, err = makeBitMatcher(cal.DayOfMonth, parseModeInt); err != nil {
+	} else if cc.dayOfMonth, err = makeBitMatcher(cal.DayOfMonth); err != nil {
 		return nil, err
-	} else if cc.dayOfWeek, err = makeBitMatcher(cal.DayOfWeek, parseModeDow); err != nil {
+	} else if cc.dayOfWeek, err = makeBitMatcher(cal.DayOfWeek); err != nil {
 		return nil, err
-	} else if cc.hour, err = makeBitMatcher(cal.Hour, parseModeInt); err != nil {
+	} else if cc.hour, err = makeBitMatcher(cal.Hour); err != nil {
 		return nil, err
-	} else if cc.minute, err = makeBitMatcher(cal.Minute, parseModeInt); err != nil {
+	} else if cc.minute, err = makeBitMatcher(cal.Minute); err != nil {
 		return nil, err
-	} else if cc.second, err = makeBitMatcher(cal.Second, parseModeInt); err != nil {
+	} else if cc.second, err = makeBitMatcher(cal.Second); err != nil {
 		return nil, err
 	}
 	return cc, nil
@@ -351,13 +351,10 @@ func handlePredefinedCronStrings(c string) string {
 	}
 }
 
-func makeBitMatcher(ranges []*schedpb.Range, parseMode parseMode) (func(int) bool, error) {
+func makeBitMatcher(ranges []*schedpb.Range) (func(int) bool, error) {
 	var bits uint64
 	add := func(i int) { bits |= 1 << i }
 	iterateRanges(ranges, add)
-	if parseMode == parseModeDow {
-		bits |= bits >> 7 // allow 7 or 0 for sunday
-	}
 	return func(v int) bool { return (1<<v)&bits != 0 }, nil
 }
 
@@ -458,6 +455,13 @@ func makeRange(s, def string, min, max int, parseMode parseMode) ([]*schedpb.Ran
 					end = start
 				}
 			}
+		}
+		// special handling for sunday: turn "7" into "0", which may require an extra range
+		if parseMode == parseModeDow && end == 7 && (7-start)%step == 0 {
+			if step == 1 && start > 1 || step > 1 {
+				ranges = append(ranges, &schedpb.Range{Start: int32(0)})
+			}
+			end = 6
 		}
 		if start == end {
 			end = 0 // use default value so proto is smaller
