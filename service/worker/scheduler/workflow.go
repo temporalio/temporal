@@ -556,7 +556,8 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 	var currentInfoBytes []byte
 	var currentInfo schedpb.ScheduleListInfo
 
-	if payload.Decode(currentInfoPayload, &currentInfoBytes) != nil ||
+	if currentInfoPayload == nil ||
+		payload.Decode(currentInfoPayload, &currentInfoBytes) != nil ||
 		currentInfo.Unmarshal(currentInfoBytes) != nil ||
 		!proto.Equal(&currentInfo, newInfo) {
 		// marshal manually to get proto encoding (default dataconverter will use json)
@@ -573,7 +574,8 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 
 	currentPausedPayload := workflowInfo.SearchAttributes.GetIndexedFields()[searchattribute.TemporalSchedulePaused]
 	var currentPaused bool
-	if payload.Decode(currentPausedPayload, &currentPaused) != nil ||
+	if currentPausedPayload == nil ||
+		payload.Decode(currentPausedPayload, &currentPaused) != nil ||
 		currentPaused != s.Schedule.State.Paused {
 		err := workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
 			searchattribute.TemporalSchedulePaused: s.Schedule.State.Paused,
