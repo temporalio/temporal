@@ -376,17 +376,11 @@ func (p *ackMgrImpl) generateSyncActivityTask(
 				return nil, nil
 			}
 
+			// The activity may be in a scheduled state
 			var startedTime *time.Time
-			var heartbeatTime *time.Time
-			scheduledTime := activityInfo.ScheduledTime
-
-			// Todo: Comment why this exists? Why not set?
 			if activityInfo.StartedEventId != common.EmptyEventID {
 				startedTime = activityInfo.StartedTime
 			}
-
-			// LastHeartbeatUpdateTime must be valid when getting the sync activity replication task
-			heartbeatTime = activityInfo.LastHeartbeatUpdateTime
 
 			// Version history uses when replicate the sync activity task
 			versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
@@ -404,10 +398,10 @@ func (p *ackMgrImpl) generateSyncActivityTask(
 						RunId:              runID,
 						Version:            activityInfo.Version,
 						ScheduledEventId:   activityInfo.ScheduledEventId,
-						ScheduledTime:      scheduledTime,
+						ScheduledTime:      activityInfo.ScheduledTime,
 						StartedEventId:     activityInfo.StartedEventId,
 						StartedTime:        startedTime,
-						LastHeartbeatTime:  heartbeatTime,
+						LastHeartbeatTime:  activityInfo.LastHeartbeatUpdateTime,
 						Details:            activityInfo.LastHeartbeatDetails,
 						Attempt:            activityInfo.Attempt,
 						LastFailure:        activityInfo.RetryLastFailure,
