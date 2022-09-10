@@ -177,6 +177,7 @@ func (c *workflowSizeChecker) failWorkflowIfMemoSizeExceedsLimit(
 	commandTypeTag metrics.Tag,
 	message string,
 ) (bool, error) {
+	c.metricsScope.Tagged(commandTypeTag).RecordDistribution(metrics.MemoSize, memo.Size())
 
 	executionInfo := c.mutableState.GetExecutionInfo()
 	executionState := c.mutableState.GetExecutionState()

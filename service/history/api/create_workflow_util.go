@@ -190,13 +190,15 @@ func ValidateStart(
 		namespaceName,
 		workflowID,
 		"",
-		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag("ValidateStart_Input")),
+		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(operation)),
 		throttledLogger,
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
 		return err
 	}
 
+	scope := interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(operation))
+	scope.RecordDistribution(metrics.MemoSize, workflowMemoSize)
 	if err := common.CheckEventBlobSizeLimit(
 		workflowMemoSize,
 		config.MemoSizeLimitWarn(namespaceName),
@@ -204,7 +206,7 @@ func ValidateStart(
 		namespaceName,
 		workflowID,
 		"",
-		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag("ValidateStart_Memo")),
+		scope,
 		throttledLogger,
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
