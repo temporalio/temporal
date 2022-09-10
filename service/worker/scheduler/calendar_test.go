@@ -102,6 +102,17 @@ func (s *calendarSuite) TestCalendarMatch() {
 	s.False(cc.matches(time.Date(2022, time.March, 16, 13, 55, 55, 0, time.UTC)))
 	// correct offset
 	s.True(cc.matches(time.Date(2022, time.March, 16, 12, 55, 55, 0, time.UTC)))
+
+	// different sunday representations
+	for _, dow := range []string{"0", "7", "sun", "*", "0-3", "5-7"} {
+		cc = s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
+			Second:    "55",
+			Minute:    "55",
+			Hour:      "5",
+			DayOfWeek: dow,
+		}, pacific)
+		s.True(cc.matches(time.Date(2022, time.March, 6, 5, 55, 55, 0, pacific)))
+	}
 }
 
 func (s *calendarSuite) TestParseCronString() {

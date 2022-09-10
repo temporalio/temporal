@@ -45,56 +45,9 @@ type (
 )
 
 func NewCompiledSpec(spec *schedpb.ScheduleSpec) (*CompiledSpec, error) {
-	// make shallow copy so we can change some fields
-	specCopy := *spec
-	spec = &specCopy
-
-	// parse CalendarSpecs to StructuredCalendarSpecs
-	for _, cal := range spec.Calendar {
-		structured, err := parseCalendarToStrucured(cal)
-		if err != nil {
-			return nil, err
-		}
-		spec.StructuredCalendar = append(spec.StructuredCalendar, structured)
-	}
-	spec.Calendar = nil
-
-	// parse ExcludeCalendars
-	for _, cal := range spec.ExcludeCalendar {
-		structured, err := parseCalendarToStrucured(cal)
-		if err != nil {
-			return nil, err
-		}
-		spec.ExcludeStructuredCalendar = append(spec.ExcludeStructuredCalendar, structured)
-	}
-	spec.ExcludeCalendar = nil
-
-	// parse CronStrings
-	for _, cs := range spec.CronString {
-		structured, interval, tz, err := parseCronString(cs)
-		if err != nil {
-			return nil, err
-		}
-		if tz != "" {
-			if spec.TimezoneName != tz || spec.TimezoneData != nil {
-				return nil, errConflictingTimezoneNames
-			}
-			spec.TimezoneName = tz
-		}
-		if structured != nil {
-			spec.StructuredCalendar = append(spec.StructuredCalendar, structured)
-		}
-		if interval != nil {
-			spec.Interval = append(spec.Interval, interval)
-		}
-	}
-	spec.CronString = nil
-
-	// validate intervals
-	for _, interval := range spec.Interval {
-		if err := validateInterval(interval); err != nil {
-			return nil, err
-		}
+	spec, err := canonicalizeSpec(spec)
+	if err != nil {
+		return nil, err
 	}
 
 	// load timezone
@@ -127,6 +80,73 @@ func NewCompiledSpec(spec *schedpb.ScheduleSpec) (*CompiledSpec, error) {
 	}
 
 	return cspec, nil
+}
+
+func canonicalizeSpec(spec *schedpb.ScheduleSpec) (*schedpb.ScheduleSpec, error) {
+	// make shallow copy so we can change some fields
+	specCopy := *spec
+	spec = &specCopy
+
+	// parse CalendarSpecs to StructuredCalendarSpecs
+	for _, cal := range spec.Calendar {
+		structured, err := parseCalendarToStrucured(cal)
+		if err != nil {
+			return nil, err
+		}
+		spec.StructuredCalendar = append(spec.StructuredCalendar, structured)
+	}
+	spec.Calendar = nil
+
+	// parse ExcludeCalendars
+	for _, cal := range spec.ExcludeCalendar {
+		structured, err := parseCalendarToStrucured(cal)
+		if err != nil {
+			return nil, err
+		}
+		spec.ExcludeStructuredCalendar = append(spec.ExcludeStructuredCalendar, structured)
+	}
+	spec.ExcludeCalendar = nil
+
+	// parse CronStrings
+	const unset = "__unset__"
+	cronTZ := unset
+	for _, cs := range spec.CronString {
+		structured, interval, tz, err := parseCronString(cs)
+		if err != nil {
+			return nil, err
+		}
+		if cronTZ != unset && tz != cronTZ {
+			// all cron strings must agree on timezone (whether present or not)
+			return nil, errConflictingTimezoneNames
+		}
+		cronTZ = tz
+		if structured != nil {
+			spec.StructuredCalendar = append(spec.StructuredCalendar, structured)
+		}
+		if interval != nil {
+			spec.Interval = append(spec.Interval, interval)
+		}
+	}
+	spec.CronString = nil
+
+	// if we have cron string(s), copy the timezone to spec, checking for conflict first.
+	// if cron string timezone is empty string, don't copy, let the one in spec be used.
+	if cronTZ != unset && cronTZ != "" {
+		if spec.TimezoneName != "" && spec.TimezoneName != cronTZ {
+			return nil, errConflictingTimezoneNames
+		} else if spec.TimezoneName == "" {
+			spec.TimezoneName = cronTZ
+		}
+	}
+
+	// validate intervals
+	for _, interval := range spec.Interval {
+		if err := validateInterval(interval); err != nil {
+			return nil, err
+		}
+	}
+
+	return spec, nil
 }
 
 func validateInterval(i *schedpb.IntervalSpec) error {
