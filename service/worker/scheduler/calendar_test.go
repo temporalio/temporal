@@ -105,7 +105,7 @@ func (s *calendarSuite) TestCalendarMatch() {
 }
 
 func (s *calendarSuite) TestParseCronString() {
-	scs, iv, tz, err := parseCronString(&schedpb.CronString{CronSpec: "5,9 */2 * * *"})
+	scs, iv, tz, err := parseCronString("5,9 */2 * * *")
 	s.NoError(err)
 	s.Equal(&schedpb.StructuredCalendarSpec{
 		Second:     []*schedpb.Range{{Start: 0}},
@@ -119,7 +119,7 @@ func (s *calendarSuite) TestParseCronString() {
 	s.Nil(iv)
 	s.Equal("", tz)
 
-	scs, iv, tz, err = parseCronString(&schedpb.CronString{CronSpec: "CRON_TZ=US/Pacific 55 55,57 5 2/2 * wed-thurs *", Comment: "explanation"})
+	scs, iv, tz, err = parseCronString("CRON_TZ=US/Pacific 55 55,57 5 2/2 * wed-thurs *  # explanation")
 	s.NoError(err)
 	s.Equal(&schedpb.StructuredCalendarSpec{
 		Second:     []*schedpb.Range{{Start: 55}},
@@ -134,7 +134,7 @@ func (s *calendarSuite) TestParseCronString() {
 	s.Nil(iv)
 	s.Equal("US/Pacific", tz)
 
-	scs, iv, tz, err = parseCronString(&schedpb.CronString{CronSpec: "@monthly"})
+	scs, iv, tz, err = parseCronString("@monthly")
 	s.NoError(err)
 	s.Equal(&schedpb.StructuredCalendarSpec{
 		Second:     []*schedpb.Range{{Start: 0}},
@@ -148,7 +148,7 @@ func (s *calendarSuite) TestParseCronString() {
 	s.Nil(iv)
 	s.Equal("", tz)
 
-	scs, iv, tz, err = parseCronString(&schedpb.CronString{CronSpec: "@every 5d"})
+	scs, iv, tz, err = parseCronString("@every 5d")
 	s.NoError(err)
 	s.Nil(scs)
 	s.Equal(&schedpb.IntervalSpec{
@@ -156,7 +156,7 @@ func (s *calendarSuite) TestParseCronString() {
 	}, iv)
 	s.Equal("", tz)
 
-	scs, iv, tz, err = parseCronString(&schedpb.CronString{CronSpec: "@every 5h/45m"})
+	scs, iv, tz, err = parseCronString("@every 5h/45m")
 	s.NoError(err)
 	s.Nil(scs)
 	s.Equal(&schedpb.IntervalSpec{
@@ -209,7 +209,7 @@ func (s *calendarSuite) TestGoDSTBehavior() {
 
 func (s *calendarSuite) checkSequence(cs string, start time.Time, seq ...time.Time) {
 	s.T().Helper()
-	scs, _, tzName, err := parseCronString(&schedpb.CronString{CronSpec: cs})
+	scs, _, tzName, err := parseCronString(cs)
 	s.NoError(err)
 	tz, err := time.LoadLocation(tzName)
 	s.NoError(err)

@@ -168,8 +168,8 @@ func (s *specSuite) TestSpecCalendarAndCron() {
 			Calendar: []*schedpb.CalendarSpec{
 				{Hour: "5,7", Minute: "23"},
 			},
-			CronString: []*schedpb.CronString{
-				{CronSpec: "55 11,13 * * *"},
+			CronString: []string{
+				"55 11,13 * * *",
 			},
 		},
 		time.Date(2022, 3, 23, 3, 0, 0, 0, time.UTC),

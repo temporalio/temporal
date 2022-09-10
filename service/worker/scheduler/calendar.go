@@ -260,9 +260,11 @@ func parseCalendarToStrucured(cal *schedpb.CalendarSpec) (*schedpb.StructuredCal
 	return ss, nil
 }
 
-func parseCronString(cronString *schedpb.CronString) (*schedpb.StructuredCalendarSpec, *schedpb.IntervalSpec, string, error) {
+func parseCronString(c string) (*schedpb.StructuredCalendarSpec, *schedpb.IntervalSpec, string, error) {
 	var tzName string
-	c := cronString.GetCronSpec()
+	var comment string
+
+	c = strings.TrimSpace(c)
 
 	// split out timezone
 	if strings.HasPrefix(c, "TZ=") || strings.HasPrefix(c, "CRON_TZ=") {
@@ -274,6 +276,11 @@ func parseCronString(cronString *schedpb.CronString) (*schedpb.StructuredCalenda
 		_, tzName, _ = strings.Cut(tz, "=")
 	}
 
+	// split out comment
+	c, comment, _ = strings.Cut(c, "#")
+	c = strings.TrimSpace(c)
+	comment = strings.TrimSpace(comment)
+
 	// handle @every intervals
 	if strings.HasPrefix(c, "@every") {
 		iv, err := parseCronStringInterval(c)
@@ -284,7 +291,7 @@ func parseCronString(cronString *schedpb.CronString) (*schedpb.StructuredCalenda
 	c = handlePredefinedCronStrings(c)
 
 	// split fields
-	cal := schedpb.CalendarSpec{Comment: cronString.GetComment()}
+	cal := schedpb.CalendarSpec{Comment: comment}
 	fields := strings.Fields(c)
 	switch len(fields) {
 	case 5:
