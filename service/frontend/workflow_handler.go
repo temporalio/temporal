@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -3865,60 +3866,46 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %s is not supported", operationTypeString))
 	}
 
-	var totalOpsCount int64
-	var completedOpsCount int64
-	var failureOpsCount int64
-	if len(resp.GetPendingActivities()) > 0 {
-		hbdPayload := resp.GetPendingActivities()[0].HeartbeatDetails
-		var hbd batcher.HeartBeatDetails
-		err = payloads.Decode(hbdPayload, &hbd)
-		if err != nil {
-			return nil, err
-		}
-		totalOpsCount = hbd.TotalEstimate
-		completedOpsCount = int64(hbd.SuccessCount)
-		failureOpsCount = int64(hbd.ErrorCount)
+	batchOperationResp := &workflowservice.DescribeBatchOperationResponse{
+		OperationType: operationType,
+		JobId:         executionInfo.Execution.GetWorkflowId(),
+		State:         operationState,
+		StartTime:     executionInfo.StartTime,
+		CloseTime:     executionInfo.CloseTime,
+		Identity:      identity,
+		Reason:        reason,
 	}
-
 	if executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
-		lastHistoryResp, err := wh.GetWorkflowExecutionHistoryReverse(ctx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
-			Namespace:       request.GetNamespace(),
-			Execution:       execution,
-			MaximumPageSize: 1,
-		})
+		stats, err := wh.getCompletedBatchOperationStats(memo)
 		if err != nil {
 			return nil, err
 		}
-		historyEvents := lastHistoryResp.GetHistory().GetEvents()
-		if len(historyEvents) == 0 {
-			return nil, serviceerror.NewInternal("Cannot get batch operation completed event.")
+		batchOperationResp.TotalOperationCount = int64(stats.NumSuccess + stats.NumFailure)
+		batchOperationResp.FailureOperationCount = int64(stats.NumFailure)
+		batchOperationResp.CompleteOperationCount = int64(stats.NumSuccess)
+	} else {
+		if len(resp.GetPendingActivities()) > 0 {
+			hbdPayload := resp.GetPendingActivities()[0].HeartbeatDetails
+			var hbd batcher.HeartBeatDetails
+			err = payloads.Decode(hbdPayload, &hbd)
+			if err != nil {
+				return nil, err
+			}
+			batchOperationResp.TotalOperationCount = hbd.TotalEstimate
+			batchOperationResp.CompleteOperationCount = int64(hbd.SuccessCount)
+			batchOperationResp.FailureOperationCount = int64(hbd.ErrorCount)
 		}
-		if historyEvents[0].EventType != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED {
-			return nil, serviceerror.NewInternal("Cannot get completed event from a closed batch operation.")
-		}
-		opsResult := historyEvents[0].GetWorkflowExecutionCompletedEventAttributes().GetResult()
-		var result batcher.HeartBeatDetails
-		err = payloads.Decode(opsResult, &result)
-		if err != nil {
-			return nil, err
-		}
-
-		totalOpsCount = result.TotalEstimate
-		completedOpsCount = int64(result.SuccessCount)
-		failureOpsCount = int64(result.ErrorCount)
 	}
-	return &workflowservice.DescribeBatchOperationResponse{
-		OperationType:          operationType,
-		JobId:                  executionInfo.Execution.GetWorkflowId(),
-		State:                  operationState,
-		StartTime:              executionInfo.StartTime,
-		CloseTime:              executionInfo.CloseTime,
-		TotalOperationCount:    totalOpsCount,
-		CompleteOperationCount: completedOpsCount,
-		FailureOperationCount:  failureOpsCount,
-		Identity:               identity,
-		Reason:                 reason,
-	}, nil
+	return batchOperationResp, nil
+}
+
+func (wh *WorkflowHandler) getCompletedBatchOperationStats(memo map[string]*commonpb.Payload) (stats batcher.BatchOperationStats, err error) {
+	statsPayload, ok := memo[batcher.BatchOperationStatsMemo]
+	if !ok {
+		return stats, errors.New("batch operation stats are not present in the memo")
+	}
+	err = payload.Decode(statsPayload, &stats)
+	return stats, err
 }
 
 func (wh *WorkflowHandler) ListBatchOperations(

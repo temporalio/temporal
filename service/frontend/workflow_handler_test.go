@@ -2053,76 +2053,90 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 	wh := s.getWorkflowHandler(config)
 	now := timestamp.TimePtr(time.Now())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
-	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(
-			_ context.Context,
-			request *historyservice.DescribeWorkflowExecutionRequest,
-			_ ...grpc.CallOption,
-		) (*historyservice.DescribeWorkflowExecutionResponse, error) {
-
-			return &historyservice.DescribeWorkflowExecutionResponse{
-				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-					Execution: &commonpb.WorkflowExecution{
-						WorkflowId: jobID,
-					},
-					StartTime:     now,
-					CloseTime:     now,
-					Status:        enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-					ExecutionTime: now,
-					Memo: &commonpb.Memo{
-						Fields: map[string]*commonpb.Payload{
-							batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
+	s.Run("StatsNotInMemo", func() {
+		s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(
+				_ context.Context,
+				request *historyservice.DescribeWorkflowExecutionRequest,
+				_ ...grpc.CallOption,
+			) (*historyservice.DescribeWorkflowExecutionResponse, error) {
+				return &historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: jobID,
 						},
+						StartTime:     now,
+						CloseTime:     now,
+						Status:        enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+						ExecutionTime: now,
+						Memo: &commonpb.Memo{
+							Fields: map[string]*commonpb.Payload{
+								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
+							},
+						},
+						SearchAttributes: nil,
 					},
-					SearchAttributes: nil,
-				},
-			}, nil
-		},
-	)
-	s.mockHistoryClient.EXPECT().PollMutableState(gomock.Any(), gomock.Any(), gomock.Any()).Return(
-		&historyservice.PollMutableStateResponse{
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: jobID,
-				RunId:      uuid.New(),
+				}, nil
 			},
-			CurrentBranchToken:  []byte{1},
-			LastFirstEventTxnId: 0,
-		}, nil)
-	encodedResult, err := payloads.Encode(batcher.HeartBeatDetails{
-		TotalEstimate: 3,
-		SuccessCount:  2,
-		ErrorCount:    1,
+		)
+		request := &workflowservice.DescribeBatchOperationRequest{
+			Namespace: testNamespace.String(),
+			JobId:     jobID,
+		}
+
+		_, err := wh.DescribeBatchOperation(context.Background(), request)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "batch operation stats are not present in the memo")
 	})
-	s.NoError(err)
-	s.mockExecutionManager.EXPECT().ReadHistoryBranchReverse(gomock.Any(), gomock.Any()).Return(
-		&persistence.ReadHistoryBranchReverseResponse{
-			HistoryEvents: []*historypb.HistoryEvent{
-				{
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-					Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
-						WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{
-							Result: encodedResult,
-						},
-					},
-				},
-			},
-		}, nil)
-	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.NameTypeMap{}, nil)
-	request := &workflowservice.DescribeBatchOperationRequest{
-		Namespace: testNamespace.String(),
-		JobId:     jobID,
-	}
+	s.Run("StatsInMemo", func() {
+		s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(
+				_ context.Context,
+				request *historyservice.DescribeWorkflowExecutionRequest,
+				_ ...grpc.CallOption,
+			) (*historyservice.DescribeWorkflowExecutionResponse, error) {
 
-	resp, err := wh.DescribeBatchOperation(context.Background(), request)
-	s.NoError(err)
-	s.Equal(jobID, resp.GetJobId())
-	s.Equal(now, resp.GetStartTime())
-	s.Equal(now, resp.GetCloseTime())
-	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
-	s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, resp.GetState())
-	s.Equal(int64(3), resp.GetTotalOperationCount())
-	s.Equal(int64(2), resp.GetCompleteOperationCount())
-	s.Equal(int64(1), resp.GetFailureOperationCount())
+				statsPayload, err := payload.Encode(batcher.BatchOperationStats{
+					NumSuccess: 2,
+					NumFailure: 1,
+				})
+				s.Require().NoError(err)
+				return &historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: jobID,
+						},
+						StartTime:     now,
+						CloseTime:     now,
+						Status:        enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+						ExecutionTime: now,
+						Memo: &commonpb.Memo{
+							Fields: map[string]*commonpb.Payload{
+								batcher.BatchOperationTypeMemo:  payload.EncodeString(batcher.BatchTypeTerminate),
+								batcher.BatchOperationStatsMemo: statsPayload,
+							},
+						},
+						SearchAttributes: nil,
+					},
+				}, nil
+			},
+		)
+		request := &workflowservice.DescribeBatchOperationRequest{
+			Namespace: testNamespace.String(),
+			JobId:     jobID,
+		}
+
+		resp, err := wh.DescribeBatchOperation(context.Background(), request)
+		s.Require().NoError(err)
+		s.Equal(jobID, resp.GetJobId())
+		s.Equal(now, resp.GetStartTime())
+		s.Equal(now, resp.GetCloseTime())
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
+		s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, resp.GetState())
+		s.Equal(int64(3), resp.GetTotalOperationCount())
+		s.Equal(int64(2), resp.GetCompleteOperationCount())
+		s.Equal(int64(1), resp.GetFailureOperationCount())
+	})
 }
 
 func (s *workflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
@@ -2139,7 +2153,12 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 			request *historyservice.DescribeWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.DescribeWorkflowExecutionResponse, error) {
-
+			hbdPayload, err := payloads.Encode(batcher.HeartBeatDetails{
+				TotalEstimate: 5,
+				SuccessCount:  3,
+				ErrorCount:    1,
+			})
+			s.Require().NoError(err)
 			return &historyservice.DescribeWorkflowExecutionResponse{
 				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 					Execution: &commonpb.WorkflowExecution{
@@ -2156,6 +2175,11 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 					},
 					SearchAttributes: nil,
 				},
+				PendingActivities: []*workflowpb.PendingActivityInfo{
+					{
+						HeartbeatDetails: hbdPayload,
+					},
+				},
 			}, nil
 		},
 	)
@@ -2171,6 +2195,9 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 	s.Equal(now, resp.GetCloseTime())
 	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
 	s.Equal(enumspb.BATCH_OPERATION_STATE_RUNNING, resp.GetState())
+	s.Assert().Equal(int64(5), resp.TotalOperationCount)
+	s.Assert().Equal(int64(3), resp.CompleteOperationCount)
+	s.Assert().Equal(int64(1), resp.FailureOperationCount)
 }
 
 func (s *workflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
