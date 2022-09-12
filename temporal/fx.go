@@ -874,7 +874,10 @@ var ServiceTracingModule = fx.Options(
 	),
 	fx.Provide(func(lc fx.Lifecycle, opts []otelsdktrace.TracerProviderOption) trace.TracerProvider {
 		tp := otelsdktrace.NewTracerProvider(opts...)
-		lc.Append(fx.Hook{OnStop: tp.Shutdown})
+		lc.Append(fx.Hook{OnStop: func(ctx context.Context) error {
+			tp.Shutdown(ctx)
+			return nil // do not pass this up to fx
+		}})
 		return tp
 	}),
 	// Haven't had use for baggage propagation yet

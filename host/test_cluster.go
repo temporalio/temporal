@@ -307,13 +307,14 @@ func (tc *TestCluster) SetFaultInjectionRate(rate float64) {
 }
 
 // TearDownCluster tears down the test cluster
-func (tc *TestCluster) TearDownCluster() {
+func (tc *TestCluster) TearDownCluster() error {
 	tc.SetFaultInjectionRate(0)
-	tc.host.Stop()
+	err := tc.host.Stop()
 	tc.host = nil
 	tc.testBase.TearDownWorkflowStore()
 	os.RemoveAll(tc.archiverBase.historyStoreDirectory)
 	os.RemoveAll(tc.archiverBase.visibilityStoreDirectory)
+	return err
 }
 
 // GetFrontendClient returns a frontend client from the test cluster
