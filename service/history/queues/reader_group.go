@@ -29,8 +29,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"go.temporal.io/server/common"
 	"golang.org/x/exp/maps"
+
+	"go.temporal.io/server/common"
 )
 
 type (

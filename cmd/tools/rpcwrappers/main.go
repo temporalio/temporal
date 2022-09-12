@@ -365,7 +365,7 @@ func (c *metricClient) {{.Method}}(
 	opts ...grpc.CallOption,
 ) (_ {{.ResponseType}}, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.{{.MetricPrefix}}{{.Method}}Scope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.{{.MetricPrefix}}{{.Method}}Scope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()

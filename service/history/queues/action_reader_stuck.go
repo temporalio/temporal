@@ -88,6 +88,13 @@ func (a *actionReaderStuck) Run(readerGroup *ReaderGroup) {
 			s = left
 		}
 
+		if len(remaining) == 0 {
+			// s can't split by both min and max of stuck range,
+			// and stuck range does not contain the range of s,
+			// the only possible case is s is not overlapping with stuck range at all.
+			return nil, false
+		}
+
 		splitSlices = append(splitSlices, s)
 		return remaining, true
 	})

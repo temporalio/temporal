@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 const (
@@ -317,7 +318,11 @@ func (p *executionRateLimitedPersistenceClient) GetHistoryTask(
 	ctx context.Context,
 	request *GetHistoryTaskRequest,
 ) (*GetHistoryTaskResponse, error) {
-	if ok := allow(ctx, "GetHistoryTask", p.rateLimiter); !ok {
+	if ok := allow(
+		ctx,
+		ConstructHistoryTaskAPI("GetHistoryTask", request.TaskCategory),
+		p.rateLimiter,
+	); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -329,7 +334,11 @@ func (p *executionRateLimitedPersistenceClient) GetHistoryTasks(
 	ctx context.Context,
 	request *GetHistoryTasksRequest,
 ) (*GetHistoryTasksResponse, error) {
-	if ok := allow(ctx, "GetHistoryTasks", p.rateLimiter); !ok {
+	if ok := allow(
+		ctx,
+		ConstructHistoryTaskAPI("GetHistoryTasks", request.TaskCategory),
+		p.rateLimiter,
+	); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
@@ -341,7 +350,11 @@ func (p *executionRateLimitedPersistenceClient) CompleteHistoryTask(
 	ctx context.Context,
 	request *CompleteHistoryTaskRequest,
 ) error {
-	if ok := allow(ctx, "CompleteHistoryTask", p.rateLimiter); !ok {
+	if ok := allow(
+		ctx,
+		ConstructHistoryTaskAPI("CompleteHistoryTask", request.TaskCategory),
+		p.rateLimiter,
+	); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -353,7 +366,11 @@ func (p *executionRateLimitedPersistenceClient) RangeCompleteHistoryTasks(
 	ctx context.Context,
 	request *RangeCompleteHistoryTasksRequest,
 ) error {
-	if ok := allow(ctx, "RangeCompleteHistoryTasks", p.rateLimiter); !ok {
+	if ok := allow(
+		ctx,
+		ConstructHistoryTaskAPI("RangeCompleteHistoryTasks", request.TaskCategory),
+		p.rateLimiter,
+	); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
@@ -1028,4 +1045,15 @@ func allow(
 		callerInfo.CallerType,
 		callerInfo.CallOrigin,
 	))
+}
+
+// TODO: change the value returned so it can also be used by
+// persistence metrics client. For now, it's only used by rate
+// limit client, and we don't really care about the actual value
+// returned, as long as they are different from each task category.
+func ConstructHistoryTaskAPI(
+	baseAPI string,
+	taskCategory tasks.Category,
+) string {
+	return baseAPI + taskCategory.Name()
 }

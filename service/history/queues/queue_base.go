@@ -96,12 +96,10 @@ type (
 		exclusiveDeletionHighWatermark tasks.Key
 		nonReadableScope               Scope
 		readerGroup                    *ReaderGroup
-		lastPollTime                   time.Time
 		nextForceNewSliceTime          time.Time
 
 		checkpointRetrier backoff.Retrier
 		checkpointTimer   *time.Timer
-		pollTimer         *time.Timer
 
 		alertCh <-chan *Alert
 	}
@@ -192,7 +190,7 @@ func newQueueBase(
 		return NewReader(
 			readerID,
 			slices,
-			&options.ReaderOptions,
+			&readerOptions,
 			scheduler,
 			rescheduler,
 			timeSource,
@@ -263,10 +261,6 @@ func (p *queueBase) Start() {
 	p.rescheduler.Start()
 	p.readerGroup.Start()
 
-	p.pollTimer = time.NewTimer(backoff.JitDuration(
-		p.options.MaxPollInterval(),
-		p.options.MaxPollIntervalJitterCoefficient(),
-	))
 	p.checkpointTimer = time.NewTimer(backoff.JitDuration(
 		p.options.CheckpointInterval(),
 		p.options.CheckpointIntervalJitterCoefficient(),
@@ -277,7 +271,6 @@ func (p *queueBase) Stop() {
 	p.monitor.Close()
 	p.readerGroup.Stop()
 	p.rescheduler.Stop()
-	p.pollTimer.Stop()
 	p.checkpointTimer.Stop()
 }
 
@@ -299,17 +292,6 @@ func (p *queueBase) UnlockTaskProcessing() {
 	// no-op
 }
 
-func (p *queueBase) processPollTimer() {
-	if p.lastPollTime.Add(p.options.MaxPollInterval()).Before(p.timeSource.Now()) {
-		p.processNewRange()
-	}
-
-	p.pollTimer.Reset(backoff.JitDuration(
-		p.options.MaxPollInterval(),
-		p.options.MaxPollIntervalJitterCoefficient(),
-	))
-}
-
 func (p *queueBase) processNewRange() {
 	newMaxKey := p.shard.GetQueueExclusiveHighReadWatermark(
 		p.category,
@@ -319,8 +301,6 @@ func (p *queueBase) processNewRange() {
 	if !p.nonReadableScope.CanSplitByRange(newMaxKey) {
 		return
 	}
-
-	p.lastPollTime = p.timeSource.Now()
 
 	var newReadScope Scope
 	newReadScope, p.nonReadableScope = p.nonReadableScope.SplitByRange(newMaxKey)

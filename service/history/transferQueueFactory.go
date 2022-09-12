@@ -43,6 +43,10 @@ import (
 	"go.uber.org/fx"
 )
 
+const (
+	transferQueuePersistenceMaxRPSRatio = 0.3
+)
+
 type (
 	transferQueueFactoryParams struct {
 		fx.In
@@ -64,7 +68,7 @@ type (
 
 func NewTransferQueueFactory(
 	params transferQueueFactoryParams,
-) queues.Factory {
+) QueueFactory {
 	var hostScheduler queues.Scheduler
 	if params.Config.TransferProcessorEnablePriorityTaskScheduler() {
 		hostScheduler = queues.NewNamespacePriorityScheduler(
@@ -88,11 +92,13 @@ func NewTransferQueueFactory(
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.TransferProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
+				transferQueuePersistenceMaxRPSRatio,
 			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.TransferProcessorMaxPollHostRPS,
 					params.Config.PersistenceMaxQPS,
+					transferQueuePersistenceMaxRPSRatio,
 				),
 				params.Config.QueueMaxReaderCount(),
 			),

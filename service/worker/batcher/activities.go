@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/sdk"
 )
 
 var (
@@ -75,7 +76,10 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 		return hbd, err
 	}
 
-	sdkClient := a.ClientFactory.NewClient(batchParams.Namespace)
+	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
+		Namespace:     batchParams.Namespace,
+		DataConverter: sdk.PreferProtoDataConverter,
+	})
 	startOver := true
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &hbd); err == nil {

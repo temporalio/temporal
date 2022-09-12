@@ -31,7 +31,7 @@ import (
 const (
 	defaultDeleteActivityRPS                    = 100
 	defaultPageSize                             = 1000
-	defaultPagesPerExecutionCount               = 256
+	defaultPagesPerExecution                    = 256
 	defaultConcurrentDeleteExecutionsActivities = 4
 	maxConcurrentDeleteExecutionsActivities     = 256
 )
@@ -44,9 +44,9 @@ type (
 		// Page size to read executions from visibility.
 		PageSize int
 		// Number of pages before returning ContinueAsNew.
-		PagesPerExecutionCount int
+		PagesPerExecution int
 		// Number of concurrent delete executions activities.
-		// Must be not greater than PagesPerExecutionCount and number of worker cores in the cluster.
+		// Must be not greater than PagesPerExecution and number of worker cores in the cluster.
 		ConcurrentDeleteExecutionsActivities int
 	}
 )
@@ -58,8 +58,8 @@ func (cfg *DeleteExecutionsConfig) ApplyDefaults() {
 	if cfg.PageSize <= 0 {
 		cfg.PageSize = defaultPageSize
 	}
-	if cfg.PagesPerExecutionCount <= 0 {
-		cfg.PagesPerExecutionCount = defaultPagesPerExecutionCount
+	if cfg.PagesPerExecution <= 0 {
+		cfg.PagesPerExecution = defaultPagesPerExecution
 	}
 	if cfg.ConcurrentDeleteExecutionsActivities <= 0 {
 		cfg.ConcurrentDeleteExecutionsActivities = defaultConcurrentDeleteExecutionsActivities
@@ -67,9 +67,9 @@ func (cfg *DeleteExecutionsConfig) ApplyDefaults() {
 	if cfg.ConcurrentDeleteExecutionsActivities > maxConcurrentDeleteExecutionsActivities {
 		cfg.ConcurrentDeleteExecutionsActivities = maxConcurrentDeleteExecutionsActivities
 	}
-	// It won't be able to start more than PagesPerExecutionCount activities.
-	if cfg.ConcurrentDeleteExecutionsActivities > cfg.PagesPerExecutionCount {
-		cfg.ConcurrentDeleteExecutionsActivities = cfg.PagesPerExecutionCount
+	// It won't be able to start more than PagesPerExecution activities.
+	if cfg.ConcurrentDeleteExecutionsActivities > cfg.PagesPerExecution {
+		cfg.ConcurrentDeleteExecutionsActivities = cfg.PagesPerExecution
 	}
 }
 

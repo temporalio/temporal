@@ -32,6 +32,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/common/headers"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -70,7 +71,7 @@ func (c *metricClient) AddActivityTask(
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.AddActivityTaskResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientAddActivityTaskScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientAddActivityTaskScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -90,7 +91,7 @@ func (c *metricClient) AddWorkflowTask(
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientAddWorkflowTaskScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientAddWorkflowTaskScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -110,7 +111,7 @@ func (c *metricClient) PollActivityTaskQueue(
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientPollActivityTaskQueueScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientPollActivityTaskQueueScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -132,7 +133,7 @@ func (c *metricClient) PollWorkflowTaskQueue(
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientPollWorkflowTaskQueueScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientPollWorkflowTaskQueueScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -154,7 +155,7 @@ func (c *metricClient) QueryWorkflow(
 	opts ...grpc.CallOption,
 ) (_ *matchingservice.QueryWorkflowResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientQueryWorkflowScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientQueryWorkflowScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -189,9 +190,11 @@ func (c *metricClient) emitForwardedSourceStats(
 }
 
 func (c *metricClient) startMetricsRecording(
+	ctx context.Context,
 	metricScope int,
 ) (metrics.Scope, metrics.Stopwatch) {
-	scope := c.metricsClient.Scope(metricScope)
+	caller := headers.GetCallerInfo(ctx).CallerName
+	scope := c.metricsClient.Scope(metricScope, metrics.NamespaceTag(caller))
 	scope.IncCounter(metrics.ClientRequests)
 	stopwatch := scope.StartTimer(metrics.ClientLatency)
 	return scope, stopwatch

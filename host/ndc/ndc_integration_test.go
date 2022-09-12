@@ -195,7 +195,7 @@ func (s *nDCIntegrationTestSuite) TearDownSuite() {
 	if s.generator != nil {
 		s.generator.Reset()
 	}
-	s.active.TearDownCluster()
+	s.NoError(s.active.TearDownCluster())
 }
 
 func (s *nDCIntegrationTestSuite) TestSingleBranch() {

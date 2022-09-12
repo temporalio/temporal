@@ -414,7 +414,7 @@ func (s *historyArchiverSuite) TestGet_Fail_DirectoryNotExist() {
 	response, err := historyArchiver.Get(context.Background(), s.testArchivalURI, request)
 	s.Nil(response)
 	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *historyArchiverSuite) TestGet_Fail_InvalidToken() {

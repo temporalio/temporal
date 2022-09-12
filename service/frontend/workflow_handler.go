@@ -33,7 +33,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pborman/uuid"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -76,6 +75,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -2964,7 +2964,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 			ConflictToken: scheduler.InitialConflictToken,
 		},
 	}
-	inputPayload, err := payloads.Encode(input)
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {
 		return nil, err
 	}
@@ -2976,7 +2976,7 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		WorkflowId:            workflowID,
 		WorkflowType:          &commonpb.WorkflowType{Name: scheduler.WorkflowType},
 		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                 inputPayload,
+		Input:                 inputPayloads,
 		Identity:              request.Identity,
 		RequestId:             request.RequestId,
 		WorkflowIdReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
@@ -3270,7 +3270,7 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 	if len(request.ConflictToken) >= 8 {
 		input.ConflictToken = int64(binary.BigEndian.Uint64(request.ConflictToken))
 	}
-	inputPayloads, err := payloads.Encode(input)
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {
 		return nil, err
 	}
@@ -3341,7 +3341,7 @@ func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflows
 		return nil, errNotesTooLong
 	}
 
-	inputPayloads, err := payloads.Encode(request.Patch)
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(request.Patch)
 	if err != nil {
 		return nil, err
 	}
@@ -3403,7 +3403,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		return nil, err
 	}
 
-	queryPayload, err := payloads.Encode(request)
+	queryPayload, err := sdk.PreferProtoDataConverter.ToPayloads(request)
 	if err != nil {
 		return nil, err
 	}
@@ -3539,16 +3539,15 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 
 	schedules := make([]*schedpb.ScheduleListEntry, len(persistenceResp.Executions))
 	for i, ex := range persistenceResp.Executions {
-		searchAttributes := ex.GetSearchAttributes()
-		info := wh.decodeScheduleListInfo(searchAttributes)
-		searchAttributes = wh.cleanScheduleSearchAttributes(searchAttributes)
-		memo := wh.cleanScheduleMemo(ex.GetMemo())
+		memo := ex.GetMemo()
+		info := wh.decodeScheduleListInfo(memo)
+		memo = wh.cleanScheduleMemo(memo)
 		workflowID := ex.GetExecution().GetWorkflowId()
 		scheduleID := strings.TrimPrefix(workflowID, scheduler.WorkflowIDPrefix)
 		schedules[i] = &schedpb.ScheduleListEntry{
 			ScheduleId:       scheduleID,
 			Memo:             memo,
-			SearchAttributes: searchAttributes,
+			SearchAttributes: wh.cleanScheduleSearchAttributes(ex.GetSearchAttributes()),
 			Info:             info,
 		}
 	}
@@ -3724,7 +3723,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		CancelParams:    batcher.CancelParams{},
 		SignalParams:    signalParams,
 	}
-	inputPayload, err := payloads.Encode(input)
+	inputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {
 		return nil, err
 	}
@@ -4726,19 +4725,19 @@ func (wh *WorkflowHandler) trimHistoryNode(
 	}
 }
 
-func (wh *WorkflowHandler) decodeScheduleListInfo(searchAttributes *commonpb.SearchAttributes) *schedpb.ScheduleListInfo {
-	var listInfoStr string
-	var listInfoPb schedpb.ScheduleListInfo
-	if listInfoPayload := searchAttributes.GetIndexedFields()[searchattribute.TemporalScheduleInfoJSON]; listInfoPayload == nil {
+func (wh *WorkflowHandler) decodeScheduleListInfo(memo *commonpb.Memo) *schedpb.ScheduleListInfo {
+	var listInfo schedpb.ScheduleListInfo
+	var listInfoBytes []byte
+	if p := memo.GetFields()[scheduler.MemoFieldInfo]; p == nil {
 		return nil
-	} else if err := payload.Decode(listInfoPayload, &listInfoStr); err != nil {
+	} else if err := payload.Decode(p, &listInfoBytes); err != nil {
 		wh.logger.Error("decoding schedule list info from payload", tag.Error(err))
 		return nil
-	} else if err = jsonpb.UnmarshalString(listInfoStr, &listInfoPb); err != nil {
-		wh.logger.Error("decoding schedule list info from json", tag.Error(err))
+	} else if err := listInfo.Unmarshal(listInfoBytes); err != nil {
+		wh.logger.Error("decoding schedule list info from payload", tag.Error(err))
 		return nil
 	}
-	return &listInfoPb
+	return &listInfo
 }
 
 // This mutates searchAttributes
@@ -4749,7 +4748,7 @@ func (wh *WorkflowHandler) cleanScheduleSearchAttributes(searchAttributes *commo
 	}
 
 	delete(fields, searchattribute.TemporalSchedulePaused)
-	delete(fields, searchattribute.TemporalScheduleInfoJSON)
+	delete(fields, "TemporalScheduleInfoJSON") // used by older version, clean this up if present
 	// this isn't schedule-related but isn't relevant to the user for
 	// scheduler workflows since it's the server worker
 	delete(fields, searchattribute.BinaryChecksums)
@@ -4766,7 +4765,10 @@ func (wh *WorkflowHandler) cleanScheduleMemo(memo *commonpb.Memo) *commonpb.Memo
 	if len(fields) == 0 {
 		return nil
 	}
-	// we don't define any fields here but might in the future
+	delete(fields, scheduler.MemoFieldInfo)
+	if len(fields) == 0 {
+		return nil
+	}
 	return memo
 }
 

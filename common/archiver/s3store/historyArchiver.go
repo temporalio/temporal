@@ -292,6 +292,9 @@ func (h *historyArchiver) Get(
 	} else {
 		highestVersion, err := h.getHighestVersion(ctx, URI, request)
 		if err != nil {
+			if err == archiver.ErrHistoryNotExist {
+				return nil, serviceerror.NewNotFound(err.Error())
+			}
 			return nil, serviceerror.NewInvalidArgument(err.Error())
 		}
 		token = &getHistoryToken{

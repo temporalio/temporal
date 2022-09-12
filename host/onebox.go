@@ -27,8 +27,10 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -237,30 +239,42 @@ func (c *temporalImpl) Start() error {
 	return nil
 }
 
-func (c *temporalImpl) Stop() {
+func (c *temporalImpl) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
+	var errs []string
+
 	if c.enableWorker() {
 		c.shutdownWG.Add(1)
-		c.workerApp.Stop(ctx)
+		err := c.workerApp.Stop(ctx)
+		if err != nil {
+			errs = append(errs, err.Error())
+		}
 	}
 
 	c.shutdownWG.Add(3)
 
 	c.frontendApp.Stop(ctx)
 	for _, historyApp := range c.historyApps {
-		historyApp.Stop(ctx)
+		err := historyApp.Stop(ctx)
+		if err != nil {
+			errs = append(errs, err.Error())
+		}
 	}
-	c.matchingApp.Stop(ctx)
 
-	if ctx.Err() != nil {
-		c.logger.Warn("server did not shut down in 15s")
-		// TODO: we should fail the test in this case
+	err := c.matchingApp.Stop(ctx)
+	if err != nil {
+		errs = append(errs, err.Error())
 	}
 
 	close(c.shutdownCh)
 	c.shutdownWG.Wait()
+
+	if len(errs) > 0 {
+		return errors.New("shutdown errors: " + strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 func (c *temporalImpl) FrontendGRPCAddress() string {

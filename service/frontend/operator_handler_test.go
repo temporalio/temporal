@@ -28,8 +28,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -421,7 +421,10 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 
 	handler.config = &Config{
 		DeleteNamespaceDeleteActivityRPS:                    dynamicconfig.GetIntPropertyFn(22),
-		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.GetIntPropertyFn(8),
+		DeleteNamespacePageSize:                             dynamicconfig.GetIntPropertyFn(8),
+		DeleteNamespacePagesPerExecution:                    dynamicconfig.GetIntPropertyFn(78),
+		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.GetIntPropertyFn(3),
+		DeleteNamespaceNamespaceDeleteDelay:                 dynamicconfig.GetDurationPropertyFn(22 * time.Hour),
 	}
 
 	// Start workflow failed.

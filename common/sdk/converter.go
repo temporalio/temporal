@@ -22,22 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues
+package sdk
 
-import (
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/service/history/tasks"
-)
+import "go.temporal.io/sdk/converter"
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination queue_mock.go
-
-type (
-	Queue interface {
-		common.Daemon
-		Category() tasks.Category
-		NotifyNewTasks(clusterName string, tasks []tasks.Task)
-		FailoverNamespace(namespaceIDs map[string]struct{})
-		LockTaskProcessing()
-		UnlockTaskProcessing()
-	}
+var (
+	// PreferProtoDataConverter is like the default data converter defined in the SDK, except
+	// that it prefers encoding proto messages with the binary encoding instead of json.
+	PreferProtoDataConverter = converter.NewCompositeDataConverter(
+		converter.NewNilPayloadConverter(),
+		converter.NewByteSlicePayloadConverter(),
+		converter.NewProtoPayloadConverter(),
+		converter.NewProtoJSONPayloadConverter(),
+		converter.NewJSONPayloadConverter(),
+	)
 )

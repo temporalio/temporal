@@ -74,17 +74,17 @@ func (mr *MockClientFactoryMockRecorder) GetSystemClient() *gomock.Call {
 }
 
 // NewClient mocks base method.
-func (m *MockClientFactory) NewClient(namespaceName string) client.Client {
+func (m *MockClientFactory) NewClient(options client.Options) client.Client {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewClient", namespaceName)
+	ret := m.ctrl.Call(m, "NewClient", options)
 	ret0, _ := ret[0].(client.Client)
 	return ret0
 }
 
 // NewClient indicates an expected call of NewClient.
-func (mr *MockClientFactoryMockRecorder) NewClient(namespaceName interface{}) *gomock.Call {
+func (mr *MockClientFactoryMockRecorder) NewClient(options interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewClient", reflect.TypeOf((*MockClientFactory)(nil).NewClient), namespaceName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewClient", reflect.TypeOf((*MockClientFactory)(nil).NewClient), options)
 }
 
 // MockWorkerFactory is a mock of WorkerFactory interface.

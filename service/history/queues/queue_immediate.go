@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -145,20 +146,35 @@ func (p *immediateQueue) NotifyNewTasks(_ string, tasks []tasks.Task) {
 func (p *immediateQueue) processEventLoop() {
 	defer p.shutdownWG.Done()
 
+	pollTimer := time.NewTimer(backoff.JitDuration(
+		p.options.MaxPollInterval(),
+		p.options.MaxPollIntervalJitterCoefficient(),
+	))
+	defer pollTimer.Stop()
+
 	for {
 		select {
 		case <-p.shutdownCh:
 			return
 		case <-p.notifyCh:
 			p.processNewRange()
-		case <-p.pollTimer.C:
-			p.processPollTimer()
+		case <-pollTimer.C:
+			p.processPollTimer(pollTimer)
 		case <-p.checkpointTimer.C:
 			p.checkpoint()
 		case alert := <-p.alertCh:
 			p.handleAlert(alert)
 		}
 	}
+}
+
+func (p *immediateQueue) processPollTimer(pollTimer *time.Timer) {
+	p.processNewRange()
+
+	pollTimer.Reset(backoff.JitDuration(
+		p.options.MaxPollInterval(),
+		p.options.MaxPollIntervalJitterCoefficient(),
+	))
 }
 
 func (p *immediateQueue) notify() {
