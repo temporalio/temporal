@@ -169,11 +169,7 @@ func (p *immediateQueue) processEventLoop() {
 }
 
 func (p *immediateQueue) processPollTimer(pollTimer *time.Timer) {
-	// NOTE: this check can actually make the maximum poll interval becomes
-	// 2 * configured maxPollInterval + jitter
-	if p.lastPollTime.Add(p.options.MaxPollInterval()).Before(p.timeSource.Now()) {
-		p.processNewRange()
-	}
+	p.processNewRange()
 
 	pollTimer.Reset(backoff.JitDuration(
 		p.options.MaxPollInterval(),

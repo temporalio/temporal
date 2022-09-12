@@ -96,7 +96,6 @@ type (
 		exclusiveDeletionHighWatermark tasks.Key
 		nonReadableScope               Scope
 		readerGroup                    *ReaderGroup
-		lastPollTime                   time.Time
 		nextForceNewSliceTime          time.Time
 
 		checkpointRetrier backoff.Retrier
@@ -302,8 +301,6 @@ func (p *queueBase) processNewRange() {
 	if !p.nonReadableScope.CanSplitByRange(newMaxKey) {
 		return
 	}
-
-	p.lastPollTime = p.timeSource.Now()
 
 	var newReadScope Scope
 	newReadScope, p.nonReadableScope = p.nonReadableScope.SplitByRange(newMaxKey)
