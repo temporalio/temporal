@@ -108,19 +108,19 @@ func (s *calendarSuite) TestCalendarMatch() {
 		cc = s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
 			DayOfWeek: dow,
 		}, time.UTC)
-		s.True(cc.matches(time.Date(2022, time.March, 6, 0, 0, 0, 0, time.UTC)))
+		s.True(cc.matches(time.Date(2022, time.March, 6, 0, 0, 0, 0, time.UTC)), dow) // sunday
 	}
-	for _, dow := range []string{"*", "5-7", "5-7/2", "6-7", "2/4", "2-7/4"} {
+	for _, dow := range []string{"*", "5-7", "6-7", "2/4", "2-7/4"} {
 		cc = s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
 			DayOfWeek: dow,
 		}, time.UTC)
-		s.True(cc.matches(time.Date(2022, time.March, 5, 0, 0, 0, 0, time.UTC)))
+		s.True(cc.matches(time.Date(2022, time.March, 5, 0, 0, 0, 0, time.UTC)), dow) // saturday
 	}
 	for _, dow := range []string{"0", "7", "sun", "5-7", "5-7/2", "6-7", "2-7/5", "0-7/7", "0/7"} {
 		cc = s.mustCompileCalendarSpec(&schedpb.CalendarSpec{
 			DayOfWeek: dow,
 		}, time.UTC)
-		s.False(cc.matches(time.Date(2022, time.March, 7, 0, 0, 0, 0, time.UTC)))
+		s.False(cc.matches(time.Date(2022, time.March, 7, 0, 0, 0, 0, time.UTC)), dow) // monday
 	}
 }
 
@@ -133,8 +133,7 @@ func (s *calendarSuite) TestParseCronString() {
 		Hour:       []*schedpb.Range{{Start: 0, End: 23, Step: 2}},
 		DayOfMonth: []*schedpb.Range{{Start: 1, End: 31}},
 		Month:      []*schedpb.Range{{Start: 1, End: 12}},
-		DayOfWeek:  []*schedpb.Range{{Start: 0, End: 7}},
-		Year:       []*schedpb.Range{{Start: minCalendarYear, End: maxCalendarYear}},
+		DayOfWeek:  []*schedpb.Range{{Start: 0, End: 6}},
 	}, scs)
 	s.Nil(iv)
 	s.Equal("", tz)
@@ -148,7 +147,6 @@ func (s *calendarSuite) TestParseCronString() {
 		DayOfMonth: []*schedpb.Range{{Start: 2, End: 31, Step: 2}},
 		Month:      []*schedpb.Range{{Start: 1, End: 12}},
 		DayOfWeek:  []*schedpb.Range{{Start: 3, End: 4}},
-		Year:       []*schedpb.Range{{Start: minCalendarYear, End: maxCalendarYear}},
 		Comment:    "explanation",
 	}, scs)
 	s.Nil(iv)
@@ -162,8 +160,7 @@ func (s *calendarSuite) TestParseCronString() {
 		Hour:       []*schedpb.Range{{Start: 0}},
 		DayOfMonth: []*schedpb.Range{{Start: 1}},
 		Month:      []*schedpb.Range{{Start: 1, End: 12}},
-		DayOfWeek:  []*schedpb.Range{{Start: 0, End: 7}},
-		Year:       []*schedpb.Range{{Start: minCalendarYear, End: maxCalendarYear}},
+		DayOfWeek:  []*schedpb.Range{{Start: 0, End: 6}},
 	}, scs)
 	s.Nil(iv)
 	s.Equal("", tz)
@@ -298,7 +295,7 @@ func (s *calendarSuite) TestMakeMatcher() {
 		if max < 63 {
 			m, err = makeBitMatcher(ranges)
 		} else {
-			m, err = makeSliceMatcher(ranges)
+			m, err = makeYearMatcher(ranges)
 		}
 		s.NoError(err)
 		for _, e := range expected {
@@ -313,8 +310,8 @@ func (s *calendarSuite) TestMakeMatcher() {
 	check("1,3,5-7", 0, 10, parseModeInt, 1, -2, 3, -4, 5, 6, 7, -8, -9, -10)
 	check("2-4,8,1-5/2", 1, 15, parseModeInt, 1, 2, 3, 4, 5, -6, -7, 8, -9, -10, -11, -12, -13, -14, -15)
 	check("February/5", 1, 12, parseModeMonth, -1, 2, -3, -4, -5, -6, 7, -8, -9, -10, -11, 12)
-	check("*", 0, 7, parseModeDow, 0, 1, 2, 3, 4, 5, 6, 7)
-	check("0", 0, 7, parseModeDow, 0, -1, -2, -3, -4, -5, -6, -7)
+	check("*", 0, 7, parseModeDow, 0, 1, 2, 3, 4, 5, 6)
+	check("0", 0, 7, parseModeDow, 0, -1, -2, -3, -4, -5, -6)
 	check("6,7", 0, 7, parseModeDow, 0, -1, -2, -3, -4, -5, 6) // 7 means sunday (0)
 	check("2020-2022,2024,2026/3", 2000, 2100, parseModeInt, -2019, 2020, 2021, 2022, -2023, 2024, -2025, 2026, -2027, -2028, 2029, -2030, 2032, 2098, -2101)
 }

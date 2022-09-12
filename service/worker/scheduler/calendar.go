@@ -60,6 +60,8 @@ const (
 const (
 	// Modes for parsing range strings: all modes accept decimal integers
 	parseModeInt parseMode = iota
+	// parseModeYear is like parseModeInt but returns an empty range for the default
+	parseModeYear
 	// parseModeMonth also accepts month name prefixes (at least three letters)
 	parseModeMonth
 	// parseModeDow also accepts day-of-week prefixes (at least two letters)
@@ -100,7 +102,7 @@ var (
 func newCompiledCalendar(cal *schedpb.StructuredCalendarSpec, tz *time.Location) (*compiledCalendar, error) {
 	cc := &compiledCalendar{tz: tz}
 	var err error
-	if cc.year, err = makeSliceMatcher(cal.Year); err != nil {
+	if cc.year, err = makeYearMatcher(cal.Year); err != nil {
 		return nil, err
 	} else if cc.month, err = makeBitMatcher(cal.Month); err != nil {
 		return nil, err
@@ -242,7 +244,7 @@ Outer:
 func parseCalendarToStrucured(cal *schedpb.CalendarSpec) (*schedpb.StructuredCalendarSpec, error) {
 	ss := &schedpb.StructuredCalendarSpec{Comment: cal.Comment}
 	var err error
-	if ss.Year, err = makeRange(cal.Year, "*", minCalendarYear, maxCalendarYear, parseModeInt); err != nil {
+	if ss.Year, err = makeRange(cal.Year, "*", 0, 1e6, parseModeYear); err != nil {
 		return nil, err
 	} else if ss.Month, err = makeRange(cal.Month, "*", 1, 12, parseModeMonth); err != nil {
 		return nil, err
@@ -358,7 +360,12 @@ func makeBitMatcher(ranges []*schedpb.Range) (func(int) bool, error) {
 	return func(v int) bool { return (1<<v)&bits != 0 }, nil
 }
 
-func makeSliceMatcher(ranges []*schedpb.Range) (func(int) bool, error) {
+func makeYearMatcher(ranges []*schedpb.Range) (func(int) bool, error) {
+	if len(ranges) == 0 {
+		// special case for year: all is represented as empty range list
+		return func(int) bool { return true }, nil
+	}
+
 	var values []int16
 	add := func(i int) { values = append(values, int16(i)) }
 	iterateRanges(ranges, add)
@@ -410,6 +417,9 @@ func makeRange(s, def string, min, max int, parseMode parseMode) ([]*schedpb.Ran
 	s = strings.TrimSpace(s)
 	if s == "" {
 		s = def
+	}
+	if s == "*" && parseMode == parseModeYear {
+		return nil, nil // special case for year: all is represented as empty range list
 	}
 	var ranges []*schedpb.Range
 	for _, part := range strings.Split(s, ",") {
