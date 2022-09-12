@@ -158,10 +158,14 @@ func (s *executableSuite) TestHandleErr_NamespaceNotActiveError() {
 	s.timeSource.Update(now)
 	s.NoError(executable.HandleErr(err))
 
+	s.timeSource.Update(now.Add(-namespaceCacheRefreshInterval * time.Duration(3)))
+	executable = s.newTestExecutable(nil)
+	s.timeSource.Update(now)
+	s.Equal(err, executable.HandleErr(err))
+
 	executable = s.newTestExecutable(func(_ tasks.Task) bool {
 		return true
 	})
-
 	s.Equal(err, executable.HandleErr(err))
 }
 
