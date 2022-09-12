@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -193,8 +194,6 @@ func (p *scheduledQueue) processEventLoop() {
 			p.processNewTime()
 		case <-p.timerGate.FireChan():
 			p.processNewRange()
-		case <-p.pollTimer.C:
-			p.processPollTimer()
 		case <-p.checkpointTimer.C:
 			p.checkpoint()
 		case alert := <-p.alertCh:
@@ -232,14 +231,12 @@ func (p *scheduledQueue) processNewRange() {
 	p.lookAheadTask()
 }
 
-func (p *scheduledQueue) processPollTimer() {
-	p.queueBase.processPollTimer()
-	p.lookAheadTask()
-}
-
 func (p *scheduledQueue) lookAheadTask() {
 	lookAheadMinTime := p.nonReadableScope.Range.InclusiveMin.FireTime
-	lookAheadMaxTime := lookAheadMinTime.Add(p.options.MaxPollInterval())
+	lookAheadMaxTime := lookAheadMinTime.Add(backoff.JitDuration(
+		p.options.MaxPollInterval(),
+		p.options.MaxPollIntervalJitterCoefficient(),
+	))
 
 	ctx, cancel := newQueueIOContext()
 	defer cancel()
@@ -264,7 +261,11 @@ func (p *scheduledQueue) lookAheadTask() {
 		p.timerGate.Update(response.Tasks[0].GetKey().FireTime)
 	}
 
-	// no look ahead task, wait for max poll interval or new task notification
+	// no look ahead task, next loading will be triggerred at the end of the current
+	// look ahead window or when new task notification comes
+	// NOTE: with this we don't need a separate max poll timer, loading will be triggerred
+	// every maxPollInterval + jitter.
+	p.timerGate.Update(lookAheadMaxTime)
 }
 
 // IsTimeExpired checks if the testing time is equal or before

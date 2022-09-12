@@ -86,8 +86,7 @@ func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) {
 	a.init()
 	a.gatherStatistics(readers)
 	a.findSliceToClear(
-		a.monitor.GetTotalPendingTaskCount(),
-		int(float64(a.attributes.CiriticalPendingTaskCount)*targetLoadFactor),
+		int(float64(a.attributes.CiriticalPendingTaskCount) * targetLoadFactor),
 	)
 	a.splitAndClearSlice(readers, readerGroup)
 }
@@ -135,12 +134,13 @@ func (a *actionQueuePendingTask) gatherStatistics(
 }
 
 func (a *actionQueuePendingTask) findSliceToClear(
-	currentPendingTasks int,
 	targetPendingTasks int,
 ) {
+	currentPendingTasks := 0
 	// order namespace by # of pending tasks
 	namespaceIDs := make([]namespace.ID, 0, len(a.tasksPerNamespace))
-	for namespaceID := range a.tasksPerNamespace {
+	for namespaceID, namespacePendingTasks := range a.tasksPerNamespace {
+		currentPendingTasks += namespacePendingTasks
 		namespaceIDs = append(namespaceIDs, namespaceID)
 	}
 	pq := collection.NewPriorityQueueWithItems(
@@ -163,7 +163,9 @@ func (a *actionQueuePendingTask) findSliceToClear(
 		sliceList = sliceList[1:]
 		a.slicesPerNamespace[namespaceID] = sliceList
 
-		a.tasksPerNamespace[namespaceID] -= a.pendingTaskPerNamespacePerSlice[sliceToClear][namespaceID]
+		tasksCleared := a.pendingTaskPerNamespacePerSlice[sliceToClear][namespaceID]
+		a.tasksPerNamespace[namespaceID] -= tasksCleared
+		currentPendingTasks -= tasksCleared
 		if a.tasksPerNamespace[namespaceID] > 0 {
 			pq.Add(namespaceID)
 		}

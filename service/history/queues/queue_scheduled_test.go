@@ -25,6 +25,7 @@
 package queues
 
 import (
+	"context"
 	"errors"
 	"math/rand"
 	"testing"
@@ -196,11 +197,13 @@ func (s *scheduledQueueSuite) TestLookAheadTask_NoLookAheadTask() {
 	lookAheadRange, _ := s.setupLookAheadMock(false)
 	s.scheduledQueue.lookAheadTask()
 
-	timerGate.SetCurrentTime(lookAheadRange.InclusiveMin.FireTime.Add(testQueueOptions.MaxPollInterval()))
+	timerGate.SetCurrentTime(lookAheadRange.InclusiveMin.FireTime.Add(time.Duration(
+		(1 + testQueueOptions.MaxPollIntervalJitterCoefficient()) * float64(testQueueOptions.MaxPollInterval()),
+	)))
 	select {
 	case <-s.scheduledQueue.timerGate.FireChan():
-		s.Fail("timer gate should not fire")
 	default:
+		s.Fail("timer gate should fire at the end of look ahead window")
 	}
 }
 
@@ -238,20 +241,6 @@ func (s *scheduledQueueSuite) TestProcessNewRange_LookAheadPerformed() {
 	s.scheduledQueue.processNewRange()
 }
 
-func (s *scheduledQueueSuite) TestProcessPollTimer_LookAheadPerformed() {
-	timerGate := timer.NewRemoteGate()
-	s.scheduledQueue.timerGate = timerGate
-	s.scheduledQueue.pollTimer = time.NewTimer(time.Second)
-
-	// test if look ahead if performed after processing poll timer
-	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(&persistence.GetHistoryTasksResponse{
-		Tasks:         []tasks.Task{},
-		NextPageToken: nil,
-	}, nil).Times(1)
-
-	s.scheduledQueue.processPollTimer()
-}
-
 func (s *scheduledQueueSuite) setupLookAheadMock(
 	hasLookAheadTask bool,
 ) (lookAheadRange Range, lookAheadTask *tasks.MockTask) {
@@ -269,17 +258,26 @@ func (s *scheduledQueueSuite) setupLookAheadMock(
 		loadedTasks = append(loadedTasks, lookAheadTask)
 	}
 
-	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
-		ShardID:             s.mockShard.GetShardID(),
-		TaskCategory:        tasks.CategoryTimer,
-		InclusiveMinTaskKey: lookAheadRange.InclusiveMin,
-		ExclusiveMaxTaskKey: lookAheadRange.ExclusiveMax,
-		BatchSize:           1,
-		NextPageToken:       nil,
-	}).Return(&persistence.GetHistoryTasksResponse{
-		Tasks:         loadedTasks,
-		NextPageToken: nil,
-	}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *persistence.GetHistoryTasksRequest) (*persistence.GetHistoryTasksResponse, error) {
+		s.Equal(s.mockShard.GetShardID(), request.ShardID)
+		s.Equal(tasks.CategoryTimer, request.TaskCategory)
+		s.Equal(lookAheadRange.InclusiveMin, request.InclusiveMinTaskKey)
+		s.Equal(1, request.BatchSize)
+		s.Nil(request.NextPageToken)
+
+		s.Equal(lookAheadRange.ExclusiveMax.TaskID, request.ExclusiveMaxTaskKey.TaskID)
+		fireTimeDifference := request.ExclusiveMaxTaskKey.FireTime.Sub(lookAheadRange.ExclusiveMax.FireTime)
+		if fireTimeDifference < 0 {
+			fireTimeDifference = -fireTimeDifference
+		}
+		maxAllowedFireTimeDifference := time.Duration(float64(testQueueOptions.MaxPollInterval()) * testQueueOptions.MaxPollIntervalJitterCoefficient())
+		s.LessOrEqual(fireTimeDifference, maxAllowedFireTimeDifference)
+
+		return &persistence.GetHistoryTasksResponse{
+			Tasks:         loadedTasks,
+			NextPageToken: nil,
+		}, nil
+	}).Times(1)
 
 	return lookAheadRange, lookAheadTask
 }
