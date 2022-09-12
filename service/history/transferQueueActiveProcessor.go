@@ -148,7 +148,7 @@ func newTransferQueueActiveProcessor(
 	// if single cursor is enabled, then this processor is responsible for both active and standby tasks
 	// and we need to customize some parameters for ack manager and task executable
 	if singleProcessor {
-		transferTaskFilter = func(task tasks.Task) bool { return true }
+		transferTaskFilter = nil
 		taskExecutor = queues.NewExecutorWrapper(
 			currentClusterName,
 			shard.GetNamespaceRegistry(),

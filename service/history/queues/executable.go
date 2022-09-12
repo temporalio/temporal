@@ -273,15 +273,18 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
-	// this is a transient error
-	// TODO remove this error check special case
-	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
-		if e.timeSource.Now().Sub(e.loadTime) > 2*e.namespaceCacheRefreshInterval() {
+		// TODO remove this error check special case after multi-cursor is enabled by default,
+		// since the new task life cycle will not give up until task processed / verified
+		// Currently, only run this check if filter is not nil which means we are running the old
+		// active/passive queue logic.
+		if e.filter != nil && e.timeSource.Now().Sub(e.loadTime) > 2*e.namespaceCacheRefreshInterval() {
 			e.taggedMetricsHandler.Counter(TaskNotActiveCounter).Record(1)
 			return nil
 		}
 
+		// error is expected when there's namespace failover,
+		// so don't count it into task failures.
 		return err
 	}
 
