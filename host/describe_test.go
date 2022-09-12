@@ -58,7 +58,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -181,7 +181,7 @@ func (s *integrationSuite) TestDescribeTaskQueue() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 

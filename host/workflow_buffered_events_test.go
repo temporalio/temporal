@@ -158,7 +158,7 @@ func (s *integrationSuite) TestBufferedEvents() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 

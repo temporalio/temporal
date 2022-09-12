@@ -226,7 +226,7 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 	var we *workflowservice.StartWorkflowExecutionResponse
@@ -284,7 +284,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
@@ -834,7 +834,7 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
@@ -1005,7 +1005,7 @@ func (s *integrationClustersTestSuite) TestResetWorkflowFailover() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
@@ -1162,7 +1162,7 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
@@ -1286,7 +1286,7 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(300 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 	we, err := client1.StartWorkflowExecution(host.NewContext(), startReq)
@@ -1718,7 +1718,7 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 		CronSchedule:        "@every 5s",
 	}
@@ -1803,7 +1803,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialInterval:        timestamp.DurationPtr(1 * time.Second),

@@ -63,7 +63,7 @@ func (s *integrationSuite) TestWorkflowTimeout() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(1 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 

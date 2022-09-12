@@ -61,7 +61,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -156,7 +156,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetRunni
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -171,7 +171,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetRunni
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(NewContext(), foreignRequest)
@@ -292,7 +292,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetFinis
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -307,7 +307,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetFinis
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 	we2, err0 := s.engine.StartWorkflowExecution(NewContext(), foreignRequest)
@@ -424,7 +424,7 @@ func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetNotFo
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
@@ -506,7 +506,7 @@ func (s *integrationSuite) TestImmediateChildCancellation_WorkflowTaskFailed() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)

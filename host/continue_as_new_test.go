@@ -202,7 +202,7 @@ func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
 					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 					Input:               payloads.EncodeBytes(buf.Bytes()),
 					WorkflowRunTimeout:  timestamp.DurationPtr(1 * time.Second), // set timeout to 1
-					WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+					WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 				}},
 			}}, nil
 		}
@@ -299,7 +299,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 				TaskQueue:           taskQueue,
 				Input:               nil,
 				WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+				WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 			}},
 		}}, nil
 	}
@@ -389,7 +389,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 		TaskQueue:           taskQueue,
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -415,7 +415,7 @@ func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
 					TaskQueue:           taskQueue,
 					Input:               nil,
 					WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-					WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+					WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 				}},
 			}}, nil
 		}

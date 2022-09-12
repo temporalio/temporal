@@ -66,7 +66,7 @@ func (s *integrationSuite) TestCronWorkflow_Failed_Infinite() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(5 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 		CronSchedule:        cronSchedule, // minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
 		RetryPolicy: &commonpb.RetryPolicy{
@@ -166,7 +166,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 		CronSchedule:        cronSchedule, // minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
 		Memo:                memo,

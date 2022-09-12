@@ -96,7 +96,7 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 	we2, err2 := s.engine.StartWorkflowExecution(NewContext(), newRequest)
@@ -167,7 +167,7 @@ func (s *integrationSuite) TestTerminateWorkflow() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -284,7 +284,7 @@ StartNewExecutionLoop:
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 			Input:               nil,
 			WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-			WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+			WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 			Identity:            identity,
 		}
 
@@ -419,7 +419,7 @@ func (s *integrationSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -498,7 +498,7 @@ func (s *integrationSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -617,7 +617,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
 			// Intentionally test server-initialization of Initial Interval value (which should be 1 second)
@@ -794,7 +794,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialInterval:        timestamp.DurationPtr(1 * time.Second),
@@ -849,7 +849,7 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
 		RetryPolicy: &commonpb.RetryPolicy{
 			InitialInterval:        timestamp.DurationPtr(1 * time.Second),
