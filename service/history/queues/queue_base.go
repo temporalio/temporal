@@ -190,7 +190,7 @@ func newQueueBase(
 		return NewReader(
 			readerID,
 			slices,
-			&options.ReaderOptions,
+			&readerOptions,
 			scheduler,
 			rescheduler,
 			timeSource,

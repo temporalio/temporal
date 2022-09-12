@@ -188,28 +188,18 @@ func (s *SliceImpl) MergeWithSlice(slice Slice) []Slice {
 
 	mergedSlices := make([]Slice, 0, 3)
 	currentLeftSlice, currentRightSlice := s.splitByRange(incomingSlice.Scope().Range.InclusiveMin)
-	if !currentLeftSlice.scope.IsEmpty() {
-		mergedSlices = append(mergedSlices, currentLeftSlice)
-	}
+	mergedSlices = appendMergedSlice(mergedSlices, currentLeftSlice)
 
 	if currentRightMax := currentRightSlice.Scope().Range.ExclusiveMax; incomingSlice.CanSplitByRange(currentRightMax) {
 		leftIncomingSlice, rightIncomingSlice := incomingSlice.splitByRange(currentRightMax)
 		mergedMidSlice := currentRightSlice.mergeByPredicate(leftIncomingSlice)
-		if !mergedMidSlice.scope.IsEmpty() {
-			mergedSlices = append(mergedSlices, mergedMidSlice)
-		}
-		if !rightIncomingSlice.scope.IsEmpty() {
-			mergedSlices = append(mergedSlices, rightIncomingSlice)
-		}
+		mergedSlices = appendMergedSlice(mergedSlices, mergedMidSlice)
+		mergedSlices = appendMergedSlice(mergedSlices, rightIncomingSlice)
 	} else {
 		currentMidSlice, currentRightSlice := currentRightSlice.splitByRange(incomingSlice.Scope().Range.ExclusiveMax)
 		mergedMidSlice := currentMidSlice.mergeByPredicate(incomingSlice)
-		if !mergedMidSlice.scope.IsEmpty() {
-			mergedSlices = append(mergedSlices, mergedMidSlice)
-		}
-		if !currentRightSlice.scope.IsEmpty() {
-			mergedSlices = append(mergedSlices, currentRightSlice)
-		}
+		mergedSlices = appendMergedSlice(mergedSlices, mergedMidSlice)
+		mergedSlices = appendMergedSlice(mergedSlices, currentRightSlice)
 	}
 
 	return mergedSlices
@@ -458,7 +448,7 @@ func (s *SliceImpl) newSlice(
 	iterators []Iterator,
 	tracker *executableTracker,
 ) *SliceImpl {
-	return &SliceImpl{
+	slice := &SliceImpl{
 		paginationFnProvider:  s.paginationFnProvider,
 		executableInitializer: s.executableInitializer,
 		scope:                 scope,
@@ -466,6 +456,21 @@ func (s *SliceImpl) newSlice(
 		executableTracker:     tracker,
 		monitor:               s.monitor,
 	}
+	slice.monitor.SetSlicePendingTaskCount(slice, len(slice.executableTracker.pendingExecutables))
+
+	return slice
+}
+
+func appendMergedSlice(
+	mergedSlices []Slice,
+	s *SliceImpl,
+) []Slice {
+	if s.scope.IsEmpty() {
+		s.destroy()
+		return mergedSlices
+	}
+
+	return append(mergedSlices, s)
 }
 
 func validateIteratorsOrderedDisjoint(

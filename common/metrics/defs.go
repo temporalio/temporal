@@ -2056,6 +2056,7 @@ const (
 	HistoryCount
 	EventBlobSize
 	SearchAttributesSize
+	MemoSize
 
 	LockRequests
 	LockFailures
@@ -2548,6 +2549,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryCount:                                        NewDimensionlessHistogramDef("history_count"),
 		EventBlobSize:                                       NewBytesHistogramDef("event_blob_size"),
 		SearchAttributesSize:                                NewBytesHistogramDef("search_attributes_size"),
+		MemoSize:                                            NewBytesHistogramDef("memo_size"),
 		LockRequests:                                        NewCounterDef("lock_requests"),
 		LockFailures:                                        NewCounterDef("lock_failures"),
 		LockLatency:                                         NewTimerDef("lock_latency"),
