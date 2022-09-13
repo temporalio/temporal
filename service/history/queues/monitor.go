@@ -56,8 +56,9 @@ type (
 		SetSliceCount(readerID int32, count int)
 
 		RemoveSlice(slice Slice)
-		// RemoveReader(readerID int32)
+		RemoveReader(readerID int32)
 
+		ResolveAlert(AlertType)
 		AlertCh() <-chan *Alert
 		Close()
 	}
@@ -80,8 +81,9 @@ type (
 		categoryType tasks.CategoryType
 		options      *MonitorOptions
 
-		alertCh    chan *Alert
-		shutdownCh chan struct{}
+		pendingAlerts map[AlertType]struct{}
+		alertCh       chan *Alert
+		shutdownCh    chan struct{}
 	}
 
 	readerStats struct {
@@ -104,12 +106,13 @@ func newMonitor(
 	options *MonitorOptions,
 ) *monitorImpl {
 	return &monitorImpl{
-		readerStats:  make(map[int32]readerStats),
-		sliceStats:   make(map[Slice]sliceStats),
-		categoryType: categoryType,
-		options:      options,
-		alertCh:      make(chan *Alert, alertChSize),
-		shutdownCh:   make(chan struct{}),
+		readerStats:   make(map[int32]readerStats),
+		sliceStats:    make(map[Slice]sliceStats),
+		categoryType:  categoryType,
+		options:       options,
+		pendingAlerts: make(map[AlertType]struct{}),
+		alertCh:       make(chan *Alert, alertChSize),
+		shutdownCh:    make(chan struct{}),
 	}
 }
 
@@ -258,6 +261,26 @@ func (m *monitorImpl) RemoveSlice(slice Slice) {
 	delete(m.sliceStats, slice)
 }
 
+func (m *monitorImpl) RemoveReader(readerID int32) {
+	m.Lock()
+	defer m.Unlock()
+
+	stats, ok := m.readerStats[readerID]
+	if !ok {
+		return
+	}
+
+	m.totalSliceCount -= stats.sliceCount
+	delete(m.readerStats, readerID)
+}
+
+func (m *monitorImpl) ResolveAlert(alertType AlertType) {
+	m.Lock()
+	defer m.Unlock()
+
+	delete(m.pendingAlerts, alertType)
+}
+
 func (m *monitorImpl) AlertCh() <-chan *Alert {
 	return m.alertCh
 }
@@ -285,8 +308,14 @@ func (m *monitorImpl) sendAlertLocked(alert *Alert) {
 		return
 	}
 
+	// dedup alerts, we only need one outstanding alert per alert type
+	if _, ok := m.pendingAlerts[alert.AlertType]; ok {
+		return
+	}
+
 	select {
 	case m.alertCh <- alert:
+		m.pendingAlerts[alert.AlertType] = struct{}{}
 	default:
 		// do not block if alertCh full
 	}

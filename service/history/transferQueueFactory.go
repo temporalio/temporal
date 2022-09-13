@@ -43,6 +43,10 @@ import (
 	"go.uber.org/fx"
 )
 
+const (
+	transferQueuePersistenceMaxRPSRatio = 0.3
+)
+
 type (
 	transferQueueFactoryParams struct {
 		fx.In
@@ -64,39 +68,37 @@ type (
 
 func NewTransferQueueFactory(
 	params transferQueueFactoryParams,
-) queues.Factory {
+) QueueFactory {
 	var hostScheduler queues.Scheduler
 	if params.Config.TransferProcessorEnablePriorityTaskScheduler() {
 		hostScheduler = queues.NewNamespacePriorityScheduler(
+			params.ClusterMetadata.GetCurrentClusterName(),
 			queues.NamespacePrioritySchedulerOptions{
-				WorkerCount:      params.Config.TransferProcessorSchedulerWorkerCount,
-				NamespaceWeights: params.Config.TransferProcessorSchedulerRoundRobinWeights,
+				WorkerCount:             params.Config.TransferProcessorSchedulerWorkerCount,
+				ActiveNamespaceWeights:  params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
+				StandbyNamespaceWeights: params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
 			params.TimeSource,
-			params.MetricsHandler,
+			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferQueueProcessor)),
 			params.Logger,
 		)
 	}
 	return &transferQueueFactory{
 		transferQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
-			HostScheduler: hostScheduler,
-			HostPriorityAssigner: queues.NewPriorityAssigner(
-				params.ClusterMetadata.GetCurrentClusterName(),
-				params.NamespaceRegistry,
-				queues.PriorityAssignerOptions{
-					CriticalRetryAttempts: params.Config.TransferTaskMaxRetryCount(),
-				},
-			),
+			HostScheduler:        hostScheduler,
+			HostPriorityAssigner: queues.NewPriorityAssigner(),
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.TransferProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
+				transferQueuePersistenceMaxRPSRatio,
 			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.TransferProcessorMaxPollHostRPS,
 					params.Config.PersistenceMaxQPS,
+					transferQueuePersistenceMaxRPSRatio,
 				),
 				params.Config.QueueMaxReaderCount(),
 			),

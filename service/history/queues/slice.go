@@ -31,6 +31,10 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+const (
+	shrinkPredicateMaxPendingNamespaces = 3
+)
+
 type (
 
 	// Slice manages the loading and status tracking of all
@@ -45,7 +49,7 @@ type (
 		CanMergeWithSlice(Slice) bool
 		MergeWithSlice(Slice) []Slice
 		CompactWithSlice(Slice) Slice
-		ShrinkRange()
+		ShrinkScope()
 		SelectTasks(readerID int32, batchSize int) ([]Executable, error)
 		MoreTasks() bool
 		TaskStats() TaskStats
@@ -184,28 +188,18 @@ func (s *SliceImpl) MergeWithSlice(slice Slice) []Slice {
 
 	mergedSlices := make([]Slice, 0, 3)
 	currentLeftSlice, currentRightSlice := s.splitByRange(incomingSlice.Scope().Range.InclusiveMin)
-	if !currentLeftSlice.scope.IsEmpty() {
-		mergedSlices = append(mergedSlices, currentLeftSlice)
-	}
+	mergedSlices = appendMergedSlice(mergedSlices, currentLeftSlice)
 
 	if currentRightMax := currentRightSlice.Scope().Range.ExclusiveMax; incomingSlice.CanSplitByRange(currentRightMax) {
 		leftIncomingSlice, rightIncomingSlice := incomingSlice.splitByRange(currentRightMax)
 		mergedMidSlice := currentRightSlice.mergeByPredicate(leftIncomingSlice)
-		if !mergedMidSlice.scope.IsEmpty() {
-			mergedSlices = append(mergedSlices, mergedMidSlice)
-		}
-		if !rightIncomingSlice.scope.IsEmpty() {
-			mergedSlices = append(mergedSlices, rightIncomingSlice)
-		}
+		mergedSlices = appendMergedSlice(mergedSlices, mergedMidSlice)
+		mergedSlices = appendMergedSlice(mergedSlices, rightIncomingSlice)
 	} else {
 		currentMidSlice, currentRightSlice := currentRightSlice.splitByRange(incomingSlice.Scope().Range.ExclusiveMax)
 		mergedMidSlice := currentMidSlice.mergeByPredicate(incomingSlice)
-		if !mergedMidSlice.scope.IsEmpty() {
-			mergedSlices = append(mergedSlices, mergedMidSlice)
-		}
-		if !currentRightSlice.scope.IsEmpty() {
-			mergedSlices = append(mergedSlices, currentRightSlice)
-		}
+		mergedSlices = appendMergedSlice(mergedSlices, mergedMidSlice)
+		mergedSlices = appendMergedSlice(mergedSlices, currentRightSlice)
 	}
 
 	return mergedSlices
@@ -316,9 +310,16 @@ func (s *SliceImpl) CompactWithSlice(slice Slice) Slice {
 	)
 }
 
-func (s *SliceImpl) ShrinkRange() {
+func (s *SliceImpl) ShrinkScope() {
 	s.stateSanityCheck()
 
+	s.shrinkRange()
+	s.shrinkPredicate()
+
+	s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
+}
+
+func (s *SliceImpl) shrinkRange() {
 	minPendingTaskKey := s.executableTracker.shrink()
 
 	minIteratorKey := tasks.MaximumKey
@@ -335,8 +336,27 @@ func (s *SliceImpl) ShrinkRange() {
 	}
 
 	s.scope.Range.InclusiveMin = newRangeMin
+}
 
-	s.monitor.SetSlicePendingTaskCount(s, len(s.executableTracker.pendingExecutables))
+func (s *SliceImpl) shrinkPredicate() {
+	if len(s.iterators) != 0 {
+		// predicate can't be updated if there're still
+		// tasks in persistence, as we don't know if those
+		// tasks will be filtered out or not if predicate is updated.
+		return
+	}
+
+	if len(s.executableTracker.pendingPerNamesapce) > shrinkPredicateMaxPendingNamespaces {
+		// only shrink predicate if there're few namespaces left
+		return
+	}
+
+	pendingNamespaceIDs := make([]string, 0, len(s.executableTracker.pendingPerNamesapce))
+	for namespaceID := range s.executableTracker.pendingPerNamesapce {
+		pendingNamespaceIDs = append(pendingNamespaceIDs, namespaceID.String())
+	}
+	namespacePredicate := tasks.NewNamespacePredicate(pendingNamespaceIDs)
+	s.scope.Predicate = tasks.AndPredicates(s.scope.Predicate, namespacePredicate)
 }
 
 func (s *SliceImpl) SelectTasks(readerID int32, batchSize int) ([]Executable, error) {
@@ -400,7 +420,7 @@ func (s *SliceImpl) TaskStats() TaskStats {
 func (s *SliceImpl) Clear() {
 	s.stateSanityCheck()
 
-	s.ShrinkRange()
+	s.ShrinkScope()
 
 	s.iterators = []Iterator{
 		NewIterator(s.paginationFnProvider, s.scope.Range),
@@ -428,7 +448,7 @@ func (s *SliceImpl) newSlice(
 	iterators []Iterator,
 	tracker *executableTracker,
 ) *SliceImpl {
-	return &SliceImpl{
+	slice := &SliceImpl{
 		paginationFnProvider:  s.paginationFnProvider,
 		executableInitializer: s.executableInitializer,
 		scope:                 scope,
@@ -436,6 +456,21 @@ func (s *SliceImpl) newSlice(
 		executableTracker:     tracker,
 		monitor:               s.monitor,
 	}
+	slice.monitor.SetSlicePendingTaskCount(slice, len(slice.executableTracker.pendingExecutables))
+
+	return slice
+}
+
+func appendMergedSlice(
+	mergedSlices []Slice,
+	s *SliceImpl,
+) []Slice {
+	if s.scope.IsEmpty() {
+		s.destroy()
+		return mergedSlices
+	}
+
+	return append(mergedSlices, s)
 }
 
 func validateIteratorsOrderedDisjoint(

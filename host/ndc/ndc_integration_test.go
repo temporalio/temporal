@@ -195,7 +195,7 @@ func (s *nDCIntegrationTestSuite) TearDownSuite() {
 	if s.generator != nil {
 		s.generator.Reset()
 	}
-	s.active.TearDownCluster()
+	s.NoError(s.active.TearDownCluster())
 }
 
 func (s *nDCIntegrationTestSuite) TestSingleBranch() {
@@ -1270,7 +1270,6 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			RunId:      runID,
 		}
 		return adminClient.GetWorkflowExecutionRawHistoryV2(host.NewContext(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace:         nsName.String(),
 			NamespaceId:       nsID.String(),
 			Execution:         execution,
 			StartEventId:      startEventID,

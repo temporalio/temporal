@@ -215,13 +215,27 @@ const (
 	FrontendEnableSchedules = "frontend.enableSchedules"
 	// FrontendMaxConcurrentBatchOperationPerNamespace is the max concurrent batch operation job count per namespace
 	FrontendMaxConcurrentBatchOperationPerNamespace = "frontend.MaxConcurrentBatchOperationPerNamespace"
+	// FrontendEnableBatcher enables batcher-related RPCs in the frontend
+	FrontendEnableBatcher = "frontend.enableBatcher"
 
-	// DeleteNamespaceDeleteActivityRPS is RPS per every parallel delete executions activity.
+	// DeleteNamespaceDeleteActivityRPS is an RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
+	// Default value is 100.
 	DeleteNamespaceDeleteActivityRPS = "frontend.deleteNamespaceDeleteActivityRPS"
+	// DeleteNamespacePageSize is a page size to read executions from visibility for delete executions activity.
+	// Default value is 1000.
+	DeleteNamespacePageSize = "frontend.deleteNamespaceDeletePageSize"
+	// DeleteNamespacePagesPerExecution is a number of pages before returning ContinueAsNew from delete executions activity.
+	// Default value is 256.
+	DeleteNamespacePagesPerExecution = "frontend.deleteNamespacePagesPerExecution"
 	// DeleteNamespaceConcurrentDeleteExecutionsActivities is a number of concurrent delete executions activities.
 	// Must be not greater than 256 and number of worker cores in the cluster.
+	// Default is 4.
 	DeleteNamespaceConcurrentDeleteExecutionsActivities = "frontend.deleteNamespaceConcurrentDeleteExecutionsActivities"
+	// DeleteNamespaceNamespaceDeleteDelay is a duration for how long namespace stays in database
+	// after all namespace resources (i.e. workflow executions) are deleted.
+	// Default is 0, means, namespace will be deleted immediately.
+	DeleteNamespaceNamespaceDeleteDelay = "frontend.deleteNamespaceNamespaceDeleteDelay"
 
 	// keys for matching
 
@@ -350,8 +364,10 @@ const (
 	TimerProcessorEnablePriorityTaskScheduler = "history.timerProcessorEnablePriorityTaskScheduler"
 	// TimerProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for timer processor
 	TimerProcessorSchedulerWorkerCount = "history.timerProcessorSchedulerWorkerCount"
-	// TimerProcessorSchedulerRoundRobinWeights is the priority round robin weights for timer task scheduler
-	TimerProcessorSchedulerRoundRobinWeights = "history.timerProcessorSchedulerRoundRobinWeights"
+	// TimerProcessorSchedulerActiveRoundRobinWeights is the priority round robin weights used by timer task scheduler for active namespaces
+	TimerProcessorSchedulerActiveRoundRobinWeights = "history.timerProcessorSchedulerActiveRoundRobinWeights"
+	// TimerProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights used by timer task scheduler for standby namespaces
+	TimerProcessorSchedulerStandbyRoundRobinWeights = "history.timerProcessorSchedulerStandbyRoundRobinWeights"
 	// TimerProcessorUpdateAckInterval is update interval for timer processor
 	TimerProcessorUpdateAckInterval = "history.timerProcessorUpdateAckInterval"
 	// TimerProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
@@ -400,8 +416,10 @@ const (
 	TransferProcessorEnablePriorityTaskScheduler = "history.transferProcessorEnablePriorityTaskScheduler"
 	// TransferProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for transferQueueProcessor
 	TransferProcessorSchedulerWorkerCount = "history.transferProcessorSchedulerWorkerCount"
-	// TransferProcessorSchedulerRoundRobinWeights is the priority round robin weights for transfer task scheduler
-	TransferProcessorSchedulerRoundRobinWeights = "history.transferProcessorSchedulerRoundRobinWeights"
+	// TransferProcessorSchedulerActiveRoundRobinWeights is the priority round robin weights used by transfer task scheduler for active namespaces
+	TransferProcessorSchedulerActiveRoundRobinWeights = "history.transferProcessorSchedulerActiveRoundRobinWeights"
+	// TransferProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights used by transfer task scheduler for standby namespaces
+	TransferProcessorSchedulerStandbyRoundRobinWeights = "history.transferProcessorSchedulerStandbyRoundRobinWeights"
 	// TransferProcessorUpdateShardTaskCount is update shard count for transferQueueProcessor
 	TransferProcessorUpdateShardTaskCount = "history.transferProcessorUpdateShardTaskCount"
 	// TransferProcessorMaxPollInterval max poll interval for transferQueueProcessor
@@ -438,8 +456,10 @@ const (
 	VisibilityProcessorEnablePriorityTaskScheduler = "history.visibilityProcessorEnablePriorityTaskScheduler"
 	// VisibilityProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for visibilityQueueProcessor
 	VisibilityProcessorSchedulerWorkerCount = "history.visibilityProcessorSchedulerWorkerCount"
-	// VisibilityProcessorSchedulerRoundRobinWeights is the priority round robin weights for visibility task scheduler
-	VisibilityProcessorSchedulerRoundRobinWeights = "history.visibilityProcessorSchedulerRoundRobinWeights"
+	// VisibilityProcessorSchedulerActiveRoundRobinWeights is the priority round robin weights by visibility task scheduler for active namespaces
+	VisibilityProcessorSchedulerActiveRoundRobinWeights = "history.visibilityProcessorSchedulerActiveRoundRobinWeights"
+	// VisibilityProcessorSchedulerStandbyRoundRobinWeights is the priority round robin weights by visibility task scheduler for standby namespaces
+	VisibilityProcessorSchedulerStandbyRoundRobinWeights = "history.visibilityProcessorSchedulerStandbyRoundRobinWeights"
 	// VisibilityProcessorMaxPollInterval max poll interval for visibilityQueueProcessor
 	VisibilityProcessorMaxPollInterval = "history.visibilityProcessorMaxPollInterval"
 	// VisibilityProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
@@ -493,6 +513,8 @@ const (
 	NumArchiveSystemWorkflows = "history.numArchiveSystemWorkflows"
 	// ArchiveRequestRPS is the rate limit on the number of archive request per second
 	ArchiveRequestRPS = "history.archiveRequestRPS"
+	// ArchiveSignalTimeout is the signal timeout used when starting an archive system workflow
+	ArchiveSignalTimeout = "history.archiveSignalTimeout"
 	// DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
 	// the user has not specified an explicit RetryPolicy
 	DefaultActivityRetryPolicy = "history.defaultActivityRetryPolicy"
@@ -623,8 +645,6 @@ const (
 	HistoryScannerDataMinAge = "worker.historyScannerDataMinAge"
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher = "worker.enableBatcher"
-	// EnableBatcherPerNamespaceWorker decides whether start batcher worker per namespace
-	EnableBatcherPerNamespaceWorker = "worker.enableBatcherPerNamespaceWorker"
 	// BatcherRPS controls number the rps of batch operations
 	BatcherRPS = "worker.batcherRPS"
 	// BatcherConcurrency controls the concurrency of one batch operation

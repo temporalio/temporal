@@ -111,7 +111,7 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 	actCtx := context.WithValue(context.Background(), bootstrapContainerKey, container)
 	actCtx = headers.SetCallerInfo(actCtx, headers.SystemBackgroundCallerInfo)
 
-	sdkClient := container.SdkClientFactory.GetSystemClient(container.Logger)
+	sdkClient := container.SdkClientFactory.GetSystemClient()
 	wo := worker.Options{
 		MaxConcurrentActivityExecutionSize:     container.Config.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: container.Config.MaxConcurrentWorkflowTaskExecutionSize(),

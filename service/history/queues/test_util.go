@@ -93,8 +93,8 @@ func NewRandomOrderedRangesInRange(
 	for len(ranges) < numRanges {
 		r := ranges[0]
 		left, right := r.Split(NewRandomKeyInRange(r))
-		left.ExclusiveMax.FireTime.Add(-time.Nanosecond)
-		right.InclusiveMin.FireTime.Add(time.Nanosecond)
+		left.ExclusiveMax.FireTime = left.ExclusiveMax.FireTime.Add(-time.Nanosecond)
+		right.InclusiveMin.FireTime = right.InclusiveMin.FireTime.Add(time.Nanosecond)
 		ranges = append(ranges[1:], left, right)
 	}
 

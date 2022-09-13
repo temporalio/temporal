@@ -90,7 +90,7 @@ func (c *clientImpl) SendParentClosePolicyRequest(ctx context.Context, request R
 	signalCtx, cancel := context.WithTimeout(ctx, signalTimeout)
 	defer cancel()
 
-	sdkClient := c.sdkClientFactory.GetSystemClient(c.logger)
+	sdkClient := c.sdkClientFactory.GetSystemClient()
 	_, err := sdkClient.SignalWithStartWorkflow(signalCtx, workflowID, processorChannelName, request, workflowOptions, processorWFTypeName, nil)
 	return err
 }

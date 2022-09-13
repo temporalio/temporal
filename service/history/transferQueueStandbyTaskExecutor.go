@@ -91,37 +91,40 @@ func newTransferQueueStandbyTaskExecutor(
 func (t *transferQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.MetricsHandler, error) {
+) ([]metrics.Tag, bool, error) {
 	task := executable.GetTask()
 	taskType := queues.GetStandbyTransferTaskTypeTagValue(task)
-	metricsProvider := t.metricProvider.WithTags(
+	metricsTags := []metrics.Tag{
 		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
-	)
+	}
 
+	var err error
 	switch task := task.(type) {
 	case *tasks.ActivityTask:
-		return metricsProvider, t.processActivityTask(ctx, task)
+		err = t.processActivityTask(ctx, task)
 	case *tasks.WorkflowTask:
-		return metricsProvider, t.processWorkflowTask(ctx, task)
+		err = t.processWorkflowTask(ctx, task)
 	case *tasks.CancelExecutionTask:
-		return metricsProvider, t.processCancelExecution(ctx, task)
+		err = t.processCancelExecution(ctx, task)
 	case *tasks.SignalExecutionTask:
-		return metricsProvider, t.processSignalExecution(ctx, task)
+		err = t.processSignalExecution(ctx, task)
 	case *tasks.StartChildExecutionTask:
-		return metricsProvider, t.processStartChildExecution(ctx, task)
+		err = t.processStartChildExecution(ctx, task)
 	case *tasks.ResetWorkflowTask:
 		// no reset needed for standby
 		// TODO: add error logs
-		return metricsProvider, nil
+		err = nil
 	case *tasks.CloseExecutionTask:
-		return metricsProvider, t.processCloseExecution(ctx, task)
+		err = t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionTask:
-		return metricsProvider, t.processDeleteExecutionTask(ctx, task)
+		err = t.processDeleteExecutionTask(ctx, task)
 	default:
-		return metricsProvider, errUnknownTransferTask
+		err = errUnknownTransferTask
 	}
+
+	return metricsTags, false, err
 }
 
 func (t *transferQueueStandbyTaskExecutor) processActivityTask(
@@ -635,16 +638,9 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return consts.ErrTaskRetry
 	}
 
-	ns, err := t.registry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
-	if err != nil {
-		// This is most likely a NamespaceNotFound error. Don't log it and return error to stop retrying.
-		return err
-	}
-
 	if err = refreshTasks(
 		ctx,
 		adminClient,
-		ns.Name(),
 		namespace.ID(taskInfo.GetNamespaceID()),
 		taskInfo.GetWorkflowID(),
 		taskInfo.GetRunID(),

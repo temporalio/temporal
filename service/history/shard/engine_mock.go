@@ -427,11 +427,12 @@ func (mr *MockEngineMockRecorder) ReplicateWorkflowState(ctx, request interface{
 }
 
 // RequestCancelWorkflowExecution mocks base method.
-func (m *MockEngine) RequestCancelWorkflowExecution(ctx context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest) error {
+func (m *MockEngine) RequestCancelWorkflowExecution(ctx context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RequestCancelWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.RequestCancelWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RequestCancelWorkflowExecution indicates an expected call of RequestCancelWorkflowExecution.
@@ -471,11 +472,12 @@ func (mr *MockEngineMockRecorder) ResetWorkflowExecution(ctx, request interface{
 }
 
 // RespondActivityTaskCanceled mocks base method.
-func (m *MockEngine) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) error {
+func (m *MockEngine) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (*historyservice.RespondActivityTaskCanceledResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RespondActivityTaskCanceled", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.RespondActivityTaskCanceledResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RespondActivityTaskCanceled indicates an expected call of RespondActivityTaskCanceled.
@@ -485,11 +487,12 @@ func (mr *MockEngineMockRecorder) RespondActivityTaskCanceled(ctx, request inter
 }
 
 // RespondActivityTaskCompleted mocks base method.
-func (m *MockEngine) RespondActivityTaskCompleted(ctx context.Context, request *historyservice.RespondActivityTaskCompletedRequest) error {
+func (m *MockEngine) RespondActivityTaskCompleted(ctx context.Context, request *historyservice.RespondActivityTaskCompletedRequest) (*historyservice.RespondActivityTaskCompletedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RespondActivityTaskCompleted", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.RespondActivityTaskCompletedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RespondActivityTaskCompleted indicates an expected call of RespondActivityTaskCompleted.
@@ -499,11 +502,12 @@ func (mr *MockEngineMockRecorder) RespondActivityTaskCompleted(ctx, request inte
 }
 
 // RespondActivityTaskFailed mocks base method.
-func (m *MockEngine) RespondActivityTaskFailed(ctx context.Context, request *historyservice.RespondActivityTaskFailedRequest) error {
+func (m *MockEngine) RespondActivityTaskFailed(ctx context.Context, request *historyservice.RespondActivityTaskFailedRequest) (*historyservice.RespondActivityTaskFailedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RespondActivityTaskFailed", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.RespondActivityTaskFailedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RespondActivityTaskFailed indicates an expected call of RespondActivityTaskFailed.
@@ -571,11 +575,12 @@ func (mr *MockEngineMockRecorder) SignalWithStartWorkflowExecution(ctx, request 
 }
 
 // SignalWorkflowExecution mocks base method.
-func (m *MockEngine) SignalWorkflowExecution(ctx context.Context, request *historyservice.SignalWorkflowExecutionRequest) error {
+func (m *MockEngine) SignalWorkflowExecution(ctx context.Context, request *historyservice.SignalWorkflowExecutionRequest) (*historyservice.SignalWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SignalWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.SignalWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // SignalWorkflowExecution indicates an expected call of SignalWorkflowExecution.
@@ -652,11 +657,12 @@ func (mr *MockEngineMockRecorder) SyncShardStatus(ctx, request interface{}) *gom
 }
 
 // TerminateWorkflowExecution mocks base method.
-func (m *MockEngine) TerminateWorkflowExecution(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest) error {
+func (m *MockEngine) TerminateWorkflowExecution(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest) (*historyservice.TerminateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TerminateWorkflowExecution", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.TerminateWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // TerminateWorkflowExecution indicates an expected call of TerminateWorkflowExecution.

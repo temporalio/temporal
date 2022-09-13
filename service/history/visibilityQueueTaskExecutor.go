@@ -75,27 +75,30 @@ func newVisibilityQueueTaskExecutor(
 func (t *visibilityQueueTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.MetricsHandler, error) {
+) ([]metrics.Tag, bool, error) {
 	task := executable.GetTask()
 	taskType := queues.GetVisibilityTaskTypeTagValue(task)
-	metricsProvider := t.metricProvider.WithTags(
+	metricsTags := []metrics.Tag{
 		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
-	)
+	}
 
+	var err error
 	switch task := task.(type) {
 	case *tasks.StartExecutionVisibilityTask:
-		return metricsProvider, t.processStartExecution(ctx, task)
+		err = t.processStartExecution(ctx, task)
 	case *tasks.UpsertExecutionVisibilityTask:
-		return metricsProvider, t.processUpsertExecution(ctx, task)
+		err = t.processUpsertExecution(ctx, task)
 	case *tasks.CloseExecutionVisibilityTask:
-		return metricsProvider, t.processCloseExecution(ctx, task)
+		err = t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionVisibilityTask:
-		return metricsProvider, t.processDeleteExecution(ctx, task)
+		err = t.processDeleteExecution(ctx, task)
 	default:
-		return metricsProvider, errUnknownVisibilityTask
+		err = errUnknownVisibilityTask
 	}
+
+	return metricsTags, true, err
 }
 
 func (t *visibilityQueueTaskExecutor) processStartExecution(
@@ -111,7 +114,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadWorkflowExecution(ctx)
+	mutableState, err := weContext.LoadMutableState(ctx)
 	if err != nil {
 		return err
 	}
@@ -143,7 +146,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
 
 	// NOTE: do not access anything related mutable state after this lock release
-	// release the context lock since we no longer need mutable state builder and
+	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
@@ -177,7 +180,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadWorkflowExecution(ctx)
+	mutableState, err := weContext.LoadMutableState(ctx)
 	if err != nil {
 		return err
 	}
@@ -198,7 +201,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
 
 	// NOTE: do not access anything related mutable state after this lock release
-	// release the context lock since we no longer need mutable state builder and
+	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
@@ -317,7 +320,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadWorkflowExecution(ctx)
+	mutableState, err := weContext.LoadMutableState(ctx)
 	if err != nil {
 		return err
 	}
@@ -351,7 +354,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
 
 	// NOTE: do not access anything related mutable state after this lock release
-	// release the context lock since we no longer need mutable state builder and
+	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.recordCloseExecution(

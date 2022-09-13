@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"math"
+	"sync"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -51,6 +52,10 @@ type TaskMatcher struct {
 
 	// dynamicRate is the dynamic rate & burst for rate limiter
 	dynamicRateBurst quotas.MutableRateBurst
+	// dynamicRateLimiter is the dynamic rate limiter that can be used to force refresh on new rates.
+	dynamicRateLimiter *quotas.DynamicRateLimiterImpl
+	// forceRefreshRateOnce is used to force refresh rate limit for first time
+	forceRefreshRateOnce sync.Once
 	// rateLimiter that limits the rate at which tasks can be dispatched to consumers
 	rateLimiter quotas.RateLimiter
 
@@ -72,11 +77,12 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scope metrics.Scop
 		defaultTaskDispatchRPS,
 		int(defaultTaskDispatchRPS),
 	)
+	dynamicRateLimiter := quotas.NewDynamicRateLimiter(
+		dynamicRateBurst,
+		defaultTaskDispatchRPSTTL,
+	)
 	limiter := quotas.NewMultiRateLimiter([]quotas.RateLimiter{
-		quotas.NewDynamicRateLimiter(
-			dynamicRateBurst,
-			defaultTaskDispatchRPSTTL,
-		),
+		dynamicRateLimiter,
 		quotas.NewDefaultOutgoingRateLimiter(
 			config.AdminNamespaceTaskQueueToPartitionDispatchRate,
 		),
@@ -85,14 +91,15 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scope metrics.Scop
 		),
 	})
 	return &TaskMatcher{
-		config:           config,
-		dynamicRateBurst: dynamicRateBurst,
-		rateLimiter:      limiter,
-		scope:            scope,
-		fwdr:             fwdr,
-		taskC:            make(chan *internalTask),
-		queryTaskC:       make(chan *internalTask),
-		numPartitions:    config.NumReadPartitions,
+		config:             config,
+		dynamicRateBurst:   dynamicRateBurst,
+		dynamicRateLimiter: dynamicRateLimiter,
+		rateLimiter:        limiter,
+		scope:              scope,
+		fwdr:               fwdr,
+		taskC:              make(chan *internalTask),
+		queryTaskC:         make(chan *internalTask),
+		numPartitions:      config.NumReadPartitions,
 	}
 }
 
@@ -312,6 +319,12 @@ func (tm *TaskMatcher) UpdateRatelimit(rps *float64) {
 
 	tm.dynamicRateBurst.SetRate(rate)
 	tm.dynamicRateBurst.SetBurst(burst)
+	tm.forceRefreshRateOnce.Do(func() {
+		// Dynamic rate limiter only refresh its rate every 1m. Before that initial 1m interval, it uses default rate
+		// which is 10K and is too large in most cases. We need to force refresh for the first time this rate is set
+		// by poller. Only need to do that once. If the rate change later, it will be refresh in 1m.
+		tm.dynamicRateLimiter.Refresh()
+	})
 }
 
 // Rate returns the current rate at which tasks are dispatched

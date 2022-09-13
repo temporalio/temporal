@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -268,7 +269,7 @@ func NewMutableState(
 	return s
 }
 
-func newMutableStateBuilderFromDB(
+func newMutableStateFromDB(
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
@@ -358,7 +359,7 @@ func NewSanitizedMutableState(
 	mutableStateRecord *persistencespb.WorkflowMutableState,
 ) (*MutableStateImpl, error) {
 
-	mutableState, err := newMutableStateBuilderFromDB(shard, eventsCache, logger, namespaceEntry, mutableStateRecord, 1)
+	mutableState, err := newMutableStateFromDB(shard, eventsCache, logger, namespaceEntry, mutableStateRecord, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -1955,7 +1956,6 @@ func (e *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		StartedEventId:          common.EmptyEventID,
 		StartedTime:             timestamp.TimePtr(time.Time{}),
 		ActivityId:              attributes.ActivityId,
-		NamespaceId:             e.executionInfo.NamespaceId,
 		ScheduleToStartTimeout:  attributes.GetScheduleToStartTimeout(),
 		ScheduleToCloseTimeout:  scheduleToCloseTimeout,
 		StartToCloseTimeout:     attributes.GetStartToCloseTimeout(),
@@ -2790,11 +2790,8 @@ func (e *MutableStateImpl) AddUpsertWorkflowSearchAttributesEvent(
 func (e *MutableStateImpl) ReplicateUpsertWorkflowSearchAttributesEvent(
 	event *historypb.HistoryEvent,
 ) {
-
 	upsertSearchAttr := event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes().GetIndexedFields()
-	currentSearchAttr := e.GetExecutionInfo().SearchAttributes
-
-	e.executionInfo.SearchAttributes = mergeMapOfPayload(currentSearchAttr, upsertSearchAttr)
+	e.executionInfo.SearchAttributes = payload.MergeMapOfPayload(e.executionInfo.SearchAttributes, upsertSearchAttr)
 }
 
 func (e *MutableStateImpl) AddWorkflowPropertiesModifiedEvent(
@@ -2823,26 +2820,8 @@ func (e *MutableStateImpl) ReplicateWorkflowPropertiesModifiedEvent(
 	attr := event.GetWorkflowPropertiesModifiedEventAttributes()
 	if attr.UpsertedMemo != nil {
 		upsertMemo := attr.GetUpsertedMemo().GetFields()
-		currentMemo := e.GetExecutionInfo().Memo
-		e.executionInfo.Memo = mergeMapOfPayload(currentMemo, upsertMemo)
+		e.executionInfo.Memo = payload.MergeMapOfPayload(e.executionInfo.Memo, upsertMemo)
 	}
-}
-
-func mergeMapOfPayload(
-	current map[string]*commonpb.Payload,
-	upsert map[string]*commonpb.Payload,
-) map[string]*commonpb.Payload {
-	if current == nil {
-		current = make(map[string]*commonpb.Payload)
-	}
-	for k, v := range upsert {
-		if v.Data == nil {
-			delete(current, k)
-		} else {
-			current[k] = v
-		}
-	}
-	return current
 }
 
 func (e *MutableStateImpl) AddExternalWorkflowExecutionSignaled(
@@ -3220,7 +3199,7 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		return nil, nil, err
 	}
 
-	newStateBuilder := NewMutableState(
+	newMutableState := NewMutableState(
 		e.shard,
 		e.shard.GetEventsCache(),
 		e.logger,
@@ -3228,11 +3207,11 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
 	)
 
-	if err = newStateBuilder.SetHistoryTree(ctx, newRunID); err != nil {
+	if err = newMutableState.SetHistoryTree(ctx, newRunID); err != nil {
 		return nil, nil, err
 	}
 
-	if _, err = newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(
+	if _, err = newMutableState.addWorkflowExecutionStartedEventForContinueAsNew(
 		parentInfo,
 		newExecution,
 		e,
@@ -3256,7 +3235,7 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		return nil, nil, err
 	}
 
-	return continueAsNewEvent, newStateBuilder, nil
+	return continueAsNewEvent, newMutableState, nil
 }
 
 func rolloverAutoResetPointsWithExpiringTime(
@@ -4224,7 +4203,7 @@ func (e *MutableStateImpl) updateWithLastWriteEvent(
 ) error {
 
 	if transactionPolicy == TransactionPolicyPassive {
-		// already handled in state builder
+		// already handled in mutable state.
 		return nil
 	}
 

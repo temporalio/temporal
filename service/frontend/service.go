@@ -139,14 +139,28 @@ type Config struct {
 
 	// RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
+	// Default value is 100.
 	DeleteNamespaceDeleteActivityRPS dynamicconfig.IntPropertyFn
+	// Page size to read executions from visibility for delete executions activity.
+	// Default value is 1000.
+	DeleteNamespacePageSize dynamicconfig.IntPropertyFn
+	// Number of pages before returning ContinueAsNew from delete executions activity.
+	// Default value is 256.
+	DeleteNamespacePagesPerExecution dynamicconfig.IntPropertyFn
 	// Number of concurrent delete executions activities.
 	// Must be not greater than 256 and number of worker cores in the cluster.
+	// Default is 4.
 	DeleteNamespaceConcurrentDeleteExecutionsActivities dynamicconfig.IntPropertyFn
+	// Duration for how long namespace stays in database
+	// after all namespace resources (i.e. workflow executions) are deleted.
+	// Default is 0, means, namespace will be deleted immediately.
+	DeleteNamespaceNamespaceDeleteDelay dynamicconfig.DurationPropertyFn
 
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	// Enable batcher RPCs
+	EnableBatcher dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Batch operation dynamic configs
 	MaxConcurrentBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
@@ -208,10 +222,14 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		KeepAliveTimeout:                       dc.GetDurationProperty(dynamicconfig.KeepAliveTimeout, 10*time.Second),
 
 		DeleteNamespaceDeleteActivityRPS:                    dc.GetIntProperty(dynamicconfig.DeleteNamespaceDeleteActivityRPS, 100),
+		DeleteNamespacePageSize:                             dc.GetIntProperty(dynamicconfig.DeleteNamespacePageSize, 1000),
+		DeleteNamespacePagesPerExecution:                    dc.GetIntProperty(dynamicconfig.DeleteNamespacePagesPerExecution, 256),
 		DeleteNamespaceConcurrentDeleteExecutionsActivities: dc.GetIntProperty(dynamicconfig.DeleteNamespaceConcurrentDeleteExecutionsActivities, 4),
+		DeleteNamespaceNamespaceDeleteDelay:                 dc.GetDurationProperty(dynamicconfig.DeleteNamespaceNamespaceDeleteDelay, 0),
 
-		EnableSchedules: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableSchedules, false),
+		EnableSchedules: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableSchedules, true),
 
+		EnableBatcher:               dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.FrontendEnableBatcher, true),
 		MaxConcurrentBatchOperation: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
 	}
 }

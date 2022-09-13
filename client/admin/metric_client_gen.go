@@ -41,7 +41,7 @@ func (c *metricClient) AddOrUpdateRemoteCluster(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.AddOrUpdateRemoteClusterResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientAddOrUpdateRemoteClusterScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientAddOrUpdateRemoteClusterScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -55,7 +55,7 @@ func (c *metricClient) AddSearchAttributes(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.AddSearchAttributesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientAddSearchAttributesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientAddSearchAttributesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -69,7 +69,7 @@ func (c *metricClient) CloseShard(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.CloseShardResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientCloseShardScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientCloseShardScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -83,7 +83,7 @@ func (c *metricClient) DeleteWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.DeleteWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientDeleteWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientDeleteWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -97,7 +97,7 @@ func (c *metricClient) DescribeCluster(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.DescribeClusterResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientDescribeClusterScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientDescribeClusterScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -111,7 +111,7 @@ func (c *metricClient) DescribeHistoryHost(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.DescribeHistoryHostResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientDescribeHistoryHostScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientDescribeHistoryHostScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -125,7 +125,7 @@ func (c *metricClient) DescribeMutableState(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.DescribeMutableStateResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientDescribeMutableStateScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientDescribeMutableStateScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -139,7 +139,7 @@ func (c *metricClient) GetDLQMessages(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.GetDLQMessagesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientGetDLQMessagesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientGetDLQMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -153,7 +153,7 @@ func (c *metricClient) GetDLQReplicationMessages(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.GetDLQReplicationMessagesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientGetDLQReplicationMessagesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientGetDLQReplicationMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -167,7 +167,7 @@ func (c *metricClient) GetNamespaceReplicationMessages(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.GetNamespaceReplicationMessagesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientGetNamespaceReplicationMessagesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientGetNamespaceReplicationMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -181,7 +181,7 @@ func (c *metricClient) GetReplicationMessages(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.GetReplicationMessagesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientGetReplicationMessagesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientGetReplicationMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -195,7 +195,7 @@ func (c *metricClient) GetSearchAttributes(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.GetSearchAttributesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientGetSearchAttributesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientGetSearchAttributesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -209,7 +209,7 @@ func (c *metricClient) GetShard(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.GetShardResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientGetShardScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientGetShardScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -223,7 +223,7 @@ func (c *metricClient) GetTaskQueueTasks(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.GetTaskQueueTasksResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientGetTaskQueueTasksScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientGetTaskQueueTasksScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -237,7 +237,7 @@ func (c *metricClient) GetWorkflowExecutionRawHistoryV2(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.GetWorkflowExecutionRawHistoryV2Response, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientGetWorkflowExecutionRawHistoryV2Scope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientGetWorkflowExecutionRawHistoryV2Scope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -251,7 +251,7 @@ func (c *metricClient) ListClusterMembers(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.ListClusterMembersResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientListClusterMembersScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientListClusterMembersScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -265,7 +265,7 @@ func (c *metricClient) ListClusters(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.ListClustersResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientListClustersScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientListClustersScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -279,7 +279,7 @@ func (c *metricClient) ListHistoryTasks(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.ListHistoryTasksResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientListHistoryTasksScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientListHistoryTasksScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -293,7 +293,7 @@ func (c *metricClient) MergeDLQMessages(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.MergeDLQMessagesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientMergeDLQMessagesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientMergeDLQMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -307,7 +307,7 @@ func (c *metricClient) PurgeDLQMessages(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.PurgeDLQMessagesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientPurgeDLQMessagesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientPurgeDLQMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -321,7 +321,7 @@ func (c *metricClient) ReapplyEvents(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.ReapplyEventsResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientReapplyEventsScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientReapplyEventsScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -335,7 +335,7 @@ func (c *metricClient) RebuildMutableState(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.RebuildMutableStateResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientRebuildMutableStateScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientRebuildMutableStateScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -349,7 +349,7 @@ func (c *metricClient) RefreshWorkflowTasks(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.RefreshWorkflowTasksResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientRefreshWorkflowTasksScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientRefreshWorkflowTasksScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -363,7 +363,7 @@ func (c *metricClient) RemoveRemoteCluster(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientRemoveRemoteClusterScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientRemoveRemoteClusterScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -377,7 +377,7 @@ func (c *metricClient) RemoveSearchAttributes(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.RemoveSearchAttributesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientRemoveSearchAttributesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientRemoveSearchAttributesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -391,7 +391,7 @@ func (c *metricClient) RemoveTask(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.RemoveTaskResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientRemoveTaskScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientRemoveTaskScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -405,7 +405,7 @@ func (c *metricClient) ResendReplicationTasks(
 	opts ...grpc.CallOption,
 ) (_ *adminservice.ResendReplicationTasksResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.AdminClientResendReplicationTasksScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.AdminClientResendReplicationTasksScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()

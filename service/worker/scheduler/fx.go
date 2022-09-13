@@ -54,7 +54,7 @@ type (
 		MetricsClient  metrics.Client
 		Logger         log.Logger
 		HistoryClient  historyservice.HistoryServiceClient
-		FrontendClient workflowservice.WorkflowServiceClient `name:"localFrontendClient"`
+		FrontendClient workflowservice.WorkflowServiceClient
 	}
 
 	fxResult struct {
@@ -75,7 +75,7 @@ func NewResult(
 		Component: &workerComponent{
 			activityDeps: params,
 			enabledForNs: dcCollection.GetBoolPropertyFnWithNamespaceFilter(
-				dynamicconfig.WorkerEnableScheduler, false),
+				dynamicconfig.WorkerEnableScheduler, true),
 		},
 	}
 }

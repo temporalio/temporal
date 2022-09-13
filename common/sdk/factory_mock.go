@@ -34,7 +34,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	client "go.temporal.io/sdk/client"
 	worker "go.temporal.io/sdk/worker"
-	log "go.temporal.io/server/common/log"
 )
 
 // MockClientFactory is a mock of ClientFactory interface.
@@ -61,32 +60,31 @@ func (m *MockClientFactory) EXPECT() *MockClientFactoryMockRecorder {
 }
 
 // GetSystemClient mocks base method.
-func (m *MockClientFactory) GetSystemClient(logger log.Logger) client.Client {
+func (m *MockClientFactory) GetSystemClient() client.Client {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSystemClient", logger)
+	ret := m.ctrl.Call(m, "GetSystemClient")
 	ret0, _ := ret[0].(client.Client)
 	return ret0
 }
 
 // GetSystemClient indicates an expected call of GetSystemClient.
-func (mr *MockClientFactoryMockRecorder) GetSystemClient(logger interface{}) *gomock.Call {
+func (mr *MockClientFactoryMockRecorder) GetSystemClient() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSystemClient", reflect.TypeOf((*MockClientFactory)(nil).GetSystemClient), logger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSystemClient", reflect.TypeOf((*MockClientFactory)(nil).GetSystemClient))
 }
 
 // NewClient mocks base method.
-func (m *MockClientFactory) NewClient(namespaceName string, logger log.Logger) (client.Client, error) {
+func (m *MockClientFactory) NewClient(options client.Options) client.Client {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewClient", namespaceName, logger)
+	ret := m.ctrl.Call(m, "NewClient", options)
 	ret0, _ := ret[0].(client.Client)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // NewClient indicates an expected call of NewClient.
-func (mr *MockClientFactoryMockRecorder) NewClient(namespaceName, logger interface{}) *gomock.Call {
+func (mr *MockClientFactoryMockRecorder) NewClient(options interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewClient", reflect.TypeOf((*MockClientFactory)(nil).NewClient), namespaceName, logger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewClient", reflect.TypeOf((*MockClientFactory)(nil).NewClient), options)
 }
 
 // MockWorkerFactory is a mock of WorkerFactory interface.

@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -73,17 +74,6 @@ func (s *mitigatorSuite) TestQueuePendingTaskAlert() {
 
 	action := s.mitigator.Mitigate(alert)
 	s.IsType(&actionQueuePendingTask{}, action)
-
-	s.Nil(
-		s.mitigator.Mitigate(alert),
-		"mitigator should have only one outstanding action for pending task alert",
-	)
-
-	action.(*actionQueuePendingTask).completionFn()
-
-	action = s.mitigator.Mitigate(alert)
-	s.NotNil(action)
-	s.IsType(&actionQueuePendingTask{}, action)
 }
 
 func (s *mitigatorSuite) TestReaderWatermarkAlert() {
@@ -96,17 +86,6 @@ func (s *mitigatorSuite) TestReaderWatermarkAlert() {
 	}
 
 	action := s.mitigator.Mitigate(alert)
-	s.IsType(&actionReaderStuck{}, action)
-
-	s.Nil(
-		s.mitigator.Mitigate(alert),
-		"mitigator should have only one outstanding action for reader watermark alert",
-	)
-
-	action.(*actionReaderStuck).completionFn()
-
-	action = s.mitigator.Mitigate(alert)
-	s.NotNil(action)
 	s.IsType(&actionReaderStuck{}, action)
 }
 
@@ -121,15 +100,19 @@ func (s *mitigatorSuite) TestSliceCountAlert() {
 
 	action := s.mitigator.Mitigate(alert)
 	s.IsType(&actionSliceCount{}, action)
+}
 
-	s.Nil(
-		s.mitigator.Mitigate(alert),
-		"mitigator should have only one outstanding action for slice count alert",
-	)
+func (s *mitigatorSuite) TestActionComplectionFn() {
+	// manually set pending alerts in monitor
+	monitor := s.monitor.(*monitorImpl)
+	monitor.pendingAlerts = map[AlertType]struct{}{
+		AlertTypeQueuePendingTaskCount: {},
+	}
 
-	action.(*actionSliceCount).completionFn()
+	s.mitigator.newActionCompletionFn(
+		AlertTypeQueuePendingTaskCount,
+		&AlertAttributesQueuePendingTaskCount{},
+	)()
 
-	action = s.mitigator.Mitigate(alert)
-	s.NotNil(action)
-	s.IsType(&actionSliceCount{}, action)
+	s.Empty(monitor.pendingAlerts)
 }

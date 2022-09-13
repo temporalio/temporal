@@ -25,12 +25,17 @@
 package payload
 
 import (
+	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
+	"golang.org/x/exp/maps"
 )
 
 var (
 	defaultDataConverter = converter.GetDefaultDataConverter()
+
+	nilPayload, _        = Encode(nil)
+	emptySlicePayload, _ = Encode([]string{})
 )
 
 func EncodeString(str string) *commonpb.Payload {
@@ -55,4 +60,42 @@ func Decode(p *commonpb.Payload, valuePtr interface{}) error {
 
 func ToString(p *commonpb.Payload) string {
 	return defaultDataConverter.ToString(p)
+}
+
+// MergeMapOfPayload returns a new map resulting from merging map m2 into m1.
+// If a key in m2 already exists in m1, then the value in m2 replaces the value in m1.
+// If the new payload have nil data or an empty slice data, then it deletes the key.
+// For example:
+//
+//	m1 := map[string]*commonpb.Payload{
+//		"key1": EncodeString("value1"),
+//		"key2": EncodeString("value2"),
+//	}
+//	m2 := map[string]*commonpb.Payload{
+//		"key1": EncodeString("newValue1"),
+//		"key2": nilPayload,
+//	}
+//	m3 := MergeMapOfPayload(m1, m2)
+//
+// The resulting map `m3` is:
+//
+//	m1 := map[string]*commonpb.Payload{
+//		"key1": EncodeString("newValue1"),
+//	}
+func MergeMapOfPayload(
+	m1 map[string]*commonpb.Payload,
+	m2 map[string]*commonpb.Payload,
+) map[string]*commonpb.Payload {
+	if len(m1) == 0 {
+		return maps.Clone(m2)
+	}
+	ret := maps.Clone(m1)
+	for k, v := range m2 {
+		if proto.Equal(v, nilPayload) || proto.Equal(v, emptySlicePayload) {
+			delete(ret, k)
+		} else {
+			ret[k] = v
+		}
+	}
+	return ret
 }

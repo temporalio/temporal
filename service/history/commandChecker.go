@@ -173,15 +173,16 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 }
 
 func (c *workflowSizeChecker) failWorkflowIfMemoSizeExceedsLimit(
+	memo *commonpb.Memo,
 	commandTypeTag metrics.Tag,
-	memoSize int,
 	message string,
 ) (bool, error) {
+	c.metricsScope.Tagged(commandTypeTag).RecordDistribution(metrics.MemoSize, memo.Size())
 
 	executionInfo := c.mutableState.GetExecutionInfo()
 	executionState := c.mutableState.GetExecutionState()
 	err := common.CheckEventBlobSizeLimit(
-		memoSize,
+		memo.Size(),
 		c.memoSizeLimitWarn,
 		c.memoSizeLimitError,
 		executionInfo.NamespaceId,

@@ -42,6 +42,10 @@ import (
 	"go.uber.org/fx"
 )
 
+const (
+	timerQueuePersistenceMaxRPSRatio = 0.3
+)
+
 type (
 	timerQueueFactoryParams struct {
 		fx.In
@@ -61,39 +65,37 @@ type (
 
 func NewTimerQueueFactory(
 	params timerQueueFactoryParams,
-) queues.Factory {
+) QueueFactory {
 	var hostScheduler queues.Scheduler
 	if params.Config.TimerProcessorEnablePriorityTaskScheduler() {
 		hostScheduler = queues.NewNamespacePriorityScheduler(
+			params.ClusterMetadata.GetCurrentClusterName(),
 			queues.NamespacePrioritySchedulerOptions{
-				WorkerCount:      params.Config.TimerProcessorSchedulerWorkerCount,
-				NamespaceWeights: params.Config.TimerProcessorSchedulerRoundRobinWeights,
+				WorkerCount:             params.Config.TimerProcessorSchedulerWorkerCount,
+				ActiveNamespaceWeights:  params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
+				StandbyNamespaceWeights: params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
 			params.TimeSource,
-			params.MetricsHandler,
+			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTimerQueueProcessor)),
 			params.Logger,
 		)
 	}
 	return &timerQueueFactory{
 		timerQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
-			HostScheduler: hostScheduler,
-			HostPriorityAssigner: queues.NewPriorityAssigner(
-				params.ClusterMetadata.GetCurrentClusterName(),
-				params.NamespaceRegistry,
-				queues.PriorityAssignerOptions{
-					CriticalRetryAttempts: params.Config.TimerTaskMaxRetryCount(),
-				},
-			),
+			HostScheduler:        hostScheduler,
+			HostPriorityAssigner: queues.NewPriorityAssigner(),
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.TimerProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
+				timerQueuePersistenceMaxRPSRatio,
 			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.TimerProcessorMaxPollHostRPS,
 					params.Config.PersistenceMaxQPS,
+					timerQueuePersistenceMaxRPSRatio,
 				),
 				params.Config.QueueMaxReaderCount(),
 			),

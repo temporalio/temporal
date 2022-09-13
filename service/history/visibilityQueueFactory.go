@@ -37,6 +37,10 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
+const (
+	visibilityQueuePersistenceMaxRPSRatio = 0.15
+)
+
 type (
 	visibilityQueueFactoryParams struct {
 		fx.In
@@ -54,39 +58,37 @@ type (
 
 func NewVisibilityQueueFactory(
 	params visibilityQueueFactoryParams,
-) queues.Factory {
+) QueueFactory {
 	var hostScheduler queues.Scheduler
 	if params.Config.VisibilityProcessorEnablePriorityTaskScheduler() {
 		hostScheduler = queues.NewNamespacePriorityScheduler(
+			params.ClusterMetadata.GetCurrentClusterName(),
 			queues.NamespacePrioritySchedulerOptions{
-				WorkerCount:      params.Config.VisibilityProcessorSchedulerWorkerCount,
-				NamespaceWeights: params.Config.VisibilityProcessorSchedulerRoundRobinWeights,
+				WorkerCount:             params.Config.VisibilityProcessorSchedulerWorkerCount,
+				ActiveNamespaceWeights:  params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
+				StandbyNamespaceWeights: params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
 			params.TimeSource,
-			params.MetricsHandler,
+			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
 			params.Logger,
 		)
 	}
 	return &visibilityQueueFactory{
 		visibilityQueueFactoryParams: params,
 		QueueFactoryBase: QueueFactoryBase{
-			HostScheduler: hostScheduler,
-			HostPriorityAssigner: queues.NewPriorityAssigner(
-				params.ClusterMetadata.GetCurrentClusterName(),
-				params.NamespaceRegistry,
-				queues.PriorityAssignerOptions{
-					CriticalRetryAttempts: params.Config.TransferTaskMaxRetryCount(),
-				},
-			),
+			HostScheduler:        hostScheduler,
+			HostPriorityAssigner: queues.NewPriorityAssigner(),
 			HostRateLimiter: NewQueueHostRateLimiter(
 				params.Config.VisibilityProcessorMaxPollHostRPS,
 				params.Config.PersistenceMaxQPS,
+				visibilityQueuePersistenceMaxRPSRatio,
 			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.VisibilityProcessorMaxPollHostRPS,
 					params.Config.PersistenceMaxQPS,
+					visibilityQueuePersistenceMaxRPSRatio,
 				),
 				params.Config.QueueMaxReaderCount(),
 			),

@@ -80,7 +80,7 @@ func (wm *workerManager) Start() {
 		// TODO: add dynamic config for worker options
 		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackground),
 	}
-	sdkClient := wm.sdkClientFactory.GetSystemClient(wm.logger)
+	sdkClient := wm.sdkClientFactory.GetSystemClient()
 	defaultWorker := sdkworker.New(sdkClient, DefaultWorkerTaskQueue, defaultWorkerOptions)
 	wm.workers = []sdkworker.Worker{defaultWorker}
 

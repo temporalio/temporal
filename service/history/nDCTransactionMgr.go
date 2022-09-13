@@ -368,7 +368,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 			// no-op. Usually this is due to reset workflow with pending child workflows
 			r.logger.Warn("Cannot reset workflow. Ignoring reapply events.", tag.Error(err))
 		case nil:
-			//no-op
+			// no-op
 		default:
 			return 0, workflow.TransactionPolicyActive, err
 		}
@@ -464,13 +464,13 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 		return nil, err
 	}
 
-	msBuilder, err := weContext.LoadWorkflowExecution(ctx)
+	ms, err := weContext.LoadMutableState(ctx)
 	if err != nil {
 		// no matter what error happen, we need to retry
 		release(err)
 		return nil, err
 	}
-	return newNDCWorkflow(ctx, r.namespaceRegistry, r.clusterMetadata, weContext, msBuilder, release), nil
+	return newNDCWorkflow(ctx, r.namespaceRegistry, r.clusterMetadata, weContext, ms, release), nil
 }
 
 func (r *nDCTransactionMgrImpl) isWorkflowCurrent(

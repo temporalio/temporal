@@ -29,8 +29,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"go.temporal.io/server/common"
 	"golang.org/x/exp/maps"
+
+	"go.temporal.io/server/common"
 )
 
 type (
@@ -115,6 +116,19 @@ func (g *ReaderGroup) NewReader(readerID int32, slices ...Slice) Reader {
 		reader.Start()
 	}
 	return reader
+}
+
+func (g *ReaderGroup) RemoveReader(readerID int32) {
+	g.Lock()
+	defer g.Unlock()
+
+	reader, ok := g.readerMap[readerID]
+	if !ok {
+		return
+	}
+
+	reader.Stop()
+	delete(g.readerMap, readerID)
 }
 
 func (g *ReaderGroup) isStarted() bool {

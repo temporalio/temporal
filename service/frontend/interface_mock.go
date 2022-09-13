@@ -105,6 +105,21 @@ func (mr *MockHandlerMockRecorder) DeleteSchedule(arg0, arg1 interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSchedule", reflect.TypeOf((*MockHandler)(nil).DeleteSchedule), arg0, arg1)
 }
 
+// DeleteWorkflowExecution mocks base method.
+func (m *MockHandler) DeleteWorkflowExecution(arg0 context.Context, arg1 *v10.DeleteWorkflowExecutionRequest) (*v10.DeleteWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", arg0, arg1)
+	ret0, _ := ret[0].(*v10.DeleteWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
+func (mr *MockHandlerMockRecorder) DeleteWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockHandler)(nil).DeleteWorkflowExecution), arg0, arg1)
+}
+
 // DeprecateNamespace mocks base method.
 func (m *MockHandler) DeprecateNamespace(arg0 context.Context, arg1 *v10.DeprecateNamespaceRequest) (*v10.DeprecateNamespaceResponse, error) {
 	m.ctrl.T.Helper()
@@ -974,51 +989,6 @@ func (m *MockOperatorHandler) DeleteNamespace(arg0 context.Context, arg1 *v1.Del
 func (mr *MockOperatorHandlerMockRecorder) DeleteNamespace(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNamespace", reflect.TypeOf((*MockOperatorHandler)(nil).DeleteNamespace), arg0, arg1)
-}
-
-// DeleteWorkflowExecution mocks base method.
-func (m *MockOperatorHandler) DeleteWorkflowExecution(arg0 context.Context, arg1 *v1.DeleteWorkflowExecutionRequest) (*v1.DeleteWorkflowExecutionResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", arg0, arg1)
-	ret0, _ := ret[0].(*v1.DeleteWorkflowExecutionResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockOperatorHandlerMockRecorder) DeleteWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockOperatorHandler)(nil).DeleteWorkflowExecution), arg0, arg1)
-}
-
-// DescribeCluster mocks base method.
-func (m *MockOperatorHandler) DescribeCluster(arg0 context.Context, arg1 *v1.DescribeClusterRequest) (*v1.DescribeClusterResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DescribeCluster", arg0, arg1)
-	ret0, _ := ret[0].(*v1.DescribeClusterResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DescribeCluster indicates an expected call of DescribeCluster.
-func (mr *MockOperatorHandlerMockRecorder) DescribeCluster(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeCluster", reflect.TypeOf((*MockOperatorHandler)(nil).DescribeCluster), arg0, arg1)
-}
-
-// ListClusterMembers mocks base method.
-func (m *MockOperatorHandler) ListClusterMembers(arg0 context.Context, arg1 *v1.ListClusterMembersRequest) (*v1.ListClusterMembersResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListClusterMembers", arg0, arg1)
-	ret0, _ := ret[0].(*v1.ListClusterMembersResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListClusterMembers indicates an expected call of ListClusterMembers.
-func (mr *MockOperatorHandlerMockRecorder) ListClusterMembers(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMembers", reflect.TypeOf((*MockOperatorHandler)(nil).ListClusterMembers), arg0, arg1)
 }
 
 // ListClusters mocks base method.

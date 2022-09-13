@@ -116,7 +116,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := executionContext.LoadWorkflowExecution(ctx)
+	mutableState, err := executionContext.LoadMutableState(ctx)
 	if err != nil {
 		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			// this can happen if the workflow start event and this sync activity task are out of order

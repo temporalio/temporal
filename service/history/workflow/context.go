@@ -72,7 +72,7 @@ type (
 		GetWorkflowID() string
 		GetRunID() string
 
-		LoadWorkflowExecution(ctx context.Context) (MutableState, error)
+		LoadMutableState(ctx context.Context) (MutableState, error)
 		LoadExecutionStats(ctx context.Context) (*persistencespb.ExecutionStats, error)
 		Clear()
 
@@ -253,14 +253,14 @@ func (c *ContextImpl) SetHistorySize(size int64) {
 }
 
 func (c *ContextImpl) LoadExecutionStats(ctx context.Context) (*persistencespb.ExecutionStats, error) {
-	_, err := c.LoadWorkflowExecution(ctx)
+	_, err := c.LoadMutableState(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return c.stats, nil
 }
 
-func (c *ContextImpl) LoadWorkflowExecution(ctx context.Context) (MutableState, error) {
+func (c *ContextImpl) LoadMutableState(ctx context.Context) (MutableState, error) {
 	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(c.GetNamespaceID())
 	if err != nil {
 		return nil, err
@@ -277,7 +277,7 @@ func (c *ContextImpl) LoadWorkflowExecution(ctx context.Context) (MutableState, 
 			return nil, err
 		}
 
-		c.MutableState, err = newMutableStateBuilderFromDB(
+		c.MutableState, err = newMutableStateFromDB(
 			c.shard,
 			c.shard.GetEventsCache(),
 			c.logger,
@@ -672,15 +672,12 @@ func (c *ContextImpl) SetWorkflowExecution(ctx context.Context, now time.Time) (
 		}
 	}()
 
-	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsSnapshot(
+	resetWorkflowSnapshot, _, err := c.MutableState.CloseTransactionAsSnapshot(
 		now,
 		TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
-	}
-	if len(resetWorkflowEventsSeq) != 0 {
-		return serviceerror.NewInternal("SetWorkflowExecution encountered new events")
 	}
 
 	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
@@ -856,7 +853,6 @@ func (c *ContextImpl) ReapplyEvents(
 	_, err = sourceCluster.ReapplyEvents(
 		ctx2,
 		&adminservice.ReapplyEventsRequest{
-			Namespace:         namespaceEntry.Name().String(),
 			NamespaceId:       namespaceEntry.ID().String(),
 			WorkflowExecution: execution,
 			Events:            reapplyEventsDataBlob,
@@ -893,7 +889,7 @@ func (c *ContextImpl) enforceSizeCheck(
 		c.Clear()
 
 		// Reload mutable state
-		mutableState, err := c.LoadWorkflowExecution(ctx)
+		mutableState, err := c.LoadMutableState(ctx)
 		if err != nil {
 			return false, err
 		}

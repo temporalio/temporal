@@ -1861,6 +1861,7 @@ func (s *workflowHandlerSuite) TestGetSystemInfo() {
 	s.True(resp.Capabilities.ActivityFailureIncludeHeartbeat)
 	s.True(resp.Capabilities.SupportsSchedules)
 	s.True(resp.Capabilities.EncodedFailureAttributes)
+	s.True(resp.Capabilities.UpsertMemo)
 }
 
 func (s *workflowHandlerSuite) TestStartBatchOperation_Terminate() {
@@ -2052,44 +2053,90 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 	wh := s.getWorkflowHandler(config)
 	now := timestamp.TimePtr(time.Now())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
-	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(
-			_ context.Context,
-			request *historyservice.DescribeWorkflowExecutionRequest,
-			_ ...grpc.CallOption,
-		) (*historyservice.DescribeWorkflowExecutionResponse, error) {
-
-			return &historyservice.DescribeWorkflowExecutionResponse{
-				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-					Execution: &commonpb.WorkflowExecution{
-						WorkflowId: jobID,
-					},
-					StartTime:     now,
-					CloseTime:     now,
-					Status:        enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-					ExecutionTime: now,
-					Memo: &commonpb.Memo{
-						Fields: map[string]*commonpb.Payload{
-							batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
+	s.Run("StatsNotInMemo", func() {
+		s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(
+				_ context.Context,
+				request *historyservice.DescribeWorkflowExecutionRequest,
+				_ ...grpc.CallOption,
+			) (*historyservice.DescribeWorkflowExecutionResponse, error) {
+				return &historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: jobID,
 						},
+						StartTime:     now,
+						CloseTime:     now,
+						Status:        enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+						ExecutionTime: now,
+						Memo: &commonpb.Memo{
+							Fields: map[string]*commonpb.Payload{
+								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
+							},
+						},
+						SearchAttributes: nil,
 					},
-					SearchAttributes: nil,
-				},
-			}, nil
-		},
-	)
-	request := &workflowservice.DescribeBatchOperationRequest{
-		Namespace: testNamespace.String(),
-		JobId:     jobID,
-	}
+				}, nil
+			},
+		)
+		request := &workflowservice.DescribeBatchOperationRequest{
+			Namespace: testNamespace.String(),
+			JobId:     jobID,
+		}
 
-	resp, err := wh.DescribeBatchOperation(context.Background(), request)
-	s.NoError(err)
-	s.Equal(jobID, resp.GetJobId())
-	s.Equal(now, resp.GetStartTime())
-	s.Equal(now, resp.GetCloseTime())
-	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
-	s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, resp.GetState())
+		_, err := wh.DescribeBatchOperation(context.Background(), request)
+		s.Require().Error(err)
+		s.Contains(err.Error(), "batch operation stats are not present in the memo")
+	})
+	s.Run("StatsInMemo", func() {
+		s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(
+				_ context.Context,
+				request *historyservice.DescribeWorkflowExecutionRequest,
+				_ ...grpc.CallOption,
+			) (*historyservice.DescribeWorkflowExecutionResponse, error) {
+
+				statsPayload, err := payload.Encode(batcher.BatchOperationStats{
+					NumSuccess: 2,
+					NumFailure: 1,
+				})
+				s.Require().NoError(err)
+				return &historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: jobID,
+						},
+						StartTime:     now,
+						CloseTime:     now,
+						Status:        enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+						ExecutionTime: now,
+						Memo: &commonpb.Memo{
+							Fields: map[string]*commonpb.Payload{
+								batcher.BatchOperationTypeMemo:  payload.EncodeString(batcher.BatchTypeTerminate),
+								batcher.BatchOperationStatsMemo: statsPayload,
+							},
+						},
+						SearchAttributes: nil,
+					},
+				}, nil
+			},
+		)
+		request := &workflowservice.DescribeBatchOperationRequest{
+			Namespace: testNamespace.String(),
+			JobId:     jobID,
+		}
+
+		resp, err := wh.DescribeBatchOperation(context.Background(), request)
+		s.Require().NoError(err)
+		s.Equal(jobID, resp.GetJobId())
+		s.Equal(now, resp.GetStartTime())
+		s.Equal(now, resp.GetCloseTime())
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
+		s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, resp.GetState())
+		s.Equal(int64(3), resp.GetTotalOperationCount())
+		s.Equal(int64(2), resp.GetCompleteOperationCount())
+		s.Equal(int64(1), resp.GetFailureOperationCount())
+	})
 }
 
 func (s *workflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
@@ -2106,7 +2153,12 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 			request *historyservice.DescribeWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.DescribeWorkflowExecutionResponse, error) {
-
+			hbdPayload, err := payloads.Encode(batcher.HeartBeatDetails{
+				TotalEstimate: 5,
+				SuccessCount:  3,
+				ErrorCount:    1,
+			})
+			s.Require().NoError(err)
 			return &historyservice.DescribeWorkflowExecutionResponse{
 				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 					Execution: &commonpb.WorkflowExecution{
@@ -2123,6 +2175,11 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 					},
 					SearchAttributes: nil,
 				},
+				PendingActivities: []*workflowpb.PendingActivityInfo{
+					{
+						HeartbeatDetails: hbdPayload,
+					},
+				},
 			}, nil
 		},
 	)
@@ -2138,6 +2195,9 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 	s.Equal(now, resp.GetCloseTime())
 	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
 	s.Equal(enumspb.BATCH_OPERATION_STATE_RUNNING, resp.GetState())
+	s.Assert().Equal(int64(5), resp.TotalOperationCount)
+	s.Assert().Equal(int64(3), resp.CompleteOperationCount)
+	s.Assert().Equal(int64(1), resp.FailureOperationCount)
 }
 
 func (s *workflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
@@ -2338,4 +2398,73 @@ func TestContextNearDeadline(t *testing.T) {
 	ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*500)
 	assert.True(t, contextNearDeadline(ctx, longPollTailRoom))
 	assert.False(t, contextNearDeadline(ctx, time.Millisecond))
+}
+
+func (s *workflowHandlerSuite) Test_DeleteWorkflowExecution() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	type test struct {
+		Name     string
+		Request  *workflowservice.DeleteWorkflowExecutionRequest
+		Expected error
+	}
+	// request validation tests
+	testCases1 := []test{
+		{
+			Name:     "nil request",
+			Request:  nil,
+			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
+		},
+		{
+			Name:     "empty request",
+			Request:  &workflowservice.DeleteWorkflowExecutionRequest{},
+			Expected: &serviceerror.InvalidArgument{Message: "Execution is not set on request."},
+		},
+		{
+			Name: "empty namespace",
+			Request: &workflowservice.DeleteWorkflowExecutionRequest{
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: "test-workflow-id",
+					RunId:      "wrong-run-id",
+				},
+			},
+			Expected: &serviceerror.InvalidArgument{Message: "Invalid RunId."},
+		},
+	}
+	for _, testCase := range testCases1 {
+		s.T().Run(testCase.Name, func(t *testing.T) {
+			resp, err := wh.DeleteWorkflowExecution(ctx, testCase.Request)
+			s.Equal(testCase.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	// History call failed.
+	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("random error"))
+	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
+	resp, err := wh.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+			RunId:      "d2595cb3-3b21-4026-a3e8-17bc32fb2a2b",
+		},
+	})
+	s.Error(err)
+	s.Equal("random error", err.Error())
+	s.Nil(resp)
+
+	// Success case.
+	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
+	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
+	resp, err = wh.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+			// RunId is not required.
+		},
+	})
+	s.NoError(err)
+	s.NotNil(resp)
 }

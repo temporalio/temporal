@@ -29,7 +29,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -39,7 +39,6 @@ import (
 	schedpb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/converter"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -66,11 +65,15 @@ const (
 	QueryNameDescribe          = "describe"
 	QueryNameListMatchingTimes = "listMatchingTimes"
 
+	MemoFieldInfo = "ScheduleInfo"
+
 	InitialConflictToken = 1
 
 	// Maximum number of times to list per ListMatchingTimes query. (This is used only in a
 	// query so it can be changed without breaking history.)
 	maxListMatchingTimesCount = 1000
+
+	invalidDuration time.Duration = -1
 )
 
 type (
@@ -81,13 +84,15 @@ type (
 		a      *activities
 		logger sdklog.Logger
 
-		cspec *compiledSpec
+		cspec *CompiledSpec
 
 		tweakables tweakablePolicies
 
 		// We might have zero or one long-poll watcher activity running. If so, these are set:
 		watchingWorkflowId string
 		watchingFuture     workflow.Future
+
+		uuidBatch []string
 	}
 
 	tweakablePolicies struct {
@@ -99,7 +104,6 @@ type (
 		RecentActionCount                 int           // The number of recent actual action results to include in Describe.
 		FutureActionCountForList          int           // The number of future action times to include in List (search attr).
 		RecentActionCountForList          int           // The number of recent actual action results to include in List (search attr).
-		MaxSearchAttrLen                  int           // Search attr length limit (should be <= server's limit).
 		IterationsBeforeContinueAsNew     int
 	}
 )
@@ -129,8 +133,7 @@ var (
 		RecentActionCount:                 10,
 		FutureActionCountForList:          5,
 		RecentActionCountForList:          5,
-		MaxSearchAttrLen:                  2000, // server default is 2048 but leave a little room
-		IterationsBeforeContinueAsNew:     501,  // weird number to compensate for historical bug, see pr #3020
+		IterationsBeforeContinueAsNew:     500,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -179,7 +182,7 @@ func (s *scheduler) run() error {
 			s.logger.Warn("Time went backwards", "from", t1, "to", t2)
 			t2 = t1
 		}
-		nextSleep, hasNext := s.processTimeRange(
+		nextSleep := s.processTimeRange(
 			t1, t2,
 			// resolve this to the schedule's policy as late as possible
 			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
@@ -188,12 +191,12 @@ func (s *scheduler) run() error {
 		s.State.LastProcessedTime = timestamp.TimePtr(t2)
 		for s.processBuffer() {
 		}
-		s.updateSearchAttributes()
+		s.updateMemoAndSearchAttributes()
 		// sleep returns on any of:
 		// 1. requested time elapsed
 		// 2. we got a signal (update, request, refresh)
 		// 3. a workflow that we were watching finished
-		s.sleep(nextSleep, hasNext)
+		s.sleep(nextSleep)
 		s.updateTweakables()
 	}
 
@@ -216,6 +219,8 @@ func (s *scheduler) ensureFields() {
 	if s.Schedule.Policies == nil {
 		s.Schedule.Policies = &schedpb.SchedulePolicies{}
 	}
+	// set default so it shows up in describe output
+	s.Schedule.Policies.OverlapPolicy = s.resolveOverlapPolicy(s.Schedule.Policies.OverlapPolicy)
 	if s.Schedule.State == nil {
 		s.Schedule.State = &schedpb.ScheduleState{}
 	}
@@ -228,7 +233,7 @@ func (s *scheduler) ensureFields() {
 }
 
 func (s *scheduler) compileSpec() {
-	cspec, err := newCompiledSpec(s.Schedule.Spec)
+	cspec, err := NewCompiledSpec(s.Schedule.Spec)
 	if err != nil {
 		s.logger.Error("Invalid schedule", "error", err)
 		s.Info.InvalidScheduleError = err.Error()
@@ -297,25 +302,30 @@ func (s *scheduler) processTimeRange(
 	t1, t2 time.Time,
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	manual bool,
-) (nextSleep time.Duration, hasNext bool) {
+) time.Duration {
 	s.logger.Debug("processTimeRange", "t1", t1, "t2", t2, "overlapPolicy", overlapPolicy, "manual", manual)
 
 	if s.cspec == nil {
-		return 0, false
+		return invalidDuration
 	}
 
 	catchupWindow := s.getCatchupWindow()
 
 	for {
-		nominalTime, nextTime, hasNext := s.cspec.getNextTime(t1)
-		t1 = nextTime
-		if !hasNext {
-			return 0, false
-		} else if nextTime.After(t2) {
-			return nextTime.Sub(t2), true
+		// Run this logic in a SideEffect so that we can fix bugs there without breaking
+		// existing schedule workflows.
+		var next getNextTimeResult
+		workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+			return s.cspec.getNextTime(t1)
+		}).Get(&next)
+		t1 = next.Next
+		if t1.IsZero() {
+			return invalidDuration
+		} else if t1.After(t2) {
+			return t1.Sub(t2)
 		}
-		if !manual && t2.Sub(nextTime) > catchupWindow {
-			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", nextTime)
+		if !manual && t2.Sub(t1) > catchupWindow {
+			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", t1)
 			s.Info.MissedCatchupWindow++
 			continue
 		}
@@ -324,9 +334,8 @@ func (s *scheduler) processTimeRange(
 		if !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
-		s.addStart(nominalTime, nextTime, overlapPolicy, manual)
+		s.addStart(next.Nominal, next.Next, overlapPolicy, manual)
 	}
-	return 0, false
 }
 
 func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
@@ -354,7 +363,7 @@ func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
 	return false
 }
 
-func (s *scheduler) sleep(nextSleep time.Duration, hasNext bool) {
+func (s *scheduler) sleep(nextSleep time.Duration) {
 	sel := workflow.NewSelector(s.ctx)
 
 	upCh := workflow.GetSignalChannel(s.ctx, SignalNameUpdate)
@@ -366,7 +375,7 @@ func (s *scheduler) sleep(nextSleep time.Duration, hasNext bool) {
 	refreshCh := workflow.GetSignalChannel(s.ctx, SignalNameRefresh)
 	sel.AddReceive(refreshCh, s.handleRefreshSignal)
 
-	if hasNext {
+	if nextSleep != invalidDuration {
 		tmr := workflow.NewTimer(s.ctx, nextSleep)
 		sel.AddFuture(tmr, func(_ workflow.Future) {})
 	}
@@ -375,7 +384,7 @@ func (s *scheduler) sleep(nextSleep time.Duration, hasNext bool) {
 		sel.AddFuture(s.watchingFuture, s.wfWatcherReturned)
 	}
 
-	s.logger.Debug("sleeping", "hasNext", hasNext, "watching", s.watchingFuture != nil)
+	s.logger.Debug("sleeping", "nextSleep", nextSleep, "watching", s.watchingFuture != nil)
 	sel.Select(s.ctx)
 	for sel.HasPending() {
 		sel.Select(s.ctx)
@@ -486,9 +495,10 @@ func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
 	out := make([]*time.Time, 0, n)
 	t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 	for len(out) < n {
-		var has bool
-		_, t1, has = s.cspec.getNextTime(t1)
-		if !has {
+		// don't need to call getNextTime in SideEffect because this is only used in a query
+		// handler and for the UpsertMemo value
+		t1 = s.cspec.getNextTime(t1).Next
+		if t1.IsZero() {
 			break
 		}
 		out = append(out, timestamp.TimePtr(t1))
@@ -517,8 +527,9 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 	var out []*time.Time
 	t1 := timestamp.TimeValue(req.StartTime)
 	for i := 0; i < maxListMatchingTimesCount; i++ {
-		_, t1, has := s.cspec.getNextTime(t1)
-		if !has || t1.After(timestamp.TimeValue(req.EndTime)) {
+		// don't need to call getNextTime in SideEffect because this is just a query
+		t1 = s.cspec.getNextTime(t1).Next
+		if t1.IsZero() || t1.After(timestamp.TimeValue(req.EndTime)) {
 			break
 		}
 		out = append(out, timestamp.TimePtr(t1))
@@ -530,77 +541,58 @@ func (s *scheduler) incSeqNo() {
 	s.State.ConflictToken++
 }
 
-func (s *scheduler) getListInfo(shrink int) *schedpb.ScheduleListInfo {
-	specCopy := *s.Schedule.Spec
-	spec := &specCopy
-	// always clear some fields that are too large/not useful for the list view
-	spec.ExcludeCalendar = nil
-	spec.Jitter = nil
+func (s *scheduler) getListInfo() *schedpb.ScheduleListInfo {
+	// make shallow copy
+	spec := *s.Schedule.Spec
+	// clear fields that are too large/not useful for the list view
 	spec.TimezoneData = nil
 
-	recentActionCount := s.tweakables.RecentActionCountForList
-	futureActionCount := s.tweakables.FutureActionCountForList
-	notes := s.Schedule.State.Notes
-
-	// if we need to shrink it, clear/shrink some more
-	if shrink > 0 {
-		recentActionCount = 1
-		futureActionCount = 1
-		notes = ""
-	}
-	if shrink > 1 {
-		spec = nil
-	}
-
 	return &schedpb.ScheduleListInfo{
-		Spec:              spec,
+		Spec:              &spec,
 		WorkflowType:      s.Schedule.Action.GetStartWorkflow().GetWorkflowType(),
-		Notes:             notes,
+		Notes:             s.Schedule.State.Notes,
 		Paused:            s.Schedule.State.Paused,
-		RecentActions:     util.SliceTail(s.Info.RecentActions, recentActionCount),
-		FutureActionTimes: s.getFutureActionTimes(futureActionCount),
+		RecentActions:     util.SliceTail(s.Info.RecentActions, s.tweakables.RecentActionCountForList),
+		FutureActionTimes: s.getFutureActionTimes(s.tweakables.FutureActionCountForList),
 	}
 }
 
-func (s *scheduler) updateSearchAttributes() {
-	dc := converter.GetDefaultDataConverter()
+func (s *scheduler) updateMemoAndSearchAttributes() {
+	newInfo := s.getListInfo()
 
-	var currentInfo, newInfo string
-	if payload := workflow.GetInfo(s.ctx).SearchAttributes.GetIndexedFields()[searchattribute.TemporalScheduleInfoJSON]; payload != nil {
-		if err := dc.FromPayload(payload, &currentInfo); err != nil {
-			s.logger.Error("error decoding current info search attr", "error", err)
-			return
+	workflowInfo := workflow.GetInfo(s.ctx)
+	currentInfoPayload := workflowInfo.Memo.GetFields()[MemoFieldInfo]
+
+	var currentInfoBytes []byte
+	var currentInfo schedpb.ScheduleListInfo
+
+	if currentInfoPayload == nil ||
+		payload.Decode(currentInfoPayload, &currentInfoBytes) != nil ||
+		currentInfo.Unmarshal(currentInfoBytes) != nil ||
+		!proto.Equal(&currentInfo, newInfo) {
+		// marshal manually to get proto encoding (default dataconverter will use json)
+		newInfoBytes, err := newInfo.Marshal()
+		if err == nil {
+			err = workflow.UpsertMemo(s.ctx, map[string]interface{}{
+				MemoFieldInfo: newInfoBytes,
+			})
+		}
+		if err != nil {
+			s.logger.Error("error updating memo", "error", err)
 		}
 	}
 
-	for shrink := 0; shrink <= 2; shrink++ {
-		var err error
-		m := &jsonpb.Marshaler{}
-		if newInfo, err = m.MarshalToString(s.getListInfo(shrink)); err != nil {
-			s.logger.Error("error encoding ScheduleListInfo", "error", err)
-			return
+	currentPausedPayload := workflowInfo.SearchAttributes.GetIndexedFields()[searchattribute.TemporalSchedulePaused]
+	var currentPaused bool
+	if currentPausedPayload == nil ||
+		payload.Decode(currentPausedPayload, &currentPaused) != nil ||
+		currentPaused != s.Schedule.State.Paused {
+		err := workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
+			searchattribute.TemporalSchedulePaused: s.Schedule.State.Paused,
+		})
+		if err != nil {
+			s.logger.Error("error updating search attributes", "error", err)
 		}
-		// encode to check size. note that the server uses len(Data) for per-attr size checks
-		if newInfoPayload, err := dc.ToPayload(newInfo); err != nil {
-			s.logger.Error("error encoding ScheduleListInfo into payload", "error", err)
-			return
-		} else if len(newInfoPayload.Data) <= s.tweakables.MaxSearchAttrLen {
-			break
-		}
-		newInfo = "{}" // fallback that can't possibly exceed the limit
-	}
-
-	// note that newInfo contains paused, so if paused changed, then newInfo will too
-	if newInfo == currentInfo {
-		return
-	}
-
-	err := workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
-		searchattribute.TemporalSchedulePaused:   s.Schedule.State.Paused,
-		searchattribute.TemporalScheduleInfoJSON: newInfo,
-	})
-	if err != nil {
-		s.logger.Error("error updating search attributes", "error", err)
 	}
 }
 
@@ -906,9 +898,16 @@ func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
 }
 
 func (s *scheduler) newUUIDString() string {
-	var str string
-	workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-		return uuid.NewString()
-	}).Get(&str)
-	return str
+	if len(s.uuidBatch) == 0 {
+		workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+			out := make([]string, 10)
+			for i := range out {
+				out[i] = uuid.NewString()
+			}
+			return out
+		}).Get(&s.uuidBatch)
+	}
+	next := s.uuidBatch[0]
+	s.uuidBatch = s.uuidBatch[1:]
+	return next
 }

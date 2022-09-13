@@ -178,7 +178,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 	ctx := context.Background()
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace: s.namespace.String(),
+			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "",
 				RunId:      uuid.New(),
@@ -197,7 +197,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 	ctx := context.Background()
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace: s.namespace.String(),
+			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      "runID",
@@ -216,7 +216,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 	ctx := context.Background()
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace: s.namespace.String(),
+			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
 				RunId:      uuid.New(),
@@ -236,7 +236,6 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamesp
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(nil, fmt.Errorf("test"))
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace:   s.namespace.String(),
 			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
@@ -274,7 +273,6 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	}, nil)
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace:   s.namespace.String(),
 			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
@@ -307,7 +305,6 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_SameStartIDAnd
 
 	resp, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace:   s.namespace.String(),
 			NamespaceId: s.namespaceID.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: "workflowID",
@@ -334,7 +331,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, endItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Namespace: s.namespace.String(),
+		NamespaceId: s.namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
@@ -367,7 +364,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Namespace: s.namespace.String(),
+		NamespaceId: s.namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
@@ -400,7 +397,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	versionHistory := versionhistory.NewVersionHistory([]byte{}, []*historyspb.VersionHistoryItem{firstItem, targetItem})
 	versionHistories := versionhistory.NewVersionHistories(versionHistory)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Namespace: s.namespace.String(),
+		NamespaceId: s.namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
@@ -438,7 +435,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory2)
 	s.NoError(err)
 	request := &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Namespace: s.namespace.String(),
+		NamespaceId: s.namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID",
 			RunId:      uuid.New(),
@@ -558,7 +555,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	}
 
 	mockSdkClient := mocksdk.NewMockClient(s.controller)
-	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(mockSdkClient).AnyTimes()
+	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 
 	// Start workflow failed.
 	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-add-search-attributes-workflow", gomock.Any()).Return(nil, errors.New("start failed"))
@@ -607,7 +604,7 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes() {
 	s.Nil(resp)
 
 	mockSdkClient := mocksdk.NewMockClient(s.controller)
-	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(mockSdkClient).AnyTimes()
+	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 
 	// Elasticsearch is not configured
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(

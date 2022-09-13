@@ -235,13 +235,11 @@ func getStandbyPostActionFn(
 func refreshTasks(
 	ctx context.Context,
 	adminClient adminservice.AdminServiceClient,
-	namespaceName namespace.Name,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 ) error {
 	_, err := adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
-		Namespace:   namespaceName.String(),
 		NamespaceId: namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,

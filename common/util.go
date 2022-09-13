@@ -63,10 +63,10 @@ const (
 	frontendClientRetryMaxAttempts     = 2
 
 	historyClientRetryInitialInterval = 50 * time.Millisecond
-	historyClientRetryMaxAttempts     = 5
+	historyClientRetryMaxAttempts     = 2
 
 	matchingClientRetryInitialInterval = 1000 * time.Millisecond
-	matchingClientRetryMaxAttempts     = 5
+	matchingClientRetryMaxAttempts     = 2
 
 	frontendHandlerRetryInitialInterval = 200 * time.Millisecond
 	frontendHandlerRetryMaxInterval     = time.Second
@@ -96,6 +96,10 @@ const (
 	taskNotReadyRescheduleInitialInterval    = 3 * time.Second
 	taskNotReadyRescheduleBackoffCoefficient = 1.5
 	taskNotReadyRescheduleMaxInterval        = 3 * time.Minute
+
+	taskResourceExhaustedRescheduleInitialInterval    = 3 * time.Second
+	taskResourceExhaustedRescheduleBackoffCoefficient = 1.5
+	taskResourceExhaustedRescheduleMaxInterval        = 5 * time.Minute
 
 	sdkClientFactoryRetryInitialInterval    = 200 * time.Millisecond
 	sdkClientFactoryRetryMaxInterval        = 5 * time.Second
@@ -130,6 +134,8 @@ const (
 var (
 	// ErrBlobSizeExceedsLimit is error for event blob size exceeds limit
 	ErrBlobSizeExceedsLimit = serviceerror.NewInvalidArgument("Blob data size exceeds limit.")
+	// ErrMemoSizeExceedsLimit is error for memo size exceeds limit
+	ErrMemoSizeExceedsLimit = serviceerror.NewInvalidArgument("Memo size exceeds limit.")
 	// ErrContextTimeoutTooShort is error for setting a very short context timeout when calling a long poll API
 	ErrContextTimeoutTooShort = serviceerror.NewInvalidArgument("Context timeout is too short.")
 	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
@@ -216,30 +222,32 @@ func CreateCompleteTaskRetryPolicy() backoff.RetryPolicy {
 
 // CreateTaskProcessingRetryPolicy creates a retry policy for task processing
 func CreateTaskProcessingRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(taskProcessingRetryInitialInterval).
+	return backoff.NewExponentialRetryPolicy(taskProcessingRetryInitialInterval).
 		WithMaximumAttempts(taskProcessingRetryMaxAttempts)
-
-	return policy
 }
 
 // CreateTaskReschedulePolicy creates a retry policy for rescheduling task with errors not equal to ErrTaskRetry
 func CreateTaskReschedulePolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(taskRescheduleInitialInterval).
+	return backoff.NewExponentialRetryPolicy(taskRescheduleInitialInterval).
 		WithBackoffCoefficient(taskRescheduleBackoffCoefficient).
 		WithMaximumInterval(taskRescheduleMaxInterval).
 		WithExpirationInterval(backoff.NoInterval)
-
-	return policy
 }
 
 // CreateTaskNotReadyReschedulePolicy creates a retry policy for rescheduling task with ErrTaskRetry
 func CreateTaskNotReadyReschedulePolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(taskNotReadyRescheduleInitialInterval).
+	return backoff.NewExponentialRetryPolicy(taskNotReadyRescheduleInitialInterval).
 		WithBackoffCoefficient(taskNotReadyRescheduleBackoffCoefficient).
 		WithMaximumInterval(taskNotReadyRescheduleMaxInterval).
 		WithExpirationInterval(backoff.NoInterval)
+}
 
-	return policy
+// CreateTaskResourceExhaustedReschedulePolicy creates a retry policy for rescheduling task with resource exhausted error
+func CreateTaskResourceExhaustedReschedulePolicy() backoff.RetryPolicy {
+	return backoff.NewExponentialRetryPolicy(taskResourceExhaustedRescheduleInitialInterval).
+		WithBackoffCoefficient(taskResourceExhaustedRescheduleBackoffCoefficient).
+		WithMaximumInterval(taskResourceExhaustedRescheduleMaxInterval).
+		WithExpirationInterval(backoff.NoInterval)
 }
 
 // CreateSdkClientFactoryRetryPolicy creates a retry policy to handle SdkClientFactory NewClient when frontend service is not ready

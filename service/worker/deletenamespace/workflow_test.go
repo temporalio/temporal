@@ -59,7 +59,7 @@ func Test_DeleteNamespaceWorkflow_ByName(t *testing.T) {
 		Config: deleteexecutions.DeleteExecutionsConfig{
 			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
-			PagesPerExecutionCount:               256,
+			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
 		PreviousSuccessCount: 0,
@@ -103,7 +103,7 @@ func Test_DeleteNamespaceWorkflow_ByID(t *testing.T) {
 		Config: deleteexecutions.DeleteExecutionsConfig{
 			DeleteActivityRPS:                    100,
 			PageSize:                             1000,
-			PagesPerExecutionCount:               256,
+			PagesPerExecution:                    256,
 			ConcurrentDeleteExecutionsActivities: 4,
 		},
 		PreviousSuccessCount: 0,

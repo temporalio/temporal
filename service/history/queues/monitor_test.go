@@ -31,6 +31,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -95,6 +96,14 @@ func (s *monitorSuite) TestPendingTasksStats() {
 
 	slice2 := &SliceImpl{}
 	s.monitor.SetSlicePendingTaskCount(slice2, 1)
+	select {
+	case <-s.alertCh:
+		s.Fail("should have only one outstanding pending task alert")
+	default:
+	}
+
+	s.monitor.ResolveAlert(alert.AlertType)
+	s.monitor.SetSlicePendingTaskCount(slice2, 1)
 	s.Equal(threshold*2+1, s.monitor.GetTotalPendingTaskCount())
 	alert = <-s.alertCh
 	s.Equal(Alert{
@@ -128,7 +137,7 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 	}
 
 	alert := <-s.alertCh
-	s.Equal(Alert{
+	expectedAlert := Alert{
 		AlertType: AlertTypeReaderStuck,
 		AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
 			ReaderID: DefaultReaderId,
@@ -137,7 +146,20 @@ func (s *monitorSuite) TestReaderWatermarkStats() {
 				0,
 			),
 		},
-	}, *alert)
+	}
+	s.Equal(expectedAlert, *alert)
+
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+	select {
+	case <-s.alertCh:
+		s.Fail("should have only one outstanding slice count alert")
+	default:
+	}
+
+	s.monitor.ResolveAlert(alert.AlertType)
+	s.monitor.SetReaderWatermark(DefaultReaderId, tasks.NewKey(now, rand.Int63()))
+	alert = <-s.alertCh
+	s.Equal(expectedAlert, *alert)
 }
 
 func (s *monitorSuite) TestSliceCount() {
@@ -164,6 +186,14 @@ func (s *monitorSuite) TestSliceCount() {
 		},
 	}, *alert)
 
+	s.monitor.SetSliceCount(DefaultReaderId+1, 1)
+	select {
+	case <-s.alertCh:
+		s.Fail("should have only one outstanding slice count alert")
+	default:
+	}
+
+	s.monitor.ResolveAlert(alert.AlertType)
 	s.monitor.SetSliceCount(DefaultReaderId+1, 1)
 	s.Equal(threshold*2+1, s.monitor.GetTotalSliceCount())
 	alert = <-s.alertCh

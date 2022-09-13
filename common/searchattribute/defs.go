@@ -62,8 +62,6 @@ const (
 
 	// Used by scheduler workflow.
 	TemporalSchedulePaused = "TemporalSchedulePaused"
-	// TemporalScheduleInfoJSON is not in Elasticsearch mappings definition and therefore is not indexed.
-	TemporalScheduleInfoJSON = "TemporalScheduleInfoJSON"
 
 	ReservedPrefix = "Temporal"
 )
@@ -93,7 +91,6 @@ var (
 		TemporalScheduledStartTime: enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		TemporalScheduledById:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalSchedulePaused:     enumspb.INDEXED_VALUE_TYPE_BOOL,
-		TemporalScheduleInfoJSON:   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TemporalNamespaceDivision:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 

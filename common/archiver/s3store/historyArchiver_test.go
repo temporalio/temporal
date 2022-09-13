@@ -630,6 +630,23 @@ func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
 	s.Equal(append(s.historyBatchesV100[0].Body, s.historyBatchesV100[1].Body...), combinedHistory)
 }
 
+func (s *historyArchiverSuite) TestGet_EmptyHistory_ReturnsNotFoundError() {
+	historyIterator := archiver.NewMockHistoryIterator(s.controller)
+	historyArchiver := s.newTestHistoryArchiver(historyIterator)
+	URI, err := archiver.NewURI(testBucketURI + "/TestArchiveAndGet")
+	s.NoError(err)
+	getRequest := &archiver.GetHistoryRequest{
+		NamespaceID: testNamespaceID,
+		WorkflowID:  testWorkflowID,
+		RunID:       testRunID,
+		PageSize:    testPageSize,
+	}
+	response, err := historyArchiver.Get(context.Background(), URI, getRequest)
+	s.Error(err)
+	s.Nil(response)
+	s.IsType(&serviceerror.NotFound{}, err)
+}
+
 func (s *historyArchiverSuite) TestArchiveAndGet() {
 	historyIterator := archiver.NewMockHistoryIterator(s.controller)
 	gomock.InOrder(

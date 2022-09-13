@@ -260,13 +260,9 @@ func (c *clientImpl) {{.Method}}(
 	request {{.RequestType}},
 	opts ...grpc.CallOption,
 ) ({{.ResponseType}}, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
 	ctx, cancel := c.create{{or .LongPoll ""}}Context{{or .WithLargeTimeout ""}}(ctx)
 	defer cancel()
-	return client.{{.Method}}(ctx, request, opts...)
+	return c.client.{{.Method}}(ctx, request, opts...)
 }
 `)
 }
@@ -369,7 +365,7 @@ func (c *metricClient) {{.Method}}(
 	opts ...grpc.CallOption,
 ) (_ {{.ResponseType}}, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.{{.MetricPrefix}}{{.Method}}Scope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.{{.MetricPrefix}}{{.Method}}Scope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()

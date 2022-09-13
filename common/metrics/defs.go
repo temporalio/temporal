@@ -458,6 +458,8 @@ const (
 	MatchingClientInvalidateTaskQueueMetadataScope
 	// MatchingClientGetTaskQueueMetadataScope tracks RPC calls to matching service
 	MatchingClientGetTaskQueueMetadataScope
+	// FrontendClientDeleteWorkflowExecutionScope tracks RPC calls to frontend service
+	FrontendClientDeleteWorkflowExecutionScope
 	// FrontendClientDeprecateNamespaceScope tracks RPC calls to frontend service
 	FrontendClientDeprecateNamespaceScope
 	// FrontendClientDescribeNamespaceScope tracks RPC calls to frontend service
@@ -626,6 +628,8 @@ const (
 	// AdminClientDeleteWorkflowExecutionScope tracks RPC calls to admin service
 	AdminClientDeleteWorkflowExecutionScope
 
+	// DCRedirectionDeleteWorkflowExecutionScope tracks RPC calls for dc redirection
+	DCRedirectionDeleteWorkflowExecutionScope
 	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateNamespaceScope
 	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
@@ -895,12 +899,14 @@ const (
 	// OperatorListSearchAttributesScope is the metric scope for operator.ListSearchAttributes
 	OperatorListSearchAttributesScope
 	OperatorDeleteNamespaceScope
-	OperatorAddOrUpdateRemoteCluster
-	OperatorDeleteWorkflowExecution
-	OperatorDescribeCluster
-	OperatorListClusterMembers
-	OperatorListClusters
-	OperatorRemoveRemoteCluster
+	// OperatorAddOrUpdateRemoteClusterScope is the metric scope for operator.AddOrUpdateRemoteCluster
+	OperatorAddOrUpdateRemoteClusterScope
+	// OperatorRemoveRemoteClusterScope is the metric scope for operator.RemoveRemoteCluster
+	OperatorRemoveRemoteClusterScope
+	// OperatorListClustersScope is the metric scope for operator.OperatorListClusters
+	OperatorListClustersScope
+	// OperatorDeleteWorkflowExecutionScope is the metric scope for operator.DeleteWorkflowExecution
+	OperatorDeleteWorkflowExecutionScope
 
 	NumOperatorScopes
 )
@@ -951,6 +957,8 @@ const (
 	FrontendSignalWithStartWorkflowExecutionScope
 	// FrontendTerminateWorkflowExecutionScope is the metric scope for frontend.TerminateWorkflowExecution
 	FrontendTerminateWorkflowExecutionScope
+	// FrontendDeleteWorkflowExecutionScope is the metric scope for frontend.DeleteWorkflowExecution
+	FrontendDeleteWorkflowExecutionScope
 	// FrontendRequestCancelWorkflowExecutionScope is the metric scope for frontend.RequestCancelWorkflowExecution
 	FrontendRequestCancelWorkflowExecutionScope
 	// FrontendListArchivedWorkflowExecutionsScope is the metric scope for frontend.ListArchivedWorkflowExecutions
@@ -1536,6 +1544,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingClientInvalidateTaskQueueMetadataScope: {operation: "MatchingClientInvalidateTaskQueueMetadata", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientGetTaskQueueMetadataScope:        {operation: "MatchingClientGetTaskQueueMetadata", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 
+		FrontendClientDeleteWorkflowExecutionScope:            {operation: "FrontendClientDeleteWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDeprecateNamespaceScope:                 {operation: "FrontendClientDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeBatchOperationScope:             {operation: "FrontendClientDescribeBatchOperation", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeNamespaceScope:                  {operation: "FrontendClientDescribeNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1621,6 +1630,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientMergeDLQMessagesScope:                 {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDeleteWorkflowExecutionScope:          {operation: "AdminClientDeleteWorkflowExecution", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 
+		DCRedirectionDeleteWorkflowExecutionScope:            {operation: "DCRedirectionDeleteWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDeprecateNamespaceScope:                 {operation: "DCRedirectionDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeNamespaceScope:                  {operation: "DCRedirectionDescribeNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeTaskQueueScope:                  {operation: "DCRedirectionDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1736,16 +1746,15 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminRemoveRemoteClusterScope:              {operation: "AdminRemoveRemoteCluster"},
 		AdminDeleteWorkflowExecutionScope:          {operation: "AdminDeleteWorkflowExecution"},
 		// Operator Service API
-		OperatorAddSearchAttributesScope:    {operation: "OperatorAddSearchAttributes"},
-		OperatorRemoveSearchAttributesScope: {operation: "OperatorRemoveSearchAttributes"},
-		OperatorListSearchAttributesScope:   {operation: "OperatorListSearchAttributes"},
-		OperatorDeleteNamespaceScope:        {operation: "OperatorDeleteNamespace"},
-		OperatorAddOrUpdateRemoteCluster:    {operation: "OperatorAddOrUpdateRemoteCluster"},
-		OperatorDeleteWorkflowExecution:     {operation: "OperatorDeleteWorkflowExecution"},
-		OperatorDescribeCluster:             {operation: "OperatorDescribeCluster"},
-		OperatorListClusterMembers:          {operation: "OperatorListClusterMembers"},
-		OperatorListClusters:                {operation: "OperatorListClusters"},
-		OperatorRemoveRemoteCluster:         {operation: "OperatorRemoveRemoteCluster"},
+		OperatorAddSearchAttributesScope:      {operation: "OperatorAddSearchAttributes"},
+		OperatorRemoveSearchAttributesScope:   {operation: "OperatorRemoveSearchAttributes"},
+		OperatorListSearchAttributesScope:     {operation: "OperatorListSearchAttributes"},
+		OperatorDeleteNamespaceScope:          {operation: "OperatorDeleteNamespace"},
+		OperatorAddOrUpdateRemoteClusterScope: {operation: "OperatorAddOrUpdateRemoteCluster"},
+		OperatorDeleteWorkflowExecutionScope:  {operation: "OperatorDeleteWorkflowExecution"},
+		OperatorListClustersScope:             {operation: "OperatorListClusters"},
+		OperatorRemoveRemoteClusterScope:      {operation: "OperatorRemoveRemoteCluster"},
+
 		// Workflow Service API
 		FrontendStartWorkflowExecutionScope:             {operation: "StartWorkflowExecution"},
 		FrontendPollWorkflowTaskQueueScope:              {operation: "PollWorkflowTaskQueue"},
@@ -1769,6 +1778,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendSignalWorkflowExecutionScope:            {operation: "SignalWorkflowExecution"},
 		FrontendSignalWithStartWorkflowExecutionScope:   {operation: "SignalWithStartWorkflowExecution"},
 		FrontendTerminateWorkflowExecutionScope:         {operation: "TerminateWorkflowExecution"},
+		FrontendDeleteWorkflowExecutionScope:            {operation: "DeleteWorkflowExecution"},
 		FrontendResetWorkflowExecutionScope:             {operation: "ResetWorkflowExecution"},
 		FrontendRequestCancelWorkflowExecutionScope:     {operation: "RequestCancelWorkflowExecution"},
 		FrontendListArchivedWorkflowExecutionsScope:     {operation: "ListArchivedWorkflowExecutions"},
@@ -2046,6 +2056,7 @@ const (
 	HistoryCount
 	EventBlobSize
 	SearchAttributesSize
+	MemoSize
 
 	LockRequests
 	LockFailures
@@ -2428,6 +2439,7 @@ const (
 	ExecutorTasksDroppedCount
 	BatcherProcessorSuccess
 	BatcherProcessorFailures
+	BatcherOperationFailures
 	HistoryScavengerSuccessCount
 	HistoryScavengerErrorCount
 	HistoryScavengerSkipCount
@@ -2537,6 +2549,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryCount:                                        NewDimensionlessHistogramDef("history_count"),
 		EventBlobSize:                                       NewBytesHistogramDef("event_blob_size"),
 		SearchAttributesSize:                                NewBytesHistogramDef("search_attributes_size"),
+		MemoSize:                                            NewBytesHistogramDef("memo_size"),
 		LockRequests:                                        NewCounterDef("lock_requests"),
 		LockFailures:                                        NewCounterDef("lock_failures"),
 		LockLatency:                                         NewTimerDef("lock_latency"),
@@ -2900,6 +2913,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ExecutorTasksDroppedCount:                     NewCounterDef("executor_dropped"),
 		BatcherProcessorSuccess:                       NewCounterDef("batcher_processor_requests"),
 		BatcherProcessorFailures:                      NewCounterDef("batcher_processor_errors"),
+		BatcherOperationFailures:                      NewCounterDef("batcher_operation_errors"),
 		HistoryScavengerSuccessCount:                  NewCounterDef("scavenger_success"),
 		HistoryScavengerErrorCount:                    NewCounterDef("scavenger_errors"),
 		HistoryScavengerSkipCount:                     NewCounterDef("scavenger_skips"),

@@ -43,7 +43,7 @@ type (
 	nDCEventsReapplier interface {
 		reapplyEvents(
 			ctx context.Context,
-			msBuilder workflow.MutableState,
+			ms workflow.MutableState,
 			historyEvents []*historypb.HistoryEvent,
 			runID string,
 		) ([]*historypb.HistoryEvent, error)
@@ -68,7 +68,7 @@ func newNDCEventsReapplier(
 
 func (r *nDCEventsReapplierImpl) reapplyEvents(
 	ctx context.Context,
-	msBuilder workflow.MutableState,
+	ms workflow.MutableState,
 	historyEvents []*historypb.HistoryEvent,
 	runID string,
 ) ([]*historypb.HistoryEvent, error) {
@@ -78,7 +78,7 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
-			if msBuilder.IsResourceDuplicated(dedupResource) {
+			if ms.IsResourceDuplicated(dedupResource) {
 				// skip already applied event
 				continue
 			}
@@ -91,13 +91,13 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 	}
 
 	// sanity check workflow still running
-	if !msBuilder.IsWorkflowExecutionRunning() {
+	if !ms.IsWorkflowExecutionRunning() {
 		return nil, serviceerror.NewInternal("unable to reapply events to closed workflow.")
 	}
 
 	for _, event := range reappliedEvents {
 		signal := event.GetWorkflowExecutionSignaledEventAttributes()
-		if _, err := msBuilder.AddWorkflowExecutionSignaled(
+		if _, err := ms.AddWorkflowExecutionSignaled(
 			signal.GetSignalName(),
 			signal.GetInput(),
 			signal.GetIdentity(),
@@ -106,16 +106,16 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 			return nil, err
 		}
 		deDupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
-		msBuilder.UpdateDuplicatedResource(deDupResource)
+		ms.UpdateDuplicatedResource(deDupResource)
 	}
 
 	// After reapply event, checking if we should schedule a workflow task
-	if msBuilder.IsWorkflowPendingOnWorkflowTaskBackoff() {
+	if ms.IsWorkflowPendingOnWorkflowTaskBackoff() {
 		// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
 		return reappliedEvents, nil
 	}
-	if !msBuilder.HasPendingWorkflowTask() {
-		if _, err := msBuilder.AddWorkflowTaskScheduledEvent(
+	if !ms.HasPendingWorkflowTask() {
+		if _, err := ms.AddWorkflowTaskScheduledEvent(
 			false,
 		); err != nil {
 			return nil, err

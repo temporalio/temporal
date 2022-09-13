@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/predicates"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/tasks"
@@ -68,7 +69,7 @@ func (s *sliceSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
-		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
+		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil, nil)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
@@ -328,7 +329,7 @@ func (s *sliceSuite) TestCompactWithSlice() {
 	s.Panics(func() { slice2.stateSanityCheck() })
 }
 
-func (s *sliceSuite) TestShrinkRange() {
+func (s *sliceSuite) TestShrinkScope_ShrinkRange() {
 	r := NewRandomRange()
 	predicate := predicates.Universal[tasks.Task]()
 
@@ -361,7 +362,7 @@ func (s *sliceSuite) TestShrinkRange() {
 		slice.pendingExecutables[executable.GetKey()] = executable
 	}
 
-	slice.ShrinkRange()
+	slice.ShrinkScope()
 	s.Len(slice.pendingExecutables, len(executables)-numAcked)
 	s.validateSliceState(slice)
 
@@ -375,6 +376,47 @@ func (s *sliceSuite) TestShrinkRange() {
 	}
 
 	s.Equal(NewRange(newInclusiveMin, r.ExclusiveMax), slice.Scope().Range)
+}
+
+func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
+	r := NewRandomRange()
+	predicate := predicates.Universal[tasks.Task]()
+
+	slice := NewSlice(nil, s.executableInitializer, s.monitor, NewScope(r, predicate))
+	slice.iterators = []Iterator{} // manually set iterators to be empty to trigger predicate update
+
+	executables := s.randomExecutablesInRange(r, 100)
+	slices.SortFunc(executables, func(a, b Executable) bool {
+		return a.GetKey().CompareTo(b.GetKey()) < 0
+	})
+
+	pendingNamespaceID := []string{uuid.New(), uuid.New()}
+	s.True(len(pendingNamespaceID) <= shrinkPredicateMaxPendingNamespaces)
+	for _, executable := range executables {
+		mockExecutable := executable.(*MockExecutable)
+
+		mockExecutable.EXPECT().GetTask().Return(mockExecutable).AnyTimes()
+
+		acked := rand.Intn(10) < 8
+		if acked {
+			mockExecutable.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+			mockExecutable.EXPECT().State().Return(ctasks.TaskStateAcked).MaxTimes(1)
+		} else {
+			mockExecutable.EXPECT().GetNamespaceID().Return(pendingNamespaceID[rand.Intn(len(pendingNamespaceID))]).AnyTimes()
+			mockExecutable.EXPECT().State().Return(ctasks.TaskStatePending).MaxTimes(1)
+		}
+
+		slice.executableTracker.add(executable)
+	}
+
+	slice.ShrinkScope()
+	s.validateSliceState(slice)
+
+	namespacePredicate, ok := slice.Scope().Predicate.(*tasks.NamespacePredicate)
+	s.True(ok)
+	for namespaceID := range namespacePredicate.NamespaceIDs {
+		s.True(slices.Index(pendingNamespaceID, namespaceID) != -1)
+	}
 }
 
 func (s *sliceSuite) TestSelectTasks_NoError() {

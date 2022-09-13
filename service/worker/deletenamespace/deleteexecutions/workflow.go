@@ -116,7 +116,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	// It reads nextPageToken and pass it DeleteExecutionsActivity. This allocates block of workflow executions to delete for
 	// DeleteExecutionsActivity which takes much longer to complete. This is why this workflow starts
 	// ConcurrentDeleteExecutionsActivities number of them and executes them concurrently on available workers.
-	for i := 0; i < params.Config.PagesPerExecutionCount; i++ {
+	for i := 0; i < params.Config.PagesPerExecution; i++ {
 		ctx1 := workflow.WithActivityOptions(ctx, deleteWorkflowExecutionsActivityOptions)
 		deleteExecutionsFuture := workflow.ExecuteActivity(ctx1, a.DeleteExecutionsActivity, &DeleteExecutionsActivityParams{
 			Namespace:     params.Namespace,

@@ -28,23 +28,26 @@ package sdk
 
 import (
 	"crypto/tls"
-	"fmt"
 	"sync"
 
 	sdkclient "go.temporal.io/sdk/client"
+	sdklog "go.temporal.io/sdk/log"
 	sdkworker "go.temporal.io/sdk/worker"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 )
 
 type (
 	ClientFactory interface {
-		NewClient(namespaceName string, logger log.Logger) (sdkclient.Client, error)
-		GetSystemClient(logger log.Logger) sdkclient.Client
+		// options must include Namespace and should not include: HostPort, ConnectionOptions,
+		// MetricsHandler, or Logger (they will be overwritten)
+		NewClient(options sdkclient.Options) sdkclient.Client
+		GetSystemClient() sdkclient.Client
 	}
 
 	WorkerFactory interface {
@@ -55,8 +58,10 @@ type (
 		hostPort        string
 		tlsConfig       *tls.Config
 		metricsHandler  *MetricsHandler
+		logger          log.Logger
+		sdklogger       sdklog.Logger
 		systemSdkClient sdkclient.Client
-		once            *sync.Once
+		once            sync.Once
 	}
 
 	workerFactory struct{}
@@ -67,51 +72,56 @@ var (
 	_ WorkerFactory = (*workerFactory)(nil)
 )
 
-func NewClientFactory(hostPort string, tlsConfig *tls.Config, metricsHandler *MetricsHandler) *clientFactory {
+func NewClientFactory(
+	hostPort string,
+	tlsConfig *tls.Config,
+	metricsHandler metrics.MetricsHandler,
+	logger log.Logger,
+) *clientFactory {
 	return &clientFactory{
 		hostPort:       hostPort,
 		tlsConfig:      tlsConfig,
-		metricsHandler: metricsHandler,
-		once:           &sync.Once{},
+		metricsHandler: NewMetricsHandler(metricsHandler),
+		logger:         logger,
+		sdklogger:      log.NewSdkLogger(logger),
 	}
 }
 
-func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkclient.Client, error) {
-	var client sdkclient.Client
-
-	// Retry for up to 1m, handles frontend service not ready
-	err := backoff.ThrottleRetry(func() error {
-		sdkClient, err := sdkclient.Dial(sdkclient.Options{
-			HostPort:       f.hostPort,
-			Namespace:      namespaceName,
-			MetricsHandler: f.metricsHandler,
-			Logger:         log.NewSdkLogger(logger),
-			ConnectionOptions: sdkclient.ConnectionOptions{
-				TLS: f.tlsConfig,
-			},
-		})
-		if err != nil {
-			return fmt.Errorf("unable to create SDK client: %w", err)
-		}
-
-		client = sdkClient
-		return nil
-	}, common.CreateSdkClientFactoryRetryPolicy(), common.IsContextDeadlineExceededErr)
-
-	return client, err
+func (f *clientFactory) options(options sdkclient.Options) sdkclient.Options {
+	options.HostPort = f.hostPort
+	options.MetricsHandler = f.metricsHandler
+	options.Logger = f.sdklogger
+	options.ConnectionOptions = sdkclient.ConnectionOptions{
+		TLS: f.tlsConfig,
+	}
+	return options
 }
 
-func (f *clientFactory) GetSystemClient(logger log.Logger) sdkclient.Client {
-	f.once.Do(func() {
-		client, err := f.NewClient(primitives.SystemLocalNamespace, logger)
-		if err != nil {
-			logger.Fatal(
-				"error getting system sdk client",
-				tag.Error(err),
-			)
-		}
+func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
+	// this shouldn't fail if the first client was created successfully
+	client, err := sdkclient.NewClientFromExisting(f.GetSystemClient(), f.options(options))
+	if err != nil {
+		f.logger.Fatal("error creating sdk client", tag.Error(err))
+	}
+	return client
+}
 
-		f.systemSdkClient = client
+func (f *clientFactory) GetSystemClient() sdkclient.Client {
+	f.once.Do(func() {
+		err := backoff.ThrottleRetry(func() error {
+			sdkClient, err := sdkclient.Dial(f.options(sdkclient.Options{
+				Namespace: primitives.SystemLocalNamespace,
+			}))
+			if err != nil {
+				f.logger.Warn("error creating sdk client", tag.Error(err))
+				return err
+			}
+			f.systemSdkClient = sdkClient
+			return nil
+		}, common.CreateSdkClientFactoryRetryPolicy(), common.IsContextDeadlineExceededErr)
+		if err != nil {
+			f.logger.Fatal("error creating sdk client", tag.Error(err))
+		}
 	})
 	return f.systemSdkClient
 }

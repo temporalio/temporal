@@ -55,6 +55,7 @@ type (
 		WalkSlices(SliceIterator)
 		SplitSlices(SliceSplitter)
 		MergeSlices(...Slice)
+		AppendSlices(...Slice)
 		ClearSlices(SlicePredicate)
 		CompactSlices(SlicePredicate)
 		ShrinkSlices()
@@ -119,6 +120,7 @@ func NewReader(
 	for _, slice := range slices {
 		sliceList.PushBack(slice)
 	}
+	monitor.SetSliceCount(readerID, len(slices))
 
 	return &ReaderImpl{
 		readerID:       readerID,
@@ -172,6 +174,8 @@ func (r *ReaderImpl) Stop() {
 	) {
 		return
 	}
+
+	r.monitor.RemoveReader(r.readerID)
 
 	close(r.shutdownCh)
 	if success := common.AwaitWaitGroup(&r.shutdownWG, time.Minute); !success {
@@ -243,24 +247,53 @@ func (r *ReaderImpl) MergeSlices(incomingSlices ...Slice) {
 		incomingSlice := incomingSlices[incomingSliceIdx]
 
 		if currentSlice.Scope().Range.InclusiveMin.CompareTo(incomingSlice.Scope().Range.InclusiveMin) < 0 {
-			appendSlice(mergedSlices, currentSlice)
+			mergeOrAppendSlice(mergedSlices, currentSlice)
 			currentSliceElement = currentSliceElement.Next()
 		} else {
-			appendSlice(mergedSlices, incomingSlice)
+			mergeOrAppendSlice(mergedSlices, incomingSlice)
 			incomingSliceIdx++
 		}
 	}
 
 	for ; currentSliceElement != nil; currentSliceElement = currentSliceElement.Next() {
-		appendSlice(mergedSlices, currentSliceElement.Value.(Slice))
+		mergeOrAppendSlice(mergedSlices, currentSliceElement.Value.(Slice))
 	}
 	for _, slice := range incomingSlices[incomingSliceIdx:] {
-		appendSlice(mergedSlices, slice)
+		mergeOrAppendSlice(mergedSlices, slice)
 	}
 
 	// clear existing list
 	r.slices.Init()
 	r.slices = mergedSlices
+
+	r.resetNextReadSliceLocked()
+	r.monitor.SetSliceCount(r.readerID, r.slices.Len())
+}
+
+func (r *ReaderImpl) AppendSlices(incomingSlices ...Slice) {
+	if len(incomingSlices) == 0 {
+		return
+	}
+
+	validateSlicesOrderedDisjoint(incomingSlices)
+	if back := r.slices.Back(); back != nil {
+		lastSliceRange := back.Value.(Slice).Scope().Range
+		firstIncomingRange := incomingSlices[0].Scope().Range
+		if lastSliceRange.ExclusiveMax.CompareTo(firstIncomingRange.InclusiveMin) > 0 {
+			panic(fmt.Sprintf(
+				"Can not append slice to existing list of slices, incoming slice range: %v, existing slice range: %v ",
+				firstIncomingRange,
+				lastSliceRange,
+			))
+		}
+	}
+
+	r.Lock()
+	defer r.Unlock()
+
+	for _, incomingSlice := range incomingSlices {
+		r.slices.PushBack(incomingSlice)
+	}
 
 	r.resetNextReadSliceLocked()
 	r.monitor.SetSliceCount(r.readerID, r.slices.Len())
@@ -319,8 +352,9 @@ func (r *ReaderImpl) ShrinkSlices() {
 		next = element.Next()
 
 		slice := element.Value.(Slice)
-		slice.ShrinkRange()
+		slice.ShrinkScope()
 		if scope := slice.Scope(); scope.IsEmpty() {
+			r.monitor.RemoveSlice(slice)
 			r.slices.Remove(element)
 		}
 	}
@@ -453,7 +487,7 @@ func (r *ReaderImpl) verifyPendingTaskSize() bool {
 	return r.monitor.GetTotalPendingTaskCount() < r.options.MaxPendingTasksCount()
 }
 
-func appendSlice(
+func mergeOrAppendSlice(
 	slices *list.List,
 	incomingSlice Slice,
 ) {

@@ -34,6 +34,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -75,7 +76,7 @@ func (s *readerSuite) SetupTest() {
 	s.metricsHandler = metrics.NoopMetricsHandler
 
 	s.executableInitializer = func(readerID int32, t tasks.Task) Executable {
-		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, nil, QueueTypeUnknown, nil)
+		return NewExecutable(readerID, t, nil, nil, nil, nil, NewNoopPriorityAssigner(), clock.NewRealTimeSource(), nil, nil, metrics.NoopMetricsHandler, nil, nil)
 	}
 	s.monitor = newMonitor(tasks.CategoryTypeScheduled, &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
@@ -188,6 +189,34 @@ func (s *readerSuite) TestMergeSlices() {
 		if scope.Range.ExclusiveMax.CompareTo(nextScope.Range.InclusiveMin) > 0 {
 			panic(fmt.Sprintf(
 				"Found overlapping scope in merged slices, left: %v, right: %v",
+				scope,
+				nextScope,
+			))
+		}
+	}
+}
+
+func (s *readerSuite) TestAppendSlices() {
+	totalScopes := 10
+	scopes := NewRandomScopes(totalScopes)
+	currentScopes := scopes[:totalScopes/2]
+	reader := s.newTestReader(currentScopes, nil)
+
+	incomingScopes := scopes[totalScopes/2:]
+	incomingSlices := make([]Slice, 0, len(incomingScopes))
+	for _, incomingScope := range incomingScopes {
+		incomingSlices = append(incomingSlices, NewSlice(nil, s.executableInitializer, s.monitor, incomingScope))
+	}
+
+	reader.AppendSlices(incomingSlices...)
+
+	appendedScopes := reader.Scopes()
+	s.Len(appendedScopes, totalScopes)
+	for idx, scope := range appendedScopes[:len(appendedScopes)-1] {
+		nextScope := appendedScopes[idx+1]
+		if scope.Range.ExclusiveMax.CompareTo(nextScope.Range.InclusiveMin) > 0 {
+			panic(fmt.Sprintf(
+				"Found overlapping scope in appended slices, left: %v, right: %v",
 				scope,
 				nextScope,
 			))

@@ -26,9 +26,7 @@ package queues
 
 import (
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination queue_mock.go
@@ -42,41 +40,4 @@ type (
 		LockTaskProcessing()
 		UnlockTaskProcessing()
 	}
-
-	Factory interface {
-		common.Daemon
-
-		// TODO: remove the cache parameter after workflow cache become a host level component
-		// and it can be provided as a parameter when creating a QueueFactory instance.
-		// Currently, workflow cache is shard level, but we can't get it from shard or engine interface,
-		// as that will lead to a cycle dependency issue between shard and workflow package.
-		CreateQueue(shard shard.Context, engine shard.Engine, cache workflow.Cache) Queue
-	}
-)
-
-const (
-	FactoryFxGroup = "queueFactory"
-)
-
-// TODO: remove QueueType after merging active and standby
-// transfer/timer queue. Use tasks.Category instead
-// Currently need queue active/standby information
-// for assigning priority
-type (
-	QueueType int
-)
-
-const (
-	QueueTypeUnknown QueueType = iota
-	// QueueTypeTransfer is used by single cursor transfer queue, which
-	// processes both active and standby task
-	QueueTypeTransfer
-	QueueTypeActiveTransfer
-	QueueTypeStandbyTransfer
-	// QueueTypeTimer is used by single cursor timer queue, which
-	// processes both active and standby task
-	QueueTypeTimer
-	QueueTypeActiveTimer
-	QueueTypeStandbyTimer
-	QueueTypeVisibility
 )

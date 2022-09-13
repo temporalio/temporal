@@ -638,7 +638,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		}
 		defer func() { release(retError) }()
 
-		mutableState, err := context.LoadWorkflowExecution(ctx)
+		mutableState, err := context.LoadMutableState(ctx)
 		if err != nil {
 			// no matter what error happen, we need to retry
 			return 0, nil, err

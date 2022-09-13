@@ -44,7 +44,7 @@ func TestSpec(t *testing.T) {
 
 func (s *specSuite) checkSequenceRaw(spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
-	cs, err := newCompiledSpec(spec)
+	cs, err := NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
 		next := cs.rawNextTime(start)
@@ -55,18 +55,139 @@ func (s *specSuite) checkSequenceRaw(spec *schedpb.ScheduleSpec, start time.Time
 
 func (s *specSuite) checkSequenceFull(spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
-	cs, err := newCompiledSpec(spec)
+	cs, err := NewCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
-		_, next, has := cs.getNextTime(start)
+		result := cs.getNextTime(start)
 		if exp.IsZero() {
-			s.Require().False(has)
+			s.Require().True(result.Nominal.IsZero())
+			s.Require().True(result.Next.IsZero())
 			break
 		}
-		s.Require().True(has)
-		s.Equal(exp, next)
-		start = next
+		s.Require().False(result.Nominal.IsZero())
+		s.Require().False(result.Next.IsZero())
+		s.Equal(exp, result.Next)
+		start = result.Next
 	}
+}
+
+func (s *specSuite) TestCanonicalize() {
+	canonical, err := canonicalizeSpec(&schedpb.ScheduleSpec{})
+	s.NoError(err)
+	s.Equal(&schedpb.ScheduleSpec{}, canonical)
+
+	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+		CronString: []string{
+			"@every 43h",
+		},
+	})
+	s.NoError(err)
+	s.Equal(&schedpb.ScheduleSpec{
+		Interval: []*schedpb.IntervalSpec{{
+			Interval: timestamp.DurationPtr(43 * time.Hour),
+		}},
+	}, canonical)
+
+	// negative interval
+	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+		Interval: []*schedpb.IntervalSpec{{
+			Interval: timestamp.DurationPtr(-43 * time.Hour),
+		}},
+	})
+	s.Error(err)
+
+	// phase exceeds interval
+	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+		Interval: []*schedpb.IntervalSpec{{
+			Interval: timestamp.DurationPtr(3 * time.Hour),
+			Phase:    timestamp.DurationPtr(4 * time.Hour),
+		}},
+	})
+	s.Error(err)
+
+	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+		Calendar: []*schedpb.CalendarSpec{
+			{Hour: "5,7", Minute: "23"},
+		},
+	})
+	s.NoError(err)
+	structured := []*schedpb.StructuredCalendarSpec{{
+		Second:     []*schedpb.Range{{Start: 0}},
+		Minute:     []*schedpb.Range{{Start: 23}},
+		Hour:       []*schedpb.Range{{Start: 5}, {Start: 7}},
+		DayOfMonth: []*schedpb.Range{{Start: 1, End: 31}},
+		Month:      []*schedpb.Range{{Start: 1, End: 12}},
+		DayOfWeek:  []*schedpb.Range{{Start: 0, End: 6}},
+	}}
+	s.Equal(&schedpb.ScheduleSpec{
+		StructuredCalendar: structured,
+	}, canonical)
+
+	// no tz in cron string, leave spec alone
+	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+		CronString: []string{
+			"23 5,7 * * *",
+		},
+		Jitter:       timestamp.DurationPtr(5 * time.Minute),
+		StartTime:    timestamp.TimePtr(time.Date(2022, 3, 23, 0, 0, 0, 0, time.UTC)),
+		TimezoneName: "Europe/London",
+	})
+	s.NoError(err)
+	s.Equal(&schedpb.ScheduleSpec{
+		StructuredCalendar: structured,
+		Jitter:             timestamp.DurationPtr(5 * time.Minute),
+		StartTime:          timestamp.TimePtr(time.Date(2022, 3, 23, 0, 0, 0, 0, time.UTC)),
+		TimezoneName:       "Europe/London",
+	}, canonical)
+
+	// tz matches, ok
+	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+		CronString: []string{
+			"CRON_TZ=Europe/London 23 5,7 * * *",
+		},
+		TimezoneName: "Europe/London",
+	})
+	s.NoError(err)
+	s.Equal(&schedpb.ScheduleSpec{
+		StructuredCalendar: structured,
+		TimezoneName:       "Europe/London",
+	}, canonical)
+
+	// tz mismatch, error
+	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+		CronString: []string{
+			"CRON_TZ=America/New_York 23 5,7 * * *",
+		},
+		TimezoneName: "Europe/London",
+	})
+	s.Error(err)
+
+	// tz mismatch between cron strings, error
+	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+		CronString: []string{
+			"CRON_TZ=Europe/London 23 5,7 * * *",
+			"CRON_TZ=America/New_York 23 5,7 * * *",
+		},
+	})
+	s.Error(err)
+
+	// all cron strings don't agree, error
+	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+		CronString: []string{
+			"CRON_TZ=Europe/London 23 5,7 * * *",
+			"23 5,7 * * *",
+		},
+	})
+	s.Error(err)
+
+	// all cron strings don't agree, error
+	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+		CronString: []string{
+			"23 5,7 * * *",
+			"CRON_TZ=Europe/London 23 5,7 * * *",
+		},
+	})
+	s.Error(err)
 }
 
 func (s *specSuite) TestSpecIntervalBasic() {
@@ -148,6 +269,28 @@ func (s *specSuite) TestSpecCalendarMultiple() {
 			Calendar: []*schedpb.CalendarSpec{
 				{Hour: "5,7", Minute: "23"},
 				{Hour: "11,13", Minute: "55"},
+			},
+		},
+		time.Date(2022, 3, 23, 3, 0, 0, 0, time.UTC),
+		time.Date(2022, 3, 23, 5, 23, 0, 0, time.UTC),
+		time.Date(2022, 3, 23, 7, 23, 0, 0, time.UTC),
+		time.Date(2022, 3, 23, 11, 55, 0, 0, time.UTC),
+		time.Date(2022, 3, 23, 13, 55, 0, 0, time.UTC),
+		time.Date(2022, 3, 24, 5, 23, 0, 0, time.UTC),
+		time.Date(2022, 3, 24, 7, 23, 0, 0, time.UTC),
+		time.Date(2022, 3, 24, 11, 55, 0, 0, time.UTC),
+		time.Date(2022, 3, 24, 13, 55, 0, 0, time.UTC),
+	)
+}
+
+func (s *specSuite) TestSpecCalendarAndCron() {
+	s.checkSequenceRaw(
+		&schedpb.ScheduleSpec{
+			Calendar: []*schedpb.CalendarSpec{
+				{Hour: "5,7", Minute: "23"},
+			},
+			CronString: []string{
+				"55 11,13 * * *",
 			},
 		},
 		time.Date(2022, 3, 23, 3, 0, 0, 0, time.UTC),

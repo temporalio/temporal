@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	commonpb "go.temporal.io/api/common/v1"
 )
 
 type testStruct struct {
@@ -70,4 +71,34 @@ func TestToString(t *testing.T) {
 
 	result = ToString(nil)
 	assert.Equal("", result)
+}
+
+func TestMergeMapOfPayload(t *testing.T) {
+	assert := assert.New(t)
+
+	var currentMap map[string]*commonpb.Payload
+	var newMap map[string]*commonpb.Payload
+	resultMap := MergeMapOfPayload(currentMap, newMap)
+	assert.Equal(make(map[string]*commonpb.Payload), resultMap)
+
+	newMap = map[string]*commonpb.Payload{"key": EncodeString("val")}
+	resultMap = MergeMapOfPayload(currentMap, newMap)
+	assert.Equal(newMap, resultMap)
+
+	currentMap = map[string]*commonpb.Payload{"number": EncodeString("1")}
+	resultMap = MergeMapOfPayload(currentMap, newMap)
+	assert.Equal(
+		map[string]*commonpb.Payload{"number": EncodeString("1"), "key": EncodeString("val")},
+		resultMap,
+	)
+
+	newValue, _ := Encode(nil)
+	newMap = map[string]*commonpb.Payload{"number": newValue}
+	resultMap = MergeMapOfPayload(currentMap, newMap)
+	assert.Equal(0, len(resultMap))
+
+	newValue, _ = Encode([]int{})
+	newMap = map[string]*commonpb.Payload{"number": newValue}
+	resultMap = MergeMapOfPayload(currentMap, newMap)
+	assert.Equal(0, len(resultMap))
 }

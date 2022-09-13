@@ -30,6 +30,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/server/common"
 )
 
@@ -104,6 +105,16 @@ func (s *readerGroupSuite) TestAddGetReader() {
 	})
 }
 
+func (s *readerGroupSuite) TestRemoveReader() {
+	s.readerGroup.Start()
+	defer s.readerGroup.Stop()
+
+	r := s.readerGroup.NewReader(DefaultReaderId)
+	s.readerGroup.RemoveReader(DefaultReaderId)
+	s.Equal(common.DaemonStatusStopped, r.(*testReader).status)
+	s.Len(s.readerGroup.Readers(), 0)
+}
+
 func newTestReader() Reader {
 	return &testReader{
 		status: common.DaemonStatusInitialized,
@@ -116,6 +127,7 @@ func (r *testReader) Scopes() []Scope              { panic("not implemented") }
 func (r *testReader) WalkSlices(SliceIterator)     { panic("not implemented") }
 func (r *testReader) SplitSlices(SliceSplitter)    { panic("not implemented") }
 func (r *testReader) MergeSlices(...Slice)         { panic("not implemented") }
+func (r *testReader) AppendSlices(...Slice)        { panic("not implemented") }
 func (r *testReader) ClearSlices(SlicePredicate)   { panic("not implemented") }
 func (r *testReader) CompactSlices(SlicePredicate) { panic("not implemented") }
 func (r *testReader) ShrinkSlices()                { panic("not implemented") }

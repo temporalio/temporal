@@ -102,7 +102,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	}
 	firstEvent := history[0]
 	lastEvent := history[len(history)-1]
-	var newRunMutableStateBuilder MutableState
+	var newRunMutableState MutableState
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
 
@@ -604,7 +604,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			// The length of newRunHistory can be zero in resend case
 			if len(newRunHistory) != 0 {
-				newRunMutableStateBuilder = NewMutableState(
+				newRunMutableState = NewMutableState(
 					b.shard,
 					b.shard.GetEventsCache(),
 					b.logger,
@@ -612,7 +612,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 					timestamp.TimeValue(newRunHistory[0].GetEventTime()),
 				)
 
-				newRunStateBuilder := NewMutableStateRebuilder(b.shard, b.logger, newRunMutableStateBuilder)
+				newRunStateBuilder := NewMutableStateRebuilder(b.shard, b.logger, newRunMutableState)
 
 				newRunID := event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 				newExecution := commonpb.WorkflowExecution{
@@ -677,5 +677,5 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 	b.mutableState.SetHistoryBuilder(NewImmutableHistoryBuilder(history))
 
-	return newRunMutableStateBuilder, nil
+	return newRunMutableState, nil
 }

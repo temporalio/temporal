@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -66,7 +67,7 @@ type (
 		hasBufferedEvents               bool
 		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
-		newStateBuilder                 workflow.MutableState
+		newMutableState                 workflow.MutableState
 		stopProcessing                  bool // should stop processing any more commands
 		mutableState                    workflow.MutableState
 		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
@@ -125,7 +126,7 @@ func newWorkflowTaskHandler(
 		hasBufferedEvents:               mutableState.HasBufferedEvents(),
 		workflowTaskFailedCause:         nil,
 		activityNotStartedCancelled:     false,
-		newStateBuilder:                 nil,
+		newMutableState:                 nil,
 		stopProcessing:                  false,
 		mutableState:                    mutableState,
 		initiatedChildExecutionsInBatch: make(map[string]struct{}),
@@ -794,8 +795,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	}
 
 	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfMemoSizeExceedsLimit(
+		attr.GetMemo(),
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
-		attr.GetMemo().Size(),
 		"ContinueAsNewWorkflowExecutionCommandAttributes. Memo exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -813,9 +814,15 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
-	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespaceName.String()); err != nil {
+	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespaceName.String())
+	if err != nil {
 		handler.stopProcessing = true
 		return err
+	}
+	if unaliasedSas != nil {
+		newAttr := *attr
+		newAttr.SearchAttributes = unaliasedSas
+		attr = &newAttr
 	}
 
 	// If the workflow task has more than one completion event than just pick the first one
@@ -842,7 +849,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		}
 	}
 
-	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
+	_, newMutableState, err := handler.mutableState.AddContinueAsNewEvent(
 		ctx,
 		handler.workflowTaskCompletedID,
 		handler.workflowTaskCompletedID,
@@ -853,7 +860,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
-	handler.newStateBuilder = newStateBuilder
+	handler.newMutableState = newMutableState
 	return nil
 }
 
@@ -909,8 +916,8 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	}
 
 	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfMemoSizeExceedsLimit(
+		attr.GetMemo(),
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
-		attr.GetMemo().Size(),
 		"StartChildWorkflowExecutionCommandAttributes. Memo exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -928,9 +935,15 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		return err
 	}
 
-	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace.String()); err != nil {
+	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace.String())
+	if err != nil {
 		handler.stopProcessing = true
 		return err
+	}
+	if unaliasedSas != nil {
+		newAttr := *attr
+		newAttr.SearchAttributes = unaliasedSas
+		attr = &newAttr
 	}
 
 	enabled := handler.config.EnableParentClosePolicy(parentNamespace.String())
@@ -1046,8 +1059,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		return err
 	}
 
+	// new search attributes size limit check
 	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfSearchAttributesSizeExceedsLimit(
-		attr.GetSearchAttributes(),
+		&commonpb.SearchAttributes{
+			IndexedFields: payload.MergeMapOfPayload(
+				executionInfo.SearchAttributes,
+				attr.GetSearchAttributes().GetIndexedFields(),
+			),
+		},
 		namespace,
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES.String()),
 	)
@@ -1056,9 +1075,15 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		return err
 	}
 
-	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace.String()); err != nil {
+	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace.String())
+	if err != nil {
 		handler.stopProcessing = true
 		return err
+	}
+	if unaliasedSas != nil {
+		newAttr := *attr
+		newAttr.SearchAttributes = unaliasedSas
+		attr = &newAttr
 	}
 
 	_, err = handler.mutableState.AddUpsertWorkflowSearchAttributesEvent(
@@ -1106,9 +1131,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
 		return err
 	}
 
+	// new memo size limit check
 	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfMemoSizeExceedsLimit(
+		&commonpb.Memo{
+			Fields: payload.MergeMapOfPayload(executionInfo.Memo, attr.GetUpsertedMemo().GetFields()),
+		},
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES.String()),
-		attr.GetUpsertedMemo().Size(),
 		"ModifyWorkflowPropertiesCommandAttributes. Memo exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
@@ -1145,7 +1173,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newStateBuilder, err := api.CreateMutableState(
+	newMutableState, err := api.CreateMutableState(
 		ctx,
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
@@ -1157,7 +1185,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,
 		handler.mutableState,
-		newStateBuilder,
+		newMutableState,
 		newRunID,
 		startAttr,
 		nil,
@@ -1169,7 +1197,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 		return err
 	}
 
-	handler.newStateBuilder = newStateBuilder
+	handler.newMutableState = newMutableState
 	return nil
 }
 
@@ -1190,7 +1218,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		lastCompletionResult = startAttr.LastCompletionResult
 	}
 
-	newStateBuilder, err := api.CreateMutableState(
+	newMutableState, err := api.CreateMutableState(
 		ctx,
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
@@ -1202,7 +1230,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,
 		handler.mutableState,
-		newStateBuilder,
+		newMutableState,
 		newRunID,
 		startAttr,
 		lastCompletionResult,
@@ -1214,7 +1242,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		return err
 	}
 
-	handler.newStateBuilder = newStateBuilder
+	handler.newMutableState = newMutableState
 	return nil
 }
 

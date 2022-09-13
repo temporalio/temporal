@@ -41,7 +41,7 @@ func (c *metricClient) CloseShard(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.CloseShardResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientCloseShardScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientCloseShardScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -55,7 +55,7 @@ func (c *metricClient) DeleteWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.DeleteWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientDeleteWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientDeleteWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -69,7 +69,7 @@ func (c *metricClient) DeleteWorkflowVisibilityRecord(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.DeleteWorkflowVisibilityRecordResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientDeleteWorkflowVisibilityRecordScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientDeleteWorkflowVisibilityRecordScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -83,7 +83,7 @@ func (c *metricClient) DescribeHistoryHost(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.DescribeHistoryHostResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientDescribeHistoryHostScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientDescribeHistoryHostScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -97,7 +97,7 @@ func (c *metricClient) DescribeMutableState(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.DescribeMutableStateResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientDescribeMutableStateScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientDescribeMutableStateScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -111,7 +111,7 @@ func (c *metricClient) DescribeWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientDescribeWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientDescribeWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -125,7 +125,7 @@ func (c *metricClient) GenerateLastHistoryReplicationTasks(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientGenerateLastHistoryReplicationTasksScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientGenerateLastHistoryReplicationTasksScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -139,7 +139,7 @@ func (c *metricClient) GetDLQMessages(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.GetDLQMessagesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientGetDLQMessagesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientGetDLQMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -153,7 +153,7 @@ func (c *metricClient) GetDLQReplicationMessages(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.GetDLQReplicationMessagesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientGetDLQReplicationMessagesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientGetDLQReplicationMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -167,7 +167,7 @@ func (c *metricClient) GetMutableState(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.GetMutableStateResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientGetMutableStateScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientGetMutableStateScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -181,7 +181,7 @@ func (c *metricClient) GetReplicationMessages(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.GetReplicationMessagesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientGetReplicationMessagesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientGetReplicationMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -195,7 +195,7 @@ func (c *metricClient) GetReplicationStatus(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.GetReplicationStatusResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientGetReplicationStatusScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientGetReplicationStatusScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -209,7 +209,7 @@ func (c *metricClient) GetShard(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.GetShardResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientGetShardScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientGetShardScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -223,7 +223,7 @@ func (c *metricClient) MergeDLQMessages(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.MergeDLQMessagesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientMergeDLQMessagesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientMergeDLQMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -237,7 +237,7 @@ func (c *metricClient) PollMutableState(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.PollMutableStateResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientPollMutableStateScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientPollMutableStateScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -251,7 +251,7 @@ func (c *metricClient) PurgeDLQMessages(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.PurgeDLQMessagesResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientPurgeDLQMessagesScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientPurgeDLQMessagesScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -265,7 +265,7 @@ func (c *metricClient) QueryWorkflow(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.QueryWorkflowResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientQueryWorkflowScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientQueryWorkflowScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -279,7 +279,7 @@ func (c *metricClient) ReapplyEvents(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.ReapplyEventsResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientReapplyEventsScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientReapplyEventsScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -293,7 +293,7 @@ func (c *metricClient) RebuildMutableState(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RebuildMutableStateResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRebuildMutableStateScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRebuildMutableStateScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -307,7 +307,7 @@ func (c *metricClient) RecordActivityTaskHeartbeat(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RecordActivityTaskHeartbeatResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRecordActivityTaskHeartbeatScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRecordActivityTaskHeartbeatScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -321,7 +321,7 @@ func (c *metricClient) RecordActivityTaskStarted(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RecordActivityTaskStartedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRecordActivityTaskStartedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRecordActivityTaskStartedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -335,7 +335,7 @@ func (c *metricClient) RecordChildExecutionCompleted(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RecordChildExecutionCompletedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRecordChildExecutionCompletedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRecordChildExecutionCompletedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -349,7 +349,7 @@ func (c *metricClient) RecordWorkflowTaskStarted(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RecordWorkflowTaskStartedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRecordWorkflowTaskStartedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRecordWorkflowTaskStartedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -363,7 +363,7 @@ func (c *metricClient) RefreshWorkflowTasks(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RefreshWorkflowTasksResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRefreshWorkflowTasksScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRefreshWorkflowTasksScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -377,7 +377,7 @@ func (c *metricClient) RemoveSignalMutableState(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RemoveSignalMutableStateResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRemoveSignalMutableStateScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRemoveSignalMutableStateScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -391,7 +391,7 @@ func (c *metricClient) RemoveTask(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RemoveTaskResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRemoveTaskScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRemoveTaskScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -405,7 +405,7 @@ func (c *metricClient) ReplicateEventsV2(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.ReplicateEventsV2Response, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientReplicateEventsV2Scope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientReplicateEventsV2Scope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -419,7 +419,7 @@ func (c *metricClient) RequestCancelWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RequestCancelWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRequestCancelWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRequestCancelWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -433,7 +433,7 @@ func (c *metricClient) ResetStickyTaskQueue(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.ResetStickyTaskQueueResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientResetStickyTaskQueueScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientResetStickyTaskQueueScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -447,7 +447,7 @@ func (c *metricClient) ResetWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientResetWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientResetWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -461,7 +461,7 @@ func (c *metricClient) RespondActivityTaskCanceled(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RespondActivityTaskCanceledResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRespondActivityTaskCanceledScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRespondActivityTaskCanceledScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -475,7 +475,7 @@ func (c *metricClient) RespondActivityTaskCompleted(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RespondActivityTaskCompletedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRespondActivityTaskCompletedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRespondActivityTaskCompletedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -489,7 +489,7 @@ func (c *metricClient) RespondActivityTaskFailed(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RespondActivityTaskFailedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRespondActivityTaskFailedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRespondActivityTaskFailedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -503,7 +503,7 @@ func (c *metricClient) RespondWorkflowTaskCompleted(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRespondWorkflowTaskCompletedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRespondWorkflowTaskCompletedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -517,7 +517,7 @@ func (c *metricClient) RespondWorkflowTaskFailed(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.RespondWorkflowTaskFailedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRespondWorkflowTaskFailedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientRespondWorkflowTaskFailedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -531,7 +531,7 @@ func (c *metricClient) ScheduleWorkflowTask(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.ScheduleWorkflowTaskResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientScheduleWorkflowTaskScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientScheduleWorkflowTaskScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -545,7 +545,7 @@ func (c *metricClient) SignalWithStartWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientSignalWithStartWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientSignalWithStartWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -559,7 +559,7 @@ func (c *metricClient) SignalWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.SignalWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientSignalWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientSignalWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -573,7 +573,7 @@ func (c *metricClient) StartWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.StartWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientStartWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientStartWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -587,7 +587,7 @@ func (c *metricClient) SyncActivity(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.SyncActivityResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientSyncActivityScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientSyncActivityScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -601,7 +601,7 @@ func (c *metricClient) SyncShardStatus(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.SyncShardStatusResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientSyncShardStatusScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientSyncShardStatusScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -615,7 +615,7 @@ func (c *metricClient) TerminateWorkflowExecution(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.TerminateWorkflowExecutionResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientTerminateWorkflowExecutionScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientTerminateWorkflowExecutionScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -629,7 +629,7 @@ func (c *metricClient) UpdateWorkflow(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.UpdateWorkflowResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientUpdateWorkflowScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientUpdateWorkflowScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -643,7 +643,7 @@ func (c *metricClient) VerifyChildExecutionCompletionRecorded(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.VerifyChildExecutionCompletionRecordedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientVerifyChildExecutionCompletionRecordedScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientVerifyChildExecutionCompletionRecordedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
@@ -657,7 +657,7 @@ func (c *metricClient) VerifyFirstWorkflowTaskScheduled(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.VerifyFirstWorkflowTaskScheduledResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientVerifyFirstWorkflowTaskScheduledScope)
+	scope, stopwatch := c.startMetricsRecording(ctx, metrics.HistoryClientVerifyFirstWorkflowTaskScheduledScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()

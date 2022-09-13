@@ -157,8 +157,8 @@ func (s *integrationClustersTestSuite) SetupTest() {
 }
 
 func (s *integrationClustersTestSuite) TearDownSuite() {
-	s.cluster1.TearDownCluster()
-	s.cluster2.TearDownCluster()
+	s.NoError(s.cluster1.TearDownCluster())
+	s.NoError(s.cluster2.TearDownCluster())
 }
 
 func (s *integrationClustersTestSuite) decodePayloadsString(ps *commonpb.Payloads) (r string) {
