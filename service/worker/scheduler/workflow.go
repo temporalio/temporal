@@ -82,7 +82,7 @@ type (
 		a      *activities
 		logger sdklog.Logger
 
-		cspec *compiledSpec
+		cspec *CompiledSpec
 
 		tweakables tweakablePolicies
 
@@ -229,7 +229,7 @@ func (s *scheduler) ensureFields() {
 }
 
 func (s *scheduler) compileSpec() {
-	cspec, err := newCompiledSpec(s.Schedule.Spec)
+	cspec, err := NewCompiledSpec(s.Schedule.Spec)
 	if err != nil {
 		s.logger.Error("Invalid schedule", "error", err)
 		s.Info.InvalidScheduleError = err.Error()

@@ -2936,6 +2936,14 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	if request.Schedule == nil {
+		request.Schedule = &schedpb.Schedule{}
+	}
+	err = wh.canonicalizeScheduleSpec(request.Schedule)
+	if err != nil {
+		return nil, err
+	}
+
 	err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
@@ -3252,6 +3260,14 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 
 	namespaceName := namespace.Name(request.Namespace)
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if request.Schedule == nil {
+		request.Schedule = &schedpb.Schedule{}
+	}
+	err = wh.canonicalizeScheduleSpec(request.Schedule)
 	if err != nil {
 		return nil, err
 	}
@@ -4710,6 +4726,20 @@ func (wh *WorkflowHandler) trimHistoryNode(
 			tag.Error(err),
 		)
 	}
+}
+
+func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedpb.Schedule) error {
+	if schedule.Spec == nil {
+		schedule.Spec = &schedpb.ScheduleSpec{}
+	}
+	compiledSpec, err := scheduler.NewCompiledSpec(schedule.Spec)
+	if err != nil {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid schedule spec: %v", err))
+	}
+	// This mutates a part of the request message, but it's safe even in the presence of
+	// retries (reusing the same message) because canonicalization is idempotent.
+	schedule.Spec = compiledSpec.CanonicalForm()
+	return nil
 }
 
 func (wh *WorkflowHandler) decodeScheduleListInfo(memo *commonpb.Memo) *schedpb.ScheduleListInfo {
