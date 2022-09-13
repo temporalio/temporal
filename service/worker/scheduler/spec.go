@@ -42,6 +42,11 @@ type (
 		calendar []*compiledCalendar
 		excludes []*compiledCalendar
 	}
+
+	getNextTimeResult struct {
+		Nominal time.Time // scheduled time before adding jitter
+		Next    time.Time // scheduled time after adding jitter
+	}
 )
 
 func NewCompiledSpec(spec *schedpb.ScheduleSpec) (*CompiledSpec, error) {
@@ -169,21 +174,21 @@ func (cs *CompiledSpec) CanonicalForm() *schedpb.ScheduleSpec {
 }
 
 // Returns the earliest time that matches the schedule spec that is after the given time.
-// Returns: nominal is the time that matches, pre-jitter. next is the nominal time with
-// jitter applied. has is false if there is no matching time.
-func (cs *CompiledSpec) getNextTime(after time.Time) (nominal, next time.Time, has bool) {
+// Returns: Nominal is the time that matches, pre-jitter. Next is the nominal time with
+// jitter applied. If there is no matching time, Nominal and Next will be the zero time.
+func (cs *CompiledSpec) getNextTime(after time.Time) getNextTimeResult {
 	// If we're starting before the schedule's allowed time range, jump up to right before
 	// it (so that we can still return the first second of the range if it happens to match).
-	if cs.spec.StartTime != nil && after.Before(*cs.spec.StartTime) {
+	if cs.spec.StartTime != nil && after.Before(timestamp.TimeValue(cs.spec.StartTime)) {
 		after = cs.spec.StartTime.Add(-time.Second)
 	}
 
+	var nominal time.Time
 	for {
 		nominal = cs.rawNextTime(after)
 
 		if nominal.IsZero() || (cs.spec.EndTime != nil && nominal.After(*cs.spec.EndTime)) {
-			has = false
-			return
+			return getNextTimeResult{}
 		}
 
 		// check against excludes
@@ -199,10 +204,9 @@ func (cs *CompiledSpec) getNextTime(after time.Time) (nominal, next time.Time, h
 	if following := cs.rawNextTime(nominal); !following.IsZero() {
 		maxJitter = util.Min(maxJitter, following.Sub(nominal))
 	}
-	next = cs.addJitter(nominal, maxJitter)
+	next := cs.addJitter(nominal, maxJitter)
 
-	has = true
-	return
+	return getNextTimeResult{Nominal: nominal, Next: next}
 }
 
 // Returns the next matching time (without jitter), or the zero value if no time matches.
