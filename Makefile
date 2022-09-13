@@ -52,11 +52,6 @@ MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))
 COLOR := "\e[1;36m%s\e[0m\n"
 RED :=   "\e[1;31m%s\e[0m\n"
 
-PINNED_DEPENDENCIES := \
-	github.com/go-sql-driver/mysql@v1.5.0
-
-GOGO_PROTOBUF_VERSION := v1.22.1
-
 define NEWLINE
 
 
@@ -71,7 +66,7 @@ INTEG_TEST_NDC_ROOT    := ./host/ndc
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
-PROTO_IMPORTS := -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(shell go env GOMODCACHE)/github.com/temporalio/gogo-protobuf@$(GOGO_PROTOBUF_VERSION)/protobuf
+PROTO_IMPORTS = -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(shell cd build && go list -m -f '{{.Dir}}' github.com/temporalio/gogo-protobuf)/protobuf
 PROTO_OUT := api
 
 ALL_SRC         := $(shell find . -name "*.go")
@@ -81,6 +76,9 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
+
+PINNED_DEPENDENCIES := \
+	github.com/go-sql-driver/mysql@v1.5.0
 
 # Code coverage output files.
 COVER_ROOT                 := ./.coverage
@@ -117,7 +115,7 @@ update-mockgen:
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	@go install github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick@$(GOGO_PROTOBUF_VERSION)
+	@(cd build && go install github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick)
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 update-tctl:
