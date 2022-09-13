@@ -28,6 +28,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	commonpb "go.temporal.io/api/common/v1"
 	"testing"
 	"time"
 
@@ -201,6 +202,7 @@ func (s *versioningIntegSuite) TestVersioningStateNotDestroyedByOtherUpdates() {
 	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, wfFunc)
 	s.NoError(err)
 	err = workflowRun.Get(ctx, nil)
+	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{WorkflowId: id})
 	s.NoError(err)
 	sdkWorker.Stop()
 
