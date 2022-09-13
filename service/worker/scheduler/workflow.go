@@ -72,6 +72,8 @@ const (
 	// Maximum number of times to list per ListMatchingTimes query. (This is used only in a
 	// query so it can be changed without breaking history.)
 	maxListMatchingTimesCount = 1000
+
+	invalidDuration time.Duration = -1
 )
 
 type (
@@ -89,6 +91,8 @@ type (
 		// We might have zero or one long-poll watcher activity running. If so, these are set:
 		watchingWorkflowId string
 		watchingFuture     workflow.Future
+
+		uuidBatch []string
 	}
 
 	tweakablePolicies struct {
@@ -178,7 +182,7 @@ func (s *scheduler) run() error {
 			s.logger.Warn("Time went backwards", "from", t1, "to", t2)
 			t2 = t1
 		}
-		nextSleep, hasNext := s.processTimeRange(
+		nextSleep := s.processTimeRange(
 			t1, t2,
 			// resolve this to the schedule's policy as late as possible
 			enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
@@ -192,7 +196,7 @@ func (s *scheduler) run() error {
 		// 1. requested time elapsed
 		// 2. we got a signal (update, request, refresh)
 		// 3. a workflow that we were watching finished
-		s.sleep(nextSleep, hasNext)
+		s.sleep(nextSleep)
 		s.updateTweakables()
 	}
 
@@ -298,25 +302,30 @@ func (s *scheduler) processTimeRange(
 	t1, t2 time.Time,
 	overlapPolicy enumspb.ScheduleOverlapPolicy,
 	manual bool,
-) (nextSleep time.Duration, hasNext bool) {
+) time.Duration {
 	s.logger.Debug("processTimeRange", "t1", t1, "t2", t2, "overlapPolicy", overlapPolicy, "manual", manual)
 
 	if s.cspec == nil {
-		return 0, false
+		return invalidDuration
 	}
 
 	catchupWindow := s.getCatchupWindow()
 
 	for {
-		nominalTime, nextTime, hasNext := s.cspec.getNextTime(t1)
-		t1 = nextTime
-		if !hasNext {
-			return 0, false
-		} else if nextTime.After(t2) {
-			return nextTime.Sub(t2), true
+		// Run this logic in a SideEffect so that we can fix bugs there without breaking
+		// existing schedule workflows.
+		var next getNextTimeResult
+		workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+			return s.cspec.getNextTime(t1)
+		}).Get(&next)
+		t1 = next.Next
+		if t1.IsZero() {
+			return invalidDuration
+		} else if t1.After(t2) {
+			return t1.Sub(t2)
 		}
-		if !manual && t2.Sub(nextTime) > catchupWindow {
-			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", nextTime)
+		if !manual && t2.Sub(t1) > catchupWindow {
+			s.logger.Warn("Schedule missed catchup window", "now", t2, "time", t1)
 			s.Info.MissedCatchupWindow++
 			continue
 		}
@@ -325,9 +334,8 @@ func (s *scheduler) processTimeRange(
 		if !s.canTakeScheduledAction(manual, false) {
 			continue
 		}
-		s.addStart(nominalTime, nextTime, overlapPolicy, manual)
+		s.addStart(next.Nominal, next.Next, overlapPolicy, manual)
 	}
-	return 0, false
 }
 
 func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
@@ -355,7 +363,7 @@ func (s *scheduler) canTakeScheduledAction(manual, decrement bool) bool {
 	return false
 }
 
-func (s *scheduler) sleep(nextSleep time.Duration, hasNext bool) {
+func (s *scheduler) sleep(nextSleep time.Duration) {
 	sel := workflow.NewSelector(s.ctx)
 
 	upCh := workflow.GetSignalChannel(s.ctx, SignalNameUpdate)
@@ -367,7 +375,7 @@ func (s *scheduler) sleep(nextSleep time.Duration, hasNext bool) {
 	refreshCh := workflow.GetSignalChannel(s.ctx, SignalNameRefresh)
 	sel.AddReceive(refreshCh, s.handleRefreshSignal)
 
-	if hasNext {
+	if nextSleep != invalidDuration {
 		tmr := workflow.NewTimer(s.ctx, nextSleep)
 		sel.AddFuture(tmr, func(_ workflow.Future) {})
 	}
@@ -376,7 +384,7 @@ func (s *scheduler) sleep(nextSleep time.Duration, hasNext bool) {
 		sel.AddFuture(s.watchingFuture, s.wfWatcherReturned)
 	}
 
-	s.logger.Debug("sleeping", "hasNext", hasNext, "watching", s.watchingFuture != nil)
+	s.logger.Debug("sleeping", "nextSleep", nextSleep, "watching", s.watchingFuture != nil)
 	sel.Select(s.ctx)
 	for sel.HasPending() {
 		sel.Select(s.ctx)
@@ -487,9 +495,10 @@ func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
 	out := make([]*time.Time, 0, n)
 	t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 	for len(out) < n {
-		var has bool
-		_, t1, has = s.cspec.getNextTime(t1)
-		if !has {
+		// don't need to call getNextTime in SideEffect because this is only used in a query
+		// handler and for the UpsertMemo value
+		t1 = s.cspec.getNextTime(t1).Next
+		if t1.IsZero() {
 			break
 		}
 		out = append(out, timestamp.TimePtr(t1))
@@ -518,8 +527,9 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 	var out []*time.Time
 	t1 := timestamp.TimeValue(req.StartTime)
 	for i := 0; i < maxListMatchingTimesCount; i++ {
-		_, t1, has := s.cspec.getNextTime(t1)
-		if !has || t1.After(timestamp.TimeValue(req.EndTime)) {
+		// don't need to call getNextTime in SideEffect because this is just a query
+		t1 = s.cspec.getNextTime(t1).Next
+		if t1.IsZero() || t1.After(timestamp.TimeValue(req.EndTime)) {
 			break
 		}
 		out = append(out, timestamp.TimePtr(t1))
@@ -888,9 +898,16 @@ func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
 }
 
 func (s *scheduler) newUUIDString() string {
-	var str string
-	workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-		return uuid.NewString()
-	}).Get(&str)
-	return str
+	if len(s.uuidBatch) == 0 {
+		workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+			out := make([]string, 10)
+			for i := range out {
+				out[i] = uuid.NewString()
+			}
+			return out
+		}).Get(&s.uuidBatch)
+	}
+	next := s.uuidBatch[0]
+	s.uuidBatch = s.uuidBatch[1:]
+	return next
 }
