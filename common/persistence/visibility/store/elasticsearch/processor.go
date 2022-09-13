@@ -155,7 +155,9 @@ func (p *processorImpl) Stop() {
 
 	err := p.bulkProcessor.Stop()
 	if err != nil {
-		p.logger.Fatal("Unable to stop Elasticsearch processor.", tag.LifeCycleStopFailed, tag.Error(err))
+		// This could happen if ES is down when we're trying to shut down the server.
+		p.logger.Error("Unable to stop Elasticsearch processor.", tag.LifeCycleStopFailed, tag.Error(err))
+		return
 	}
 	p.mapToAckFuture = nil
 	p.bulkProcessor = nil

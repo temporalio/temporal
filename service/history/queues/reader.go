@@ -354,6 +354,7 @@ func (r *ReaderImpl) ShrinkSlices() {
 		slice := element.Value.(Slice)
 		slice.ShrinkScope()
 		if scope := slice.Scope(); scope.IsEmpty() {
+			r.monitor.RemoveSlice(slice)
 			r.slices.Remove(element)
 		}
 	}

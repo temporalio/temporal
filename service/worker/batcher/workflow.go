@@ -51,6 +51,8 @@ const (
 	BatchOperationTypeMemo = "batch_operation_type"
 	//BatchReasonMemo stores batch operation reason in memo
 	BatchReasonMemo = "batch_operation_reason"
+	// BatchOperationStatsMemo stores batch operation stats in memo
+	BatchOperationStatsMemo = "batch_operation_stats"
 	// BatchTypeTerminate is batch type for terminating workflows
 	BatchTypeTerminate = "terminate"
 	// BatchTypeCancel is the batch type for canceling workflows
@@ -165,7 +167,31 @@ func BatchWorkflow(ctx workflow.Context, batchParams BatchParams) (HeartBeatDeta
 	var result HeartBeatDetails
 	var ac *activities
 	err = workflow.ExecuteActivity(opt, ac.BatchActivity, batchParams).Get(ctx, &result)
+	if err != nil {
+		return HeartBeatDetails{}, err
+	}
+	err = attachBatchOperationStats(ctx, result)
+	if err != nil {
+		return HeartBeatDetails{}, err
+	}
 	return result, err
+}
+
+type BatchOperationStats struct {
+	NumSuccess int
+	NumFailure int
+}
+
+// attachBatchOperationStats attaches statistics on the number of individual successes and failures to the memo of
+// this workflow.
+func attachBatchOperationStats(ctx workflow.Context, result HeartBeatDetails) error {
+	memo := map[string]interface{}{
+		BatchOperationStatsMemo: BatchOperationStats{
+			NumSuccess: result.SuccessCount,
+			NumFailure: result.ErrorCount,
+		},
+	}
+	return workflow.UpsertMemo(ctx, memo)
 }
 
 func validateParams(params BatchParams) error {
