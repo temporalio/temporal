@@ -89,6 +89,8 @@ type (
 		// We might have zero or one long-poll watcher activity running. If so, these are set:
 		watchingWorkflowId string
 		watchingFuture     workflow.Future
+
+		uuidBatch []string
 	}
 
 	tweakablePolicies struct {
@@ -888,9 +890,16 @@ func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
 }
 
 func (s *scheduler) newUUIDString() string {
-	var str string
-	workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
-		return uuid.NewString()
-	}).Get(&str)
-	return str
+	if len(s.uuidBatch) == 0 {
+		workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+			out := make([]string, 10)
+			for i := range out {
+				out[i] = uuid.NewString()
+			}
+			return out
+		}).Get(&s.uuidBatch)
+	}
+	next := s.uuidBatch[0]
+	s.uuidBatch = s.uuidBatch[1:]
+	return next
 }
