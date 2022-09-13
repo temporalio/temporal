@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 var _ historyservice.HistoryServiceClient = (*metricClient)(nil)
@@ -84,7 +85,8 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.QueryFailed,
 			*serviceerror.NamespaceNotFound,
 			*serviceerror.WorkflowNotReady,
-			*serviceerror.WorkflowExecutionAlreadyStarted:
+			*serviceerror.WorkflowExecutionAlreadyStarted,
+			*serviceerrors.TaskAlreadyStarted:
 			// noop - not interest and too many logs
 		default:
 			c.throttledLogger.Info("history client encountered error", tag.Error(err), tag.ErrorType(err))
