@@ -240,6 +240,13 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 		return err
 	}
 
+	// first we need to get the current notification version since we need to it for conditional update
+	metadata, err := h.metadataManager.GetMetadata(ctx)
+	if err != nil {
+		return err
+	}
+	notificationVersion := metadata.NotificationVersion
+
 	// plus, we need to check whether the config version is <= the config version set in the input
 	// plus, we need to check whether the failover version is <= the failover version set in the input
 	resp, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
@@ -253,13 +260,6 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 		}
 		return err
 	}
-
-	// we need to get the current notification version since we need to it for conditional update
-	metadata, err := h.metadataManager.GetMetadata(ctx)
-	if err != nil {
-		return err
-	}
-	notificationVersion := metadata.NotificationVersion
 
 	recordUpdated := false
 	request := &persistence.UpdateNamespaceRequest{
