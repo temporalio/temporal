@@ -87,7 +87,7 @@ func (s *specSuite) TestCanonicalize() {
 	}, canonical)
 
 	// negative interval
-	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
 		Interval: []*schedpb.IntervalSpec{{
 			Interval: timestamp.DurationPtr(-43 * time.Hour),
 		}},
@@ -95,7 +95,7 @@ func (s *specSuite) TestCanonicalize() {
 	s.Error(err)
 
 	// phase exceeds interval
-	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
 		Interval: []*schedpb.IntervalSpec{{
 			Interval: timestamp.DurationPtr(3 * time.Hour),
 			Phase:    timestamp.DurationPtr(4 * time.Hour),
@@ -152,7 +152,7 @@ func (s *specSuite) TestCanonicalize() {
 	}, canonical)
 
 	// tz mismatch, error
-	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
 		CronString: []string{
 			"CRON_TZ=America/New_York 23 5,7 * * *",
 		},
@@ -161,7 +161,7 @@ func (s *specSuite) TestCanonicalize() {
 	s.Error(err)
 
 	// tz mismatch between cron strings, error
-	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
 		CronString: []string{
 			"CRON_TZ=Europe/London 23 5,7 * * *",
 			"CRON_TZ=America/New_York 23 5,7 * * *",
@@ -170,7 +170,7 @@ func (s *specSuite) TestCanonicalize() {
 	s.Error(err)
 
 	// all cron strings don't agree, error
-	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
 		CronString: []string{
 			"CRON_TZ=Europe/London 23 5,7 * * *",
 			"23 5,7 * * *",
@@ -179,7 +179,7 @@ func (s *specSuite) TestCanonicalize() {
 	s.Error(err)
 
 	// all cron strings don't agree, error
-	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+	_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
 		CronString: []string{
 			"23 5,7 * * *",
 			"CRON_TZ=Europe/London 23 5,7 * * *",

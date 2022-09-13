@@ -50,8 +50,6 @@ type (
 )
 
 const (
-	// minCalendarYear is the earliest year that will be recognized for calendar dates.
-	minCalendarYear = 2000
 	// maxCalendarYear is the latest year that will be recognized for calendar dates.
 	// If you're still using Temporal in 2100 please change this constant and rebuild.
 	maxCalendarYear = 2100
