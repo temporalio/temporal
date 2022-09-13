@@ -26,12 +26,12 @@ package scheduler
 
 import (
 	"errors"
-	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	schedpb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -50,8 +50,6 @@ type (
 )
 
 const (
-	// minCalendarYear is the earliest year that will be recognized for calendar dates.
-	minCalendarYear = 2000
 	// maxCalendarYear is the latest year that will be recognized for calendar dates.
 	// If you're still using Temporal in 2100 please change this constant and rebuild.
 	maxCalendarYear = 2100
@@ -60,6 +58,8 @@ const (
 const (
 	// Modes for parsing range strings: all modes accept decimal integers
 	parseModeInt parseMode = iota
+	// parseModeYear is like parseModeInt but returns an empty range for the default
+	parseModeYear
 	// parseModeMonth also accepts month name prefixes (at least three letters)
 	parseModeMonth
 	// parseModeDow also accepts day-of-week prefixes (at least two letters)
@@ -67,8 +67,9 @@ const (
 )
 
 var (
-	errOutOfRange = errors.New("out of range")
-	errMalformed  = errors.New("malformed expression")
+	errOutOfRange               = errors.New("out of range")
+	errMalformed                = errors.New("malformed expression")
+	errConflictingTimezoneNames = errors.New("conflicting timezone names")
 
 	monthStrings = []string{
 		"january",
@@ -96,22 +97,22 @@ var (
 	}
 )
 
-func newCompiledCalendar(cal *schedpb.CalendarSpec, tz *time.Location) (*compiledCalendar, error) {
+func newCompiledCalendar(cal *schedpb.StructuredCalendarSpec, tz *time.Location) (*compiledCalendar, error) {
 	cc := &compiledCalendar{tz: tz}
 	var err error
-	if cc.year, err = makeMatcher(cal.Year, "*", minCalendarYear, maxCalendarYear, parseModeInt); err != nil {
+	if cc.year, err = makeYearMatcher(cal.Year); err != nil {
 		return nil, err
-	} else if cc.month, err = makeMatcher(cal.Month, "*", 1, 12, parseModeMonth); err != nil {
+	} else if cc.month, err = makeBitMatcher(cal.Month); err != nil {
 		return nil, err
-	} else if cc.dayOfMonth, err = makeMatcher(cal.DayOfMonth, "*", 1, 31, parseModeInt); err != nil {
+	} else if cc.dayOfMonth, err = makeBitMatcher(cal.DayOfMonth); err != nil {
 		return nil, err
-	} else if cc.dayOfWeek, err = makeMatcher(cal.DayOfWeek, "*", 0, 7, parseModeDow); err != nil {
+	} else if cc.dayOfWeek, err = makeBitMatcher(cal.DayOfWeek); err != nil {
 		return nil, err
-	} else if cc.hour, err = makeMatcher(cal.Hour, "0", 0, 23, parseModeInt); err != nil {
+	} else if cc.hour, err = makeBitMatcher(cal.Hour); err != nil {
 		return nil, err
-	} else if cc.minute, err = makeMatcher(cal.Minute, "0", 0, 59, parseModeInt); err != nil {
+	} else if cc.minute, err = makeBitMatcher(cal.Minute); err != nil {
 		return nil, err
-	} else if cc.second, err = makeMatcher(cal.Second, "0", 0, 59, parseModeInt); err != nil {
+	} else if cc.second, err = makeBitMatcher(cal.Second); err != nil {
 		return nil, err
 	}
 	return cc, nil
@@ -238,45 +239,134 @@ Outer:
 	return time.Time{}
 }
 
-// Returns a function that matches the given integer range/skip spec.
-// The function _may_ return true for values that are out of range.
-func makeMatcher(s, def string, min, max int, parseMode parseMode) (func(int) bool, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		s = def
-	}
-	// easy special cases
-	if s == "*" {
-		return func(int) bool { return true }, nil
-	} else if s == "0" {
-		return func(v int) bool { return v == 0 }, nil
-	}
-	if max <= 63 {
-		return makeBitMatcher(s, min, max, parseMode)
-	} else if max < math.MaxInt16 {
-		return makeSliceMatcher(s, min, max, parseMode)
-	}
-	return nil, errOutOfRange
-}
-
-func makeBitMatcher(s string, min, max int, parseMode parseMode) (func(int) bool, error) {
-	var bits uint64
-	add := func(i int) { bits |= 1 << i }
-	if err := parseStringSpec(s, min, max, parseMode, add); err != nil {
+func parseCalendarToStrucured(cal *schedpb.CalendarSpec) (*schedpb.StructuredCalendarSpec, error) {
+	ss := &schedpb.StructuredCalendarSpec{Comment: cal.Comment}
+	var err error
+	if ss.Year, err = makeRange(cal.Year, "*", 0, 1e6, parseModeYear); err != nil {
+		return nil, err
+	} else if ss.Month, err = makeRange(cal.Month, "*", 1, 12, parseModeMonth); err != nil {
+		return nil, err
+	} else if ss.DayOfMonth, err = makeRange(cal.DayOfMonth, "*", 1, 31, parseModeInt); err != nil {
+		return nil, err
+	} else if ss.DayOfWeek, err = makeRange(cal.DayOfWeek, "*", 0, 7, parseModeDow); err != nil {
+		return nil, err
+	} else if ss.Hour, err = makeRange(cal.Hour, "0", 0, 23, parseModeInt); err != nil {
+		return nil, err
+	} else if ss.Minute, err = makeRange(cal.Minute, "0", 0, 59, parseModeInt); err != nil {
+		return nil, err
+	} else if ss.Second, err = makeRange(cal.Second, "0", 0, 59, parseModeInt); err != nil {
 		return nil, err
 	}
-	if parseMode == parseModeDow {
-		bits |= bits >> 7 // allow 7 or 0 for sunday
+	return ss, nil
+}
+
+func parseCronString(c string) (*schedpb.StructuredCalendarSpec, *schedpb.IntervalSpec, string, error) {
+	var tzName string
+	var comment string
+
+	c = strings.TrimSpace(c)
+
+	// split out timezone
+	if strings.HasPrefix(c, "TZ=") || strings.HasPrefix(c, "CRON_TZ=") {
+		tz, rest, found := strings.Cut(c, " ")
+		if !found {
+			return nil, nil, "", errMalformed
+		}
+		c = rest
+		_, tzName, _ = strings.Cut(tz, "=")
 	}
+
+	// split out comment
+	c, comment, _ = strings.Cut(c, "#")
+	c = strings.TrimSpace(c)
+	comment = strings.TrimSpace(comment)
+
+	// handle @every intervals
+	if strings.HasPrefix(c, "@every") {
+		iv, err := parseCronStringInterval(c)
+		return nil, iv, "", err
+	}
+
+	// handle @hourly, etc.
+	c = handlePredefinedCronStrings(c)
+
+	// split fields
+	cal := schedpb.CalendarSpec{Comment: comment}
+	fields := strings.Fields(c)
+	switch len(fields) {
+	case 5:
+		cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek = fields[0], fields[1], fields[2], fields[3], fields[4]
+	case 6:
+		cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek, cal.Year = fields[0], fields[1], fields[2], fields[3], fields[4], fields[5]
+	case 7:
+		cal.Second, cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek, cal.Year = fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]
+	default:
+		return nil, nil, "", errMalformed
+	}
+
+	structured, err := parseCalendarToStrucured(&cal)
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	return structured, nil, tzName, nil
+}
+
+func parseCronStringInterval(c string) (*schedpb.IntervalSpec, error) {
+	// split after @every
+	_, interval, found := strings.Cut(c, " ")
+	if !found {
+		return nil, errMalformed
+	}
+	// allow @every 14h/3h
+	interval, phase, _ := strings.Cut(interval, "/")
+	intervalDuration, err := timestamp.ParseDuration(interval)
+	if err != nil {
+		return nil, err
+	}
+	if phase == "" {
+		return &schedpb.IntervalSpec{Interval: timestamp.DurationPtr(intervalDuration)}, nil
+	}
+	phaseDuration, err := timestamp.ParseDuration(phase)
+	if err != nil {
+		return nil, err
+	}
+	return &schedpb.IntervalSpec{Interval: timestamp.DurationPtr(intervalDuration), Phase: timestamp.DurationPtr(phaseDuration)}, nil
+}
+
+func handlePredefinedCronStrings(c string) string {
+	switch c {
+	case "@yearly", "@annually":
+		return "0 0 1 1 *"
+	case "@monthly":
+		return "0 0 1 * *"
+	case "@weekly":
+		return "0 0 * * 0"
+	case "@daily", "@midnight":
+		return "0 0 * * *"
+	case "@hourly":
+		return "0 * * * *"
+	default:
+		return c
+	}
+}
+
+func makeBitMatcher(ranges []*schedpb.Range) (func(int) bool, error) {
+	var bits uint64
+	add := func(i int) { bits |= 1 << i }
+	iterateRanges(ranges, add)
 	return func(v int) bool { return (1<<v)&bits != 0 }, nil
 }
 
-func makeSliceMatcher(s string, min, max int, parseMode parseMode) (func(int) bool, error) {
+func makeYearMatcher(ranges []*schedpb.Range) (func(int) bool, error) {
+	if len(ranges) == 0 {
+		// special case for year: all is represented as empty range list
+		return func(int) bool { return true }, nil
+	}
+
 	var values []int16
 	add := func(i int) { values = append(values, int16(i)) }
-	if err := parseStringSpec(s, min, max, parseMode, add); err != nil {
-		return nil, err
-	}
+	iterateRanges(ranges, add)
 	return func(v int) bool {
 		for _, value := range values {
 			if int(value) == v {
@@ -287,6 +377,22 @@ func makeSliceMatcher(s string, min, max int, parseMode parseMode) (func(int) bo
 	}, nil
 }
 
+func iterateRanges(ranges []*schedpb.Range, f func(i int)) {
+	for _, r := range ranges {
+		start, end, step := int(r.GetStart()), int(r.GetEnd()), int(r.GetStep())
+		if step == 0 {
+			step = 1
+		}
+		if end < start {
+			end = start
+		}
+		for ; start <= end; start += step {
+			f(start)
+		}
+	}
+}
+
+// Parses the string into a Range.
 // Accepts strings of the form:
 //   *        matches always
 //   x        matches when the field equals x
@@ -305,25 +411,33 @@ func makeSliceMatcher(s string, min, max int, parseMode parseMode) (func(int) bo
 // in order, and f may be called out of order as well.
 // Handles day-of-week names or month names according to parseMode.
 // min and max are the complete range of expected values.
-func parseStringSpec(s string, min, max int, parseMode parseMode, f func(int)) error {
+func makeRange(s, def string, min, max int, parseMode parseMode) ([]*schedpb.Range, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		s = def
+	}
+	if s == "*" && parseMode == parseModeYear {
+		return nil, nil // special case for year: all is represented as empty range list
+	}
+	var ranges []*schedpb.Range
 	for _, part := range strings.Split(s, ",") {
 		var err error
-		skipBy := 1
-		hasSkipBy := false
+		step := 1
+		hasStep := false
 		if strings.Contains(part, "/") {
 			skipParts := strings.Split(part, "/")
 			if len(skipParts) != 2 {
-				return errMalformed
+				return nil, errMalformed
 			}
 			part = skipParts[0]
-			skipBy, err = strconv.Atoi(skipParts[1])
+			step, err = strconv.Atoi(skipParts[1])
 			if err != nil {
-				return err
+				return nil, err
 			}
-			if skipBy < 1 {
-				return errMalformed
+			if step < 1 {
+				return nil, errMalformed
 			}
-			hasSkipBy = true
+			hasStep = true
 		}
 
 		start, end := min, max
@@ -331,32 +445,49 @@ func parseStringSpec(s string, min, max int, parseMode parseMode, f func(int)) e
 			if strings.Contains(part, "-") {
 				rangeParts := strings.Split(part, "-")
 				if len(rangeParts) != 2 {
-					return errMalformed
+					return nil, errMalformed
 				}
 				if start, err = parseValue(rangeParts[0], min, max, parseMode); err != nil {
-					return err
+					return nil, err
 				}
 				if end, err = parseValue(rangeParts[1], start, max, parseMode); err != nil {
-					return err
+					return nil, err
 				}
 			} else {
 				if start, err = parseValue(part, min, max, parseMode); err != nil {
-					return err
+					return nil, err
 				}
-				if !hasSkipBy {
+				if !hasStep {
 					// if / is present, a single value is treated as that value to the
 					// end. otherwise a single value is just the single value.
 					end = start
 				}
 			}
 		}
-
-		for start <= end {
-			f(start)
-			start += skipBy
+		// Special handling for Sunday: Turn "7" into "0", which may require an extra range.
+		// Consider some cases:
+		// 0-7 or 1-7   can turn into 0-6
+		// 3-7          has to turn into 0,3-6
+		// 3-7/3        can turn into 3-6/3  (7 doesn't match)
+		// 1-7/2        has to turn into 0,1-6/2
+		// That is, we can use a single range and just turn the 7 into a 6 only if step == 1
+		// and start == 0 or 1. Or if 7 isn't actually included. In other cases, we can add a
+		// 0, and then turn the 7 into a 6 in whatever the original range was.
+		if parseMode == parseModeDow && end == 7 {
+			if (7-start)%step == 0 && (step > 1 || step == 1 && start > 1) {
+				ranges = append(ranges, &schedpb.Range{Start: int32(0)})
+			}
+			end = 6
 		}
+		if start == end {
+			end = 0 // use default value so proto is smaller
+		}
+		if step == 1 {
+			step = 0 // use default value so proto is smaller
+		}
+		ranges = append(ranges, &schedpb.Range{Start: int32(start), End: int32(end), Step: int32(step)})
 	}
-	return nil
+	return ranges, nil
 }
 
 // Parses a single value (integer or day-of-week or month name).
