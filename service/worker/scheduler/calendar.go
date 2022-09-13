@@ -466,9 +466,17 @@ func makeRange(s, def string, min, max int, parseMode parseMode) ([]*schedpb.Ran
 				}
 			}
 		}
-		// special handling for sunday: turn "7" into "0", which may require an extra range
-		if parseMode == parseModeDow && end == 7 && (7-start)%step == 0 {
-			if step == 1 && start > 1 || step > 1 {
+		// Special handling for Sunday: Turn "7" into "0", which may require an extra range.
+		// Consider some cases:
+		// 0-7 or 1-7   can turn into 0-6
+		// 3-7          has to turn into 0,3-6
+		// 3-7/3        can turn into 3-6/3  (7 doesn't match)
+		// 1-7/2        has to turn into 0,1-6/2
+		// That is, we can use a single range and just turn the 7 into a 6 only if step == 1
+		// and start == 0 or 1. Or if 7 isn't actually included. In other cases, we can add a
+		// 0, and then turn the 7 into a 6 in whatever the original range was.
+		if parseMode == parseModeDow && end == 7 {
+			if (7-start)%step == 0 && (step > 1 || step == 1 && start > 1) {
 				ranges = append(ranges, &schedpb.Range{Start: int32(0)})
 			}
 			end = 6
