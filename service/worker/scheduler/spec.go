@@ -132,7 +132,7 @@ func canonicalizeSpec(spec *schedpb.ScheduleSpec) (*schedpb.ScheduleSpec, error)
 	// if we have cron string(s), copy the timezone to spec, checking for conflict first.
 	// if cron string timezone is empty string, don't copy, let the one in spec be used.
 	if cronTZ != unset && cronTZ != "" {
-		if spec.TimezoneName != "" && spec.TimezoneName != cronTZ {
+		if spec.TimezoneName != "" && spec.TimezoneName != cronTZ || spec.TimezoneData != nil {
 			return nil, errConflictingTimezoneNames
 		} else if spec.TimezoneName == "" {
 			spec.TimezoneName = cronTZ
