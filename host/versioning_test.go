@@ -28,9 +28,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	commonpb "go.temporal.io/api/common/v1"
 	"testing"
 	"time"
+
+	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/server/service/matching"
 
