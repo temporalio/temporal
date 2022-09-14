@@ -21,17 +21,11 @@
 /tctl*
 /tdbg
 
-# Build info
-/build
-
 # Buf proto image
 /proto/image.bin
 
 # Goreleaser
 /dist
-
-# Fossa
-.fossa.yml
 
 # direnv
 .envrc
