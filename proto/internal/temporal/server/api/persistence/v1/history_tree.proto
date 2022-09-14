@@ -29,11 +29,14 @@ import "dependencies/gogoproto/gogo.proto";
 
 // branch column
 message HistoryTreeInfo {
-    HistoryBranch branch_info = 1;
+    // Deprecating branch info in favor of branch token.
+    HistoryBranch branch_info = 1 [deprecated = true];
     // For fork operation to prevent race condition of leaking event data when forking branches fail. Also can be used for clean up leaked data.
     google.protobuf.Timestamp fork_time = 2 [(gogoproto.stdtime) = true];
     // For lookup back to workflow during debugging, also background cleanup when fork operation cannot finish self cleanup due to crash.
     string info = 3;
+    // The opaque branch token replaces the deprecated branch info.
+    bytes branch_token = 4;
 }
 
 // For history persistence to serialize/deserialize branch details.

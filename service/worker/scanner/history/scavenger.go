@@ -79,8 +79,7 @@ type (
 		namespaceID string
 		workflowID  string
 		runID       string
-		treeID      string
-		branchID    string
+		branchToken []byte
 	}
 )
 
@@ -240,8 +239,7 @@ func (s *Scavenger) filterTask(
 		namespaceID: namespaceID,
 		workflowID:  workflowID,
 		runID:       runID,
-		treeID:      branch.TreeID,
-		branchID:    branch.BranchID,
+		branchToken: branch.BranchToken,
 	}
 }
 
@@ -269,16 +267,9 @@ func (s *Scavenger) handleTask(
 	}
 
 	//deleting history branch
-	var branchToken []byte
-	branchToken, err = persistence.NewHistoryBranchToken(task.treeID, task.branchID)
-	if err != nil {
-		s.logger.Error("encountered error when creating branch token", getTaskLoggingTags(err, task)...)
-		return err
-	}
-
 	err = s.db.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
 		ShardID:     task.shardID,
-		BranchToken: branchToken,
+		BranchToken: task.branchToken,
 	})
 	if err != nil {
 		s.logger.Error("encountered error when deleting garbage history branch", getTaskLoggingTags(err, task)...)
@@ -333,15 +324,13 @@ func getTaskLoggingTags(err error, task taskDetail) []tag.Tag {
 			tag.WorkflowNamespaceID(task.namespaceID),
 			tag.WorkflowID(task.workflowID),
 			tag.WorkflowRunID(task.runID),
-			tag.WorkflowTreeID(task.treeID),
-			tag.WorkflowBranchID(task.branchID),
+			tag.WorkflowBranchToken(task.branchToken),
 		}
 	}
 	return []tag.Tag{
 		tag.WorkflowNamespaceID(task.namespaceID),
 		tag.WorkflowID(task.workflowID),
 		tag.WorkflowRunID(task.runID),
-		tag.WorkflowTreeID(task.treeID),
-		tag.WorkflowBranchID(task.branchID),
+		tag.WorkflowBranchToken(task.branchToken),
 	}
 }

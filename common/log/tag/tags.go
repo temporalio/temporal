@@ -262,6 +262,11 @@ func WorkflowResetNextEventID(resetNextEventID int64) ZapTag {
 
 // history tree
 
+// WorkflowBranchToken returns tag for WorkflowBranchToken
+func WorkflowBranchToken(branchToken []byte) ZapTag {
+	return NewBinaryTag("wf-branch-token", branchToken)
+}
+
 // WorkflowTreeID returns tag for WorkflowTreeID
 func WorkflowTreeID(treeID string) ZapTag {
 	return NewStringTag("wf-tree-id", treeID)
