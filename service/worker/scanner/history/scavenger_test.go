@@ -349,25 +349,25 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 
-	branchToken1, err := persistence.NewHistoryBranchTokenByBranchID(treeID1, branchID1)
+	branchToken1, err := persistence.NewHistoryBranchToken(treeID1, branchID1)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID1", "workflowID1", s.numShards),
 	}).Return(nil)
-	branchToken2, err := persistence.NewHistoryBranchTokenByBranchID(treeID2, branchID2)
+	branchToken2, err := persistence.NewHistoryBranchToken(treeID2, branchID2)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID2", "workflowID2", s.numShards),
 	}).Return(nil)
-	branchToken3, err := persistence.NewHistoryBranchTokenByBranchID(treeID3, branchID3)
+	branchToken3, err := persistence.NewHistoryBranchToken(treeID3, branchID3)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	}).Return(nil)
-	branchToken4, err := persistence.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
+	branchToken4, err := persistence.NewHistoryBranchToken(treeID4, branchID4)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
@@ -459,14 +459,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 		},
 	}).Return(nil, nil)
 
-	branchToken3, err := persistence.NewHistoryBranchTokenByBranchID(treeID3, branchID3)
+	branchToken3, err := persistence.NewHistoryBranchToken(treeID3, branchID3)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	}).Return(nil)
 
-	branchToken4, err := persistence.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
+	branchToken4, err := persistence.NewHistoryBranchToken(treeID4, branchID4)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(gomock.Any(), &persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
