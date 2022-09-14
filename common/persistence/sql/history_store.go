@@ -197,6 +197,8 @@ func (m *sqlExecutionStore) NewHistoryBranch(
 	var branchID string
 	if request.BranchID == nil {
 		branchID = primitives.NewUUID().String()
+	} else {
+		branchID = *request.BranchID
 	}
 	branchToken, err := p.NewHistoryBranchToken(request.TreeID, branchID)
 	if err != nil {
