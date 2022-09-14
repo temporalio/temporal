@@ -301,6 +301,10 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(cluster string) tasks.Key 
 		s.scheduledTaskMaxReadLevelMap[cluster] = tasks.DefaultFireTime
 	}
 
+	if s.errorByState() != nil {
+		return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
+	}
+
 	currentTime := s.timeSource.Now()
 	if cluster != "" && cluster != s.GetClusterMetadata().GetCurrentClusterName() {
 		currentTime = s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime
@@ -1610,6 +1614,15 @@ func (s *ContextImpl) transition(request contextRequest) error {
 				s.contextTaggedLogger.Warn("transition to acquired but no engine set")
 				return errInvalidTransition
 			}
+
+			engine, err := s.engineFuture.Get(s.lifecycleCtx)
+			if err != nil {
+				// this should not happen, already checked engineFuture is ready above
+				s.contextTaggedLogger.Warn("transition to acquired but unable to get engine", tag.Error(err))
+				return errInvalidTransition
+			}
+			s.notifyQueueProcessor(engine)
+
 			return nil
 		case contextRequestLost:
 			return nil // nothing to do, already acquiring
@@ -1649,6 +1662,22 @@ func (s *ContextImpl) transition(request contextRequest) error {
 		tag.ShardContextStateRequest(fmt.Sprintf("%T", request)),
 	)
 	return errInvalidTransition
+}
+
+func (s *ContextImpl) notifyQueueProcessor(engine Engine) {
+	now := s.timeSource.Now()
+	fakeTasks := make(map[tasks.Category][]tasks.Task)
+	for _, category := range tasks.GetCategories() {
+		fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(definition.WorkflowKey{}, category, now)}
+	}
+
+	// TODO: with multi-cursor, we don't need the for loop
+	for clusterName, info := range s.clusterMetadata.GetAllClusterInfo() {
+		if !info.Enabled {
+			continue
+		}
+		engine.NotifyNewTasks(clusterName, fakeTasks)
+	}
 }
 
 func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
