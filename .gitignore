@@ -19,6 +19,7 @@
 # Executables produced by temporal repo
 /temporal-*
 /tctl*
+/tdbg
 
 # Buf proto image
 /proto/image.bin
@@ -26,6 +27,5 @@
 # Goreleaser
 /dist
 
-# Fossa
-.fossa.yml
-
+# direnv
+.envrc
