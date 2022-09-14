@@ -25,5 +25,5 @@
 package build
 
 import (
-	_ "github.com/temporalio/gogo-protobuf/gogoproto"
+	_ "github.com/temporalio/gogo-protobuf/gogoproto" // gogoproto is just a random package name for module.
 )

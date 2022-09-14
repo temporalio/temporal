@@ -66,7 +66,7 @@ INTEG_TEST_NDC_ROOT    := ./host/ndc
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
-PROTO_IMPORTS = -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(shell cd build && go list -m -f '{{.Dir}}' github.com/temporalio/gogo-protobuf)/protobuf
+PROTO_IMPORTS = -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(shell go list -modfile build/go.mod -m -f '{{.Dir}}' github.com/temporalio/gogo-protobuf)/protobuf
 PROTO_OUT := api
 
 ALL_SRC         := $(shell find . -name "*.go")
@@ -115,7 +115,7 @@ update-mockgen:
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	@(cd build && go install github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick)
+	@go install -modfile build/go.mod github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 update-tctl:
