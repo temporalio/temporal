@@ -26,6 +26,7 @@ package queues
 
 import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -55,4 +56,20 @@ func IsTaskAcked(
 	}
 
 	return true
+}
+
+// IsTaskDone is similar to IsTaskAcked but it performs some additional checks
+func IsTaskDone(shard shard.Context, task tasks.Task) bool {
+	taskID := task.GetTaskID()
+	if taskID == 0 {
+		return true
+	}
+	category := task.GetCategory()
+	persistenceQueueState, ok := shard.GetQueueState(category)
+	if !ok {
+		// Use global ack level visibility queue ack level because cluster level is not updated.
+		visibilityQueueAckLevel := shard.GetQueueAckLevel(category).TaskID
+		return taskID <= visibilityQueueAckLevel
+	}
+	return IsTaskAcked(task, persistenceQueueState)
 }

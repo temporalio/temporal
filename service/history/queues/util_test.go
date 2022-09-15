@@ -28,49 +28,122 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
 
-func TestIsTaskAcked(t *testing.T) {
-	scopes := NewRandomScopes(5)
-	exclusiveReaderHighWatermark := scopes[len(scopes)-1].Range.ExclusiveMax.Next()
-	persistenceQueueState := ToPersistenceQueueState(&queueState{
+type queueUtilsTestSuite struct {
+	suite.Suite
+	ctrl  *gomock.Controller
+	shard *shard.MockContext
+	task  tasks.Task
+}
+
+func TestQueueUtilsTestSuite(t *testing.T) {
+	suite.Run(t, new(queueUtilsTestSuite))
+}
+
+func (s *queueUtilsTestSuite) SetupTest() {
+	s.ctrl = gomock.NewController(s.T())
+	s.shard = shard.NewMockContext(s.ctrl)
+	category := tasks.NewCategory(rand.Int31(), tasks.CategoryTypeUnspecified, "unspecified")
+	workflowKey := definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID)
+	s.task = tasks.NewFakeTask(workflowKey, category, tasks.DefaultFireTime)
+}
+
+func (s *queueUtilsTestSuite) TearDownTest() {
+	s.ctrl.Finish()
+}
+
+func (s *queueUtilsTestSuite) TestZeroTaskID() {
+	s.task.SetTaskID(0)
+	s.True(IsTaskDone(s.shard, s.task))
+}
+
+func (s *queueUtilsTestSuite) TestGlobalQueueAckLevel() {
+	category := s.task.GetCategory()
+	s.shard.EXPECT().GetQueueState(category).Return(nil, false).AnyTimes()
+	ackLevel := int64(5)
+	s.shard.EXPECT().GetQueueAckLevel(category).Return(tasks.NewImmediateKey(ackLevel)).AnyTimes()
+	s.Run("TaskID < AckLevel", func() {
+		s.task.SetTaskID(ackLevel - 1)
+		s.True(IsTaskDone(s.shard, s.task))
+	})
+	s.Run("TaskID = AckLevel", func() {
+		s.task.SetTaskID(ackLevel)
+		s.True(IsTaskDone(s.shard, s.task))
+	})
+	s.Run("TaskID > AckLevel", func() {
+		s.task.SetTaskID(ackLevel + 1)
+		s.False(IsTaskDone(s.shard, s.task))
+	})
+}
+
+func (s *queueUtilsTestSuite) TestTaskIDGeqHighWatermark() {
+	highWatermark := tasks.Key{
+		TaskID:   5,
+		FireTime: tasks.DefaultFireTime,
+	}
+	qState := ToPersistenceQueueState(&queueState{
+		exclusiveReaderHighWatermark: highWatermark,
+	})
+	s.shard.EXPECT().GetQueueState(s.task.GetCategory()).Return(qState, true).AnyTimes()
+	s.Run("TaskID = HighWatermark", func() {
+		s.task.SetTaskID(highWatermark.TaskID)
+		s.False(IsTaskDone(s.shard, s.task))
+	})
+	s.Run("TaskID > HighWatermark", func() {
+		s.task.SetTaskID(highWatermark.TaskID + 1)
+		s.False(IsTaskDone(s.shard, s.task))
+	})
+}
+
+func (s *queueUtilsTestSuite) TestNoReaderScopes() {
+	qState := ToPersistenceQueueState(&queueState{
+		readerScopes: map[int32][]Scope{
+			DefaultReaderId: {},
+		},
+		exclusiveReaderHighWatermark: tasks.Key{
+			TaskID:   5,
+			FireTime: tasks.DefaultFireTime,
+		},
+	})
+	s.shard.EXPECT().GetQueueState(s.task.GetCategory()).Return(qState, true).AnyTimes()
+	s.task.SetTaskID(qState.ExclusiveReaderHighWatermark.TaskId - 1)
+	acked := IsTaskDone(s.shard, s.task)
+	s.True(acked)
+}
+
+func (s *queueUtilsTestSuite) TestReaderScopes() {
+	scopes := NewRandomScopes(1)
+	firstInclusiveMin := &scopes[0].Range.InclusiveMin
+	fireTime := tasks.DefaultFireTime
+	firstInclusiveMin.FireTime = fireTime
+	highWatermark := tasks.Key{
+		TaskID:   firstInclusiveMin.TaskID + 100,
+		FireTime: fireTime,
+	}
+	qState := ToPersistenceQueueState(&queueState{
 		readerScopes: map[int32][]Scope{
 			DefaultReaderId: scopes,
 		},
-		exclusiveReaderHighWatermark: exclusiveReaderHighWatermark,
+		exclusiveReaderHighWatermark: highWatermark,
 	})
-
-	workflowKey := definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID)
-
-	testKey := exclusiveReaderHighWatermark
-	testTask := tasks.NewFakeTask(
-		workflowKey,
-		tasks.CategoryTimer,
-		testKey.FireTime,
-	)
-	testTask.SetTaskID(testKey.TaskID)
-	assert.False(t, IsTaskAcked(testTask, persistenceQueueState))
-
-	testKey = NewRandomKeyInRange(scopes[rand.Intn(len(scopes))].Range)
-	testTask.SetVisibilityTime(testKey.FireTime)
-	testTask.SetTaskID(testKey.TaskID)
-	assert.False(t, IsTaskAcked(testTask, persistenceQueueState))
-
-	testKey = NewRandomKeyInRange(NewRange(
-		scopes[2].Range.ExclusiveMax,
-		scopes[3].Range.InclusiveMin,
-	))
-	testTask.SetVisibilityTime(testKey.FireTime)
-	testTask.SetTaskID(testKey.TaskID)
-	assert.True(t, IsTaskAcked(testTask, persistenceQueueState))
-
-	testKey = scopes[0].Range.InclusiveMin.Prev()
-	testTask.SetVisibilityTime(testKey.FireTime)
-	testTask.SetTaskID(testKey.TaskID)
-	assert.True(t, IsTaskAcked(testTask, persistenceQueueState))
+	s.shard.EXPECT().GetQueueState(s.task.GetCategory()).Return(qState, true).AnyTimes()
+	s.Run("TaskID < InclusiveMin", func() {
+		s.task.SetTaskID(firstInclusiveMin.TaskID - 1)
+		s.True(IsTaskDone(s.shard, s.task))
+	})
+	s.Run("TaskID = InclusiveMin", func() {
+		s.task.SetTaskID(firstInclusiveMin.TaskID)
+		s.False(IsTaskDone(s.shard, s.task))
+	})
+	s.Run("TaskID > InclusiveMin", func() {
+		s.task.SetTaskID(firstInclusiveMin.TaskID + 1)
+		s.False(IsTaskDone(s.shard, s.task))
+	})
 }
