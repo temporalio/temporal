@@ -330,6 +330,29 @@ func (s *taskSerializerSuite) TestReplicateHistoryTask() {
 	s.assertEqualTasks(replicateHistoryTask)
 }
 
+func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask() {
+	replicateHistoryTask := &tasks.DeleteExecutionVisibilityTask{
+		WorkflowKey:           s.workflowKey,
+		VisibilityTimestamp:   time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:                rand.Int63(),
+		Version:               rand.Int63(),
+		CloseVisibilityTaskID: rand.Int63(),
+	}
+
+	s.assertEqualTasks(replicateHistoryTask)
+}
+
+func (s *taskSerializerSuite) TestDeleteExecutionTask() {
+	replicateHistoryTask := &tasks.DeleteExecutionTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+		TaskID:              rand.Int63(),
+		Version:             rand.Int63(),
+	}
+
+	s.assertEqualTasks(replicateHistoryTask)
+}
+
 func (s *taskSerializerSuite) assertEqualTasks(
 	task tasks.Task,
 ) {

@@ -927,15 +927,16 @@ func (s *TaskSerializer) visibilityDeleteTaskToProto(
 	deleteVisibilityTask *tasks.DeleteExecutionVisibilityTask,
 ) *persistencespb.VisibilityTaskInfo {
 	return &persistencespb.VisibilityTaskInfo{
-		NamespaceId:    deleteVisibilityTask.WorkflowKey.NamespaceID,
-		WorkflowId:     deleteVisibilityTask.WorkflowKey.WorkflowID,
-		RunId:          deleteVisibilityTask.WorkflowKey.RunID,
-		TaskType:       enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
-		Version:        deleteVisibilityTask.Version,
-		TaskId:         deleteVisibilityTask.TaskID,
-		VisibilityTime: &deleteVisibilityTask.VisibilityTimestamp,
-		StartTime:      deleteVisibilityTask.StartTime,
-		CloseTime:      deleteVisibilityTask.CloseTime,
+		NamespaceId:           deleteVisibilityTask.WorkflowKey.NamespaceID,
+		WorkflowId:            deleteVisibilityTask.WorkflowKey.WorkflowID,
+		RunId:                 deleteVisibilityTask.WorkflowKey.RunID,
+		TaskType:              enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
+		Version:               deleteVisibilityTask.Version,
+		TaskId:                deleteVisibilityTask.TaskID,
+		VisibilityTime:        &deleteVisibilityTask.VisibilityTimestamp,
+		StartTime:             deleteVisibilityTask.StartTime,
+		CloseTime:             deleteVisibilityTask.CloseTime,
+		CloseVisibilityTaskId: deleteVisibilityTask.CloseVisibilityTaskID,
 	}
 }
 
@@ -948,11 +949,12 @@ func (s *TaskSerializer) visibilityDeleteTaskFromProto(
 			deleteVisibilityTask.WorkflowId,
 			deleteVisibilityTask.RunId,
 		),
-		VisibilityTimestamp: *deleteVisibilityTask.VisibilityTime,
-		TaskID:              deleteVisibilityTask.TaskId,
-		Version:             deleteVisibilityTask.Version,
-		StartTime:           deleteVisibilityTask.StartTime,
-		CloseTime:           deleteVisibilityTask.CloseTime,
+		VisibilityTimestamp:   *deleteVisibilityTask.VisibilityTime,
+		TaskID:                deleteVisibilityTask.TaskId,
+		Version:               deleteVisibilityTask.Version,
+		StartTime:             deleteVisibilityTask.StartTime,
+		CloseTime:             deleteVisibilityTask.CloseTime,
+		CloseVisibilityTaskID: deleteVisibilityTask.CloseVisibilityTaskId,
 	}
 }
 
