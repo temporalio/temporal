@@ -1615,14 +1615,6 @@ func (s *ContextImpl) transition(request contextRequest) error {
 				return errInvalidTransition
 			}
 
-			engine, err := s.engineFuture.Get(s.lifecycleCtx)
-			if err != nil {
-				// this should not happen, already checked engineFuture is ready above
-				s.contextTaggedLogger.Warn("transition to acquired but unable to get engine", tag.Error(err))
-				return errInvalidTransition
-			}
-			s.notifyQueueProcessor(engine)
-
 			return nil
 		case contextRequestLost:
 			return nil // nothing to do, already acquiring
@@ -1873,6 +1865,14 @@ func (s *ContextImpl) acquireShard() {
 			engine.Stop()
 			return err
 		}
+
+		engine, err = s.engineFuture.Get(s.lifecycleCtx)
+		if err != nil {
+			// this should not happen, already checked engineFuture is ready when transition to acquired state
+			s.contextTaggedLogger.Warn("acquired the shard but unable to get engine", tag.Error(err))
+			return err
+		}
+		s.notifyQueueProcessor(engine)
 
 		return nil
 	}
