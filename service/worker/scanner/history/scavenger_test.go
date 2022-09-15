@@ -94,7 +94,7 @@ func (s *ScavengerTestSuite) createTestScavenger(
 }
 
 func (s *ScavengerTestSuite) toBranchToken(treeID string, branchID string) []byte {
-	data, err := persistence.NewHistoryBranchTokenByBranchID(treeID, branchID)
+	data, err := persistence.NewHistoryBranchToken(treeID, branchID)
 	s.NoError(err)
 	return data
 }
