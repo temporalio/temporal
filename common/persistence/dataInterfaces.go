@@ -41,7 +41,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -765,6 +764,8 @@ type (
 	NewHistoryBranchRequest struct {
 		// The tree ID for the new branch token
 		TreeID string
+		// optional: can specify BranchID or allow random UUID to be generated
+		BranchID *string
 	}
 
 	NewHistoryBranchResponse struct {
@@ -1246,30 +1247,12 @@ func UpdateHistoryBranchToken(branchToken []byte, branchInfo *persistencespb.His
 }
 
 // NewHistoryBranchToken return a new branch token
-func NewHistoryBranchToken(treeID string) ([]byte, error) {
-	branchID := primitives.NewUUID().String()
+func NewHistoryBranchToken(treeID, branchID string) ([]byte, error) {
 	bi := &persistencespb.HistoryBranch{
 		TreeId:    treeID,
 		BranchId:  branchID,
 		Ancestors: []*persistencespb.HistoryBranchRange{},
 	}
-	// TODO: instead of always using the implementation from the serialization package, this should be injected
-	datablob, err := serialization.HistoryBranchToBlob(bi)
-	if err != nil {
-		return nil, err
-	}
-	token := datablob.Data
-	return token, nil
-}
-
-// NewHistoryBranchTokenByBranchID return a new branch token with treeID/branchID
-func NewHistoryBranchTokenByBranchID(treeID, branchID string) ([]byte, error) {
-	bi := &persistencespb.HistoryBranch{
-		TreeId:    treeID,
-		BranchId:  branchID,
-		Ancestors: []*persistencespb.HistoryBranchRange{},
-	}
-	// TODO: instead of always using the implementation from the serialization package, this should be injected
 	datablob, err := serialization.HistoryBranchToBlob(bi)
 	if err != nil {
 		return nil, err
