@@ -92,6 +92,10 @@ type (
 		watchingWorkflowId string
 		watchingFuture     workflow.Future
 
+		// Signal requests
+		pendingPatch  *schedpb.SchedulePatch
+		pendingUpdate *schedspb.FullUpdateRequest
+
 		uuidBatch []string
 	}
 
@@ -170,11 +174,12 @@ func (s *scheduler) run() error {
 		s.Info.CreateTime = s.State.LastProcessedTime
 	}
 
-	// A schedule may be created with an initial Patch, e.g. start one immediately. Handle that now.
-	s.processPatch(s.InitialPatch)
+	// A schedule may be created with an initial Patch, e.g. start one immediately. Put that in
+	// the state so it takes effect below.
+	s.pendingPatch = s.InitialPatch
 	s.InitialPatch = nil
 
-	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0; iters-- {
+	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0 || s.pendingUpdate != nil || s.pendingPatch != nil; iters-- {
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 		t2 := s.now()
 		if t2.Before(t1) {
@@ -189,6 +194,13 @@ func (s *scheduler) run() error {
 			false,
 		)
 		s.State.LastProcessedTime = timestamp.TimePtr(t2)
+		// handle signals after processing time range that just elapsed
+		scheduleChanged := s.processSignals()
+		if scheduleChanged {
+			// need to calculate sleep again
+			nextSleep = s.processTimeRange(t2, t2, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, false)
+		}
+		// try starting workflows in the buffer
 		for s.processBuffer() {
 		}
 		s.updateMemoAndSearchAttributes()
@@ -266,11 +278,7 @@ func (s *scheduler) now() time.Time {
 }
 
 func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
-	s.logger.Debug("processPatch", "patch", patch)
-
-	if patch == nil {
-		return
-	}
+	s.logger.Info("Schedule patch", "patch", patch.String())
 
 	if trigger := patch.TriggerImmediately; trigger != nil {
 		now := s.now()
@@ -451,13 +459,14 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future) {
 }
 
 func (s *scheduler) handleUpdateSignal(ch workflow.ReceiveChannel, _ bool) {
-	var req schedspb.FullUpdateRequest
-	ch.Receive(s.ctx, &req)
-	if err := s.checkConflict(req.ConflictToken); err != nil {
+	ch.Receive(s.ctx, &s.pendingUpdate)
+	if err := s.checkConflict(s.pendingUpdate.GetConflictToken()); err != nil {
 		s.logger.Warn("Update conflicted with concurrent change")
-		return
+		s.pendingUpdate = nil
 	}
+}
 
+func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
 	s.logger.Info("Schedule update", "new-schedule", req.Schedule.String())
 
 	s.Schedule.Spec = req.Schedule.GetSpec()
@@ -474,10 +483,7 @@ func (s *scheduler) handleUpdateSignal(ch workflow.ReceiveChannel, _ bool) {
 }
 
 func (s *scheduler) handlePatchSignal(ch workflow.ReceiveChannel, _ bool) {
-	var patch schedpb.SchedulePatch
-	ch.Receive(s.ctx, &patch)
-	s.logger.Info("Schedule patch", "patch", patch.String())
-	s.processPatch(&patch)
+	ch.Receive(s.ctx, &s.pendingPatch)
 }
 
 func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
@@ -486,6 +492,20 @@ func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
 	// If we're woken up by any signal, we'll pass through processBuffer before sleeping again.
 	// processBuffer will see this flag and refresh everything.
 	s.State.NeedRefresh = true
+}
+
+func (s *scheduler) processSignals() bool {
+	scheduleChanged := false
+	if s.pendingPatch != nil {
+		s.processPatch(s.pendingPatch)
+		s.pendingPatch = nil
+	}
+	if s.pendingUpdate != nil {
+		s.processUpdate(s.pendingUpdate)
+		s.pendingUpdate = nil
+		scheduleChanged = true
+	}
+	return scheduleChanged
 }
 
 func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
