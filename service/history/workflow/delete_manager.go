@@ -291,6 +291,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		currentBranchToken,
 		startTime,
 		closeTime,
+		0,
 	); err != nil {
 		return err
 	}

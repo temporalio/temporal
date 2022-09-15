@@ -30,6 +30,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pborman/uuid"
+	"go.temporal.io/server/common/definition"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -51,7 +54,7 @@ type (
 		*require.Assertions
 
 		controller           *gomock.Controller
-		mockShard            Context
+		mockShard            *ContextTest
 		mockClusterMetadata  *cluster.MockMetadata
 		mockShardManager     *persistence.MockShardManager
 		mockExecutionManager *persistence.MockExecutionManager
@@ -69,9 +72,7 @@ func TestShardContextSuite(t *testing.T) {
 
 func (s *contextSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-
 	s.controller = gomock.NewController(s.T())
-
 	s.timeSource = clock.NewEventTimeSource()
 	shardContext := NewTestContextWithTimeSource(
 		s.controller,
@@ -159,9 +160,8 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 	)
 
 	// clear shardInfo and load from persistence
-	shardContextImpl := s.mockShard.(*ContextTest)
-	shardContextImpl.shardInfo = nil
-	err := shardContextImpl.loadShardMetadata(convert.BoolPtr(false))
+	s.mockShard.shardInfo = nil
+	err := s.mockShard.loadShardMetadata(convert.BoolPtr(false))
 	s.NoError(err)
 
 	for clusterName, info := range s.mockShard.GetClusterMetadata().GetAllClusterInfo() {
@@ -172,7 +172,7 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 		timerQueueAckLevels := persistenceShardInfo.QueueAckLevels[tasks.CategoryTimer.ID()]
 		timerQueueStates := persistenceShardInfo.QueueStates[tasks.CategoryTimer.ID()]
 
-		maxReadLevel := shardContextImpl.getScheduledTaskMaxReadLevel(clusterName).FireTime
+		maxReadLevel := s.mockShard.getScheduledTaskMaxReadLevel(clusterName).FireTime
 		s.False(maxReadLevel.Before(timestamp.UnixOrZeroTime(timerQueueAckLevels.AckLevel)))
 
 		if clusterAckLevel, ok := timerQueueAckLevels.ClusterAckLevel[clusterName]; ok {
@@ -195,4 +195,33 @@ func (s *contextSuite) TestTimerMaxReadLevelUpdate() {
 	s.timeSource.Update(now.Add(time.Minute))
 	newMaxReadLevel = s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName)
 	s.True(newMaxReadLevel.FireTime.After(maxReadLevel.FireTime))
+}
+
+func (s *contextSuite) TestDeleteWorkflowExecution() {
+	ctx := context.Background()
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: tests.NamespaceID.String(),
+		WorkflowID:  uuid.New(),
+		RunID:       uuid.New(),
+	}
+	branchToken := make([]byte, 3)
+	_, err := rand.Read(branchToken)
+	s.NoError(err)
+	var startTime, closeTime *time.Time
+	closeVisibilityTaskID := rand.Int63()
+
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any())
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Do(func(ctx context.Context, req *persistence.AddHistoryTasksRequest) {
+		transferTasks, ok := req.Tasks[tasks.CategoryVisibility]
+		s.True(ok)
+		s.Len(transferTasks, 1)
+		transferTask, ok := transferTasks[0].(*tasks.DeleteExecutionVisibilityTask)
+		s.True(ok)
+		s.Assert().Equal(closeVisibilityTaskID, transferTask.CloseVisibilityTaskID)
+	})
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any())
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any())
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any())
+	err = s.mockShard.DeleteWorkflowExecution(ctx, workflowKey, branchToken, startTime, closeTime, closeVisibilityTaskID)
+	s.NoError(err)
 }
