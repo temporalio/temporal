@@ -100,6 +100,9 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 		Ancestors: newAncestors,
 	}
 
+	// The above newBranchInfo is a lossy construction of the forked branch token from the original opaque branch token.
+	// It only initializes with the fields it understands, which may inadvertently discard other misc fields. The
+	// following is the replacement logic to correctly apply the updated fields into the original opaque branch token.
 	resp, err := m.UpdateHistoryBranchInfo(
 		ctx,
 		&UpdateHistoryBranchInfoRequest{
@@ -347,7 +350,7 @@ func (m *executionManagerImpl) GetHistoryTree(
 	}
 	branchTokens := make([][]byte, 0, len(resp.TreeInfos))
 	for _, blob := range resp.TreeInfos {
-		treeInfo, err := ToHistoryBranchInfo(m.serializer, NewDataBlob(blob.Data, blob.EncodingType.String()))
+		treeInfo, err := ToHistoryTreeInfo(m.serializer, NewDataBlob(blob.Data, blob.EncodingType.String()))
 		if err != nil {
 			return nil, err
 		}
@@ -372,7 +375,7 @@ func (m *executionManagerImpl) getHistoryBranchInfo(
 	return resp.BranchInfo, err
 }
 
-func ToHistoryBranchInfo(serializer serialization.Serializer, blob *commonpb.DataBlob) (*persistencespb.HistoryTreeInfo, error) {
+func ToHistoryTreeInfo(serializer serialization.Serializer, blob *commonpb.DataBlob) (*persistencespb.HistoryTreeInfo, error) {
 	treeInfo, err := serializer.HistoryTreeInfoFromBlob(blob)
 	if err != nil {
 		return nil, err
@@ -695,7 +698,7 @@ func (m *executionManagerImpl) GetAllHistoryTreeBranches(
 	}
 	branches := make([]HistoryBranchDetail, 0, len(resp.Branches))
 	for _, branch := range resp.Branches {
-		treeInfo, err := ToHistoryBranchInfo(m.serializer, NewDataBlob(branch.Data, branch.Encoding))
+		treeInfo, err := ToHistoryTreeInfo(m.serializer, NewDataBlob(branch.Data, branch.Encoding))
 		if err != nil {
 			return nil, err
 		}

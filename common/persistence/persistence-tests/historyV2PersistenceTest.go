@@ -704,7 +704,7 @@ func (s *HistoryV2PersistenceSuite) TestTreeInfoCompatibility() {
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
-	info, err := p.ToHistoryBranchInfo(serializer, blob)
+	info, err := p.ToHistoryTreeInfo(serializer, blob)
 	s.NoError(err)
 	s.Equal(originalToken.Data, info.BranchToken)
 	s.Equal(originalBranch, info.BranchInfo)
@@ -718,7 +718,7 @@ func (s *HistoryV2PersistenceSuite) TestTreeInfoCompatibility() {
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
-	info, err = p.ToHistoryBranchInfo(serializer, blob)
+	info, err = p.ToHistoryTreeInfo(serializer, blob)
 	s.NoError(err)
 	s.Equal(originalToken.Data, info.BranchToken)
 	s.Equal(originalBranch, info.BranchInfo)
