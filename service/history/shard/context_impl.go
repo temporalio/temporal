@@ -1860,9 +1860,11 @@ func (s *ContextImpl) acquireShard() {
 
 		err = s.transition(contextRequestAcquired{engine: engine})
 
-		if err != nil && engine != nil {
-			// We tried to set the engine but the context was already stopped
-			engine.Stop()
+		if err != nil {
+			if engine != nil {
+				// We tried to set the engine but the context was already stopped
+				engine.Stop()
+			}
 			return err
 		}
 
