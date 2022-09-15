@@ -438,6 +438,8 @@ const (
 	TransferProcessorPollBackoffInterval = "history.transferProcessorPollBackoffInterval"
 	// TransferProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
 	TransferProcessorVisibilityArchivalTimeLimit = "history.transferProcessorVisibilityArchivalTimeLimit"
+	// TransferProcessorEnsureCloseBeforeDelete means we ensure the execution is closed before we delete it
+	TransferProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
 
 	// VisibilityTaskBatchSize is batch size for visibilityQueueProcessor
 	VisibilityTaskBatchSize = "history.visibilityTaskBatchSize"
@@ -476,6 +478,8 @@ const (
 	VisibilityProcessorPollBackoffInterval = "history.visibilityProcessorPollBackoffInterval"
 	// VisibilityProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
 	VisibilityProcessorVisibilityArchivalTimeLimit = "history.visibilityProcessorVisibilityArchivalTimeLimit"
+	// VisibilityProcessorEnsureCloseBeforeDelete means we ensure the visibility of an execution is closed before we delete its visibility records
+	VisibilityProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
 
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"
