@@ -1656,7 +1656,20 @@ func (s *ContextImpl) transition(request contextRequest) error {
 	return errInvalidTransition
 }
 
-func (s *ContextImpl) notifyQueueProcessor(engine Engine) {
+// notifyQueueProcessor sends notification to all queue processors for triggering a load
+// NOTE: this method assumes engineFuture is already in a ready state.
+func (s *ContextImpl) notifyQueueProcessor() {
+	// use a cancelled ctx so the method won't be blocked if engineFuture is not ready
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// we will get the engine when the Future is ready
+	engine, err := s.engineFuture.Get(cancelledCtx)
+	if err != nil {
+		s.contextTaggedLogger.Warn("tried to notify queue processor when engine is not ready")
+		return
+	}
+
 	now := s.timeSource.Now()
 	fakeTasks := make(map[tasks.Category][]tasks.Task)
 	for _, category := range tasks.GetCategories() {
@@ -1868,13 +1881,9 @@ func (s *ContextImpl) acquireShard() {
 			return err
 		}
 
-		engine, err = s.engineFuture.Get(s.lifecycleCtx)
-		if err != nil {
-			// this should not happen, already checked engineFuture is ready when transition to acquired state
-			s.contextTaggedLogger.Warn("acquired the shard but unable to get engine", tag.Error(err))
-			return err
-		}
-		s.notifyQueueProcessor(engine)
+		// we know engineFuture must be ready here, and we can notify queue processor
+		// to trigger a load as queue max level can be updated to a newer value
+		s.notifyQueueProcessor()
 
 		return nil
 	}
