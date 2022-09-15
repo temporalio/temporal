@@ -694,6 +694,9 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 
+	// only for MockEngines: we just need to hook Start/Stop, not verify calls
+	disconnectedMockController := gomock.NewController(nil)
+
 	var engineStarts, engineStops int64
 	var getShards, closeContexts int64
 	var countCloseWg sync.WaitGroup
@@ -704,7 +707,7 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).AnyTimes()
 		s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).DoAndReturn(func(shard Context) Engine {
-			mockEngine := NewMockEngine(s.controller)
+			mockEngine := NewMockEngine(disconnectedMockController)
 			status := new(int32)
 			mockEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
 			mockEngine.EXPECT().Start().Do(func() {
@@ -798,11 +801,13 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	workers.Wait()
 	s.shardController.Stop()
 
-	s.Assert().True(common.AwaitWaitGroup(&countCloseWg, 500*time.Millisecond), "all contexts did not close")
+	s.Assert().True(common.AwaitWaitGroup(&countCloseWg, 1*time.Second), "all contexts did not close")
 
 	// check that things are good
 	s.Assert().Equal(atomic.LoadInt64(&getShards), atomic.LoadInt64(&closeContexts), "getorcreate/close context")
-	s.Assert().Equal(atomic.LoadInt64(&engineStarts), atomic.LoadInt64(&engineStops), "engine start/stop")
+	s.Eventually(func() bool {
+		return atomic.LoadInt64(&engineStarts) == atomic.LoadInt64(&engineStops)
+	}, 1*time.Second, 50*time.Millisecond, "engine start/stop")
 }
 
 func (s *controllerSuite) setupMocksForAcquireShard(
