@@ -66,18 +66,16 @@ INTEG_TEST_NDC_ROOT    := ./host/ndc
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
 PROTO_DIRS = $(sort $(dir $(PROTO_FILES)))
-PROTO_IMPORTS := -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(GOPATH)/src/github.com/temporalio/gogo-protobuf/protobuf
+PROTO_IMPORTS = -I=$(PROTO_ROOT)/internal -I=$(PROTO_ROOT)/api -I=$(shell go list -modfile build/go.mod -m -f '{{.Dir}}' github.com/temporalio/gogo-protobuf)/protobuf
 PROTO_OUT := api
-
 
 ALL_SRC         := $(shell find . -name "*.go")
 ALL_SRC         += go.mod
-# Replace below with build tags and `go test ./...` for targets
+ALL_SCRIPTS     := $(shell find . -name "*.sh")
+# TODO (jeremy): Replace below with build tags and `go test ./...` for targets
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
-
-ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
 PINNED_DEPENDENCIES := \
 	github.com/go-sql-driver/mysql@v1.5.0
@@ -117,9 +115,7 @@ update-mockgen:
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	@go install github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick@master
-# This to download sources of gogo-protobuf which are required to build proto files.
-	@GO111MODULE=off go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
+	@go install -modfile build/go.mod github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 update-tctl:
@@ -295,7 +291,6 @@ integration-with-fault-injection-test: clean-test-results
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
 	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -PersistenceFaultInjectionRate=0.005 | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
-
 
 test: unit-test integration-test integration-with-fault-injection-test
 

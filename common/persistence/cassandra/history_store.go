@@ -197,7 +197,13 @@ func (h *HistoryStore) NewHistoryBranch(
 	ctx context.Context,
 	request *p.NewHistoryBranchRequest,
 ) (*p.NewHistoryBranchResponse, error) {
-	branchToken, err := p.NewHistoryBranchToken(request.TreeID)
+	var branchID string
+	if request.BranchID == nil {
+		branchID = primitives.NewUUID().String()
+	} else {
+		branchID = *request.BranchID
+	}
+	branchToken, err := p.NewHistoryBranchToken(request.TreeID, branchID)
 	if err != nil {
 		return nil, err
 	}
