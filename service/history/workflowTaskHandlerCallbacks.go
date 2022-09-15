@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"fmt"
+	commandpb "go.temporal.io/api/command/v1"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -502,6 +503,16 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		}
 		hasUnhandledEvents = true
 		newMutableState = nil
+
+		if wtFailedCause.workflowFailure != nil {
+			attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
+				Failure: wtFailedCause.workflowFailure,
+			}
+			if _, err := ms.AddFailWorkflowEvent(ms.GetNextEventID(), enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
+				return nil, err
+			}
+			hasUnhandledEvents = false
+		}
 	}
 
 	createNewWorkflowTask := ms.IsWorkflowExecutionRunning() && (hasUnhandledEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled)
