@@ -61,7 +61,7 @@ message ShardInfo {
     reserved 15;
     // Map from task category to ack levels of the corresponding queue processor
     map<int32, QueueAckLevel> queue_ack_levels = 16;
-    map<int32, QueueState> queue_states = 17;  
+    map<int32, QueueState> queue_states = 17;
 }
 
 // execution column
@@ -205,6 +205,7 @@ message VisibilityTaskInfo {
     google.protobuf.Timestamp visibility_time = 7 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp close_time = 8 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp start_time = 9 [(gogoproto.stdtime) = true];
+    int64 close_visibility_task_id = 10;
 }
 
 // timer column
