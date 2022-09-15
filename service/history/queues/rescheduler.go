@@ -150,9 +150,8 @@ func (r *reschedulerImpl) Add(
 		rescheduleTime: rescheduleTime,
 	})
 	r.numExecutables++
-	r.Unlock()
-
 	r.timerGate.Update(rescheduleTime)
+	r.Unlock()
 
 	if r.isStopped() {
 		r.drain()
