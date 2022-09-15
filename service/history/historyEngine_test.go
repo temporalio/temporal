@@ -199,6 +199,7 @@ func (s *engineSuite) SetupTest() {
 		eventsReapplier:            s.mockEventsReapplier,
 		workflowResetter:           s.mockWorkflowResetter,
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(s.mockShard, s.workflowCache),
+		throttledLogger:            log.NewNoopLogger(),
 	}
 	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
@@ -2266,56 +2267,6 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 	s.Equal("child-workflow-id", ms2.GetPendingChildExecutionInfos()[childID].StartedWorkflowId)
 	s.Equal(enumspb.PARENT_CLOSE_POLICY_TERMINATE, ms2.GetPendingChildExecutionInfos()[childID].ParentClosePolicy)
 }
-
-// RunID Invalid is no longer possible form this scope.
-/*func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowFailed() {
-
-	we := commonpb.WorkflowExecution{
-		WorkflowId: tests.WorkflowID,
-		RunId:      "invalid run id",
-	}
-	tl := "testTaskQueue"
-	tt := &tokenspb.Task{
-Attempt: 1,
-		WorkflowId: we.GetWorkflowId(),
-		RunId:      we.GetRunId(),
-		ScheduledEventId: 2,
-	}
-                                  taskToken, _  := tt.Marshal()
-	identity := "testIdentity"
-	executionContext := []byte("context")
-
-	ms := tests.TestLocalMutableState(s.mockHistoryEngine.shard, s.eventsCache,
-		loggerimpl.NewTestLogger(s.Suite), tests.RunID)
-	addWorkflowExecutionStartedEvent(ms, we, "wType", tl, payload.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second,  identity)
-	wt := addWorkflowTaskScheduledEvent(ms)
-	addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
-
-	commands := []*commandpb.Command{{
-		CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
-		Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-			Namespace: tests.NamespaceID,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: we.WorkflowId,
-				RunId:      we.RunId,
-			},
-			SignalName: "signal",
-			Input:      codec.EncodeString("test input"),
-		}},
-	}}
-
-	_, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
-		NamespaceId:  tests.NamespaceID.String(),
-		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Task:        taskToken,
-			Commands: commands,
-			ExecutionContext: executionContext,
-			Identity:         identity,
-		},
-	})
-
-	s.EqualError(err, "RunID is not valid UUID.")
-}*/
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowFailed_UnKnownNamespace() {
 	namespaceID := tests.NamespaceID

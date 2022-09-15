@@ -68,13 +68,6 @@ type (
 		memoSizeLimitWarn  int
 		memoSizeLimitError int
 
-		historySizeLimitWarn  int
-		historySizeLimitError int
-
-		historyCountLimitWarn  int
-		historyCountLimitError int
-
-		completedID               int64
 		mutableState              workflow.MutableState
 		searchAttributesValidator *searchattribute.Validator
 		executionStats            *persistencespb.ExecutionStats
@@ -108,11 +101,6 @@ func newWorkflowSizeChecker(
 	blobSizeLimitError int,
 	memoSizeLimitWarn int,
 	memoSizeLimitError int,
-	historySizeLimitWarn int,
-	historySizeLimitError int,
-	historyCountLimitWarn int,
-	historyCountLimitError int,
-	completedID int64,
 	mutableState workflow.MutableState,
 	searchAttributesValidator *searchattribute.Validator,
 	executionStats *persistencespb.ExecutionStats,
@@ -124,11 +112,6 @@ func newWorkflowSizeChecker(
 		blobSizeLimitError:        blobSizeLimitError,
 		memoSizeLimitWarn:         memoSizeLimitWarn,
 		memoSizeLimitError:        memoSizeLimitError,
-		historySizeLimitWarn:      historySizeLimitWarn,
-		historySizeLimitError:     historySizeLimitError,
-		historyCountLimitWarn:     historyCountLimitWarn,
-		historyCountLimitError:    historyCountLimitError,
-		completedID:               completedID,
 		mutableState:              mutableState,
 		searchAttributesValidator: searchAttributesValidator,
 		executionStats:            executionStats,
