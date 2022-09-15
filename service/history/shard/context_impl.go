@@ -1661,7 +1661,7 @@ func (s *ContextImpl) transition(request contextRequest) error {
 func (s *ContextImpl) notifyQueueProcessor() {
 	// use a cancelled ctx so the method won't be blocked if engineFuture is not ready
 	cancelledCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	cancel()
 
 	// we will get the engine when the Future is ready
 	engine, err := s.engineFuture.Get(cancelledCtx)
