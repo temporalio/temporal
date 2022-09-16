@@ -375,10 +375,14 @@ func (s *scheduler) sleep(nextSleep time.Duration) {
 	sel := workflow.NewSelector(s.ctx)
 
 	upCh := workflow.GetSignalChannel(s.ctx, SignalNameUpdate)
-	sel.AddReceive(upCh, s.handleUpdateSignal)
+	sel.AddReceive(upCh, func(ch workflow.ReceiveChannel, _ bool) {
+		ch.Receive(s.ctx, &s.pendingUpdate)
+	})
 
 	reqCh := workflow.GetSignalChannel(s.ctx, SignalNamePatch)
-	sel.AddReceive(reqCh, s.handlePatchSignal)
+	sel.AddReceive(reqCh, func(ch workflow.ReceiveChannel, _ bool) {
+		ch.Receive(s.ctx, &s.pendingPatch)
+	})
 
 	refreshCh := workflow.GetSignalChannel(s.ctx, SignalNameRefresh)
 	sel.AddReceive(refreshCh, s.handleRefreshSignal)
@@ -458,15 +462,12 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future) {
 	s.logger.Info("started workflow finished", "workflow", id, "status", res.Status, "pause-after-failure", pauseOnFailure)
 }
 
-func (s *scheduler) handleUpdateSignal(ch workflow.ReceiveChannel, _ bool) {
-	ch.Receive(s.ctx, &s.pendingUpdate)
-	if err := s.checkConflict(s.pendingUpdate.GetConflictToken()); err != nil {
-		s.logger.Warn("Update conflicted with concurrent change")
-		s.pendingUpdate = nil
-	}
-}
-
 func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
+	if err := s.checkConflict(req.ConflictToken); err != nil {
+		s.logger.Warn("Update conflicted with concurrent change")
+		return
+	}
+
 	s.logger.Info("Schedule update", "new-schedule", req.Schedule.String())
 
 	s.Schedule.Spec = req.Schedule.GetSpec()
@@ -480,10 +481,6 @@ func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
 
 	s.Info.UpdateTime = timestamp.TimePtr(s.now())
 	s.incSeqNo()
-}
-
-func (s *scheduler) handlePatchSignal(ch workflow.ReceiveChannel, _ bool) {
-	ch.Receive(s.ctx, &s.pendingPatch)
 }
 
 func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
