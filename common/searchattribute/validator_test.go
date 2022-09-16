@@ -201,7 +201,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 	attr.IndexedFields = fields
 	err := saValidator.ValidateSize(attr, namespace)
 	s.Error(err)
-	s.Equal("search attribute CustomKeywordField value of size 8: exceeds size limit 5", err.Error())
+	s.Equal("search attribute CustomKeywordField value size 8 exceeds size limit 5", err.Error())
 
 	fields = map[string]*commonpb.Payload{
 		"CustomKeywordField": payload.EncodeString("123"),
@@ -210,7 +210,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 	attr.IndexedFields = fields
 	err = saValidator.ValidateSize(attr, namespace)
 	s.Error(err)
-	s.Equal("total size of search attributes 106: exceeds size limit 20", err.Error())
+	s.Equal("total size of search attributes 106 exceeds size limit 20", err.Error())
 }
 
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper() {
@@ -237,7 +237,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper
 	attr.IndexedFields = fields
 	err := saValidator.ValidateSize(attr, namespace)
 	s.Error(err)
-	s.Equal("search attribute alias_of_CustomKeywordField value of size 8: exceeds size limit 5", err.Error())
+	s.Equal("search attribute alias_of_CustomKeywordField value size 8 exceeds size limit 5", err.Error())
 
 	fields = map[string]*commonpb.Payload{
 		"CustomKeywordField": payload.EncodeString("123"),
@@ -246,5 +246,5 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper
 	attr.IndexedFields = fields
 	err = saValidator.ValidateSize(attr, namespace)
 	s.Error(err)
-	s.Equal("total size of search attributes 106: exceeds size limit 20", err.Error())
+	s.Equal("total size of search attributes 106 exceeds size limit 20", err.Error())
 }

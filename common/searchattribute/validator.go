@@ -27,7 +27,6 @@ package searchattribute
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -47,10 +46,6 @@ type (
 	}
 )
 
-var (
-	ErrExceedSizeLimit = errors.New("exceeds size limit")
-)
-
 // NewValidator create Validator
 func NewValidator(
 	searchAttributesProvider Provider,
@@ -66,26 +61,6 @@ func NewValidator(
 		searchAttributesSizeOfValueLimit:  searchAttributesSizeOfValueLimit,
 		searchAttributesTotalSizeLimit:    searchAttributesTotalSizeLimit,
 	}
-}
-
-func (v *Validator) getAlias(saFieldName string, namespace string) (string, error) {
-	var err error
-	saAlias := saFieldName
-	if IsMappable(saFieldName) && v.searchAttributesMapper != nil {
-		saAlias, err = v.searchAttributesMapper.GetAlias(saFieldName, namespace)
-	}
-	return saAlias, err
-}
-
-// Generates a validation error replacing `{saAlias}` with the alias of `saFieldName`.
-func (v *Validator) validationError(msg string, saFieldName string, namespace string) error {
-	saAlias, err := v.getAlias(saFieldName, namespace)
-	if err != nil {
-		return err
-	}
-	return serviceerror.NewInvalidArgument(
-		strings.ReplaceAll(msg, "{saAlias}", saAlias),
-	)
 }
 
 // Validate search attributes are valid for writing.
@@ -125,13 +100,13 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		if err != nil {
 			if errors.Is(err, ErrInvalidName) {
 				return v.validationError(
-					"search attribute {saAlias} is not defined",
+					"search attribute %s is not defined",
 					saFieldName,
 					namespace,
 				)
 			}
 			return v.validationError(
-				fmt.Sprintf("unable to get {saAlias} search attribute type: %v", err),
+				fmt.Sprintf("unable to get %s search attribute type: %v", "%s", err),
 				saFieldName,
 				namespace,
 			)
@@ -144,7 +119,8 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			}
 			return v.validationError(
 				fmt.Sprintf(
-					"invalid value for search attribute {saAlias} of type %s: %v",
+					"invalid value for search attribute %s of type %s: %v",
+					"%s",
 					saType,
 					invalidValue,
 				),
@@ -165,28 +141,46 @@ func (v *Validator) ValidateSize(searchAttributes *commonpb.SearchAttributes, na
 
 	for saFieldName, saPayload := range searchAttributes.GetIndexedFields() {
 		if len(saPayload.GetData()) > v.searchAttributesSizeOfValueLimit(namespace) {
-			saAlias, err := v.getAlias(saFieldName, namespace)
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf(
-				"search attribute %s value of size %d: %w %d",
-				saAlias,
-				len(saPayload.GetData()),
-				ErrExceedSizeLimit,
-				v.searchAttributesSizeOfValueLimit(namespace),
+			return v.validationError(
+				fmt.Sprintf(
+					"search attribute %s value size %d exceeds size limit %d",
+					"%s",
+					len(saPayload.GetData()),
+					v.searchAttributesSizeOfValueLimit(namespace),
+				),
+				saFieldName,
+				namespace,
 			)
 		}
 	}
 
 	if searchAttributes.Size() > v.searchAttributesTotalSizeLimit(namespace) {
-		return fmt.Errorf(
-			"total size of search attributes %d: %w %d",
-			searchAttributes.Size(),
-			ErrExceedSizeLimit,
-			v.searchAttributesTotalSizeLimit(namespace),
+		return serviceerror.NewInvalidArgument(
+			fmt.Sprintf(
+				"total size of search attributes %d exceeds size limit %d",
+				searchAttributes.Size(),
+				v.searchAttributesTotalSizeLimit(namespace),
+			),
 		)
 	}
 
 	return nil
+}
+
+// Generates a validation error with search attribute alias resolution.
+// Input `msg` must contain a single occurrence of `%s` that will be substituted
+// by the search attribute alias.
+func (v *Validator) validationError(msg string, saFieldName string, namespace string) error {
+	saAlias, err := v.getAlias(saFieldName, namespace)
+	if err != nil {
+		return err
+	}
+	return serviceerror.NewInvalidArgument(fmt.Sprintf(msg, saAlias))
+}
+
+func (v *Validator) getAlias(saFieldName string, namespace string) (string, error) {
+	if IsMappable(saFieldName) && v.searchAttributesMapper != nil {
+		return v.searchAttributesMapper.GetAlias(saFieldName, namespace)
+	}
+	return saFieldName, nil
 }
