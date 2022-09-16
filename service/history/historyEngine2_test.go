@@ -905,10 +905,6 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 		GetFieldName("AliasForCustomTextField", tests.Namespace.String()).Return("CustomTextField", nil).
 		Times(1) // one for mapper
 
-	s.mockShard.Resource.SearchAttributesMapper.EXPECT().
-		GetAlias("CustomTextField", tests.Namespace.String()).Return("AliasForCustomTextField", nil).
-		Times(1) // one for validator
-
 	_, err := s.historyEngine.RespondWorkflowTaskCompleted(metrics.AddMetricsContext(context.Background()), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
