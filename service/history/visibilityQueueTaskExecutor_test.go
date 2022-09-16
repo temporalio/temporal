@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/service/history/consts"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -408,6 +410,75 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessModifyWorkflowProperties()
 		s.newTaskExecutable(visibilityTask),
 	)
 	s.NoError(err)
+}
+
+func (s *visibilityQueueTaskExecutorSuite) TestProcessorDeleteExecution() {
+	s.mockShard.GetConfig().VisibilityProcessorEnsureCloseBeforeDelete = func() bool {
+		return true
+	}
+	workflowKey := definition.WorkflowKey{
+		NamespaceID: s.namespaceID.String(),
+	}
+	s.Run("TaskID=0", func() {
+		s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any())
+		err := s.execute(&tasks.DeleteExecutionVisibilityTask{
+			WorkflowKey:           workflowKey,
+			CloseVisibilityTaskID: 0,
+		})
+		s.Assert().NoError(err)
+	})
+	s.Run("SingleCursorQueue", func() {
+		const ackLevel int64 = 5
+		s.mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any())
+		s.NoError(s.mockShard.UpdateQueueAckLevel(tasks.CategoryVisibility,
+			tasks.NewImmediateKey(ackLevel),
+		))
+		s.Run("NotAcked", func() {
+			err := s.execute(&tasks.DeleteExecutionVisibilityTask{
+				WorkflowKey:           workflowKey,
+				CloseVisibilityTaskID: ackLevel + 1,
+			})
+			s.ErrorIs(err, consts.ErrDependencyTaskNotCompleted)
+		})
+		s.Run("Acked", func() {
+			s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any())
+			err := s.execute(&tasks.DeleteExecutionVisibilityTask{
+				WorkflowKey:           workflowKey,
+				CloseVisibilityTaskID: ackLevel - 1,
+			})
+			s.NoError(err)
+		})
+	})
+	s.Run("MultiCursorQueue", func() {
+		const highWatermark int64 = 5
+		s.NoError(s.mockShard.UpdateQueueState(tasks.CategoryVisibility, &persistencespb.QueueState{
+			ReaderStates: nil,
+			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+				TaskId:   highWatermark,
+				FireTime: timestamp.TimePtr(tasks.DefaultFireTime),
+			},
+		}))
+		s.Run("NotAcked", func() {
+			err := s.execute(&tasks.DeleteExecutionVisibilityTask{
+				WorkflowKey:           workflowKey,
+				CloseVisibilityTaskID: highWatermark + 1,
+			})
+			s.ErrorIs(err, consts.ErrDependencyTaskNotCompleted)
+		})
+		s.Run("Acked", func() {
+			s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any())
+			err := s.execute(&tasks.DeleteExecutionVisibilityTask{
+				WorkflowKey:           workflowKey,
+				CloseVisibilityTaskID: highWatermark - 1,
+			})
+			s.NoError(err)
+		})
+	})
+}
+
+func (s *visibilityQueueTaskExecutorSuite) execute(task tasks.Task) error {
+	_, _, err := s.visibilityQueueTaskExecutor.Execute(context.Background(), s.newTaskExecutable(task))
+	return err
 }
 
 func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedRequest(
