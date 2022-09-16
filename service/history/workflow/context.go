@@ -672,12 +672,15 @@ func (c *ContextImpl) SetWorkflowExecution(ctx context.Context, now time.Time) (
 		}
 	}()
 
-	resetWorkflowSnapshot, _, err := c.MutableState.CloseTransactionAsSnapshot(
+	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsSnapshot(
 		now,
 		TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
+	}
+	if len(resetWorkflowEventsSeq) != 0 {
+		return serviceerror.NewInternal("SetWorkflowExecution encountered new events")
 	}
 
 	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
