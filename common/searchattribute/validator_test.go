@@ -138,7 +138,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	intPayload, err := payload.Encode(1)
 	s.NoError(err)
 	fields := map[string]*commonpb.Payload{
-		"alias_of_CustomIntField": intPayload,
+		"CustomIntField": intPayload,
 	}
 	attr = &commonpb.SearchAttributes{
 		IndexedFields: fields,
@@ -160,7 +160,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	s.NoError(err)
 
 	fields = map[string]*commonpb.Payload{
-		"alias_of_InvalidKey": payload.EncodeString("1"),
+		"InvalidKey": payload.EncodeString("1"),
 	}
 	attr.IndexedFields = fields
 	err = saValidator.Validate(attr, namespace, "")
@@ -168,8 +168,8 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	s.Equal("search attribute alias_of_InvalidKey is not defined", err.Error())
 
 	fields = map[string]*commonpb.Payload{
-		"alias_of_CustomTextField": payload.EncodeString("1"),
-		"alias_of_CustomBoolField": payload.EncodeString("123"),
+		"CustomTextField": payload.EncodeString("1"),
+		"CustomBoolField": payload.EncodeString("123"),
 	}
 	attr.IndexedFields = fields
 	err = saValidator.Validate(attr, namespace, "")
@@ -202,6 +202,42 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 	err := saValidator.ValidateSize(attr, namespace)
 	s.Error(err)
 	s.Equal("search attribute CustomKeywordField value of size 8: exceeds size limit 5", err.Error())
+
+	fields = map[string]*commonpb.Payload{
+		"CustomKeywordField": payload.EncodeString("123"),
+		"CustomTextField":    payload.EncodeString("12"),
+	}
+	attr.IndexedFields = fields
+	err = saValidator.ValidateSize(attr, namespace)
+	s.Error(err)
+	s.Equal("total size of search attributes 106: exceeds size limit 20", err.Error())
+}
+
+func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize_Mapper() {
+	numOfKeysLimit := 2
+	sizeOfValueLimit := 5
+	sizeOfTotalLimit := 20
+
+	saValidator := NewValidator(
+		NewTestProvider(),
+		&TestMapper{},
+		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))
+
+	namespace := "test-namespace"
+
+	fields := map[string]*commonpb.Payload{
+		"CustomKeywordField": payload.EncodeString("123456"),
+	}
+	attr := &commonpb.SearchAttributes{
+		IndexedFields: fields,
+	}
+
+	attr.IndexedFields = fields
+	err := saValidator.ValidateSize(attr, namespace)
+	s.Error(err)
+	s.Equal("search attribute alias_of_CustomKeywordField value of size 8: exceeds size limit 5", err.Error())
 
 	fields = map[string]*commonpb.Payload{
 		"CustomKeywordField": payload.EncodeString("123"),

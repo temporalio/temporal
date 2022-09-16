@@ -69,6 +69,7 @@ func NewValidator(
 }
 
 // Validate search attributes are valid for writing.
+// The search attributes must be unaliased before calling validation.
 func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namespace string, indexName string) error {
 	if searchAttributes == nil {
 		return nil
@@ -84,26 +85,33 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to get search attributes from cluster metadata: %v", err))
 	}
 
-	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		if _, err = saTypeMap.getType(saName, systemCategory); err == nil {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s attribute can't be set in SearchAttributes", saName))
+	for saFieldName, saPayload := range searchAttributes.GetIndexedFields() {
+		// user search attribute cannot be a system search attribute
+		if _, err = saTypeMap.getType(saFieldName, systemCategory); err == nil {
+			return serviceerror.NewInvalidArgument(
+				fmt.Sprintf("%s attribute can't be set in SearchAttributes", saFieldName),
+			)
 		}
 
-		fieldName := saName
-		if IsMappable(saName) && v.searchAttributesMapper != nil {
-			// Call mapper here because original saName is needed to generate a proper error message (it should contain an alias but not a field name).
-			fieldName, err = v.searchAttributesMapper.GetFieldName(saName, namespace)
+		saAlias := saFieldName
+		if IsMappable(saFieldName) && v.searchAttributesMapper != nil {
+			// call mapper to get the original search attribute name to generate proper error message
+			saAlias, err = v.searchAttributesMapper.GetAlias(saFieldName, namespace)
 			if err != nil {
 				return err
 			}
 		}
 
 		var saType enumspb.IndexedValueType
-		if saType, err = saTypeMap.getType(fieldName, customCategory|predefinedCategory); err != nil {
+		if saType, err = saTypeMap.getType(saFieldName, customCategory|predefinedCategory); err != nil {
 			if errors.Is(err, ErrInvalidName) {
-				return serviceerror.NewInvalidArgument(fmt.Sprintf("search attribute %s is not defined", saName))
+				return serviceerror.NewInvalidArgument(
+					fmt.Sprintf("search attribute %s is not defined", saAlias),
+				)
 			}
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to get %s search attribute type: %v", saName, err))
+			return serviceerror.NewInvalidArgument(
+				fmt.Sprintf("unable to get %s search attribute type: %v", saAlias, err),
+			)
 		}
 
 		if _, err = DecodeValue(saPayload, saType); err != nil {
@@ -111,26 +119,53 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			if err = payload.Decode(saPayload, &invalidValue); err != nil {
 				invalidValue = fmt.Sprintf("value from <%s>", saPayload.String())
 			}
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid value for search attribute %s of type %s: %v", saName, saType, invalidValue))
+			return serviceerror.NewInvalidArgument(
+				fmt.Sprintf(
+					"invalid value for search attribute %s of type %s: %v",
+					saAlias,
+					saType,
+					invalidValue,
+				),
+			)
 		}
 	}
 	return nil
 }
 
-// ValidateSize validate search attributes are valid for writing and not exceed limits
+// ValidateSize validate search attributes are valid for writing and not exceed limits.
+// The search attributes must be unaliased before calling validation.
 func (v *Validator) ValidateSize(searchAttributes *commonpb.SearchAttributes, namespace string) error {
 	if searchAttributes == nil {
 		return nil
 	}
 
-	for saName, saPayload := range searchAttributes.GetIndexedFields() {
+	for saFieldName, saPayload := range searchAttributes.GetIndexedFields() {
 		if len(saPayload.GetData()) > v.searchAttributesSizeOfValueLimit(namespace) {
-			return fmt.Errorf("search attribute %s value of size %d: %w %d", saName, len(saPayload.GetData()), ErrExceedSizeLimit, v.searchAttributesSizeOfValueLimit(namespace))
+			saAliasName := saFieldName
+			if IsMappable(saFieldName) && v.searchAttributesMapper != nil {
+				var err error
+				saAliasName, err = v.searchAttributesMapper.GetAlias(saFieldName, namespace)
+				if err != nil {
+					return err
+				}
+			}
+			return fmt.Errorf(
+				"search attribute %s value of size %d: %w %d",
+				saAliasName,
+				len(saPayload.GetData()),
+				ErrExceedSizeLimit,
+				v.searchAttributesSizeOfValueLimit(namespace),
+			)
 		}
 	}
 
 	if searchAttributes.Size() > v.searchAttributesTotalSizeLimit(namespace) {
-		return fmt.Errorf("total size of search attributes %d: %w %d", searchAttributes.Size(), ErrExceedSizeLimit, v.searchAttributesTotalSizeLimit(namespace))
+		return fmt.Errorf(
+			"total size of search attributes %d: %w %d",
+			searchAttributes.Size(),
+			ErrExceedSizeLimit,
+			v.searchAttributesTotalSizeLimit(namespace),
+		)
 	}
 
 	return nil
