@@ -163,7 +163,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 		if hostID == 0 {
 			myShards = append(myShards, shardID)
 			s.mockHistoryEngine.EXPECT().Start().Return()
-			s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any())
+			s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
 			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 			s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
 			s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(

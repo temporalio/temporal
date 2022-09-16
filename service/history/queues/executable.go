@@ -220,7 +220,7 @@ func (e *executableImpl) Execute() error {
 
 	priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 	priorityTaggedProvider.Counter(TaskRequests).Record(1)
-	priorityTaggedProvider.Timer(TaskScheduleLatency).Record(e.scheduledTime.Sub(startTime))
+	priorityTaggedProvider.Timer(TaskScheduleLatency).Record(startTime.Sub(e.scheduledTime))
 
 	return err
 }
