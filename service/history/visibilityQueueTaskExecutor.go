@@ -421,6 +421,13 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	})
 }
 
+type ErrVisibilityNotClosed struct{}
+
+func (e ErrVisibilityNotClosed) Error() string {
+	return "this error occurs when VisibilityProcessorEnsureCloseBeforeDelete is on, " +
+		"and we found that the visibility is not closed, so we can't delete it yet"
+}
+
 func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	ctx context.Context,
 	task *tasks.DeleteExecutionVisibilityTask,
