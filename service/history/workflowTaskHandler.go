@@ -766,6 +766,21 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 
 	namespaceName := handler.mutableState.GetNamespaceEntry().Name()
 
+	unaliasedSas, err := searchattribute.UnaliasFields(
+		handler.searchAttributesMapper,
+		attr.GetSearchAttributes(),
+		namespaceName.String(),
+	)
+	if err != nil {
+		handler.stopProcessing = true
+		return err
+	}
+	if unaliasedSas != nil {
+		newAttr := *attr
+		newAttr.SearchAttributes = unaliasedSas
+		attr = &newAttr
+	}
+
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateContinueAsNewWorkflowExecutionAttributes(
@@ -795,23 +810,13 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
 	}
 
+	// search attribute validation must be done after unaliasing keys
 	if err := handler.sizeLimitChecker.checkIfSearchAttributesSizeExceedsLimit(
 		attr.GetSearchAttributes(),
 		namespaceName,
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
 	); err != nil {
 		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
-	}
-
-	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespaceName.String())
-	if err != nil {
-		handler.stopProcessing = true
-		return err
-	}
-	if unaliasedSas != nil {
-		newAttr := *attr
-		newAttr.SearchAttributes = unaliasedSas
-		attr = &newAttr
 	}
 
 	// If the workflow task has more than one completion event than just pick the first one
@@ -878,6 +883,21 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		attr.Namespace = parentNamespace.String()
 	}
 
+	unaliasedSas, err := searchattribute.UnaliasFields(
+		handler.searchAttributesMapper,
+		attr.GetSearchAttributes(),
+		targetNamespace.String(),
+	)
+	if err != nil {
+		handler.stopProcessing = true
+		return err
+	}
+	if unaliasedSas != nil {
+		newAttr := *attr
+		newAttr.SearchAttributes = unaliasedSas
+		attr = &newAttr
+	}
+
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateStartChildExecutionAttributes(
@@ -910,23 +930,13 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
 	}
 
+	// search attribute validation must be done after unaliasing keys
 	if err := handler.sizeLimitChecker.checkIfSearchAttributesSizeExceedsLimit(
 		attr.GetSearchAttributes(),
 		targetNamespace,
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 	); err != nil {
 		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
-	}
-
-	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace.String())
-	if err != nil {
-		handler.stopProcessing = true
-		return err
-	}
-	if unaliasedSas != nil {
-		newAttr := *attr
-		newAttr.SearchAttributes = unaliasedSas
-		attr = &newAttr
 	}
 
 	enabled := handler.config.EnableParentClosePolicy(parentNamespace.String())
@@ -1016,6 +1026,21 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	}
 	namespace := namespaceEntry.Name()
 
+	unaliasedSas, err := searchattribute.UnaliasFields(
+		handler.searchAttributesMapper,
+		attr.GetSearchAttributes(),
+		namespace.String(),
+	)
+	if err != nil {
+		handler.stopProcessing = true
+		return err
+	}
+	if unaliasedSas != nil {
+		newAttr := *attr
+		newAttr.SearchAttributes = unaliasedSas
+		attr = &newAttr
+	}
+
 	// valid search attributes for upsert
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
@@ -1039,6 +1064,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	}
 
 	// new search attributes size limit check
+	// search attribute validation must be done after unaliasing keys
 	err = handler.sizeLimitChecker.checkIfSearchAttributesSizeExceedsLimit(
 		&commonpb.SearchAttributes{
 			IndexedFields: payload.MergeMapOfPayload(
@@ -1051,17 +1077,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	)
 	if err != nil {
 		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
-	}
-
-	unaliasedSas, err := searchattribute.UnaliasFields(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace.String())
-	if err != nil {
-		handler.stopProcessing = true
-		return err
-	}
-	if unaliasedSas != nil {
-		newAttr := *attr
-		newAttr.SearchAttributes = unaliasedSas
-		attr = &newAttr
 	}
 
 	_, err = handler.mutableState.AddUpsertWorkflowSearchAttributesEvent(
