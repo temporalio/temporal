@@ -970,6 +970,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	branchToken []byte,
 	startTime *time.Time,
 	closeTime *time.Time,
+	closeVisibilityTaskId int64,
 ) (retErr error) {
 	// DeleteWorkflowExecution is a 4-steps process (order is very important and should not be changed):
 	// 1. Add visibility delete task, i.e. schedule visibility record delete,
@@ -1033,10 +1034,11 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 				tasks.CategoryVisibility: {
 					&tasks.DeleteExecutionVisibilityTask{
 						// TaskID is set by addTasksLocked
-						WorkflowKey:         key,
-						VisibilityTimestamp: s.timeSource.Now(),
-						StartTime:           startTime,
-						CloseTime:           closeTime,
+						WorkflowKey:                    key,
+						VisibilityTimestamp:            s.timeSource.Now(),
+						StartTime:                      startTime,
+						CloseTime:                      closeTime,
+						CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
 					},
 				},
 			}
