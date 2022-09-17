@@ -80,9 +80,10 @@ var (
 	schedulerRetryPolicy = common.CreateTaskProcessingRetryPolicy()
 	// reschedulePolicy is the policy for determine reschedule backoff duration
 	// across multiple submissions to scheduler
-	reschedulePolicy                      = common.CreateTaskReschedulePolicy()
-	taskNotReadyReschedulePolicy          = common.CreateTaskNotReadyReschedulePolicy()
-	taskResourceExhuastedReschedulePolicy = common.CreateTaskResourceExhaustedReschedulePolicy()
+	reschedulePolicy                           = common.CreateTaskReschedulePolicy()
+	taskNotReadyReschedulePolicy               = common.CreateTaskNotReadyReschedulePolicy()
+	taskResourceExhuastedReschedulePolicy      = common.CreateTaskResourceExhaustedReschedulePolicy()
+	dependencyTaskNotCompletedReschedulePolicy = common.CreateDependencyTaskNotCompletedReschedulePolicy()
 )
 
 const (
@@ -258,6 +259,11 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
+	if err == consts.ErrDependencyTaskNotCompleted {
+		e.taggedMetricsHandler.Counter(TasksDependencyTaskNotCompleted).Record(1)
+		return err
+	}
+
 	if err == consts.ErrTaskRetry {
 		e.taggedMetricsHandler.Counter(TaskStandbyRetryCounter).Record(1)
 		return err
@@ -314,7 +320,7 @@ func (e *executableImpl) IsRetryableError(err error) bool {
 	// ErrTaskRetry means mutable state is not ready for standby task processing
 	// there's no point for retrying the task immediately which will hold the worker corouinte
 	// TODO: change ErrTaskRetry to a better name
-	return err != consts.ErrTaskRetry && err != consts.ErrWorkflowBusy
+	return err != consts.ErrTaskRetry && err != consts.ErrWorkflowBusy && err != consts.ErrDependencyTaskNotCompleted
 }
 
 func (e *executableImpl) RetryPolicy() backoff.RetryPolicy {
@@ -441,7 +447,7 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 		return false
 	}
 
-	return err != consts.ErrTaskRetry
+	return err != consts.ErrTaskRetry && err != consts.ErrDependencyTaskNotCompleted
 }
 
 func (e *executableImpl) rescheduleTime(
@@ -456,6 +462,8 @@ func (e *executableImpl) rescheduleTime(
 		// as the error means mutable state is not ready to handle the task,
 		// need to wait for replication.
 		return e.timeSource.Now().Add(taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt))
+	} else if err == consts.ErrDependencyTaskNotCompleted {
+		return e.timeSource.Now().Add(dependencyTaskNotCompletedReschedulePolicy.ComputeNextDelay(0, attempt))
 	}
 
 	backoff := reschedulePolicy.ComputeNextDelay(0, attempt)
