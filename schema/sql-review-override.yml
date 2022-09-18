@@ -6,7 +6,7 @@ ruleList:
   - type: naming.table
     level: ERROR
     payload:
-      format: "^t[a-z0-9]+(_[a-z0-9]+)*$"
+      format: "^[a-z0-9]+(_[a-z0-9]+)*$"
   - type: naming.column
     level: WARNING
     payload:
