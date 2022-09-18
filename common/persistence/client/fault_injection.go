@@ -386,20 +386,12 @@ func NewFaultInjectionExecutionStore(
 	rate float64,
 	executionStore persistence.ExecutionStore,
 ) (*FaultInjectionExecutionStore, error) {
+	// TODO: inject shard ownership lost ever after
+	// queue processor can notify shard upon unloading itself
+	// when shard ownership lost error is encountered.
 	errorGenerator := newErrorGenerator(
 		rate,
-		append(
-			defaultErrors,
-			FaultWeight{
-				errFactory: func(msg string) error {
-					return &persistence.ShardOwnershipLostError{
-						ShardID: -1,
-						Msg:     fmt.Sprintf("FaultInjectionQueue injected, %s", msg),
-					}
-				},
-				weight: 1,
-			},
-		),
+		defaultErrors,
 	)
 	return &FaultInjectionExecutionStore{
 		baseExecutionStore: executionStore,

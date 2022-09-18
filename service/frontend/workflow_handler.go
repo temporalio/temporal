@@ -378,7 +378,12 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errRequestIDTooLong
 	}
 
-	if err := wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName); err != nil {
+	request, err := wh.unaliasStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -390,11 +395,6 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 	wh.logger.Debug("Start workflow execution request namespaceID.", tag.WorkflowNamespaceID(namespaceID.String()))
-
-	request, err = wh.unaliasStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
-	if err != nil {
-		return nil, err
-	}
 
 	resp, err := wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), request, nil, time.Now().UTC()))
 
@@ -2002,18 +2002,18 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	if err := wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName); err != nil {
+	request, err := wh.unaliasSignalWithStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName); err != nil {
 		return nil, err
 	}
 
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
-	if err != nil {
-		return nil, err
-	}
-
-	request, err = wh.unaliasSignalWithStartWorkflowExecutionRequestSearchAttributes(request, namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -2944,17 +2944,17 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	request, err = wh.unaliasCreateScheduleRequestSearchAttributes(request, namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
 	err = wh.validateSearchAttributes(request.GetSearchAttributes(), namespaceName)
 	if err != nil {
 		return nil, err
 	}
 
 	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
-		return nil, err
-	}
-
-	request, err = wh.unaliasCreateScheduleRequestSearchAttributes(request, namespaceName)
-	if err != nil {
 		return nil, err
 	}
 
@@ -4202,7 +4202,6 @@ func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.H
 }
 
 func (wh *WorkflowHandler) validateSearchAttributes(searchAttributes *commonpb.SearchAttributes, namespaceName namespace.Name) error {
-	// Validate search attributes before substitution because in case of error, error message should contain alias but not field name.
 	if err := wh.saValidator.Validate(searchAttributes, namespaceName.String(), wh.config.ESIndexName); err != nil {
 		return err
 	}

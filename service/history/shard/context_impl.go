@@ -301,6 +301,10 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(cluster string) tasks.Key 
 		s.scheduledTaskMaxReadLevelMap[cluster] = tasks.DefaultFireTime
 	}
 
+	if s.errorByState() != nil {
+		return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
+	}
+
 	currentTime := s.timeSource.Now()
 	if cluster != "" && cluster != s.GetClusterMetadata().GetCurrentClusterName() {
 		currentTime = s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime
@@ -1610,6 +1614,7 @@ func (s *ContextImpl) transition(request contextRequest) error {
 				s.contextTaggedLogger.Warn("transition to acquired but no engine set")
 				return errInvalidTransition
 			}
+
 			return nil
 		case contextRequestLost:
 			return nil // nothing to do, already acquiring
@@ -1649,6 +1654,35 @@ func (s *ContextImpl) transition(request contextRequest) error {
 		tag.ShardContextStateRequest(fmt.Sprintf("%T", request)),
 	)
 	return errInvalidTransition
+}
+
+// notifyQueueProcessor sends notification to all queue processors for triggering a load
+// NOTE: this method assumes engineFuture is already in a ready state.
+func (s *ContextImpl) notifyQueueProcessor() {
+	// use a cancelled ctx so the method won't be blocked if engineFuture is not ready
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// we will get the engine when the Future is ready
+	engine, err := s.engineFuture.Get(cancelledCtx)
+	if err != nil {
+		s.contextTaggedLogger.Warn("tried to notify queue processor when engine is not ready")
+		return
+	}
+
+	now := s.timeSource.Now()
+	fakeTasks := make(map[tasks.Category][]tasks.Task)
+	for _, category := range tasks.GetCategories() {
+		fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(definition.WorkflowKey{}, category, now)}
+	}
+
+	// TODO: with multi-cursor, we don't need the for loop
+	for clusterName, info := range s.clusterMetadata.GetAllClusterInfo() {
+		if !info.Enabled {
+			continue
+		}
+		engine.NotifyNewTasks(clusterName, fakeTasks)
+	}
 }
 
 func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
@@ -1839,11 +1873,17 @@ func (s *ContextImpl) acquireShard() {
 
 		err = s.transition(contextRequestAcquired{engine: engine})
 
-		if err != nil && engine != nil {
-			// We tried to set the engine but the context was already stopped
-			engine.Stop()
+		if err != nil {
+			if engine != nil {
+				// We tried to set the engine but the context was already stopped
+				engine.Stop()
+			}
 			return err
 		}
+
+		// we know engineFuture must be ready here, and we can notify queue processor
+		// to trigger a load as queue max level can be updated to a newer value
+		s.notifyQueueProcessor()
 
 		return nil
 	}

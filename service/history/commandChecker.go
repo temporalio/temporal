@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -69,13 +68,6 @@ type (
 		memoSizeLimitWarn  int
 		memoSizeLimitError int
 
-		historySizeLimitWarn  int
-		historySizeLimitError int
-
-		historyCountLimitWarn  int
-		historyCountLimitError int
-
-		completedID               int64
 		mutableState              workflow.MutableState
 		searchAttributesValidator *searchattribute.Validator
 		executionStats            *persistencespb.ExecutionStats
@@ -109,11 +101,6 @@ func newWorkflowSizeChecker(
 	blobSizeLimitError int,
 	memoSizeLimitWarn int,
 	memoSizeLimitError int,
-	historySizeLimitWarn int,
-	historySizeLimitError int,
-	historyCountLimitWarn int,
-	historyCountLimitError int,
-	completedID int64,
 	mutableState workflow.MutableState,
 	searchAttributesValidator *searchattribute.Validator,
 	executionStats *persistencespb.ExecutionStats,
@@ -125,11 +112,6 @@ func newWorkflowSizeChecker(
 		blobSizeLimitError:        blobSizeLimitError,
 		memoSizeLimitWarn:         memoSizeLimitWarn,
 		memoSizeLimitError:        memoSizeLimitError,
-		historySizeLimitWarn:      historySizeLimitWarn,
-		historySizeLimitError:     historySizeLimitError,
-		historyCountLimitWarn:     historyCountLimitWarn,
-		historyCountLimitError:    historyCountLimitError,
-		completedID:               completedID,
 		mutableState:              mutableState,
 		searchAttributesValidator: searchAttributesValidator,
 		executionStats:            executionStats,
@@ -138,11 +120,11 @@ func newWorkflowSizeChecker(
 	}
 }
 
-func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
+func (c *workflowSizeChecker) checkIfPayloadSizeExceedsLimit(
 	commandTypeTag metrics.Tag,
 	payloadSize int,
 	message string,
-) (bool, error) {
+) error {
 
 	executionInfo := c.mutableState.GetExecutionInfo()
 	executionState := c.mutableState.GetExecutionState()
@@ -157,26 +139,17 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 		c.logger,
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
 	)
-	if err == nil {
-		return false, nil
+	if err != nil {
+		return fmt.Errorf(message)
 	}
-
-	attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
-		Failure: failure.NewServerFailure(message, true),
-	}
-
-	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
-		return false, err
-	}
-
-	return true, nil
+	return nil
 }
 
-func (c *workflowSizeChecker) failWorkflowIfMemoSizeExceedsLimit(
+func (c *workflowSizeChecker) checkIfMemoSizeExceedsLimit(
 	memo *commonpb.Memo,
 	commandTypeTag metrics.Tag,
 	message string,
-) (bool, error) {
+) error {
 	c.metricsScope.Tagged(commandTypeTag).RecordDistribution(metrics.MemoSize, memo.Size())
 
 	executionInfo := c.mutableState.GetExecutionInfo()
@@ -192,44 +165,23 @@ func (c *workflowSizeChecker) failWorkflowIfMemoSizeExceedsLimit(
 		c.logger,
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
 	)
-	if err == nil {
-		return false, nil
+	if err != nil {
+		return fmt.Errorf(message)
 	}
-
-	attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
-		Failure: failure.NewServerFailure(message, true),
-	}
-
-	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
-		return false, err
-	}
-
-	return true, nil
+	return nil
 }
 
-func (c *workflowSizeChecker) failWorkflowIfSearchAttributesSizeExceedsLimit(
+func (c *workflowSizeChecker) checkIfSearchAttributesSizeExceedsLimit(
 	searchAttributes *commonpb.SearchAttributes,
 	namespace namespace.Name,
 	commandTypeTag metrics.Tag,
-) (bool, error) {
+) error {
 	c.metricsScope.Tagged(commandTypeTag).RecordDistribution(metrics.SearchAttributesSize, searchAttributes.Size())
 
 	err := c.searchAttributesValidator.ValidateSize(searchAttributes, namespace.String())
-	if err == nil {
-		return false, nil
-	}
-
 	c.logger.Warn("Search attributes size exceeds limits. Fail workflow.", tag.Error(err), tag.WorkflowNamespace(namespace.String()))
 
-	attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
-		Failure: failure.NewServerFailure(err.Error(), true),
-	}
-
-	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
-		return false, err
-	}
-
-	return true, nil
+	return err
 }
 
 func (v *commandAttrValidator) validateActivityScheduleAttributes(
