@@ -1,0 +1,26 @@
+on: [pull_request]
+
+jobs:
+  # Use separate jobs for different databases, otherwise the failed step will block other following steps
+  mysql-sql-review:
+    runs-on: ubuntu-latest
+    name: MySQL SQL Review
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check MySQL
+        uses: bytebase/sql-review-action@0.0.4
+        with:
+          override-file-path: schema/sql-review-override.yml
+          database-type: MYSQL
+          file-pattern: ^schema/mysql/.*\.sql$
+  postgres-sql-review:
+    runs-on: ubuntu-latest
+    name: Postgres SQL Review
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check PostgreSQL
+        uses: bytebase/sql-review-action@main
+        with:
+          override-file-path: schema/sql-review-override.yml
+          database-type: POSTGRES
+          file-pattern: ^schema/postgresql/.*\.sql$

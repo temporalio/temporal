@@ -1,0 +1,15 @@
+# You can configure and generate this file in https://www.bytebase.com/sql-review-guide
+template: bb.sql-review.prod # Need to provide the template id
+ruleList:
+  - type: table.require-pk
+    level: ERROR
+  - type: naming.table
+    level: ERROR
+    payload:
+      format: "^t[a-z0-9]+(_[a-z0-9]+)*$"
+  - type: naming.column
+    level: WARNING
+    payload:
+      maxLength: 24
+  - type: column.required
+    level: DISABLED
