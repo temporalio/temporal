@@ -33,3 +33,5 @@ ruleList:
       maxLength: 32
   - type: column.required
     level: DISABLED
+  - type: column.no-null
+    level: DISABLED
