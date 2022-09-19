@@ -34,4 +34,4 @@ ruleList:
   - type: column.required
     level: DISABLED
   - type: column.no-null
-    level: DISABLED
+    level: WARNING
