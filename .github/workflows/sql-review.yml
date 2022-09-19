@@ -8,7 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Check MySQL
-        uses: bytebase/sql-review-action@0.0.4
+        uses: bytebase/sql-review-action@1.0.0
         with:
           override-file-path: schema/sql-review-override.yml
           database-type: MYSQL
