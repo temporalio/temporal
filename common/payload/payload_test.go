@@ -79,7 +79,7 @@ func TestMergeMapOfPayload(t *testing.T) {
 	var currentMap map[string]*commonpb.Payload
 	var newMap map[string]*commonpb.Payload
 	resultMap := MergeMapOfPayload(currentMap, newMap)
-	assert.Equal(make(map[string]*commonpb.Payload), resultMap)
+	assert.Equal(newMap, resultMap)
 
 	newMap = map[string]*commonpb.Payload{"key": EncodeString("val")}
 	resultMap = MergeMapOfPayload(currentMap, newMap)
