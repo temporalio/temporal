@@ -86,7 +86,7 @@ func MergeMapOfPayload(
 	m1 map[string]*commonpb.Payload,
 	m2 map[string]*commonpb.Payload,
 ) map[string]*commonpb.Payload {
-	if len(m1) == 0 {
+	if m1 == nil {
 		return maps.Clone(m2)
 	}
 	ret := maps.Clone(m1)
