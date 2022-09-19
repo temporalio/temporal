@@ -6,7 +6,7 @@ ruleList:
   - type: naming.table
     level: ERROR
     payload:
-      format: "^[a-z]+(_[a-z]+)*[a-z]$"
+      format: "^t[a-z]+(_[a-z]+)*[a-z]$"
   - type: naming.column
     level: ERROR
     payload:
