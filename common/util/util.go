@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"golang.org/x/exp/constraints"
+	"golang.org/x/exp/maps"
 )
 
 // Min returns the minimum of two comparable values.
@@ -87,4 +88,13 @@ func SliceTail[S ~[]E, E any](s S, n int) S {
 		return s[extra:]
 	}
 	return s
+}
+
+// CloneMapNonNil is like maps.Clone except it can't return nil, it will return an empty map instead.
+func CloneMapNonNil[M ~map[K]V, K comparable, V any](m M) M {
+	m = maps.Clone(m)
+	if m == nil {
+		m = make(M)
+	}
+	return m
 }
