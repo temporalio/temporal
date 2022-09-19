@@ -982,6 +982,13 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.NewStringTag("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
+	case *fxevent.Replaced:
+		if e.Err != nil {
+			l.logger.Error("error encountered while replacing",
+				tag.ComponentFX,
+				tag.NewStringTag("module", e.ModuleName),
+				tag.Error(e.Err))
+		}
 	case *fxevent.Decorated:
 		if e.Err != nil {
 			l.logger.Error("error encountered while applying options",
