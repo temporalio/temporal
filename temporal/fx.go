@@ -1041,5 +1041,10 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 				tag.ComponentFX,
 				tag.NewStringTag("function", e.ConstructorName))
 		}
+	default:
+		l.logger.Warn("unknown fx log type, update fxLogAdapter",
+			tag.ComponentFX,
+			tag.ValueType(e),
+		)
 	}
 }
