@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -143,6 +142,12 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 	}
 
 	return metricsTags, true, err
+}
+
+func (t *transferQueueActiveTaskExecutor) processDeleteExecutionTask(ctx context.Context,
+	task *tasks.DeleteExecutionTask) error {
+	return t.transferQueueTaskExecutorBase.processDeleteExecutionTask(ctx, task,
+		t.config.TransferProcessorEnsureCloseBeforeDelete())
 }
 
 func (t *transferQueueActiveTaskExecutor) processActivityTask(
@@ -409,10 +414,12 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		err = t.deleteExecution(
 			ctx,
 			task,
-			// Visibility is not updated (to avoid race condition for visibility tasks) and workflow execution is still open there.
-			true)
+			// Visibility is not updated (to avoid race condition for visibility tasks) and workflow execution is
+			//still open there.
+			true,
+			false,
+		)
 	}
-
 	return err
 }
 

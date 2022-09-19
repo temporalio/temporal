@@ -33,20 +33,24 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
+
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 )
 
 const (
@@ -226,15 +230,13 @@ func (t *transferQueueTaskExecutorBase) archiveVisibility(
 func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	ctx context.Context,
 	task *tasks.DeleteExecutionTask,
+	ensureNoPendingCloseTask bool,
 ) error {
-	return t.deleteExecution(ctx, task, false)
+	return t.deleteExecution(ctx, task, false, ensureNoPendingCloseTask)
 }
 
-func (t *transferQueueTaskExecutorBase) deleteExecution(
-	ctx context.Context,
-	task tasks.Task,
-	forceDeleteFromOpenVisibility bool,
-) (retError error) {
+func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, task tasks.Task,
+	forceDeleteFromOpenVisibility bool, ensureNoPendingCloseTask bool) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
@@ -259,6 +261,12 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		return err
 	}
 
+	if ensureNoPendingCloseTask {
+		if t.isCloseExecutionTaskPending(mutableState, weCtx) {
+			return consts.ErrDependencyTaskNotCompleted
+		}
+	}
+
 	// If task version is EmptyVersion it means "don't check task version".
 	// This can happen when task was created from explicit user API call.
 	// Or the namespace is a local namespace which will not have version conflict.
@@ -281,4 +289,25 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		mutableState,
 		forceDeleteFromOpenVisibility,
 	)
+}
+
+func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms workflow.MutableState, weCtx workflow.Context) bool {
+	closeTransferTaskId := ms.GetExecutionInfo().CloseTransferTaskId
+	// taskID == 0 if workflow closed before this field was added (v1.17).
+	if closeTransferTaskId == 0 {
+		return false
+	}
+	currentClusterName := t.shard.GetClusterMetadata().GetCurrentClusterName()
+	// check if close execution transfer task is completed
+	transferQueueState, ok := t.shard.GetQueueState(tasks.CategoryTransfer)
+	if !ok {
+		// Use cluster ack level for transfer queue ack level because it gets updated more often.
+		transferQueueAckLevel := t.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, currentClusterName).TaskID
+		return closeTransferTaskId > transferQueueAckLevel
+	}
+	fakeCloseTransferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(weCtx.GetNamespaceID().String(), weCtx.GetWorkflowID(), weCtx.GetRunID()),
+		TaskID:      closeTransferTaskId,
+	}
+	return !queues.IsTaskAcked(fakeCloseTransferTask, transferQueueState)
 }

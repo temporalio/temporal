@@ -2387,6 +2387,167 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 	}
 }
 
+func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() {
+	testCases := []struct {
+		Name                    string
+		EnsureCloseBeforeDelete bool
+		CloseTransferTaskIdSet  bool
+		MultiCursorQueue        bool
+		CloseTaskIsAcked        bool
+		ShouldDelete            bool
+	}{
+		{
+			Name:                    "skip the check",
+			EnsureCloseBeforeDelete: false,
+			ShouldDelete:            true,
+		},
+		{
+			Name:                    "no task id",
+			EnsureCloseBeforeDelete: true,
+			CloseTransferTaskIdSet:  false,
+			ShouldDelete:            true,
+		},
+		{
+			Name:                    "single cursor queue unacked",
+			EnsureCloseBeforeDelete: true,
+			CloseTransferTaskIdSet:  true,
+			MultiCursorQueue:        false,
+			CloseTaskIsAcked:        false,
+			ShouldDelete:            false,
+		},
+		{
+			Name:                    "single cursor queue acked",
+			EnsureCloseBeforeDelete: true,
+			CloseTransferTaskIdSet:  true,
+			MultiCursorQueue:        false,
+			CloseTaskIsAcked:        true,
+			ShouldDelete:            true,
+		},
+		{
+			Name:                    "multicursor queue unacked",
+			EnsureCloseBeforeDelete: true,
+			CloseTransferTaskIdSet:  true,
+			MultiCursorQueue:        true,
+			CloseTaskIsAcked:        false,
+			ShouldDelete:            false,
+		},
+		{
+			Name:                    "multicursor queue acked",
+			EnsureCloseBeforeDelete: true,
+			CloseTransferTaskIdSet:  true,
+			MultiCursorQueue:        true,
+			CloseTaskIsAcked:        true,
+			ShouldDelete:            true,
+		},
+	}
+	for _, c := range testCases {
+		s.Run(c.Name, func() {
+			ctrl := gomock.NewController(s.T())
+
+			mockMutableState := workflow.NewMockMutableState(ctrl)
+			var closeTransferTaskId int64
+			if c.CloseTransferTaskIdSet {
+				closeTransferTaskId = 10
+			}
+			workflowKey := definition.NewWorkflowKey(uuid.New(), uuid.New(), uuid.New())
+			mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				NamespaceId:         workflowKey.NamespaceID,
+				WorkflowId:          workflowKey.WorkflowID,
+				CloseTransferTaskId: closeTransferTaskId,
+			}).AnyTimes()
+			var deleteExecutionTaskId int64 = 1
+			mockMutableState.EXPECT().GetNextEventID().Return(deleteExecutionTaskId + 1).AnyTimes()
+			namespaceEntry := tests.GlobalNamespaceEntry
+			mockMutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
+
+			mockWorkflowContext := workflow.NewMockContext(ctrl)
+			mockWorkflowContext.EXPECT().GetNamespaceID().Return(namespace.ID(workflowKey.NamespaceID)).AnyTimes()
+			mockWorkflowContext.EXPECT().GetWorkflowID().Return(workflowKey.WorkflowID).AnyTimes()
+			mockWorkflowContext.EXPECT().GetRunID().Return(workflowKey.RunID).AnyTimes()
+			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
+
+			mockWorkflowCache := workflow.NewMockCache(ctrl)
+			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
+				gomock.Any(),
+			).Return(mockWorkflowContext, workflow.ReleaseCacheFunc(func(err error) {
+			}), nil)
+
+			mockClusterMetadata := cluster.NewMockMetadata(ctrl)
+			clusterName := namespaceEntry.ActiveClusterName()
+			mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName).AnyTimes()
+			mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
+
+			mockShard := shard.NewMockContext(ctrl)
+			mockShard.EXPECT().GetConfig().Return(&configs.Config{
+				TransferProcessorEnsureCloseBeforeDelete: func() bool {
+					return c.EnsureCloseBeforeDelete
+				},
+			}).AnyTimes()
+			mockShard.EXPECT().GetClusterMetadata().Return(mockClusterMetadata).AnyTimes()
+			mockMutableState.EXPECT().GetLastWriteVersion().Return(tests.Version, nil).AnyTimes()
+			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
+			mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespaceEntry.Name(), nil)
+			mockShard.EXPECT().GetNamespaceRegistry().Return(mockNamespaceRegistry)
+			if c.MultiCursorQueue {
+				var highWatermarkTaskId int64
+				if c.CloseTaskIsAcked {
+					highWatermarkTaskId = closeTransferTaskId + 1
+				} else {
+					highWatermarkTaskId = closeTransferTaskId
+				}
+				mockShard.EXPECT().GetQueueState(tasks.CategoryTransfer).Return(&persistencespb.QueueState{
+					ReaderStates: nil,
+					ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+						FireTime: timestamp.TimePtr(tasks.DefaultFireTime),
+						TaskId:   highWatermarkTaskId,
+					},
+				}, true).AnyTimes()
+			} else {
+				var ackLevel int64
+				if c.CloseTaskIsAcked {
+					ackLevel = closeTransferTaskId
+				} else {
+					ackLevel = closeTransferTaskId - 1
+				}
+				mockShard.EXPECT().GetQueueState(tasks.CategoryTransfer).Return(nil, false).AnyTimes()
+				mockShard.EXPECT().GetQueueClusterAckLevel(tasks.CategoryTransfer,
+					clusterName).Return(tasks.NewImmediateKey(ackLevel)).AnyTimes()
+			}
+
+			mockWorkflowDeleteManager := workflow.NewMockDeleteManager(ctrl)
+			if c.ShouldDelete {
+				mockWorkflowDeleteManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
+					gomock.Any(), gomock.Any(), gomock.Any())
+			}
+
+			executor := &transferQueueActiveTaskExecutor{
+				transferQueueTaskExecutorBase: &transferQueueTaskExecutorBase{
+					cache:                 mockWorkflowCache,
+					config:                mockShard.GetConfig(),
+					metricsClient:         metrics.NoopClient,
+					shard:                 mockShard,
+					workflowDeleteManager: mockWorkflowDeleteManager,
+				},
+			}
+
+			task := &tasks.DeleteExecutionTask{
+				WorkflowKey: workflowKey,
+				TaskID:      deleteExecutionTaskId,
+				Version:     tests.Version,
+			}
+			executable := queues.NewMockExecutable(ctrl)
+			executable.EXPECT().GetTask().Return(task)
+			_, _, err := executor.Execute(context.Background(), executable)
+			if c.ShouldDelete {
+				s.NoError(err)
+			} else {
+				s.Error(err)
+				s.Assert().ErrorIs(err, consts.ErrDependencyTaskNotCompleted)
+			}
+		})
+	}
+}
+
 func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 	task *tasks.WorkflowTask,
 	mutableState workflow.MutableState,
