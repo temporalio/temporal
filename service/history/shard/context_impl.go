@@ -206,11 +206,11 @@ func (s *ContextImpl) AssertOwnership(
 	s.wLock()
 	defer s.wUnlock()
 
-	if err := s.errorByState(); err != nil {
-		return err
+	if s.shardInfo == nil {
+		return s.errorByState()
 	}
 
-	rangeID := s.getRangeIDLocked()
+	rangeID := s.shardInfo.GetRangeId()
 	err := s.persistenceShardManager.AssertShardOwnership(ctx, &persistence.AssertShardOwnershipRequest{
 		ShardID: s.shardID,
 		RangeID: rangeID,
