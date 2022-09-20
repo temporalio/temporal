@@ -31,7 +31,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
-	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -91,6 +90,10 @@ type (
 		// We might have zero or one long-poll watcher activity running. If so, these are set:
 		watchingWorkflowId string
 		watchingFuture     workflow.Future
+
+		// Signal requests
+		pendingPatch  *schedpb.SchedulePatch
+		pendingUpdate *schedspb.FullUpdateRequest
 
 		uuidBatch []string
 	}
@@ -170,11 +173,12 @@ func (s *scheduler) run() error {
 		s.Info.CreateTime = s.State.LastProcessedTime
 	}
 
-	// A schedule may be created with an initial Patch, e.g. start one immediately. Handle that now.
-	s.processPatch(s.InitialPatch)
+	// A schedule may be created with an initial Patch, e.g. start one immediately. Put that in
+	// the state so it takes effect below.
+	s.pendingPatch = s.InitialPatch
 	s.InitialPatch = nil
 
-	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0; iters-- {
+	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters > 0 || s.pendingUpdate != nil || s.pendingPatch != nil; iters-- {
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 		t2 := s.now()
 		if t2.Before(t1) {
@@ -189,6 +193,13 @@ func (s *scheduler) run() error {
 			false,
 		)
 		s.State.LastProcessedTime = timestamp.TimePtr(t2)
+		// handle signals after processing time range that just elapsed
+		scheduleChanged := s.processSignals()
+		if scheduleChanged {
+			// need to calculate sleep again
+			nextSleep = s.processTimeRange(t2, t2, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, false)
+		}
+		// try starting workflows in the buffer
 		for s.processBuffer() {
 		}
 		s.updateMemoAndSearchAttributes()
@@ -266,11 +277,7 @@ func (s *scheduler) now() time.Time {
 }
 
 func (s *scheduler) processPatch(patch *schedpb.SchedulePatch) {
-	s.logger.Debug("processPatch", "patch", patch)
-
-	if patch == nil {
-		return
-	}
+	s.logger.Info("Schedule patch", "patch", patch.String())
 
 	if trigger := patch.TriggerImmediately; trigger != nil {
 		now := s.now()
@@ -367,10 +374,14 @@ func (s *scheduler) sleep(nextSleep time.Duration) {
 	sel := workflow.NewSelector(s.ctx)
 
 	upCh := workflow.GetSignalChannel(s.ctx, SignalNameUpdate)
-	sel.AddReceive(upCh, s.handleUpdateSignal)
+	sel.AddReceive(upCh, func(ch workflow.ReceiveChannel, _ bool) {
+		ch.Receive(s.ctx, &s.pendingUpdate)
+	})
 
 	reqCh := workflow.GetSignalChannel(s.ctx, SignalNamePatch)
-	sel.AddReceive(reqCh, s.handlePatchSignal)
+	sel.AddReceive(reqCh, func(ch workflow.ReceiveChannel, _ bool) {
+		ch.Receive(s.ctx, &s.pendingPatch)
+	})
 
 	refreshCh := workflow.GetSignalChannel(s.ctx, SignalNameRefresh)
 	sel.AddReceive(refreshCh, s.handleRefreshSignal)
@@ -450,9 +461,7 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future) {
 	s.logger.Info("started workflow finished", "workflow", id, "status", res.Status, "pause-after-failure", pauseOnFailure)
 }
 
-func (s *scheduler) handleUpdateSignal(ch workflow.ReceiveChannel, _ bool) {
-	var req schedspb.FullUpdateRequest
-	ch.Receive(s.ctx, &req)
+func (s *scheduler) processUpdate(req *schedspb.FullUpdateRequest) {
 	if err := s.checkConflict(req.ConflictToken); err != nil {
 		s.logger.Warn("Update conflicted with concurrent change")
 		return
@@ -473,19 +482,26 @@ func (s *scheduler) handleUpdateSignal(ch workflow.ReceiveChannel, _ bool) {
 	s.incSeqNo()
 }
 
-func (s *scheduler) handlePatchSignal(ch workflow.ReceiveChannel, _ bool) {
-	var patch schedpb.SchedulePatch
-	ch.Receive(s.ctx, &patch)
-	s.logger.Info("Schedule patch", "patch", patch.String())
-	s.processPatch(&patch)
-}
-
 func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
 	ch.Receive(s.ctx, nil)
 	s.logger.Debug("got refresh signal")
 	// If we're woken up by any signal, we'll pass through processBuffer before sleeping again.
 	// processBuffer will see this flag and refresh everything.
 	s.State.NeedRefresh = true
+}
+
+func (s *scheduler) processSignals() bool {
+	scheduleChanged := false
+	if s.pendingPatch != nil {
+		s.processPatch(s.pendingPatch)
+		s.pendingPatch = nil
+	}
+	if s.pendingUpdate != nil {
+		s.processUpdate(s.pendingUpdate)
+		s.pendingUpdate = nil
+		scheduleChanged = true
+	}
+	return scheduleChanged
 }
 
 func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
@@ -806,7 +822,7 @@ func (s *scheduler) addSearchAttributes(
 	attributes *commonpb.SearchAttributes,
 	nominal time.Time,
 ) *commonpb.SearchAttributes {
-	fields := maps.Clone(attributes.GetIndexedFields())
+	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
 	if p, err := payload.Encode(nominal); err == nil {
 		fields[searchattribute.TemporalScheduledStartTime] = p
 	}

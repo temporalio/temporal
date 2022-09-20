@@ -60,6 +60,7 @@ func TestMeter(t *testing.T) {
 	err := exp.Collect(ctx)
 	assert.Nil(t, err)
 
+	//lint:ignore SA1019 TODO: fix later
 	lib := metrictest.Library{InstrumentationName: "test"}
 	got := exp.Records
 

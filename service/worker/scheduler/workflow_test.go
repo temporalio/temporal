@@ -285,7 +285,7 @@ func (s *workflowSuite) runAcrossContinue(
 			s.True(s.env.IsWorkflowCompleted())
 			result := s.env.GetWorkflowError()
 			var canErr *workflow.ContinueAsNewError
-			s.True(errors.As(result, &canErr))
+			s.Require().True(errors.As(result, &canErr))
 
 			s.env.AssertExpectations(s.T())
 
@@ -299,9 +299,9 @@ func (s *workflowSuite) runAcrossContinue(
 			s.NoError(payloads.Decode(canErr.Input, &startArgs))
 		}
 		// check starts that we actually got
-		s.Equal(len(runs), len(gotRuns))
+		s.Require().Equal(len(runs), len(gotRuns))
 		for _, run := range runs {
-			s.True(run.start.Equal(gotRuns[run.id]))
+			s.Truef(run.start.Equal(gotRuns[run.id]), "%v != %v", run.start, gotRuns[run.id])
 		}
 	}
 }
@@ -1243,6 +1243,56 @@ func (s *workflowSuite) TestUpdate() {
 			},
 		},
 		10,
+	)
+}
+
+func (s *workflowSuite) TestUpdateNotRetroactive() {
+	s.runAcrossContinue(
+		[]workflowRun{
+			{
+				id:     "myid-2022-06-01T01:00:00Z",
+				start:  time.Date(2022, 6, 1, 1, 0, 0, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 1, 0, 30, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "newid-2022-06-01T01:07:20Z",
+				start:  time.Date(2022, 6, 1, 1, 7, 20, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 1, 7, 30, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+			{
+				id:     "newid-2022-06-01T01:07:40Z",
+				start:  time.Date(2022, 6, 1, 1, 7, 40, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 1, 7, 50, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				at: time.Date(2022, 6, 1, 1, 7, 10, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNameUpdate, &schedspb.FullUpdateRequest{
+						Schedule: &schedpb.Schedule{
+							Spec: &schedpb.ScheduleSpec{
+								Interval: []*schedpb.IntervalSpec{{
+									Interval: timestamp.DurationPtr(20 * time.Second),
+								}},
+							},
+							Action: s.defaultAction("newid"),
+						},
+					})
+				},
+			},
+		},
+		&schedpb.Schedule{
+			Spec: &schedpb.ScheduleSpec{
+				Interval: []*schedpb.IntervalSpec{{
+					Interval: timestamp.DurationPtr(1 * time.Hour),
+				}},
+			},
+		},
+		5,
 	)
 }
 
