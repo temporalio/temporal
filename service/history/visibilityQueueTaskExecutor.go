@@ -33,11 +33,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -436,7 +438,32 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		StartTime:   task.StartTime,
 		CloseTime:   task.CloseTime,
 	}
+	if t.shard.GetConfig().VisibilityProcessorEnsureCloseBeforeDelete() {
+		if t.isCloseExecutionVisibilityTaskPending(task) {
+			return consts.ErrDependencyTaskNotCompleted
+		}
+	}
 	return t.visibilityMgr.DeleteWorkflowExecution(ctx, request)
+}
+
+func (t *visibilityQueueTaskExecutor) isCloseExecutionVisibilityTaskPending(task *tasks.DeleteExecutionVisibilityTask) bool {
+	closeVisibilityTaskId := task.CloseVisibilityTaskID
+	// taskID == 0 if workflow still running in passive cluster or closed before this field was added (v1.17).
+	if closeVisibilityTaskId == 0 {
+		return false
+	}
+	// check if close execution visibility task is completed
+	visibilityQueueState, ok := t.shard.GetQueueState(tasks.CategoryVisibility)
+	if !ok {
+		// !ok means multi-cursor is not available, so we have to revert to using acks
+		visibilityQueueAckLevel := t.shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID
+		return closeVisibilityTaskId > visibilityQueueAckLevel
+	}
+	queryTask := &tasks.CloseExecutionVisibilityTask{
+		WorkflowKey: definition.NewWorkflowKey(task.GetNamespaceID(), task.GetWorkflowID(), task.GetRunID()),
+		TaskID:      closeVisibilityTaskId,
+	}
+	return !queues.IsTaskAcked(queryTask, visibilityQueueState)
 }
 
 func getWorkflowMemo(
