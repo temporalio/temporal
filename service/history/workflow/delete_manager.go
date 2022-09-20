@@ -146,9 +146,9 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 		}
 	}
 
-	closeVisibilityTaskId := ms.GetExecutionInfo().CloseVisibilityTaskId
+	closeExecutionVisibilityTaskID := ms.GetExecutionInfo().CloseVisibilityTaskId
 	closeVisibilityTaskCheckPassed := true
-	if closeVisibilityTaskId != 0 { // taskID == 0 if workflow still running in passive cluster or closed before this field was added (v1.17).
+	if closeExecutionVisibilityTaskID != 0 { // taskID == 0 if workflow still running in passive cluster or closed before this field was added (v1.17).
 		// check if close execution visibility task is completed
 		visibilityQueueState, ok := m.shard.GetQueueState(tasks.CategoryVisibility)
 		if !ok {
@@ -158,7 +158,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 		} else {
 			fakeCloseVisibiltyTask := &tasks.CloseExecutionVisibilityTask{
 				WorkflowKey: definition.NewWorkflowKey(nsID.String(), we.GetWorkflowId(), we.GetRunId()),
-				TaskID:      closeVisibilityTaskId,
+				TaskID:      closeExecutionVisibilityTaskID,
 			}
 			closeVisibilityTaskCheckPassed = queues.IsTaskAcked(fakeCloseVisibiltyTask, visibilityQueueState)
 		}
@@ -291,6 +291,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		currentBranchToken,
 		startTime,
 		closeTime,
+		ms.GetExecutionInfo().GetCloseVisibilityTaskId(),
 	); err != nil {
 		return err
 	}
