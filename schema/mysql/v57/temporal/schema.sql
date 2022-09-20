@@ -275,5 +275,3 @@ CREATE TABLE cluster_membership
     PRIMARY KEY (membership_partition, host_id)
 );
 
-CREATE TABLE foo (name TEXT);
-

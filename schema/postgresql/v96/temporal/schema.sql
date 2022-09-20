@@ -275,5 +275,3 @@ CREATE INDEX cm_idx_rolelasthb ON cluster_membership (role, last_heartbeat);
 CREATE INDEX cm_idx_rpchost ON cluster_membership (rpc_address, role);
 CREATE INDEX cm_idx_lasthb ON cluster_membership (last_heartbeat);
 CREATE INDEX cm_idx_recordexpiry ON cluster_membership (record_expiry);
-
-CREATE TABLE foo (name TEXT);
