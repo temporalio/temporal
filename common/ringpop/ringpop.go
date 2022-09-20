@@ -122,7 +122,7 @@ func (factory *ringpopFactory) getMembership() (membership.Monitor, error) {
 			factory.logger.Fatal("Failed to get current cluster ID", tag.Error(err))
 		}
 		ringpopAppName := "temporal"
-		if currentClusterMetadata.IncludeCurrentClusterId {
+		if currentClusterMetadata.UseClusterIdMembership {
 			ringpopAppName = fmt.Sprintf("temporal-%s", currentClusterMetadata.GetClusterId())
 		}
 		if rp, err := ringpop.New(ringpopAppName, ringpop.Channel(factory.getTChannel()), ringpop.AddressResolverFunc(factory.broadcastAddressResolver)); err != nil {

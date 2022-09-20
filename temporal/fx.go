@@ -637,7 +637,7 @@ func ApplyClusterMetadataConfigProvider(
 					InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
 					IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
 					IsConnectionEnabled:      clusterInfo.Enabled,
-					IncludeCurrentClusterId:  true, // Enable this for new cluster after 1.19. This is to prevent two cluster membership joined into one App.
+					UseClusterIdMembership:   true, // Enable this for new cluster after 1.19. This is to prevent two clusters join into one ring.
 				},
 			})
 		if err != nil {
