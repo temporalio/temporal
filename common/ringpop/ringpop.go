@@ -25,6 +25,7 @@
 package ringpop
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -116,7 +117,15 @@ func (factory *ringpopFactory) GetMembershipMonitor() (membership.Monitor, error
 func (factory *ringpopFactory) getMembership() (membership.Monitor, error) {
 	var err error
 	factory.monOnce.Do(func() {
-		if rp, err := ringpop.New("temporal", ringpop.Channel(factory.getTChannel()), ringpop.AddressResolverFunc(factory.broadcastAddressResolver)); err != nil {
+		currentClusterMetadata, err := factory.metadataManager.GetCurrentClusterMetadata(context.Background())
+		if err != nil {
+			factory.logger.Fatal("Failed to get current cluster ID", tag.Error(err))
+		}
+		ringpopAppName := "temporal"
+		if currentClusterMetadata.IncludeCurrentClusterId {
+			ringpopAppName = fmt.Sprintf("temporal-%s", currentClusterMetadata.GetClusterId())
+		}
+		if rp, err := ringpop.New(ringpopAppName, ringpop.Channel(factory.getTChannel()), ringpop.AddressResolverFunc(factory.broadcastAddressResolver)); err != nil {
 			factory.logger.Fatal("Failed to get new ringpop", tag.Error(err))
 		} else {
 			mrp := membership.NewRingPop(rp, factory.config.MaxJoinDuration, factory.logger)
