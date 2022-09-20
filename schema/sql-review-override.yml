@@ -1,0 +1,35 @@
+# You can configure and generate this file in https://www.bytebase.com/sql-review-guide
+template: bb.sql-review.prod # Need to provide the template id
+ruleList:
+  - type: table.require-pk
+    level: ERROR
+  - type: naming.table
+    level: ERROR
+    payload:
+      format: "^[a-z]+(_[a-z]+)*[a-z]$"
+  - type: naming.column
+    level: ERROR
+    payload:
+      maxLength: 32
+  - type: naming.index.uk
+    level: ERROR
+    payload:
+      format: ^$|^[a-z]+_idx_[a-z]+$
+      maxLength: 32
+  - type: naming.index.pk
+    level: ERROR
+    payload:
+      format: ^$|^[a-z]+_idx_[a-z]+$
+      maxLength: 32
+  - type: naming.index.idx
+    level: ERROR
+    payload:
+      format: ^$|^[a-z]+_idx_[a-z]+$
+      maxLength: 32
+  - type: naming.index.fk
+    level: ERROR
+    payload:
+      format: ^$|^[a-z]+_idx_[a-z]+$
+      maxLength: 32
+  - type: column.required
+    level: DISABLED
