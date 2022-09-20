@@ -356,10 +356,8 @@ func (c *ControllerImpl) acquireShards() {
 
 		ctx, cancel := context.WithTimeout(context.Background(), shardIOTimeout)
 		defer cancel()
-		if err := shard.AssertOwnership(ctx); IsShardOwnershipLostError(err) {
-			c.CloseShardByID(shardID)
-			return
-		}
+		// trust the AssertOwnership will handle shard ownership lost
+		_ = shard.AssertOwnership(ctx)
 
 		// Wait up to 1s for the shard to acquire the rangeid lock.
 		// After 1s we will move on but the shard will continue trying in the background.
