@@ -82,7 +82,7 @@ var (
 	// across multiple submissions to scheduler
 	reschedulePolicy                      = common.CreateTaskReschedulePolicy()
 	taskNotReadyReschedulePolicy          = common.CreateTaskNotReadyReschedulePolicy()
-	taskResourceExhuastedReschedulePolicy = common.CreateTaskNotReadyReschedulePolicy()
+	taskResourceExhuastedReschedulePolicy = common.CreateTaskResourceExhaustedReschedulePolicy()
 )
 
 const (
@@ -455,7 +455,7 @@ func (e *executableImpl) rescheduleTime(
 		// using a different reschedule policy to slow down retry
 		// as the error means mutable state is not ready to handle the task,
 		// need to wait for replication.
-		e.timeSource.Now().Add(taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt))
+		return e.timeSource.Now().Add(taskNotReadyReschedulePolicy.ComputeNextDelay(0, attempt))
 	}
 
 	backoff := reschedulePolicy.ComputeNextDelay(0, attempt)
