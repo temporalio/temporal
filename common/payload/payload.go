@@ -86,10 +86,13 @@ func MergeMapOfPayload(
 	m1 map[string]*commonpb.Payload,
 	m2 map[string]*commonpb.Payload,
 ) map[string]*commonpb.Payload {
-	if m1 == nil {
-		return maps.Clone(m2)
+	if m2 == nil {
+		return maps.Clone(m1)
 	}
 	ret := maps.Clone(m1)
+	if ret == nil {
+		ret = make(map[string]*commonpb.Payload)
+	}
 	for k, v := range m2 {
 		if proto.Equal(v, nilPayload) || proto.Equal(v, emptySlicePayload) {
 			delete(ret, k)
