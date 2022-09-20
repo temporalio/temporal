@@ -328,6 +328,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 			},
 			PreviousRangeID: 5,
 		}).Return(nil)
+		s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	}
 
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
