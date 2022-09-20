@@ -31,7 +31,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
-	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -823,7 +822,7 @@ func (s *scheduler) addSearchAttributes(
 	attributes *commonpb.SearchAttributes,
 	nominal time.Time,
 ) *commonpb.SearchAttributes {
-	fields := maps.Clone(attributes.GetIndexedFields())
+	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
 	if p, err := payload.Encode(nominal); err == nil {
 		fields[searchattribute.TemporalScheduledStartTime] = p
 	}

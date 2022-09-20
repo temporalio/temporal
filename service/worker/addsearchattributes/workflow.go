@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/util"
 )
 
 const (
@@ -173,7 +174,7 @@ func (a *activities) UpdateClusterMetadataActivity(ctx context.Context, params W
 		return fmt.Errorf("%w: %v", ErrUnableToGetSearchAttributes, err)
 	}
 
-	newCustomSearchAttributes := maps.Clone(oldSearchAttributes.Custom())
+	newCustomSearchAttributes := util.CloneMapNonNil(oldSearchAttributes.Custom())
 	maps.Copy(newCustomSearchAttributes, params.CustomAttributesToAdd)
 	err = a.saManager.SaveSearchAttributes(ctx, params.IndexName, newCustomSearchAttributes)
 	if err != nil {

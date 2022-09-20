@@ -1333,6 +1333,35 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecutionSearchAttribu
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}
 	s.True(verified)
+
+	// verify search attributes from DescribeWorkflowExecution
+	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+		},
+	}
+	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
+	s.NoError(err)
+	expectedSearchAttributes, _ := searchattribute.Encode(
+		map[string]interface{}{
+			"CustomDoubleField":             22.0878,
+			searchattribute.BinaryChecksums: []string{"binary-v1", "binary-v2"},
+		},
+		nil,
+	)
+	s.Equal(
+		len(expectedSearchAttributes.GetIndexedFields()),
+		len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()),
+	)
+	for attrName, expectedPayload := range expectedSearchAttributes.GetIndexedFields() {
+		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
+		s.True(ok)
+		s.Equal(expectedPayload.GetData(), respAttr.GetData())
+		attrType, typeSet := respAttr.GetMetadata()[searchattribute.MetadataType]
+		s.True(typeSet)
+		s.True(len(attrType) > 0)
+	}
 }
 
 func (s *elasticsearchIntegrationSuite) TestModifyWorkflowExecutionProperties() {
