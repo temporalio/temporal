@@ -97,6 +97,10 @@ const (
 	taskNotReadyRescheduleBackoffCoefficient = 1.5
 	taskNotReadyRescheduleMaxInterval        = 3 * time.Minute
 
+	dependencyTaskNotCompletedRescheduleInitialInterval    = 10 * time.Second
+	dependencyTaskNotCompletedRescheduleBackoffCoefficient = 1.5
+	dependencyTaskNotCompletedRescheduleMaxInterval        = 3 * time.Minute
+
 	taskResourceExhaustedRescheduleInitialInterval    = 3 * time.Second
 	taskResourceExhaustedRescheduleBackoffCoefficient = 1.5
 	taskResourceExhaustedRescheduleMaxInterval        = 5 * time.Minute
@@ -231,6 +235,15 @@ func CreateTaskReschedulePolicy() backoff.RetryPolicy {
 	return backoff.NewExponentialRetryPolicy(taskRescheduleInitialInterval).
 		WithBackoffCoefficient(taskRescheduleBackoffCoefficient).
 		WithMaximumInterval(taskRescheduleMaxInterval).
+		WithExpirationInterval(backoff.NoInterval)
+}
+
+// CreateDependencyTaskNotCompletedReschedulePolicy creates a retry policy for rescheduling task with
+// ErrDependencyTaskNotCompleted
+func CreateDependencyTaskNotCompletedReschedulePolicy() backoff.RetryPolicy {
+	return backoff.NewExponentialRetryPolicy(dependencyTaskNotCompletedRescheduleInitialInterval).
+		WithBackoffCoefficient(dependencyTaskNotCompletedRescheduleBackoffCoefficient).
+		WithMaximumInterval(dependencyTaskNotCompletedRescheduleMaxInterval).
 		WithExpirationInterval(backoff.NoInterval)
 }
 

@@ -139,6 +139,14 @@ func (s *executableSuite) TestHandleErr_ErrTaskRetry() {
 	s.Equal(consts.ErrTaskRetry, executable.HandleErr(consts.ErrTaskRetry))
 }
 
+func (s *executableSuite) TestHandleErr_ErrDeleteOpenExecution() {
+	executable := s.newTestExecutable(func(_ tasks.Task) bool {
+		return true
+	})
+
+	s.Equal(consts.ErrDependencyTaskNotCompleted, executable.HandleErr(consts.ErrDependencyTaskNotCompleted))
+}
+
 func (s *executableSuite) TestHandleErr_ErrTaskDiscarded() {
 	executable := s.newTestExecutable(func(_ tasks.Task) bool {
 		return true
@@ -204,10 +212,16 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 		return true
 	})
 
-	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now()))
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).MinTimes(1)
 
-	executable.Nack(consts.ErrTaskRetry) // this error won't trigger re-submit
-	s.Equal(ctasks.TaskStatePending, executable.State())
+	s.Run("ErrTaskRetry", func() {
+		executable.Nack(consts.ErrTaskRetry) // this error won't trigger re-submit
+		s.Equal(ctasks.TaskStatePending, executable.State())
+	})
+	s.Run("ErrDeleteOpenExecErr", func() {
+		executable.Nack(consts.ErrDependencyTaskNotCompleted) // this error won't trigger re-submit
+		s.Equal(ctasks.TaskStatePending, executable.State())
+	})
 }
 
 func (s *executableSuite) TestTaskCancellation() {
