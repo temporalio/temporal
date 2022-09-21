@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -46,7 +47,8 @@ import (
 )
 
 const (
-	defaultMaxJoinDuration = 10 * time.Second
+	defaultMaxJoinDuration      = 10 * time.Second
+	persistenceOperationTimeout = 10 * time.Second
 )
 
 var (
@@ -117,7 +119,11 @@ func (factory *ringpopFactory) GetMembershipMonitor() (membership.Monitor, error
 func (factory *ringpopFactory) getMembership() (membership.Monitor, error) {
 	var err error
 	factory.monOnce.Do(func() {
-		currentClusterMetadata, err := factory.metadataManager.GetCurrentClusterMetadata(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), persistenceOperationTimeout)
+		defer cancel()
+		ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+
+		currentClusterMetadata, err := factory.metadataManager.GetCurrentClusterMetadata(ctx)
 		if err != nil {
 			factory.logger.Fatal("Failed to get current cluster ID", tag.Error(err))
 		}
