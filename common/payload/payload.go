@@ -64,8 +64,10 @@ func ToString(p *commonpb.Payload) string {
 }
 
 // MergeMapOfPayload returns a new map resulting from merging map `src` into `dst`.
-// If a key in `src` already exists in `dst`, then the value in `src` replaces the value in `dst`.
-// If the new payload in `src` have nil data or an empty slice data, then it deletes the key.
+// If a key in `src` already exists in `dst`, then the value in `src` replaces
+// the value in `dst`.
+// If a key in `src` has nil or empty slice payload value, then it deletes
+// the key from `dst` if it exists.
 // For example:
 //
 //	dst := map[string]*commonpb.Payload{
