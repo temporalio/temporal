@@ -71,7 +71,7 @@ var (
 )
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).StateValidationIntercept
-var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).SizeValidationIntercept
+var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).LengthValidationIntercept
 
 func NewNamespaceValidatorInterceptor(
 	namespaceRegistry namespace.Registry,
@@ -86,7 +86,7 @@ func NewNamespaceValidatorInterceptor(
 	}
 }
 
-func (ni *NamespaceValidatorInterceptor) SizeValidationIntercept(
+func (ni *NamespaceValidatorInterceptor) LengthValidationIntercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
