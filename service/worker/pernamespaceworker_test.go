@@ -124,7 +124,7 @@ func (s *perNsWorkerManagerSuite) TestDisabled() {
 	time.Sleep(50 * time.Millisecond)
 }
 
-func (s *perNsWorkerManagerSuite) TestInActive() {
+func (s *perNsWorkerManagerSuite) TestInactive() {
 	ns := testInactiveNS("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
 
 	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
