@@ -167,7 +167,6 @@ func GrpcServerOptionsProvider(
 		rpc.ServiceErrorInterceptor,
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
-		retryableInterceptor.Intercept,
 		telemetryInterceptor.Intercept,
 		namespaceValidatorInterceptor.Intercept,
 		namespaceCountLimiterInterceptor.Intercept,
@@ -186,6 +185,8 @@ func GrpcServerOptionsProvider(
 	if len(customInterceptors) > 0 {
 		interceptors = append(interceptors, customInterceptors...)
 	}
+	// retry interceptor should be the last as other interceptors may modify context values
+	interceptors = append(interceptors, retryableInterceptor.Intercept)
 
 	return append(
 		grpcServerOptions,
