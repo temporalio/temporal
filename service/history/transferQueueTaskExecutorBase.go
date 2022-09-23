@@ -261,7 +261,17 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 		return err
 	}
 
+	// Here, we ensure that the workflow is closed successfully before deleting it. Otherwise, the mutable state
+	// might be deleted before the close task is executed, and so the close task will be dropped. In passive cluster,
+	// this check can be ignored.
+	//
+	// Additionally, this function itself could be called from within the close execution task, so we need to skip
+	// the check in that case because the close execution task would be waiting for itself to finish forever. So, the
+	// ensureNoPendingCloseTask flag is set iff we're running in the active cluster, and we aren't processing the
+	// CloseExecutionTask from within this same goroutine.
 	if ensureNoPendingCloseTask {
+		// Unfortunately, queue states/ack levels are updated with delay (default 30s), therefore this could fail if the
+		// workflow was closed before the queue state/ack levels were updated, so we return a retryable error.
 		if t.isCloseExecutionTaskPending(mutableState, weCtx) {
 			return consts.ErrDependencyTaskNotCompleted
 		}

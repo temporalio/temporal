@@ -97,7 +97,10 @@ const (
 	taskNotReadyRescheduleBackoffCoefficient = 1.5
 	taskNotReadyRescheduleMaxInterval        = 3 * time.Minute
 
-	dependencyTaskNotCompletedRescheduleInitialInterval    = 10 * time.Second
+	// dependencyTaskNotCompletedRescheduleInitialInterval is lower than the interval the ack level most queues are
+	// updated at, which can lead to tasks being retried more frequently than they should be. If this becomes an issue,
+	// we should consider increasing this interval.
+	dependencyTaskNotCompletedRescheduleInitialInterval    = 3 * time.Second
 	dependencyTaskNotCompletedRescheduleBackoffCoefficient = 1.5
 	dependencyTaskNotCompletedRescheduleMaxInterval        = 3 * time.Minute
 

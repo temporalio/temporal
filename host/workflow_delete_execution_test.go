@@ -119,21 +119,13 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Competed() {
 
 	// Delete workflow executions.
 	for _, we := range wes {
-		var err error
-		for {
-			_, err = s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
-				Namespace: s.namespace,
-				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: we.WorkflowId,
-					RunId:      we.RunId,
-				},
-			})
-			if _, isNotReady := err.(*serviceerror.WorkflowNotReady); err == nil || !isNotReady {
-				break
-			}
-			// Overrides are defined in onebox.go:770 to iterate faster.
-			time.Sleep(500 * time.Millisecond)
-		}
+		_, err := s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: we.WorkflowId,
+				RunId:      we.RunId,
+			},
+		})
 		s.NoError(err)
 	}
 
@@ -147,7 +139,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Competed() {
 			})
 			if err == nil {
 				s.Logger.Warn("Execution not deleted yet")
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(2 * time.Second)
 				continue
 			}
 			var notFoundErr *serviceerror.NotFound
@@ -172,7 +164,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Competed() {
 			})
 			s.NoError(err)
 			if len(visibilityResponse.Executions) != 0 {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(2 * time.Second)
 				s.Logger.Warn("Visibility is not deleted yet")
 				continue
 			}
@@ -259,7 +251,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Running() {
 			})
 			if err == nil {
 				s.Logger.Warn("Execution not deleted yet")
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(2 * time.Second)
 				continue
 			}
 			var notFoundErr *serviceerror.NotFound
@@ -284,7 +276,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Running() {
 			})
 			s.NoError(err)
 			if len(visibilityResponse.Executions) != 0 {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(2 * time.Second)
 				s.Logger.Warn("Visibility is not deleted yet")
 				continue
 			}
@@ -359,20 +351,13 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 			},
 		})
 		s.NoError(err)
-		for {
-			_, err = s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
-				Namespace: s.namespace,
-				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: we.WorkflowId,
-					RunId:      we.RunId,
-				},
-			})
-			if _, isNotReady := err.(*serviceerror.WorkflowNotReady); err == nil || !isNotReady {
-				break
-			}
-			// Overrides are defined in onebox.go:770 to iterate faster.
-			time.Sleep(500 * time.Millisecond)
-		}
+		_, err = s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: we.WorkflowId,
+				RunId:      we.RunId,
+			},
+		})
 		s.NoError(err)
 	}
 
@@ -386,7 +371,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 			})
 			if err == nil {
 				s.Logger.Warn("Execution not deleted yet")
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(2 * time.Second)
 				continue
 			}
 			var notFoundErr *serviceerror.NotFound
@@ -411,7 +396,7 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_RunningWithTerminate() {
 			})
 			s.NoError(err)
 			if len(visibilityResponse.Executions) != 0 {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(2 * time.Second)
 				s.Logger.Warn("Visibility is not deleted yet")
 				continue
 			}
