@@ -165,9 +165,9 @@ func GrpcServerOptionsProvider(
 	interceptors := []grpc.UnaryServerInterceptor{
 		// Service Error Interceptor should be the most outer interceptor on error handling
 		rpc.ServiceErrorInterceptor,
+		namespaceValidatorInterceptor.SizeValidationIntercept,
 		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
-		namespaceValidatorInterceptor.Intercept,
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		telemetryInterceptor.Intercept,
 		authorization.NewAuthorizationInterceptor(
@@ -177,6 +177,7 @@ func GrpcServerOptionsProvider(
 			logger,
 			audienceGetter,
 		),
+		namespaceValidatorInterceptor.StateValidationIntercept,
 		namespaceCountLimiterInterceptor.Intercept,
 		namespaceRateLimiterInterceptor.Intercept,
 		rateLimitInterceptor.Intercept,
@@ -312,6 +313,7 @@ func NamespaceValidatorInterceptorProvider(
 	return interceptor.NewNamespaceValidatorInterceptor(
 		namespaceRegistry,
 		serviceConfig.EnableTokenNamespaceEnforcement,
+		serviceConfig.MaxIDLengthLimit,
 	)
 }
 
