@@ -737,3 +737,42 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		BufferedEvents:      bufferedEvents,
 	}
 }
+
+func (s *mutableStateSuite) TestReplicateActivityTaskStartedEvent() {
+	state := s.buildWorkflowMutableState()
+
+	var err error
+	s.mutableState, err = newMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
+	s.NoError(err)
+
+	var scheduledEventID int64
+	var ai *persistencespb.ActivityInfo
+	for scheduledEventID, ai = range s.mutableState.GetPendingActivityInfos() {
+		break
+	}
+	s.Nil(ai.LastHeartbeatDetails)
+
+	now := time.Now()
+	version := int64(101)
+	requestID := "102"
+	eventID := int64(104)
+	attributes := &historypb.ActivityTaskStartedEventAttributes{
+		ScheduledEventId: scheduledEventID,
+		RequestId:        requestID,
+	}
+	err = s.mutableState.ReplicateActivityTaskStartedEvent(&historypb.HistoryEvent{
+		EventId:   eventID,
+		EventTime: &now,
+		Version:   version,
+		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
+			ActivityTaskStartedEventAttributes: attributes,
+		},
+	})
+	s.NoError(err)
+	s.Assert().Equal(version, ai.Version)
+	s.Assert().Equal(eventID, ai.StartedEventId)
+	s.NotNil(ai.StartedTime)
+	s.Assert().Equal(now, *ai.StartedTime)
+	s.Assert().Equal(requestID, ai.RequestId)
+	s.Assert().Nil(ai.LastHeartbeatDetails)
+}
