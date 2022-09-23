@@ -28,6 +28,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/server/common/util"
 	"golang.org/x/exp/maps"
 )
 
@@ -62,43 +63,42 @@ func ToString(p *commonpb.Payload) string {
 	return defaultDataConverter.ToString(p)
 }
 
-// MergeMapOfPayload returns a new map resulting from merging map m2 into m1.
-// If a key in m2 already exists in m1, then the value in m2 replaces the value in m1.
-// If the new payload have nil data or an empty slice data, then it deletes the key.
+// MergeMapOfPayload returns a new map resulting from merging map `src` into `dst`.
+// If a key in `src` already exists in `dst`, then the value in `src` replaces
+// the value in `dst`.
+// If a key in `src` has nil or empty slice payload value, then it deletes
+// the key from `dst` if it exists.
 // For example:
 //
-//	m1 := map[string]*commonpb.Payload{
+//	dst := map[string]*commonpb.Payload{
 //		"key1": EncodeString("value1"),
 //		"key2": EncodeString("value2"),
 //	}
-//	m2 := map[string]*commonpb.Payload{
+//	src := map[string]*commonpb.Payload{
 //		"key1": EncodeString("newValue1"),
 //		"key2": nilPayload,
 //	}
-//	m3 := MergeMapOfPayload(m1, m2)
+//	res := MergeMapOfPayload(dst, src)
 //
-// The resulting map `m3` is:
+// The resulting map `res` is:
 //
-//	m1 := map[string]*commonpb.Payload{
+//	map[string]*commonpb.Payload{
 //		"key1": EncodeString("newValue1"),
 //	}
 func MergeMapOfPayload(
-	m1 map[string]*commonpb.Payload,
-	m2 map[string]*commonpb.Payload,
+	dst map[string]*commonpb.Payload,
+	src map[string]*commonpb.Payload,
 ) map[string]*commonpb.Payload {
-	if m2 == nil {
-		return maps.Clone(m1)
+	if src == nil {
+		return maps.Clone(dst)
 	}
-	ret := maps.Clone(m1)
-	if ret == nil {
-		ret = make(map[string]*commonpb.Payload)
-	}
-	for k, v := range m2 {
+	res := util.CloneMapNonNil(dst)
+	for k, v := range src {
 		if proto.Equal(v, nilPayload) || proto.Equal(v, emptySlicePayload) {
-			delete(ret, k)
+			delete(res, k)
 		} else {
-			ret[k] = v
+			res[k] = v
 		}
 	}
-	return ret
+	return res
 }
