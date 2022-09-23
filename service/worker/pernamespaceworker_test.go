@@ -37,6 +37,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
@@ -91,7 +92,8 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 				return util.Max(1, map[string]int{"ns1": 1, "ns2": 2, "ns3": 3}[ns])
 			},
 		},
-		Components: []workercommon.PerNSWorkerComponent{s.cmp1, s.cmp2},
+		Components:      []workercommon.PerNSWorkerComponent{s.cmp1, s.cmp2},
+		ClusterMetadata: cluster.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
 	})
 	s.manager.initialRetry = 1 * time.Millisecond
 
@@ -116,6 +118,20 @@ func (s *perNsWorkerManagerSuite) TestDisabled() {
 	}).AnyTimes()
 	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
 		Enabled: false,
+	}).AnyTimes()
+
+	s.manager.namespaceCallback(ns, false)
+	time.Sleep(50 * time.Millisecond)
+}
+
+func (s *perNsWorkerManagerSuite) TestInActive() {
+	ns := testInactiveNS("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
+
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
+		Enabled: true,
+	}).AnyTimes()
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&workercommon.PerNSDedicatedWorkerOptions{
+		Enabled: true,
 	}).AnyTimes()
 
 	s.manager.namespaceCallback(ns, false)
@@ -402,7 +418,24 @@ func testns(name string, state enumspb.NamespaceState) *namespace.Namespace {
 			Name:  name,
 		},
 		nil,
-		"cluster",
+		cluster.TestCurrentClusterName,
+	)
+}
+
+func testInactiveNS(name string, state enumspb.NamespaceState) *namespace.Namespace {
+	return namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Id:    name,
+			State: state,
+			Name:  name,
+		},
+		nil,
+		true,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName, // not active
+			Clusters:          cluster.TestAllClusterNames,
+		},
+		0,
 	)
 }
 
