@@ -25,7 +25,10 @@
 package scheduler
 
 import (
+	"errors"
+	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/dgryski/go-farm"
@@ -64,17 +67,13 @@ func NewCompiledSpec(spec *schedpb.ScheduleSpec) (*CompiledSpec, error) {
 	// compile StructuredCalendarSpecs
 	ccs := make([]*compiledCalendar, len(spec.StructuredCalendar))
 	for i, structured := range spec.StructuredCalendar {
-		if ccs[i], err = newCompiledCalendar(structured, tz); err != nil {
-			return nil, err
-		}
+		ccs[i] = newCompiledCalendar(structured, tz)
 	}
 
 	// compile excludes
 	excludes := make([]*compiledCalendar, len(spec.ExcludeStructuredCalendar))
 	for i, excal := range spec.ExcludeStructuredCalendar {
-		if excludes[i], err = newCompiledCalendar(excal, tz); err != nil {
-			return nil, err
-		}
+		excludes[i] = newCompiledCalendar(excal, tz)
 	}
 
 	cspec := &CompiledSpec{
@@ -94,7 +93,7 @@ func canonicalizeSpec(spec *schedpb.ScheduleSpec) (*schedpb.ScheduleSpec, error)
 
 	// parse CalendarSpecs to StructuredCalendarSpecs
 	for _, cal := range spec.Calendar {
-		structured, err := parseCalendarToStrucured(cal)
+		structured, err := parseCalendarToStructured(cal)
 		if err != nil {
 			return nil, err
 		}
@@ -104,7 +103,7 @@ func canonicalizeSpec(spec *schedpb.ScheduleSpec) (*schedpb.ScheduleSpec, error)
 
 	// parse ExcludeCalendars
 	for _, cal := range spec.ExcludeCalendar {
-		structured, err := parseCalendarToStrucured(cal)
+		structured, err := parseCalendarToStructured(cal)
 		if err != nil {
 			return nil, err
 		}
@@ -144,6 +143,13 @@ func canonicalizeSpec(spec *schedpb.ScheduleSpec) (*schedpb.ScheduleSpec, error)
 		}
 	}
 
+	// validate structured calendar
+	for _, structured := range spec.StructuredCalendar {
+		if err := validateStructuredCalendar(structured); err != nil {
+			return nil, err
+		}
+	}
+
 	// validate intervals
 	for _, interval := range spec.Interval {
 		if err := validateInterval(interval); err != nil {
@@ -154,10 +160,56 @@ func canonicalizeSpec(spec *schedpb.ScheduleSpec) (*schedpb.ScheduleSpec, error)
 	return spec, nil
 }
 
+func validateStructuredCalendar(scs *schedpb.StructuredCalendarSpec) error {
+	var errs []string
+
+	checkRanges := func(ranges []*schedpb.Range, field string, min, max int32) {
+		for _, r := range ranges {
+			if r == nil { // shouldn't happen
+				errs = append(errs, "range is nil")
+				continue
+			}
+			if r.Start < min || r.Start > max {
+				errs = append(errs, fmt.Sprintf("%s Start is not in range [%d-%d]", field, min, max))
+			}
+			if r.End != 0 && (r.End < r.Start || r.End > max) {
+				errs = append(errs, fmt.Sprintf("%s End is before Start or not in range [%d-%d]", field, min, max))
+			}
+			if r.Step < 0 {
+				errs = append(errs, fmt.Sprintf("%s has invalid Step", field))
+			}
+		}
+	}
+
+	checkRanges(scs.Second, "Second", 0, 59)
+	checkRanges(scs.Minute, "Minute", 0, 59)
+	checkRanges(scs.Hour, "Hour", 0, 23)
+	checkRanges(scs.DayOfMonth, "DayOfMonth", 1, 31)
+	checkRanges(scs.Month, "Month", 1, 12)
+	checkRanges(scs.Year, "Year", minCalendarYear, maxCalendarYear)
+	checkRanges(scs.DayOfWeek, "DayOfWeek", 0, 6)
+
+	if len(scs.Comment) > maxCommentLen {
+		errs = append(errs, "comment is too long")
+	}
+
+	if len(errs) > 0 {
+		return errors.New("invalid calendar spec: " + strings.Join(errs, ", "))
+	}
+	return nil
+}
+
 func validateInterval(i *schedpb.IntervalSpec) error {
-	iv, phase := timestamp.DurationValue(i.GetInterval()), timestamp.DurationValue(i.GetPhase())
-	if iv < time.Second || phase < 0 || phase >= iv {
-		return errMalformed
+	if i == nil {
+		return errors.New("Interval is nil")
+	}
+	iv, phase := timestamp.DurationValue(i.Interval), timestamp.DurationValue(i.Phase)
+	if iv < time.Second {
+		return errors.New("Interval is too small")
+	} else if phase < 0 {
+		return errors.New("Phase is negative")
+	} else if phase >= iv {
+		return errors.New("Phase cannot be greater than Interval")
 	}
 	return nil
 }

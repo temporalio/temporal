@@ -961,7 +961,7 @@ func (s *workflowSuite) TestCompileError() {
 	// written using low-level mocks since it sleeps forever
 
 	s.env.RegisterDelayedCallback(func() {
-		s.Contains(s.describe().Info.InvalidScheduleError, "invalid syntax")
+		s.Contains(s.describe().Info.InvalidScheduleError, "Month is not in range [1-12]")
 	}, 1*time.Minute)
 
 	s.run(&schedpb.Schedule{
