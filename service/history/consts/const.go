@@ -44,6 +44,8 @@ var (
 	ErrTaskDiscarded = errors.New("passive task pending for too long")
 	// ErrTaskRetry is the error indicating that the standby timer / transfer task should be retried since condition in mutable state is not met.
 	ErrTaskRetry = errors.New("passive task should retry due to condition in mutable state is not met")
+	// ErrDependencyTaskNotCompleted is the error returned when a task this task depends on is not completed yet
+	ErrDependencyTaskNotCompleted = errors.New("can't delete execution which is still open")
 	// ErrDuplicate is exported temporarily for integration test
 	ErrDuplicate = errors.New("duplicate task, completing it")
 	// ErrLocateCurrentWorkflowExecution is the error returned when current workflow execution can't be located

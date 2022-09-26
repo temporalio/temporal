@@ -1962,7 +1962,7 @@ func (e *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		HeartbeatTimeout:        attributes.GetHeartbeatTimeout(),
 		CancelRequested:         false,
 		CancelRequestId:         common.EmptyEventID,
-		LastHeartbeatUpdateTime: timestamp.TimePtr(time.Time{}),
+		LastHeartbeatUpdateTime: nil,
 		TimerTaskStatus:         TimerTaskStatusNone,
 		TaskQueue:               attributes.TaskQueue.GetName(),
 		HasRetryPolicy:          attributes.RetryPolicy != nil,
@@ -2047,7 +2047,6 @@ func (e *MutableStateImpl) AddActivityTaskStartedEvent(
 	ai.StartedEventId = common.TransientEventID
 	ai.RequestId = requestID
 	ai.StartedTime = timestamp.TimePtr(e.timeSource.Now())
-	ai.LastHeartbeatUpdateTime = ai.StartedTime
 	ai.StartedIdentity = identity
 	if err := e.UpdateActivity(ai); err != nil {
 		return nil, err
@@ -2075,7 +2074,6 @@ func (e *MutableStateImpl) ReplicateActivityTaskStartedEvent(
 	ai.StartedEventId = event.GetEventId()
 	ai.RequestId = attributes.GetRequestId()
 	ai.StartedTime = event.GetEventTime()
-	ai.LastHeartbeatUpdateTime = ai.StartedTime
 	e.updateActivityInfos[ai.ScheduledEventId] = ai
 	return nil
 }

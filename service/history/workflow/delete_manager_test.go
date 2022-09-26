@@ -123,6 +123,10 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(&closeTime, nil)
+	closeExecutionVisibilityTaskID := int64(39)
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
+	})
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
@@ -134,6 +138,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		[]byte{22, 8, 78},
 		nil,
 		&closeTime,
+		closeExecutionVisibilityTaskID,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 
@@ -160,6 +165,10 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(&closeTime, nil)
+	closeExecutionVisibilityTaskID := int64(39)
+	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
+		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
+	})
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
@@ -171,6 +180,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		[]byte{22, 8, 78},
 		nil,
 		&closeTime,
+		closeExecutionVisibilityTaskID,
 	).Return(serviceerror.NewInternal("test error"))
 
 	err := s.deleteManager.DeleteWorkflowExecution(
@@ -193,8 +203,12 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
+	closeExecutionVisibilityTaskID := int64(39)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
-	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{StartTime: &now})
+	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
+		StartTime:             &now,
+		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
+	})
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
 		definition.WorkflowKey{
@@ -205,6 +219,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		[]byte{22, 8, 78},
 		&now,
 		nil,
+		closeExecutionVisibilityTaskID,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 

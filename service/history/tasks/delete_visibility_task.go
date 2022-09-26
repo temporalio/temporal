@@ -36,10 +36,10 @@ var _ Task = (*DeleteExecutionVisibilityTask)(nil)
 type (
 	DeleteExecutionVisibilityTask struct {
 		definition.WorkflowKey
-		VisibilityTimestamp   time.Time
-		TaskID                int64
-		Version               int64
-		CloseVisibilityTaskID int64
+		VisibilityTimestamp            time.Time
+		TaskID                         int64
+		Version                        int64
+		CloseExecutionVisibilityTaskID int64
 		// These two fields are needed for cassandra standard visibility.
 		// TODO (alex): Remove them when cassandra standard visibility is removed.
 		StartTime *time.Time
@@ -84,5 +84,5 @@ func (t *DeleteExecutionVisibilityTask) GetType() enumsspb.TaskType {
 }
 
 func (t *DeleteExecutionVisibilityTask) GetCloseVisibilityTaskID() int64 {
-	return t.CloseVisibilityTaskID
+	return t.CloseExecutionVisibilityTaskID
 }
