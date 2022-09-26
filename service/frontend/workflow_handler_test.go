@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -2261,7 +2262,7 @@ func (s *workflowHandlerSuite) TestListBatchOperations() {
 			_ context.Context,
 			request *manager.ListWorkflowExecutionsRequestV2,
 		) (*manager.ListWorkflowExecutionsResponse, error) {
-
+			s.True(strings.Contains(request.Query, searchattribute.TemporalNamespaceDivision))
 			return &manager.ListWorkflowExecutionsResponse{
 				Executions: []*workflowpb.WorkflowExecutionInfo{
 					{Execution: &commonpb.WorkflowExecution{
