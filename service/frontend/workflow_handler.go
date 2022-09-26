@@ -3757,7 +3757,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		Namespace:             primitives.SystemLocalNamespace,
 		WorkflowId:            request.GetJobId(),
 		WorkflowType:          &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: batcher.TaskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                 inputPayload,
 		Identity:              identity,
 		RequestId:             uuid.New(),
