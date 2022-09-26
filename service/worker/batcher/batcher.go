@@ -41,7 +41,7 @@ import (
 
 const (
 	// taskQueueName is the taskqueue name
-	taskQueueName = "temporal-sys-batcher-taskqueue"
+	TaskQueueName = "temporal-sys-batcher-taskqueue"
 )
 
 type (
@@ -81,7 +81,7 @@ func (s *Batcher) Start() error {
 		BackgroundActivityContext: ctx,
 	}
 	sdkClient := s.sdkClientFactory.GetSystemClient()
-	batchWorker := worker.New(sdkClient, taskQueueName, workerOpts)
+	batchWorker := worker.New(sdkClient, TaskQueueName, workerOpts)
 	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	batchWorker.RegisterActivity(&activities{
 		activityDeps: activityDeps{

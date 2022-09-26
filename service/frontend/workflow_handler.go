@@ -3708,10 +3708,6 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, serviceerror.NewUnavailable("Max concurrent batch operations is reached")
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
 	var identity string
 	var operationType string
 	var signalParams batcher.SignalParams
@@ -3755,13 +3751,13 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	// Add pre-define search attributes
 	var searchAttributes *commonpb.SearchAttributes
 	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.TemporalNamespaceDivision, payload.EncodeString(batcher.NamespaceDivision))
+	searchattribute.AddSearchAttribute(&searchAttributes, searchattribute.BatcherNamespace, payload.EncodeString(request.GetNamespace()))
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:             request.Namespace,
+		Namespace:             primitives.SystemLocalNamespace,
 		WorkflowId:            request.GetJobId(),
 		WorkflowType:          &commonpb.WorkflowType{Name: batcher.BatchWFTypeName},
-		TaskQueue:             &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: batcher.TaskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:                 inputPayload,
 		Identity:              identity,
 		RequestId:             uuid.New(),
@@ -3770,10 +3766,16 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		SearchAttributes:      searchAttributes,
 	}
 
-	_, err = wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC()))
+	sysNamespaceID, err := wh.namespaceRegistry.GetNamespaceID(primitives.SystemLocalNamespace)
 	if err != nil {
 		return nil, err
 	}
+
+	_, err = wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(sysNamespaceID.String(), startReq, nil, time.Now().UTC()))
+	if err != nil {
+		return nil, err
+	}
+
 	return &workflowservice.StartBatchOperationResponse{}, nil
 }
 
@@ -3801,7 +3803,7 @@ func (wh *WorkflowHandler) StopBatchOperation(
 	}
 
 	terminateReq := &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: request.GetNamespace(),
+		Namespace: primitives.SystemLocalNamespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: request.GetJobId(),
 		},
@@ -3947,7 +3949,7 @@ func (wh *WorkflowHandler) ListBatchOperations(
 	}
 
 	resp, err := wh.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace:     request.GetNamespace(),
+		Namespace:     primitives.SystemLocalNamespace,
 		PageSize:      int32(wh.config.VisibilityMaxPageSize(request.GetNamespace())),
 		NextPageToken: request.GetNextPageToken(),
 		Query:         fmt.Sprintf("%s = '%s'", searchattribute.WorkflowType, batcher.BatchWFTypeName),
