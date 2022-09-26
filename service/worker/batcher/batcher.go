@@ -39,11 +39,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 )
 
-const (
-	// taskQueueName is the taskqueue name
-	TaskQueueName = "temporal-sys-batcher-taskqueue"
-)
-
 type (
 	// Batcher is the background sub-system that execute workflow for batch operations
 	// It is also the context object that get's passed around within the scanner workflows / activities
@@ -81,7 +76,7 @@ func (s *Batcher) Start() error {
 		BackgroundActivityContext: ctx,
 	}
 	sdkClient := s.sdkClientFactory.GetSystemClient()
-	batchWorker := worker.New(sdkClient, TaskQueueName, workerOpts)
+	batchWorker := worker.New(sdkClient, primitives.PerNSWorkerTaskQueue, workerOpts)
 	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	batchWorker.RegisterActivity(&activities{
 		activityDeps: activityDeps{
