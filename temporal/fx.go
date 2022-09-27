@@ -744,12 +744,17 @@ func loadClusterInformationFromStore(ctx context.Context, config *config.Config,
 			InitialFailoverVersion: metadata.InitialFailoverVersion,
 			RPCAddress:             metadata.ClusterAddress,
 		}
-		if staticClusterMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok && metadata.ClusterName != config.ClusterMetadata.CurrentClusterName {
-			logger.Warn(
-				"ClusterInformation in ClusterMetadata config is deprecated. Please use TCTL tool to configure remote cluster connections",
-				tag.Key("clusterInformation"),
-				tag.IgnoredValue(staticClusterMetadata),
-				tag.Value(newMetadata))
+		if staticClusterMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
+			if metadata.ClusterName != config.ClusterMetadata.CurrentClusterName {
+				logger.Warn(
+					"ClusterInformation in ClusterMetadata config is deprecated. Please use TCTL tool to configure remote cluster connections",
+					tag.Key("clusterInformation"),
+					tag.IgnoredValue(staticClusterMetadata),
+					tag.Value(newMetadata))
+			} else {
+				newMetadata.RPCAddress = staticClusterMetadata.RPCAddress
+				logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, metadata.ClusterName))
+			}
 		}
 		config.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
 	}
