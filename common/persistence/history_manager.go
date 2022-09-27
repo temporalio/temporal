@@ -33,6 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/persistence/serialization"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -98,10 +99,25 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 		BranchId:  uuid.New(),
 		Ancestors: newAncestors,
 	}
+
+	// The above newBranchInfo is a lossy construction of the forked branch token from the original opaque branch token.
+	// It only initializes with the fields it understands, which may inadvertently discard other misc fields. The
+	// following is the replacement logic to correctly apply the updated fields into the original opaque branch token.
+	resp, err := m.UpdateHistoryBranchInfo(
+		ctx,
+		&UpdateHistoryBranchInfoRequest{
+			BranchToken: request.ForkBranchToken,
+			BranchInfo:  newBranchInfo,
+		})
+	if err != nil {
+		return nil, err
+	}
+
 	treeInfo := &persistencespb.HistoryTreeInfo{
-		BranchInfo: newBranchInfo,
-		ForkTime:   timestamp.TimeNowPtrUtc(),
-		Info:       request.Info,
+		BranchToken: resp.BranchToken,
+		BranchInfo:  newBranchInfo,
+		ForkTime:    timestamp.TimeNowPtrUtc(),
+		Info:        request.Info,
 	}
 
 	treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(treeInfo, enumspb.ENCODING_TYPE_PROTO3)
@@ -120,16 +136,6 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 	}
 
 	err = m.persistence.ForkHistoryBranch(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := m.UpdateHistoryBranchInfo(ctx,
-		&UpdateHistoryBranchInfoRequest{
-			BranchToken: request.ForkBranchToken,
-			BranchInfo:  newBranchInfo,
-		},
-	)
 	if err != nil {
 		return nil, err
 	}
@@ -171,13 +177,21 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 
 	// usedBranches record branches referenced by others
 	usedBranches := map[string]int64{}
-	for _, br := range historyTreeResp.Branches {
-		if br.BranchId == branch.BranchId {
+	for _, br := range historyTreeResp.BranchTokens {
+		resp, err := m.ParseHistoryBranchInfo(
+			ctx,
+			&ParseHistoryBranchInfoRequest{
+				BranchToken: br,
+			})
+		if err != nil {
+			return err
+		}
+		if resp.BranchInfo.BranchId == branch.BranchId {
 			// skip the target branch
 			continue
 		}
-		usedBranches[br.BranchId] = common.LastEventID
-		for _, ancestor := range br.Ancestors {
+		usedBranches[resp.BranchInfo.BranchId] = common.LastEventID
+		for _, ancestor := range resp.BranchInfo.Ancestors {
 			if curr, ok := usedBranches[ancestor.GetBranchId()]; !ok || curr < ancestor.GetEndNodeId() {
 				usedBranches[ancestor.GetBranchId()] = ancestor.GetEndNodeId()
 			}
@@ -334,15 +348,15 @@ func (m *executionManagerImpl) GetHistoryTree(
 	if err != nil {
 		return nil, err
 	}
-	branches := make([]*persistencespb.HistoryBranch, 0, len(resp.TreeInfos))
+	branchTokens := make([][]byte, 0, len(resp.TreeInfos))
 	for _, blob := range resp.TreeInfos {
-		br, err := m.serializer.HistoryTreeInfoFromBlob(NewDataBlob(blob.Data, blob.EncodingType.String()))
+		treeInfo, err := ToHistoryTreeInfo(m.serializer, NewDataBlob(blob.Data, blob.EncodingType.String()))
 		if err != nil {
 			return nil, err
 		}
-		branches = append(branches, br.BranchInfo)
+		branchTokens = append(branchTokens, treeInfo.BranchToken)
 	}
-	return &GetHistoryTreeResponse{Branches: branches}, nil
+	return &GetHistoryTreeResponse{BranchTokens: branchTokens}, nil
 }
 
 func (m *executionManagerImpl) getHistoryBranchInfo(
@@ -359,6 +373,35 @@ func (m *executionManagerImpl) getHistoryBranchInfo(
 		return nil, err
 	}
 	return resp.BranchInfo, err
+}
+
+func ToHistoryTreeInfo(serializer serialization.Serializer, blob *commonpb.DataBlob) (*persistencespb.HistoryTreeInfo, error) {
+	treeInfo, err := serializer.HistoryTreeInfoFromBlob(blob)
+	if err != nil {
+		return nil, err
+	}
+	// For existing data that was previously persisted with only branch info but without the opaque branch token,
+	// compute the missing branch token on the fly. Similarly, if only opaque branch token exists but without the branch
+	// info, then compute the missing branch info on the fly.
+	// TODO: Consider removing in the future, but this will be a forward/backward incompatible change for old data.
+	if treeInfo.BranchToken == nil {
+		blob, err := serializer.HistoryBranchToBlob(treeInfo.BranchInfo, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		treeInfo.BranchToken = blob.Data
+	} else if treeInfo.BranchInfo == nil {
+		branch, err := serializer.HistoryBranchFromBlob(NewDataBlob(treeInfo.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String()))
+		if err != nil {
+			return nil, err
+		}
+		treeInfo.BranchInfo = &persistencespb.HistoryBranch{
+			TreeId:    branch.TreeId,
+			BranchId:  branch.BranchId,
+			Ancestors: branch.Ancestors,
+		}
+	}
+	return treeInfo, nil
 }
 
 func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
@@ -430,9 +473,10 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	if req.IsNewBranch {
 		// TreeInfo is only needed for new branch
 		treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
-			BranchInfo: branch,
-			ForkTime:   timestamp.TimeNowPtrUtc(),
-			Info:       request.Info,
+			BranchToken: request.BranchToken,
+			BranchInfo:  branch,
+			ForkTime:    timestamp.TimeNowPtrUtc(),
+			Info:        request.Info,
 		}, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return nil, err
@@ -497,9 +541,10 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 	if req.IsNewBranch {
 		// TreeInfo is only needed for new branch
 		treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
-			BranchInfo: branch,
-			ForkTime:   timestamp.TimeNowPtrUtc(),
-			Info:       request.Info,
+			BranchToken: request.BranchToken,
+			BranchInfo:  branch,
+			ForkTime:    timestamp.TimeNowPtrUtc(),
+			Info:        request.Info,
 		}, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return nil, err
@@ -653,17 +698,14 @@ func (m *executionManagerImpl) GetAllHistoryTreeBranches(
 	}
 	branches := make([]HistoryBranchDetail, 0, len(resp.Branches))
 	for _, branch := range resp.Branches {
-		blob := NewDataBlob(branch.Data, branch.Encoding)
-		treeInfo, err := m.serializer.HistoryTreeInfoFromBlob(blob)
+		treeInfo, err := ToHistoryTreeInfo(m.serializer, NewDataBlob(branch.Data, branch.Encoding))
 		if err != nil {
 			return nil, err
 		}
-
 		branchDetail := HistoryBranchDetail{
-			TreeID:   branch.TreeID,
-			BranchID: branch.BranchID,
-			ForkTime: treeInfo.ForkTime,
-			Info:     treeInfo.Info,
+			BranchToken: treeInfo.BranchToken,
+			ForkTime:    treeInfo.ForkTime,
+			Info:        treeInfo.Info,
 		}
 		branches = append(branches, branchDetail)
 	}

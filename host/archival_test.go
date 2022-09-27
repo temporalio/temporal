@@ -197,7 +197,7 @@ func (s *integrationSuite) isHistoryDeleted(execution *commonpb.WorkflowExecutio
 	for i := 0; i < retryLimit; i++ {
 		resp, err := s.testCluster.testBase.ExecutionManager.GetHistoryTree(NewContext(), request)
 		s.NoError(err)
-		if len(resp.Branches) == 0 {
+		if len(resp.BranchTokens) == 0 {
 			return true
 		}
 		time.Sleep(retryBackoffTime)
