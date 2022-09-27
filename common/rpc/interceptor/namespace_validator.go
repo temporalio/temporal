@@ -39,7 +39,7 @@ import (
 )
 
 type (
-	// NamespaceValidatorInterceptor contains SizeValidationIntercept and StateValidationIntercept
+	// NamespaceValidatorInterceptor contains LengthValidationIntercept and StateValidationIntercept
 	NamespaceValidatorInterceptor struct {
 		namespaceRegistry               namespace.Registry
 		tokenSerializer                 common.TaskTokenSerializer
