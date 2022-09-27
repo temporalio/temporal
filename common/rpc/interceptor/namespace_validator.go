@@ -39,21 +39,18 @@ import (
 )
 
 type (
-	// NamespaceValidatorInterceptor validates:
-	// 1. Namespace is specified in task token if there is a `task_token` field.
-	// 2. Namespace is specified in request if there is a `namespace` field and no `task_token` field.
-	// 3. Namespace exists.
-	// 4. Namespace from request match namespace from task token, if check is enabled with dynamic config.
-	// 5. Namespace is in correct state.
+	// NamespaceValidatorInterceptor contains LengthValidationIntercept and StateValidationIntercept
 	NamespaceValidatorInterceptor struct {
 		namespaceRegistry               namespace.Registry
 		tokenSerializer                 common.TaskTokenSerializer
 		enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
+		maxNamespaceLength              dynamicconfig.IntPropertyFn
 	}
 )
 
 var (
 	ErrNamespaceNotSet            = serviceerror.NewInvalidArgument("Namespace not set on request.")
+	errNamespaceTooLong           = serviceerror.NewInvalidArgument("Namespace length exceeds limit.")
 	errNamespaceHandover          = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
 	errTaskTokenNotSet            = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errTaskTokenNamespaceMismatch = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
@@ -73,20 +70,46 @@ var (
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).StateValidationIntercept
+var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).LengthValidationIntercept
 
 func NewNamespaceValidatorInterceptor(
 	namespaceRegistry namespace.Registry,
 	enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn,
+	maxNamespaceLength dynamicconfig.IntPropertyFn,
 ) *NamespaceValidatorInterceptor {
 	return &NamespaceValidatorInterceptor{
 		namespaceRegistry:               namespaceRegistry,
 		tokenSerializer:                 common.NewProtoTaskTokenSerializer(),
 		enableTokenNamespaceEnforcement: enableTokenNamespaceEnforcement,
+		maxNamespaceLength:              maxNamespaceLength,
 	}
 }
 
-func (ni *NamespaceValidatorInterceptor) Intercept(
+func (ni *NamespaceValidatorInterceptor) LengthValidationIntercept(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+	reqWithNamespace, hasNamespace := req.(NamespaceNameGetter)
+	if hasNamespace {
+		namespaceName := namespace.Name(reqWithNamespace.GetNamespace())
+		if len(namespaceName) > ni.maxNamespaceLength() {
+			return nil, errNamespaceTooLong
+		}
+	}
+
+	return handler(ctx, req)
+}
+
+// StateValidationIntercept validates:
+// 1. Namespace is specified in task token if there is a `task_token` field.
+// 2. Namespace is specified in request if there is a `namespace` field and no `task_token` field.
+// 3. Namespace exists.
+// 4. Namespace from request match namespace from task token, if check is enabled with dynamic config.
+// 5. Namespace is in correct state.
+func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
