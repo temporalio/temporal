@@ -163,16 +163,13 @@ func GrpcServerOptionsProvider(
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
 	interceptors := []grpc.UnaryServerInterceptor{
-		namespaceLogInterceptor.Intercept,
+		// Service Error Interceptor should be the most outer interceptor on error handling
 		rpc.ServiceErrorInterceptor,
+		namespaceValidatorInterceptor.LengthValidationIntercept,
+		namespaceLogInterceptor.Intercept, // TODO: Deprecate this with a outer custom interceptor
 		grpc.UnaryServerInterceptor(traceInterceptor),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
-		retryableInterceptor.Intercept,
 		telemetryInterceptor.Intercept,
-		namespaceValidatorInterceptor.Intercept,
-		namespaceCountLimiterInterceptor.Intercept,
-		namespaceRateLimiterInterceptor.Intercept,
-		rateLimitInterceptor.Intercept,
 		authorization.NewAuthorizationInterceptor(
 			claimMapper,
 			authorizer,
@@ -180,12 +177,19 @@ func GrpcServerOptionsProvider(
 			logger,
 			audienceGetter,
 		),
+		namespaceValidatorInterceptor.StateValidationIntercept,
+		namespaceCountLimiterInterceptor.Intercept,
+		namespaceRateLimiterInterceptor.Intercept,
+		rateLimitInterceptor.Intercept,
 		sdkVersionInterceptor.Intercept,
 		callerInfoInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
+		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
 		interceptors = append(interceptors, customInterceptors...)
 	}
+	// retry interceptor should be the most inner interceptor
+	interceptors = append(interceptors, retryableInterceptor.Intercept)
 
 	return append(
 		grpcServerOptions,
@@ -309,6 +313,7 @@ func NamespaceValidatorInterceptorProvider(
 	return interceptor.NewNamespaceValidatorInterceptor(
 		namespaceRegistry,
 		serviceConfig.EnableTokenNamespaceEnforcement,
+		serviceConfig.MaxIDLengthLimit,
 	)
 }
 

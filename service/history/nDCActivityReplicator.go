@@ -266,7 +266,8 @@ func (r *nDCActivityReplicatorImpl) testActivity(
 	// activityInfo.Version == version & activityInfo.Attempt == attempt
 
 	// last heartbeat after existing heartbeat & should update activity
-	if activityInfo.LastHeartbeatUpdateTime != nil && activityInfo.LastHeartbeatUpdateTime.After(lastHeartbeatTime) {
+	if !timestamp.TimeValue(activityInfo.LastHeartbeatUpdateTime).IsZero() &&
+		activityInfo.LastHeartbeatUpdateTime.After(lastHeartbeatTime) {
 		// this should not retry, can be caused by out of order delivery
 		return false
 	}

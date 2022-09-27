@@ -102,9 +102,9 @@ func GrpcServerOptionsProvider(
 			grpc.UnaryServerInterceptor(tracingInterceptor),
 			metrics.NewServerMetricsContextInjectorInterceptor(),
 			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
-			retryableInterceptor.Intercept,
 			telemetryInterceptor.Intercept,
 			rateLimitInterceptor.Intercept,
+			retryableInterceptor.Intercept,
 		),
 	)
 }
