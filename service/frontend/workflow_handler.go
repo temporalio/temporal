@@ -4356,21 +4356,52 @@ func (wh *WorkflowHandler) validateBuildIdOrderingUpdate(
 ) error {
 	errstr := "request to update worker build id ordering requires:"
 	hadErr := false
+
+	checkIdLen := func(id string) {
+		if len(id) > wh.config.WorkerBuildIdSizeLimit() {
+			errstr += fmt.Sprintf(" Worker build IDs to be no larger than %v characters",
+				wh.config.WorkerBuildIdSizeLimit())
+			hadErr = true
+		}
+	}
+
 	if req.GetNamespace() == "" {
-		errstr += " `namespace` to be set"
+		errstr += " `namespace` to be set."
 		hadErr = true
 	}
 	if req.GetTaskQueue() == "" {
-		errstr += " `task_queue` to be set"
+		errstr += " `task_queue` to be set."
 		hadErr = true
 	}
-	if req.GetVersionId().GetWorkerBuildId() == "" {
-		errstr += " targeting a valid version identifier"
+	if req.GetOperation() == nil {
+		errstr += " an operation to be specified."
 		hadErr = true
 	}
-	if len(req.GetVersionId().GetWorkerBuildId()) > wh.config.WorkerBuildIdSizeLimit() {
-		errstr += fmt.Sprintf(" Worker build IDs to be no larger than %v characters", wh.config.WorkerBuildIdSizeLimit())
-		hadErr = true
+	if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdOrderingRequest_NewCompatibleVersion_); ok {
+		if x.NewCompatibleVersion.GetNewVersionId() == "" {
+			errstr += " `new_version_id` to be set."
+			hadErr = true
+		} else {
+			checkIdLen(x.NewCompatibleVersion.GetNewVersionId())
+		}
+		if x.NewCompatibleVersion.GetExistingCompatibleVersion() == "" {
+			errstr += " `existing_compatible_version` to be set."
+			hadErr = true
+		}
+	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdOrderingRequest_NewDefaultVersionId); ok {
+		if x.NewDefaultVersionId == "" {
+			errstr += " `new_default_major_version_id` to be set."
+			hadErr = true
+		} else {
+			checkIdLen(x.NewDefaultVersionId)
+		}
+	} else if x, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdOrderingRequest_ExistingVersionIdInSetToPromote); ok {
+		if x.ExistingVersionIdInSetToPromote == "" {
+			errstr += " `existing_version_id_in_set_to_promote` to be set."
+			hadErr = true
+		} else {
+			checkIdLen(x.ExistingVersionIdInSetToPromote)
+		}
 	}
 	if hadErr {
 		return serviceerror.NewInvalidArgument(errstr)

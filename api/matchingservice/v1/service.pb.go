@@ -94,7 +94,7 @@ var fileDescriptor_1a5c83076e651916 = []byte{
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
-var _ grpc.ClientConnInterface
+var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
@@ -146,10 +146,10 @@ type MatchingServiceClient interface {
 }
 
 type matchingServiceClient struct {
-	cc grpc.ClientConnInterface
+	cc *grpc.ClientConn
 }
 
-func NewMatchingServiceClient(cc grpc.ClientConnInterface) MatchingServiceClient {
+func NewMatchingServiceClient(cc *grpc.ClientConn) MatchingServiceClient {
 	return &matchingServiceClient{cc}
 }
 

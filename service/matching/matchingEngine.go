@@ -754,7 +754,7 @@ func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
 		return nil, err
 	}
 	return &matchingservice.GetWorkerBuildIdOrderingResponse{
-		Response: ToBuildIdOrderingResponse(verDat, int(req.GetRequest().GetMaxDepth())),
+		Response: ToBuildIdOrderingResponse(verDat, int(req.GetRequest().GetMaxSets())),
 	}, nil
 }
 
