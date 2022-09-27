@@ -3950,7 +3950,12 @@ func (wh *WorkflowHandler) ListBatchOperations(
 		Namespace:     request.GetNamespace(),
 		PageSize:      int32(wh.config.VisibilityMaxPageSize(request.GetNamespace())),
 		NextPageToken: request.GetNextPageToken(),
-		Query:         fmt.Sprintf("%s = '%s'", searchattribute.WorkflowType, batcher.BatchWFTypeName),
+		Query: fmt.Sprintf("%s = '%s' and %s='%s'",
+			searchattribute.WorkflowType,
+			batcher.BatchWFTypeName,
+			searchattribute.TemporalNamespaceDivision,
+			batcher.NamespaceDivision,
+		),
 	})
 	if err != nil {
 		return nil, err
