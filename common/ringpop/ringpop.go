@@ -25,6 +25,7 @@
 package ringpop
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -37,6 +38,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -45,7 +47,8 @@ import (
 )
 
 const (
-	defaultMaxJoinDuration = 10 * time.Second
+	defaultMaxJoinDuration      = 10 * time.Second
+	persistenceOperationTimeout = 10 * time.Second
 )
 
 var (
@@ -116,7 +119,19 @@ func (factory *ringpopFactory) GetMembershipMonitor() (membership.Monitor, error
 func (factory *ringpopFactory) getMembership() (membership.Monitor, error) {
 	var err error
 	factory.monOnce.Do(func() {
-		if rp, err := ringpop.New("temporal", ringpop.Channel(factory.getTChannel()), ringpop.AddressResolverFunc(factory.broadcastAddressResolver)); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), persistenceOperationTimeout)
+		defer cancel()
+		ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+
+		currentClusterMetadata, err := factory.metadataManager.GetCurrentClusterMetadata(ctx)
+		if err != nil {
+			factory.logger.Fatal("Failed to get current cluster ID", tag.Error(err))
+		}
+		ringpopAppName := "temporal"
+		if currentClusterMetadata.UseClusterIdMembership {
+			ringpopAppName = fmt.Sprintf("temporal-%s", currentClusterMetadata.GetClusterId())
+		}
+		if rp, err := ringpop.New(ringpopAppName, ringpop.Channel(factory.getTChannel()), ringpop.AddressResolverFunc(factory.broadcastAddressResolver)); err != nil {
 			factory.logger.Fatal("Failed to get new ringpop", tag.Error(err))
 		} else {
 			mrp := membership.NewRingPop(rp, factory.config.MaxJoinDuration, factory.logger)

@@ -101,7 +101,7 @@ type (
 		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
 		// Address indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
-		// private field to track cluster infomation updates
+		// private field to track cluster information updates
 		version int64
 	}
 
