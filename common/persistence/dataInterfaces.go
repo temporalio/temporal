@@ -766,6 +766,11 @@ type (
 		TreeID string
 		// optional: can specify BranchID or allow random UUID to be generated
 		BranchID *string
+
+		// optional: supply optionally configured workflow settings as hints
+		RunTimeout        *time.Duration
+		ExecutionTimeout  *time.Duration
+		RetentionDuration *time.Duration
 	}
 
 	NewHistoryBranchResponse struct {
