@@ -97,6 +97,7 @@ message NamespaceTaskAttributes {
     temporal.api.replication.v1.NamespaceReplicationConfig replication_config = 5;
     int64 config_version = 6;
     int64 failover_version = 7;
+    repeated temporal.api.replication.v1.FailoverStatus failover_history = 8;
 }
 
 message SyncShardStatusTaskAttributes {

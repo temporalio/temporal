@@ -399,6 +399,13 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := int64(1)
 	updateFailoverVersion := int64(59)
+	failoverTime := time.Now()
+	failoverHistory := []*replicationpb.FailoverStatus{
+		{
+			FailoverTime:    &failoverTime,
+			FailoverVersion: 999,
+		},
+	}
 	updateClusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: updateClusterActive,
@@ -430,6 +437,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 		ConfigVersion:   updateConfigVersion,
 		FailoverVersion: updateFailoverVersion,
+		FailoverHistory: failoverHistory,
 	}
 
 	s.namespaceReplicator.currentCluster = updateClusterStandby
@@ -464,6 +472,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: updateTask.ReplicationConfig.ActiveClusterName,
 				Clusters:          []string{updateClusterActive, updateClusterStandby},
+				FailoverHistory:   convertFailoverHistoryToPersistenceProto(failoverHistory),
 			},
 			ConfigVersion:               updateConfigVersion,
 			FailoverNotificationVersion: updateFailoverVersion,
