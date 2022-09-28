@@ -290,6 +290,7 @@ func (d *HandlerImpl) RegisterNamespace(
 		namespaceRequest.Namespace.ConfigVersion,
 		namespaceRequest.Namespace.FailoverVersion,
 		namespaceRequest.IsGlobalNamespace,
+		nil,
 	)
 	if err != nil {
 		return nil, err
@@ -330,8 +331,8 @@ func (d *HandlerImpl) ListNamespaces(
 			IsGlobalNamespace: namespace.IsGlobalNamespace,
 			FailoverVersion:   namespace.Namespace.FailoverVersion,
 		}
-		desc.NamespaceInfo, desc.Config, desc.ReplicationConfig =
-			d.createResponse(ctx,
+		desc.NamespaceInfo, desc.Config, desc.ReplicationConfig, desc.FailoverHistory =
+			d.createResponse(
 				namespace.Namespace.Info,
 				namespace.Namespace.Config,
 				namespace.Namespace.ReplicationConfig)
@@ -366,8 +367,8 @@ func (d *HandlerImpl) DescribeNamespace(
 		IsGlobalNamespace: resp.IsGlobalNamespace,
 		FailoverVersion:   resp.Namespace.FailoverVersion,
 	}
-	response.NamespaceInfo, response.Config, response.ReplicationConfig =
-		d.createResponse(ctx, resp.Namespace.Info, resp.Namespace.Config, resp.Namespace.ReplicationConfig)
+	response.NamespaceInfo, response.Config, response.ReplicationConfig, response.FailoverHistory =
+		d.createResponse(resp.Namespace.Info, resp.Namespace.Config, resp.Namespace.ReplicationConfig)
 	return response, nil
 }
 
@@ -615,6 +616,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		configVersion,
 		failoverVersion,
 		isGlobalNamespace,
+		failoverHistory,
 	)
 	if err != nil {
 		return nil, err
@@ -624,7 +626,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		IsGlobalNamespace: isGlobalNamespace,
 		FailoverVersion:   failoverVersion,
 	}
-	response.NamespaceInfo, response.Config, response.ReplicationConfig = d.createResponse(ctx, info, config, replicationConfig)
+	response.NamespaceInfo, response.Config, response.ReplicationConfig, _ = d.createResponse(info, config, replicationConfig)
 
 	d.logger.Info("Update namespace succeeded",
 		tag.WorkflowNamespace(info.Name),
@@ -682,11 +684,10 @@ func (d *HandlerImpl) DeprecateNamespace(
 }
 
 func (d *HandlerImpl) createResponse(
-	ctx context.Context,
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
-) (*namespacepb.NamespaceInfo, *namespacepb.NamespaceConfig, *replicationpb.NamespaceReplicationConfig) {
+) (*namespacepb.NamespaceInfo, *namespacepb.NamespaceConfig, *replicationpb.NamespaceReplicationConfig, []*replicationpb.FailoverStatus) {
 
 	infoResult := &namespacepb.NamespaceInfo{
 		Name:        info.Name,
@@ -719,7 +720,15 @@ func (d *HandlerImpl) createResponse(
 		Clusters:          clusters,
 	}
 
-	return infoResult, configResult, replicationConfigResult
+	var failoverHistory []*replicationpb.FailoverStatus
+	for _, entry := range replicationConfig.GetFailoverHistory() {
+		failoverHistory = append(failoverHistory, &replicationpb.FailoverStatus{
+			FailoverTime:    entry.GetFailoverTime(),
+			FailoverVersion: entry.GetFailoverVersion(),
+		})
+	}
+
+	return infoResult, configResult, replicationConfigResult, failoverHistory
 }
 
 func (d *HandlerImpl) mergeBadBinaries(
