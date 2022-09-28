@@ -144,7 +144,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 				},
 				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 					ActiveClusterName: clusterActive,
-					Clusters:          s.namespaceReplicator.convertClusterReplicationConfigToProto(clusters),
+					Clusters:          convertClusterReplicationConfigToProto(clusters),
 				},
 				ConfigVersion:   configVersion,
 				FailoverVersion: failoverVersion,
@@ -162,6 +162,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		configVersion,
 		failoverVersion,
 		isGlobalNamespace,
+		nil,
 	)
 	s.Nil(err)
 }
@@ -216,6 +217,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		configVersion,
 		failoverVersion,
 		isGlobalNamespace,
+		nil,
 	)
 	s.Nil(err)
 }
@@ -285,7 +287,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 				},
 				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 					ActiveClusterName: clusterActive,
-					Clusters:          s.namespaceReplicator.convertClusterReplicationConfigToProto(clusters),
+					Clusters:          convertClusterReplicationConfigToProto(clusters),
 				},
 				ConfigVersion:   configVersion,
 				FailoverVersion: failoverVersion},
@@ -302,6 +304,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		configVersion,
 		failoverVersion,
 		isGlobalNamespace,
+		nil,
 	)
 	s.Nil(err)
 }
@@ -355,6 +358,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		configVersion,
 		failoverVersion,
 		isGlobalNamespace,
+		nil,
 	)
 	s.Nil(err)
 }
@@ -424,7 +428,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 				},
 				ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 					ActiveClusterName: clusterActive,
-					Clusters:          s.namespaceReplicator.convertClusterReplicationConfigToProto(singleClusterList),
+					Clusters:          convertClusterReplicationConfigToProto(singleClusterList),
 				},
 				ConfigVersion:   configVersion,
 				FailoverVersion: failoverVersion},
@@ -441,6 +445,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 		configVersion,
 		failoverVersion,
 		isGlobalNamespace,
+		nil,
 	)
 	s.Nil(err)
 
@@ -454,6 +459,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 		configVersion,
 		failoverVersion,
 		isGlobalNamespace,
+		nil,
 	)
 	s.Nil(err)
 }

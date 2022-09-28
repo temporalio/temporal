@@ -296,6 +296,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 		request.Namespace.ReplicationConfig.ActiveClusterName = task.ReplicationConfig.GetActiveClusterName()
 		request.Namespace.FailoverVersion = task.GetFailoverVersion()
 		request.Namespace.FailoverNotificationVersion = notificationVersion
+		request.Namespace.ReplicationConfig.FailoverHistory = convertFailoverHistoryToPersistenceProto(task.GetFailoverHistory())
 	}
 
 	if !recordUpdated {
@@ -331,6 +332,17 @@ func convertClusterReplicationConfigFromProto(
 		output = append(output, clusterName)
 	}
 	return output
+}
+
+func convertFailoverHistoryToPersistenceProto(failoverHistory []*replicationpb.FailoverStatus) []*persistencespb.FailoverStatus {
+	var persistencePb []*persistencespb.FailoverStatus
+	for _, status := range failoverHistory {
+		persistencePb = append(persistencePb, &persistencespb.FailoverStatus{
+			FailoverTime:    status.GetFailoverTime(),
+			FailoverVersion: status.GetFailoverVersion(),
+		})
+	}
+	return persistencePb
 }
 
 func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceStatus(input enumspb.NamespaceState) error {
