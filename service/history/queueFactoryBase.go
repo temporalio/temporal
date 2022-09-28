@@ -33,10 +33,10 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -69,7 +69,7 @@ type (
 		Config            *configs.Config
 		TimeSource        clock.TimeSource
 		MetricsHandler    metrics.MetricsHandler
-		Logger            resource.SnTaggedLogger
+		Logger            log.SnTaggedLogger
 	}
 
 	QueueFactoryBase struct {

@@ -30,6 +30,7 @@ import (
 
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver/provider"
@@ -88,11 +89,12 @@ func ServiceProvider(
 	serviceConfig *configs.Config,
 	visibilityMgr manager.VisibilityManager,
 	handler *Handler,
-	logger resource.SnTaggedLogger,
+	logger log.SnTaggedLogger,
 	grpcListener net.Listener,
 	membershipMonitor membership.Monitor,
 	metricsHandler metrics.MetricsHandler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
+	healthServer *health.Server,
 ) *Service {
 	return NewService(
 		grpcServerOptions,
@@ -104,6 +106,7 @@ func ServiceProvider(
 		membershipMonitor,
 		metricsHandler,
 		faultInjectionDataStoreFactory,
+		healthServer,
 	)
 }
 

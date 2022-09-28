@@ -53,6 +53,7 @@ const (
 type (
 	Metadata interface {
 		common.Daemon
+		common.Pingable
 
 		// IsGlobalNamespaceEnabled whether the global namespace is enabled,
 		// this attr should be discarded when cross DC is made public
@@ -246,6 +247,32 @@ func (m *metadataImpl) Stop() {
 
 	m.refresher.Cancel()
 	<-m.refresher.Done()
+}
+
+func (m *metadataImpl) GetPingChecks() []common.PingCheck {
+	return []common.PingCheck{
+		{
+			Name: "cluster metadata lock",
+			// we don't do any persistence ops under clusterLock, use a short timeout
+			Timeout: 10 * time.Second,
+			Ping: func() []common.Pingable {
+				m.clusterLock.Lock()
+				m.clusterLock.Unlock()
+				return nil
+			},
+		},
+		{
+			Name: "cluster metadata callback lock",
+			// listeners get called under clusterCallbackLock, they may do some more work, but
+			// not persistence ops.
+			Timeout: 10 * time.Second,
+			Ping: func() []common.Pingable {
+				m.clusterCallbackLock.Lock()
+				m.clusterCallbackLock.Unlock()
+				return nil
+			},
+		},
+	}
 }
 
 func (m *metadataImpl) IsGlobalNamespaceEnabled() bool {

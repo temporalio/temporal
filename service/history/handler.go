@@ -38,7 +38,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.uber.org/fx"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -60,7 +59,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
@@ -105,8 +103,8 @@ type (
 		fx.In
 
 		Config                        *configs.Config
-		Logger                        resource.SnTaggedLogger
-		ThrottledLogger               resource.ThrottledLogger
+		Logger                        log.SnTaggedLogger
+		ThrottledLogger               log.ThrottledLogger
 		PersistenceExecutionManager   persistence.ExecutionManager
 		PersistenceShardManager       persistence.ShardManager
 		PersistenceVisibilityManager  manager.VisibilityManager
@@ -184,27 +182,6 @@ func (h *Handler) Stop() {
 
 func (h *Handler) isStopped() bool {
 	return atomic.LoadInt32(&h.status) == common.DaemonStatusStopped
-}
-
-// Check is from: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	h.logger.Debug("History service health check endpoint (gRPC) reached.")
-
-	h.startWG.Wait()
-
-	if request.Service != serviceName {
-		return &healthpb.HealthCheckResponse{
-			Status: healthpb.HealthCheckResponse_SERVICE_UNKNOWN,
-		}, nil
-	}
-
-	hs := &healthpb.HealthCheckResponse{
-		Status: healthpb.HealthCheckResponse_SERVING,
-	}
-	return hs, nil
-}
-func (h *Handler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
-	return serviceerror.NewUnimplemented("Watch is not implemented.")
 }
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.

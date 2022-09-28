@@ -32,6 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	common "go.temporal.io/server/common"
 	namespace "go.temporal.io/server/common/namespace"
 )
 
@@ -68,6 +69,20 @@ func (m *MockController) CloseShardByID(shardID int32) {
 func (mr *MockControllerMockRecorder) CloseShardByID(shardID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShardByID", reflect.TypeOf((*MockController)(nil).CloseShardByID), shardID)
+}
+
+// GetPingChecks mocks base method.
+func (m *MockController) GetPingChecks() []common.PingCheck {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPingChecks")
+	ret0, _ := ret[0].([]common.PingCheck)
+	return ret0
+}
+
+// GetPingChecks indicates an expected call of GetPingChecks.
+func (mr *MockControllerMockRecorder) GetPingChecks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPingChecks", reflect.TypeOf((*MockController)(nil).GetPingChecks))
 }
 
 // GetShardByID mocks base method.

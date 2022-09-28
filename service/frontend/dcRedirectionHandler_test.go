@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/resourcetest"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -100,7 +101,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.mockDCRedirectionPolicy = NewMockDCRedirectionPolicy(s.controller)
-	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
+	s.mockResource = resourcetest.NewTest(s.controller, metrics.Frontend)
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.mockRemoteFrontendClient = s.mockResource.RemoteFrontendClient
 

@@ -40,7 +40,7 @@ import (
 
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 )
 
 type scannerWorkflowTestSuite struct {
@@ -77,7 +77,7 @@ func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 	s.registerActivities(env)
 	controller := gomock.NewController(s.T())
 	defer controller.Finish()
-	mockResource := resource.NewTest(controller, metrics.Worker)
+	mockResource := resourcetest.NewTest(controller, metrics.Worker)
 
 	mockResource.TaskMgr.EXPECT().ListTaskQueue(gomock.Any(), gomock.Any()).Return(&p.ListTaskQueueResponse{}, nil)
 

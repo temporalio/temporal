@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/resourcetest"
 
 	"google.golang.org/grpc/health"
 
@@ -119,7 +120,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
+	s.mockResource = resourcetest.NewTest(s.controller, metrics.Frontend)
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockExecutionMgr = s.mockResource.ExecutionMgr

@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -59,6 +60,7 @@ type (
 		membershipMonitor              membership.Monitor
 		faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
 		metricsHandler                 metrics.MetricsHandler
+		healthServer                   *health.Server
 	}
 )
 
@@ -72,6 +74,7 @@ func NewService(
 	membershipMonitor membership.Monitor,
 	metricsHandler metrics.MetricsHandler,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
+	healthServer *health.Server,
 ) *Service {
 	return &Service{
 		status:                         common.DaemonStatusInitialized,
@@ -84,6 +87,7 @@ func NewService(
 		membershipMonitor:              membershipMonitor,
 		metricsHandler:                 metricsHandler,
 		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
+		healthServer:                   healthServer,
 	}
 }
 
@@ -102,7 +106,8 @@ func (s *Service) Start() {
 	s.handler.Start()
 
 	historyservice.RegisterHistoryServiceServer(s.server, s.handler)
-	healthpb.RegisterHealthServer(s.server, s.handler)
+	healthpb.RegisterHealthServer(s.server, s.healthServer)
+	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
 	listener := s.grpcListener
 	logger.Info("Starting to serve on history listener")
@@ -137,6 +142,7 @@ func (s *Service) Stop() {
 
 	logger.Info("ShutdownHandler: Evicting self from membership ring")
 	_ = s.membershipMonitor.EvictSelf()
+	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
 
 	logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	remainingTime = s.sleep(gossipPropagationDelay, remainingTime)
