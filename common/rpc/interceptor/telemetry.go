@@ -147,18 +147,19 @@ func (ti *TelemetryInterceptor) Intercept(
 	}
 
 	// emit action metrics only after successful calls
-	ti.emitActionMetric(methodName, req, metricsScope, resp)
+	ti.emitActionMetric(methodName, info.FullMethod, req, metricsScope, resp)
 
 	return resp, nil
 }
 
 func (ti *TelemetryInterceptor) emitActionMetric(
 	methodName string,
+	fullName string,
 	req interface{},
 	scope metrics.Scope,
 	result interface{},
 ) {
-	if actionScope, ok := grpcActions[methodName]; !ok || actionScope != ti.scopes[methodName] {
+	if actionScope, ok := grpcActions[methodName]; !ok || actionScope != ti.scopes[fullName] {
 		// grpcActions checks that methodName is the one that we care about.
 		// ti.scopes verifies that the scope is the one we intended to emit action metrics.
 		// This is necessary because TelemetryInterceptor is used for all services. Different service could have same
