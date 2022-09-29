@@ -201,15 +201,15 @@ func validateStructuredCalendar(scs *schedpb.StructuredCalendarSpec) error {
 
 func validateInterval(i *schedpb.IntervalSpec) error {
 	if i == nil {
-		return errors.New("Interval is nil")
+		return errors.New("interval is nil")
 	}
 	iv, phase := timestamp.DurationValue(i.Interval), timestamp.DurationValue(i.Phase)
 	if iv < time.Second {
-		return errors.New("Interval is too small")
+		return errors.New("interval is too small")
 	} else if phase < 0 {
-		return errors.New("Phase is negative")
+		return errors.New("phase is negative")
 	} else if phase >= iv {
-		return errors.New("Phase cannot be greater than Interval")
+		return errors.New("phase cannot be greater than Interval")
 	}
 	return nil
 }
