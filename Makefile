@@ -78,7 +78,8 @@ INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_D
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
 
 PINNED_DEPENDENCIES := \
-	github.com/go-sql-driver/mysql@v1.5.0
+	github.com/go-sql-driver/mysql@v1.5.0 \
+	github.com/urfave/cli/v2@v2.4.0 # needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241
 
 # Code coverage output files.
 COVER_ROOT                 := ./.coverage

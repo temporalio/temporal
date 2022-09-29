@@ -24,49 +24,52 @@
 
 package tdbg
 
-func (s *utilSuite) TestStringToEnum_MapCaseInsensitive() {
-	enumValues := map[string]int32{
-		"Unspecified": 0,
-		"Transfer":    1,
-		"Timer":       2,
-		"Replication": 3,
-	}
+import (
+	"encoding/json"
+	"testing"
 
-	result, err := stringToEnum("timeR", enumValues)
-	s.NoError(err)
-	s.Equal(result, int32(2)) // Timer
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"github.com/urfave/cli/v2"
+)
+
+func (s *utilSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+}
+func TestUtilSuite(t *testing.T) {
+	suite.Run(t, new(utilSuite))
 }
 
-func (s *utilSuite) TestStringToEnum_MapNonExisting() {
-	enumValues := map[string]int32{
-		"Unspecified": 0,
-		"Transfer":    1,
-		"Timer":       2,
-		"Replication": 3,
-	}
-
-	result, err := stringToEnum("Timer2", enumValues)
-	s.Error(err)
-	s.Equal(result, int32(0))
+type utilSuite struct {
+	*require.Assertions
+	suite.Suite
 }
 
-func (s *utilSuite) TestStringToEnum_MapEmptyValue() {
-	enumValues := map[string]int32{
-		"Unspecified": 0,
-		"Transfer":    1,
-		"Timer":       2,
-		"Replication": 3,
+// TestAcceptStringSliceArgsWithCommas tests that the cli accepts string slice args with commas
+// If the test fails consider downgrading urfave/cli/v2 to v2.4.0
+// See https://github.com/urfave/cli/pull/1241
+func (s *utilSuite) TestAcceptStringSliceArgsWithCommas() {
+	app := cli.NewApp()
+	app.Name = "testapp"
+	app.Commands = []*cli.Command{
+		{
+			Name: "dostuff",
+			Action: func(c *cli.Context) error {
+				s.Equal(2, len(c.StringSlice("input")))
+				for _, inp := range c.StringSlice("input") {
+					var thing any
+					s.NoError(json.Unmarshal([]byte(inp), &thing))
+				}
+				return nil
+			},
+			Flags: []cli.Flag{
+				&cli.StringSliceFlag{
+					Name: "input",
+				},
+			},
+		},
 	}
-
-	result, err := stringToEnum("", enumValues)
-	s.NoError(err)
-	s.Equal(result, int32(0))
-}
-
-func (s *utilSuite) TestStringToEnum_MapEmptyEnum() {
-	enumValues := map[string]int32{}
-
-	result, err := stringToEnum("Timer", enumValues)
-	s.Error(err)
-	s.Equal(result, int32(0))
+	app.Run([]string{"testapp", "dostuff",
+		"--input", `{"field1": 34, "field2": false}`,
+		"--input", `{"numbers": [4,5,6]}`})
 }

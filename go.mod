@@ -34,7 +34,7 @@ require (
 	github.com/temporalio/tctl-kit v0.0.0-20220902020621-bce71d13b67c
 	github.com/uber-go/tally/v4 v4.1.2
 	github.com/urfave/cli v1.22.10
-	github.com/urfave/cli/v2 v2.16.3
+	github.com/urfave/cli/v2 v2.4.0
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.35.0
 	go.opentelemetry.io/otel v1.10.0
@@ -111,7 +111,6 @@ require (
 	github.com/twmb/murmur3 v1.1.6 // indirect
 	github.com/uber-common/bark v1.3.0 // indirect
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
-	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.10.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric v0.31.0 // indirect
