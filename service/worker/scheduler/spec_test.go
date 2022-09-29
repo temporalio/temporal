@@ -105,6 +105,32 @@ func (s *specSuite) TestCanonicalize() {
 	})
 	s.Error(err)
 
+	// various errors in ranges
+	for _, scs := range []*schedpb.StructuredCalendarSpec{
+		{Second: []*schedpb.Range{{Start: 100}}},
+		{Second: []*schedpb.Range{{Start: -3}}},
+		{Second: []*schedpb.Range{{Start: 30, End: 60}}},
+		{Second: []*schedpb.Range{{Start: 30, End: 40, Step: -3}}},
+		{Minute: []*schedpb.Range{{Start: 60}}},
+		{Hour: []*schedpb.Range{{Start: 0, End: 24}}},
+		{Hour: []*schedpb.Range{{Start: 24, End: 26}}},
+		{Hour: []*schedpb.Range{{Start: 16, End: 12}}},
+		{DayOfMonth: []*schedpb.Range{{Start: 0}}},
+		{DayOfMonth: []*schedpb.Range{{End: 33}}},
+		{Month: []*schedpb.Range{{Start: 0}}},
+		{Month: []*schedpb.Range{{End: 13}}},
+		{DayOfWeek: []*schedpb.Range{{Start: 7}}},
+		{DayOfWeek: []*schedpb.Range{{Start: 6, End: 7}}},
+		{Year: []*schedpb.Range{{Start: 1999}}},
+		{Year: []*schedpb.Range{{Start: 2112}}},
+	} {
+		_, err = canonicalizeSpec(&schedpb.ScheduleSpec{
+			StructuredCalendar: []*schedpb.StructuredCalendarSpec{scs},
+		})
+		s.Error(err)
+	}
+
+	// check parsing and filling in defaults
 	canonical, err = canonicalizeSpec(&schedpb.ScheduleSpec{
 		Calendar: []*schedpb.CalendarSpec{
 			{Hour: "5,7", Minute: "23"},
