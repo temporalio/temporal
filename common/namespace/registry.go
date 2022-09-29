@@ -141,7 +141,7 @@ type (
 		Refresh()
 		// Registers callback for namespace state changes. This is regrettably
 		// different from the above RegisterNamespaceChangeCallback because we
-		// need different semantics (and that one is going away).
+		// need different semantics.
 		RegisterStateChangeCallback(key any, cb StateChangeCallbackFn)
 		UnregisterStateChangeCallback(key any)
 	}
@@ -489,7 +489,12 @@ UpdateLoop:
 			newEntries = append(newEntries, namespace)
 		}
 
-		if oldNSAnyVersion == nil || oldNSAnyVersion.State() != namespace.State() {
+		// this test should include anything that might affect whether a namespace is active on
+		// this cluster.
+		if oldNSAnyVersion == nil ||
+			oldNSAnyVersion.State() != namespace.State() ||
+			oldNSAnyVersion.IsGlobalNamespace() != namespace.IsGlobalNamespace() ||
+			oldNSAnyVersion.ActiveClusterName() != namespace.ActiveClusterName() {
 			stateChanged = append(stateChanged, namespace)
 		}
 	}

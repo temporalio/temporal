@@ -42,6 +42,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -66,6 +67,7 @@ type (
 		NamespaceRegistry namespace.Registry
 		HostName          resource.HostName
 		Config            *Config
+		ClusterMetadata   cluster.Metadata
 		Components        []workercommon.PerNSWorkerComponent `group:"perNamespaceWorkerComponent"`
 	}
 
@@ -83,6 +85,7 @@ type (
 		serviceResolver   membership.ServiceResolver
 		components        []workercommon.PerNSWorkerComponent
 		initialRetry      time.Duration
+		thisClusterName   string
 
 		membershipChangedCh chan *membership.ChangedEvent
 
@@ -118,6 +121,7 @@ func NewPerNamespaceWorkerManager(params perNamespaceWorkerManagerInitParams) *p
 		config:              params.Config,
 		components:          params.Components,
 		initialRetry:        1 * time.Second,
+		thisClusterName:     params.ClusterMetadata.GetCurrentClusterName(),
 		membershipChangedCh: make(chan *membership.ChangedEvent),
 		workers:             make(map[namespace.ID]*perNamespaceWorker),
 	}
@@ -313,7 +317,9 @@ func (w *perNamespaceWorker) handleError(err error) {
 // means that we should retry creating/starting the worker. Returning noWorkerNeeded means any
 // existing worker should be stopped.
 func (w *perNamespaceWorker) tryRefresh(ns *namespace.Namespace) error {
-	if !w.wm.Running() || ns.State() == enumspb.NAMESPACE_STATE_DELETED {
+	if !w.wm.Running() ||
+		ns.State() == enumspb.NAMESPACE_STATE_DELETED ||
+		!ns.ActiveInCluster(w.wm.thisClusterName) {
 		return errNoWorkerNeeded
 	}
 
