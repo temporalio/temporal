@@ -26,6 +26,7 @@ package scheduler
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -50,9 +51,14 @@ type (
 )
 
 const (
+	// minCalendarYear is the smallest year that can appear in a calendar spec.
+	minCalendarYear = 2000
 	// maxCalendarYear is the latest year that will be recognized for calendar dates.
 	// If you're still using Temporal in 2100 please change this constant and rebuild.
 	maxCalendarYear = 2100
+
+	// max length of one calendar comment field
+	maxCommentLen = 200
 )
 
 const (
@@ -68,7 +74,6 @@ const (
 
 var (
 	errOutOfRange               = errors.New("out of range")
-	errMalformed                = errors.New("malformed expression")
 	errConflictingTimezoneNames = errors.New("conflicting timezone names")
 
 	monthStrings = []string{
@@ -97,25 +102,17 @@ var (
 	}
 )
 
-func newCompiledCalendar(cal *schedpb.StructuredCalendarSpec, tz *time.Location) (*compiledCalendar, error) {
-	cc := &compiledCalendar{tz: tz}
-	var err error
-	if cc.year, err = makeYearMatcher(cal.Year); err != nil {
-		return nil, err
-	} else if cc.month, err = makeBitMatcher(cal.Month); err != nil {
-		return nil, err
-	} else if cc.dayOfMonth, err = makeBitMatcher(cal.DayOfMonth); err != nil {
-		return nil, err
-	} else if cc.dayOfWeek, err = makeBitMatcher(cal.DayOfWeek); err != nil {
-		return nil, err
-	} else if cc.hour, err = makeBitMatcher(cal.Hour); err != nil {
-		return nil, err
-	} else if cc.minute, err = makeBitMatcher(cal.Minute); err != nil {
-		return nil, err
-	} else if cc.second, err = makeBitMatcher(cal.Second); err != nil {
-		return nil, err
+func newCompiledCalendar(cal *schedpb.StructuredCalendarSpec, tz *time.Location) *compiledCalendar {
+	return &compiledCalendar{
+		tz:         tz,
+		year:       makeYearMatcher(cal.Year),
+		month:      makeBitMatcher(cal.Month),
+		dayOfMonth: makeBitMatcher(cal.DayOfMonth),
+		dayOfWeek:  makeBitMatcher(cal.DayOfWeek),
+		hour:       makeBitMatcher(cal.Hour),
+		minute:     makeBitMatcher(cal.Minute),
+		second:     makeBitMatcher(cal.Second),
 	}
-	return cc, nil
 }
 
 // Returns true if the given time matches this calendar spec.
@@ -239,23 +236,27 @@ Outer:
 	return time.Time{}
 }
 
-func parseCalendarToStrucured(cal *schedpb.CalendarSpec) (*schedpb.StructuredCalendarSpec, error) {
-	ss := &schedpb.StructuredCalendarSpec{Comment: cal.Comment}
-	var err error
-	if ss.Year, err = makeRange(cal.Year, "*", 0, 1e6, parseModeYear); err != nil {
-		return nil, err
-	} else if ss.Month, err = makeRange(cal.Month, "*", 1, 12, parseModeMonth); err != nil {
-		return nil, err
-	} else if ss.DayOfMonth, err = makeRange(cal.DayOfMonth, "*", 1, 31, parseModeInt); err != nil {
-		return nil, err
-	} else if ss.DayOfWeek, err = makeRange(cal.DayOfWeek, "*", 0, 7, parseModeDow); err != nil {
-		return nil, err
-	} else if ss.Hour, err = makeRange(cal.Hour, "0", 0, 23, parseModeInt); err != nil {
-		return nil, err
-	} else if ss.Minute, err = makeRange(cal.Minute, "0", 0, 59, parseModeInt); err != nil {
-		return nil, err
-	} else if ss.Second, err = makeRange(cal.Second, "0", 0, 59, parseModeInt); err != nil {
-		return nil, err
+func parseCalendarToStructured(cal *schedpb.CalendarSpec) (*schedpb.StructuredCalendarSpec, error) {
+	var errs []string
+	makeRangeOrNil := func(s, field, def string, min, max int, parseMode parseMode) []*schedpb.Range {
+		r, err := makeRange(s, field, def, min, max, parseMode)
+		if err != nil {
+			errs = append(errs, err.Error())
+		}
+		return r
+	}
+	ss := &schedpb.StructuredCalendarSpec{
+		Second:     makeRangeOrNil(cal.Second, "Second", "0", 0, 59, parseModeInt),
+		Minute:     makeRangeOrNil(cal.Minute, "Minute", "0", 0, 59, parseModeInt),
+		Hour:       makeRangeOrNil(cal.Hour, "Hour", "0", 0, 23, parseModeInt),
+		DayOfWeek:  makeRangeOrNil(cal.DayOfWeek, "DayOfWeek", "*", 0, 7, parseModeDow),
+		DayOfMonth: makeRangeOrNil(cal.DayOfMonth, "DayOfMonth", "*", 1, 31, parseModeInt),
+		Month:      makeRangeOrNil(cal.Month, "Month", "*", 1, 12, parseModeMonth),
+		Year:       makeRangeOrNil(cal.Year, "Year", "*", minCalendarYear, maxCalendarYear, parseModeYear),
+		Comment:    cal.Comment,
+	}
+	if len(errs) > 0 {
+		return nil, errors.New(strings.Join(errs, ", "))
 	}
 	return ss, nil
 }
@@ -270,7 +271,7 @@ func parseCronString(c string) (*schedpb.StructuredCalendarSpec, *schedpb.Interv
 	if strings.HasPrefix(c, "TZ=") || strings.HasPrefix(c, "CRON_TZ=") {
 		tz, rest, found := strings.Cut(c, " ")
 		if !found {
-			return nil, nil, "", errMalformed
+			return nil, nil, "", errors.New("CronString has time zone but missing fields")
 		}
 		c = rest
 		_, tzName, _ = strings.Cut(tz, "=")
@@ -301,10 +302,10 @@ func parseCronString(c string) (*schedpb.StructuredCalendarSpec, *schedpb.Interv
 	case 7:
 		cal.Second, cal.Minute, cal.Hour, cal.DayOfMonth, cal.Month, cal.DayOfWeek, cal.Year = fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]
 	default:
-		return nil, nil, "", errMalformed
+		return nil, nil, "", errors.New("CronString does not have 5-7 fields")
 	}
 
-	structured, err := parseCalendarToStrucured(&cal)
+	structured, err := parseCalendarToStructured(&cal)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -316,7 +317,7 @@ func parseCronStringInterval(c string) (*schedpb.IntervalSpec, error) {
 	// split after @every
 	_, interval, found := strings.Cut(c, " ")
 	if !found {
-		return nil, errMalformed
+		return nil, errors.New("CronString does not have interval after @every")
 	}
 	// allow @every 14h/3h
 	interval, phase, _ := strings.Cut(interval, "/")
@@ -351,17 +352,17 @@ func handlePredefinedCronStrings(c string) string {
 	}
 }
 
-func makeBitMatcher(ranges []*schedpb.Range) (func(int) bool, error) {
+func makeBitMatcher(ranges []*schedpb.Range) func(int) bool {
 	var bits uint64
 	add := func(i int) { bits |= 1 << i }
 	iterateRanges(ranges, add)
-	return func(v int) bool { return (1<<v)&bits != 0 }, nil
+	return func(v int) bool { return (1<<v)&bits != 0 }
 }
 
-func makeYearMatcher(ranges []*schedpb.Range) (func(int) bool, error) {
+func makeYearMatcher(ranges []*schedpb.Range) func(int) bool {
 	if len(ranges) == 0 {
 		// special case for year: all is represented as empty range list
-		return func(int) bool { return true }, nil
+		return func(int) bool { return true }
 	}
 
 	var values []int16
@@ -374,7 +375,7 @@ func makeYearMatcher(ranges []*schedpb.Range) (func(int) bool, error) {
 			}
 		}
 		return false
-	}, nil
+	}
 }
 
 func iterateRanges(ranges []*schedpb.Range, f func(i int)) {
@@ -411,7 +412,7 @@ func iterateRanges(ranges []*schedpb.Range, f func(i int)) {
 // in order, and f may be called out of order as well.
 // Handles day-of-week names or month names according to parseMode.
 // min and max are the complete range of expected values.
-func makeRange(s, def string, min, max int, parseMode parseMode) ([]*schedpb.Range, error) {
+func makeRange(s, field, def string, min, max int, parseMode parseMode) ([]*schedpb.Range, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		s = def
@@ -427,7 +428,7 @@ func makeRange(s, def string, min, max int, parseMode parseMode) ([]*schedpb.Ran
 		if strings.Contains(part, "/") {
 			skipParts := strings.Split(part, "/")
 			if len(skipParts) != 2 {
-				return nil, errMalformed
+				return nil, fmt.Errorf("%s has too many slashes", field)
 			}
 			part = skipParts[0]
 			step, err = strconv.Atoi(skipParts[1])
@@ -435,7 +436,7 @@ func makeRange(s, def string, min, max int, parseMode parseMode) ([]*schedpb.Ran
 				return nil, err
 			}
 			if step < 1 {
-				return nil, errMalformed
+				return nil, fmt.Errorf("%s has invalid Step", field)
 			}
 			hasStep = true
 		}
@@ -445,17 +446,17 @@ func makeRange(s, def string, min, max int, parseMode parseMode) ([]*schedpb.Ran
 			if strings.Contains(part, "-") {
 				rangeParts := strings.Split(part, "-")
 				if len(rangeParts) != 2 {
-					return nil, errMalformed
+					return nil, fmt.Errorf("%s has too many dashes", field)
 				}
 				if start, err = parseValue(rangeParts[0], min, max, parseMode); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("%s Start is not in range [%d-%d]", field, min, max)
 				}
 				if end, err = parseValue(rangeParts[1], start, max, parseMode); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("%s End is before Start or not in range [%d-%d]", field, min, max)
 				}
 			} else {
 				if start, err = parseValue(part, min, max, parseMode); err != nil {
-					return nil, err
+					return nil, fmt.Errorf("%s is not in range [%d-%d]", field, min, max)
 				}
 				if !hasStep {
 					// if / is present, a single value is treated as that value to the
@@ -472,10 +473,14 @@ func makeRange(s, def string, min, max int, parseMode parseMode) ([]*schedpb.Ran
 		// 1-7/2        has to turn into 0,1-6/2
 		// That is, we can use a single range and just turn the 7 into a 6 only if step == 1
 		// and start == 0 or 1. Or if 7 isn't actually included. In other cases, we can add a
-		// 0, and then turn the 7 into a 6 in whatever the original range was.
+		// 0, and then turn the 7 into a 6 in whatever the original range was. If the original
+		// range was just 7-7, then we're done.
 		if parseMode == parseModeDow && end == 7 {
 			if (7-start)%step == 0 && (step > 1 || step == 1 && start > 1) {
 				ranges = append(ranges, &schedpb.Range{Start: int32(0)})
+				if start == 7 {
+					continue
+				}
 			}
 			end = 6
 		}
