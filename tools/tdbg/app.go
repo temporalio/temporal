@@ -46,7 +46,6 @@ func NewCliApp() *cli.App {
 	app.Name = "tdbg"
 	app.Usage = "A command-line tool for Temporal server debugging"
 	app.Version = headers.ServerVersion
-	app.Suggest = true
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{
 			Name:    FlagAddress,
