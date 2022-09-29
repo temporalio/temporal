@@ -176,11 +176,18 @@ func (c *workflowSizeChecker) checkIfSearchAttributesSizeExceedsLimit(
 	namespace namespace.Name,
 	commandTypeTag metrics.Tag,
 ) error {
-	c.metricsScope.Tagged(commandTypeTag).RecordDistribution(metrics.SearchAttributesSize, searchAttributes.Size())
-
+	c.metricsScope.Tagged(commandTypeTag).RecordDistribution(
+		metrics.SearchAttributesSize,
+		searchAttributes.Size(),
+	)
 	err := c.searchAttributesValidator.ValidateSize(searchAttributes, namespace.String())
-	c.logger.Warn("Search attributes size exceeds limits. Fail workflow.", tag.Error(err), tag.WorkflowNamespace(namespace.String()))
-
+	if err != nil {
+		c.logger.Warn(
+			"Search attributes size exceeds limits. Fail workflow.",
+			tag.Error(err),
+			tag.WorkflowNamespace(namespace.String()),
+		)
+	}
 	return err
 }
 
