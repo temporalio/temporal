@@ -423,7 +423,7 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 	workflowID := taskInfo.WorkflowID
 	runID := taskInfo.RunID
 	taskID := taskInfo.TaskID
-	return p.processReplication(
+	replicationTask, err := p.processReplication(
 		ctx,
 		true, // still necessary to send out history replication message if workflow closed
 		namespaceID,
@@ -449,53 +449,6 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 				return nil, err
 			}
 
-			var newRunBranchToken []byte
-			if len(taskInfo.NewRunID) > 0 {
-				newRunContext, releaseFn, err := p.workflowCache.GetOrCreateWorkflowExecution(
-					ctx,
-					namespaceID,
-					commonpb.WorkflowExecution{
-						WorkflowId: workflowID,
-						RunId:      taskInfo.NewRunID,
-					},
-					workflow.CallerTypeTask,
-				)
-				if err != nil {
-					return nil, err
-				}
-
-				newRunMutableState, err := newRunContext.LoadMutableState(ctx)
-				if err != nil {
-					releaseFn(err)
-					return nil, err
-				}
-				_, newRunBranchToken, err = getVersionHistoryItems(
-					newRunMutableState,
-					common.FirstEventID,
-					taskInfo.Version,
-				)
-				if err != nil {
-					releaseFn(err)
-					return nil, err
-				}
-				releaseFn(nil)
-			} else if len(taskInfo.NewRunBranchToken) != 0 {
-				newRunBranchToken = taskInfo.NewRunBranchToken
-			}
-			var newRunEventsBlob *commonpb.DataBlob
-			if len(newRunBranchToken) > 0 {
-				// only get the first batch
-				newRunEventsBlob, err = p.getEventsBlob(
-					ctx,
-					newRunBranchToken,
-					common.FirstEventID,
-					common.FirstEventID+1,
-				)
-				if err != nil {
-					return nil, err
-				}
-			}
-
 			replicationTask := &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
 				SourceTaskId: taskID,
@@ -506,13 +459,25 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 						RunId:               runID,
 						VersionHistoryItems: versionHistoryItems,
 						Events:              eventsBlob,
-						NewRunEvents:        newRunEventsBlob,
+						// NewRunEvents will be set in processNewRunReplication
 					},
 				},
 				VisibilityTime: &taskInfo.VisibilityTimestamp,
 			}
 			return replicationTask, nil
 		},
+	)
+	if err != nil {
+		return replicationTask, err
+	}
+	return p.processNewRunReplication(
+		ctx,
+		namespaceID,
+		workflowID,
+		taskInfo.NewRunID,
+		taskInfo.NewRunBranchToken,
+		taskInfo.Version,
+		replicationTask,
 	)
 }
 
@@ -622,6 +587,72 @@ func (p *ackMgrImpl) processReplication(
 	default:
 		return nil, err
 	}
+}
+
+func (p *ackMgrImpl) processNewRunReplication(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	workflowID string,
+	newRunID string,
+	branchToken []byte,
+	taskVersion int64,
+	task *replicationspb.ReplicationTask,
+) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
+
+	attr, ok := task.Attributes.(*replicationspb.ReplicationTask_HistoryTaskAttributes)
+	if !ok {
+		return nil, serviceerror.NewInternal("Wrong replication task to process new run replication.")
+	}
+
+	var newRunBranchToken []byte
+	if len(newRunID) > 0 {
+		newRunContext, releaseFn, err := p.workflowCache.GetOrCreateWorkflowExecution(
+			ctx,
+			namespaceID,
+			commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      newRunID,
+			},
+			workflow.CallerTypeTask,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		newRunMutableState, err := newRunContext.LoadMutableState(ctx)
+		if err != nil {
+			releaseFn(err)
+			return nil, err
+		}
+		_, newRunBranchToken, err = getVersionHistoryItems(
+			newRunMutableState,
+			common.FirstEventID,
+			taskVersion,
+		)
+		if err != nil {
+			releaseFn(err)
+			return nil, err
+		}
+		releaseFn(nil)
+	} else if len(branchToken) != 0 {
+		newRunBranchToken = branchToken
+	}
+	var newRunEventsBlob *commonpb.DataBlob
+	if len(newRunBranchToken) > 0 {
+		// only get the first batch
+		var err error
+		newRunEventsBlob, err = p.getEventsBlob(
+			ctx,
+			newRunBranchToken,
+			common.FirstEventID,
+			common.FirstEventID+1,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	attr.HistoryTaskAttributes.NewRunEvents = newRunEventsBlob
+	return task, nil
 }
 
 func getVersionHistoryItems(
