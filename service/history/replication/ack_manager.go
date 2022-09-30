@@ -364,16 +364,26 @@ func (p *ackMgrImpl) toReplicationTask(
 	task tasks.Task,
 ) (*replicationspb.ReplicationTask, error) {
 
+	var err error
+	var resp *replicationspb.ReplicationTask
 	switch task := task.(type) {
 	case *tasks.SyncActivityTask:
-		return p.generateSyncActivityTask(ctx, task)
+		resp, err = p.generateSyncActivityTask(ctx, task)
 	case *tasks.HistoryReplicationTask:
-		return p.generateHistoryReplicationTask(ctx, task)
+		resp, err = p.generateHistoryReplicationTask(ctx, task)
 	case *tasks.SyncWorkflowStateTask:
-		return p.generateSyncWorkflowStateTask(ctx, task)
+		resp, err = p.generateSyncWorkflowStateTask(ctx, task)
 	default:
 		return nil, errUnknownReplicationTask
 	}
+	if err != nil {
+		p.logger.Error("Failed to generate replication task",
+			tag.Error(err),
+			tag.WorkflowNamespaceID(task.GetNamespaceID()),
+			tag.WorkflowID(task.GetWorkflowID()),
+			tag.WorkflowRunID(task.GetRunID()))
+	}
+	return resp, err
 }
 
 func (p *ackMgrImpl) generateSyncActivityTask(
