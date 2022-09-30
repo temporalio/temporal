@@ -485,7 +485,10 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 					common.FirstEventID+1,
 				)
 				if err != nil {
-					return nil, err
+					// Ignore not found error when fetching new run history
+					if _, ok := err.(*serviceerror.NotFound); !ok {
+						return nil, err
+					}
 				}
 			}
 
