@@ -465,14 +465,9 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 				return nil, err
 			}
 
-			// BranchToken will not set in get dlq replication message request
-			if len(taskInfo.BranchToken) == 0 {
-				taskInfo.BranchToken = branchToken
-			}
-
 			eventsBlob, err := p.getEventsBlob(
 				ctx,
-				taskInfo.BranchToken,
+				branchToken,
 				taskInfo.FirstEventID,
 				taskInfo.NextEventID,
 			)
