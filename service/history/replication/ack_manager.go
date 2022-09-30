@@ -67,7 +67,7 @@ type (
 		currentClusterName string
 		shard              shard.Context
 		config             *configs.Config
-		historyCache       workflow.Cache
+		workflowCache      workflow.Cache
 		executionMgr       persistence.ExecutionManager
 		metricsClient      metrics.Client
 		logger             log.Logger
@@ -88,7 +88,7 @@ var (
 
 func NewAckManager(
 	shard shard.Context,
-	historyCache workflow.Cache,
+	workflowCache workflow.Cache,
 	executionMgr persistence.ExecutionManager,
 	logger log.Logger,
 ) AckManager {
@@ -104,7 +104,7 @@ func NewAckManager(
 		currentClusterName: currentClusterName,
 		shard:              shard,
 		config:             shard.GetConfig(),
-		historyCache:       historyCache,
+		workflowCache:      workflowCache,
 		executionMgr:       executionMgr,
 		metricsClient:      shard.GetMetricsClient(),
 		logger:             log.With(logger, tag.ComponentReplicatorQueue),
@@ -439,14 +439,9 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 				return nil, err
 			}
 
-			// BranchToken will not set in get dlq replication message request
-			if len(taskInfo.BranchToken) == 0 {
-				taskInfo.BranchToken = branchToken
-			}
-
 			eventsBlob, err := p.getEventsBlob(
 				ctx,
-				taskInfo.BranchToken,
+				branchToken,
 				taskInfo.FirstEventID,
 				taskInfo.NextEventID,
 			)
@@ -454,12 +449,45 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 				return nil, err
 			}
 
+			var newRunBranchToken []byte
+			if len(taskInfo.NewRunID) > 0 {
+				newRunContext, releaseFn, err := p.workflowCache.GetOrCreateWorkflowExecution(
+					ctx,
+					namespaceID,
+					commonpb.WorkflowExecution{
+						WorkflowId: workflowID,
+						RunId:      taskInfo.NewRunID,
+					},
+					workflow.CallerTypeTask,
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				newRunMutableState, err := newRunContext.LoadMutableState(ctx)
+				if err != nil {
+					releaseFn(err)
+					return nil, err
+				}
+				_, newRunBranchToken, err = getVersionHistoryItems(
+					newRunMutableState,
+					common.FirstEventID,
+					taskInfo.Version,
+				)
+				if err != nil {
+					releaseFn(err)
+					return nil, err
+				}
+				releaseFn(nil)
+			} else if len(taskInfo.NewRunBranchToken) != 0 {
+				newRunBranchToken = taskInfo.NewRunBranchToken
+			}
 			var newRunEventsBlob *commonpb.DataBlob
-			if len(taskInfo.NewRunBranchToken) != 0 {
+			if len(newRunBranchToken) > 0 {
 				// only get the first batch
 				newRunEventsBlob, err = p.getEventsBlob(
 					ctx,
-					taskInfo.NewRunBranchToken,
+					newRunBranchToken,
 					common.FirstEventID,
 					common.FirstEventID+1,
 				)
@@ -570,11 +598,11 @@ func (p *ackMgrImpl) processReplication(
 		RunId:      runID,
 	}
 
-	context, release, err := p.historyCache.GetOrCreateWorkflowExecution(
+	context, release, err := p.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
-		workflow.CallerTypeAPI,
+		workflow.CallerTypeTask,
 	)
 	if err != nil {
 		return nil, err
