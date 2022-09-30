@@ -120,11 +120,6 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 
 // TestScanAllTrees test
 func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
-	// TODO https://go.temporal.io/server/issues/2458
-	if s.ExecutionManager.GetName() != "cassandra" {
-		return
-	}
-
 	resp, err := s.ExecutionManager.GetAllHistoryTreeBranches(s.ctx, &p.GetAllHistoryTreeBranchesRequest{
 		PageSize: 1,
 	})
