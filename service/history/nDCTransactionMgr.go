@@ -30,8 +30,6 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/server/common"
-
 	"go.temporal.io/server/common/persistence/serialization"
 
 	"github.com/pborman/uuid"
@@ -323,18 +321,6 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 		baseRunID := baseMutableState.GetExecutionState().GetRunId()
 		resetRunID := uuid.New()
 		baseRebuildLastEventID := baseMutableState.GetPreviousStartedEventID()
-
-		// TODO when https://github.com/uber/cadence/issues/2420 is finished, remove this block,
-		//  since cannot reapply event to a finished workflow which had no workflow task started
-		if baseRebuildLastEventID == common.EmptyEventID {
-			r.logger.Warn("cannot reapply event to a finished workflow",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(workflowID),
-			)
-			r.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
-			return persistence.UpdateWorkflowModeBypassCurrent, workflow.TransactionPolicyPassive, nil
-		}
-
 		baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
 		baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 		if err != nil {
@@ -367,14 +353,15 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 		case *serviceerror.InvalidArgument:
 			// no-op. Usually this is due to reset workflow with pending child workflows
 			r.logger.Warn("Cannot reset workflow. Ignoring reapply events.", tag.Error(err))
+			// the target workflow is not reset so it is still the current workflow. It need to persist updated version histories.
+			return persistence.UpdateWorkflowModeUpdateCurrent, workflow.TransactionPolicyPassive, nil
 		case nil:
-			// no-op
+			// after the reset of target workflow (current workflow) with additional events to be reapplied
+			// target workflow is no longer the current workflow
+			return persistence.UpdateWorkflowModeBypassCurrent, workflow.TransactionPolicyPassive, nil
 		default:
 			return 0, workflow.TransactionPolicyActive, err
 		}
-		// after the reset of target workflow (current workflow) with additional events to be reapplied
-		// target workflow is no longer the current workflow
-		return persistence.UpdateWorkflowModeBypassCurrent, workflow.TransactionPolicyPassive, nil
 	}
 
 	// case 2

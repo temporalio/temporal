@@ -255,6 +255,84 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 	s.True(releaseCalled)
 }
 
+func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetFailed() {
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+	lastWorkflowTaskStartedEventID := int64(9999)
+	nextEventID := lastWorkflowTaskStartedEventID * 2
+	lastWorkflowTaskStartedVersion := s.namespaceEntry.FailoverVersion()
+	versionHistory := versionhistory.NewVersionHistory([]byte("branch token"), []*historyspb.VersionHistoryItem{
+		{EventId: lastWorkflowTaskStartedEventID, Version: lastWorkflowTaskStartedVersion},
+	})
+	histories := versionhistory.NewVersionHistories(versionHistory)
+
+	releaseCalled := false
+
+	targetWorkflow := NewMocknDCWorkflow(s.controller)
+	weContext := workflow.NewMockContext(s.controller)
+	mutableState := workflow.NewMockMutableState(s.controller)
+	var releaseFn workflow.ReleaseCacheFunc = func(error) { releaseCalled = true }
+
+	workflowEvents := &persistence.WorkflowEvents{}
+
+	targetWorkflow.EXPECT().getContext().Return(weContext).AnyTimes()
+	targetWorkflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
+	targetWorkflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
+
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId:      namespaceID.String(),
+		WorkflowId:       workflowID,
+		VersionHistories: histories,
+	}).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: runID,
+	}).AnyTimes()
+	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
+	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastWorkflowTaskStartedEventID)
+
+	s.mockWorkflowResetter.EXPECT().resetWorkflow(
+		ctx,
+		namespaceID,
+		workflowID,
+		runID,
+		versionHistory.GetBranchToken(),
+		lastWorkflowTaskStartedEventID,
+		lastWorkflowTaskStartedVersion,
+		nextEventID,
+		gomock.Any(),
+		gomock.Any(),
+		targetWorkflow,
+		eventsReapplicationResetWorkflowReason,
+		workflowEvents.Events,
+		enumspb.RESET_REAPPLY_TYPE_SIGNAL,
+	).Return(serviceerror.NewInvalidArgument("reset fail"))
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), &persistence.GetCurrentExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: namespaceID.String(),
+		WorkflowID:  workflowID,
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
+
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), workflowEvents).Return(int64(0), nil)
+	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(), now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
+	).Return(nil)
+
+	err := s.transactionMgr.backfillWorkflow(ctx, now, targetWorkflow, workflowEvents)
+	s.NoError(err)
+	s.True(releaseCalled)
+}
+
 func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open() {
 	ctx := context.Background()
 	now := time.Now().UTC()
