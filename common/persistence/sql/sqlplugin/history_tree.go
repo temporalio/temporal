@@ -56,10 +56,19 @@ type (
 		BranchID primitives.UUID
 	}
 
-	// HistoryNode is the SQL persistence interface for history trees
+	// HistoryTreeBranchPage is a struct which represents a page of history tree branches to query.
+	HistoryTreeBranchPage struct {
+		ShardID  int32
+		TreeID   primitives.UUID
+		BranchID primitives.UUID
+		Limit    int
+	}
+
+	// HistoryTree is the SQL persistence interface for history trees
 	HistoryTree interface {
 		InsertIntoHistoryTree(ctx context.Context, row *HistoryTreeRow) (sql.Result, error)
 		SelectFromHistoryTree(ctx context.Context, filter HistoryTreeSelectFilter) ([]HistoryTreeRow, error)
 		DeleteFromHistoryTree(ctx context.Context, filter HistoryTreeDeleteFilter) (sql.Result, error)
+		PaginateBranchesFromHistoryTree(ctx context.Context, filter HistoryTreeBranchPage) ([]HistoryTreeRow, error)
 	}
 )
