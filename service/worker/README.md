@@ -24,24 +24,24 @@ can be applied to local Temporal cluster.
    
 3. Connect two Temporal clusters:
    ```bash
-   tctl --ad 127.0.0.1:7233 adm cl upsert-remote-cluster --frontend_address "localhost:8233"
-   tctl --ad 127.0.0.1:8233 adm cl upsert-remote-cluster --frontend_address "localhost:7233"
+   tctl --address 127.0.0.1:7233 cluster upsert --frontend-address localhost:8233
+   tctl --address 127.0.0.1:8233 cluster upsert --frontend-address localhost:7233
    ```
 
 4. Create global namespaces
     ```bash
-    tctl --ns sample namespace register --gd true --ac active --cl active standby
+    tctl namespace register --global true --active-cluster active --cluster active --cluster standby sample
     ```
 
 5. Failover between zones:
 
     Failover to standby:
     ```bash
-    tctl --ns sample namespace update --ac standby
+    tctl namespace update --active-cluster standby sample
     ```
     Failback to active:
     ```bash
-    tctl --ns sample namespace update --ac active
+    tctl namespace update --active-cluster active sample
     ```
 
 ## Archiver

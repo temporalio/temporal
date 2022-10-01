@@ -44,7 +44,7 @@ namespaceDefaults:
 ```
 
 ## Visibility query syntax
-You can query the visibility store by using the `tctl workflow listarchived` command
+You can query the visibility store by using the `tctl workflow list --archived` command
 
 The syntax for the query is based on SQL
 
@@ -71,7 +71,7 @@ it will search all records starting from `2020-01-21T00:00:00Z` to `2020-01-21T5
 
 *Searches the first 20 records for a given day 2020-01-21*
 
-`./tctl --ns samples-namespace workflow listarchived -ps="20" -q "StartTime = '2020-01-21T00:00:00Z' AND SearchPrecision='Day'"`
+`./tctl --namespace samples-namespace workflow list --archived --limit 20 -q "StartTime = '2020-01-21T00:00:00Z' AND SearchPrecision='Day'"`
 
 ## Archival query syntax
 
@@ -79,4 +79,4 @@ Once you have a workflowId and a runId you can retrieve your workflow history.
 
 example:
 
-`./tctl --ns samples-namespace  workflow  show  -w workflow-id -r runId`
+`./tctl --namespace samples-namespace workflow show --workflow-id workflow-id --run-id runId`
