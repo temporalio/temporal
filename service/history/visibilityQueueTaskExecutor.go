@@ -354,6 +354,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	taskQueue := executionInfo.TaskQueue
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
+	historySizeBytes := executionInfo.GetExecutionStats().GetHistorySize()
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
@@ -375,6 +376,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		visibilityMemo,
 		taskQueue,
 		searchAttr,
+		historySizeBytes,
 	)
 }
 
@@ -394,6 +396,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	visibilityMemo *commonpb.Memo,
 	taskQueue string,
 	searchAttributes *commonpb.SearchAttributes,
+	historySizeBytes int64,
 ) error {
 	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
@@ -411,15 +414,17 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 			WorkflowTypeName:     workflowTypeName,
 			StartTime:            startTime,
 			ExecutionTime:        executionTime,
-			StateTransitionCount: stateTransitionCount, Status: status,
-			TaskID:           taskID,
-			ShardID:          t.shard.GetShardID(),
-			Memo:             visibilityMemo,
-			TaskQueue:        taskQueue,
-			SearchAttributes: searchAttributes,
+			StateTransitionCount: stateTransitionCount,
+			Status:               status,
+			TaskID:               taskID,
+			ShardID:              t.shard.GetShardID(),
+			Memo:                 visibilityMemo,
+			TaskQueue:            taskQueue,
+			SearchAttributes:     searchAttributes,
 		},
-		CloseTime:     endTime,
-		HistoryLength: historyLength,
+		CloseTime:        endTime,
+		HistoryLength:    historyLength,
+		HistorySizeBytes: historySizeBytes,
 	})
 }
 

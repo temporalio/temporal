@@ -158,6 +158,7 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(
 	doc[searchattribute.ExecutionDuration] = request.CloseTime.Sub(request.ExecutionTime).Nanoseconds()
 	doc[searchattribute.HistoryLength] = request.HistoryLength
 	doc[searchattribute.StateTransitionCount] = request.StateTransitionCount
+	doc[searchattribute.HistorySizeBytes] = request.HistorySizeBytes
 
 	return s.addBulkIndexRequestAndWait(ctx, request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
@@ -937,6 +938,8 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 			record.HistoryLength = fieldValueParsed.(int64)
 		case searchattribute.StateTransitionCount:
 			record.StateTransitionCount = fieldValueParsed.(int64)
+		case searchattribute.HistorySizeBytes:
+			record.HistorySizeBytes = fieldValueParsed.(int64)
 		default:
 			// All custom and predefined search attributes are handled here.
 			if customSearchAttributes == nil {
