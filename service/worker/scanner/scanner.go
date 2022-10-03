@@ -26,6 +26,7 @@ package scanner
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -40,15 +41,11 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/sdk"
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
-)
-
-const (
-	// scannerStartUpDelay is to let services warm up
-	scannerStartUpDelay = time.Second * 4
 )
 
 type (
@@ -84,6 +81,7 @@ type (
 		executionManager persistence.ExecutionManager
 		taskManager      persistence.TaskManager
 		historyClient    historyservice.HistoryServiceClient
+		workerFactory    sdk.WorkerFactory
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -91,6 +89,7 @@ type (
 	// and emit stats for analytics
 	Scanner struct {
 		context scannerContext
+		wg      sync.WaitGroup
 	}
 )
 
@@ -107,6 +106,7 @@ func New(
 	executionManager persistence.ExecutionManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
+	workerFactory sdk.WorkerFactory,
 ) *Scanner {
 	return &Scanner{
 		context: scannerContext{
@@ -117,6 +117,7 @@ func New(
 			executionManager: executionManager,
 			taskManager:      taskManager,
 			historyClient:    historyClient,
+			workerFactory:    workerFactory,
 		},
 	}
 }
@@ -137,20 +138,25 @@ func (s *Scanner) Start() error {
 
 	var workerTaskQueueNames []string
 	if s.context.cfg.ExecutionsScannerEnabled() {
+		s.wg.Add(1)
 		go s.startWorkflowWithRetry(executionsScannerWFStartOptions, executionsScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, executionsScannerTaskQueueName)
 	}
 
 	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskQueueScannerEnabled() {
+		s.wg.Add(1)
 		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tqScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, tqScannerTaskQueueName)
-	} else if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeNoSQL && s.context.cfg.HistoryScannerEnabled() {
+	}
+
+	if s.context.cfg.HistoryScannerEnabled() {
+		s.wg.Add(1)
 		go s.startWorkflowWithRetry(historyScannerWFStartOptions, historyScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, historyScannerTaskQueueName)
 	}
 
 	for _, tl := range workerTaskQueueNames {
-		work := worker.New(s.context.sdkSystemClient, tl, workerOpts)
+		work := s.context.workerFactory.New(s.context.sdkSystemClient, tl, workerOpts)
 
 		work.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tqScannerWFTypeName})
 		work.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
@@ -167,14 +173,16 @@ func (s *Scanner) Start() error {
 	return nil
 }
 
+func (s *Scanner) Stop() {
+	s.wg.Wait()
+}
+
 func (s *Scanner) startWorkflowWithRetry(
 	options sdkclient.StartWorkflowOptions,
 	workflowType string,
 	workflowArgs ...interface{},
 ) {
-
-	// let history / matching service warm up
-	time.Sleep(scannerStartUpDelay)
+	defer s.wg.Done()
 
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
 		WithMaximumInterval(time.Minute).
