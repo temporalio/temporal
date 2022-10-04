@@ -53,6 +53,7 @@ type (
 		runID       string
 		dbVersion   int64
 		nextEventID int64 // TODO deprecate this variable once DB version comparison is the default
+		notExist    bool
 	}
 )
 
@@ -130,7 +131,6 @@ func extractErrors(
 	requestCurrentRunID string,
 	requestExecutionCASConditions []executionCASCondition,
 ) []error {
-
 	var errors []error
 	if err := extractShardOwnershipLostError(
 		conflictRecord,
@@ -150,9 +150,7 @@ func extractErrors(
 	for _, condition := range requestExecutionCASConditions {
 		if err := extractWorkflowConflictError(
 			conflictRecord,
-			condition.runID,
-			condition.dbVersion,
-			condition.nextEventID,
+			condition,
 		); err != nil {
 			errors = append(errors, err)
 		}
@@ -244,7 +242,7 @@ func extractCurrentWorkflowConflictError(
 				actualCurrentRunID,
 			),
 			RequestID:        executionState.CreateRequestId,
-			RunID:            executionState.RunId,
+			RunID:            actualCurrentRunID,
 			State:            executionState.State,
 			Status:           executionState.Status,
 			LastWriteVersion: lastWriteVersion,
@@ -255,9 +253,7 @@ func extractCurrentWorkflowConflictError(
 
 func extractWorkflowConflictError(
 	conflictRecord map[string]interface{},
-	requestRunID string,
-	requestDBVersion int64,
-	requestNextEventID int64, // TODO deprecate this variable once DB version comparison is the default
+	condition executionCASCondition,
 ) error {
 	rowType, ok := conflictRecord["type"].(*int)
 	if !ok || rowType == nil {
@@ -267,21 +263,31 @@ func extractWorkflowConflictError(
 	if *rowType != rowTypeExecution {
 		return nil
 	}
-	if runID := gocql.UUIDToString(conflictRecord["run_id"]); runID != requestRunID {
+	if runID := gocql.UUIDToString(conflictRecord["run_id"]); runID != condition.runID {
 		return nil
 	}
 
 	actualNextEventID, _ := conflictRecord["next_event_id"].(int64)
 	actualDBVersion, _ := conflictRecord["db_record_version"].(int64)
 
+	if condition.notExist {
+		return &p.WorkflowConditionFailedError{
+			Msg:             fmt.Sprintf("Workflow execution already running, runID: %v", condition.runID),
+			RunID:           condition.runID,
+			NextEventID:     actualNextEventID,
+			DBRecordVersion: actualDBVersion,
+		}
+	}
+
 	// TODO remove this block once DB version comparison is the default
-	if requestDBVersion == 0 {
-		if actualNextEventID != requestNextEventID {
+	if condition.dbVersion == 0 {
+		if actualNextEventID != condition.nextEventID {
 			return &p.WorkflowConditionFailedError{
 				Msg: fmt.Sprintf("Encounter workflow next event ID mismatch, request next event ID: %v, actual next event ID: %v",
-					requestNextEventID,
+					condition.nextEventID,
 					actualNextEventID,
 				),
+				RunID:           condition.runID,
 				NextEventID:     actualNextEventID,
 				DBRecordVersion: actualDBVersion,
 			}
@@ -289,16 +295,18 @@ func extractWorkflowConflictError(
 		return nil
 	}
 
-	if actualDBVersion != requestDBVersion {
+	if actualDBVersion != condition.dbVersion {
 		return &p.WorkflowConditionFailedError{
 			Msg: fmt.Sprintf("Encounter workflow db version mismatch, request db version: %v, actual db version: %v",
-				requestDBVersion,
+				condition.dbVersion,
 				actualDBVersion,
 			),
+			RunID:           condition.runID,
 			NextEventID:     actualNextEventID,
 			DBRecordVersion: actualDBVersion,
 		}
 	}
+
 	return nil
 }
 

@@ -126,6 +126,7 @@ type (
 	// WorkflowConditionFailedError represents a failed conditional update for workflow record
 	WorkflowConditionFailedError struct {
 		Msg             string
+		RunID           string
 		NextEventID     int64
 		DBRecordVersion int64
 	}

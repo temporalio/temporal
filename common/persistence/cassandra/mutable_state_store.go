@@ -475,6 +475,7 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 				// while CAS on `updateWorkflow.DBRecordVersion - 1`
 				dbVersion:   newWorkflow.DBRecordVersion - 1,
 				nextEventID: newWorkflow.Condition,
+				notExist:    true,
 			}},
 		)
 	}
@@ -687,19 +688,31 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 	}()
 
 	if !applied {
+		executionCASConditions := []executionCASCondition{{
+			runID: updateWorkflow.ExecutionState.RunId,
+			// dbVersion is for CAS, so the db record version will be set to `updateWorkflow.DBRecordVersion`
+			// while CAS on `updateWorkflow.DBRecordVersion - 1`
+			dbVersion:   updateWorkflow.DBRecordVersion - 1,
+			nextEventID: updateWorkflow.Condition,
+			notExist:    false,
+		}}
+		if newWorkflow != nil {
+			executionCASConditions = append(executionCASConditions, executionCASCondition{
+				runID: newWorkflow.ExecutionState.RunId,
+				// dbVersion is for CAS, so the db record version will be set to `newWorkflow.DBRecordVersion`
+				// while CAS on `newWorkflow.DBRecordVersion - 1`
+				dbVersion:   newWorkflow.DBRecordVersion - 1,
+				nextEventID: newWorkflow.Condition,
+				notExist:    true,
+			})
+		}
 		return convertErrors(
 			conflictRecord,
 			conflictIter,
 			request.ShardID,
 			request.RangeID,
 			updateWorkflow.ExecutionState.RunId,
-			[]executionCASCondition{{
-				runID: updateWorkflow.ExecutionState.RunId,
-				// dbVersion is for CAS, so the db record version will be set to `updateWorkflow.DBRecordVersion`
-				// while CAS on `updateWorkflow.DBRecordVersion - 1`
-				dbVersion:   updateWorkflow.DBRecordVersion - 1,
-				nextEventID: updateWorkflow.Condition,
-			}},
+			executionCASConditions,
 		)
 	}
 	return nil
@@ -844,6 +857,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			// while CAS on `resetWorkflow.DBRecordVersion - 1`
 			dbVersion:   resetWorkflow.DBRecordVersion - 1,
 			nextEventID: resetWorkflow.Condition,
+			notExist:    false,
 		}}
 		if currentWorkflow != nil {
 			executionCASConditions = append(executionCASConditions, executionCASCondition{
@@ -852,6 +866,17 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 				// while CAS on `currentWorkflow.DBRecordVersion - 1`
 				dbVersion:   currentWorkflow.DBRecordVersion - 1,
 				nextEventID: currentWorkflow.Condition,
+				notExist:    false,
+			})
+		}
+		if newWorkflow != nil {
+			executionCASConditions = append(executionCASConditions, executionCASCondition{
+				runID: newWorkflow.RunID,
+				// dbVersion is for CAS, so the db record version will be set to `newWorkflow.DBRecordVersion`
+				// while CAS on `newWorkflow.DBRecordVersion - 1`
+				dbVersion:   newWorkflow.DBRecordVersion - 1,
+				nextEventID: newWorkflow.Condition,
+				notExist:    true,
 			})
 		}
 		return convertErrors(
@@ -1014,6 +1039,7 @@ func (d *MutableStateStore) SetWorkflowExecution(
 			// while CAS on `setSnapshot.DBRecordVersion - 1`
 			dbVersion:   setSnapshot.DBRecordVersion - 1,
 			nextEventID: setSnapshot.Condition,
+			notExist:    false,
 		}}
 		return convertErrors(
 			conflictRecord,

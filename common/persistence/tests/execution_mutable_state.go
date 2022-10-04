@@ -155,7 +155,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 		RangeID: s.RangeID,
 		Mode:    p.CreateWorkflowModeBrandNew,
 
-		PreviousRunID:            "",
+		PreviousRunID:            newSnapshot.ExecutionState.RunId,
 		PreviousLastWriteVersion: 0,
 
 		NewWorkflowSnapshot: *newSnapshot,
@@ -244,6 +244,67 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 	}, err)
 
 	s.AssertEqualWithDB(prevSnapshot)
+}
+
+func (s *ExecutionMutableStateSuite) TestCreate_Reuse_ConcreteConflict() {
+	prevLastWriteVersion := rand.Int63()
+	prevDBRecordVersion := rand.Int63()
+	prevSnapshot := s.CreateWorkflow(
+		prevLastWriteVersion,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		prevDBRecordVersion,
+	)
+
+	currentLastWriteVersion := rand.Int63()
+	currentSnapshot := RandomSnapshot(
+		s.NamespaceID,
+		s.WorkflowID,
+		uuid.New().String(),
+		currentLastWriteVersion,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		rand.Int63(),
+	)
+	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeUpdateCurrent,
+
+		PreviousRunID:            prevSnapshot.ExecutionState.RunId,
+		PreviousLastWriteVersion: prevLastWriteVersion,
+
+		NewWorkflowSnapshot: *currentSnapshot,
+		NewWorkflowEvents:   nil,
+	})
+	s.NoError(err)
+
+	newSnapshot := RandomSnapshot(
+		s.NamespaceID,
+		s.WorkflowID,
+		prevSnapshot.ExecutionState.RunId,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+	_, err = s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeUpdateCurrent,
+
+		PreviousRunID:            currentSnapshot.ExecutionState.RunId,
+		PreviousLastWriteVersion: currentLastWriteVersion,
+
+		NewWorkflowSnapshot: *newSnapshot,
+		NewWorkflowEvents:   nil,
+	})
+	errWorkflowConditionFailed, ok := err.(*p.WorkflowConditionFailedError)
+	s.True(ok)
+	s.Equal(prevSnapshot.ExecutionState.RunId, errWorkflowConditionFailed.RunID)
+
+	s.AssertEqualWithDB(prevSnapshot)
+	s.AssertEqualWithDB(currentSnapshot)
 }
 
 func (s *ExecutionMutableStateSuite) TestCreate_Zombie() {
@@ -529,6 +590,78 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 
 	s.AssertEqualWithDB(currentSnapshot, currentMutation)
 	s.AssertEqualWithDB(newSnapshot)
+}
+
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew_ConcreteConflict() {
+	prevLastWriteVersion := rand.Int63()
+	prevDBRecordVersion := rand.Int63()
+	prevSnapshot := s.CreateWorkflow(
+		prevLastWriteVersion,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		prevDBRecordVersion,
+	)
+
+	currentRunID := uuid.New().String()
+	currentLastWriteVersion := rand.Int63()
+	currentSnapshot := RandomSnapshot(
+		s.NamespaceID,
+		s.WorkflowID,
+		currentRunID,
+		currentLastWriteVersion,
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeUpdateCurrent,
+
+		PreviousRunID:            prevSnapshot.ExecutionState.RunId,
+		PreviousLastWriteVersion: prevLastWriteVersion,
+
+		NewWorkflowSnapshot: *currentSnapshot,
+		NewWorkflowEvents:   nil,
+	})
+	s.NoError(err)
+
+	currentMutation := RandomMutation(
+		s.NamespaceID,
+		s.WorkflowID,
+		currentRunID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		currentSnapshot.DBRecordVersion+1,
+	)
+	newSnapshot := RandomSnapshot(
+		s.NamespaceID,
+		s.WorkflowID,
+		prevSnapshot.ExecutionState.RunId,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		UpdateWorkflowMutation: *currentMutation,
+		UpdateWorkflowEvents:   nil,
+
+		NewWorkflowSnapshot: newSnapshot,
+		NewWorkflowEvents:   nil,
+	})
+
+	errWorkflowConditionFailed, ok := err.(*p.WorkflowConditionFailedError)
+	s.True(ok)
+	s.Equal(prevSnapshot.ExecutionState.RunId, errWorkflowConditionFailed.RunID)
+
+	s.AssertEqualWithDB(prevSnapshot)
+	s.AssertEqualWithDB(currentSnapshot)
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {

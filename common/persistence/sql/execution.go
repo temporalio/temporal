@@ -126,23 +126,19 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 	// current run ID, last write version, current workflow state check
 	switch request.Mode {
 	case p.CreateWorkflowModeBrandNew:
-		if currentRow == nil {
-			// current row does not exists, suits the create mode
-		} else {
-			if currentRow.RunID.String() != request.PreviousRunID {
-				return nil, extractCurrentWorkflowConflictError(
-					currentRow,
-					fmt.Sprintf(
-						"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
-						workflowID,
-						currentRow.RunID.String(),
-						request.PreviousRunID,
-					),
-				)
-			}
-			// current run ID is already request ID
+		if currentRow != nil {
+			return nil, extractCurrentWorkflowConflictError(
+				currentRow,
+				fmt.Sprintf(
+					"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
+					workflowID,
+					currentRow.RunID.String(),
+					request.PreviousRunID,
+				),
+			)
 		}
 
+		// current row does not exists, suits the create mode
 	case p.CreateWorkflowModeUpdateCurrent:
 		if currentRow == nil {
 			return nil, extractCurrentWorkflowConflictError(currentRow, "")
