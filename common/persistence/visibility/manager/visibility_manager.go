@@ -88,8 +88,9 @@ type (
 	// RecordWorkflowExecutionClosedRequest is used to add a record of a closed execution
 	RecordWorkflowExecutionClosedRequest struct {
 		*VisibilityRequestBase
-		CloseTime     time.Time
-		HistoryLength int64
+		CloseTime        time.Time
+		HistoryLength    int64
+		HistorySizeBytes int64
 	}
 
 	// UpsertWorkflowExecutionRequest is used to upsert workflow execution

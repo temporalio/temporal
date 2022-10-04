@@ -102,6 +102,7 @@ func (p *visibilityManagerImpl) RecordWorkflowExecutionClosed(
 		InternalVisibilityRequestBase: requestBase,
 		CloseTime:                     request.CloseTime,
 		HistoryLength:                 request.HistoryLength,
+		HistorySizeBytes:              request.HistorySizeBytes,
 	}
 	return p.store.RecordWorkflowExecutionClosed(ctx, req)
 }
