@@ -618,10 +618,10 @@ func (p *ackMgrImpl) processNewRunReplication(
 		if err != nil {
 			return nil, err
 		}
+		defer func() { releaseFn(retError) }()
 
 		newRunMutableState, err := newRunContext.LoadMutableState(ctx)
 		if err != nil {
-			releaseFn(err)
 			return nil, err
 		}
 		_, newRunBranchToken, err = getVersionHistoryItems(
@@ -630,13 +630,12 @@ func (p *ackMgrImpl) processNewRunReplication(
 			taskVersion,
 		)
 		if err != nil {
-			releaseFn(err)
 			return nil, err
 		}
-		releaseFn(nil)
 	} else if len(branchToken) != 0 {
 		newRunBranchToken = branchToken
 	}
+
 	var newRunEventsBlob *commonpb.DataBlob
 	if len(newRunBranchToken) > 0 {
 		// only get the first batch
