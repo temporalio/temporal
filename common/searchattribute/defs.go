@@ -31,23 +31,23 @@ import (
 )
 
 const (
-	NamespaceID          = "NamespaceId"
-	WorkflowID           = "WorkflowId"
-	RunID                = "RunId"
-	WorkflowType         = "WorkflowType"
-	StartTime            = "StartTime"
-	ExecutionTime        = "ExecutionTime"
-	CloseTime            = "CloseTime"
-	ExecutionStatus      = "ExecutionStatus"
-	TaskQueue            = "TaskQueue"
-	HistoryLength        = "HistoryLength"
-	ExecutionDuration    = "ExecutionDuration"
-	StateTransitionCount = "StateTransitionCount"
-
+	NamespaceID           = "NamespaceId"
+	WorkflowID            = "WorkflowId"
+	RunID                 = "RunId"
+	WorkflowType          = "WorkflowType"
+	StartTime             = "StartTime"
+	ExecutionTime         = "ExecutionTime"
+	CloseTime             = "CloseTime"
+	ExecutionStatus       = "ExecutionStatus"
+	TaskQueue             = "TaskQueue"
+	HistoryLength         = "HistoryLength"
+	ExecutionDuration     = "ExecutionDuration"
+	StateTransitionCount  = "StateTransitionCount"
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
 	BatcherNamespace      = "BatcherNamespace"
 	BatcherUser           = "BatcherUser"
+	HistorySizeBytes      = "HistorySizeBytes"
 
 	TemporalNamespaceDivision = "TemporalNamespaceDivision"
 
@@ -80,6 +80,7 @@ var (
 		HistoryLength:        enumspb.INDEXED_VALUE_TYPE_INT,
 		ExecutionDuration:    enumspb.INDEXED_VALUE_TYPE_INT,
 		StateTransitionCount: enumspb.INDEXED_VALUE_TYPE_INT,
+		HistorySizeBytes:     enumspb.INDEXED_VALUE_TYPE_INT,
 	}
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
