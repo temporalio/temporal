@@ -30,6 +30,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
 )
 
@@ -48,6 +49,7 @@ const (
 	testGetDurationPropertyFilteredByNamespaceKey     = "testGetDurationPropertyFilteredByNamespaceKey"
 	testGetIntPropertyFilteredByTaskQueueInfoKey      = "testGetIntPropertyFilteredByTaskQueueInfoKey"
 	testGetDurationPropertyFilteredByTaskQueueInfoKey = "testGetDurationPropertyFilteredByTaskQueueInfoKey"
+	testGetDurationPropertyFilteredByTaskTypeKey      = "testGetDurationPropertyFilteredByTaskTypeKey"
 	testGetDurationPropertyStructuredDefaults         = "testGetDurationPropertyStructuredDefaults"
 	testGetBoolPropertyFilteredByNamespaceIDKey       = "testGetBoolPropertyFilteredByNamespaceIDKey"
 	testGetBoolPropertyFilteredByTaskQueueInfoKey     = "testGetBoolPropertyFilteredByTaskQueueInfoKey"
@@ -157,6 +159,14 @@ func (s *collectionSuite) TestGetDurationPropertyFilteredByTaskQueueInfo() {
 	s.Equal(time.Second, value(namespace, taskQueue, 0))
 	s.client[testGetDurationPropertyFilteredByTaskQueueInfoKey] = time.Minute
 	s.Equal(time.Minute, value(namespace, taskQueue, 0))
+}
+
+func (s *collectionSuite) TestGetDurationPropertyFilteredByTaskType() {
+	taskType := enumsspb.TASK_TYPE_UNSPECIFIED
+	value := s.cln.GetDurationPropertyFilteredByTaskType(testGetDurationPropertyFilteredByTaskTypeKey, time.Second)
+	s.Equal(time.Second, value(taskType))
+	s.client[testGetDurationPropertyFilteredByTaskTypeKey] = time.Minute
+	s.Equal(time.Minute, value(taskType))
 }
 
 func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {
