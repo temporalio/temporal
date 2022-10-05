@@ -77,6 +77,7 @@ type (
 		Memo                 *commonpb.DataBlob
 		TaskQueue            string
 		SearchAttributes     *commonpb.SearchAttributes
+		HistorySizeBytes     int64
 	}
 
 	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions
@@ -112,8 +113,9 @@ type (
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
 	InternalRecordWorkflowExecutionClosedRequest struct {
 		*InternalVisibilityRequestBase
-		CloseTime     time.Time
-		HistoryLength int64
+		CloseTime        time.Time
+		HistoryLength    int64
+		HistorySizeBytes int64
 	}
 
 	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
