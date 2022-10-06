@@ -41,10 +41,10 @@ const (
 		`run_id=VALUES(run_id)`
 
 	templateCreateWorkflowExecutionClosed = `INSERT INTO executions_visibility (` +
-		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding, task_queue) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
+		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding, task_queue, history_size_bytes) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
 		`ON DUPLICATE KEY UPDATE workflow_id = VALUES(workflow_id), start_time = VALUES(start_time), execution_time = VALUES(execution_time), workflow_type_name = VALUES(workflow_type_name), ` +
-		`close_time = VALUES(close_time), status = VALUES(status), history_length = VALUES(history_length), memo = VALUES(memo), encoding = VALUES(encoding), task_queue = VALUES(task_queue)`
+		`close_time = VALUES(close_time), status = VALUES(status), history_length = VALUES(history_length), memo = VALUES(memo), encoding = VALUES(encoding), task_queue = VALUES(task_queue), history_size_bytes = `
 
 	// RunID condition is needed for correct pagination
 	templateConditions = ` AND namespace_id = ?
@@ -138,6 +138,7 @@ func (mdb *db) ReplaceIntoVisibility(
 			row.Memo,
 			row.Encoding,
 			row.TaskQueue,
+			*row.HistorySizeBytes,
 		)
 	default:
 		return nil, errCloseParams

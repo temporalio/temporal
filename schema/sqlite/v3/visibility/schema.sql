@@ -11,6 +11,7 @@ CREATE TABLE executions_visibility (
 	memo BLOB,
 	encoding VARCHAR(64) NOT NULL,
 	task_queue VARCHAR(255) DEFAULT '' NOT NULL,
+    history_size_bytes BIGINT,
 
 	PRIMARY KEY (namespace_id, run_id)
 );

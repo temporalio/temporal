@@ -41,8 +41,8 @@ const (
          ON CONFLICT (namespace_id, run_id) DO NOTHING`
 
 	templateCreateWorkflowExecutionClosed = `INSERT INTO executions_visibility (` +
-		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding, task_queue) ` +
-		`VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding, task_queue, history_size_bytes) ` +
+		`VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (namespace_id, run_id) DO UPDATE 
 		  SET workflow_id = excluded.workflow_id,
 		      start_time = excluded.start_time,
@@ -53,7 +53,8 @@ const (
 			  history_length = excluded.history_length,
 			  memo = excluded.memo,
 			  encoding = excluded.encoding,
-			  task_queue = excluded.task_queue`
+			  task_queue = excluded.task_queue,
+			  history_size_bytes = excluded.history_size_bytes`
 
 	// RunID condition is needed for correct pagination
 	templateConditions1 = ` AND namespace_id = $1
@@ -159,6 +160,7 @@ func (pdb *db) ReplaceIntoVisibility(
 			row.Memo,
 			row.Encoding,
 			row.TaskQueue,
+			*row.HistorySizeBytes,
 		)
 	default:
 		return nil, errCloseParams

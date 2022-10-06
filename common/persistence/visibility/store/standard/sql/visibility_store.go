@@ -117,6 +117,7 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(
 		Memo:             request.Memo.Data,
 		Encoding:         request.Memo.EncodingType.String(),
 		TaskQueue:        request.TaskQueue,
+		HistorySizeBytes: &request.HistorySizeBytes,
 	})
 	if err != nil {
 		return err

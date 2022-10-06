@@ -45,6 +45,7 @@ type (
 		Memo             []byte
 		Encoding         string
 		TaskQueue        string
+		HistorySizeBytes *int64
 	}
 
 	// VisibilitySelectFilter contains the column names within executions_visibility table that

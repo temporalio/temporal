@@ -42,8 +42,8 @@ const (
 		`ON CONFLICT (namespace_id, run_id) DO NOTHING`
 
 	templateCreateWorkflowExecutionClosed = `REPLACE INTO executions_visibility (` +
-		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding, task_queue) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) `
+		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding, task_queue, history_size_bytes) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) `
 
 	// RunID condition is needed for correct pagination
 	templateConditions = ` AND namespace_id = ?
@@ -135,6 +135,7 @@ func (mdb *db) ReplaceIntoVisibility(
 			row.Memo,
 			row.Encoding,
 			row.TaskQueue,
+			*row.HistorySizeBytes,
 		)
 	default:
 		return nil, errCloseParams
