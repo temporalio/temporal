@@ -44,7 +44,7 @@ const (
 		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding, task_queue, history_size_bytes) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
 		`ON DUPLICATE KEY UPDATE workflow_id = VALUES(workflow_id), start_time = VALUES(start_time), execution_time = VALUES(execution_time), workflow_type_name = VALUES(workflow_type_name), ` +
-		`close_time = VALUES(close_time), status = VALUES(status), history_length = VALUES(history_length), memo = VALUES(memo), encoding = VALUES(encoding), task_queue = VALUES(task_queue), history_size_bytes = `
+		`close_time = VALUES(close_time), status = VALUES(status), history_length = VALUES(history_length), memo = VALUES(memo), encoding = VALUES(encoding), task_queue = VALUES(task_queue), history_size_bytes = VALUES(history_size_bytes)`
 
 	// RunID condition is needed for correct pagination
 	templateConditions = ` AND namespace_id = ?
@@ -64,7 +64,7 @@ const (
 	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding, task_queue`
 	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE status = 1 `
 
-	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, history_length
+	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, history_length, history_size_bytes
 		 FROM executions_visibility WHERE status != 1 `
 
 	templateGetOpenWorkflowExecutions = templateOpenSelect + templateConditions
@@ -81,7 +81,7 @@ const (
 
 	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = ?` + templateConditionsClosedWorkflows
 
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length, task_queue 
+	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length, task_queue, history_size_bytes 
 		 FROM executions_visibility
 		 WHERE namespace_id = ? AND status != 1
 		 AND run_id = ?`

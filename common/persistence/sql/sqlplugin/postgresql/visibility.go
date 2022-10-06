@@ -88,7 +88,7 @@ const (
 	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding, task_queue`
 	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE status = 1 `
 
-	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, history_length
+	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, history_length, history_size_bytes
 		 FROM executions_visibility WHERE status != 1 `
 
 	templateGetOpenWorkflowExecutions = templateOpenSelect + templateConditions1
@@ -105,7 +105,7 @@ const (
 
 	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = $1` + templateConditionsClosedWorkflow2
 
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length, task_queue
+	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length, task_queue, history_size_bytes
 		 FROM executions_visibility
 		 WHERE namespace_id = $1 AND status != 1
 		 AND run_id = $2`

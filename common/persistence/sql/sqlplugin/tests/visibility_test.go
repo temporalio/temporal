@@ -105,6 +105,7 @@ func (s *visibilitySuite) TestInsertSelect_NonExists() {
 	status := int32(0)
 	closeTime := (*time.Time)(nil)
 	historyLength := (*int64)(nil)
+	historySizeBytes := (*int64)(nil)
 
 	visibility := s.newRandomVisibilityRow(
 		namespaceID,
@@ -116,6 +117,7 @@ func (s *visibilitySuite) TestInsertSelect_NonExists() {
 		status,
 		closeTime,
 		historyLength,
+		historySizeBytes,
 	)
 	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -145,6 +147,7 @@ func (s *visibilitySuite) TestInsertSelect_Exists() {
 	status := int32(0)
 	closeTime := (*time.Time)(nil)
 	historyLength := (*int64)(nil)
+	historySizeBytes := (*int64)(nil)
 
 	visibility1 := s.newRandomVisibilityRow(
 		namespaceID,
@@ -156,6 +159,7 @@ func (s *visibilitySuite) TestInsertSelect_Exists() {
 		status,
 		closeTime,
 		historyLength,
+		historySizeBytes,
 	)
 	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility1)
 	s.NoError(err)
@@ -173,6 +177,7 @@ func (s *visibilitySuite) TestInsertSelect_Exists() {
 		status,
 		closeTime,
 		historyLength,
+		historySizeBytes,
 	)
 	_, err = s.store.InsertIntoVisibility(newVisibilityContext(), &visibility2)
 	s.NoError(err)
@@ -202,6 +207,7 @@ func (s *visibilitySuite) TestReplaceSelect_NonExists() {
 	status := int32(0)
 	closeTime := executionTime.Add(time.Second)
 	historyLength := rand.Int63()
+	historySizeBytes := rand.Int63()
 
 	visibility := s.newRandomVisibilityRow(
 		namespaceID,
@@ -213,6 +219,7 @@ func (s *visibilitySuite) TestReplaceSelect_NonExists() {
 		status,
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
+		convert.Int64Ptr(historySizeBytes),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -242,6 +249,7 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 	status := int32(0)
 	closeTime := executionTime.Add(time.Second)
 	historyLength := rand.Int63()
+	historySizeBytes := rand.Int63()
 
 	visibility := s.newRandomVisibilityRow(
 		namespaceID,
@@ -253,6 +261,7 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 		status,
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
+		convert.Int64Ptr(historySizeBytes),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -270,6 +279,7 @@ func (s *visibilitySuite) TestReplaceSelect_Exists() {
 		status,
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
+		convert.Int64Ptr(historySizeBytes),
 	)
 	_, err = s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -321,6 +331,7 @@ func (s *visibilitySuite) TestInsertDeleteSelect() {
 	status := int32(0)
 	closeTime := (*time.Time)(nil)
 	historyLength := (*int64)(nil)
+	historySizeBytes := (*int64)(nil)
 
 	visibility := s.newRandomVisibilityRow(
 		namespaceID,
@@ -332,6 +343,7 @@ func (s *visibilitySuite) TestInsertDeleteSelect() {
 		status,
 		closeTime,
 		historyLength,
+		historySizeBytes,
 	)
 	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -367,6 +379,7 @@ func (s *visibilitySuite) TestReplaceDeleteSelect() {
 	status := int32(0)
 	closeTime := executionTime.Add(time.Second)
 	historyLength := rand.Int63()
+	historySizeBytes := rand.Int63()
 
 	visibility := s.newRandomVisibilityRow(
 		namespaceID,
@@ -378,6 +391,7 @@ func (s *visibilitySuite) TestReplaceDeleteSelect() {
 		status,
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
+		convert.Int64Ptr(historySizeBytes),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -415,6 +429,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	closeTime := (*time.Time)(nil)
 	historyLength := (*int64)(nil)
+	historySizeBytes := (*int64)(nil)
 
 	visibility := s.newRandomVisibilityRow(
 		namespaceID,
@@ -426,6 +441,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		status,
 		closeTime,
 		historyLength,
+		historySizeBytes,
 	)
 	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -469,6 +485,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	closeTime := (*time.Time)(nil)
 	historyLength := (*int64)(nil)
+	historySizeBytes := (*int64)(nil)
 	for i := 0; i < numStartTime; i++ {
 		for j := 0; j < visibilityPerStartTime; j++ {
 			runID := primitives.NewUUID()
@@ -483,6 +500,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 				status,
 				closeTime,
 				historyLength,
+				historySizeBytes,
 			)
 			result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
@@ -540,6 +558,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
 	closeTime := executionTime.Add(time.Second)
 	historyLength := rand.Int63()
+	historySizeBytes := rand.Int63()
 
 	visibility := s.newRandomVisibilityRow(
 		namespaceID,
@@ -551,6 +570,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 		status,
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
+		convert.Int64Ptr(historySizeBytes),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -592,6 +612,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
 	closeTime := executionTime.Add(time.Second)
 	historyLength := rand.Int63()
+	historySizeBytes := rand.Int63()
 	minStartTime := closeTime
 	maxStartTime := closeTime.Add(time.Duration(numStartTime) * time.Second)
 	for i := 0; i < numStartTime; i++ {
@@ -608,6 +629,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 				status,
 				timestamp.TimePtr(closeTime),
 				convert.Int64Ptr(historyLength),
+				convert.Int64Ptr(historySizeBytes),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
@@ -664,6 +686,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	closeTime := (*time.Time)(nil)
 	historyLength := (*int64)(nil)
+	historySizeBytes := (*int64)(nil)
 
 	visibility := s.newRandomVisibilityRow(
 		namespaceID,
@@ -675,6 +698,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		status,
 		closeTime,
 		historyLength,
+		historySizeBytes,
 	)
 	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -718,6 +742,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	closeTime := (*time.Time)(nil)
 	historyLength := (*int64)(nil)
+	historySizeBytes := (*int64)(nil)
 	for i := 0; i < numStartTime; i++ {
 		for j := 0; j < visibilityPerStartTime; j++ {
 			workflowID := shuffle.String(testVisibilityWorkflowID)
@@ -732,6 +757,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 				status,
 				closeTime,
 				historyLength,
+				historySizeBytes,
 			)
 			result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
@@ -789,6 +815,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
 	closeTime := executionTime.Add(time.Second)
 	historyLength := rand.Int63()
+	historySizeBytes := rand.Int63()
 
 	visibility := s.newRandomVisibilityRow(
 		namespaceID,
@@ -800,6 +827,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 		status,
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
+		convert.Int64Ptr(historySizeBytes),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -841,6 +869,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
 	closeTime := executionTime.Add(time.Second)
 	historyLength := rand.Int63()
+	historySizeBytes := rand.Int63()
 	minStartTime := closeTime
 	maxStartTime := closeTime.Add(time.Duration(numStartTime) * time.Second)
 	for i := 0; i < numStartTime; i++ {
@@ -857,6 +886,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 				status,
 				timestamp.TimePtr(closeTime),
 				convert.Int64Ptr(historyLength),
+				convert.Int64Ptr(historySizeBytes),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
@@ -913,6 +943,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Single
 	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	closeTime := (*time.Time)(nil)
 	historyLength := (*int64)(nil)
+	historySizeBytes := (*int64)(nil)
 
 	visibility := s.newRandomVisibilityRow(
 		namespaceID,
@@ -924,6 +955,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Single
 		status,
 		closeTime,
 		historyLength,
+		historySizeBytes,
 	)
 	result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -966,6 +998,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multip
 	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	closeTime := (*time.Time)(nil)
 	historyLength := (*int64)(nil)
+	historySizeBytes := (*int64)(nil)
 	for i := 0; i < numStartTime; i++ {
 		for j := 0; j < visibilityPerStartTime; j++ {
 			workflowID := shuffle.String(testVisibilityWorkflowID)
@@ -981,6 +1014,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multip
 				status,
 				closeTime,
 				historyLength,
+				historySizeBytes,
 			)
 			result, err := s.store.InsertIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
@@ -1045,6 +1079,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseSingle(
 	executionTime := startTime.Add(time.Second)
 	closeTime := executionTime.Add(time.Second)
 	historyLength := rand.Int63()
+	historySizeBytes := rand.Int63()
 
 	visibility := s.newRandomVisibilityRow(
 		namespaceID,
@@ -1056,6 +1091,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseSingle(
 		int32(status),
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
+		convert.Int64Ptr(historySizeBytes),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -1096,6 +1132,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 
 	closeTime := executionTime.Add(time.Second)
 	historyLength := rand.Int63()
+	historySizeBytes := rand.Int63()
 	minStartTime := closeTime
 	maxStartTime := closeTime.Add(time.Duration(numStartTime) * time.Second)
 	for i := 0; i < numStartTime; i++ {
@@ -1114,6 +1151,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 				status,
 				timestamp.TimePtr(closeTime),
 				convert.Int64Ptr(historyLength),
+				convert.Int64Ptr(historySizeBytes),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
@@ -1177,6 +1215,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeSin
 	executionTime := startTime.Add(time.Second)
 	closeTime := executionTime.Add(time.Second)
 	historyLength := rand.Int63()
+	historySizeBytes := rand.Int63()
 
 	visibility := s.newRandomVisibilityRow(
 		namespaceID,
@@ -1188,6 +1227,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeSin
 		int32(status),
 		timestamp.TimePtr(closeTime),
 		convert.Int64Ptr(historyLength),
+		convert.Int64Ptr(historySizeBytes),
 	)
 	result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 	s.NoError(err)
@@ -1235,6 +1275,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 	executionTime := startTime.Add(time.Second)
 	closeTime := executionTime.Add(time.Second)
 	historyLength := rand.Int63()
+	historySizeBytes := rand.Int63()
 	minStartTime := closeTime
 	maxStartTime := closeTime.Add(time.Duration(numStartTime) * time.Second)
 	for i := 0; i < numStartTime; i++ {
@@ -1252,6 +1293,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 				int32(status),
 				timestamp.TimePtr(closeTime),
 				convert.Int64Ptr(historyLength),
+				convert.Int64Ptr(historySizeBytes),
 			)
 			result, err := s.store.ReplaceIntoVisibility(newVisibilityContext(), &visibility)
 			s.NoError(err)
@@ -1363,6 +1405,7 @@ func (s *visibilitySuite) newRandomVisibilityRow(
 	status int32,
 	closeTime *time.Time,
 	historyLength *int64,
+	historySizeBytes *int64,
 ) sqlplugin.VisibilityRow {
 	return sqlplugin.VisibilityRow{
 		NamespaceID:      namespaceID.String(),
@@ -1376,5 +1419,6 @@ func (s *visibilitySuite) newRandomVisibilityRow(
 		HistoryLength:    historyLength,
 		Memo:             shuffle.Bytes(testVisibilityData),
 		Encoding:         testVisibilityEncoding,
+		HistorySizeBytes: historySizeBytes,
 	}
 }
