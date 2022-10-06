@@ -458,6 +458,7 @@ func (s *Service) startScanner() {
 		s.executionManager,
 		s.taskManager,
 		s.historyClient,
+		s.namespaceRegistry,
 	)
 	if err := sc.Start(); err != nil {
 		s.logger.Fatal(

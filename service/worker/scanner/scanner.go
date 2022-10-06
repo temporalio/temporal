@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 
 	"go.temporal.io/server/common/backoff"
@@ -77,13 +78,14 @@ type (
 	// scannerContext is the context object that get's
 	// passed around within the scanner workflows / activities
 	scannerContext struct {
-		cfg              *Config
-		logger           log.Logger
-		sdkSystemClient  sdkclient.Client
-		metricsClient    metrics.Client
-		executionManager persistence.ExecutionManager
-		taskManager      persistence.TaskManager
-		historyClient    historyservice.HistoryServiceClient
+		cfg               *Config
+		logger            log.Logger
+		sdkSystemClient   sdkclient.Client
+		metricsClient     metrics.Client
+		executionManager  persistence.ExecutionManager
+		taskManager       persistence.TaskManager
+		historyClient     historyservice.HistoryServiceClient
+		namespaceRegistry namespace.Registry
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -107,16 +109,18 @@ func New(
 	executionManager persistence.ExecutionManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
+	registry namespace.Registry,
 ) *Scanner {
 	return &Scanner{
 		context: scannerContext{
-			cfg:              cfg,
-			sdkSystemClient:  sdkSystemClient,
-			logger:           logger,
-			metricsClient:    metricsClient,
-			executionManager: executionManager,
-			taskManager:      taskManager,
-			historyClient:    historyClient,
+			cfg:               cfg,
+			sdkSystemClient:   sdkSystemClient,
+			logger:            logger,
+			metricsClient:     metricsClient,
+			executionManager:  executionManager,
+			taskManager:       taskManager,
+			historyClient:     historyClient,
+			namespaceRegistry: registry,
 		},
 	}
 }
