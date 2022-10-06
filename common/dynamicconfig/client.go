@@ -95,5 +95,6 @@ type (
 		TaskQueueName string
 		TaskQueueType enumspb.TaskQueueType
 		ShardID       int32
+		TaskType      string
 	}
 )

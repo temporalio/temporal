@@ -846,16 +846,7 @@ func (d *HandlerImpl) maybeUpdateFailoverHistory(
 		d.logger.Debug("updateReplicationConfig was nil")
 		return failoverHistory
 	}
-	desiredReplicationState := updateReplicationConfig.State
-	if desiredReplicationState == enumspb.REPLICATION_STATE_UNSPECIFIED {
-		desiredReplicationState = namespaceDetail.ReplicationConfig.State
-	}
-	// N.B., UNSPECIFIED is the same as NORMAL
-	if desiredReplicationState != enumspb.REPLICATION_STATE_NORMAL &&
-		desiredReplicationState != enumspb.REPLICATION_STATE_UNSPECIFIED {
-		d.logger.Debug("Replication state not NORMAL", tag.NewAnyTag("state", updateReplicationConfig.State))
-		return failoverHistory
-	}
+
 	lastFailoverVersion := int64(-1)
 	if l := len(namespaceDetail.ReplicationConfig.FailoverHistory); l > 0 {
 		lastFailoverVersion = namespaceDetail.ReplicationConfig.FailoverHistory[l-1].FailoverVersion

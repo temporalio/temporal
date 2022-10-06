@@ -117,9 +117,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.clusterName = cluster.TestAlternativeClusterName
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
-	s.fetchHistoryDuration = config.StandbyTaskMissingEventsResendDelay() +
-		(config.StandbyTaskMissingEventsDiscardDelay()-config.StandbyTaskMissingEventsResendDelay())/2
-	s.discardDuration = config.StandbyTaskMissingEventsDiscardDelay() * 2
+	s.fetchHistoryDuration = time.Minute * 12
+	s.discardDuration = time.Minute * 30
 
 	s.controller = gomock.NewController(s.T())
 	s.mockNDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
