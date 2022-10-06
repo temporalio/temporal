@@ -271,7 +271,7 @@ func (s *ackManagerSuite) TestSyncActivity_WorkflowCompleted() {
 		ScheduledEventID:    scheduledEventID,
 	}
 
-	context, release, _ := s.replicationAckManager.historyCache.GetOrCreateWorkflowExecution(
+	context, release, _ := s.replicationAckManager.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
@@ -323,7 +323,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityCompleted() {
 		ScheduledEventID:    scheduledEventID,
 	}
 
-	context, release, _ := s.replicationAckManager.historyCache.GetOrCreateWorkflowExecution(
+	context, release, _ := s.replicationAckManager.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
@@ -378,7 +378,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRetry() {
 		ScheduledEventID:    scheduledEventID,
 	}
 
-	context, release, _ := s.replicationAckManager.historyCache.GetOrCreateWorkflowExecution(
+	context, release, _ := s.replicationAckManager.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
@@ -491,7 +491,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRunning() {
 		ScheduledEventID:    scheduledEventID,
 	}
 
-	context, release, _ := s.replicationAckManager.historyCache.GetOrCreateWorkflowExecution(
+	context, release, _ := s.replicationAckManager.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{

@@ -1012,6 +1012,7 @@ func (s *TaskSerializer) replicationHistoryTaskToProto(
 		NextEventId:       historyTask.NextEventID,
 		BranchToken:       historyTask.BranchToken,
 		NewRunBranchToken: historyTask.NewRunBranchToken,
+		NewRunId:          historyTask.NewRunID,
 		VisibilityTime:    &historyTask.VisibilityTimestamp,
 	}
 }
@@ -1036,6 +1037,7 @@ func (s *TaskSerializer) replicationHistoryTaskFromProto(
 		Version:             historyTask.Version,
 		BranchToken:         historyTask.BranchToken,
 		NewRunBranchToken:   historyTask.NewRunBranchToken,
+		NewRunID:            historyTask.NewRunId,
 	}
 }
 

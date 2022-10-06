@@ -67,7 +67,7 @@ type (
 		currentClusterName string
 		shard              shard.Context
 		config             *configs.Config
-		historyCache       workflow.Cache
+		workflowCache      workflow.Cache
 		executionMgr       persistence.ExecutionManager
 		metricsClient      metrics.Client
 		logger             log.Logger
@@ -88,7 +88,7 @@ var (
 
 func NewAckManager(
 	shard shard.Context,
-	historyCache workflow.Cache,
+	workflowCache workflow.Cache,
 	executionMgr persistence.ExecutionManager,
 	logger log.Logger,
 ) AckManager {
@@ -104,7 +104,7 @@ func NewAckManager(
 		currentClusterName: currentClusterName,
 		shard:              shard,
 		config:             shard.GetConfig(),
-		historyCache:       historyCache,
+		workflowCache:      workflowCache,
 		executionMgr:       executionMgr,
 		metricsClient:      shard.GetMetricsClient(),
 		logger:             log.With(logger, tag.ComponentReplicatorQueue),
@@ -423,7 +423,7 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 	workflowID := taskInfo.WorkflowID
 	runID := taskInfo.RunID
 	taskID := taskInfo.TaskID
-	return p.processReplication(
+	replicationTask, err := p.processReplication(
 		ctx,
 		true, // still necessary to send out history replication message if workflow closed
 		namespaceID,
@@ -439,33 +439,14 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 				return nil, err
 			}
 
-			// BranchToken will not set in get dlq replication message request
-			if len(taskInfo.BranchToken) == 0 {
-				taskInfo.BranchToken = branchToken
-			}
-
 			eventsBlob, err := p.getEventsBlob(
 				ctx,
-				taskInfo.BranchToken,
+				branchToken,
 				taskInfo.FirstEventID,
 				taskInfo.NextEventID,
 			)
 			if err != nil {
 				return nil, err
-			}
-
-			var newRunEventsBlob *commonpb.DataBlob
-			if len(taskInfo.NewRunBranchToken) != 0 {
-				// only get the first batch
-				newRunEventsBlob, err = p.getEventsBlob(
-					ctx,
-					taskInfo.NewRunBranchToken,
-					common.FirstEventID,
-					common.FirstEventID+1,
-				)
-				if err != nil {
-					return nil, err
-				}
 			}
 
 			replicationTask := &replicationspb.ReplicationTask{
@@ -478,13 +459,25 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 						RunId:               runID,
 						VersionHistoryItems: versionHistoryItems,
 						Events:              eventsBlob,
-						NewRunEvents:        newRunEventsBlob,
+						// NewRunEvents will be set in processNewRunReplication
 					},
 				},
 				VisibilityTime: &taskInfo.VisibilityTimestamp,
 			}
 			return replicationTask, nil
 		},
+	)
+	if err != nil {
+		return replicationTask, err
+	}
+	return p.processNewRunReplication(
+		ctx,
+		namespaceID,
+		workflowID,
+		taskInfo.NewRunID,
+		taskInfo.NewRunBranchToken,
+		taskInfo.Version,
+		replicationTask,
 	)
 }
 
@@ -570,11 +563,11 @@ func (p *ackMgrImpl) processReplication(
 		RunId:      runID,
 	}
 
-	context, release, err := p.historyCache.GetOrCreateWorkflowExecution(
+	context, release, err := p.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
-		workflow.CallerTypeAPI,
+		workflow.CallerTypeTask,
 	)
 	if err != nil {
 		return nil, err
@@ -594,6 +587,71 @@ func (p *ackMgrImpl) processReplication(
 	default:
 		return nil, err
 	}
+}
+
+func (p *ackMgrImpl) processNewRunReplication(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	workflowID string,
+	newRunID string,
+	branchToken []byte,
+	taskVersion int64,
+	task *replicationspb.ReplicationTask,
+) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
+
+	attr, ok := task.Attributes.(*replicationspb.ReplicationTask_HistoryTaskAttributes)
+	if !ok {
+		return nil, serviceerror.NewInternal("Wrong replication task to process new run replication.")
+	}
+
+	var newRunBranchToken []byte
+	if len(newRunID) > 0 {
+		newRunContext, releaseFn, err := p.workflowCache.GetOrCreateWorkflowExecution(
+			ctx,
+			namespaceID,
+			commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      newRunID,
+			},
+			workflow.CallerTypeTask,
+		)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { releaseFn(retError) }()
+
+		newRunMutableState, err := newRunContext.LoadMutableState(ctx)
+		if err != nil {
+			return nil, err
+		}
+		_, newRunBranchToken, err = getVersionHistoryItems(
+			newRunMutableState,
+			common.FirstEventID,
+			taskVersion,
+		)
+		if err != nil {
+			return nil, err
+		}
+	} else if len(branchToken) != 0 {
+		newRunBranchToken = branchToken
+	}
+
+	var newRunEventsBlob *commonpb.DataBlob
+	if len(newRunBranchToken) > 0 {
+		// only get the first batch
+		var err error
+		newRunEventsBlob, err = p.getEventsBlob(
+			ctx,
+			newRunBranchToken,
+			common.FirstEventID,
+			common.FirstEventID+1,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	attr.HistoryTaskAttributes.NewRunEvents = newRunEventsBlob
+	return task, nil
 }
 
 func getVersionHistoryItems(
