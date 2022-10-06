@@ -41,8 +41,11 @@ type (
 		FirstEventID        int64
 		NextEventID         int64
 		Version             int64
-		BranchToken         []byte
-		NewRunBranchToken   []byte
+		// deprecated
+		BranchToken []byte
+		// deprecated
+		NewRunBranchToken []byte
+		NewRunID          string
 	}
 )
 

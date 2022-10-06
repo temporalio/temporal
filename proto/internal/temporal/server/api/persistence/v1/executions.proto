@@ -192,6 +192,7 @@ message ReplicationTaskInfo {
     reserved 14;
     int64 task_id = 15;
     google.protobuf.Timestamp visibility_time = 16 [(gogoproto.stdtime) = true];
+    string new_run_id = 17;
 }
 
 // visibility_task_data column
