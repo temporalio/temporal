@@ -49,6 +49,10 @@ type (
 		) error
 		GenerateWorkflowCloseTasks(
 			now time.Time,
+			// TODO: remove closeEvent parameter
+			// when deprecating the backward compatible logic
+			// for getting close time from close event.
+			closeEvent *historypb.HistoryEvent,
 			deleteAfterClose bool,
 		) error
 		GenerateDeleteExecutionTask(
@@ -161,6 +165,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	now time.Time,
+	closeEvent *historypb.HistoryEvent,
 	deleteAfterClose bool,
 ) error {
 
@@ -196,6 +201,19 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	// Also, there is no reason to schedule history retention task if workflow executions in about to be deleted.
 	// This will also save one call to visibility storage and one timer task creation.
 	if !deleteAfterClose {
+		// In most cases, the value of "now" is the closeEvent time.
+		// however this is not true for task refresh, where now is
+		// the refresh time, not the close time.
+		// Also can't always use close time as "now" when calling the method
+		// as it will be used as visibilityTimestamp for immediate task and
+		// for emitting task_latency_queue/load metric. If close time is used
+		// as now, upon refresh the latency metric may see a huge value.
+		// TODO: remove all "now" parameters from task generator interface,
+		// visibility timestamp for scheduled task should be calculated from event
+		// or execution info in mutable state. For immediate task, visibility timestamp
+		// should always be when the task is generated so that task_latency_queue/load
+		// truly measures only task processing/loading latency.
+		closeTime := timestamp.TimeValue(closeEvent.GetEventTime())
 		closeTasks = append(closeTasks,
 			&tasks.CloseExecutionVisibilityTask{
 				// TaskID is set by shard
@@ -206,7 +224,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			&tasks.DeleteHistoryEventTask{
 				// TaskID is set by shard
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),
-				VisibilityTimestamp: now.Add(retention),
+				VisibilityTimestamp: closeTime.Add(retention),
 				Version:             currentVersion,
 				BranchToken:         branchToken,
 			},
@@ -234,10 +252,12 @@ func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
 ) error {
 
 	startVersion := startEvent.GetVersion()
-
+	// start time may not be "now" if method called by refresher
+	startTime := timestamp.TimeValue(startEvent.GetEventTime())
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
+
 	workflowTaskBackoffDuration := timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff())
-	executionTimestamp := now.Add(workflowTaskBackoffDuration)
+	executionTimestamp := startTime.Add(workflowTaskBackoffDuration)
 
 	var workflowBackoffType enumsspb.WorkflowBackoffType
 	switch startAttr.GetInitiator() {

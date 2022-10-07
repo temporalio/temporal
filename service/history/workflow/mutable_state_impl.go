@@ -2387,6 +2387,7 @@ func (e *MutableStateImpl) AddCompletedWorkflowEvent(
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		event,
 		false,
 	); err != nil {
 		return nil, err
@@ -2432,6 +2433,7 @@ func (e *MutableStateImpl) AddFailWorkflowEvent(
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		event,
 		false,
 	); err != nil {
 		return nil, err
@@ -2476,6 +2478,7 @@ func (e *MutableStateImpl) AddTimeoutWorkflowEvent(
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		event,
 		false,
 	); err != nil {
 		return nil, err
@@ -2557,6 +2560,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionCanceledEvent(
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		event,
 		false,
 	); err != nil {
 		return nil, err
@@ -3103,6 +3107,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		event,
 		deleteAfterTerminate,
 	); err != nil {
 		return nil, err
@@ -3235,6 +3240,7 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
+		continueAsNewEvent,
 		false,
 	); err != nil {
 		return nil, nil, err
