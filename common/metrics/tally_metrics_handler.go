@@ -64,6 +64,7 @@ func (tmp *tallyMetricsHandler) WithTags(tags ...Tag) MetricsHandler {
 	return &tallyMetricsHandler{
 		scope:          tmp.scope.Tagged(tagsToMap(tags, tmp.excludeTags)),
 		perUnitBuckets: tmp.perUnitBuckets,
+		excludeTags:    tmp.excludeTags,
 	}
 }
 
