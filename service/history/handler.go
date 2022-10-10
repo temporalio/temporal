@@ -1242,12 +1242,12 @@ func (h *Handler) VerifyChildExecutionCompletionRecorded(
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.VerifyChildExecutionCompletionRecorded(ctx, request)
+	resp, err2 := engine.VerifyChildExecutionCompletionRecorded(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.VerifyChildExecutionCompletionRecordedResponse{}, nil
+	return resp, nil
 }
 
 // ResetStickyTaskQueue reset the volatile information in mutable state of a given workflow.
