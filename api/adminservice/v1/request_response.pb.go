@@ -889,7 +889,7 @@ func (m *RemoveTaskResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RemoveTaskResponse proto.InternalMessageInfo
 
-// *
+//*
 // StartEventId defines the beginning of the event to fetch. The first event is exclusive.
 // EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
 type GetWorkflowExecutionRawHistoryV2Request struct {
