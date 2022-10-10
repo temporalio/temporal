@@ -272,16 +272,16 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 
 	releaseCalled := false
 
-	targetWorkflow := NewMocknDCWorkflow(s.controller)
+	targetWorkflow := NewMockWorkflow(s.controller)
 	weContext := workflow.NewMockContext(s.controller)
 	mutableState := workflow.NewMockMutableState(s.controller)
 	var releaseFn workflow.ReleaseCacheFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{}
 
-	targetWorkflow.EXPECT().getContext().Return(weContext).AnyTimes()
-	targetWorkflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
-	targetWorkflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
+	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(releaseFn).AnyTimes()
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -300,7 +300,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	mutableState.EXPECT().GetPreviousStartedEventID().Return(lastWorkflowTaskStartedEventID)
 
-	s.mockWorkflowResetter.EXPECT().resetWorkflow(
+	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
 		ctx,
 		namespaceID,
 		workflowID,
@@ -312,7 +312,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 		gomock.Any(),
 		gomock.Any(),
 		targetWorkflow,
-		eventsReapplicationResetWorkflowReason,
+		EventsReapplicationResetWorkflowReason,
 		workflowEvents.Events,
 		enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 	).Return(serviceerror.NewInvalidArgument("reset fail"))
@@ -333,7 +333,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 	s.True(releaseCalled)
 }
 
-func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open() {
+func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open() {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	releaseCalled := false
