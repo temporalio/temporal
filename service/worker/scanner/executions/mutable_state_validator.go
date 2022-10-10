@@ -243,12 +243,14 @@ func (v *mutableStateIDValidator) validateRetention(
 	if executionState != enums.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil, nil
 	}
-	closeTime := executionInfo.GetCloseTime()
-	if closeTime == nil {
+	// We don't use the close time here because some old workflows do not have the close time.
+	// It makes sense the workflow is finished and use the last update time.
+	finalUpdateTime := executionInfo.GetLastUpdateTime()
+	if finalUpdateTime == nil {
 		return nil, nil
 	}
 
-	ttl := time.Now().UTC().Sub(timestamp.TimeValue(closeTime))
+	ttl := time.Now().UTC().Sub(timestamp.TimeValue(finalUpdateTime))
 	ns, err := v.registry.GetNamespaceByID(namespace.ID(executionInfo.GetNamespaceId()))
 	if err != nil {
 		return nil, err
