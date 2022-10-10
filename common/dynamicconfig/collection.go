@@ -508,7 +508,7 @@ func shardIDPrecedence(shardID int32) []Constraints {
 
 func taskTypePrecedence(taskType enumsspb.TaskType) []Constraints {
 	return []Constraints{
-		{TaskType: taskType.String()},
+		{TaskType: taskType},
 		{},
 	}
 }

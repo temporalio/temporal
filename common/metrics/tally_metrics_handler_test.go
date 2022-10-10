@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/uber-go/tally/v4"
 )
@@ -79,6 +80,14 @@ func TestTallyScope(t *testing.T) {
 	}, histograms["test.transmission+"].Values())
 	assert.EqualValues(t, map[time.Duration]int64(nil), histograms["test.transmission+"].Durations())
 	assert.EqualValues(t, map[string]string{}, histograms["test.transmission+"].Tags())
+
+	newTaggedHandler := mp.WithTags(NamespaceTag(uuid.New()))
+	recordTallyMetrics(newTaggedHandler)
+	snap = scope.Snapshot()
+	counters = snap.Counters()
+
+	assert.EqualValues(t, 11, counters["test.hits-tagged+taskqueue=__sticky__"].Value())
+	assert.EqualValues(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
 }
 
 func recordTallyMetrics(mp MetricsHandler) {
