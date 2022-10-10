@@ -236,18 +236,19 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 				e.taggedMetricsHandler.Histogram(TaskAttempt, metrics.Dimensionless).Record(int64(e.attempt))
 				e.logger.Error("Critical error processing task, retrying.", tag.Error(err), tag.OperationCritical)
 			}
-
-			if common.IsResourceExhausted(retErr) {
-				e.resourceExhaustedCount++
-			} else {
-				e.resourceExhaustedCount = 0
-			}
 		}
 	}()
 
 	if err == nil {
 		return nil
 	}
+
+	if common.IsResourceExhausted(err) {
+		e.resourceExhaustedCount++
+		e.taggedMetricsHandler.Counter(TaskThrottledCounter).Record(1)
+		return err
+	}
+	e.resourceExhaustedCount = 0
 
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		return nil
