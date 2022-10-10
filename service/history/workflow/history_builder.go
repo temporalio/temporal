@@ -27,6 +27,7 @@ package workflow
 import (
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -716,12 +717,20 @@ func (b *HistoryBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(
 func (b *HistoryBuilder) AddUpsertWorkflowSearchAttributesEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
+	mergedSearchAttributes *commonpb.SearchAttributes,
 ) *historypb.HistoryEvent {
+	if proto.Equal(mergedSearchAttributes, command.GetSearchAttributes()) {
+		// If the merged search attributes is exactly the same as the upsert,
+		// then avoid duplication and only store the upsert map.
+		mergedSearchAttributes = nil
+	}
+
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes{
 		UpsertWorkflowSearchAttributesEventAttributes: &historypb.UpsertWorkflowSearchAttributesEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			SearchAttributes:             command.SearchAttributes,
+			MergedSearchAttributes:       mergedSearchAttributes,
 		},
 	}
 
@@ -731,12 +740,20 @@ func (b *HistoryBuilder) AddUpsertWorkflowSearchAttributesEvent(
 func (b *HistoryBuilder) AddWorkflowPropertiesModifiedEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ModifyWorkflowPropertiesCommandAttributes,
+	mergedMemo *commonpb.Memo,
 ) *historypb.HistoryEvent {
+	if proto.Equal(mergedMemo, command.GetUpsertedMemo()) {
+		// If the merged memo is exactly the same as the upsert,
+		// then avoid duplication and only store the upsert map.
+		mergedMemo = nil
+	}
+
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowPropertiesModifiedEventAttributes{
 		WorkflowPropertiesModifiedEventAttributes: &historypb.WorkflowPropertiesModifiedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			UpsertedMemo:                 command.UpsertedMemo,
+			MergedMemo:                   mergedMemo,
 		},
 	}
 

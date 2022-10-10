@@ -561,18 +561,18 @@ func (mr *MockMutableStateMockRecorder) AddTimerStartedEvent(arg0, arg1 interfac
 }
 
 // AddUpsertWorkflowSearchAttributesEvent mocks base method.
-func (m *MockMutableState) AddUpsertWorkflowSearchAttributesEvent(arg0 int64, arg1 *v1.UpsertWorkflowSearchAttributesCommandAttributes) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) AddUpsertWorkflowSearchAttributesEvent(arg0 int64, arg1 *v1.UpsertWorkflowSearchAttributesCommandAttributes, arg2 *v10.SearchAttributes) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddUpsertWorkflowSearchAttributesEvent", arg0, arg1)
+	ret := m.ctrl.Call(m, "AddUpsertWorkflowSearchAttributesEvent", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddUpsertWorkflowSearchAttributesEvent indicates an expected call of AddUpsertWorkflowSearchAttributesEvent.
-func (mr *MockMutableStateMockRecorder) AddUpsertWorkflowSearchAttributesEvent(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddUpsertWorkflowSearchAttributesEvent(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddUpsertWorkflowSearchAttributesEvent", reflect.TypeOf((*MockMutableState)(nil).AddUpsertWorkflowSearchAttributesEvent), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddUpsertWorkflowSearchAttributesEvent", reflect.TypeOf((*MockMutableState)(nil).AddUpsertWorkflowSearchAttributesEvent), arg0, arg1, arg2)
 }
 
 // AddWorkflowExecutionCancelRequestedEvent mocks base method.
@@ -666,18 +666,18 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionTerminatedEvent(firs
 }
 
 // AddWorkflowPropertiesModifiedEvent mocks base method.
-func (m *MockMutableState) AddWorkflowPropertiesModifiedEvent(arg0 int64, arg1 *v1.ModifyWorkflowPropertiesCommandAttributes) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) AddWorkflowPropertiesModifiedEvent(arg0 int64, arg1 *v1.ModifyWorkflowPropertiesCommandAttributes, arg2 *v10.Memo) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowPropertiesModifiedEvent", arg0, arg1)
+	ret := m.ctrl.Call(m, "AddWorkflowPropertiesModifiedEvent", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddWorkflowPropertiesModifiedEvent indicates an expected call of AddWorkflowPropertiesModifiedEvent.
-func (mr *MockMutableStateMockRecorder) AddWorkflowPropertiesModifiedEvent(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddWorkflowPropertiesModifiedEvent(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowPropertiesModifiedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowPropertiesModifiedEvent), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowPropertiesModifiedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowPropertiesModifiedEvent), arg0, arg1, arg2)
 }
 
 // AddWorkflowTaskCompletedEvent mocks base method.

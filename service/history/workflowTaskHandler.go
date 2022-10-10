@@ -1063,15 +1063,16 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
 
-	// new search attributes size limit check
-	// search attribute validation must be done after unaliasing keys
+	mergedSearchAttributes := &commonpb.SearchAttributes{
+		IndexedFields: payload.MergeMapOfPayload(
+			executionInfo.SearchAttributes,
+			attr.GetSearchAttributes().GetIndexedFields(),
+		),
+	}
+
+	// merged search attributes size limit check
 	err = handler.sizeLimitChecker.checkIfSearchAttributesSizeExceedsLimit(
-		&commonpb.SearchAttributes{
-			IndexedFields: payload.MergeMapOfPayload(
-				executionInfo.SearchAttributes,
-				attr.GetSearchAttributes().GetIndexedFields(),
-			),
-		},
+		mergedSearchAttributes,
 		namespace,
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES.String()),
 	)
@@ -1080,7 +1081,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	}
 
 	_, err = handler.mutableState.AddUpsertWorkflowSearchAttributesEvent(
-		handler.workflowTaskCompletedID, attr,
+		handler.workflowTaskCompletedID, attr, mergedSearchAttributes,
 	)
 	return err
 }
@@ -1116,26 +1117,40 @@ func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
 	// blob size limit check
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES.String()),
-		payloadsMapSize(attr.GetUpsertedMemo().GetFields()),
+		attr.Size(),
 		"ModifyWorkflowPropertiesCommandAttributes exceeds size limit.",
 	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, err)
+		return handler.failWorkflow(
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES,
+			err,
+		)
 	}
 
-	// new memo size limit check
-	err = handler.sizeLimitChecker.checkIfMemoSizeExceedsLimit(
-		&commonpb.Memo{
-			Fields: payload.MergeMapOfPayload(executionInfo.Memo, attr.GetUpsertedMemo().GetFields()),
-		},
-		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES.String()),
-		"ModifyWorkflowPropertiesCommandAttributes. Memo exceeds size limit.",
-	)
-	if err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, err)
+	var mergedMemo *commonpb.Memo
+	if attr.UpsertedMemo != nil {
+		mergedMemo = &commonpb.Memo{
+			Fields: payload.MergeMapOfPayload(
+				executionInfo.Memo,
+				attr.GetUpsertedMemo().GetFields(),
+			),
+		}
+
+		// merged memo size limit check
+		err = handler.sizeLimitChecker.checkIfMemoSizeExceedsLimit(
+			mergedMemo,
+			metrics.CommandTypeTag(enumspb.COMMAND_TYPE_MODIFY_WORKFLOW_PROPERTIES.String()),
+			"ModifyWorkflowPropertiesCommandAttributes. Merged memo exceeds size limit.",
+		)
+		if err != nil {
+			return handler.failWorkflow(
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES,
+				err,
+			)
+		}
 	}
 
 	_, err = handler.mutableState.AddWorkflowPropertiesModifiedEvent(
-		handler.workflowTaskCompletedID, attr,
+		handler.workflowTaskCompletedID, attr, mergedMemo,
 	)
 	return err
 }

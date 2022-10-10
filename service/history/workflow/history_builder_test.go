@@ -380,6 +380,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionSearchAttribute() {
 	event := s.historyBuilder.AddUpsertWorkflowSearchAttributesEvent(
 		workflowTaskCompletionEventID,
 		attributes,
+		attributes.SearchAttributes,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -392,6 +393,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionSearchAttribute() {
 			UpsertWorkflowSearchAttributesEventAttributes: &historypb.UpsertWorkflowSearchAttributesEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
 				SearchAttributes:             attributes.SearchAttributes,
+				MergedSearchAttributes:       nil,
 			},
 		},
 	}, event)
@@ -405,6 +407,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionMemo() {
 	event := s.historyBuilder.AddWorkflowPropertiesModifiedEvent(
 		workflowTaskCompletionEventID,
 		attributes,
+		testMemo,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -417,6 +420,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionMemo() {
 			WorkflowPropertiesModifiedEventAttributes: &historypb.WorkflowPropertiesModifiedEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
 				UpsertedMemo:                 attributes.UpsertedMemo,
+				MergedMemo:                   nil,
 			},
 		},
 	}, event)
