@@ -766,6 +766,11 @@ type (
 		TreeID string
 		// optional: can specify BranchID or allow random UUID to be generated
 		BranchID *string
+
+		// optional: supply optionally configured workflow settings as hints
+		RunTimeout        *time.Duration
+		ExecutionTimeout  *time.Duration
+		RetentionDuration *time.Duration
 	}
 
 	NewHistoryBranchResponse struct {
@@ -925,16 +930,15 @@ type (
 
 	// HistoryBranchDetail contains detailed information of a branch
 	HistoryBranchDetail struct {
-		TreeID   string
-		BranchID string
-		ForkTime *time.Time
-		Info     string
+		BranchToken []byte
+		ForkTime    *time.Time
+		Info        string
 	}
 
 	// GetHistoryTreeResponse is a response to GetHistoryTreeRequest
 	GetHistoryTreeResponse struct {
 		// all branches of a tree
-		Branches []*persistencespb.HistoryBranch
+		BranchTokens [][]byte
 	}
 
 	// GetAllHistoryTreeBranchesRequest is a request of GetAllHistoryTreeBranches

@@ -725,11 +725,13 @@ func (c *ContextImpl) mergeContinueAsNewReplicationTasks(
 	delete(newWorkflowSnapshot.Tasks, tasks.CategoryReplication)
 
 	newRunBranchToken := newRunTask.BranchToken
+	newRunID := newRunTask.RunID
 	taskUpdated := false
 	for _, replicationTask := range currentWorkflowMutation.Tasks[tasks.CategoryReplication] {
 		if task, ok := replicationTask.(*tasks.HistoryReplicationTask); ok {
 			taskUpdated = true
 			task.NewRunBranchToken = newRunBranchToken
+			task.NewRunID = newRunID
 		}
 	}
 	if !taskUpdated {

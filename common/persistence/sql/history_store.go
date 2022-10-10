@@ -27,6 +27,7 @@ package sql
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math"
 
@@ -425,14 +426,72 @@ func (m *sqlExecutionStore) DeleteHistoryBranch(
 	})
 }
 
+// getAllHistoryTreeBranchesPaginationToken represents the primary key of the latest row in the history_tree table that
+// we returned.
+type getAllHistoryTreeBranchesPaginationToken struct {
+	ShardID  int32
+	TreeID   primitives.UUID
+	BranchID primitives.UUID
+}
+
 func (m *sqlExecutionStore) GetAllHistoryTreeBranches(
-	_ context.Context,
+	ctx context.Context,
 	request *p.GetAllHistoryTreeBranchesRequest,
 ) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
+	pageSize := request.PageSize
+	if pageSize <= 0 {
+		return nil, fmt.Errorf("PageSize must be greater than 0, but was %d", pageSize)
+	}
 
-	// TODO https://github.com/uber/cadence/issues/2458
-	// Implement it when we need
-	panic("not implemented yet")
+	page := sqlplugin.HistoryTreeBranchPage{
+		Limit: pageSize,
+	}
+	if len(request.NextPageToken) != 0 {
+		var token getAllHistoryTreeBranchesPaginationToken
+		if err := json.Unmarshal(request.NextPageToken, &token); err != nil {
+			return nil, err
+		}
+		page.ShardID = token.ShardID
+		page.TreeID = token.TreeID
+		page.BranchID = token.BranchID
+	}
+
+	rows, err := m.Db.PaginateBranchesFromHistoryTree(ctx, page)
+	if err != nil {
+		return nil, err
+	}
+	branches := make([]p.InternalHistoryBranchDetail, 0, pageSize)
+	for _, row := range rows {
+		branch := p.InternalHistoryBranchDetail{
+			TreeID:   row.TreeID.String(),
+			BranchID: row.BranchID.String(),
+			Data:     row.Data,
+			Encoding: row.DataEncoding,
+		}
+		branches = append(branches, branch)
+	}
+
+	response := &p.InternalGetAllHistoryTreeBranchesResponse{
+		Branches: branches,
+	}
+	if len(branches) < pageSize {
+		// no next page token because there are no more results
+		return response, nil
+	}
+
+	// if we filled the page with rows, then set the next page token
+	lastRow := rows[len(rows)-1]
+	token := getAllHistoryTreeBranchesPaginationToken{
+		ShardID:  lastRow.ShardID,
+		TreeID:   lastRow.TreeID,
+		BranchID: lastRow.BranchID,
+	}
+	tokenBytes, err := json.Marshal(token)
+	if err != nil {
+		return nil, err
+	}
+	response.NextPageToken = tokenBytes
+	return response, nil
 }
 
 // GetHistoryTree returns all branch information of a tree

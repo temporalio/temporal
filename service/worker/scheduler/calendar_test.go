@@ -50,11 +50,11 @@ func (s *calendarSuite) SetupTest() {
 }
 
 func (s *calendarSuite) mustCompileCalendarSpec(cal *schedpb.CalendarSpec, tz *time.Location) *compiledCalendar {
-	scs, err := parseCalendarToStrucured(cal)
+	scs, err := parseCalendarToStructured(cal)
 	s.NoError(err)
 	s.NotNil(scs)
-	cc, err := newCompiledCalendar(scs, tz)
-	s.NoError(err)
+	s.NoError(validateStructuredCalendar(scs))
+	cc := newCompiledCalendar(scs, tz)
 	return cc
 }
 
@@ -137,6 +137,9 @@ func (s *calendarSuite) TestParseCronString() {
 	}, scs)
 	s.Nil(iv)
 	s.Equal("", tz)
+
+	_, _, _, err = parseCronString("0 1 2 3 4 1999")
+	s.ErrorContains(err, "Year is not in range")
 
 	scs, iv, tz, err = parseCronString("CRON_TZ=US/Pacific 55 55,57 5 2/2 * wed-thurs *  # explanation")
 	s.NoError(err)
@@ -230,8 +233,7 @@ func (s *calendarSuite) checkSequence(cs string, start time.Time, seq ...time.Ti
 	s.NoError(err)
 	tz, err := time.LoadLocation(tzName)
 	s.NoError(err)
-	cc, err := newCompiledCalendar(scs, tz)
-	s.NoError(err)
+	cc := newCompiledCalendar(scs, tz)
 	for _, exp := range seq {
 		next := cc.next(start)
 		s.True(exp.Equal(next))
@@ -289,15 +291,14 @@ func (s *calendarSuite) TestCalendarDSTStartInRepeatedHourButNotEnd() {
 func (s *calendarSuite) TestMakeMatcher() {
 	check := func(str string, min, max int, parseMode parseMode, expected ...int) {
 		s.T().Helper()
-		ranges, err := makeRange(str, str, min, max, parseMode)
+		ranges, err := makeRange(str, "Test", str, min, max, parseMode)
 		s.NoError(err)
 		var m func(int) bool
 		if max < 63 {
-			m, err = makeBitMatcher(ranges)
+			m = makeBitMatcher(ranges)
 		} else {
-			m, err = makeYearMatcher(ranges)
+			m = makeYearMatcher(ranges)
 		}
-		s.NoError(err)
 		for _, e := range expected {
 			if e >= 0 {
 				s.True(m(e), e)
@@ -319,36 +320,36 @@ func (s *calendarSuite) TestMakeMatcher() {
 func (s *calendarSuite) TestMakeRange() {
 	check := func(str string, min, max int, parseMode parseMode, expected ...*schedpb.Range) {
 		s.T().Helper()
-		ranges, err := makeRange(str, "", min, max, parseMode)
+		ranges, err := makeRange(str, "Test", "", min, max, parseMode)
 		s.NoError(err)
 		s.EqualValues(expected, ranges)
 	}
-	checkErr := func(str string, min, max int, parseMode parseMode) {
+	checkErr := func(str string, min, max int, parseMode parseMode, expectedErr string) {
 		s.T().Helper()
-		_, err := makeRange(str, "", min, max, parseMode)
-		s.Error(err)
+		_, err := makeRange(str, "Test", "", min, max, parseMode)
+		s.ErrorContains(err, expectedErr)
 	}
 
 	check("13", 0, 59, parseModeInt, &schedpb.Range{Start: 13})
-	checkErr("133", 0, 59, parseModeInt)
+	checkErr("133", 0, 59, parseModeInt, "Test is not in range [0-59]")
 	check("Sept", 1, 12, parseModeMonth, &schedpb.Range{Start: 9})
 	check("13,18", 0, 59, parseModeInt, &schedpb.Range{Start: 13}, &schedpb.Range{Start: 18})
 	check("13,18,44", 0, 59, parseModeInt, &schedpb.Range{Start: 13}, &schedpb.Range{Start: 18}, &schedpb.Range{Start: 44})
-	checkErr("13,18,44,", 0, 59, parseModeInt)
+	checkErr("13,18,44,", 0, 59, parseModeInt, "Test is not in range") // not the most helpful error in this case but it has the field name
 	check("13-18", 0, 59, parseModeInt, &schedpb.Range{Start: 13, End: 18})
-	checkErr("18-13", 0, 59, parseModeInt)
-	checkErr("1,3,18-13", 0, 59, parseModeInt)
+	checkErr("18-13", 0, 59, parseModeInt, "End is before Start")
+	checkErr("1,3,18-13", 0, 59, parseModeInt, "End is before Start")
 	check("2-5,7-9,11", 0, 59, parseModeInt, &schedpb.Range{Start: 2, End: 5}, &schedpb.Range{Start: 7, End: 9}, &schedpb.Range{Start: 11})
 	check("*", 5, 9, parseModeInt, &schedpb.Range{Start: 5, End: 9})
 	check("*/3", 5, 9, parseModeInt, &schedpb.Range{Start: 5, End: 9, Step: 3})
 	check("2/3", 0, 10, parseModeInt, &schedpb.Range{Start: 2, End: 10, Step: 3})
-	checkErr("2/3/5", 0, 10, parseModeInt)
+	checkErr("2/3/5", 0, 10, parseModeInt, "too many slashes")
 	check("2-6/3", 0, 10, parseModeInt, &schedpb.Range{Start: 2, End: 6, Step: 3})
 	check("2-6/4,7-8", 0, 10, parseModeInt, &schedpb.Range{Start: 2, End: 6, Step: 4}, &schedpb.Range{Start: 7, End: 8})
 	check("mon-Friday", 0, 7, parseModeDow, &schedpb.Range{Start: 1, End: 5})
-	checkErr("Fri-Tues", 0, 7, parseModeDow)
-	checkErr("1-5-7", 0, 7, parseModeDow)
-	checkErr("monday-", 0, 7, parseModeDow)
+	checkErr("Fri-Tues", 0, 7, parseModeDow, "End is before Start")
+	checkErr("1-5-7", 0, 7, parseModeDow, "too many dashes")
+	checkErr("monday-", 0, 7, parseModeDow, "End is before Start")
 }
 
 func (s *calendarSuite) TestParseValue() {
@@ -424,14 +425,11 @@ func FuzzCalendar(f *testing.F) {
 			Year:       y,
 			DayOfWeek:  dow,
 		}
-		scs, err := parseCalendarToStrucured(cal)
+		scs, err := parseCalendarToStructured(cal)
 		if err != nil {
 			return
 		}
-		cc, err := newCompiledCalendar(scs, loc)
-		if err != nil {
-			return
-		}
+		cc := newCompiledCalendar(scs, loc)
 		now := time.Unix(start, 0).In(loc)
 		next := cc.next(now)
 		if next.IsZero() {

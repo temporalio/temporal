@@ -22,48 +22,54 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package interceptor
+package tdbg
 
 import (
-	"context"
+	"encoding/json"
+	"testing"
 
-	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/backoff"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"github.com/urfave/cli/v2"
 )
 
-type (
-	RetryableInterceptor struct {
-		policy      backoff.RetryPolicy
-		isRetryable backoff.IsRetryable
-	}
-)
-
-var _ grpc.UnaryServerInterceptor = (*RetryableInterceptor)(nil).Intercept
-
-func NewRetryableInterceptor(
-	policy backoff.RetryPolicy,
-	isRetryable backoff.IsRetryable,
-) *RetryableInterceptor {
-	return &RetryableInterceptor{
-		policy:      policy,
-		isRetryable: isRetryable,
-	}
+func (s *utilSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+}
+func TestUtilSuite(t *testing.T) {
+	suite.Run(t, new(utilSuite))
 }
 
-func (i *RetryableInterceptor) Intercept(
-	ctx context.Context,
-	req interface{},
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	var response interface{}
-	op := func(ctx context.Context) error {
-		var err error
-		response, err = handler(ctx, req)
-		return err
-	}
+type utilSuite struct {
+	*require.Assertions
+	suite.Suite
+}
 
-	err := backoff.ThrottleRetryContext(ctx, op, i.policy, i.isRetryable)
-	return response, err
+// TestAcceptStringSliceArgsWithCommas tests that the cli accepts string slice args with commas
+// If the test fails consider downgrading urfave/cli/v2 to v2.4.0
+// See https://github.com/urfave/cli/pull/1241
+func (s *utilSuite) TestAcceptStringSliceArgsWithCommas() {
+	app := cli.NewApp()
+	app.Name = "testapp"
+	app.Commands = []*cli.Command{
+		{
+			Name: "dostuff",
+			Action: func(c *cli.Context) error {
+				s.Equal(2, len(c.StringSlice("input")))
+				for _, inp := range c.StringSlice("input") {
+					var thing any
+					s.NoError(json.Unmarshal([]byte(inp), &thing))
+				}
+				return nil
+			},
+			Flags: []cli.Flag{
+				&cli.StringSliceFlag{
+					Name: "input",
+				},
+			},
+		},
+	}
+	app.Run([]string{"testapp", "dostuff",
+		"--input", `{"field1": 34, "field2": false}`,
+		"--input", `{"numbers": [4,5,6]}`})
 }

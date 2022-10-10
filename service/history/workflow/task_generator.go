@@ -556,8 +556,6 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 		FirstEventID:        firstEvent.GetEventId(),
 		NextEventID:         lastEvent.GetEventId() + 1,
 		Version:             version,
-		BranchToken:         branchToken,
-		NewRunBranchToken:   nil,
 	})
 	return nil
 }
@@ -589,8 +587,6 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(
 			FirstEventID:        executionInfo.LastFirstEventId,
 			NextEventID:         lastItem.GetEventId() + 1,
 			Version:             lastItem.GetVersion(),
-			BranchToken:         versionHistory.BranchToken,
-			NewRunBranchToken:   nil,
 		}, nil
 	}
 }

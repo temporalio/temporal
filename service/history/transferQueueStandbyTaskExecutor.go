@@ -119,7 +119,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	case *tasks.CloseExecutionTask:
 		err = t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionTask:
-		err = t.processDeleteExecutionTask(ctx, task)
+		err = t.processDeleteExecutionTask(ctx, task, false)
 	default:
 		err = errUnknownTransferTask
 	}
@@ -158,8 +158,8 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsResendDelay(),
-			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
+			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
 			t.fetchHistoryFromRemote,
 			t.pushActivity,
 		),
@@ -216,8 +216,8 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsResendDelay(),
-			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
+			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
 			t.fetchHistoryFromRemote,
 			t.pushWorkflowTask,
 		),
@@ -331,8 +331,8 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsResendDelay(),
-			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
+			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
 			standbyTaskPostActionNoOp,
 			standbyTransferTaskPostActionTaskDiscarded,
 		),
@@ -366,8 +366,8 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsResendDelay(),
-			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
+			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
 			t.fetchHistoryFromRemote,
 			standbyTransferTaskPostActionTaskDiscarded,
 		),
@@ -401,8 +401,8 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsResendDelay(),
-			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
+			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
 			t.fetchHistoryFromRemote,
 			standbyTransferTaskPostActionTaskDiscarded,
 		),
@@ -483,8 +483,8 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		getStandbyPostActionFn(
 			transferTask,
 			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsResendDelay(),
-			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
+			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
 			t.startChildExecutionResendPostAction,
 			standbyTransferTaskPostActionTaskDiscarded,
 		),

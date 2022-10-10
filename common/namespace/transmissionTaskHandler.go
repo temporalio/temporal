@@ -53,6 +53,7 @@ type (
 			configVersion int64,
 			failoverVersion int64,
 			isGlobalNamespace bool,
+			failoverHistoy []*persistencespb.FailoverStatus,
 		) error
 	}
 
@@ -84,6 +85,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 	configVersion int64,
 	failoverVersion int64,
 	isGlobalNamespace bool,
+	failoverHistoy []*persistencespb.FailoverStatus,
 ) error {
 
 	if !isGlobalNamespace {
@@ -119,10 +121,11 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 			},
 			ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 				ActiveClusterName: replicationConfig.ActiveClusterName,
-				Clusters:          namespaceReplicator.convertClusterReplicationConfigToProto(replicationConfig.Clusters),
+				Clusters:          convertClusterReplicationConfigToProto(replicationConfig.Clusters),
 			},
 			ConfigVersion:   configVersion,
 			FailoverVersion: failoverVersion,
+			FailoverHistory: convertFailoverHistoryToReplicationProto(failoverHistoy),
 		},
 	}
 
@@ -134,7 +137,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 		})
 }
 
-func (namespaceReplicator *namespaceReplicatorImpl) convertClusterReplicationConfigToProto(
+func convertClusterReplicationConfigToProto(
 	input []string,
 ) []*replicationpb.ClusterReplicationConfig {
 	output := make([]*replicationpb.ClusterReplicationConfig, 0, len(input))
@@ -142,4 +145,18 @@ func (namespaceReplicator *namespaceReplicatorImpl) convertClusterReplicationCon
 		output = append(output, &replicationpb.ClusterReplicationConfig{ClusterName: clusterName})
 	}
 	return output
+}
+
+func convertFailoverHistoryToReplicationProto(
+	failoverHistoy []*persistencespb.FailoverStatus,
+) []*replicationpb.FailoverStatus {
+	var replicationProto []*replicationpb.FailoverStatus
+	for _, failoverStatus := range failoverHistoy {
+		replicationProto = append(replicationProto, &replicationpb.FailoverStatus{
+			FailoverTime:    failoverStatus.GetFailoverTime(),
+			FailoverVersion: failoverStatus.GetFailoverVersion(),
+		})
+	}
+
+	return replicationProto
 }

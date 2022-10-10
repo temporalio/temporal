@@ -64,6 +64,12 @@ const (
 
 	getHistoryTreeQuery = `SELECT branch_id, data, data_encoding FROM history_tree WHERE shard_id = $1 AND tree_id = $2 `
 
+	paginateBranchesQuery = `SELECT shard_id, tree_id, branch_id, data, data_encoding
+        FROM history_tree
+        WHERE (shard_id, tree_id, branch_id) > ($1, $2, $3)
+        ORDER BY shard_id, tree_id, branch_id
+        LIMIT $4`
+
 	deleteHistoryTreeQuery = `DELETE FROM history_tree WHERE shard_id = $1 AND tree_id = $2 AND branch_id = $3 `
 )
 
@@ -188,6 +194,24 @@ func (pdb *db) SelectFromHistoryTree(
 		getHistoryTreeQuery,
 		filter.ShardID,
 		filter.TreeID,
+	)
+	return rows, err
+}
+
+// PaginateBranchesFromHistoryTree reads up to page.Limit rows from the history_tree table sorted by their primary key,
+// while skipping the first page.Offset rows.
+func (pdb *db) PaginateBranchesFromHistoryTree(
+	ctx context.Context,
+	page sqlplugin.HistoryTreeBranchPage,
+) ([]sqlplugin.HistoryTreeRow, error) {
+	var rows []sqlplugin.HistoryTreeRow
+	err := pdb.conn.SelectContext(ctx,
+		&rows,
+		paginateBranchesQuery,
+		page.ShardID,
+		page.TreeID,
+		page.BranchID,
+		page.Limit,
 	)
 	return rows, err
 }

@@ -32,6 +32,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -71,6 +72,7 @@ type (
 	DurationPropertyFnWithNamespaceIDFilter    func(namespaceID string) time.Duration
 	DurationPropertyFnWithShardIDFilter        func(shardID int32) time.Duration
 	DurationPropertyFnWithTaskQueueInfoFilters func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration
+	DurationPropertyFnWithTaskTypeFilter       func(task enumsspb.TaskType) time.Duration
 	FloatPropertyFn                            func() float64
 	FloatPropertyFnWithNamespaceFilter         func(namespace string) float64
 	FloatPropertyFnWithShardIDFilter           func(shardID int32) float64
@@ -282,6 +284,19 @@ func (c *Collection) GetDurationPropertyFilteredByShardID(key Key, defaultValue 
 	}
 }
 
+// GetDurationPropertyFilteredByTaskType gets property with task type as filters and asserts that it's a duration
+func (c *Collection) GetDurationPropertyFilteredByTaskType(key Key, defaultValue any) DurationPropertyFnWithTaskTypeFilter {
+	return func(taskType enumsspb.TaskType) time.Duration {
+		return matchAndConvert(
+			c,
+			key,
+			defaultValue,
+			taskTypePrecedence(taskType),
+			convertDuration,
+		)
+	}
+}
+
 // GetBoolProperty gets property and asserts that it's a bool
 func (c *Collection) GetBoolProperty(key Key, defaultValue any) BoolPropertyFn {
 	return func() bool {
@@ -487,6 +502,13 @@ func taskQueuePrecedence(namespace string, taskQueue string, taskType enumspb.Ta
 func shardIDPrecedence(shardID int32) []Constraints {
 	return []Constraints{
 		{ShardID: shardID},
+		{},
+	}
+}
+
+func taskTypePrecedence(taskType enumsspb.TaskType) []Constraints {
+	return []Constraints{
+		{TaskType: taskType.String()},
 		{},
 	}
 }

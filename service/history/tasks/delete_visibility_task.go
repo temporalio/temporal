@@ -82,7 +82,3 @@ func (t *DeleteExecutionVisibilityTask) GetCategory() Category {
 func (t *DeleteExecutionVisibilityTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION
 }
-
-func (t *DeleteExecutionVisibilityTask) GetCloseVisibilityTaskID() int64 {
-	return t.CloseExecutionVisibilityTaskID
-}

@@ -608,6 +608,12 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveClusterWit
 				ActiveClusterName: clusterName2,
 				Clusters:          []string{clusterName1, clusterName2},
 				State:             enumspb.REPLICATION_STATE_HANDOVER,
+				FailoverHistory: []*persistencespb.FailoverStatus{
+					{
+						FailoverTime:    timestamp.TimePtr(update1Time),
+						FailoverVersion: 2,
+					},
+				},
 			},
 			ConfigVersion:               int64(0),
 			FailoverNotificationVersion: version,

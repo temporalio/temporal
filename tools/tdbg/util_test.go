@@ -24,25 +24,6 @@
 
 package tdbg
 
-import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-)
-
-func (s *utilSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-}
-func TestUtilSuite(t *testing.T) {
-	suite.Run(t, new(utilSuite))
-}
-
-type utilSuite struct {
-	*require.Assertions
-	suite.Suite
-}
-
 func (s *utilSuite) TestStringToEnum_MapCaseInsensitive() {
 	enumValues := map[string]int32{
 		"Unspecified": 0,

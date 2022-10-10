@@ -77,8 +77,12 @@ TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
 
+# go.opentelemetry.io/otel/sdk/metric@v0.31.0 - there are breaking changes in v0.32.0.
+# github.com/urfave/cli/v2@v2.4.0             - needs to accept comma in values before unlocking https://github.com/urfave/cli/pull/1241.
 PINNED_DEPENDENCIES := \
-	github.com/go-sql-driver/mysql@v1.5.0
+	github.com/go-sql-driver/mysql@v1.5.0 \
+	go.opentelemetry.io/otel/sdk/metric@v0.31.0 \
+	github.com/urfave/cli/v2@v2.4.0
 
 # Code coverage output files.
 COVER_ROOT                 := ./.coverage
