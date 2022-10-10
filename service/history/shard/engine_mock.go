@@ -342,11 +342,12 @@ func (mr *MockEngineMockRecorder) RecordActivityTaskStarted(ctx, request interfa
 }
 
 // RecordChildExecutionCompleted mocks base method.
-func (m *MockEngine) RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) error {
+func (m *MockEngine) RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) (*historyservice.RecordChildExecutionCompletedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RecordChildExecutionCompleted", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.RecordChildExecutionCompletedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RecordChildExecutionCompleted indicates an expected call of RecordChildExecutionCompleted.

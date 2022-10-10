@@ -1205,12 +1205,12 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.RecordChildExecutionCompleted(ctx, request)
+	resp, err2 := engine.RecordChildExecutionCompleted(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.RecordChildExecutionCompletedResponse{}, nil
+	return resp, nil
 }
 
 func (h *Handler) VerifyChildExecutionCompletionRecorded(
