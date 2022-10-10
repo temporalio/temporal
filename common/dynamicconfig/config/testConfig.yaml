@@ -74,3 +74,10 @@ testGetStringPropertyKey:
 - value: constrained-string
   constraints:
     namespace: random-namespace
+testGetDurationPropertyFilteredByTaskTypeKey:
+  - value: 10s
+    constraints:
+      historytasktype: ActivityRetryTimer
+  - value: 10s
+    constraints:
+      historytasktype: 1

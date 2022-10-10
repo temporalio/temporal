@@ -34,6 +34,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
 )
 
@@ -223,6 +225,18 @@ func (s *fileBasedClientSuite) TestGetDurationValue_ParseFailed() {
 	v := s.collection.GetDurationPropertyFilteredByTaskQueueInfo(testGetDurationPropertyKey, time.Second)(
 		"samples-namespace", "longIdleTimeTaskqueue", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.Equal(time.Second, v)
+}
+
+func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByTaskTypeQueue() {
+	expectedValue := time.Second * 10
+	v := s.collection.GetDurationPropertyFilteredByTaskType(testGetDurationPropertyFilteredByTaskTypeKey, 0)(
+		enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
+	)
+	s.Equal(expectedValue, v)
+	v = s.collection.GetDurationPropertyFilteredByTaskType(testGetDurationPropertyFilteredByTaskTypeKey, 0)(
+		enumsspb.TASK_TYPE_REPLICATION_HISTORY,
+	)
+	s.Equal(expectedValue, v)
 }
 
 func (s *fileBasedClientSuite) TestValidateConfig_ConfigNotExist() {
