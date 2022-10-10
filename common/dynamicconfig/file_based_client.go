@@ -38,6 +38,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"gopkg.in/yaml.v3"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
@@ -294,6 +295,9 @@ func (fc *fileBasedClient) appendConstrainedValue(logLine *strings.Builder, valu
 		if value.Constraints.ShardID != 0 {
 			logLine.WriteString(fmt.Sprintf("{ShardID:%d}", value.Constraints.ShardID))
 		}
+		if value.Constraints.TaskType != enumsspb.TASK_TYPE_UNSPECIFIED {
+			logLine.WriteString(fmt.Sprintf("{HistoryTaskType:%s}", value.Constraints.TaskType))
+		}
 		logLine.WriteString(fmt.Sprint("} value: ", value.Value, " }"))
 	}
 }
@@ -371,6 +375,19 @@ func convertYamlConstraints(m map[string]any) (Constraints, error) {
 				cs.TaskQueueType = enumspb.TaskQueueType(v)
 			default:
 				return cs, fmt.Errorf("taskType constraint must be Workflow/Activity")
+			}
+		case "historytasktype":
+			switch v := v.(type) {
+			case string:
+				if i, ok := enumsspb.TaskType_value[v]; ok && i > 0 {
+					cs.TaskType = enumsspb.TaskType(i)
+				} else {
+					return cs, fmt.Errorf("taskType %s constraint is not supported", v)
+				}
+			case int:
+				cs.TaskType = enumsspb.TaskType(v)
+			default:
+				return cs, fmt.Errorf("taskType %T constraint is not supported", v)
 			}
 		case "shardid":
 			if v, ok := v.(int); ok {
