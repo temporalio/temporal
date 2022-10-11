@@ -2105,15 +2105,15 @@ func (mr *MockMutableStateMockRecorder) ReplicateTransientWorkflowTaskScheduled(
 }
 
 // ReplicateUpsertWorkflowSearchAttributesEvent mocks base method.
-func (m *MockMutableState) ReplicateUpsertWorkflowSearchAttributesEvent(arg0 *v13.HistoryEvent) {
+func (m *MockMutableState) ReplicateUpsertWorkflowSearchAttributesEvent(arg0 int64, arg1 *v13.HistoryEvent) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReplicateUpsertWorkflowSearchAttributesEvent", arg0)
+	m.ctrl.Call(m, "ReplicateUpsertWorkflowSearchAttributesEvent", arg0, arg1)
 }
 
 // ReplicateUpsertWorkflowSearchAttributesEvent indicates an expected call of ReplicateUpsertWorkflowSearchAttributesEvent.
-func (mr *MockMutableStateMockRecorder) ReplicateUpsertWorkflowSearchAttributesEvent(arg0 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) ReplicateUpsertWorkflowSearchAttributesEvent(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateUpsertWorkflowSearchAttributesEvent", reflect.TypeOf((*MockMutableState)(nil).ReplicateUpsertWorkflowSearchAttributesEvent), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateUpsertWorkflowSearchAttributesEvent", reflect.TypeOf((*MockMutableState)(nil).ReplicateUpsertWorkflowSearchAttributesEvent), arg0, arg1)
 }
 
 // ReplicateWorkflowExecutionCancelRequestedEvent mocks base method.
@@ -2243,15 +2243,15 @@ func (mr *MockMutableStateMockRecorder) ReplicateWorkflowExecutionTimedoutEvent(
 }
 
 // ReplicateWorkflowPropertiesModifiedEvent mocks base method.
-func (m *MockMutableState) ReplicateWorkflowPropertiesModifiedEvent(arg0 *v13.HistoryEvent) {
+func (m *MockMutableState) ReplicateWorkflowPropertiesModifiedEvent(arg0 int64, arg1 *v13.HistoryEvent) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ReplicateWorkflowPropertiesModifiedEvent", arg0)
+	m.ctrl.Call(m, "ReplicateWorkflowPropertiesModifiedEvent", arg0, arg1)
 }
 
 // ReplicateWorkflowPropertiesModifiedEvent indicates an expected call of ReplicateWorkflowPropertiesModifiedEvent.
-func (mr *MockMutableStateMockRecorder) ReplicateWorkflowPropertiesModifiedEvent(arg0 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) ReplicateWorkflowPropertiesModifiedEvent(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateWorkflowPropertiesModifiedEvent", reflect.TypeOf((*MockMutableState)(nil).ReplicateWorkflowPropertiesModifiedEvent), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateWorkflowPropertiesModifiedEvent", reflect.TypeOf((*MockMutableState)(nil).ReplicateWorkflowPropertiesModifiedEvent), arg0, arg1)
 }
 
 // ReplicateWorkflowTaskCompletedEvent mocks base method.

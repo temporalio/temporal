@@ -228,8 +228,8 @@ type (
 		ReplicateTimerFiredEvent(*historypb.HistoryEvent) error
 		ReplicateTimerStartedEvent(*historypb.HistoryEvent) (*persistencespb.TimerInfo, error)
 		ReplicateTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error)
-		ReplicateWorkflowPropertiesModifiedEvent(*historypb.HistoryEvent)
-		ReplicateUpsertWorkflowSearchAttributesEvent(*historypb.HistoryEvent)
+		ReplicateWorkflowPropertiesModifiedEvent(int64, *historypb.HistoryEvent)
+		ReplicateUpsertWorkflowSearchAttributesEvent(int64, *historypb.HistoryEvent)
 		ReplicateWorkflowExecutionCancelRequestedEvent(*historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionCanceledEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionCompletedEvent(int64, *historypb.HistoryEvent) error

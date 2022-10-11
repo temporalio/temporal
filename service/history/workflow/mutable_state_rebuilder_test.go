@@ -669,7 +669,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeUpsertWorkflowSearchAttribu
 			UpsertWorkflowSearchAttributesEventAttributes: &historypb.UpsertWorkflowSearchAttributesEventAttributes{},
 		},
 	}
-	s.mockMutableState.EXPECT().ReplicateUpsertWorkflowSearchAttributesEvent(event).Return()
+	s.mockMutableState.EXPECT().ReplicateUpsertWorkflowSearchAttributesEvent(event.GetEventId(), event).Return()
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateUpsertVisibilityTask(
 		timestamp.TimeValue(event.GetEventTime()),
@@ -702,7 +702,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowPropertiesModified(
 			WorkflowPropertiesModifiedEventAttributes: &historypb.WorkflowPropertiesModifiedEventAttributes{},
 		},
 	}
-	s.mockMutableState.EXPECT().ReplicateWorkflowPropertiesModifiedEvent(event).Return()
+	s.mockMutableState.EXPECT().ReplicateWorkflowPropertiesModifiedEvent(event.GetEventId(), event).Return()
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateUpsertVisibilityTask(
 		timestamp.TimeValue(event.GetEventTime()),

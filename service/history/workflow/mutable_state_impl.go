@@ -1661,9 +1661,17 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 
 	if event.Memo != nil {
 		e.executionInfo.Memo = event.Memo.GetFields()
+		e.executionInfo.MemoInfo = &persistencespb.MemoInfo{
+			EventId:      startEvent.EventId,
+			EventBatchId: startEvent.EventId,
+		}
 	}
 	if event.SearchAttributes != nil {
 		e.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
+		e.executionInfo.SearchAttributesInfo = &persistencespb.SearchAttributesInfo{
+			EventId:      startEvent.EventId,
+			EventBatchId: startEvent.EventId,
+		}
 	}
 
 	e.writeEventToCache(startEvent)
@@ -2786,7 +2794,7 @@ func (e *MutableStateImpl) AddUpsertWorkflowSearchAttributesEvent(
 		command,
 		mergedSearchAttributes,
 	)
-	e.ReplicateUpsertWorkflowSearchAttributesEvent(event)
+	e.ReplicateUpsertWorkflowSearchAttributesEvent(workflowTaskCompletedEventID, event)
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateUpsertVisibilityTask(
 		timestamp.TimeValue(event.GetEventTime()),
@@ -2797,6 +2805,7 @@ func (e *MutableStateImpl) AddUpsertWorkflowSearchAttributesEvent(
 }
 
 func (e *MutableStateImpl) ReplicateUpsertWorkflowSearchAttributesEvent(
+	workflowTaskCompletedEventID int64,
 	event *historypb.HistoryEvent,
 ) {
 	attr := event.GetUpsertWorkflowSearchAttributesEventAttributes()
@@ -2804,6 +2813,10 @@ func (e *MutableStateImpl) ReplicateUpsertWorkflowSearchAttributesEvent(
 		e.executionInfo.SearchAttributes = attr.GetMergedSearchAttributes().GetIndexedFields()
 	} else {
 		e.executionInfo.SearchAttributes = attr.GetSearchAttributes().GetIndexedFields()
+	}
+	e.executionInfo.SearchAttributesInfo = &persistencespb.SearchAttributesInfo{
+		EventId:      event.EventId,
+		EventBatchId: workflowTaskCompletedEventID,
 	}
 }
 
@@ -2822,7 +2835,7 @@ func (e *MutableStateImpl) AddWorkflowPropertiesModifiedEvent(
 		command,
 		mergedMemo,
 	)
-	e.ReplicateWorkflowPropertiesModifiedEvent(event)
+	e.ReplicateWorkflowPropertiesModifiedEvent(workflowTaskCompletedEventID, event)
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateUpsertVisibilityTask(
 		timestamp.TimeValue(event.GetEventTime()),
@@ -2833,6 +2846,7 @@ func (e *MutableStateImpl) AddWorkflowPropertiesModifiedEvent(
 }
 
 func (e *MutableStateImpl) ReplicateWorkflowPropertiesModifiedEvent(
+	workflowTaskCompletedEventID int64,
 	event *historypb.HistoryEvent,
 ) {
 	attr := event.GetWorkflowPropertiesModifiedEventAttributes()
@@ -2841,6 +2855,10 @@ func (e *MutableStateImpl) ReplicateWorkflowPropertiesModifiedEvent(
 			e.executionInfo.Memo = attr.GetMergedMemo().GetFields()
 		} else {
 			e.executionInfo.Memo = attr.GetUpsertedMemo().GetFields()
+		}
+		e.executionInfo.MemoInfo = &persistencespb.MemoInfo{
+			EventId:      event.EventId,
+			EventBatchId: workflowTaskCompletedEventID,
 		}
 	}
 }

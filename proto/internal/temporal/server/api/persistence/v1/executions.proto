@@ -64,6 +64,16 @@ message ShardInfo {
     map<int32, QueueState> queue_states = 17;
 }
 
+message MemoInfo {
+    int64 event_id = 1;
+    int64 event_batch_id = 2;
+}
+
+message SearchAttributesInfo {
+    int64 event_id = 1;
+    int64 event_batch_id = 2;
+}
+
 // execution column
 message WorkflowExecutionInfo {
     string namespace_id = 1;
@@ -139,6 +149,8 @@ message WorkflowExecutionInfo {
     // Used to check if visibility close task is processed before deleting the workflow execution.
     int64 close_visibility_task_id = 65;
     google.protobuf.Timestamp close_time = 66 [(gogoproto.stdtime) = true];
+    MemoInfo memo_info = 67;
+    SearchAttributesInfo search_attributes_info = 68;
 }
 
 message ExecutionStats {
