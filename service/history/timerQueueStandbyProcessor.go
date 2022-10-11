@@ -161,6 +161,9 @@ func newTimerQueueStandbyProcessor(
 				config.NamespaceCacheRefreshInterval,
 			)
 		},
+		// we are creating standby processor,
+		// so we know we are not in single processor mode
+		false,
 	)
 
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(

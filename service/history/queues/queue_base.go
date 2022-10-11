@@ -296,6 +296,7 @@ func (p *queueBase) processNewRange() {
 	newMaxKey := p.shard.GetQueueExclusiveHighReadWatermark(
 		p.category,
 		p.shard.GetClusterMetadata().GetCurrentClusterName(),
+		true,
 	)
 
 	if !p.nonReadableScope.CanSplitByRange(newMaxKey) {
