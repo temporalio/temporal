@@ -67,11 +67,12 @@ func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockEngine) DeleteWorkflowExecution(ctx context.Context, deleteRequest *historyservice.DeleteWorkflowExecutionRequest) error {
+func (m *MockEngine) DeleteWorkflowExecution(ctx context.Context, deleteRequest *historyservice.DeleteWorkflowExecutionRequest) (*historyservice.DeleteWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, deleteRequest)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.DeleteWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.

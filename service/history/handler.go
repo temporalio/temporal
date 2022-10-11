@@ -1022,12 +1022,11 @@ func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historys
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.DeleteWorkflowExecution(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
+	resp, err := engine.DeleteWorkflowExecution(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
 	}
-
-	return &historyservice.DeleteWorkflowExecutionResponse{}, nil
+	return resp, nil
 }
 
 // ResetWorkflowExecution reset an existing workflow execution
