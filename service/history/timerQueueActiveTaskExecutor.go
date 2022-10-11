@@ -115,7 +115,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	case *tasks.WorkflowBackoffTimerTask:
 		err = t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
-		//err = t.executeDeleteHistoryEventTask(ctx, task)
+		err = t.executeDeleteHistoryEventTask(ctx, task)
 	default:
 		err = errUnknownTimerTask
 	}
