@@ -25,9 +25,7 @@
 package history
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -38,11 +36,8 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -62,12 +57,16 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/describeworkflow"
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
+	"go.temporal.io/server/service/history/api/recordchildworkflowcompleted"
+	replicationapi "go.temporal.io/server/service/history/api/replication"
+	"go.temporal.io/server/service/history/api/replicationadmin"
 	"go.temporal.io/server/service/history/api/requestcancelworkflow"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
+	"go.temporal.io/server/service/history/api/resetworkflow"
 	respondactivitytaskcandeled "go.temporal.io/server/service/history/api/respondactivitytaskcanceled"
 	"go.temporal.io/server/service/history/api/respondactivitytaskcompleted"
 	"go.temporal.io/server/service/history/api/respondactivitytaskfailed"
@@ -75,9 +74,11 @@ import (
 	"go.temporal.io/server/service/history/api/signalworkflow"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/terminateworkflow"
+	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
@@ -101,8 +102,8 @@ type (
 		executionManager           persistence.ExecutionManager
 		queueProcessors            map[tasks.Category]queues.Queue
 		replicationAckMgr          replication.AckManager
-		nDCReplicator              nDCHistoryReplicator
-		nDCActivityReplicator      nDCActivityReplicator
+		nDCReplicator              ndc.HistoryReplicator
+		nDCActivityReplicator      ndc.ActivityReplicator
 		replicationProcessorMgr    common.Daemon
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
@@ -111,9 +112,9 @@ type (
 		throttledLogger            log.Logger
 		config                     *configs.Config
 		workflowRebuilder          workflowRebuilder
-		workflowResetter           workflowResetter
+		workflowResetter           ndc.WorkflowResetter
 		sdkClientFactory           sdk.ClientFactory
-		eventsReapplier            nDCEventsReapplier
+		eventsReapplier            ndc.EventsReapplier
 		matchingClient             matchingservice.MatchingServiceClient
 		rawMatchingClient          matchingservice.MatchingServiceClient
 		replicationDLQHandler      replication.DLQHandler
@@ -184,7 +185,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
-	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
+	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsClient(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
@@ -193,14 +194,14 @@ func NewEngineWithShardContext(
 			executionManager,
 			logger,
 		)
-		historyEngImpl.nDCReplicator = newNDCHistoryReplicator(
+		historyEngImpl.nDCReplicator = ndc.NewHistoryReplicator(
 			shard,
 			workflowCache,
 			historyEngImpl.eventsReapplier,
 			logger,
 			eventSerializer,
 		)
-		historyEngImpl.nDCActivityReplicator = newNDCActivityReplicator(
+		historyEngImpl.nDCActivityReplicator = ndc.NewActivityReplicator(
 			shard,
 			workflowCache,
 			logger,
@@ -211,7 +212,7 @@ func NewEngineWithShardContext(
 		workflowCache,
 		logger,
 	)
-	historyEngImpl.workflowResetter = newWorkflowResetter(
+	historyEngImpl.workflowResetter = ndc.NewWorkflowResetter(
 		shard,
 		workflowCache,
 		logger,
@@ -424,8 +425,7 @@ func (e *historyEngineImpl) GetMutableState(
 	ctx context.Context,
 	request *historyservice.GetMutableStateRequest,
 ) (*historyservice.GetMutableStateResponse, error) {
-
-	return e.getMutableStateOrPolling(ctx, request)
+	return api.GetOrPollMutableState(ctx, request, e.shard, e.workflowConsistencyChecker, e.eventNotifier)
 }
 
 // PollMutableState retrieves the mutable state of the workflow execution with long polling
@@ -434,16 +434,22 @@ func (e *historyEngineImpl) PollMutableState(
 	request *historyservice.PollMutableStateRequest,
 ) (*historyservice.PollMutableStateResponse, error) {
 
-	response, err := e.getMutableStateOrPolling(ctx, &historyservice.GetMutableStateRequest{
-		NamespaceId:         request.GetNamespaceId(),
-		Execution:           request.Execution,
-		ExpectedNextEventId: request.ExpectedNextEventId,
-		CurrentBranchToken:  request.CurrentBranchToken,
-	})
-
+	response, err := api.GetOrPollMutableState(
+		ctx,
+		&historyservice.GetMutableStateRequest{
+			NamespaceId:         request.GetNamespaceId(),
+			Execution:           request.Execution,
+			ExpectedNextEventId: request.ExpectedNextEventId,
+			CurrentBranchToken:  request.CurrentBranchToken,
+		},
+		e.shard,
+		e.workflowConsistencyChecker,
+		e.eventNotifier,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	return &historyservice.PollMutableStateResponse{
 		Execution:                             response.Execution,
 		WorkflowType:                          response.WorkflowType,
@@ -460,102 +466,6 @@ func (e *historyEngineImpl) PollMutableState(
 		WorkflowStatus:                        response.WorkflowStatus,
 		FirstExecutionRunId:                   response.FirstExecutionRunId,
 	}, nil
-}
-
-func (e *historyEngineImpl) getMutableStateOrPolling(
-	ctx context.Context,
-	request *historyservice.GetMutableStateRequest,
-) (*historyservice.GetMutableStateResponse, error) {
-
-	namespaceID := namespace.ID(request.GetNamespaceId())
-	err := api.ValidateNamespaceUUID(namespaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(request.Execution.RunId) == 0 {
-		request.Execution.RunId, err = e.workflowConsistencyChecker.GetCurrentRunID(
-			ctx,
-			request.NamespaceId,
-			request.Execution.WorkflowId,
-		)
-		if err != nil {
-			return nil, err
-		}
-	}
-	workflowKey := definition.NewWorkflowKey(
-		request.NamespaceId,
-		request.Execution.WorkflowId,
-		request.Execution.RunId,
-	)
-	response, err := e.getMutableState(ctx, workflowKey)
-	if err != nil {
-		return nil, err
-	}
-	if request.CurrentBranchToken == nil {
-		request.CurrentBranchToken = response.CurrentBranchToken
-	}
-	if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
-		return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
-	}
-
-	// expectedNextEventID is 0 when caller want to get the current next event ID without blocking
-	expectedNextEventID := common.FirstEventID
-	if request.ExpectedNextEventId != common.EmptyEventID {
-		expectedNextEventID = request.GetExpectedNextEventId()
-	}
-
-	// if caller decide to long poll on workflow execution
-	// and the event ID we are looking for is smaller than current next event ID
-	if expectedNextEventID >= response.GetNextEventId() && response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		subscriberID, channel, err := e.eventNotifier.WatchHistoryEvent(workflowKey)
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = e.eventNotifier.UnwatchHistoryEvent(workflowKey, subscriberID) }()
-		// check again in case the next event ID is updated
-		response, err = e.getMutableState(ctx, workflowKey)
-		if err != nil {
-			return nil, err
-		}
-		// check again if the current branch token changed
-		if !bytes.Equal(request.CurrentBranchToken, response.CurrentBranchToken) {
-			return nil, serviceerrors.NewCurrentBranchChanged(response.CurrentBranchToken, request.CurrentBranchToken)
-		}
-		if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-			return response, nil
-		}
-
-		namespaceRegistry, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-		if err != nil {
-			return nil, err
-		}
-		timer := time.NewTimer(e.shard.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String()))
-		defer timer.Stop()
-		for {
-			select {
-			case event := <-channel:
-				response.LastFirstEventId = event.LastFirstEventID
-				response.LastFirstEventTxnId = event.LastFirstEventTxnID
-				response.NextEventId = event.NextEventID
-				response.PreviousStartedEventId = event.PreviousStartedEventID
-				response.WorkflowState = event.WorkflowState
-				response.WorkflowStatus = event.WorkflowStatus
-				if !bytes.Equal(request.CurrentBranchToken, event.CurrentBranchToken) {
-					return nil, serviceerrors.NewCurrentBranchChanged(event.CurrentBranchToken, request.CurrentBranchToken)
-				}
-				if expectedNextEventID < response.GetNextEventId() || response.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-					return response, nil
-				}
-			case <-timer.C:
-				return response, nil
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			}
-		}
-	}
-
-	return response, nil
 }
 
 func (e *historyEngineImpl) QueryWorkflow(
@@ -639,7 +549,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 			!mutableState.IsWorkflowExecutionRunning() ||
 			(!mutableState.HasPendingWorkflowTask() && !mutableState.HasInFlightWorkflowTask())
 		if safeToDispatchDirectly {
-			msResp, err := e.mutableStateToGetResponse(mutableState)
+			msResp, err := api.MutableStateToGetResponse(mutableState)
 			if err != nil {
 				return nil, err
 			}
@@ -685,7 +595,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 				return nil, consts.ErrQueryEnteredInvalidState
 			}
 		case workflow.QueryCompletionTypeUnblocked:
-			msResp, err := e.getMutableState(ctx, workflowKey)
+			msResp, err := api.GetMutableState(ctx, workflowKey, e.workflowConsistencyChecker)
 			if err != nil {
 				return nil, err
 			}
@@ -783,76 +693,6 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		}}, err
 }
 
-func (e *historyEngineImpl) getMutableState(
-	ctx context.Context,
-	workflowKey definition.WorkflowKey,
-) (_ *historyservice.GetMutableStateResponse, retError error) {
-
-	if len(workflowKey.RunID) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(
-			"getMutableState encountered empty run ID: %v", workflowKey,
-		))
-	}
-
-	weCtx, err := e.workflowConsistencyChecker.GetWorkflowContext(
-		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		workflowKey,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { weCtx.GetReleaseFn()(retError) }()
-
-	mutableState, err := weCtx.GetContext().LoadMutableState(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return e.mutableStateToGetResponse(mutableState)
-}
-
-func (e *historyEngineImpl) mutableStateToGetResponse(
-	mutableState workflow.MutableState,
-) (_ *historyservice.GetMutableStateResponse, retError error) {
-	currentBranchToken, err := mutableState.GetCurrentBranchToken()
-	if err != nil {
-		return nil, err
-	}
-
-	executionInfo := mutableState.GetExecutionInfo()
-	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
-	lastFirstEventID, lastFirstEventTxnID := mutableState.GetLastFirstEventIDTxnID()
-	return &historyservice.GetMutableStateResponse{
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: mutableState.GetExecutionInfo().WorkflowId,
-			RunId:      mutableState.GetExecutionState().RunId,
-		},
-		WorkflowType:           &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-		LastFirstEventId:       lastFirstEventID,
-		LastFirstEventTxnId:    lastFirstEventTxnID,
-		NextEventId:            mutableState.GetNextEventID(),
-		PreviousStartedEventId: mutableState.GetPreviousStartedEventID(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: executionInfo.TaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		StickyTaskQueue: &taskqueuepb.TaskQueue{
-			Name: executionInfo.StickyTaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_STICKY,
-		},
-		StickyTaskQueueScheduleToStartTimeout: executionInfo.StickyScheduleToStartTimeout,
-		CurrentBranchToken:                    currentBranchToken,
-		WorkflowState:                         workflowState,
-		WorkflowStatus:                        workflowStatus,
-		IsStickyTaskQueueEnabled:              mutableState.IsStickyTaskQueueEnabled(),
-		VersionHistories: versionhistory.CopyVersionHistories(
-			mutableState.GetExecutionInfo().GetVersionHistories(),
-		),
-		FirstExecutionRunId: executionInfo.FirstExecutionRunId,
-	}, nil
-}
-
 func (e *historyEngineImpl) DescribeMutableState(
 	ctx context.Context,
 	request *historyservice.DescribeMutableStateRequest,
@@ -913,150 +753,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DescribeWorkflowExecutionRequest,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
-
-	namespaceID := namespace.ID(request.GetNamespaceId())
-	err := api.ValidateNamespaceUUID(namespaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	weCtx, err := e.workflowConsistencyChecker.GetWorkflowContext(
-		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			request.NamespaceId,
-			request.Request.Execution.WorkflowId,
-			request.Request.Execution.RunId,
-		),
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { weCtx.GetReleaseFn()(retError) }()
-
-	mutableState := weCtx.GetMutableState()
-	executionInfo := mutableState.GetExecutionInfo()
-	executionState := mutableState.GetExecutionState()
-	result := &historyservice.DescribeWorkflowExecutionResponse{
-		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: executionInfo.TaskQueue,
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			},
-			WorkflowExecutionTimeout:   executionInfo.WorkflowExecutionTimeout,
-			WorkflowRunTimeout:         executionInfo.WorkflowRunTimeout,
-			DefaultWorkflowTaskTimeout: executionInfo.DefaultWorkflowTaskTimeout,
-		},
-		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: executionInfo.WorkflowId,
-				RunId:      executionState.RunId,
-			},
-			Type:                 &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-			StartTime:            executionInfo.StartTime,
-			Status:               executionState.Status,
-			HistoryLength:        mutableState.GetNextEventID() - common.FirstEventID,
-			ExecutionTime:        executionInfo.ExecutionTime,
-			Memo:                 &commonpb.Memo{Fields: executionInfo.Memo},
-			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
-			AutoResetPoints:      executionInfo.AutoResetPoints,
-			TaskQueue:            executionInfo.TaskQueue,
-			StateTransitionCount: executionInfo.StateTransitionCount,
-		},
-	}
-
-	if executionInfo.ParentRunId != "" {
-		result.WorkflowExecutionInfo.ParentExecution = &commonpb.WorkflowExecution{
-			WorkflowId: executionInfo.ParentWorkflowId,
-			RunId:      executionInfo.ParentRunId,
-		}
-		result.WorkflowExecutionInfo.ParentNamespaceId = executionInfo.ParentNamespaceId
-	}
-	if executionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		// for closed workflow
-		result.WorkflowExecutionInfo.Status = executionState.Status
-		closeTime, err := mutableState.GetWorkflowCloseTime(ctx)
-		if err != nil {
-			return nil, err
-		}
-		result.WorkflowExecutionInfo.CloseTime = closeTime
-	}
-
-	if len(mutableState.GetPendingActivityInfos()) > 0 {
-		for _, ai := range mutableState.GetPendingActivityInfos() {
-			p := &workflowpb.PendingActivityInfo{
-				ActivityId: ai.ActivityId,
-			}
-			if ai.CancelRequested {
-				p.State = enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
-			} else if ai.StartedEventId != common.EmptyEventID {
-				p.State = enumspb.PENDING_ACTIVITY_STATE_STARTED
-			} else {
-				p.State = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
-			}
-			if !timestamp.TimeValue(ai.LastHeartbeatUpdateTime).IsZero() {
-				p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
-				p.HeartbeatDetails = ai.LastHeartbeatDetails
-			}
-			// TODO: move to mutable state instead of loading it from event
-			scheduledEvent, err := mutableState.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
-			if err != nil {
-				return nil, err
-			}
-			p.ActivityType = scheduledEvent.GetActivityTaskScheduledEventAttributes().ActivityType
-			if p.State == enumspb.PENDING_ACTIVITY_STATE_SCHEDULED {
-				p.ScheduledTime = ai.ScheduledTime
-			} else {
-				p.LastStartedTime = ai.StartedTime
-			}
-			p.LastWorkerIdentity = ai.StartedIdentity
-			if ai.HasRetryPolicy {
-				p.Attempt = ai.Attempt
-				p.ExpirationTime = ai.RetryExpirationTime
-				if ai.RetryMaximumAttempts != 0 {
-					p.MaximumAttempts = ai.RetryMaximumAttempts
-				}
-				if ai.RetryLastFailure != nil {
-					p.LastFailure = ai.RetryLastFailure
-				}
-				if p.LastWorkerIdentity == "" && ai.RetryLastWorkerIdentity != "" {
-					p.LastWorkerIdentity = ai.RetryLastWorkerIdentity
-				}
-			} else {
-				p.Attempt = 1
-			}
-			result.PendingActivities = append(result.PendingActivities, p)
-		}
-	}
-
-	if len(mutableState.GetPendingChildExecutionInfos()) > 0 {
-		for _, ch := range mutableState.GetPendingChildExecutionInfos() {
-			p := &workflowpb.PendingChildExecutionInfo{
-				WorkflowId:        ch.StartedWorkflowId,
-				RunId:             ch.StartedRunId,
-				WorkflowTypeName:  ch.WorkflowTypeName,
-				InitiatedId:       ch.InitiatedEventId,
-				ParentClosePolicy: ch.ParentClosePolicy,
-			}
-			result.PendingChildren = append(result.PendingChildren, p)
-		}
-	}
-
-	if pendingWorkflowTask, ok := mutableState.GetPendingWorkflowTask(); ok {
-		result.PendingWorkflowTask = &workflowpb.PendingWorkflowTaskInfo{
-			State:                 enumspb.PENDING_WORKFLOW_TASK_STATE_SCHEDULED,
-			ScheduledTime:         pendingWorkflowTask.ScheduledTime,
-			OriginalScheduledTime: pendingWorkflowTask.OriginalScheduledTime,
-			Attempt:               pendingWorkflowTask.Attempt,
-		}
-		if pendingWorkflowTask.StartedEventID != common.EmptyEventID {
-			result.PendingWorkflowTask.State = enumspb.PENDING_WORKFLOW_TASK_STATE_STARTED
-			result.PendingWorkflowTask.StartedTime = pendingWorkflowTask.StartedTime
-		}
-	}
-
-	return result, nil
+	return describeworkflow.Invoke(ctx, request, e.shard, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) RecordActivityTaskStarted(
@@ -1295,162 +992,16 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 // RecordChildExecutionCompleted records the completion of child execution into parent execution history
 func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	ctx context.Context,
-	completionRequest *historyservice.RecordChildExecutionCompletedRequest,
-) error {
-
-	_, err := e.getActiveNamespaceEntry(namespace.ID(completionRequest.GetNamespaceId()))
-	if err != nil {
-		return err
-	}
-
-	parentInitiatedID := completionRequest.ParentInitiatedId
-	parentInitiatedVersion := completionRequest.ParentInitiatedVersion
-
-	return api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		completionRequest.Clock,
-		func(mutableState workflow.MutableState) bool {
-			if !mutableState.IsWorkflowExecutionRunning() {
-				// current branch already closed, we won't perform any operation, pass the check
-				return true
-			}
-
-			onCurrentBranch, err := historyEventOnCurrentBranch(mutableState, parentInitiatedID, parentInitiatedVersion)
-			if err != nil {
-				// can't find initiated event, potential stale mutable, fail the predicate check
-				return false
-			}
-			if !onCurrentBranch {
-				// found on different branch, since we don't record completion on a different branch, pass the check
-				return true
-			}
-
-			ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
-			return !(isRunning && ci.StartedEventId == common.EmptyEventID) // !(potential stale)
-		},
-		definition.NewWorkflowKey(
-			completionRequest.NamespaceId,
-			completionRequest.WorkflowExecution.WorkflowId,
-			completionRequest.WorkflowExecution.RunId,
-		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
-			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-
-			onCurrentBranch, err := historyEventOnCurrentBranch(mutableState, parentInitiatedID, parentInitiatedVersion)
-			if err != nil || !onCurrentBranch {
-				return nil, consts.ErrChildExecutionNotFound
-			}
-
-			// Check mutable state to make sure child execution is in pending child executions
-			ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
-			if !isRunning || ci.StartedEventId == common.EmptyEventID {
-				// note we already checked if startedEventID is empty (in consistency predicate)
-				// and reloaded mutable state
-				return nil, consts.ErrChildExecutionNotFound
-			}
-
-			completedExecution := completionRequest.CompletedExecution
-			if ci.GetStartedWorkflowId() != completedExecution.GetWorkflowId() {
-				// this can only happen when we don't have the initiated version
-				return nil, consts.ErrChildExecutionNotFound
-			}
-
-			completionEvent := completionRequest.CompletionEvent
-			switch completionEvent.GetEventType() {
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
-				attributes := completionEvent.GetWorkflowExecutionCompletedEventAttributes()
-				_, err = mutableState.AddChildWorkflowExecutionCompletedEvent(parentInitiatedID, completedExecution, attributes)
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-				attributes := completionEvent.GetWorkflowExecutionFailedEventAttributes()
-				_, err = mutableState.AddChildWorkflowExecutionFailedEvent(parentInitiatedID, completedExecution, attributes)
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
-				attributes := completionEvent.GetWorkflowExecutionCanceledEventAttributes()
-				_, err = mutableState.AddChildWorkflowExecutionCanceledEvent(parentInitiatedID, completedExecution, attributes)
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
-				attributes := completionEvent.GetWorkflowExecutionTerminatedEventAttributes()
-				_, err = mutableState.AddChildWorkflowExecutionTerminatedEvent(parentInitiatedID, completedExecution, attributes)
-			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-				attributes := completionEvent.GetWorkflowExecutionTimedOutEventAttributes()
-				_, err = mutableState.AddChildWorkflowExecutionTimedOutEvent(parentInitiatedID, completedExecution, attributes)
-			}
-
-			if err != nil {
-				return nil, err
-			}
-			return &api.UpdateWorkflowAction{
-				Noop:               false,
-				CreateWorkflowTask: true,
-			}, nil
-		},
-		nil,
-		e.shard,
-		e.workflowConsistencyChecker,
-	)
+	req *historyservice.RecordChildExecutionCompletedRequest,
+) (*historyservice.RecordChildExecutionCompletedResponse, error) {
+	return recordchildworkflowcompleted.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
-	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
-) (retError error) {
-	namespaceID := namespace.ID(request.GetNamespaceId())
-	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
-		return err
-	}
-
-	workflowContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
-		ctx,
-		request.Clock,
-		// it's ok we have stale state when doing verification,
-		// the logic will return WorkflowNotReady error and the caller will retry
-		// this can prevent keep reloading mutable state when there's a replication lag
-		// in parent shard.
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			request.NamespaceId,
-			request.ParentExecution.WorkflowId,
-			request.ParentExecution.RunId,
-		),
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { workflowContext.GetReleaseFn()(retError) }()
-
-	mutableState := workflowContext.GetMutableState()
-	if !mutableState.IsWorkflowExecutionRunning() &&
-		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		// parent has already completed and can't be blocked after failover.
-		return nil
-	}
-
-	onCurrentBranch, err := historyEventOnCurrentBranch(mutableState, request.ParentInitiatedId, request.ParentInitiatedVersion)
-	if err != nil {
-		// initiated event not found on any branch
-		return consts.ErrWorkflowNotReady
-	}
-
-	if !onCurrentBranch {
-		// due to conflict resolution, the initiated event may on a different branch of the workflow.
-		// we don't have to do anything and can simply return not found error. Standby logic
-		// after seeing this error will give up verification.
-		return consts.ErrChildExecutionNotFound
-	}
-
-	ci, isRunning := mutableState.GetChildExecutionInfo(request.ParentInitiatedId)
-	if isRunning {
-		if ci.StartedEventId != common.EmptyEventID &&
-			ci.GetStartedWorkflowId() != request.ChildExecution.GetWorkflowId() {
-			// this can happen since we may not have the initiated version
-			return consts.ErrChildExecutionNotFound
-		}
-
-		return consts.ErrWorkflowNotReady
-	}
-
-	return nil
+	req *historyservice.VerifyChildExecutionCompletionRecordedRequest,
+) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
+	return verifychildworkflowcompletionrecorded.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) ReplicateEventsV2(
@@ -1501,121 +1052,9 @@ func (e *historyEngineImpl) SyncActivity(
 // Consistency guarantee: always write
 func (e *historyEngineImpl) ResetWorkflowExecution(
 	ctx context.Context,
-	resetRequest *historyservice.ResetWorkflowExecutionRequest,
-) (response *historyservice.ResetWorkflowExecutionResponse, retError error) {
-
-	request := resetRequest.ResetRequest
-	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
-	workflowID := request.WorkflowExecution.GetWorkflowId()
-	baseRunID := request.WorkflowExecution.GetRunId()
-
-	baseWFContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
-		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			namespaceID.String(),
-			workflowID,
-			baseRunID,
-		),
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { baseWFContext.GetReleaseFn()(retError) }()
-
-	baseMutableState := baseWFContext.GetMutableState()
-	if request.GetWorkflowTaskFinishEventId() <= common.FirstEventID ||
-		request.GetWorkflowTaskFinishEventId() >= baseMutableState.GetNextEventID() {
-		return nil, serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow last event ID.")
-	}
-
-	// also load the current run of the workflow, it can be different from the base runID
-	currentRunID, err := e.workflowConsistencyChecker.GetCurrentRunID(
-		ctx,
-		namespaceID.String(),
-		request.WorkflowExecution.GetWorkflowId(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	if baseRunID == "" {
-		baseRunID = currentRunID
-	}
-
-	var currentWFContext api.WorkflowContext
-	if currentRunID == baseRunID {
-		currentWFContext = baseWFContext
-	} else {
-		currentWFContext, err = e.workflowConsistencyChecker.GetWorkflowContext(
-			ctx,
-			nil,
-			api.BypassMutableStateConsistencyPredicate,
-			definition.NewWorkflowKey(
-				namespaceID.String(),
-				workflowID,
-				currentRunID,
-			),
-		)
-		if err != nil {
-			return nil, err
-		}
-		defer func() { currentWFContext.GetReleaseFn()(retError) }()
-	}
-
-	// dedup by requestID
-	if currentWFContext.GetMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
-		e.logger.Info("Duplicated reset request",
-			tag.WorkflowID(workflowID),
-			tag.WorkflowRunID(currentRunID),
-			tag.WorkflowNamespaceID(namespaceID.String()))
-		return &historyservice.ResetWorkflowExecutionResponse{
-			RunId: currentRunID,
-		}, nil
-	}
-
-	resetRunID := uuid.New()
-	baseRebuildLastEventID := request.GetWorkflowTaskFinishEventId() - 1
-	baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
-	baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
-	if err != nil {
-		return nil, err
-	}
-	baseRebuildLastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
-	if err != nil {
-		return nil, err
-	}
-	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
-	baseNextEventID := baseMutableState.GetNextEventID()
-
-	if err := e.workflowResetter.resetWorkflow(
-		ctx,
-		namespaceID,
-		workflowID,
-		baseRunID,
-		baseCurrentBranchToken,
-		baseRebuildLastEventID,
-		baseRebuildLastEventVersion,
-		baseNextEventID,
-		resetRunID,
-		request.GetRequestId(),
-		newNDCWorkflow(
-			ctx,
-			e.shard.GetNamespaceRegistry(),
-			e.shard.GetClusterMetadata(),
-			currentWFContext.GetContext(),
-			currentWFContext.GetMutableState(),
-			currentWFContext.GetReleaseFn(),
-		),
-		request.GetReason(),
-		nil,
-		request.GetResetReapplyType(),
-	); err != nil {
-		return nil, err
-	}
-	return &historyservice.ResetWorkflowExecutionResponse{
-		RunId: resetRunID,
-	}, nil
+	req *historyservice.ResetWorkflowExecutionRequest,
+) (*historyservice.ResetWorkflowExecutionResponse, error) {
+	return resetworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) NotifyNewHistoryEvent(
@@ -1658,48 +1097,14 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	ackTimestamp time.Time,
 	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
-
-	if ackMessageID != persistence.EmptyQueueMessageID {
-		if err := e.shard.UpdateQueueClusterAckLevel(
-			tasks.CategoryReplication,
-			pollingCluster,
-			tasks.NewImmediateKey(ackMessageID),
-		); err != nil {
-			e.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
-		}
-		e.shard.UpdateRemoteClusterInfo(pollingCluster, ackMessageID, ackTimestamp)
-	}
-
-	replicationMessages, err := e.replicationAckMgr.GetTasks(
-		ctx,
-		pollingCluster,
-		queryMessageID,
-	)
-	if err != nil {
-		e.logger.Error("Failed to retrieve replication messages.", tag.Error(err))
-		return nil, err
-	}
-	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
-
-	return replicationMessages, nil
+	return replicationapi.GetTasks(ctx, e.shard, e.replicationAckMgr, pollingCluster, ackMessageID, ackTimestamp, queryMessageID)
 }
 
 func (e *historyEngineImpl) GetDLQReplicationMessages(
 	ctx context.Context,
 	taskInfos []*replicationspb.ReplicationTaskInfo,
 ) ([]*replicationspb.ReplicationTask, error) {
-
-	tasks := make([]*replicationspb.ReplicationTask, 0, len(taskInfos))
-	for _, taskInfo := range taskInfos {
-		task, err := e.replicationAckMgr.GetTask(ctx, taskInfo)
-		if err != nil {
-			e.logger.Error("Failed to fetch DLQ replication messages.", tag.Error(err))
-			return nil, err
-		}
-		tasks = append(tasks, task)
-	}
-
-	return tasks, nil
+	return replicationapi.GetDLQTasks(ctx, e.shard, e.replicationAckMgr, taskInfos)
 }
 
 func (e *historyEngineImpl) ReapplyEvents(
@@ -1810,7 +1215,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 				baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 				baseNextEventID := mutableState.GetNextEventID()
 
-				err = e.workflowResetter.resetWorkflow(
+				err = e.workflowResetter.ResetWorkflow(
 					ctx,
 					namespaceID,
 					workflowID,
@@ -1821,7 +1226,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 					baseNextEventID,
 					resetRunID,
 					uuid.New(),
-					newNDCWorkflow(
+					ndc.NewWorkflow(
 						ctx,
 						e.shard.GetNamespaceRegistry(),
 						e.shard.GetClusterMetadata(),
@@ -1829,7 +1234,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 						mutableState,
 						workflow.NoopReleaseFn,
 					),
-					eventsReapplicationResetWorkflowReason,
+					ndc.EventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
 					enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 				)
@@ -1856,7 +1261,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 				// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
 				postActions.CreateWorkflowTask = false
 			}
-			reappliedEvents, err := e.eventsReapplier.reapplyEvents(
+			reappliedEvents, err := e.eventsReapplier.ReapplyEvents(
 				ctx,
 				mutableState,
 				toReapplyEvents,
@@ -1884,69 +1289,21 @@ func (e *historyEngineImpl) GetDLQMessages(
 	ctx context.Context,
 	request *historyservice.GetDLQMessagesRequest,
 ) (*historyservice.GetDLQMessagesResponse, error) {
-
-	_, ok := e.clusterMetadata.GetAllClusterInfo()[request.GetSourceCluster()]
-	if !ok {
-		return nil, consts.ErrUnknownCluster
-	}
-
-	tasks, token, err := e.replicationDLQHandler.GetMessages(
-		ctx,
-		request.GetSourceCluster(),
-		request.GetInclusiveEndMessageId(),
-		int(request.GetMaximumPageSize()),
-		request.GetNextPageToken(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &historyservice.GetDLQMessagesResponse{
-		Type:             request.GetType(),
-		ReplicationTasks: tasks,
-		NextPageToken:    token,
-	}, nil
+	return replicationadmin.GetDLQ(ctx, request, e.shard, e.replicationDLQHandler)
 }
 
 func (e *historyEngineImpl) PurgeDLQMessages(
 	ctx context.Context,
 	request *historyservice.PurgeDLQMessagesRequest,
-) error {
-
-	_, ok := e.clusterMetadata.GetAllClusterInfo()[request.GetSourceCluster()]
-	if !ok {
-		return consts.ErrUnknownCluster
-	}
-
-	return e.replicationDLQHandler.PurgeMessages(
-		ctx,
-		request.GetSourceCluster(),
-		request.GetInclusiveEndMessageId(),
-	)
+) (*historyservice.PurgeDLQMessagesResponse, error) {
+	return replicationadmin.PurgeDLQ(ctx, request, e.shard, e.replicationDLQHandler)
 }
 
 func (e *historyEngineImpl) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,
 ) (*historyservice.MergeDLQMessagesResponse, error) {
-
-	_, ok := e.clusterMetadata.GetAllClusterInfo()[request.GetSourceCluster()]
-	if !ok {
-		return nil, consts.ErrUnknownCluster
-	}
-
-	token, err := e.replicationDLQHandler.MergeMessages(
-		ctx,
-		request.GetSourceCluster(),
-		request.GetInclusiveEndMessageId(),
-		int(request.GetMaximumPageSize()),
-		request.GetNextPageToken(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &historyservice.MergeDLQMessagesResponse{
-		NextPageToken: token,
-	}, nil
+	return replicationadmin.MergeDLQ(ctx, request, e.shard, e.replicationDLQHandler)
 }
 
 func (e *historyEngineImpl) RebuildMutableState(
@@ -2020,70 +1377,14 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 	ctx context.Context,
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
 ) (_ *historyservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
-	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(request.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-	namespaceID := namespaceEntry.ID()
-
-	wfContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
-		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			namespaceID.String(),
-			request.Execution.WorkflowId,
-			request.Execution.RunId,
-		),
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { wfContext.GetReleaseFn()(retError) }()
-
-	now := e.shard.GetTimeSource().Now()
-	task, err := wfContext.GetMutableState().GenerateMigrationTasks(now)
-	if err != nil {
-		return nil, err
-	}
-
-	err = e.shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
-		ShardID: e.shard.GetShardID(),
-		// RangeID is set by shard
-		NamespaceID: string(namespaceID),
-		WorkflowID:  request.Execution.WorkflowId,
-		RunID:       request.Execution.RunId,
-		Tasks: map[tasks.Category][]tasks.Task{
-			tasks.CategoryReplication: {task},
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil
+	return replicationapi.GenerateTask(ctx, request, e.shard, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) GetReplicationStatus(
 	ctx context.Context,
 	request *historyservice.GetReplicationStatusRequest,
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
-
-	resp := &historyservice.ShardReplicationStatus{
-		ShardId:        e.shard.GetShardID(),
-		ShardLocalTime: timestamp.TimePtr(e.shard.GetTimeSource().Now()),
-	}
-
-	maxReplicationTaskId, maxTaskVisibilityTimeStamp := e.replicationAckMgr.GetMaxTaskInfo()
-	resp.MaxReplicationTaskId = maxReplicationTaskId
-	resp.MaxReplicationTaskVisibilityTime = timestamp.TimePtr(maxTaskVisibilityTimeStamp)
-
-	remoteClusters, handoverNamespaces, err := e.shard.GetReplicationStatus(request.RemoteClusters)
-	if err != nil {
-		return nil, err
-	}
-	resp.RemoteClusters = remoteClusters
-	resp.HandoverNamespaces = handoverNamespaces
-	return resp, nil
+	return replicationapi.GetStatus(ctx, request, e.shard, e.replicationAckMgr)
 }
 
 func (e *historyEngineImpl) containsHistoryEvent(
@@ -2098,39 +1399,4 @@ func (e *historyEngineImpl) containsHistoryEvent(
 		versionhistory.NewVersionHistoryItem(reappliedEventID, reappliedEventVersion),
 	)
 	return err == nil
-}
-
-func historyEventOnCurrentBranch(
-	mutableState workflow.MutableState,
-	eventID int64,
-	eventVersion int64,
-) (bool, error) {
-	if eventVersion == 0 {
-		if eventID >= mutableState.GetNextEventID() {
-			return false, &serviceerror.NotFound{Message: "History event not found"}
-		}
-
-		// there's no version, assume the event is on the current branch
-		return true, nil
-	}
-
-	versionHistoryies := mutableState.GetExecutionInfo().GetVersionHistories()
-	versionHistoryItem := versionhistory.NewVersionHistoryItem(eventID, eventVersion)
-	if _, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-		versionHistoryies,
-		versionHistoryItem,
-	); err != nil {
-		return false, &serviceerror.NotFound{Message: "History event not found"}
-	}
-
-	// check if on current branch
-	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistoryies)
-	if err != nil {
-		return false, err
-	}
-
-	return versionhistory.ContainsVersionHistoryItem(
-		currentVersionHistory,
-		versionHistoryItem,
-	), nil
 }

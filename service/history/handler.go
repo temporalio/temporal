@@ -1205,12 +1205,12 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.RecordChildExecutionCompleted(ctx, request)
+	resp, err2 := engine.RecordChildExecutionCompleted(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.RecordChildExecutionCompletedResponse{}, nil
+	return resp, nil
 }
 
 func (h *Handler) VerifyChildExecutionCompletionRecorded(
@@ -1242,12 +1242,12 @@ func (h *Handler) VerifyChildExecutionCompletionRecorded(
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.VerifyChildExecutionCompletionRecorded(ctx, request)
+	resp, err2 := engine.VerifyChildExecutionCompletionRecorded(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.VerifyChildExecutionCompletionRecordedResponse{}, nil
+	return resp, nil
 }
 
 // ResetStickyTaskQueue reset the volatile information in mutable state of a given workflow.
@@ -1628,12 +1628,11 @@ func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.
 		return nil, h.convertError(err)
 	}
 
-	err = engine.PurgeDLQMessages(ctx, request)
+	resp, err := engine.PurgeDLQMessages(ctx, request)
 	if err != nil {
-		err = h.convertError(err)
-		return nil, err
+		return nil, h.convertError(err)
 	}
-	return &historyservice.PurgeDLQMessagesResponse{}, nil
+	return resp, nil
 }
 
 func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.MergeDLQMessagesRequest) (_ *historyservice.MergeDLQMessagesResponse, retError error) {

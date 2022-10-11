@@ -255,11 +255,12 @@ func (mr *MockEngineMockRecorder) PollMutableState(ctx, request interface{}) *go
 }
 
 // PurgeDLQMessages mocks base method.
-func (m *MockEngine) PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) error {
+func (m *MockEngine) PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) (*historyservice.PurgeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PurgeDLQMessages", ctx, messagesRequest)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.PurgeDLQMessagesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // PurgeDLQMessages indicates an expected call of PurgeDLQMessages.
@@ -342,11 +343,12 @@ func (mr *MockEngineMockRecorder) RecordActivityTaskStarted(ctx, request interfa
 }
 
 // RecordChildExecutionCompleted mocks base method.
-func (m *MockEngine) RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) error {
+func (m *MockEngine) RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) (*historyservice.RecordChildExecutionCompletedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RecordChildExecutionCompleted", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.RecordChildExecutionCompletedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RecordChildExecutionCompleted indicates an expected call of RecordChildExecutionCompleted.
@@ -687,11 +689,12 @@ func (mr *MockEngineMockRecorder) UpdateWorkflow(ctx, request interface{}) *gomo
 }
 
 // VerifyChildExecutionCompletionRecorded mocks base method.
-func (m *MockEngine) VerifyChildExecutionCompletionRecorded(ctx context.Context, request *historyservice.VerifyChildExecutionCompletionRecordedRequest) error {
+func (m *MockEngine) VerifyChildExecutionCompletionRecorded(ctx context.Context, request *historyservice.VerifyChildExecutionCompletionRecordedRequest) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "VerifyChildExecutionCompletionRecorded", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.VerifyChildExecutionCompletionRecordedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // VerifyChildExecutionCompletionRecorded indicates an expected call of VerifyChildExecutionCompletionRecorded.
