@@ -940,6 +940,8 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 			record.StateTransitionCount = fieldValueParsed.(int64)
 		case searchattribute.HistorySizeBytes:
 			record.HistorySizeBytes = fieldValueParsed.(int64)
+		case searchattribute.BinaryChecksums:
+			// no-op: binary checksums should not show up in the search attributes map
 		default:
 			// All custom and predefined search attributes are handled here.
 			if customSearchAttributes == nil {

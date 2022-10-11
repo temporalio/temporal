@@ -63,7 +63,6 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -101,6 +100,10 @@ var (
 	ErrMissingChildWorkflowInitiatedEvent = serviceerror.NewInternal("unable to get child workflow initiated event")
 	// ErrMissingSignalInitiatedEvent indicates missing workflow signal initiated event
 	ErrMissingSignalInitiatedEvent = serviceerror.NewInternal("unable to get signal initiated event")
+	// ErrMissingEventWithCurrentMemo indicates missing event with current memo
+	ErrMissingEventWithCurrentMemo = serviceerror.NewInternal("unable to get event with current memo")
+	// ErrMissingEventWithCurrentSearchAttributes indicates missing event with current search attributes
+	ErrMissingEventWithCurrentSearchAttributes = serviceerror.NewInternal("unable to get event with current search attributes")
 )
 
 type (
@@ -1341,6 +1344,112 @@ func (e *MutableStateImpl) GetPreviousStartedEventID() int64 {
 	return e.executionInfo.LastWorkflowTaskStartedEventId
 }
 
+func (e *MutableStateImpl) GetWorkflowMemo(
+	ctx context.Context,
+) (map[string]*commonpb.Payload, error) {
+	memoInfo := e.executionInfo.MemoInfo
+	if memoInfo == nil {
+		// Workflow started with no memo and no upsert has been called yet.
+		return nil, nil
+	}
+	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(memoInfo.EventId)
+	if err != nil {
+		return nil, err
+	}
+	event, err := e.eventsCache.GetEvent(
+		ctx,
+		events.EventKey{
+			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
+			WorkflowID:  e.executionInfo.WorkflowId,
+			RunID:       e.executionState.RunId,
+			EventID:     memoInfo.EventId,
+			Version:     version,
+		},
+		memoInfo.EventBatchId,
+		currentBranchToken,
+	)
+	if err != nil {
+		// do not return the original error
+		// since original error can be of type entity not exists
+		// which can cause task processing side to fail silently
+		return nil, ErrMissingEventWithCurrentMemo
+	}
+	var memo *commonpb.Memo
+	switch event.EventType {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
+		attr := event.Attributes.(*historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes)
+		memo = attr.WorkflowExecutionStartedEventAttributes.Memo
+	case enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:
+		attr := event.Attributes.(*historypb.HistoryEvent_WorkflowPropertiesModifiedEventAttributes)
+		if attr.WorkflowPropertiesModifiedEventAttributes.MergedMemo != nil {
+			memo = attr.WorkflowPropertiesModifiedEventAttributes.MergedMemo
+		} else {
+			memo = attr.WorkflowPropertiesModifiedEventAttributes.UpsertedMemo
+		}
+	default:
+		// this should never happen
+		panic("memo info references to invalid event not containing memo")
+	}
+	return memo.GetFields(), nil
+}
+
+func (e *MutableStateImpl) GetSearchAttributes(
+	ctx context.Context,
+) (map[string]*commonpb.Payload, error) {
+	searchAttributesInfo := e.executionInfo.SearchAttributesInfo
+	if searchAttributesInfo == nil {
+		// Workflow started with no search attributes and no upsert has been called yet.
+		return nil, nil
+	}
+	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(searchAttributesInfo.EventId)
+	if err != nil {
+		return nil, err
+	}
+	event, err := e.eventsCache.GetEvent(
+		ctx,
+		events.EventKey{
+			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
+			WorkflowID:  e.executionInfo.WorkflowId,
+			RunID:       e.executionState.RunId,
+			EventID:     searchAttributesInfo.EventId,
+			Version:     version,
+		},
+		searchAttributesInfo.EventBatchId,
+		currentBranchToken,
+	)
+	if err != nil {
+		// do not return the original error
+		// since original error can be of type entity not exists
+		// which can cause task processing side to fail silently
+		return nil, ErrMissingEventWithCurrentSearchAttributes
+	}
+	var searchAttributes *commonpb.SearchAttributes
+	switch event.EventType {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
+		attr := event.Attributes.(*historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes)
+		searchAttributes = attr.WorkflowExecutionStartedEventAttributes.SearchAttributes
+	case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+		attr := event.Attributes.(*historypb.HistoryEvent_UpsertWorkflowSearchAttributesEventAttributes)
+		if attr.UpsertWorkflowSearchAttributesEventAttributes.MergedSearchAttributes != nil {
+			searchAttributes = attr.UpsertWorkflowSearchAttributesEventAttributes.MergedSearchAttributes
+		} else {
+			searchAttributes = attr.UpsertWorkflowSearchAttributesEventAttributes.SearchAttributes
+		}
+	default:
+		// this should never happen
+		panic("search attributes info references to invalid event not containing search attributes")
+	}
+	return searchAttributes.GetIndexedFields(), nil
+}
+
+func (e *MutableStateImpl) GetBinaryChecksums() []string {
+	var binaryChecksums []string
+	for _, rp := range e.executionInfo.GetAutoResetPoints().GetPoints() {
+		binaryChecksums = append(binaryChecksums, rp.GetBinaryChecksum())
+	}
+	return binaryChecksums
+}
+
 func (e *MutableStateImpl) IsWorkflowExecutionRunning() bool {
 	switch e.executionState.State {
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
@@ -1660,14 +1769,12 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	)
 
 	if event.Memo != nil {
-		e.executionInfo.Memo = event.Memo.GetFields()
 		e.executionInfo.MemoInfo = &persistencespb.MemoInfo{
 			EventId:      startEvent.EventId,
 			EventBatchId: startEvent.EventId,
 		}
 	}
 	if event.SearchAttributes != nil {
-		e.executionInfo.SearchAttributes = event.SearchAttributes.GetIndexedFields()
 		e.executionInfo.SearchAttributesInfo = &persistencespb.SearchAttributesInfo{
 			EventId:      startEvent.EventId,
 			EventBatchId: startEvent.EventId,
@@ -1768,18 +1875,12 @@ func (e *MutableStateImpl) addBinaryCheckSumIfNotExists(
 		return nil
 	}
 	exeInfo := e.executionInfo
-	var currResetPoints []*workflowpb.ResetPointInfo
-	if exeInfo.AutoResetPoints != nil && exeInfo.AutoResetPoints.Points != nil {
-		currResetPoints = e.executionInfo.AutoResetPoints.Points
-	} else {
+	currResetPoints := exeInfo.GetAutoResetPoints().GetPoints()
+	if currResetPoints == nil {
 		currResetPoints = make([]*workflowpb.ResetPointInfo, 0, 1)
 	}
 
-	// List of all recent binary checksums associated with the workflow.
-	var recentBinaryChecksums []string
-
 	for _, rp := range currResetPoints {
-		recentBinaryChecksums = append(recentBinaryChecksums, rp.GetBinaryChecksum())
 		if rp.GetBinaryChecksum() == binChecksum {
 			// this checksum already exists
 			return nil
@@ -1789,36 +1890,22 @@ func (e *MutableStateImpl) addBinaryCheckSumIfNotExists(
 	if len(currResetPoints) == maxResetPoints {
 		// If exceeding the max limit, do rotation by taking the oldest one out.
 		currResetPoints = currResetPoints[1:]
-		recentBinaryChecksums = recentBinaryChecksums[1:]
 	}
-	// Adding current version of the binary checksum.
-	recentBinaryChecksums = append(recentBinaryChecksums, binChecksum)
 
-	resettable := true
-	err := e.CheckResettable()
-	if err != nil {
-		resettable = false
-	}
 	info := &workflowpb.ResetPointInfo{
 		BinaryChecksum:               binChecksum,
 		RunId:                        e.executionState.GetRunId(),
 		FirstWorkflowTaskCompletedId: event.GetEventId(),
 		CreateTime:                   timestamp.TimePtr(e.timeSource.Now()),
-		Resettable:                   resettable,
+		Resettable:                   e.CheckResettable() == nil,
 	}
 	currResetPoints = append(currResetPoints, info)
 	exeInfo.AutoResetPoints = &workflowpb.ResetPoints{
 		Points: currResetPoints,
 	}
-	checksumsPayload, err := searchattribute.EncodeValue(recentBinaryChecksums, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	if err != nil {
-		return err
-	}
-	if exeInfo.SearchAttributes == nil {
-		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
-	}
-	exeInfo.SearchAttributes[searchattribute.BinaryChecksums] = checksumsPayload
+
 	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != visibility.AdvancedVisibilityWritingModeOff {
+		// BinaryChecksums is a search attribute, so need to update visibility
 		return e.taskGenerator.GenerateUpsertVisibilityTask(timestamp.TimeValue(event.GetEventTime()))
 	}
 	return nil
@@ -2808,12 +2895,6 @@ func (e *MutableStateImpl) ReplicateUpsertWorkflowSearchAttributesEvent(
 	workflowTaskCompletedEventID int64,
 	event *historypb.HistoryEvent,
 ) {
-	attr := event.GetUpsertWorkflowSearchAttributesEventAttributes()
-	if attr.MergedSearchAttributes != nil {
-		e.executionInfo.SearchAttributes = attr.GetMergedSearchAttributes().GetIndexedFields()
-	} else {
-		e.executionInfo.SearchAttributes = attr.GetSearchAttributes().GetIndexedFields()
-	}
 	e.executionInfo.SearchAttributesInfo = &persistencespb.SearchAttributesInfo{
 		EventId:      event.EventId,
 		EventBatchId: workflowTaskCompletedEventID,
@@ -2851,11 +2932,6 @@ func (e *MutableStateImpl) ReplicateWorkflowPropertiesModifiedEvent(
 ) {
 	attr := event.GetWorkflowPropertiesModifiedEventAttributes()
 	if attr.UpsertedMemo != nil {
-		if attr.MergedMemo != nil {
-			e.executionInfo.Memo = attr.GetMergedMemo().GetFields()
-		} else {
-			e.executionInfo.Memo = attr.GetUpsertedMemo().GetFields()
-		}
 		e.executionInfo.MemoInfo = &persistencespb.MemoInfo{
 			EventId:      event.EventId,
 			EventBatchId: workflowTaskCompletedEventID,

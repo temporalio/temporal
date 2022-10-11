@@ -73,6 +73,22 @@ func TestToString(t *testing.T) {
 	assert.Equal("", result)
 }
 
+func TestDeepCopyMapOfPayload(t *testing.T) {
+	assert := assert.New(t)
+	var input map[string]*commonpb.Payload
+	assert.Nil(DeepCopyMapOfPayload(input))
+
+	key := "key"
+	val := EncodeBytes([]byte{'1', '2', '3'})
+	input = map[string]*commonpb.Payload{
+		key: val,
+	}
+	result := DeepCopyMapOfPayload(input)
+	assert.Equal(input, result)
+	result[key].GetData()[0] = '0'
+	assert.Equal(byte('1'), val.GetData()[0])
+}
+
 func TestMergeMapOfPayload(t *testing.T) {
 	assert := assert.New(t)
 

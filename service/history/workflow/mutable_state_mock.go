@@ -998,6 +998,20 @@ func (mr *MockMutableStateMockRecorder) GetActivityScheduledEvent(arg0, arg1 int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityScheduledEvent", reflect.TypeOf((*MockMutableState)(nil).GetActivityScheduledEvent), arg0, arg1)
 }
 
+// GetBinaryChecksums mocks base method.
+func (m *MockMutableState) GetBinaryChecksums() []string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBinaryChecksums")
+	ret0, _ := ret[0].([]string)
+	return ret0
+}
+
+// GetBinaryChecksums indicates an expected call of GetBinaryChecksums.
+func (mr *MockMutableStateMockRecorder) GetBinaryChecksums() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBinaryChecksums", reflect.TypeOf((*MockMutableState)(nil).GetBinaryChecksums))
+}
+
 // GetChildExecutionInfo mocks base method.
 func (m *MockMutableState) GetChildExecutionInfo(arg0 int64) (*v111.ChildExecutionInfo, bool) {
 	m.ctrl.T.Helper()
@@ -1360,6 +1374,21 @@ func (mr *MockMutableStateMockRecorder) GetRetryBackoffDuration(failure interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRetryBackoffDuration", reflect.TypeOf((*MockMutableState)(nil).GetRetryBackoffDuration), failure)
 }
 
+// GetSearchAttributes mocks base method.
+func (m *MockMutableState) GetSearchAttributes(arg0 context.Context) (map[string]*v10.Payload, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSearchAttributes", arg0)
+	ret0, _ := ret[0].(map[string]*v10.Payload)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSearchAttributes indicates an expected call of GetSearchAttributes.
+func (mr *MockMutableStateMockRecorder) GetSearchAttributes(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockMutableState)(nil).GetSearchAttributes), arg0)
+}
+
 // GetSignalExternalInitiatedEvent mocks base method.
 func (m *MockMutableState) GetSignalExternalInitiatedEvent(arg0 context.Context, arg1 int64) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -1492,6 +1521,21 @@ func (m *MockMutableState) GetWorkflowKey() definition.WorkflowKey {
 func (mr *MockMutableStateMockRecorder) GetWorkflowKey() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowKey", reflect.TypeOf((*MockMutableState)(nil).GetWorkflowKey))
+}
+
+// GetWorkflowMemo mocks base method.
+func (m *MockMutableState) GetWorkflowMemo(arg0 context.Context) (map[string]*v10.Payload, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowMemo", arg0)
+	ret0, _ := ret[0].(map[string]*v10.Payload)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowMemo indicates an expected call of GetWorkflowMemo.
+func (mr *MockMutableStateMockRecorder) GetWorkflowMemo(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowMemo", reflect.TypeOf((*MockMutableState)(nil).GetWorkflowMemo), arg0)
 }
 
 // GetWorkflowStateStatus mocks base method.

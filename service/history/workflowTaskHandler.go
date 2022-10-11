@@ -1008,7 +1008,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttributes(
-	_ context.Context,
+	ctx context.Context,
 	attr *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) error {
 
@@ -1063,9 +1063,13 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
 
+	currentSearchAttributes, err := handler.mutableState.GetSearchAttributes(ctx)
+	if err != nil {
+		return err
+	}
 	mergedSearchAttributes := &commonpb.SearchAttributes{
 		IndexedFields: payload.MergeMapOfPayload(
-			executionInfo.SearchAttributes,
+			currentSearchAttributes,
 			attr.GetSearchAttributes().GetIndexedFields(),
 		),
 	}
@@ -1087,7 +1091,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
-	_ context.Context,
+	ctx context.Context,
 	attr *commandpb.ModifyWorkflowPropertiesCommandAttributes,
 ) error {
 
@@ -1126,11 +1130,15 @@ func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
 		)
 	}
 
+	currentMemo, err := handler.mutableState.GetWorkflowMemo(ctx)
+	if err != nil {
+		return err
+	}
 	var mergedMemo *commonpb.Memo
 	if attr.UpsertedMemo != nil {
 		mergedMemo = &commonpb.Memo{
 			Fields: payload.MergeMapOfPayload(
-				executionInfo.Memo,
+				currentMemo,
 				attr.GetUpsertedMemo().GetFields(),
 			),
 		}

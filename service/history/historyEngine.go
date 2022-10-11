@@ -940,6 +940,14 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	mutableState := weCtx.GetMutableState()
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
+	memo, err := mutableState.GetWorkflowMemo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	searchAttributes, err := mutableState.GetSearchAttributes(ctx)
+	if err != nil {
+		return nil, err
+	}
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -960,8 +968,8 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			Status:               executionState.Status,
 			HistoryLength:        mutableState.GetNextEventID() - common.FirstEventID,
 			ExecutionTime:        executionInfo.ExecutionTime,
-			Memo:                 &commonpb.Memo{Fields: executionInfo.Memo},
-			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
+			Memo:                 &commonpb.Memo{Fields: memo},
+			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: searchAttributes},
 			AutoResetPoints:      executionInfo.AutoResetPoints,
 			TaskQueue:            executionInfo.TaskQueue,
 			StateTransitionCount: executionInfo.StateTransitionCount,

@@ -32,13 +32,14 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -139,13 +140,20 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	executionState := mutableState.GetExecutionState()
 	wfTypeName := executionInfo.WorkflowTypeName
 
-	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
-	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
-	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
-	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
+	workflowStartTime := timestamp.TimeValue(executionInfo.GetStartTime())
+	workflowExecutionTime := timestamp.TimeValue(executionInfo.GetExecutionTime())
 	executionStatus := executionState.GetStatus()
 	taskQueue := executionInfo.TaskQueue
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
+
+	visibilityMemo, err := getWorkflowMemo(ctx, mutableState)
+	if err != nil {
+		return err
+	}
+	searchAttr, err := getSearchAttributes(ctx, mutableState)
+	if err != nil {
+		return err
+	}
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
@@ -194,13 +202,20 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	executionState := mutableState.GetExecutionState()
 	wfTypeName := executionInfo.WorkflowTypeName
 
-	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
-	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
-	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
-	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
+	workflowStartTime := timestamp.TimeValue(executionInfo.GetStartTime())
+	workflowExecutionTime := timestamp.TimeValue(executionInfo.GetExecutionTime())
 	executionStatus := executionState.GetStatus()
 	taskQueue := executionInfo.TaskQueue
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
+
+	visibilityMemo, err := getWorkflowMemo(ctx, mutableState)
+	if err != nil {
+		return err
+	}
+	searchAttr, err := getSearchAttributes(ctx, mutableState)
+	if err != nil {
+		return err
+	}
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
@@ -348,13 +363,20 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	workflowTypeName := executionInfo.WorkflowTypeName
 	workflowStatus := executionState.Status
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
-	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
-	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
-	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
-	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
+	workflowStartTime := timestamp.TimeValue(executionInfo.GetStartTime())
+	workflowExecutionTime := timestamp.TimeValue(executionInfo.GetExecutionTime())
 	taskQueue := executionInfo.TaskQueue
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
 	historySizeBytes := executionInfo.GetExecutionStats().GetHistorySize()
+
+	visibilityMemo, err := getWorkflowMemo(ctx, mutableState)
+	if err != nil {
+		return err
+	}
+	searchAttr, err := getSearchAttributes(ctx, mutableState)
+	if err != nil {
+		return err
+	}
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state and
@@ -477,48 +499,41 @@ func (t *visibilityQueueTaskExecutor) isCloseExecutionVisibilityTaskPending(task
 	return !queues.IsTaskAcked(queryTask, visibilityQueueState)
 }
 
+// Returns a deep copy of the workflow memo
 func getWorkflowMemo(
-	memoFields map[string]*commonpb.Payload,
-) *commonpb.Memo {
-	if memoFields == nil {
-		return nil
+	ctx context.Context,
+	mutableState workflow.MutableState,
+) (*commonpb.Memo, error) {
+	memo, err := mutableState.GetWorkflowMemo(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return &commonpb.Memo{Fields: memoFields}
+	if memo == nil {
+		return nil, nil
+	}
+	return &commonpb.Memo{Fields: payload.DeepCopyMapOfPayload(memo)}, nil
 }
 
-func copyMemo(
-	memoFields map[string]*commonpb.Payload,
-) map[string]*commonpb.Payload {
-	if memoFields == nil {
-		return nil
-	}
-
-	result := make(map[string]*commonpb.Payload)
-	for k, v := range memoFields {
-		result[k] = common.CloneProto(v)
-	}
-	return result
-}
-
+// Returns a deep copy of the workflow search attributes with binary checksums
 func getSearchAttributes(
-	indexedFields map[string]*commonpb.Payload,
-) *commonpb.SearchAttributes {
-	if indexedFields == nil {
-		return nil
+	ctx context.Context,
+	mutableState workflow.MutableState,
+) (*commonpb.SearchAttributes, error) {
+	searchAttrMap, err := mutableState.GetSearchAttributes(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return &commonpb.SearchAttributes{IndexedFields: indexedFields}
-}
-
-func copySearchAttributes(
-	input map[string]*commonpb.Payload,
-) map[string]*commonpb.Payload {
-	if input == nil {
-		return nil
+	if searchAttrMap == nil {
+		return nil, nil
 	}
-
-	result := make(map[string]*commonpb.Payload)
-	for k, v := range input {
-		result[k] = common.CloneProto(v)
+	searchAttr := &commonpb.SearchAttributes{IndexedFields: payload.DeepCopyMapOfPayload(searchAttrMap)}
+	binaryChecksums := mutableState.GetBinaryChecksums()
+	if len(binaryChecksums) > 0 {
+		binaryChecksumsPayload, err := searchattribute.EncodeValue(binaryChecksums, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+		if err != nil {
+			return nil, err
+		}
+		searchattribute.AddSearchAttribute(&searchAttr, searchattribute.BinaryChecksums, binaryChecksumsPayload)
 	}
-	return result
+	return searchAttr, nil
 }

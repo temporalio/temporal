@@ -341,13 +341,20 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		return err
 	}
 
+	visibilityMemo, err := getWorkflowMemo(ctx, mutableState)
+	if err != nil {
+		return err
+	}
+	searchAttr, err := getSearchAttributes(ctx, mutableState)
+	if err != nil {
+		return err
+	}
+
 	workflowStatus := executionState.Status
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
 
 	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
 	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
-	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
-	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	namespaceName := mutableState.GetNamespaceEntry().Name()
 	children := copyChildWorkflowInfos(mutableState.GetPendingChildExecutionInfos())
 

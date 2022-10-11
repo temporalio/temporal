@@ -182,6 +182,9 @@ type (
 		GetWorkflowType() *commonpb.WorkflowType
 		GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus)
 		GetQueryRegistry() QueryRegistry
+		GetWorkflowMemo(context.Context) (map[string]*commonpb.Payload, error)
+		GetSearchAttributes(context.Context) (map[string]*commonpb.Payload, error)
+		GetBinaryChecksums() []string
 		HasTransientWorkflowTask() bool
 		ClearTransientWorkflowTask() error
 		HasBufferedEvents() bool

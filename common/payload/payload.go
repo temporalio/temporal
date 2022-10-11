@@ -28,6 +28,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/util"
 	"golang.org/x/exp/maps"
 )
@@ -61,6 +62,17 @@ func Decode(p *commonpb.Payload, valuePtr interface{}) error {
 
 func ToString(p *commonpb.Payload) string {
 	return defaultDataConverter.ToString(p)
+}
+
+func DeepCopyMapOfPayload(input map[string]*commonpb.Payload) map[string]*commonpb.Payload {
+	if input == nil {
+		return nil
+	}
+	result := make(map[string]*commonpb.Payload)
+	for k, v := range input {
+		result[k] = common.CloneProto(v)
+	}
+	return result
 }
 
 // MergeMapOfPayload returns a new map resulting from merging map `src` into `dst`.

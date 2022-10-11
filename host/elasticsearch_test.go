@@ -270,7 +270,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  int32(2),
-		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running' and BinaryChecksums = 'binary-v1'`, wt),
+		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
 	// verify upsert data is on ES
 	s.testListResultForUpsertSearchAttributes(listRequest)
@@ -1345,8 +1345,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecutionSearchAttribu
 	s.NoError(err)
 	expectedSearchAttributes, _ := searchattribute.Encode(
 		map[string]interface{}{
-			"CustomDoubleField":             22.0878,
-			searchattribute.BinaryChecksums: []string{"binary-v1", "binary-v2"},
+			"CustomDoubleField": 22.0878,
 		},
 		nil,
 	)
@@ -1584,7 +1583,7 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 			s.Nil(resp.NextPageToken)
 			execution := resp.GetExecutions()[0]
 			retrievedSearchAttr := execution.SearchAttributes
-			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 4 {
+			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 3 {
 				fields := retrievedSearchAttr.GetIndexedFields()
 				searchValBytes := fields[s.testSearchAttributeKey]
 				var searchVal string
@@ -1604,12 +1603,6 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 				s.NoError(err)
 				s.Equal(22.0878, doubleVal)
 
-				binaryChecksumsBytes := fields[searchattribute.BinaryChecksums]
-				var binaryChecksums []string
-				err = payload.Decode(binaryChecksumsBytes, &binaryChecksums)
-				s.NoError(err)
-				s.Equal([]string{"binary-v1", "binary-v2"}, binaryChecksums)
-
 				verified = true
 				break
 			}
@@ -1621,10 +1614,9 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 
 func (s *elasticsearchIntegrationSuite) createSearchAttributes() *commonpb.SearchAttributes {
 	searchAttributes, err := searchattribute.Encode(map[string]interface{}{
-		"CustomTextField":               "another string",
-		"CustomIntField":                123,
-		"CustomDoubleField":             22.0878,
-		searchattribute.BinaryChecksums: []string{"binary-v1", "binary-v2"},
+		"CustomTextField":   "another string",
+		"CustomIntField":    123,
+		"CustomDoubleField": 22.0878,
 	}, nil)
 	s.NoError(err)
 	return searchAttributes
