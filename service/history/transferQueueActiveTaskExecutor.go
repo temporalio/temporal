@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -38,7 +37,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -56,6 +54,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -69,7 +68,7 @@ type (
 	transferQueueActiveTaskExecutor struct {
 		*transferQueueTaskExecutorBase
 
-		workflowResetter        *workflowResetterImpl
+		workflowResetter        ndc.WorkflowResetter
 		parentClosePolicyClient parentclosepolicy.Client
 	}
 )
@@ -93,7 +92,7 @@ func newTransferQueueActiveTaskExecutor(
 			metricProvider,
 			matchingClient,
 		),
-		workflowResetter: newWorkflowResetter(
+		workflowResetter: ndc.NewWorkflowResetter(
 			shard,
 			workflowCache,
 			logger,
@@ -319,7 +318,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		if err != nil {
 			return err
 		}
-		replyToParentWorkflow = replyToParentWorkflow && !IsTerminatedByResetter(completionEvent)
+		replyToParentWorkflow = replyToParentWorkflow && !ndc.IsTerminatedByResetter(completionEvent)
 	}
 	parentNamespaceID := executionInfo.ParentNamespaceId
 	parentWorkflowID := executionInfo.ParentWorkflowId
@@ -1371,7 +1370,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 	baseNextEventID := baseMutableState.GetNextEventID()
 
-	err = t.workflowResetter.resetWorkflow(
+	err = t.workflowResetter.ResetWorkflow(
 		ctx,
 		namespaceID,
 		workflowID,
@@ -1382,7 +1381,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		baseNextEventID,
 		resetRunID,
 		uuid.New(),
-		newNDCWorkflow(
+		ndc.NewWorkflow(
 			ctx,
 			t.registry,
 			t.shard.GetClusterMetadata(),

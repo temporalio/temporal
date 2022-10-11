@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/service/history/api/replicationadmin"
 	"go.temporal.io/server/service/history/api/requestcancelworkflow"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
+	"go.temporal.io/server/service/history/api/resetworkflow"
 	respondactivitytaskcandeled "go.temporal.io/server/service/history/api/respondactivitytaskcanceled"
 	"go.temporal.io/server/service/history/api/respondactivitytaskcompleted"
 	"go.temporal.io/server/service/history/api/respondactivitytaskfailed"
@@ -77,6 +78,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
@@ -100,8 +102,8 @@ type (
 		executionManager           persistence.ExecutionManager
 		queueProcessors            map[tasks.Category]queues.Queue
 		replicationAckMgr          replication.AckManager
-		nDCReplicator              nDCHistoryReplicator
-		nDCActivityReplicator      nDCActivityReplicator
+		nDCReplicator              ndc.HistoryReplicator
+		nDCActivityReplicator      ndc.ActivityReplicator
 		replicationProcessorMgr    common.Daemon
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
@@ -110,9 +112,9 @@ type (
 		throttledLogger            log.Logger
 		config                     *configs.Config
 		workflowRebuilder          workflowRebuilder
-		workflowResetter           workflowResetter
+		workflowResetter           ndc.WorkflowResetter
 		sdkClientFactory           sdk.ClientFactory
-		eventsReapplier            nDCEventsReapplier
+		eventsReapplier            ndc.EventsReapplier
 		matchingClient             matchingservice.MatchingServiceClient
 		rawMatchingClient          matchingservice.MatchingServiceClient
 		replicationDLQHandler      replication.DLQHandler
@@ -183,7 +185,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
-	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
+	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsClient(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
@@ -192,14 +194,14 @@ func NewEngineWithShardContext(
 			executionManager,
 			logger,
 		)
-		historyEngImpl.nDCReplicator = newNDCHistoryReplicator(
+		historyEngImpl.nDCReplicator = ndc.NewHistoryReplicator(
 			shard,
 			workflowCache,
 			historyEngImpl.eventsReapplier,
 			logger,
 			eventSerializer,
 		)
-		historyEngImpl.nDCActivityReplicator = newNDCActivityReplicator(
+		historyEngImpl.nDCActivityReplicator = ndc.NewActivityReplicator(
 			shard,
 			workflowCache,
 			logger,
@@ -210,7 +212,7 @@ func NewEngineWithShardContext(
 		workflowCache,
 		logger,
 	)
-	historyEngImpl.workflowResetter = newWorkflowResetter(
+	historyEngImpl.workflowResetter = ndc.NewWorkflowResetter(
 		shard,
 		workflowCache,
 		logger,
@@ -1050,121 +1052,9 @@ func (e *historyEngineImpl) SyncActivity(
 // Consistency guarantee: always write
 func (e *historyEngineImpl) ResetWorkflowExecution(
 	ctx context.Context,
-	resetRequest *historyservice.ResetWorkflowExecutionRequest,
-) (response *historyservice.ResetWorkflowExecutionResponse, retError error) {
-
-	request := resetRequest.ResetRequest
-	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
-	workflowID := request.WorkflowExecution.GetWorkflowId()
-	baseRunID := request.WorkflowExecution.GetRunId()
-
-	baseWFContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
-		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			namespaceID.String(),
-			workflowID,
-			baseRunID,
-		),
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { baseWFContext.GetReleaseFn()(retError) }()
-
-	baseMutableState := baseWFContext.GetMutableState()
-	if request.GetWorkflowTaskFinishEventId() <= common.FirstEventID ||
-		request.GetWorkflowTaskFinishEventId() >= baseMutableState.GetNextEventID() {
-		return nil, serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow last event ID.")
-	}
-
-	// also load the current run of the workflow, it can be different from the base runID
-	currentRunID, err := e.workflowConsistencyChecker.GetCurrentRunID(
-		ctx,
-		namespaceID.String(),
-		request.WorkflowExecution.GetWorkflowId(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	if baseRunID == "" {
-		baseRunID = currentRunID
-	}
-
-	var currentWFContext api.WorkflowContext
-	if currentRunID == baseRunID {
-		currentWFContext = baseWFContext
-	} else {
-		currentWFContext, err = e.workflowConsistencyChecker.GetWorkflowContext(
-			ctx,
-			nil,
-			api.BypassMutableStateConsistencyPredicate,
-			definition.NewWorkflowKey(
-				namespaceID.String(),
-				workflowID,
-				currentRunID,
-			),
-		)
-		if err != nil {
-			return nil, err
-		}
-		defer func() { currentWFContext.GetReleaseFn()(retError) }()
-	}
-
-	// dedup by requestID
-	if currentWFContext.GetMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
-		e.logger.Info("Duplicated reset request",
-			tag.WorkflowID(workflowID),
-			tag.WorkflowRunID(currentRunID),
-			tag.WorkflowNamespaceID(namespaceID.String()))
-		return &historyservice.ResetWorkflowExecutionResponse{
-			RunId: currentRunID,
-		}, nil
-	}
-
-	resetRunID := uuid.New()
-	baseRebuildLastEventID := request.GetWorkflowTaskFinishEventId() - 1
-	baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
-	baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
-	if err != nil {
-		return nil, err
-	}
-	baseRebuildLastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
-	if err != nil {
-		return nil, err
-	}
-	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
-	baseNextEventID := baseMutableState.GetNextEventID()
-
-	if err := e.workflowResetter.resetWorkflow(
-		ctx,
-		namespaceID,
-		workflowID,
-		baseRunID,
-		baseCurrentBranchToken,
-		baseRebuildLastEventID,
-		baseRebuildLastEventVersion,
-		baseNextEventID,
-		resetRunID,
-		request.GetRequestId(),
-		newNDCWorkflow(
-			ctx,
-			e.shard.GetNamespaceRegistry(),
-			e.shard.GetClusterMetadata(),
-			currentWFContext.GetContext(),
-			currentWFContext.GetMutableState(),
-			currentWFContext.GetReleaseFn(),
-		),
-		request.GetReason(),
-		nil,
-		request.GetResetReapplyType(),
-	); err != nil {
-		return nil, err
-	}
-	return &historyservice.ResetWorkflowExecutionResponse{
-		RunId: resetRunID,
-	}, nil
+	req *historyservice.ResetWorkflowExecutionRequest,
+) (*historyservice.ResetWorkflowExecutionResponse, error) {
+	return resetworkflow.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) NotifyNewHistoryEvent(
@@ -1325,7 +1215,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 				baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 				baseNextEventID := mutableState.GetNextEventID()
 
-				err = e.workflowResetter.resetWorkflow(
+				err = e.workflowResetter.ResetWorkflow(
 					ctx,
 					namespaceID,
 					workflowID,
@@ -1336,7 +1226,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 					baseNextEventID,
 					resetRunID,
 					uuid.New(),
-					newNDCWorkflow(
+					ndc.NewWorkflow(
 						ctx,
 						e.shard.GetNamespaceRegistry(),
 						e.shard.GetClusterMetadata(),
@@ -1344,7 +1234,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 						mutableState,
 						workflow.NoopReleaseFn,
 					),
-					eventsReapplicationResetWorkflowReason,
+					ndc.EventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
 					enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 				)
@@ -1371,7 +1261,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 				// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
 				postActions.CreateWorkflowTask = false
 			}
-			reappliedEvents, err := e.eventsReapplier.reapplyEvents(
+			reappliedEvents, err := e.eventsReapplier.ReapplyEvents(
 				ctx,
 				mutableState,
 				toReapplyEvents,
