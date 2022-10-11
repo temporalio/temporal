@@ -62,6 +62,8 @@ import (
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
 	"go.temporal.io/server/service/history/api/recordchildworkflowcompleted"
+	replicationapi "go.temporal.io/server/service/history/api/replication"
+	"go.temporal.io/server/service/history/api/replicationadmin"
 	"go.temporal.io/server/service/history/api/requestcancelworkflow"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	respondactivitytaskcandeled "go.temporal.io/server/service/history/api/respondactivitytaskcanceled"
@@ -1205,48 +1207,14 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	ackTimestamp time.Time,
 	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
-
-	if ackMessageID != persistence.EmptyQueueMessageID {
-		if err := e.shard.UpdateQueueClusterAckLevel(
-			tasks.CategoryReplication,
-			pollingCluster,
-			tasks.NewImmediateKey(ackMessageID),
-		); err != nil {
-			e.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
-		}
-		e.shard.UpdateRemoteClusterInfo(pollingCluster, ackMessageID, ackTimestamp)
-	}
-
-	replicationMessages, err := e.replicationAckMgr.GetTasks(
-		ctx,
-		pollingCluster,
-		queryMessageID,
-	)
-	if err != nil {
-		e.logger.Error("Failed to retrieve replication messages.", tag.Error(err))
-		return nil, err
-	}
-	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
-
-	return replicationMessages, nil
+	return replicationapi.GetTasks(ctx, e.shard, e.replicationAckMgr, pollingCluster, ackMessageID, ackTimestamp, queryMessageID)
 }
 
 func (e *historyEngineImpl) GetDLQReplicationMessages(
 	ctx context.Context,
 	taskInfos []*replicationspb.ReplicationTaskInfo,
 ) ([]*replicationspb.ReplicationTask, error) {
-
-	tasks := make([]*replicationspb.ReplicationTask, 0, len(taskInfos))
-	for _, taskInfo := range taskInfos {
-		task, err := e.replicationAckMgr.GetTask(ctx, taskInfo)
-		if err != nil {
-			e.logger.Error("Failed to fetch DLQ replication messages.", tag.Error(err))
-			return nil, err
-		}
-		tasks = append(tasks, task)
-	}
-
-	return tasks, nil
+	return replicationapi.GetDLQTasks(ctx, e.shard, e.replicationAckMgr, taskInfos)
 }
 
 func (e *historyEngineImpl) ReapplyEvents(
@@ -1431,69 +1399,21 @@ func (e *historyEngineImpl) GetDLQMessages(
 	ctx context.Context,
 	request *historyservice.GetDLQMessagesRequest,
 ) (*historyservice.GetDLQMessagesResponse, error) {
-
-	_, ok := e.clusterMetadata.GetAllClusterInfo()[request.GetSourceCluster()]
-	if !ok {
-		return nil, consts.ErrUnknownCluster
-	}
-
-	tasks, token, err := e.replicationDLQHandler.GetMessages(
-		ctx,
-		request.GetSourceCluster(),
-		request.GetInclusiveEndMessageId(),
-		int(request.GetMaximumPageSize()),
-		request.GetNextPageToken(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &historyservice.GetDLQMessagesResponse{
-		Type:             request.GetType(),
-		ReplicationTasks: tasks,
-		NextPageToken:    token,
-	}, nil
+	return replicationadmin.GetDLQ(ctx, request, e.shard, e.replicationDLQHandler)
 }
 
 func (e *historyEngineImpl) PurgeDLQMessages(
 	ctx context.Context,
 	request *historyservice.PurgeDLQMessagesRequest,
-) error {
-
-	_, ok := e.clusterMetadata.GetAllClusterInfo()[request.GetSourceCluster()]
-	if !ok {
-		return consts.ErrUnknownCluster
-	}
-
-	return e.replicationDLQHandler.PurgeMessages(
-		ctx,
-		request.GetSourceCluster(),
-		request.GetInclusiveEndMessageId(),
-	)
+) (*historyservice.PurgeDLQMessagesResponse, error) {
+	return replicationadmin.PurgeDLQ(ctx, request, e.shard, e.replicationDLQHandler)
 }
 
 func (e *historyEngineImpl) MergeDLQMessages(
 	ctx context.Context,
 	request *historyservice.MergeDLQMessagesRequest,
 ) (*historyservice.MergeDLQMessagesResponse, error) {
-
-	_, ok := e.clusterMetadata.GetAllClusterInfo()[request.GetSourceCluster()]
-	if !ok {
-		return nil, consts.ErrUnknownCluster
-	}
-
-	token, err := e.replicationDLQHandler.MergeMessages(
-		ctx,
-		request.GetSourceCluster(),
-		request.GetInclusiveEndMessageId(),
-		int(request.GetMaximumPageSize()),
-		request.GetNextPageToken(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &historyservice.MergeDLQMessagesResponse{
-		NextPageToken: token,
-	}, nil
+	return replicationadmin.MergeDLQ(ctx, request, e.shard, e.replicationDLQHandler)
 }
 
 func (e *historyEngineImpl) RebuildMutableState(
@@ -1567,70 +1487,14 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 	ctx context.Context,
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
 ) (_ *historyservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
-	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(request.GetNamespaceId()))
-	if err != nil {
-		return nil, err
-	}
-	namespaceID := namespaceEntry.ID()
-
-	wfContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
-		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			namespaceID.String(),
-			request.Execution.WorkflowId,
-			request.Execution.RunId,
-		),
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { wfContext.GetReleaseFn()(retError) }()
-
-	now := e.shard.GetTimeSource().Now()
-	task, err := wfContext.GetMutableState().GenerateMigrationTasks(now)
-	if err != nil {
-		return nil, err
-	}
-
-	err = e.shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
-		ShardID: e.shard.GetShardID(),
-		// RangeID is set by shard
-		NamespaceID: string(namespaceID),
-		WorkflowID:  request.Execution.WorkflowId,
-		RunID:       request.Execution.RunId,
-		Tasks: map[tasks.Category][]tasks.Task{
-			tasks.CategoryReplication: {task},
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil
+	return replicationapi.GenerateTask(ctx, request, e.shard, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) GetReplicationStatus(
 	ctx context.Context,
 	request *historyservice.GetReplicationStatusRequest,
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
-
-	resp := &historyservice.ShardReplicationStatus{
-		ShardId:        e.shard.GetShardID(),
-		ShardLocalTime: timestamp.TimePtr(e.shard.GetTimeSource().Now()),
-	}
-
-	maxReplicationTaskId, maxTaskVisibilityTimeStamp := e.replicationAckMgr.GetMaxTaskInfo()
-	resp.MaxReplicationTaskId = maxReplicationTaskId
-	resp.MaxReplicationTaskVisibilityTime = timestamp.TimePtr(maxTaskVisibilityTimeStamp)
-
-	remoteClusters, handoverNamespaces, err := e.shard.GetReplicationStatus(request.RemoteClusters)
-	if err != nil {
-		return nil, err
-	}
-	resp.RemoteClusters = remoteClusters
-	resp.HandoverNamespaces = handoverNamespaces
-	return resp, nil
+	return replicationapi.GetStatus(ctx, request, e.shard, e.replicationAckMgr)
 }
 
 func (e *historyEngineImpl) containsHistoryEvent(

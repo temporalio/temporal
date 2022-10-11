@@ -1628,12 +1628,11 @@ func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.
 		return nil, h.convertError(err)
 	}
 
-	err = engine.PurgeDLQMessages(ctx, request)
+	resp, err := engine.PurgeDLQMessages(ctx, request)
 	if err != nil {
-		err = h.convertError(err)
-		return nil, err
+		return nil, h.convertError(err)
 	}
-	return &historyservice.PurgeDLQMessagesResponse{}, nil
+	return resp, nil
 }
 
 func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.MergeDLQMessagesRequest) (_ *historyservice.MergeDLQMessagesResponse, retError error) {
