@@ -136,6 +136,8 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 	}
 	historyBranch, err := serialization.HistoryBranchToBlob(branchInfo)
 	s.NoError(err)
+	completionEventBatchId := int64(5)
+	nextEventID := int64(7)
 	request := &historyservice.ReplicateWorkflowStateRequest{
 		WorkflowState: &persistencespb.WorkflowMutableState{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
@@ -155,12 +157,14 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 						},
 					},
 				},
+				CompletionEventBatchId: completionEventBatchId,
 			},
 			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:  s.runID,
 				State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 			},
+			NextEventId: nextEventID,
 		},
 		RemoteCluster: "test",
 	}
@@ -209,7 +213,13 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
 		},
 	}
+	fakeCompletionEvent := &historypb.HistoryEvent{
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
+			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{},
+		},
+	}
 	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
+	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), completionEventBatchId, gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
 	err = s.historyReplicator.ApplyWorkflowState(context.Background(), request)
 	s.NoError(err)
 }
@@ -235,6 +245,8 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 	}
 	historyBranch, err := serialization.HistoryBranchToBlob(branchInfo)
 	s.NoError(err)
+	completionEventBatchId := int64(5)
+	nextEventID := int64(7)
 	request := &historyservice.ReplicateWorkflowStateRequest{
 		WorkflowState: &persistencespb.WorkflowMutableState{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
@@ -254,12 +266,14 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 						},
 					},
 				},
+				CompletionEventBatchId: completionEventBatchId,
 			},
 			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:  s.runID,
 				State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 				Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 			},
+			NextEventId: nextEventID,
 		},
 		RemoteCluster: "test",
 	}
@@ -370,7 +384,13 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
 		},
 	}
+	fakeCompletionEvent := &historypb.HistoryEvent{
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionTerminatedEventAttributes{
+			WorkflowExecutionTerminatedEventAttributes: &historypb.WorkflowExecutionTerminatedEventAttributes{},
+		},
+	}
 	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
+	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), completionEventBatchId, gomock.Any()).Return(fakeCompletionEvent, nil).AnyTimes()
 	err = s.historyReplicator.ApplyWorkflowState(context.Background(), request)
 	s.NoError(err)
 }
