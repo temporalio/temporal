@@ -444,7 +444,13 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		CloseTime:   task.CloseTime,
 	}
 	if t.shard.GetConfig().VisibilityProcessorEnsureCloseBeforeDelete() {
+		// If visibility delete task is executed before visibility close task then visibility close task
+		// (which change workflow execution status by uploading new visibility record) will resurrect visibility record.
+		//
+		// Queue states/ack levels are updated with delay (default 30s). Therefore, this check could return false
+		// if the workflow was closed and then deleted within this delay period.
 		if t.isCloseExecutionVisibilityTaskPending(task) {
+			// Return retryable error for task processor to retry the operation later.
 			return consts.ErrDependencyTaskNotCompleted
 		}
 	}
