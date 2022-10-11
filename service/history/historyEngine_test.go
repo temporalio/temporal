@@ -4893,7 +4893,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_WorkflowTaskBackoff() {
 
 func (s *engineSuite) TestRemoveSignalMutableState() {
 	removeRequest := &historyservice.RemoveSignalMutableStateRequest{}
-	err := s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
+	_, err := s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
 	execution := commonpb.WorkflowExecution{
@@ -4920,7 +4920,7 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
-	err = s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
+	_, err = s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
 	s.Nil(err)
 }
 

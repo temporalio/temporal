@@ -60,12 +60,13 @@ import (
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
 	"go.temporal.io/server/service/history/api/recordchildworkflowcompleted"
+	"go.temporal.io/server/service/history/api/removesignalmutablestate"
 	replicationapi "go.temporal.io/server/service/history/api/replication"
 	"go.temporal.io/server/service/history/api/replicationadmin"
 	"go.temporal.io/server/service/history/api/requestcancelworkflow"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	"go.temporal.io/server/service/history/api/resetworkflow"
-	respondactivitytaskcandeled "go.temporal.io/server/service/history/api/respondactivitytaskcanceled"
+	"go.temporal.io/server/service/history/api/respondactivitytaskcanceled"
 	"go.temporal.io/server/service/history/api/respondactivitytaskcompleted"
 	"go.temporal.io/server/service/history/api/respondactivitytaskfailed"
 	"go.temporal.io/server/service/history/api/signalwithstartworkflow"
@@ -821,7 +822,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	ctx context.Context,
 	req *historyservice.RespondActivityTaskCanceledRequest,
 ) (*historyservice.RespondActivityTaskCanceledResponse, error) {
-	return respondactivitytaskcandeled.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
+	return respondactivitytaskcanceled.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 // RecordActivityTaskHeartbeat records an hearbeat for a task.
@@ -869,39 +870,9 @@ func (h *historyEngineImpl) UpdateWorkflow(
 // RemoveSignalMutableState remove the signal request id in signal_requested for deduplicate
 func (e *historyEngineImpl) RemoveSignalMutableState(
 	ctx context.Context,
-	request *historyservice.RemoveSignalMutableStateRequest,
-) error {
-
-	_, err := e.getActiveNamespaceEntry(namespace.ID(request.GetNamespaceId()))
-	if err != nil {
-		return err
-	}
-
-	return api.GetAndUpdateWorkflowWithNew(
-		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			request.NamespaceId,
-			request.WorkflowExecution.WorkflowId,
-			request.WorkflowExecution.RunId,
-		),
-		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-			mutableState := workflowContext.GetMutableState()
-			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowCompleted
-			}
-
-			mutableState.DeleteSignalRequested(request.GetRequestId())
-			return &api.UpdateWorkflowAction{
-				Noop:               false,
-				CreateWorkflowTask: false,
-			}, nil
-		},
-		nil,
-		e.shard,
-		e.workflowConsistencyChecker,
-	)
+	req *historyservice.RemoveSignalMutableStateRequest,
+) (*historyservice.RemoveSignalMutableStateResponse, error) {
+	return removesignalmutablestate.Invoke(ctx, req, e.shard, e.workflowConsistencyChecker)
 }
 
 func (e *historyEngineImpl) TerminateWorkflowExecution(
