@@ -47,9 +47,6 @@ import (
 const (
 	executionsPageSize = 100
 
-	ratePerShard = 1
-	rateOverall  = 10
-
 	taskStartupDelayRatio              = 100 * time.Millisecond
 	taskStartupDelayRandomizationRatio = 1.0
 )
@@ -108,7 +105,6 @@ func (t *task) Run() executor.TaskStatus {
 
 	iter := collection.NewPagingIteratorWithToken(t.getPaginationFn(), t.paginationToken)
 	for iter.HasNext() {
-		// ctx is background, do not expect interruption
 		_ = t.rateLimiter.Wait(t.ctx)
 		record, err := iter.Next()
 		if err != nil {

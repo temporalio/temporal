@@ -280,6 +280,14 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				dynamicconfig.HistoryScannerDataMinAge,
 				60*24*time.Hour,
 			),
+			ExecutionScannerPerHostQPS: dc.GetIntProperty(
+				dynamicconfig.ExecutionScannerPerHostQPS,
+				10,
+			),
+			ExecutionScannerPerShardQPS: dc.GetIntProperty(
+				dynamicconfig.ExecutionScannerPerShardQPS,
+				1,
+			),
 		},
 		EnableBatcher:      dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
 		BatcherRPS:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherRPS, batcher.DefaultRPS),

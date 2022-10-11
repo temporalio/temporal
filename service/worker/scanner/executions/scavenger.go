@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
@@ -60,6 +61,7 @@ type (
 		historyClient    historyservice.HistoryServiceClient
 		executor         executor.Executor
 		rateLimiter      quotas.RateLimiter
+		perShardQPS      dynamicconfig.IntPropertyFn
 		metrics          metrics.Client
 		logger           log.Logger
 
@@ -81,6 +83,8 @@ type (
 func NewScavenger(
 	activityContext context.Context,
 	numHistoryShards int32,
+	perHostQPS dynamicconfig.IntPropertyFn,
+	perShardQPS dynamicconfig.IntPropertyFn,
 	executionManager persistence.ExecutionManager,
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
@@ -100,10 +104,11 @@ func NewScavenger(
 			metrics.ExecutionsScavengerScope,
 		),
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(rateOverall) },
+			func() float64 { return float64(perHostQPS()) },
 		),
-		metrics: metricsClient,
-		logger:  logger,
+		perShardQPS: perShardQPS,
+		metrics:     metricsClient,
+		logger:      logger,
 
 		stopC: make(chan struct{}),
 	}
@@ -167,7 +172,7 @@ func (s *Scavenger) run() {
 			s,
 			quotas.NewMultiRateLimiter([]quotas.RateLimiter{
 				quotas.NewDefaultOutgoingRateLimiter(
-					func() float64 { return float64(ratePerShard) },
+					func() float64 { return float64(s.perShardQPS()) },
 				),
 				s.rateLimiter,
 			}),
