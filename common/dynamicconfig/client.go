@@ -26,6 +26,8 @@ package dynamicconfig
 
 import (
 	enumspb "go.temporal.io/api/enums/v1"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
@@ -95,6 +97,6 @@ type (
 		TaskQueueName string
 		TaskQueueType enumspb.TaskQueueType
 		ShardID       int32
-		TaskType      string
+		TaskType      enumsspb.TaskType
 	}
 )
