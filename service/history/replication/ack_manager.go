@@ -267,7 +267,9 @@ func (p *ackMgrImpl) getTasks(
 	batchSize int,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
 
-	if minTaskID == maxTaskID {
+	if minTaskID > maxTaskID {
+		return nil, 0, serviceerror.NewUnavailable("min task ID < max task ID, probably due to shard re-balancing")
+	} else if minTaskID == maxTaskID {
 		return []*replicationspb.ReplicationTask{}, maxTaskID, nil
 	}
 
