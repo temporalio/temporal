@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describeworkflow"
 	"go.temporal.io/server/service/history/api/reapplyevents"
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
@@ -885,77 +886,8 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 func (e *historyEngineImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DeleteWorkflowExecutionRequest,
-) (retError error) {
-
-	weCtx, err := e.workflowConsistencyChecker.GetWorkflowContext(
-		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			request.NamespaceId,
-			request.WorkflowExecution.WorkflowId,
-			request.WorkflowExecution.RunId,
-		),
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { weCtx.GetReleaseFn()(retError) }()
-
-	// Open and Close workflow executions are deleted differently.
-	// Open workflow execution is deleted by terminating with special flag `deleteAfterTerminate` set to true.
-	// This flag will be carried over with CloseExecutionTask and workflow will be deleted as the last step while processing the task.
-	//
-	// Close workflow execution is deleted using DeleteExecutionTask.
-	//
-	// DeleteWorkflowExecution is not replicated automatically. Workflow executions must be deleted separately in each cluster.
-	// Although running workflows in active cluster are terminated first and the termination event might be replicated.
-	// In passive cluster, workflow executions are just deleted in regardless of its state.
-
-	if weCtx.GetMutableState().IsWorkflowExecutionRunning() {
-		if request.GetClosedWorkflowOnly() {
-			// skip delete open workflow
-			return nil
-		}
-		ns, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return err
-		}
-		if ns.ActiveInCluster(e.shard.GetClusterMetadata().GetCurrentClusterName()) {
-			// If workflow execution is running and in active cluster.
-			return api.UpdateWorkflowWithNew(
-				e.shard,
-				ctx,
-				weCtx,
-				func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-					mutableState := workflowContext.GetMutableState()
-					eventBatchFirstEventID := mutableState.GetNextEventID()
-
-					return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
-						mutableState,
-						eventBatchFirstEventID,
-						"Delete workflow execution",
-						nil,
-						consts.IdentityHistoryService,
-						true,
-					)
-				},
-				nil,
-			)
-		}
-	}
-
-	// If workflow execution is closed or in passive cluster.
-	return e.workflowDeleteManager.AddDeleteWorkflowExecutionTask(
-		ctx,
-		namespace.ID(request.GetNamespaceId()),
-		commonpb.WorkflowExecution{
-			WorkflowId: request.GetWorkflowExecution().GetWorkflowId(),
-			RunId:      request.GetWorkflowExecution().GetRunId(),
-		},
-		weCtx.GetMutableState(),
-		request.GetWorkflowVersion(),
-	)
+) (*historyservice.DeleteWorkflowExecutionResponse, error) {
+	return deleteworkflow.Invoke(ctx, request, e.shard, e.workflowConsistencyChecker, e.workflowDeleteManager)
 }
 
 // RecordChildExecutionCompleted records the completion of child execution into parent execution history
