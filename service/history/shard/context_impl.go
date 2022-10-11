@@ -1342,7 +1342,7 @@ func (s *ContextImpl) allocateTaskIDsLocked(
 			// if scheduled task, check if fire time is in the past
 			if category.Type() == tasks.CategoryTypeScheduled {
 				ts := task.GetVisibilityTime()
-				if task.GetVersion() != common.EmptyVersion {
+				if task.GetVersion() != common.EmptyVersion && category.ID() == tasks.CategoryIDTimer {
 					// cannot use version to determine the corresponding cluster for timer task
 					// this is because during failover, timer task should be created as active
 					// or otherwise, failover + active processing logic may not pick up the task.
