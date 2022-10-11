@@ -338,7 +338,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		},
 		1234,
 	), nil).AnyTimes()
-	s.mockTaskRefresher.EXPECT().RefreshTasks(gomock.Any(), s.now, gomock.Any()).Return(nil)
+	s.mockTaskRefresher.EXPECT().RefreshTasks(gomock.Any(), gomock.Any()).Return(nil)
 
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
 		context.Background(),

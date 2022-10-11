@@ -1546,10 +1546,7 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 		e.shard.GetLogger(),
 	)
 
-	now := e.shard.GetTimeSource().Now()
-
-	err = mutableStateTaskRefresher.RefreshTasks(ctx, now, mutableState)
-	if err != nil {
+	if err = mutableStateTaskRefresher.RefreshTasks(ctx, mutableState); err != nil {
 		return err
 	}
 
@@ -1588,8 +1585,7 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 	}
 	defer func() { wfContext.GetReleaseFn()(retError) }()
 
-	now := e.shard.GetTimeSource().Now()
-	task, err := wfContext.GetMutableState().GenerateMigrationTasks(now)
+	task, err := wfContext.GetMutableState().GenerateMigrationTasks()
 	if err != nil {
 		return nil, err
 	}
