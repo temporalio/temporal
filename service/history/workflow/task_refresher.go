@@ -95,6 +95,7 @@ func (r *TaskRefresherImpl) RefreshTasks(
 	}
 
 	if err := r.refreshTasksForWorkflowClose(
+		ctx,
 		now,
 		mutableState,
 		taskGenerator,
@@ -129,9 +130,7 @@ func (r *TaskRefresherImpl) RefreshTasks(
 	}
 
 	if err := r.refreshTasksForTimer(
-		now,
 		mutableState,
-		taskGenerator,
 	); err != nil {
 		return err
 	}
@@ -166,7 +165,6 @@ func (r *TaskRefresherImpl) RefreshTasks(
 	if r.config.AdvancedVisibilityWritingMode() != visibility.AdvancedVisibilityWritingModeOff {
 		if err := r.refreshTasksForWorkflowSearchAttr(
 			now,
-			mutableState,
 			taskGenerator,
 		); err != nil {
 			return err
@@ -209,6 +207,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 }
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
+	ctx context.Context,
 	now time.Time,
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
@@ -217,8 +216,14 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	executionState := mutableState.GetExecutionState()
 
 	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		closeEvent, err := mutableState.GetCompletionEvent(ctx)
+		if err != nil {
+			return err
+		}
+
 		return taskGenerator.GenerateWorkflowCloseTasks(
 			now,
+			closeEvent,
 			false,
 		)
 	}
@@ -347,9 +352,7 @@ Loop:
 }
 
 func (r *TaskRefresherImpl) refreshTasksForTimer(
-	now time.Time,
 	mutableState MutableState,
-	_ TaskGenerator,
 ) error {
 
 	pendingTimerInfos := mutableState.GetPendingTimerInfos()
@@ -514,7 +517,6 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 	now time.Time,
-	_ MutableState,
 	taskGenerator TaskGenerator,
 ) error {
 
