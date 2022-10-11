@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
 	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
 	"go.temporal.io/server/service/history/api/recordchildworkflowcompleted"
+	"go.temporal.io/server/service/history/api/refreshworkflow"
 	"go.temporal.io/server/service/history/api/removesignalmutablestate"
 	replicationapi "go.temporal.io/server/service/history/api/replication"
 	"go.temporal.io/server/service/history/api/replicationadmin"
@@ -985,12 +986,6 @@ func (e *historyEngineImpl) NotifyNewTasks(
 	}
 }
 
-func (e *historyEngineImpl) getActiveNamespaceEntry(
-	namespaceUUID namespace.ID,
-) (*namespace.Namespace, error) {
-	return api.GetActiveNamespace(e.shard, namespaceUUID)
-}
-
 func (e *historyEngineImpl) GetReplicationMessages(
 	ctx context.Context,
 	pollingCluster string,
@@ -1059,51 +1054,12 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	namespaceUUID namespace.ID,
 	execution commonpb.WorkflowExecution,
 ) (retError error) {
-
-	err := api.ValidateNamespaceUUID(namespaceUUID)
-	if err != nil {
-		return err
-	}
-
-	wfContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
+	return refreshworkflow.Invoke(
 		ctx,
-		nil,
-		api.BypassMutableStateConsistencyPredicate,
-		definition.NewWorkflowKey(
-			namespaceUUID.String(),
-			execution.WorkflowId,
-			execution.RunId,
-		),
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { wfContext.GetReleaseFn()(retError) }()
-
-	mutableState := wfContext.GetMutableState()
-	mutableStateTaskRefresher := workflow.NewTaskRefresher(
+		definition.NewWorkflowKey(namespaceUUID.String(), execution.WorkflowId, execution.RunId),
 		e.shard,
-		e.shard.GetConfig(),
-		e.shard.GetNamespaceRegistry(),
-		e.shard.GetEventsCache(),
-		e.shard.GetLogger(),
+		e.workflowConsistencyChecker,
 	)
-
-	now := e.shard.GetTimeSource().Now()
-
-	err = mutableStateTaskRefresher.RefreshTasks(ctx, now, mutableState)
-	if err != nil {
-		return err
-	}
-
-	return e.shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
-		ShardID: e.shard.GetShardID(),
-		// RangeID is set by shard
-		NamespaceID: namespaceUUID.String(),
-		WorkflowID:  execution.WorkflowId,
-		RunID:       execution.RunId,
-		Tasks:       mutableState.PopTasks(),
-	})
 }
 
 func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
