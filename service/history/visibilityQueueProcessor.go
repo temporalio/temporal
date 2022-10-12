@@ -103,6 +103,9 @@ func newVisibilityQueueProcessor(
 		return shard.GetQueueExclusiveHighReadWatermark(
 			tasks.CategoryVisibility,
 			shard.GetClusterMetadata().GetCurrentClusterName(),
+			// the value doesn't actually used for immediate queue,
+			// but logically visibility queue only has one processor
+			true,
 		).TaskID
 	}
 	updateVisibilityAckLevel := func(ackLevel int64) error {
