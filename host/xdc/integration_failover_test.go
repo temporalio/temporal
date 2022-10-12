@@ -2284,11 +2284,23 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 		Namespace: namespace,
 	})
 	s.NoError(err)
+	feClient2 := s.cluster2.GetFrontendClient()
 	verify := func(wfID string, expectedRunID string) {
 		desc1, err := client2.DescribeWorkflowExecution(testCtx, wfID, "")
 		s.NoError(err)
 		s.Equal(expectedRunID, desc1.WorkflowExecutionInfo.Execution.RunId)
 		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.WorkflowExecutionInfo.Status)
+		resp, err := feClient2.GetWorkflowExecutionHistoryReverse(testCtx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+			Namespace: namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: wfID,
+				RunId:      expectedRunID,
+			},
+			MaximumPageSize: 1,
+			NextPageToken:   nil,
+		})
+		s.NoError(err)
+		s.True(len(resp.GetHistory().GetEvents()) > 0)
 	}
 	verify(workflowID, run1.GetRunID())
 	verify(workflowID2, run2.GetRunID())
