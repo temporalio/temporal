@@ -190,6 +190,7 @@ func ExecutionsScavengerActivity(
 		ctx.cfg.Persistence.NumHistoryShards,
 		ctx.cfg.ExecutionScannerPerHostQPS,
 		ctx.cfg.ExecutionScannerPerShardQPS,
+		ctx.cfg.ExecutionDataDurationBuffer,
 		ctx.executionManager,
 		ctx.namespaceRegistry,
 		ctx.historyClient,

@@ -77,6 +77,8 @@ type (
 		ExecutionScannerPerHostQPS dynamicconfig.IntPropertyFn
 		// ExecutionScannerPerShardQPS the max rate of calls to scan execution data per shard
 		ExecutionScannerPerShardQPS dynamicconfig.IntPropertyFn
+		// ExecutionScannerPerShardQPS is the data TTL duration buffer of execution data
+		ExecutionDataDurationBuffer dynamicconfig.DurationPropertyFn
 	}
 
 	// scannerContext is the context object that get's

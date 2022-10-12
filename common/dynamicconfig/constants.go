@@ -643,6 +643,8 @@ const (
 	ExecutionScannerPerHostQPS = "worker.executionScannerPerHostQPS"
 	// ExecutionScannerPerShardQPS is the maximum rate of calls per shard from executions.Scanner
 	ExecutionScannerPerShardQPS = "worker.executionScannerPerShardQPS"
+	// ExecutionDataDurationBuffer is the data TTL duration buffer of execution data
+	ExecutionDataDurationBuffer = "worker.executionDataDurationBuffer"
 	// TaskQueueScannerEnabled indicates if task queue scanner should be started as part of worker.Scanner
 	TaskQueueScannerEnabled = "worker.taskQueueScannerEnabled"
 	// HistoryScannerEnabled indicates if history scanner should be started as part of worker.Scanner

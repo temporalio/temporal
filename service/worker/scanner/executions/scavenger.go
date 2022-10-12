@@ -56,14 +56,15 @@ type (
 		numHistoryShards int32
 		activityContext  context.Context
 
-		executionManager persistence.ExecutionManager
-		registry         namespace.Registry
-		historyClient    historyservice.HistoryServiceClient
-		executor         executor.Executor
-		rateLimiter      quotas.RateLimiter
-		perShardQPS      dynamicconfig.IntPropertyFn
-		metrics          metrics.Client
-		logger           log.Logger
+		executionManager            persistence.ExecutionManager
+		registry                    namespace.Registry
+		historyClient               historyservice.HistoryServiceClient
+		executor                    executor.Executor
+		rateLimiter                 quotas.RateLimiter
+		perShardQPS                 dynamicconfig.IntPropertyFn
+		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
+		metrics                     metrics.Client
+		logger                      log.Logger
 
 		stopC  chan struct{}
 		stopWG sync.WaitGroup
@@ -85,6 +86,7 @@ func NewScavenger(
 	numHistoryShards int32,
 	perHostQPS dynamicconfig.IntPropertyFn,
 	perShardQPS dynamicconfig.IntPropertyFn,
+	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
 	executionManager persistence.ExecutionManager,
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
@@ -106,9 +108,10 @@ func NewScavenger(
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(perHostQPS()) },
 		),
-		perShardQPS: perShardQPS,
-		metrics:     metricsClient,
-		logger:      logger,
+		perShardQPS:                 perShardQPS,
+		executionDataDurationBuffer: executionDataDurationBuffer,
+		metrics:                     metricsClient,
+		logger:                      logger,
 
 		stopC: make(chan struct{}),
 	}
@@ -176,6 +179,7 @@ func (s *Scavenger) run() {
 				),
 				s.rateLimiter,
 			}),
+			s.executionDataDurationBuffer,
 		))
 		if !submitted {
 			s.logger.Error("unable to submit task to executor", tag.ShardID(shardID))

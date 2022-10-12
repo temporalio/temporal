@@ -29,12 +29,14 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -63,9 +65,10 @@ type (
 		logger           log.Logger
 		scavenger        *Scavenger
 
-		ctx             context.Context
-		rateLimiter     quotas.RateLimiter
-		paginationToken []byte
+		ctx                         context.Context
+		rateLimiter                 quotas.RateLimiter
+		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
+		paginationToken             []byte
 	}
 )
 
@@ -80,6 +83,7 @@ func newTask(
 	logger log.Logger,
 	scavenger *Scavenger,
 	rateLimiter quotas.RateLimiter,
+	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
 ) executor.Task {
 	return &task{
 		shardID:          shardID,
@@ -91,8 +95,9 @@ func newTask(
 		logger:    logger,
 		scavenger: scavenger,
 
-		ctx:         ctx,
-		rateLimiter: rateLimiter,
+		ctx:                         ctx,
+		rateLimiter:                 rateLimiter,
+		executionDataDurationBuffer: executionDataDurationBuffer,
 	}
 }
 
@@ -141,8 +146,9 @@ func (t *task) validate(
 		tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
 	)
 
-	if validationResults, err := NewMutableStateIDValidator(
+	if validationResults, err := NewMutableStateValidator(
 		t.registry,
+		t.executionDataDurationBuffer,
 	).Validate(
 		t.ctx,
 		mutableState,
@@ -211,7 +217,13 @@ func (t *task) handleFailures(
 				WorkflowVersion:    common.EmptyVersion,
 				ClosedWorkflowOnly: true,
 			})
-			if err != nil {
+			switch err.(type) {
+			case *serviceerror.NotFound,
+				*serviceerror.NamespaceNotFound:
+				return nil
+			case nil:
+				continue
+			default:
 				return err
 			}
 		default:
