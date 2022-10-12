@@ -687,6 +687,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	); err != nil {
 		return nil, err
 	}
+	s.updateCloseTaskIDs(request.NewWorkflowSnapshot.ExecutionInfo, request.NewWorkflowSnapshot.Tasks)
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
