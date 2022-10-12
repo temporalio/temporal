@@ -289,6 +289,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		ns,
 		request.GetWorkflowState(),
 		lastFirstTxnID,
+		lastEventItem.GetVersion(),
 	)
 	if err != nil {
 		return err
