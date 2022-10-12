@@ -175,6 +175,7 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 				nil,
 			)
 		},
+		false,
 	)
 }
 
@@ -563,7 +564,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 
 func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(s.clusterName).AnyTimes()
-	level := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, s.clusterName).FireTime
+	level := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, s.clusterName, false).FireTime
 
 	s.timerQueueAckMgr.minQueryLevel = level
 	s.timerQueueAckMgr.maxQueryLevel = s.timerQueueAckMgr.minQueryLevel
