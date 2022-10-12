@@ -60,6 +60,7 @@ type (
 		timeNow             timeNow
 		updateTimerAckLevel updateTimerAckLevel
 		timerQueueShutdown  timerQueueShutdown
+		singleProcessorMode bool
 		// isReadFinished indicate timer queue ack manager
 		// have no more task to send out
 		isReadFinished bool
@@ -103,6 +104,7 @@ func newTimerQueueAckMgr(
 	logger log.Logger,
 	clusterName string,
 	executableInitializer taskExecutableInitializer,
+	singleProcessorMode bool,
 ) *timerQueueAckMgrImpl {
 	ackLevel := tasks.NewKey(minLevel, 0)
 
@@ -117,6 +119,7 @@ func newTimerQueueAckMgr(
 		timeNow:                timeNow,
 		updateTimerAckLevel:    updateTimerAckLevel,
 		timerQueueShutdown:     func() error { return nil },
+		singleProcessorMode:    singleProcessorMode,
 		outstandingExecutables: make(map[tasks.Key]queues.Executable),
 		ackLevel:               ackLevel,
 		readLevel:              ackLevel,
@@ -156,6 +159,7 @@ func newTimerQueueFailoverAckMgr(
 		timeNow:                timeNow,
 		updateTimerAckLevel:    updateTimerAckLevel,
 		timerQueueShutdown:     timerQueueShutdown,
+		singleProcessorMode:    false,
 		outstandingExecutables: make(map[tasks.Key]queues.Executable),
 		ackLevel:               ackLevel,
 		readLevel:              ackLevel,
@@ -176,7 +180,7 @@ func (t *timerQueueAckMgrImpl) getFinishedChan() <-chan struct{} {
 
 func (t *timerQueueAckMgrImpl) readTimerTasks() ([]queues.Executable, *time.Time, bool, error) {
 	if t.maxQueryLevel == t.minQueryLevel {
-		t.maxQueryLevel = t.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, t.clusterName).FireTime
+		t.maxQueryLevel = t.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, t.clusterName, t.singleProcessorMode).FireTime
 		t.maxQueryLevel = util.MaxTime(t.minQueryLevel, t.maxQueryLevel)
 	}
 	minQueryLevel := t.minQueryLevel
