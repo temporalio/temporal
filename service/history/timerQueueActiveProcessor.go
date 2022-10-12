@@ -183,6 +183,7 @@ func newTimerQueueActiveProcessor(
 				config.NamespaceCacheRefreshInterval,
 			)
 		},
+		singleProcessor,
 	)
 
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(

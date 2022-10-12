@@ -72,6 +72,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -93,8 +94,8 @@ type (
 		mockMatchingClient      *matchingservicemock.MockMatchingServiceClient
 		mockHistoryClient       *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata     *cluster.MockMetadata
-		mockEventsReapplier     *MocknDCEventsReapplier
-		mockWorkflowResetter    *MockworkflowResetter
+		mockEventsReapplier     *ndc.MockEventsReapplier
+		mockWorkflowResetter    *ndc.MockWorkflowResetter
 
 		workflowCache     workflow.Cache
 		mockHistoryEngine *historyEngineImpl
@@ -122,8 +123,8 @@ func (s *engineSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockEventsReapplier = NewMocknDCEventsReapplier(s.controller)
-	s.mockWorkflowResetter = NewMockworkflowResetter(s.controller)
+	s.mockEventsReapplier = ndc.NewMockEventsReapplier(s.controller)
+	s.mockWorkflowResetter = ndc.NewMockWorkflowResetter(s.controller)
 	s.mockTxProcessor = queues.NewMockQueue(s.controller)
 	s.mockTimerProcessor = queues.NewMockQueue(s.controller)
 	s.mockVisibilityProcessor = queues.NewMockQueue(s.controller)
@@ -4892,7 +4893,7 @@ func (s *engineSuite) TestSignalWorkflowExecution_WorkflowTaskBackoff() {
 
 func (s *engineSuite) TestRemoveSignalMutableState() {
 	removeRequest := &historyservice.RemoveSignalMutableStateRequest{}
-	err := s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
+	_, err := s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
 	execution := commonpb.WorkflowExecution{
@@ -4919,7 +4920,7 @@ func (s *engineSuite) TestRemoveSignalMutableState() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
-	err = s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
+	_, err = s.mockHistoryEngine.RemoveSignalMutableState(context.Background(), removeRequest)
 	s.Nil(err)
 }
 
@@ -4952,7 +4953,7 @@ func (s *engineSuite) TestReapplyEvents_ReturnSuccess() {
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: tests.RunID}
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	s.mockEventsReapplier.EXPECT().reapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
+	s.mockEventsReapplier.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 
 	err := s.mockHistoryEngine.ReapplyEvents(
 		context.Background(),
@@ -4995,7 +4996,7 @@ func (s *engineSuite) TestReapplyEvents_IgnoreSameVersionEvents() {
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: tests.RunID}
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	s.mockEventsReapplier.EXPECT().reapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	s.mockEventsReapplier.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 	err := s.mockHistoryEngine.ReapplyEvents(
 		context.Background(),
@@ -5043,8 +5044,8 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: tests.RunID}
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(gceResponse, nil).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
-	s.mockEventsReapplier.EXPECT().reapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
-	s.mockWorkflowResetter.EXPECT().resetWorkflow(
+	s.mockEventsReapplier.EXPECT().ReapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),

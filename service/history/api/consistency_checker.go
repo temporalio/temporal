@@ -47,6 +47,7 @@ type (
 	MutableStateConsistencyPredicate func(mutableState workflow.MutableState) bool
 
 	WorkflowConsistencyChecker interface {
+		GetWorkflowCache() workflow.Cache
 		GetCurrentRunID(
 			ctx context.Context,
 			namespaceID string,
@@ -74,6 +75,10 @@ func NewWorkflowConsistencyChecker(
 		shardContext:  shardContext,
 		workflowCache: workflowCache,
 	}
+}
+
+func (c *WorkflowConsistencyCheckerImpl) GetWorkflowCache() workflow.Cache {
+	return c.workflowCache
 }
 
 func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
