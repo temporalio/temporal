@@ -148,7 +148,7 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteImmediateTasks_Multiple() {
 	numTasks := 20
-	fakeImmediateTaskCategory := tasks.NewCategory(123, tasks.CategoryTypeImmediate, "fake-immediate")
+	fakeImmediateTaskCategory := tasks.NewCategory(1234, tasks.CategoryTypeImmediate, "fake-immediate")
 	immediateTasks := s.AddRandomTasks(
 		fakeImmediateTaskCategory,
 		numTasks,
@@ -191,7 +191,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteImmediateTasks_M
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteScheduledTasks_Multiple() {
 	numTasks := 20
-	fakeScheduledTaskCategory := tasks.NewCategory(rand.Int31(), tasks.CategoryTypeScheduled, "fake-scheduled")
+	fakeScheduledTaskCategory := tasks.NewCategory(2345, tasks.CategoryTypeScheduled, "fake-scheduled")
 	scheduledTasks := s.AddRandomTasks(
 		fakeScheduledTaskCategory,
 		numTasks,
