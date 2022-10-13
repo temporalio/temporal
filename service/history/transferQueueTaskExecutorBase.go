@@ -34,7 +34,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -316,7 +315,7 @@ func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms workflow.
 		return closeTransferTaskId > transferQueueAckLevel
 	}
 	fakeCloseTransferTask := &tasks.CloseExecutionTask{
-		WorkflowKey: definition.NewWorkflowKey(weCtx.GetNamespaceID().String(), weCtx.GetWorkflowID(), weCtx.GetRunID()),
+		WorkflowKey: weCtx.GetWorkflowKey(),
 		TaskID:      closeTransferTaskId,
 	}
 	return !queues.IsTaskAcked(fakeCloseTransferTask, transferQueueState)

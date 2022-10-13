@@ -27,6 +27,8 @@ package history
 import (
 	"context"
 
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
@@ -40,7 +42,6 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
-	"go.uber.org/fx"
 )
 
 const (
@@ -108,7 +109,6 @@ func NewTransferQueueFactory(
 
 func (f *transferQueueFactory) CreateQueue(
 	shard shard.Context,
-	engine shard.Engine,
 	workflowCache workflow.Cache,
 ) queues.Queue {
 	if f.HostScheduler != nil && f.Config.TransferProcessorEnableMultiCursor() {
