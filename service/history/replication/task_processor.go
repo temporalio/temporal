@@ -478,6 +478,10 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 			tasks = append(tasks, task)
 		}
 		p.maxRxReceivedTaskID = resp.GetLastRetrievedMessageId()
+		if len(tasks) == 0 {
+			p.maxRxProcessedTimestamp = timestamp.TimeValue(resp.GetSyncShardStatus().GetStatusTime())
+		}
+
 		if resp.GetHasMore() {
 			p.rxTaskBackoff = time.Duration(0)
 		} else {
