@@ -108,7 +108,7 @@ Now you can create default namespace with `tctl`:
 ```bash
 tctl --namespace default namespace register
 ```
-and run samples from [Go](https://github.com/temporalio/samples-go) and [Java](https://github.com/temporalio/samples-java) samples repos. Also, you can access web UI at `localhost:8088`.
+and run samples from [Go](https://github.com/temporalio/samples-go) and [Java](https://github.com/temporalio/samples-java) samples repos. Also, you can access web UI at `localhost:8080`.
 
 When you are done, press `Ctrl+C` to stop the server. Don't forget to stop dependencies (with `Ctrl+C`) and clean up resources:
 ```bash
