@@ -52,8 +52,6 @@ const (
 	LastBlobNextPageToken = -1
 	// EndMessageID is the id of the end message, here we use the int64 max
 	EndMessageID int64 = 1<<63 - 1
-	// EmptyTaskID is the id of the empty task
-	EmptyTaskID int64 = 0
 )
 
 const (
