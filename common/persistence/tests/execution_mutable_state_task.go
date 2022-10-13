@@ -31,9 +31,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -41,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -60,6 +64,10 @@ type (
 		Ctx    context.Context
 		Cancel context.CancelFunc
 	}
+
+	testSerializer struct {
+		serialization.Serializer
+	}
 )
 
 func NewExecutionMutableStateTaskSuite(
@@ -69,6 +77,7 @@ func NewExecutionMutableStateTaskSuite(
 	serializer serialization.Serializer,
 	logger log.Logger,
 ) *ExecutionMutableStateTaskSuite {
+	serializer = newTestSerializer(serializer)
 	return &ExecutionMutableStateTaskSuite{
 		Assertions: require.New(t),
 		ShardManager: p.NewShardManager(
@@ -135,6 +144,92 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 	s.NoError(err)
 
 	s.Cancel()
+}
+
+func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteImmediateTasks_Multiple() {
+	numTasks := 20
+	fakeImmediateTaskCategory := tasks.NewCategory(123, tasks.CategoryTypeImmediate, "fake-immediate")
+	immediateTasks := s.AddRandomTasks(
+		fakeImmediateTaskCategory,
+		numTasks,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			fakeTask := tasks.NewFakeTask(
+				workflowKey,
+				fakeImmediateTaskCategory,
+				visibilityTimestamp,
+			)
+			fakeTask.SetTaskID(taskID)
+			return fakeTask
+		},
+	)
+
+	immediateTasks, inclusiveMinTaskKey, exclusiveMaxTaskKey := s.RandomPaginateRange(immediateTasks)
+	loadedTasks := s.PaginateTasks(
+		fakeImmediateTaskCategory,
+		inclusiveMinTaskKey,
+		exclusiveMaxTaskKey,
+		rand.Intn(len(immediateTasks)*2)+1,
+	)
+	s.Equal(immediateTasks, loadedTasks)
+
+	err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
+		ShardID:             s.ShardID,
+		TaskCategory:        fakeImmediateTaskCategory,
+		InclusiveMinTaskKey: tasks.NewImmediateKey(0),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(math.MaxInt64),
+	})
+	s.NoError(err)
+
+	loadedTasks = s.PaginateTasks(
+		fakeImmediateTaskCategory,
+		inclusiveMinTaskKey,
+		exclusiveMaxTaskKey,
+		1,
+	)
+	s.Empty(loadedTasks)
+}
+
+func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteScheduledTasks_Multiple() {
+	numTasks := 20
+	fakeScheduledTaskCategory := tasks.NewCategory(rand.Int31(), tasks.CategoryTypeScheduled, "fake-scheduled")
+	scheduledTasks := s.AddRandomTasks(
+		fakeScheduledTaskCategory,
+		numTasks,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			fakeTask := tasks.NewFakeTask(
+				workflowKey,
+				fakeScheduledTaskCategory,
+				visibilityTimestamp,
+			)
+			fakeTask.SetTaskID(taskID)
+			return fakeTask
+		},
+	)
+
+	scheduledTasks, inclusiveMinTaskKey, exclusiveMaxTaskKey := s.RandomPaginateRange(scheduledTasks)
+	loadedTasks := s.PaginateTasks(
+		fakeScheduledTaskCategory,
+		inclusiveMinTaskKey,
+		exclusiveMaxTaskKey,
+		rand.Intn(len(scheduledTasks)*2)+1,
+	)
+	s.Equal(scheduledTasks, loadedTasks)
+
+	err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
+		ShardID:             s.ShardID,
+		TaskCategory:        fakeScheduledTaskCategory,
+		InclusiveMinTaskKey: tasks.NewKey(time.Unix(0, 0), 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(time.Unix(0, math.MaxInt64), 0),
+	})
+	s.NoError(err)
+
+	loadedTasks = s.PaginateTasks(
+		fakeScheduledTaskCategory,
+		inclusiveMinTaskKey,
+		exclusiveMaxTaskKey,
+		1,
+	)
+	s.Empty(loadedTasks)
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetTransferTasks_Multiple() {
@@ -318,4 +413,68 @@ func (s *ExecutionMutableStateTaskSuite) RandomPaginateRange(
 	}
 
 	return createdTasks[firstTaskIdx:nextTaskIdx], inclusiveMinTaskKey, exclusiveMaxTaskKey
+}
+
+func newTestSerializer(
+	serializer serialization.Serializer,
+) serialization.Serializer {
+	return &testSerializer{
+		Serializer: serializer,
+	}
+}
+
+func (s *testSerializer) SerializeTask(
+	task tasks.Task,
+) (commonpb.DataBlob, error) {
+	if fakeTask, ok := task.(*tasks.FakeTask); ok {
+		data, err := proto.Marshal(&persistencespb.TransferTaskInfo{
+			NamespaceId:    fakeTask.WorkflowKey.NamespaceID,
+			WorkflowId:     fakeTask.WorkflowKey.WorkflowID,
+			RunId:          fakeTask.WorkflowKey.RunID,
+			TaskType:       fakeTask.GetType(),
+			Version:        fakeTask.Version,
+			TaskId:         fakeTask.TaskID,
+			VisibilityTime: timestamp.TimePtr(fakeTask.VisibilityTimestamp),
+		})
+		if err != nil {
+			return commonpb.DataBlob{}, err
+		}
+		return commonpb.DataBlob{
+			Data:         data,
+			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+		}, nil
+	}
+
+	return s.Serializer.SerializeTask(task)
+}
+
+func (s *testSerializer) DeserializeTask(
+	category tasks.Category,
+	blob commonpb.DataBlob,
+) (tasks.Task, error) {
+	switch category.ID() {
+	case tasks.CategoryIDTransfer,
+		tasks.CategoryIDTimer,
+		tasks.CategoryIDVisibility,
+		tasks.CategoryIDReplication:
+		return s.Serializer.DeserializeTask(category, blob)
+	}
+
+	taskInfo := &persistencespb.TransferTaskInfo{}
+	if err := proto.Unmarshal(blob.Data, taskInfo); err != nil {
+		return nil, err
+	}
+
+	fakeTask := tasks.NewFakeTask(
+		definition.NewWorkflowKey(
+			taskInfo.NamespaceId,
+			taskInfo.WorkflowId,
+			taskInfo.RunId,
+		),
+		category,
+		*taskInfo.VisibilityTime,
+	)
+	fakeTask.SetTaskID(taskInfo.TaskId)
+
+	return fakeTask, nil
 }
