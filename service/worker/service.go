@@ -97,6 +97,8 @@ type (
 
 		workerManager             *workerManager
 		perNamespaceWorkerManager *perNamespaceWorkerManager
+		scanner                   *scanner.Scanner
+		workerFactory             sdk.WorkerFactory
 	}
 
 	// Config contains all the service config for worker
@@ -148,13 +150,14 @@ func NewService(
 	workerManager *workerManager,
 	perNamespaceWorkerManager *perNamespaceWorkerManager,
 	visibilityManager manager.VisibilityManager,
+	workerFactory sdk.WorkerFactory,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(common.WorkerServiceName)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Service{
+	s := &Service{
 		status:                    common.DaemonStatusInitialized,
 		config:                    serviceConfig,
 		sdkClientFactory:          sdkClientFactory,
@@ -181,7 +184,10 @@ func NewService(
 
 		workerManager:             workerManager,
 		perNamespaceWorkerManager: perNamespaceWorkerManager,
-	}, nil
+		workerFactory:             workerFactory,
+	}
+	s.initScanner()
+	return s, nil
 }
 
 // NewConfig builds the new Config for worker service
@@ -401,6 +407,7 @@ func (s *Service) Stop() {
 
 	close(s.stopC)
 
+	s.scanner.Stop()
 	s.perNamespaceWorkerManager.Stop()
 	s.workerManager.Stop()
 	s.namespaceRegistry.Stop()
@@ -449,8 +456,8 @@ func (s *Service) startBatcher() {
 	}
 }
 
-func (s *Service) startScanner() {
-	sc := scanner.New(
+func (s *Service) initScanner() {
+	s.scanner = scanner.New(
 		s.logger,
 		s.config.ScannerCfg,
 		s.sdkClientFactory.GetSystemClient(),
@@ -458,8 +465,12 @@ func (s *Service) startScanner() {
 		s.executionManager,
 		s.taskManager,
 		s.historyClient,
+		s.workerFactory,
 	)
-	if err := sc.Start(); err != nil {
+}
+
+func (s *Service) startScanner() {
+	if err := s.scanner.Start(); err != nil {
 		s.logger.Fatal(
 			"error starting scanner",
 			tag.Error(err),
