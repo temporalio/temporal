@@ -265,12 +265,13 @@ func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
 func (s *ContextImpl) GetQueueExclusiveHighReadWatermark(
 	category tasks.Category,
 	cluster string,
+	singleProcessorMode bool,
 ) tasks.Key {
 	switch categoryType := category.Type(); categoryType {
 	case tasks.CategoryTypeImmediate:
 		return s.getImmediateTaskExclusiveMaxReadLevel()
 	case tasks.CategoryTypeScheduled:
-		return s.updateScheduledTaskMaxReadLevel(cluster)
+		return s.updateScheduledTaskMaxReadLevel(cluster, singleProcessorMode)
 	default:
 		panic(fmt.Sprintf("invalid task category type: %v", categoryType))
 	}
@@ -293,7 +294,10 @@ func (s *ContextImpl) getScheduledTaskMaxReadLevel(cluster string) tasks.Key {
 	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
 }
 
-func (s *ContextImpl) updateScheduledTaskMaxReadLevel(cluster string) tasks.Key {
+func (s *ContextImpl) updateScheduledTaskMaxReadLevel(
+	cluster string,
+	singleProcessorMode bool,
+) tasks.Key {
 	s.wLock()
 	defer s.wUnlock()
 
@@ -311,7 +315,18 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(cluster string) tasks.Key 
 	}
 
 	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
-	s.scheduledTaskMaxReadLevelMap[cluster] = util.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
+	if singleProcessorMode {
+		// When generating scheduled tasks, the task's timestamp will be compared to the namespace's active cluster's
+		// maxReadLevel to avoid generatnig a task before maxReadLevel.
+		// But when there's a single procssor, the queue is only using current cluster maxReadLevel.
+		// So update the maxReadLevel map for all clusters to ensure scheduled task won't be lost.
+		for key := range s.scheduledTaskMaxReadLevelMap {
+			s.scheduledTaskMaxReadLevelMap[key] = util.MaxTime(s.scheduledTaskMaxReadLevelMap[key], newMaxReadLevel)
+		}
+	} else {
+		s.scheduledTaskMaxReadLevelMap[cluster] = util.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
+	}
+
 	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
 }
 
@@ -687,6 +702,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	); err != nil {
 		return nil, err
 	}
+	s.updateCloseTaskIDs(request.NewWorkflowSnapshot.ExecutionInfo, request.NewWorkflowSnapshot.Tasks)
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
@@ -1327,7 +1343,7 @@ func (s *ContextImpl) allocateTaskIDsLocked(
 			// if scheduled task, check if fire time is in the past
 			if category.Type() == tasks.CategoryTypeScheduled {
 				ts := task.GetVisibilityTime()
-				if task.GetVersion() != common.EmptyVersion {
+				if task.GetVersion() != common.EmptyVersion && category.ID() == tasks.CategoryIDTimer {
 					// cannot use version to determine the corresponding cluster for timer task
 					// this is because during failover, timer task should be created as active
 					// or otherwise, failover + active processing logic may not pick up the task.

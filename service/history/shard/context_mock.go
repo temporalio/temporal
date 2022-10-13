@@ -505,17 +505,17 @@ func (mr *MockContextMockRecorder) GetQueueClusterAckLevel(category, cluster int
 }
 
 // GetQueueExclusiveHighReadWatermark mocks base method.
-func (m *MockContext) GetQueueExclusiveHighReadWatermark(category tasks.Category, cluster string) tasks.Key {
+func (m *MockContext) GetQueueExclusiveHighReadWatermark(category tasks.Category, cluster string, singleProcessorMode bool) tasks.Key {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetQueueExclusiveHighReadWatermark", category, cluster)
+	ret := m.ctrl.Call(m, "GetQueueExclusiveHighReadWatermark", category, cluster, singleProcessorMode)
 	ret0, _ := ret[0].(tasks.Key)
 	return ret0
 }
 
 // GetQueueExclusiveHighReadWatermark indicates an expected call of GetQueueExclusiveHighReadWatermark.
-func (mr *MockContextMockRecorder) GetQueueExclusiveHighReadWatermark(category, cluster interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) GetQueueExclusiveHighReadWatermark(category, cluster, singleProcessorMode interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueExclusiveHighReadWatermark", reflect.TypeOf((*MockContext)(nil).GetQueueExclusiveHighReadWatermark), category, cluster)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueExclusiveHighReadWatermark", reflect.TypeOf((*MockContext)(nil).GetQueueExclusiveHighReadWatermark), category, cluster, singleProcessorMode)
 }
 
 // GetQueueState mocks base method.
