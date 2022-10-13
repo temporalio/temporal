@@ -357,6 +357,8 @@ func NewSanitizedMutableState(
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	mutableStateRecord *persistencespb.WorkflowMutableState,
+	lastFirstEventTxnID int64,
+	lastWriteVersion int64,
 ) (*MutableStateImpl, error) {
 
 	mutableState, err := newMutableStateFromDB(shard, eventsCache, logger, namespaceEntry, mutableStateRecord, 1)
@@ -365,12 +367,15 @@ func NewSanitizedMutableState(
 	}
 
 	// sanitize data
-	mutableState.executionInfo.LastFirstEventTxnId = common.EmptyVersion
+	mutableState.executionInfo.LastFirstEventTxnId = lastFirstEventTxnID
+	mutableState.executionInfo.CloseVisibilityTaskId = common.EmptyVersion
+	mutableState.executionInfo.CloseTransferTaskId = common.EmptyVersion
 	// TODO: after adding cluster to clock info, no need to reset clock here
 	mutableState.executionInfo.ParentClock = nil
 	for _, childExecutionInfo := range mutableState.pendingChildExecutionInfoIDs {
 		childExecutionInfo.Clock = nil
 	}
+	mutableState.currentVersion = lastWriteVersion
 	return mutableState, nil
 }
 
