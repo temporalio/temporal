@@ -851,7 +851,7 @@ func (r *HistoryReplicatorImpl) backfillHistory(
 			}
 		case *serviceerror.NotFound:
 		default:
-			return nil, common.EmptyTaskID, err
+			return nil, common.EmptyEventTaskID, err
 		}
 	}
 
@@ -871,11 +871,11 @@ func (r *HistoryReplicatorImpl) backfillHistory(
 		},
 	)
 	if err != nil {
-		return nil, common.EmptyTaskID, err
+		return nil, common.EmptyEventTaskID, err
 	}
 	historyBranch := resp.BranchInfo
 
-	prevTxnID := common.EmptyTaskID
+	prevTxnID := common.EmptyEventTaskID
 	var lastHistoryBatch *commonpb.DataBlob
 	var prevBranchID string
 	sortedAncestors := sortAncestors(historyBranch.GetAncestors())
@@ -886,7 +886,7 @@ BackfillLoop:
 	for remoteHistoryIterator.HasNext() {
 		historyBlob, err := remoteHistoryIterator.Next()
 		if err != nil {
-			return nil, common.EmptyTaskID, err
+			return nil, common.EmptyEventTaskID, err
 		}
 
 		if historyBlob.nodeID <= lastBatchNodeID {
@@ -907,7 +907,7 @@ BackfillLoop:
 				currentAncestor = sortedAncestors[sortedAncestorsIdx]
 				branchID = currentAncestor.GetBranchId()
 				if historyBlob.nodeID < currentAncestor.GetBeginNodeId() || historyBlob.nodeID >= currentAncestor.GetEndNodeId() {
-					return nil, common.EmptyTaskID, serviceerror.NewInternal(
+					return nil, common.EmptyEventTaskID, serviceerror.NewInternal(
 						fmt.Sprintf("The backfill history blob node id %d is not in acestoer range [%d, %d]",
 							historyBlob.nodeID,
 							currentAncestor.GetBeginNodeId(),
@@ -928,11 +928,11 @@ BackfillLoop:
 				},
 			})
 		if err != nil {
-			return nil, common.EmptyTaskID, err
+			return nil, common.EmptyEventTaskID, err
 		}
 		txnID, err := r.shard.GenerateTaskID()
 		if err != nil {
-			return nil, common.EmptyTaskID, err
+			return nil, common.EmptyEventTaskID, err
 		}
 		_, err = r.executionMgr.AppendRawHistoryNodes(ctx, &persistence.AppendRawHistoryNodesRequest{
 			ShardID:           r.shard.GetShardID(),
@@ -949,7 +949,7 @@ BackfillLoop:
 			),
 		})
 		if err != nil {
-			return nil, common.EmptyTaskID, err
+			return nil, common.EmptyEventTaskID, err
 		}
 		prevTxnID = txnID
 		prevBranchID = branchID
