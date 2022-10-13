@@ -129,7 +129,7 @@ func Invoke(
 			} else {
 				p.State = enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
 			}
-			if !timestamp.TimeValue(ai.LastHeartbeatUpdateTime).IsZero() {
+			if timestamp.TimeValue(ai.LastHeartbeatUpdateTime).After(timestamp.TimeValue(ai.StartedTime)) {
 				p.LastHeartbeatTime = ai.LastHeartbeatUpdateTime
 				p.HeartbeatDetails = ai.LastHeartbeatDetails
 			}
