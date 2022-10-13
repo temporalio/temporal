@@ -29,6 +29,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -251,7 +253,7 @@ func (v *mutableStateValidator) validateRetention(
 	// It makes sense the workflow is finished and use the last update time.
 	finalUpdateTime := executionInfo.GetLastUpdateTime()
 	if finalUpdateTime == nil {
-		return nil, nil
+		return nil, serviceerror.NewInternal("Cannot get last update time from a closed workflow")
 	}
 
 	ttl := time.Now().UTC().Sub(timestamp.TimeValue(finalUpdateTime))
