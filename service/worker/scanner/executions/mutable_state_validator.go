@@ -27,36 +27,53 @@ package executions
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
-	mutableStateActivityIDFailureType      = "mutable_state_id_validator_activity"
-	mutableStateTimerIDFailureType         = "mutable_state_id_validator_timer"
-	mutableStateChildWorkflowIDFailureType = "mutable_state_id_validator_child_workflow"
-	mutableStateRequestCancelIDFailureType = "mutable_state_id_validator_request_cancel"
-	mutableStateSignalIDFailureType        = "mutable_state_id_validator_signal"
+	mutableStateActivityIDFailureType      = "mutable_state_validator_activity"
+	mutableStateTimerIDFailureType         = "mutable_state_validator_timer"
+	mutableStateChildWorkflowIDFailureType = "mutable_state_validator_child_workflow"
+	mutableStateRequestCancelIDFailureType = "mutable_state_validator_request_cancel"
+	mutableStateSignalIDFailureType        = "mutable_state_validator_signal"
+	mutableStateRetentionFailureType       = "mutable_state_validator_retention"
 )
 
 type (
-	// mutableStateIDValidator is a validator that does shallow checks that
+	// mutableStateValidator is a validator that does shallow checks that
 	// * ID >= common.FirstEventID
 	// * ID <= last event ID
-	mutableStateIDValidator struct{}
+	mutableStateValidator struct {
+		registry                    namespace.Registry
+		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
+	}
 )
 
-var _ Validator = (*mutableStateIDValidator)(nil)
+var _ Validator = (*mutableStateValidator)(nil)
 
-// NewMutableStateIDValidator returns new instance.
-func NewMutableStateIDValidator() *mutableStateIDValidator {
-	return &mutableStateIDValidator{}
+// NewMutableStateValidator returns new instance.
+func NewMutableStateValidator(
+	registry namespace.Registry,
+	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
+) *mutableStateValidator {
+	return &mutableStateValidator{
+		registry:                    registry,
+		executionDataDurationBuffer: executionDataDurationBuffer,
+	}
 }
 
 // Validate does shallow correctness check of IDs in mutable state.
-func (v *mutableStateIDValidator) Validate(
+func (v *mutableStateValidator) Validate(
 	ctx context.Context,
 	mutableState *MutableState,
 ) ([]MutableStateValidationResult, error) {
@@ -99,10 +116,21 @@ func (v *mutableStateIDValidator) Validate(
 		lastItem.GetEventId())...,
 	)
 
+	retentionResult, err := v.validateRetention(
+		mutableState.GetExecutionInfo(),
+		mutableState.GetExecutionState().GetState(),
+	)
+	if err != nil {
+		return results, err
+	}
+	if retentionResult != nil {
+		results = append(results, *retentionResult)
+	}
+
 	return results, nil
 }
 
-func (v *mutableStateIDValidator) validateActivity(
+func (v *mutableStateValidator) validateActivity(
 	activityInfos map[int64]*persistencespb.ActivityInfo,
 	lastEventID int64,
 ) []MutableStateValidationResult {
@@ -123,7 +151,7 @@ func (v *mutableStateIDValidator) validateActivity(
 	return results
 }
 
-func (v *mutableStateIDValidator) validateTimer(
+func (v *mutableStateValidator) validateTimer(
 	timerInfos map[string]*persistencespb.TimerInfo,
 	lastEventID int64,
 ) []MutableStateValidationResult {
@@ -144,7 +172,7 @@ func (v *mutableStateIDValidator) validateTimer(
 	return results
 }
 
-func (v *mutableStateIDValidator) validateChildWorkflow(
+func (v *mutableStateValidator) validateChildWorkflow(
 	childExecutionInfos map[int64]*persistencespb.ChildExecutionInfo,
 	lastEventID int64,
 ) []MutableStateValidationResult {
@@ -165,7 +193,7 @@ func (v *mutableStateIDValidator) validateChildWorkflow(
 	return results
 }
 
-func (v *mutableStateIDValidator) validateRequestCancel(
+func (v *mutableStateValidator) validateRequestCancel(
 	requestCancelInfos map[int64]*persistencespb.RequestCancelInfo,
 	lastEventID int64,
 ) []MutableStateValidationResult {
@@ -186,7 +214,7 @@ func (v *mutableStateIDValidator) validateRequestCancel(
 	return results
 }
 
-func (v *mutableStateIDValidator) validateSignal(
+func (v *mutableStateValidator) validateSignal(
 	signalInfos map[int64]*persistencespb.SignalInfo,
 	lastEventID int64,
 ) []MutableStateValidationResult {
@@ -207,9 +235,42 @@ func (v *mutableStateIDValidator) validateSignal(
 	return results
 }
 
-func (v *mutableStateIDValidator) validateID(
+func (v *mutableStateValidator) validateID(
 	eventID int64,
 	lastEventID int64,
 ) bool {
 	return common.FirstEventID <= eventID && eventID <= lastEventID
+}
+
+func (v *mutableStateValidator) validateRetention(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState enums.WorkflowExecutionState,
+) (*MutableStateValidationResult, error) {
+	if executionState != enums.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return nil, nil
+	}
+	// We don't use the close time here because some old workflows do not have the close time.
+	// It makes sense the workflow is finished and use the last update time.
+	finalUpdateTime := executionInfo.GetLastUpdateTime()
+	if finalUpdateTime == nil {
+		return nil, serviceerror.NewInternal("Cannot get last update time from a closed workflow")
+	}
+
+	ttl := time.Now().UTC().Sub(timestamp.TimeValue(finalUpdateTime))
+	ns, err := v.registry.GetNamespaceByID(namespace.ID(executionInfo.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+	retention := ns.Retention()
+	if ttl > 0 && ttl > retention+v.executionDataDurationBuffer() {
+
+		return &MutableStateValidationResult{
+			failureType: mutableStateRetentionFailureType,
+			failureDetails: fmt.Sprintf("Workflow Data TTL %s passed retention %s",
+				ttl.String(),
+				retention.String(),
+			),
+		}, nil
+	}
+	return nil, nil
 }
