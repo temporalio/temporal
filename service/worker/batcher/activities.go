@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
@@ -105,7 +106,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
 	for i := 0; i < a.getOperationConcurrency(batchParams.Concurrency); i++ {
-		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, metricsClient, logger)
+		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsClient, logger)
 	}
 
 	for {
@@ -200,6 +201,7 @@ func startTaskProcessor(
 	respCh chan error,
 	limiter *rate.Limiter,
 	sdkClient sdkclient.Client,
+	frontendClient workflowservice.WorkflowServiceClient,
 	metricsClient metrics.Scope,
 	logger log.Logger,
 ) {
@@ -228,6 +230,18 @@ func startTaskProcessor(
 				err = processTask(ctx, limiter, task,
 					func(workflowID, runID string) error {
 						return sdkClient.SignalWorkflow(ctx, workflowID, runID, batchParams.SignalParams.SignalName, batchParams.SignalParams.Input)
+					})
+			case BatchTypeDelete:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						_, err := frontendClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+							Namespace: batchParams.Namespace,
+							WorkflowExecution: &commonpb.WorkflowExecution{
+								WorkflowId: workflowID,
+								RunId:      runID,
+							},
+						})
+						return err
 					})
 			}
 			if err != nil {
