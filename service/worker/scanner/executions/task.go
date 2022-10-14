@@ -28,12 +28,19 @@ import (
 	"context"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/worker/scanner/executor"
@@ -41,9 +48,6 @@ import (
 
 const (
 	executionsPageSize = 100
-
-	ratePerShard = 1
-	rateOverall  = 10
 
 	taskStartupDelayRatio              = 100 * time.Millisecond
 	taskStartupDelayRandomizationRatio = 1.0
@@ -55,35 +59,45 @@ type (
 	task struct {
 		shardID          int32
 		executionManager persistence.ExecutionManager
+		registry         namespace.Registry
+		historyClient    historyservice.HistoryServiceClient
 		metrics          metrics.Client
 		logger           log.Logger
 		scavenger        *Scavenger
 
-		ctx             context.Context
-		rateLimiter     quotas.RateLimiter
-		paginationToken []byte
+		ctx                         context.Context
+		rateLimiter                 quotas.RateLimiter
+		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
+		paginationToken             []byte
 	}
 )
 
 // newTask returns a new instance of an executable task which will process a single mutableState
 func newTask(
+	ctx context.Context,
 	shardID int32,
 	executionManager persistence.ExecutionManager,
+	registry namespace.Registry,
+	historyClient historyservice.HistoryServiceClient,
 	metrics metrics.Client,
 	logger log.Logger,
 	scavenger *Scavenger,
 	rateLimiter quotas.RateLimiter,
+	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
 ) executor.Task {
 	return &task{
 		shardID:          shardID,
 		executionManager: executionManager,
+		registry:         registry,
+		historyClient:    historyClient,
 
 		metrics:   metrics,
 		logger:    logger,
 		scavenger: scavenger,
 
-		ctx:         context.Background(), // TODO: use context from ExecutionsScavengerActivity
-		rateLimiter: rateLimiter,
+		ctx:                         ctx,
+		rateLimiter:                 rateLimiter,
+		executionDataDurationBuffer: executionDataDurationBuffer,
 	}
 }
 
@@ -96,7 +110,6 @@ func (t *task) Run() executor.TaskStatus {
 
 	iter := collection.NewPagingIteratorWithToken(t.getPaginationFn(), t.paginationToken)
 	for iter.HasNext() {
-		// ctx is background, do not expect interruption
 		_ = t.rateLimiter.Wait(t.ctx)
 		record, err := iter.Next()
 		if err != nil {
@@ -105,12 +118,18 @@ func (t *task) Run() executor.TaskStatus {
 		}
 
 		mutableState := &MutableState{WorkflowMutableState: record}
+		results := t.validate(mutableState)
 		printValidationResult(
 			mutableState,
-			t.validate(mutableState),
+			results,
 			t.metrics,
 			t.logger,
 		)
+		err = t.handleFailures(mutableState, results)
+		if err != nil {
+			t.logger.Error("unable to process failure result", tag.ShardID(t.shardID), tag.Error(err))
+			return executor.TaskStatusDefer
+		}
 	}
 	return executor.TaskStatusDone
 }
@@ -127,7 +146,10 @@ func (t *task) validate(
 		tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
 	)
 
-	if validationResults, err := NewMutableStateIDValidator().Validate(
+	if validationResults, err := NewMutableStateValidator(
+		t.registry,
+		t.executionDataDurationBuffer,
+	).Validate(
 		t.ctx,
 		mutableState,
 	); err != nil {
@@ -175,6 +197,41 @@ func (t *task) getPaginationFn() collection.PaginationFn[*persistencespb.Workflo
 		t.paginationToken = resp.PageToken
 		return paginateItems, resp.PageToken, nil
 	}
+}
+
+func (t *task) handleFailures(
+	mutableState *MutableState,
+	results []MutableStateValidationResult,
+) error {
+	for _, failure := range results {
+		switch failure.failureType {
+		case mutableStateRetentionFailureType:
+			executionInfo := mutableState.GetExecutionInfo()
+			runID := mutableState.GetExecutionState().GetRunId()
+			_, err := t.historyClient.DeleteWorkflowExecution(t.ctx, &historyservice.DeleteWorkflowExecutionRequest{
+				NamespaceId: executionInfo.GetNamespaceId(),
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: executionInfo.GetWorkflowId(),
+					RunId:      runID,
+				},
+				WorkflowVersion:    common.EmptyVersion,
+				ClosedWorkflowOnly: true,
+			})
+			switch err.(type) {
+			case *serviceerror.NotFound,
+				*serviceerror.NamespaceNotFound:
+				return nil
+			case nil:
+				continue
+			default:
+				return err
+			}
+		default:
+			// no-op
+			continue
+		}
+	}
+	return nil
 }
 
 func printValidationResult(

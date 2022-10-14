@@ -286,6 +286,18 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				dynamicconfig.HistoryScannerDataMinAge,
 				60*24*time.Hour,
 			),
+			ExecutionScannerPerHostQPS: dc.GetIntProperty(
+				dynamicconfig.ExecutionScannerPerHostQPS,
+				10,
+			),
+			ExecutionScannerPerShardQPS: dc.GetIntProperty(
+				dynamicconfig.ExecutionScannerPerShardQPS,
+				1,
+			),
+			ExecutionDataDurationBuffer: dc.GetDurationProperty(
+				dynamicconfig.ExecutionDataDurationBuffer,
+				time.Hour*24*30,
+			),
 		},
 		EnableBatcher:      dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
 		BatcherRPS:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherRPS, batcher.DefaultRPS),
@@ -465,6 +477,7 @@ func (s *Service) initScanner() {
 		s.executionManager,
 		s.taskManager,
 		s.historyClient,
+		s.namespaceRegistry,
 		s.workerFactory,
 	)
 }

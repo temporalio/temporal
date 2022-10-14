@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/mocksdk"
@@ -153,6 +154,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ctrl := gomock.NewController(s.T())
 			mockWorkerFactory := sdk.NewMockWorkerFactory(ctrl)
 			mockSdkClient := mocksdk.NewMockClient(ctrl)
+			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
 			scanner := New(
 				log.NewNoopLogger(),
 				&Config{
@@ -192,6 +194,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				p.NewMockExecutionManager(ctrl),
 				p.NewMockTaskManager(ctrl),
 				historyservicemock.NewMockHistoryServiceClient(ctrl),
+				mockNamespaceRegistry,
 				mockWorkerFactory,
 			)
 			for _, sc := range c.ExpectedScanners {

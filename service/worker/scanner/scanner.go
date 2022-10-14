@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/sdk"
 
@@ -69,19 +70,26 @@ type (
 		// HistoryScannerDataMinAge indicates the cleanup threshold of history branch data
 		// Only clean up history branches that older than this threshold
 		HistoryScannerDataMinAge dynamicconfig.DurationPropertyFn
+		// ExecutionScannerPerHostQPS the max rate of calls to scan execution data per host
+		ExecutionScannerPerHostQPS dynamicconfig.IntPropertyFn
+		// ExecutionScannerPerShardQPS the max rate of calls to scan execution data per shard
+		ExecutionScannerPerShardQPS dynamicconfig.IntPropertyFn
+		// ExecutionDataDurationBuffer is the data TTL duration buffer of execution data
+		ExecutionDataDurationBuffer dynamicconfig.DurationPropertyFn
 	}
 
 	// scannerContext is the context object that get's
 	// passed around within the scanner workflows / activities
 	scannerContext struct {
-		cfg              *Config
-		logger           log.Logger
-		sdkSystemClient  sdkclient.Client
-		metricsClient    metrics.Client
-		executionManager persistence.ExecutionManager
-		taskManager      persistence.TaskManager
-		historyClient    historyservice.HistoryServiceClient
-		workerFactory    sdk.WorkerFactory
+		cfg               *Config
+		logger            log.Logger
+		sdkSystemClient   sdkclient.Client
+		metricsClient     metrics.Client
+		executionManager  persistence.ExecutionManager
+		taskManager       persistence.TaskManager
+		historyClient     historyservice.HistoryServiceClient
+		workerFactory     sdk.WorkerFactory
+		namespaceRegistry namespace.Registry
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -106,18 +114,20 @@ func New(
 	executionManager persistence.ExecutionManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
+	registry namespace.Registry,
 	workerFactory sdk.WorkerFactory,
 ) *Scanner {
 	return &Scanner{
 		context: scannerContext{
-			cfg:              cfg,
-			sdkSystemClient:  sdkSystemClient,
-			logger:           logger,
-			metricsClient:    metricsClient,
-			executionManager: executionManager,
-			taskManager:      taskManager,
-			historyClient:    historyClient,
-			workerFactory:    workerFactory,
+			cfg:               cfg,
+			sdkSystemClient:   sdkSystemClient,
+			logger:            logger,
+			metricsClient:     metricsClient,
+			executionManager:  executionManager,
+			taskManager:       taskManager,
+			historyClient:     historyClient,
+			workerFactory:     workerFactory,
+			namespaceRegistry: registry,
 		},
 	}
 }
