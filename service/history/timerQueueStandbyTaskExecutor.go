@@ -274,9 +274,9 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
-		ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
-		if !ok {
-			return nil, nil
+		err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
+		if err != nil {
+			return nil, err
 		}
 
 		if activityInfo.Attempt > task.Attempt {
@@ -322,9 +322,9 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 			return nil, nil
 		}
 
-		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)
-		if !ok {
-			return nil, nil
+		err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)
+		if err != nil {
+			return nil, err
 		}
 
 		return getHistoryResendInfo(mutableState)
@@ -396,9 +396,9 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 		if err != nil {
 			return nil, err
 		}
-		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, timerTask.Version, timerTask)
-		if !ok {
-			return nil, nil
+		err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, timerTask.Version, timerTask)
+		if err != nil {
+			return nil, err
 		}
 
 		return getHistoryResendInfo(mutableState)

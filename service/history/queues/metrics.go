@@ -38,7 +38,7 @@ const (
 
 	TaskFailures                    = "task_errors"
 	TaskDiscarded                   = "task_errors_discarded"
-	TaskSkipped                     = "task_skipped"
+	TaskVersionMisMatch             = "task_errors_version_mismatch"
 	TaskAttempt                     = "task_attempt"
 	TaskStandbyRetryCounter         = "task_errors_standby_retry_counter"
 	TaskWorkflowBusyCounter         = "task_errors_workflow_busy"

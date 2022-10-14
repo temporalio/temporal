@@ -35,35 +35,36 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
 
-// VerifyTaskVersion, will return true if failover version check is successful
-func VerifyTaskVersion(
+// CheckTaskVersion will return an error if task version check fails
+func CheckTaskVersion(
 	shard shard.Context,
 	logger log.Logger,
 	namespace *namespace.Namespace,
 	version int64,
 	taskVersion int64,
 	task interface{},
-) bool {
+) error {
 
 	if !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-		return true
+		return nil
 	}
 
 	// the first return value is whether this task is valid for further processing
 	if !namespace.IsGlobalNamespace() {
 		logger.Debug("NamespaceID is not global, task version check pass", tag.WorkflowNamespaceID(namespace.ID().String()), tag.Task(task))
-		return true
+		return nil
 	} else if version != taskVersion {
 		logger.Debug("NamespaceID is global, task version != target version", tag.WorkflowNamespaceID(namespace.ID().String()), tag.Task(task), tag.TaskVersion(version))
-		return false
+		return consts.ErrTaskVersionMismatch
 	}
 	logger.Debug("NamespaceID is global, task version == target version", tag.WorkflowNamespaceID(namespace.ID().String()), tag.Task(task), tag.TaskVersion(version))
-	return true
+	return nil
 }
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh

@@ -285,9 +285,9 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 		if err != nil {
 			return err
 		}
-		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
-		if !ok {
-			return nil
+		err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
+		if err != nil {
+			return err
 		}
 	}
 
