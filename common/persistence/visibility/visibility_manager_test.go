@@ -37,6 +37,7 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -251,5 +252,29 @@ func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByStatus() {
 
 	// no remaining tokens
 	_, err = s.visibilityManager.ListClosedWorkflowExecutionsByStatus(context.Background(), request)
+	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
+}
+
+func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
+	request := &manager.GetWorkflowExecutionRequest{
+		NamespaceID: testNamespaceUUID,
+		Namespace:   testNamespace,
+		RunID:       testWorkflowExecution.RunId,
+		WorkflowID:  testWorkflowExecution.WorkflowId,
+		CloseTime:   timestamp.TimePtr(time.Now()),
+	}
+	s.visibilityStore.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&store.InternalGetWorkflowExecutionResponse{},
+		nil,
+	)
+	s.metricClient.EXPECT().Scope(
+		metrics.VisibilityPersistenceGetWorkflowExecutionScope,
+		metrics.StandardVisibilityTypeTag(),
+	).Return(metrics.NoopScope).Times(2)
+	_, err := s.visibilityManager.GetWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+
+	// no remaining tokens
+	_, err = s.visibilityManager.GetWorkflowExecution(context.Background(), request)
 	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
 }

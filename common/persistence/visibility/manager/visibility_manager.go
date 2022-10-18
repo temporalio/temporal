@@ -62,6 +62,7 @@ type (
 		ListWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		CountWorkflowExecutions(ctx context.Context, request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
+		GetWorkflowExecution(ctx context.Context, request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 	}
 
 	VisibilityRequestBase struct {
@@ -172,6 +173,21 @@ type (
 		TaskID      int64
 		StartTime   *time.Time // if start time is not empty, delete record from open_execution for cassandra db
 		CloseTime   *time.Time // if end time is not empty, delete record from closed_execution for cassandra db
+	}
+
+	// GetWorkflowExecutionRequest is request from GetWorkflowExecution
+	GetWorkflowExecutionRequest struct {
+		NamespaceID namespace.ID
+		Namespace   namespace.Name // namespace.Name is not persisted
+		RunID       string
+		WorkflowID  string
+		StartTime   *time.Time // if start time is not empty, search record from open_execution for cassandra db
+		CloseTime   *time.Time // if end time is not empty, search record from closed_execution for cassandra db
+	}
+
+	// GetWorkflowExecutionResponse is response to GetWorkflowExecution
+	GetWorkflowExecutionResponse struct {
+		Execution *workflowpb.WorkflowExecutionInfo
 	}
 )
 

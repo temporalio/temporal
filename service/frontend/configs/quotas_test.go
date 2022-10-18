@@ -149,6 +149,7 @@ func (s *quotasSuite) TestExecutionAPIs() {
 
 func (s *quotasSuite) TestVisibilityAPIs() {
 	apis := map[string]struct{}{
+		"GetWorkflowExecution":           {},
 		"CountWorkflowExecutions":        {},
 		"ScanWorkflowExecutions":         {},
 		"ListOpenWorkflowExecutions":     {},

@@ -323,6 +323,23 @@ func (s *visibilityStore) CountWorkflowExecutions(
 	return nil, store.OperationNotSupportedErr
 }
 
+func (s *visibilityStore) GetWorkflowExecution(
+	ctx context.Context,
+	request *manager.GetWorkflowExecutionRequest,
+) (*store.InternalGetWorkflowExecutionResponse, error) {
+	row, err := s.sqlStore.Db.GetFromVisibility(ctx, sqlplugin.VisibilityGetFilter{
+		NamespaceID: request.NamespaceID.String(),
+		RunID:       request.RunID,
+	})
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(
+			fmt.Sprintf("GetWorkflowExecution operation failed. Select failed: %v", err))
+	}
+	return &store.InternalGetWorkflowExecutionResponse{
+		Execution: s.rowToInfo(row),
+	}, nil
+}
+
 func (s *visibilityStore) rowToInfo(
 	row *sqlplugin.VisibilityRow,
 ) *store.InternalWorkflowExecutionInfo {

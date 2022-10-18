@@ -201,3 +201,10 @@ func (v *visibilityManagerDual) CountWorkflowExecutions(
 ) (*manager.CountWorkflowExecutionsResponse, error) {
 	return v.managerSelector.readManager(request.Namespace).CountWorkflowExecutions(ctx, request)
 }
+
+func (v *visibilityManagerDual) GetWorkflowExecution(
+	ctx context.Context,
+	request *manager.GetWorkflowExecutionRequest,
+) (*manager.GetWorkflowExecutionResponse, error) {
+	return v.managerSelector.readManager(request.Namespace).GetWorkflowExecution(ctx, request)
+}
