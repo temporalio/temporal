@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
@@ -53,7 +52,7 @@ type (
 		*require.Assertions
 
 		controller     *gomock.Controller
-		mockResource   *resource.Test
+		mockResource   *resourcetest.Test
 		frontendClient *adminservicemock.MockAdminServiceClient
 
 		config *configs.Config

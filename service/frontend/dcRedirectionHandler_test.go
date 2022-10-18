@@ -28,9 +28,6 @@ import (
 	"context"
 	"testing"
 
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/resourcetest"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -40,12 +37,13 @@ import (
 	"google.golang.org/grpc/health"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 )
 
 type (
@@ -54,7 +52,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
-		mockResource             *resource.Test
+		mockResource             *resourcetest.Test
 		mockFrontendHandler      *workflowservicemock.MockWorkflowServiceServer
 		mockRemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
 		mockClusterMetadata      *cluster.MockMetadata

@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/mocksdk"
@@ -60,7 +59,7 @@ type (
 		*require.Assertions
 
 		controller   *gomock.Controller
-		mockResource *resource.Test
+		mockResource *resourcetest.Test
 
 		handler *OperatorHandlerImpl
 	}

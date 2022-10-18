@@ -74,7 +74,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/batcher"
@@ -95,7 +94,7 @@ type (
 		*require.Assertions
 
 		controller                   *gomock.Controller
-		mockResource                 *resource.Test
+		mockResource                 *resourcetest.Test
 		mockNamespaceCache           *namespace.MockRegistry
 		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata          *cluster.MockMetadata

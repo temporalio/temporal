@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/internal/goro"
 	"go.temporal.io/server/service/history/configs"
@@ -65,7 +64,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockResource        *resource.Test
+		mockResource        *resourcetest.Test
 		mockHistoryEngine   *MockEngine
 		mockClusterMetadata *cluster.MockMetadata
 		mockServiceResolver *membership.MockServiceResolver
@@ -84,7 +83,7 @@ type (
 func NewTestController(
 	engineFactory *MockEngineFactory,
 	config *configs.Config,
-	resource *resource.Test,
+	resource *resourcetest.Test,
 	hostInfoProvider *membership.MockHostInfoProvider,
 ) *ControllerImpl {
 	return &ControllerImpl{

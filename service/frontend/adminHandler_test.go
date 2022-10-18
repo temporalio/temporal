@@ -68,7 +68,6 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -78,7 +77,7 @@ type (
 		*require.Assertions
 
 		controller         *gomock.Controller
-		mockResource       *resource.Test
+		mockResource       *resourcetest.Test
 		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *namespace.MockRegistry
 
