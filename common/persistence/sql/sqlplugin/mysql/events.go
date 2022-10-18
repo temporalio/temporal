@@ -62,9 +62,11 @@ const (
 
 	getHistoryTreeQuery = `SELECT branch_id, data, data_encoding FROM history_tree WHERE shard_id = ? AND tree_id = ? `
 
+	// conceptually this query is WHERE (shard_id, tree_id, branch_id) > (?, ?, ?)
+	// but mysql doesn't execute it efficiently unless it's spelled out like this
 	paginateBranchesQuery = `SELECT shard_id, tree_id, branch_id, data, data_encoding
 		FROM history_tree
-		WHERE shard_id = ? AND ((tree_id = ? AND branch_id > ?) OR tree_id > ?) OR shard_id > ?
+		WHERE (shard_id = ? AND ((tree_id = ? AND branch_id > ?) OR tree_id > ?)) OR shard_id > ?
 		ORDER BY shard_id, tree_id, branch_id
 		LIMIT ?`
 
