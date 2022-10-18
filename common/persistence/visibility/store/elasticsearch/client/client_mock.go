@@ -104,6 +104,21 @@ func (mr *MockClientMockRecorder) Count(ctx, index, query interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockClient)(nil).Count), ctx, index, query)
 }
 
+// Get mocks base method.
+func (m *MockClient) Get(ctx context.Context, index, docID string) (*v7.GetResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", ctx, index, docID)
+	ret0, _ := ret[0].(*v7.GetResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockClientMockRecorder) Get(ctx, index, docID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockClient)(nil).Get), ctx, index, docID)
+}
+
 // GetMapping mocks base method.
 func (m *MockClient) GetMapping(ctx context.Context, index string) (map[string]string, error) {
 	m.ctrl.T.Helper()
@@ -317,6 +332,21 @@ func (m *MockCLIClient) Delete(ctx context.Context, indexName, docID string, ver
 func (mr *MockCLIClientMockRecorder) Delete(ctx, indexName, docID, version interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockCLIClient)(nil).Delete), ctx, indexName, docID, version)
+}
+
+// Get mocks base method.
+func (m *MockCLIClient) Get(ctx context.Context, index, docID string) (*v7.GetResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", ctx, index, docID)
+	ret0, _ := ret[0].(*v7.GetResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockCLIClientMockRecorder) Get(ctx, index, docID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockCLIClient)(nil).Get), ctx, index, docID)
 }
 
 // GetMapping mocks base method.
