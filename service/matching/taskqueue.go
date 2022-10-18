@@ -65,7 +65,7 @@ const (
 // one partition for a user specified task queue, each of the
 // individual partitions have an internal name of the form
 //
-//     /_sys/[original-name]/[partitionID]
+//	/_sys/[original-name]/[partitionID]
 //
 // The name of the root partition is always the same as the user specified name. Rest of
 // the partitions follow the naming convention above. In addition, the task queues partitions
@@ -111,7 +111,9 @@ func (tn *QualifiedTaskQueueName) GetRoot() string {
 
 // Parent returns the name of the parent task queue
 // input:
-//   degree: Number of children at each level of the tree
+//
+//	degree: Number of children at each level of the tree
+//
 // Returns empty string if this task queue is the root
 func (tn *QualifiedTaskQueueName) Parent(degree int) string {
 	if tn.IsRoot() || degree == 0 {

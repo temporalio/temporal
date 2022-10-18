@@ -303,21 +303,23 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 // A valid forking nodeID can be an ancestor from the existing branch.
 // For example, we have branch B1 with three nodes(1[1,2], 3[3,4,5] and 6[6,7,8]. 1, 3 and 6 are nodeIDs (first eventID of the batch).
 // So B1 looks like this:
-//           1[1,2]
-//           /
-//         3[3,4,5]
-//        /
-//      6[6,7,8]
+//
+//	     1[1,2]
+//	     /
+//	   3[3,4,5]
+//	  /
+//	6[6,7,8]
 //
 // Assuming we have branch B2 which contains one ancestor B1 stopping at 6 (exclusive). So B2 inherit nodeID 1 and 3 from B1, and have its own nodeID 6 and 8.
 // Branch B2 looks like this:
-//           1[1,2]
-//           /
-//         3[3,4,5]
-//          \
-//           6[6,7]
-//           \
-//            8[8]
+//
+//	  1[1,2]
+//	  /
+//	3[3,4,5]
+//	 \
+//	  6[6,7]
+//	  \
+//	   8[8]
 //
 // Now we want to fork a new branch B3 from B2.
 // The only valid forking nodeIDs are 3,6 or 8.
@@ -326,22 +328,23 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 //
 // Case #1: If we fork from nodeID 6, then B3 will have an ancestor B1 which stops at 6(exclusive).
 // As we append a batch of events[6,7,8,9] to B3, it will look like :
-//           1[1,2]
-//           /
-//         3[3,4,5]
-//          \
-//         6[6,7,8,9]
+//
+//	  1[1,2]
+//	  /
+//	3[3,4,5]
+//	 \
+//	6[6,7,8,9]
 //
 // Case #2: If we fork from node 8, then B3 will have two ancestors: B1 stops at 6(exclusive) and ancestor B2 stops at 8(exclusive)
 // As we append a batch of events[8,9] to B3, it will look like:
-//           1[1,2]
-//           /
-//         3[3,4,5]
-//        /
-//      6[6,7]
-//       \
-//       8[8,9]
 //
+//	     1[1,2]
+//	     /
+//	   3[3,4,5]
+//	  /
+//	6[6,7]
+//	 \
+//	 8[8,9]
 func (m *sqlExecutionStore) ForkHistoryBranch(
 	ctx context.Context,
 	request *p.InternalForkHistoryBranchRequest,

@@ -109,23 +109,23 @@ func depthLimiter(g *persistence.VersioningData, maxDepth int, noMutate bool) *w
 // See the API docs for more detail. In short, the graph looks like one long line of default versions, each of which
 // is incompatible with the previous, optionally with branching compatibility branches. Like so:
 //
-// ─┬─1.0───2.0─┬─3.0───4.0
-//  │           ├─3.1
-//  │           └─3.2
-//  ├─1.1
-//  ├─1.2
-//  └─1.3
+//	─┬─1.0───2.0─┬─3.0───4.0
+//	 │           ├─3.1
+//	 │           └─3.2
+//	 ├─1.1
+//	 ├─1.2
+//	 └─1.3
 //
 // In the above graph, 4.0 is the current default, and [1.3, 3.2] is the set of current compatible leaves. Links
 // going left are incompatible relationships, and links going up are compatible relationships.
 //
 // A request may:
-// 1. Add a new version to the graph, as a default version
-// 2. Add a new version to the graph, compatible with some existing version.
-// 3. Add a new version to the graph, compatible with some existing version and as the new default.
-// 4. Unset a version as a default. It will be dropped and its previous incompatible version becomes default.
-// 5. Unset a version as a compatible. It will be dropped and its previous compatible version will become the new
-//    compatible leaf for that branch.
+//  1. Add a new version to the graph, as a default version
+//  2. Add a new version to the graph, compatible with some existing version.
+//  3. Add a new version to the graph, compatible with some existing version and as the new default.
+//  4. Unset a version as a default. It will be dropped and its previous incompatible version becomes default.
+//  5. Unset a version as a compatible. It will be dropped and its previous compatible version will become the new
+//     compatible leaf for that branch.
 func UpdateVersionsGraph(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdOrderingRequest, maxSize int) error {
 	if req.GetVersionId().GetWorkerBuildId() == "" {
 		return serviceerror.NewInvalidArgument(

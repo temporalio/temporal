@@ -714,13 +714,14 @@ func (s *clientIntegrationSuite) Test_ActivityTimeouts() {
 
 // This test simulates workflow try to complete itself while there is buffered event.
 // Event sequence:
-//  1st WorkflowTask runs a local activity.
-//  While local activity is running, a signal is received by server.
-//  After signal is received, local activity completed, and workflow drains signal chan (no signal yet) and complete workflow.
-//  Server failed the complete request because there is unhandled signal.
-//  Server rescheduled a new workflow task.
-//  Workflow runs the local activity again and drain the signal chan (with one signal) and complete workflow.
-//  Server complete workflow as requested.
+//
+//	1st WorkflowTask runs a local activity.
+//	While local activity is running, a signal is received by server.
+//	After signal is received, local activity completed, and workflow drains signal chan (no signal yet) and complete workflow.
+//	Server failed the complete request because there is unhandled signal.
+//	Server rescheduled a new workflow task.
+//	Workflow runs the local activity again and drain the signal chan (with one signal) and complete workflow.
+//	Server complete workflow as requested.
 func (s *clientIntegrationSuite) Test_UnhandledCommandAndNewTask() {
 	sigReadyToSendChan := make(chan struct{}, 1)
 	sigSendDoneChan := make(chan struct{})

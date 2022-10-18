@@ -1011,12 +1011,13 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 
 // finishParseJSONValue finishes JSON parsing after json.Decode.
 // json.Decode returns:
-//     bool, for JSON booleans
-//     json.Number, for JSON numbers (because of d.UseNumber())
-//     string, for JSON strings
-//     []interface{}, for JSON arrays
-//     map[string]interface{}, for JSON objects (should never be a case)
-//     nil for JSON null
+//
+//	bool, for JSON booleans
+//	json.Number, for JSON numbers (because of d.UseNumber())
+//	string, for JSON strings
+//	[]interface{}, for JSON arrays
+//	map[string]interface{}, for JSON objects (should never be a case)
+//	nil for JSON null
 func finishParseJSONValue(val interface{}, t enumspb.IndexedValueType) (interface{}, error) {
 	// Custom search attributes support array of particular type.
 	if arrayValue, isArray := val.([]interface{}); isArray {
