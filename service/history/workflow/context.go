@@ -680,7 +680,8 @@ func (c *ContextImpl) SetWorkflowExecution(ctx context.Context, now time.Time) (
 		return err
 	}
 	if len(resetWorkflowEventsSeq) != 0 {
-		return serviceerror.NewInternal("SetWorkflowExecution encountered new events")
+		c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.ClosedWorkflowBufferEventCount)
+		c.logger.Warn("SetWorkflowExecution encountered new events")
 	}
 
 	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
