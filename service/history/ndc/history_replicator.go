@@ -296,7 +296,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 	}
 
 	taskRefresh := workflow.NewTaskRefresher(r.shard, r.shard.GetConfig(), r.namespaceRegistry, r.shard.GetEventsCache(), r.logger)
-	err = taskRefresh.RefreshTasks(ctx, timestamp.TimeValue(lastEventTime), mutableState)
+	err = taskRefresh.RefreshTasks(ctx, mutableState)
 	if err != nil {
 		return err
 	}

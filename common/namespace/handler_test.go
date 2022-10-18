@@ -1098,6 +1098,10 @@ func (s *namespaceHandlerCommonSuite) TestUpdateLocalNamespace_AllAttrSet() {
 			VisibilityArchivalUri:         "",
 			BadBinaries:                   &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}},
 		},
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: activeClusterName,
+			Clusters:          []*replicationpb.ClusterReplicationConfig{{activeClusterName}},
+		},
 	})
 	s.NoError(err)
 }

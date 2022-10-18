@@ -120,6 +120,10 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 	}, nil
 }
 
+func (c *clientImpl) Get(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {
+	return c.esClient.Get().Index(index).Id(docID).Do(ctx)
+}
+
 func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
 	searchSource := elastic.NewSearchSource().
 		Query(p.Query).

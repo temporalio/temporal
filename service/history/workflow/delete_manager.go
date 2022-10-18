@@ -116,7 +116,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 
 	// We can make this task immediately because the task itself will keep rescheduling itself until the workflow is
 	// closed before actually deleting the workflow.
-	deleteTask, err := taskGenerator.GenerateDeleteExecutionTask(m.timeSource.Now())
+	deleteTask, err := taskGenerator.GenerateDeleteExecutionTask()
 	if err != nil {
 		return err
 	}

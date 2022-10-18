@@ -923,18 +923,18 @@ func (mr *MockMutableStateMockRecorder) FlushBufferedEvents() *gomock.Call {
 }
 
 // GenerateMigrationTasks mocks base method.
-func (m *MockMutableState) GenerateMigrationTasks(now time.Time) (tasks.Task, error) {
+func (m *MockMutableState) GenerateMigrationTasks() (tasks.Task, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateMigrationTasks", now)
+	ret := m.ctrl.Call(m, "GenerateMigrationTasks")
 	ret0, _ := ret[0].(tasks.Task)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GenerateMigrationTasks indicates an expected call of GenerateMigrationTasks.
-func (mr *MockMutableStateMockRecorder) GenerateMigrationTasks(now interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) GenerateMigrationTasks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockMutableState)(nil).GenerateMigrationTasks), now)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockMutableState)(nil).GenerateMigrationTasks))
 }
 
 // GetActivityByActivityID mocks base method.

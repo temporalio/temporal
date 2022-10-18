@@ -299,6 +299,8 @@ const (
 	VisibilityPersistenceScanWorkflowExecutionsScope
 	// VisibilityPersistenceCountWorkflowExecutionsScope tracks CountWorkflowExecutions calls made by service to visibility persistence layer
 	VisibilityPersistenceCountWorkflowExecutionsScope
+	// VisibilityPersistenceGetWorkflowExecutionScope tracks GetWorkflowExecution calls made by service to visibility persistence layer
+	VisibilityPersistenceGetWorkflowExecutionScope
 
 	// PersistenceEnqueueMessageScope tracks Enqueue calls made by service to persistence layer
 	PersistenceEnqueueMessageScope
@@ -1444,6 +1446,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		VisibilityPersistenceListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
 		VisibilityPersistenceScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
 		VisibilityPersistenceCountWorkflowExecutionsScope:                  {operation: "CountWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceGetWorkflowExecutionScope:                     {operation: "GetWorkflowExecution", tags: map[string]string{visibilityTypeTagName: unknownValue}},
 
 		PersistenceAppendHistoryNodesScope:         {operation: "AppendHistoryNodes"},
 		PersistenceAppendRawHistoryNodesScope:      {operation: "AppendRawHistoryNodes"},
