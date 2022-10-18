@@ -32,7 +32,9 @@ import (
 	context "context"
 	reflect "reflect"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
+
+	"go.temporal.io/server/service/history/definition"
 )
 
 // MockTaskRefresher is a mock of TaskRefresher interface.
@@ -59,7 +61,7 @@ func (m *MockTaskRefresher) EXPECT() *MockTaskRefresherMockRecorder {
 }
 
 // RefreshTasks mocks base method.
-func (m *MockTaskRefresher) RefreshTasks(ctx context.Context, mutableState MutableState) error {
+func (m *MockTaskRefresher) RefreshTasks(ctx context.Context, mutableState definition.MutableState) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RefreshTasks", ctx, mutableState)
 	ret0, _ := ret[0].(error)

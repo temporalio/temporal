@@ -31,14 +31,13 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tests"
 )
 
 func TestLocalMutableState(
-	shard shard.Context,
-	eventsCache events.Cache,
+	shard definition.ShardContext,
+	eventsCache definition.EventCache,
 	ns *namespace.Namespace,
 	logger log.Logger,
 	runID string,
@@ -52,8 +51,8 @@ func TestLocalMutableState(
 }
 
 func TestGlobalMutableState(
-	shard shard.Context,
-	eventsCache events.Cache,
+	shard definition.ShardContext,
+	eventsCache definition.EventCache,
 	logger log.Logger,
 	version int64,
 	runID string,
@@ -68,12 +67,12 @@ func TestGlobalMutableState(
 }
 
 func TestCloneToProto(
-	mutableState MutableState,
+	mutableState definition.MutableState,
 ) *persistencespb.WorkflowMutableState {
 	if mutableState.HasBufferedEvents() {
-		_, _, _ = mutableState.CloseTransactionAsMutation(time.Now().UTC(), TransactionPolicyActive)
+		_, _, _ = mutableState.CloseTransactionAsMutation(time.Now().UTC(), definition.TransactionPolicyActive)
 	} else {
-		_, _, _ = mutableState.CloseTransactionAsSnapshot(time.Now().UTC(), TransactionPolicyActive)
+		_, _, _ = mutableState.CloseTransactionAsSnapshot(time.Now().UTC(), definition.TransactionPolicyActive)
 	}
 	return mutableState.CloneToProto()
 }

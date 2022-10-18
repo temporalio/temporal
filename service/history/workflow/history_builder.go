@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/definition"
 )
 
 const (
@@ -51,19 +52,6 @@ const (
 // TODO should the reorderFunc functionality be ported?
 type (
 	HistoryBuilderState int
-
-	HistoryMutation struct {
-		// events to be persist to events table
-		DBEventsBatches [][]*historypb.HistoryEvent
-		// events to be buffer in execution table
-		DBBufferBatch []*historypb.HistoryEvent
-		// whether to clear buffer events on DB
-		DBClearBuffer bool
-		// accumulated buffered events, equal to all buffer events from execution table
-		MemBufferBatch []*historypb.HistoryEvent
-		// scheduled to started event ID mapping for flushed buffered event
-		ScheduledIDToStartedID map[int64]int64
-	}
 
 	TaskIDGenerator func(number int) ([]int64, error)
 
@@ -1117,7 +1105,7 @@ func (b *HistoryBuilder) FlushAndCreateNewBatch() {
 
 func (b *HistoryBuilder) Finish(
 	flushBufferEvent bool,
-) (*HistoryMutation, error) {
+) (*definition.HistoryMutation, error) {
 	defer func() {
 		b.state = HistoryBuilderStateSealed
 	}()
@@ -1145,7 +1133,7 @@ func (b *HistoryBuilder) Finish(
 		return nil, err
 	}
 
-	return &HistoryMutation{
+	return &definition.HistoryMutation{
 		DBEventsBatches:        dbEventsBatches,
 		DBClearBuffer:          dbClearBuffer,
 		DBBufferBatch:          dbBufferBatch,

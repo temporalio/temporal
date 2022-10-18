@@ -39,9 +39,9 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -55,7 +55,7 @@ type (
 
 		controller        *gomock.Controller
 		mockDeleteManager *workflow.MockDeleteManager
-		mockCache         *workflow.MockCache
+		mockCache         *definition.MockWorkflowCache
 
 		testShardContext           *shard.ContextTest
 		timerQueueTaskExecutorBase *timerQueueTaskExecutorBase
@@ -78,7 +78,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockDeleteManager = workflow.NewMockDeleteManager(s.controller)
-	s.mockCache = workflow.NewMockCache(s.controller)
+	s.mockCache = definition.NewMockWorkflowCache(s.controller)
 
 	config := tests.NewDynamicConfig()
 	s.testShardContext = shard.NewTestContext(
@@ -124,10 +124,10 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 		RunId:      tests.RunID,
 	}
 
-	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockWeCtx := definition.NewMockWorkflowContext(s.controller)
+	mockMutableState := definition.NewMockMutableState(s.controller)
 
-	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
+	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, definition.CallerTypeTask).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
 
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
@@ -167,10 +167,10 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 		RunId:      tests.RunID,
 	}
 
-	mockWeCtx := workflow.NewMockContext(s.controller)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockWeCtx := definition.NewMockWorkflowContext(s.controller)
+	mockMutableState := definition.NewMockMutableState(s.controller)
 
-	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
+	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, definition.CallerTypeTask).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
 
 	mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)

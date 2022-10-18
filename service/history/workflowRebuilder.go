@@ -33,12 +33,11 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/ndc"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -52,7 +51,7 @@ type (
 	}
 
 	workflowRebuilderImpl struct {
-		shard                      shard.Context
+		shard                      definition.ShardContext
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 		transaction                workflow.Transaction
 		logger                     log.Logger
@@ -62,8 +61,8 @@ type (
 var _ workflowRebuilder = (*workflowRebuilderImpl)(nil)
 
 func NewWorkflowRebuilder(
-	shard shard.Context,
-	workflowCache workflow.Cache,
+	shard definition.ShardContext,
+	workflowCache definition.WorkflowCache,
 	logger log.Logger,
 ) *workflowRebuilderImpl {
 	return &workflowRebuilderImpl{
@@ -126,7 +125,7 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	stateTransitionCount int64,
 	dbRecordVersion int64,
 	requestID string,
-) (workflow.MutableState, int64, error) {
+) (definition.MutableState, int64, error) {
 
 	rebuildMutableState, rebuildHistorySize, err := ndc.NewStateRebuilder(r.shard, r.logger).Rebuild(
 		ctx,
@@ -152,13 +151,13 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 
 func (r *workflowRebuilderImpl) persistToDB(
 	ctx context.Context,
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	historySize int64,
 ) error {
 	now := r.shard.GetTimeSource().Now()
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
 		now,
-		workflow.TransactionPolicyPassive,
+		definition.TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err

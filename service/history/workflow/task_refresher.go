@@ -38,29 +38,28 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type (
 	TaskRefresher interface {
-		RefreshTasks(ctx context.Context, mutableState MutableState) error
+		RefreshTasks(ctx context.Context, mutableState definition.MutableState) error
 	}
 
 	TaskRefresherImpl struct {
-		shard             shard.Context
+		shard             definition.ShardContext
 		config            *configs.Config
 		namespaceRegistry namespace.Registry
-		eventsCache       events.Cache
+		eventsCache       definition.EventCache
 		logger            log.Logger
 	}
 )
 
 func NewTaskRefresher(
-	shard shard.Context,
+	shard definition.ShardContext,
 	config *configs.Config,
 	namespaceRegistry namespace.Registry,
-	eventsCache events.Cache,
+	eventsCache definition.EventCache,
 	logger log.Logger,
 ) *TaskRefresherImpl {
 
@@ -75,7 +74,7 @@ func NewTaskRefresher(
 
 func (r *TaskRefresherImpl) RefreshTasks(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState definition.MutableState,
 ) error {
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(
@@ -165,7 +164,7 @@ func (r *TaskRefresherImpl) RefreshTasks(
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState definition.MutableState,
 	taskGenerator TaskGenerator,
 ) error {
 
@@ -194,7 +193,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState definition.MutableState,
 	taskGenerator TaskGenerator,
 ) error {
 
@@ -217,7 +216,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 
 func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState definition.MutableState,
 	taskGenerator TaskGenerator,
 ) error {
 
@@ -238,7 +237,7 @@ func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 }
 
 func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
-	mutableState MutableState,
+	mutableState definition.MutableState,
 	taskGenerator TaskGenerator,
 ) error {
 
@@ -267,7 +266,7 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 
 func (r *TaskRefresherImpl) refreshTasksForActivity(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState definition.MutableState,
 	taskGenerator TaskGenerator,
 ) error {
 
@@ -298,7 +297,7 @@ Loop:
 
 		scheduleEvent, err := r.eventsCache.GetEvent(
 			ctx,
-			events.EventKey{
+			definition.EventKey{
 				NamespaceID: namespace.ID(executionInfo.NamespaceId),
 				WorkflowID:  executionInfo.WorkflowId,
 				RunID:       executionState.RunId,
@@ -329,7 +328,7 @@ Loop:
 }
 
 func (r *TaskRefresherImpl) refreshTasksForTimer(
-	mutableState MutableState,
+	mutableState definition.MutableState,
 ) error {
 
 	pendingTimerInfos := mutableState.GetPendingTimerInfos()
@@ -357,7 +356,7 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 
 func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState definition.MutableState,
 	taskGenerator TaskGenerator,
 ) error {
 
@@ -378,7 +377,7 @@ Loop:
 
 		scheduleEvent, err := r.eventsCache.GetEvent(
 			ctx,
-			events.EventKey{
+			definition.EventKey{
 				NamespaceID: namespace.ID(executionInfo.NamespaceId),
 				WorkflowID:  executionInfo.WorkflowId,
 				RunID:       executionState.RunId,
@@ -404,7 +403,7 @@ Loop:
 
 func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState definition.MutableState,
 	taskGenerator TaskGenerator,
 ) error {
 
@@ -420,7 +419,7 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 	for _, requestCancelInfo := range pendingRequestCancelInfos {
 		initiateEvent, err := r.eventsCache.GetEvent(
 			ctx,
-			events.EventKey{
+			definition.EventKey{
 				NamespaceID: namespace.ID(executionInfo.NamespaceId),
 				WorkflowID:  executionInfo.WorkflowId,
 				RunID:       executionState.RunId,
@@ -446,7 +445,7 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 
 func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState definition.MutableState,
 	taskGenerator TaskGenerator,
 ) error {
 
@@ -462,7 +461,7 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 	for _, signalInfo := range pendingSignalInfos {
 		initiateEvent, err := r.eventsCache.GetEvent(
 			ctx,
-			events.EventKey{
+			definition.EventKey{
 				NamespaceID: namespace.ID(executionInfo.NamespaceId),
 				WorkflowID:  executionInfo.WorkflowId,
 				RunID:       executionState.RunId,

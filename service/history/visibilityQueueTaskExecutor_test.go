@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -55,6 +54,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -74,7 +74,7 @@ type (
 		mockVisibilityMgr *manager.MockVisibilityManager
 		mockExecutionMgr  *persistence.MockExecutionManager
 
-		workflowCache               workflow.Cache
+		workflowCache               definition.WorkflowCache
 		logger                      log.Logger
 		namespaceID                 namespace.ID
 		namespace                   namespace.Name
@@ -484,7 +484,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 	namespaceName namespace.Name,
 	startEvent *historypb.HistoryEvent,
 	task *tasks.StartExecutionVisibilityTask,
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	backoff time.Duration,
 	taskQueueName string,
 ) *manager.RecordWorkflowExecutionStartedRequest {
@@ -514,7 +514,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowRequest(
 	namespaceName namespace.Name,
 	task *tasks.UpsertExecutionVisibilityTask,
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	taskQueueName string,
 ) *manager.UpsertWorkflowExecutionRequest {
 	execution := &commonpb.WorkflowExecution{
@@ -540,7 +540,7 @@ func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowRequest(
 }
 
 func (s *visibilityQueueTaskExecutorSuite) createPersistenceMutableState(
-	ms workflow.MutableState,
+	ms definition.MutableState,
 	lastEventID int64,
 	lastEventVersion int64,
 ) *persistencespb.WorkflowMutableState {

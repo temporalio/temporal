@@ -33,12 +33,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type (
@@ -47,15 +45,15 @@ type (
 			ctx context.Context,
 			branchIndex int32,
 			incomingVersion int64,
-		) (workflow.MutableState, bool, error)
+		) (definition.MutableState, bool, error)
 	}
 
 	ConflictResolverImpl struct {
-		shard          shard.Context
+		shard          definition.ShardContext
 		stateRebuilder StateRebuilder
 
-		context      workflow.Context
-		mutableState workflow.MutableState
+		context      definition.WorkflowContext
+		mutableState definition.MutableState
 		logger       log.Logger
 	}
 )
@@ -63,9 +61,9 @@ type (
 var _ ConflictResolver = (*ConflictResolverImpl)(nil)
 
 func NewConflictResolver(
-	shard shard.Context,
-	context workflow.Context,
-	mutableState workflow.MutableState,
+	shard definition.ShardContext,
+	context definition.WorkflowContext,
+	mutableState definition.MutableState,
 	logger log.Logger,
 ) *ConflictResolverImpl {
 
@@ -83,7 +81,7 @@ func (r *ConflictResolverImpl) prepareMutableState(
 	ctx context.Context,
 	branchIndex int32,
 	incomingVersion int64,
-) (workflow.MutableState, bool, error) {
+) (definition.MutableState, bool, error) {
 
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	currentVersionHistoryIndex := versionHistories.GetCurrentVersionHistoryIndex()
@@ -125,7 +123,7 @@ func (r *ConflictResolverImpl) rebuild(
 	ctx context.Context,
 	branchIndex int32,
 	requestID string,
-) (workflow.MutableState, error) {
+) (definition.MutableState, error) {
 
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
 	replayVersionHistory, err := versionhistory.GetVersionHistory(versionHistories, branchIndex)

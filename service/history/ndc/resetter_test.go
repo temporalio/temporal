@@ -38,12 +38,12 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -56,8 +56,8 @@ type (
 
 		controller              *gomock.Controller
 		mockShard               *shard.ContextTest
-		mockBaseMutableState    *workflow.MockMutableState
-		mockRebuiltMutableState *workflow.MockMutableState
+		mockBaseMutableState    *definition.MockMutableState
+		mockRebuiltMutableState *definition.MockMutableState
 		mockTransactionMgr      *MocktransactionMgr
 		mockStateBuilder        *MockStateRebuilder
 
@@ -68,7 +68,7 @@ type (
 		namespace   namespace.Name
 		workflowID  string
 		baseRunID   string
-		newContext  workflow.Context
+		newContext  definition.WorkflowContext
 		newRunID    string
 
 		workflowResetter *resetterImpl
@@ -84,8 +84,8 @@ func (s *resetterSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockBaseMutableState = workflow.NewMockMutableState(s.controller)
-	s.mockRebuiltMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockBaseMutableState = definition.NewMockMutableState(s.controller)
+	s.mockRebuiltMutableState = definition.NewMockMutableState(s.controller)
 	s.mockTransactionMgr = NewMocktransactionMgr(s.controller)
 	s.mockStateBuilder = NewMockStateRebuilder(s.controller)
 

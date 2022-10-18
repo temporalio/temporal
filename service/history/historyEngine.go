@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -77,11 +76,10 @@ import (
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
@@ -95,7 +93,7 @@ type (
 	historyEngineImpl struct {
 		status                     int32
 		currentClusterName         string
-		shard                      shard.Context
+		shard                      definition.ShardContext
 		timeSource                 clock.TimeSource
 		workflowTaskHandler        workflowTaskHandlerCallbacks
 		clusterMetadata            cluster.Metadata
@@ -105,7 +103,7 @@ type (
 		nDCReplicator              ndc.HistoryReplicator
 		nDCActivityReplicator      ndc.ActivityReplicator
 		replicationProcessorMgr    common.Daemon
-		eventNotifier              events.Notifier
+		eventNotifier              definition.Notifier
 		tokenSerializer            common.TaskTokenSerializer
 		metricsClient              metrics.Client
 		logger                     log.Logger
@@ -128,14 +126,14 @@ type (
 
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
-	shard shard.Context,
+	shard definition.ShardContext,
 	clientBean client.Bean,
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,
-	eventNotifier events.Notifier,
+	eventNotifier definition.Notifier,
 	config *configs.Config,
 	rawMatchingClient matchingservice.MatchingServiceClient,
-	workflowCache workflow.Cache,
+	workflowCache definition.WorkflowCache,
 	archivalClient archiver.Client,
 	eventSerializer serialization.Serializer,
 	queueProcessorFactories []QueueFactory,
@@ -143,7 +141,7 @@ func NewEngineWithShardContext(
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tracerProvider trace.TracerProvider,
-) shard.Engine {
+) definition.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
@@ -704,7 +702,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 }
 
 func (e *historyEngineImpl) NotifyNewHistoryEvent(
-	notification *events.Notification,
+	notification *definition.Notification,
 ) {
 
 	e.eventNotifier.NotifyNewHistoryEvent(notification)

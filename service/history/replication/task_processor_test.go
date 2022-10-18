@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -69,7 +70,7 @@ type (
 		controller                  *gomock.Controller
 		mockResource                *resource.Test
 		mockShard                   *shard.ContextTest
-		mockEngine                  *shard.MockEngine
+		mockEngine                  *definition.MockEngine
 		mockNamespaceCache          *namespace.MockRegistry
 		mockClientBean              *client.MockBean
 		mockAdminClient             *adminservicemock.MockAdminServiceClient
@@ -126,7 +127,7 @@ func (s *taskProcessorSuite) SetupTest() {
 		},
 		s.config,
 	)
-	s.mockEngine = shard.NewMockEngine(s.controller)
+	s.mockEngine = definition.NewMockEngine(s.controller)
 	s.mockResource = s.mockShard.Resource
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockClientBean = s.mockResource.ClientBean

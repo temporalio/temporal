@@ -43,13 +43,13 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -64,7 +64,7 @@ type (
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
 		mockNamespaceCache  *namespace.MockRegistry
-		mockMutableState    *workflow.MockMutableState
+		mockMutableState    *definition.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionMgr *persistence.MockExecutionManager
@@ -92,7 +92,7 @@ func (s *ackManagerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockMutableState = definition.NewMockMutableState(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -278,7 +278,7 @@ func (s *ackManagerSuite) TestSyncActivity_WorkflowCompleted() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		workflow.CallerTypeTask,
+		definition.CallerTypeTask,
 	)
 	context.(*workflow.ContextImpl).MutableState = s.mockMutableState
 	release(nil)
@@ -330,7 +330,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityCompleted() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		workflow.CallerTypeTask,
+		definition.CallerTypeTask,
 	)
 
 	context.(*workflow.ContextImpl).MutableState = s.mockMutableState
@@ -385,7 +385,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRetry() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		workflow.CallerTypeTask,
+		definition.CallerTypeTask,
 	)
 
 	context.(*workflow.ContextImpl).MutableState = s.mockMutableState
@@ -498,7 +498,7 @@ func (s *ackManagerSuite) TestSyncActivity_ActivityRunning() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		workflow.CallerTypeTask,
+		definition.CallerTypeTask,
 	)
 
 	context.(*workflow.ContextImpl).MutableState = s.mockMutableState

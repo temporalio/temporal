@@ -29,10 +29,11 @@
 package ndc
 
 import (
-	reflect "reflect"
+	"reflect"
 
-	gomock "github.com/golang/mock/gomock"
-	workflow "go.temporal.io/server/service/history/workflow"
+	"github.com/golang/mock/gomock"
+
+	"go.temporal.io/server/service/history/definition"
 )
 
 // MockWorkflow is a mock of Workflow interface.
@@ -73,10 +74,10 @@ func (mr *MockWorkflowMockRecorder) FlushBufferedEvents() *gomock.Call {
 }
 
 // GetContext mocks base method.
-func (m *MockWorkflow) GetContext() workflow.Context {
+func (m *MockWorkflow) GetContext() definition.WorkflowContext {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetContext")
-	ret0, _ := ret[0].(workflow.Context)
+	ret0, _ := ret[0].(definition.WorkflowContext)
 	return ret0
 }
 
@@ -87,10 +88,10 @@ func (mr *MockWorkflowMockRecorder) GetContext() *gomock.Call {
 }
 
 // GetMutableState mocks base method.
-func (m *MockWorkflow) GetMutableState() workflow.MutableState {
+func (m *MockWorkflow) GetMutableState() definition.MutableState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMutableState")
-	ret0, _ := ret[0].(workflow.MutableState)
+	ret0, _ := ret[0].(definition.MutableState)
 	return ret0
 }
 
@@ -101,10 +102,10 @@ func (mr *MockWorkflowMockRecorder) GetMutableState() *gomock.Call {
 }
 
 // GetReleaseFn mocks base method.
-func (m *MockWorkflow) GetReleaseFn() workflow.ReleaseCacheFunc {
+func (m *MockWorkflow) GetReleaseFn() definition.ReleaseFunc {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReleaseFn")
-	ret0, _ := ret[0].(workflow.ReleaseCacheFunc)
+	ret0, _ := ret[0].(definition.ReleaseFunc)
 	return ret0
 }
 
@@ -160,10 +161,10 @@ func (mr *MockWorkflowMockRecorder) Revive() *gomock.Call {
 }
 
 // SuppressBy mocks base method.
-func (m *MockWorkflow) SuppressBy(incomingWorkflow Workflow) (workflow.TransactionPolicy, error) {
+func (m *MockWorkflow) SuppressBy(incomingWorkflow Workflow) (definition.TransactionPolicy, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SuppressBy", incomingWorkflow)
-	ret0, _ := ret[0].(workflow.TransactionPolicy)
+	ret0, _ := ret[0].(definition.TransactionPolicy)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

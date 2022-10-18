@@ -33,17 +33,16 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type (
 	EventsReapplier interface {
 		ReapplyEvents(
 			ctx context.Context,
-			ms workflow.MutableState,
+			ms definition.MutableState,
 			historyEvents []*historypb.HistoryEvent,
 			runID string,
 		) ([]*historypb.HistoryEvent, error)
@@ -68,7 +67,7 @@ func NewEventsReapplier(
 
 func (r *EventsReapplierImpl) ReapplyEvents(
 	ctx context.Context,
-	ms workflow.MutableState,
+	ms definition.MutableState,
 	historyEvents []*historypb.HistoryEvent,
 	runID string,
 ) ([]*historypb.HistoryEvent, error) {

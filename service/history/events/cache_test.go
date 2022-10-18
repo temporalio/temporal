@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type (
@@ -111,11 +112,11 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 	}
 
 	s.cache.PutEvent(
-		EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
+		definition.EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
 		event)
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
-		EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
+		definition.EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
 		eventID, nil)
 	s.Nil(err)
 	s.Equal(event, actualEvent)
@@ -170,11 +171,11 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	}, nil)
 
 	s.cache.PutEvent(
-		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
+		definition.EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
 		event2)
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
-		EventKey{namespaceID, workflowID, runID, event6.GetEventId(), common.EmptyVersion},
+		definition.EventKey{namespaceID, workflowID, runID, event6.GetEventId(), common.EmptyVersion},
 		event1.GetEventId(), []byte("store_token"))
 	s.Nil(err)
 	s.Equal(event6, actualEvent)
@@ -198,7 +199,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
-		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		definition.EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), []byte("store_token"))
 	s.Nil(actualEvent)
 	s.Equal(expectedErr, err)
@@ -233,15 +234,15 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	}, nil)
 
 	s.cache.PutEvent(
-		EventKey{namespaceID, workflowID, runID, event1.GetEventId(), common.EmptyVersion},
+		definition.EventKey{namespaceID, workflowID, runID, event1.GetEventId(), common.EmptyVersion},
 		event1)
 	s.cache.PutEvent(
-		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
+		definition.EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
 		event2)
 	s.cache.disabled = true
 	actualEvent, err := s.cache.GetEvent(
 		context.Background(),
-		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
+		definition.EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
 		event2.GetEventId(), []byte("store_token"))
 	s.Nil(err)
 	s.Equal(event2, actualEvent)
@@ -272,12 +273,12 @@ func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
 
 	gotEvent1, _ := s.cache.GetEvent(
 		context.Background(),
-		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		definition.EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent1, event1)
 	gotEvent2, _ := s.cache.GetEvent(
 		context.Background(),
-		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		definition.EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent2, event1)
 }
@@ -306,17 +307,17 @@ func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
 	}, nil).Times(2) // will be called twice since the key is invalid
 
 	s.cache.PutEvent(
-		EventKey{namespaceID, workflowID, runID, event1.EventId, common.EmptyVersion},
+		definition.EventKey{namespaceID, workflowID, runID, event1.EventId, common.EmptyVersion},
 		event1)
 
 	gotEvent1, _ := s.cache.GetEvent(
 		context.Background(),
-		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		definition.EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent1, event1)
 	gotEvent2, _ := s.cache.GetEvent(
 		context.Background(),
-		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		definition.EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent2, event1)
 }

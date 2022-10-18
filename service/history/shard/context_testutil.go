@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type ContextTest struct {
@@ -46,11 +46,11 @@ type ContextTest struct {
 
 	Resource *resource.Test
 
-	MockEventsCache      *events.MockCache
+	MockEventsCache      *definition.MockEventCache
 	MockHostInfoProvider *membership.MockHostInfoProvider
 }
 
-var _ Context = (*ContextTest)(nil)
+var _ definition.ShardContext = (*ContextTest)(nil)
 
 func NewTestContextWithTimeSource(
 	ctrl *gomock.Controller,
@@ -70,7 +70,7 @@ func NewTestContext(
 	config *configs.Config,
 ) *ContextTest {
 	resourceTest := resource.NewTest(ctrl, metrics.History)
-	eventsCache := events.NewMockCache(ctrl)
+	eventsCache := definition.NewMockEventCache(ctrl)
 	hostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	if shardInfo.QueueAckLevels == nil {
@@ -91,7 +91,7 @@ func NewTestContext(
 		lifecycleCancel:     lifecycleCancel,
 
 		state:                              contextStateAcquired,
-		engineFuture:                       future.NewFuture[Engine](),
+		engineFuture:                       future.NewFuture[definition.Engine](),
 		shardInfo:                          shardInfo,
 		taskSequenceNumber:                 shardInfo.RangeId << int64(config.RangeSizeBits),
 		immediateTaskExclusiveMaxReadLevel: shardInfo.RangeId << int64(config.RangeSizeBits),
@@ -120,12 +120,12 @@ func NewTestContext(
 }
 
 // SetEngineForTest sets s.engine. Only used by tests.
-func (s *ContextTest) SetEngineForTesting(engine Engine) {
+func (s *ContextTest) SetEngineForTesting(engine definition.Engine) {
 	s.engineFuture.Set(engine, nil)
 }
 
 // SetEventsCacheForTesting sets s.eventsCache. Only used by tests.
-func (s *ContextTest) SetEventsCacheForTesting(c events.Cache) {
+func (s *ContextTest) SetEventsCacheForTesting(c definition.EventCache) {
 	// for testing only, will only be called immediately after initialization
 	s.eventsCache = c
 }

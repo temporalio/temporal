@@ -65,9 +65,8 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -80,7 +79,7 @@ type (
 		tokenSerializer               common.TaskTokenSerializer
 		startWG                       sync.WaitGroup
 		config                        *configs.Config
-		eventNotifier                 events.Notifier
+		eventNotifier                 definition.Notifier
 		replicationTaskFetcherFactory replication.TaskFetcherFactory
 		logger                        log.Logger
 		throttledLogger               log.Logger
@@ -97,7 +96,7 @@ type (
 		clusterMetadata               cluster.Metadata
 		archivalMetadata              archiver.ArchivalMetadata
 		hostInfoProvider              membership.HostInfoProvider
-		controller                    shard.Controller
+		controller                    definition.ShardController
 		tracer                        trace.Tracer
 	}
 
@@ -120,8 +119,8 @@ type (
 		ClusterMetadata               cluster.Metadata
 		ArchivalMetadata              archiver.ArchivalMetadata
 		HostInfoProvider              membership.HostInfoProvider
-		ShardController               shard.Controller
-		EventNotifier                 events.Notifier
+		ShardController               definition.ShardController
+		EventNotifier                 definition.Notifier
 		ReplicationTaskFetcherFactory replication.TaskFetcherFactory
 		TracerProvider                trace.TracerProvider
 	}

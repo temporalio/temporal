@@ -38,11 +38,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type (
@@ -95,7 +94,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
-	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent := definition.NewMockMutableState(s.controller)
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
@@ -130,7 +129,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 		}},
 	}
 
-	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent := definition.NewMockMutableState(s.controller)
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(true)
 	events := []*historypb.HistoryEvent{
@@ -169,7 +168,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	}
 	attr1 := event1.GetWorkflowExecutionSignaledEventAttributes()
 
-	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent := definition.NewMockMutableState(s.controller)
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
@@ -212,7 +211,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
-	msCurrent := workflow.NewMockMutableState(s.controller)
+	msCurrent := definition.NewMockMutableState(s.controller)
 	msCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()

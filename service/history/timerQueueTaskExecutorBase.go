@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -47,10 +47,10 @@ import (
 type (
 	timerQueueTaskExecutorBase struct {
 		currentClusterName string
-		shard              shard.Context
+		shard              definition.ShardContext
 		registry           namespace.Registry
 		deleteManager      workflow.DeleteManager
-		cache              workflow.Cache
+		cache              definition.WorkflowCache
 		logger             log.Logger
 		matchingClient     matchingservice.MatchingServiceClient
 		metricProvider     metrics.MetricsHandler
@@ -60,8 +60,8 @@ type (
 )
 
 func newTimerQueueTaskExecutorBase(
-	shard shard.Context,
-	workflowCache workflow.Cache,
+	shard definition.ShardContext,
+	workflowCache definition.WorkflowCache,
 	deleteManager workflow.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
@@ -98,7 +98,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
-		workflow.CallerTypeTask,
+		definition.CallerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -145,9 +145,9 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 
 func getWorkflowExecutionContextForTask(
 	ctx context.Context,
-	workflowCache workflow.Cache,
+	workflowCache definition.WorkflowCache,
 	task tasks.Task,
-) (workflow.Context, workflow.ReleaseCacheFunc, error) {
+) (definition.WorkflowContext, definition.ReleaseFunc, error) {
 	namespaceID, execution := getTaskNamespaceIDAndWorkflowExecution(task)
 	return getWorkflowExecutionContext(
 		ctx,
@@ -159,10 +159,10 @@ func getWorkflowExecutionContextForTask(
 
 func getWorkflowExecutionContext(
 	ctx context.Context,
-	workflowCache workflow.Cache,
+	workflowCache definition.WorkflowCache,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
-) (workflow.Context, workflow.ReleaseCacheFunc, error) {
+) (definition.WorkflowContext, definition.ReleaseFunc, error) {
 	ctx, cancel := context.WithTimeout(ctx, taskGetExecutionTimeout)
 	defer cancel()
 
@@ -170,7 +170,7 @@ func getWorkflowExecutionContext(
 		ctx,
 		namespaceID,
 		execution,
-		workflow.CallerTypeTask,
+		definition.CallerTypeTask,
 	)
 	if common.IsContextDeadlineExceededErr(err) {
 		err = consts.ErrWorkflowBusy

@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/definition"
 )
 
 // TODO treat 0 as 0, not infinite
@@ -153,8 +154,8 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 
 func SetupNewWorkflowForRetryOrCron(
 	ctx context.Context,
-	previousMutableState MutableState,
-	newMutableState MutableState,
+	previousMutableState definition.MutableState,
+	newMutableState definition.MutableState,
 	newRunID string,
 	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
 	lastCompletionResult *commonpb.Payloads,

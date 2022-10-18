@@ -35,14 +35,13 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 // VerifyTaskVersion, will return true if failover version check is successful
 func VerifyTaskVersion(
-	shard shard.Context,
+	shard definition.ShardContext,
 	logger log.Logger,
 	namespace *namespace.Namespace,
 	version int64,
@@ -70,11 +69,11 @@ func VerifyTaskVersion(
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTransferTask(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext definition.WorkflowContext,
 	transferTask tasks.Task,
 	metricsClient metrics.Client,
 	logger log.Logger,
-) (workflow.MutableState, error) {
+) (definition.MutableState, error) {
 	logger = tasks.InitializeLogger(transferTask, logger)
 	mutableState, err := LoadMutableStateForTask(
 		ctx,
@@ -114,11 +113,11 @@ func loadMutableStateForTransferTask(
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTimerTask(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext definition.WorkflowContext,
 	timerTask tasks.Task,
 	metricsClient metrics.Client,
 	logger log.Logger,
-) (workflow.MutableState, error) {
+) (definition.MutableState, error) {
 	logger = tasks.InitializeLogger(timerTask, logger)
 	return LoadMutableStateForTask(
 		ctx,
@@ -132,12 +131,12 @@ func loadMutableStateForTimerTask(
 
 func LoadMutableStateForTask(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext definition.WorkflowContext,
 	task tasks.Task,
 	taskEventIDAndRetryable func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) (int64, bool),
 	scope metrics.Scope,
 	logger log.Logger,
-) (workflow.MutableState, error) {
+) (definition.MutableState, error) {
 
 	mutableState, err := wfContext.LoadMutableState(ctx)
 	if err != nil {

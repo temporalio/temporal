@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -49,12 +48,12 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
-	workflowResetReapplyEventsFn func(ctx context.Context, resetMutableState workflow.MutableState) error
+	workflowResetReapplyEventsFn func(ctx context.Context, resetMutableState definition.MutableState) error
 
 	WorkflowResetter interface {
 		ResetWorkflow(
@@ -78,11 +77,11 @@ type (
 	stateRebuilderProvider func() StateRebuilder
 
 	workflowResetterImpl struct {
-		shard             shard.Context
+		shard             definition.ShardContext
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
-		historyCache      workflow.Cache
+		historyCache      definition.WorkflowCache
 		newStateRebuilder stateRebuilderProvider
 		transaction       workflow.Transaction
 		logger            log.Logger
@@ -92,8 +91,8 @@ type (
 var _ WorkflowResetter = (*workflowResetterImpl)(nil)
 
 func NewWorkflowResetter(
-	shard shard.Context,
-	historyCache workflow.Cache,
+	shard definition.ShardContext,
+	historyCache definition.WorkflowCache,
 	logger log.Logger,
 ) *workflowResetterImpl {
 	return &workflowResetterImpl{
@@ -148,7 +147,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 		currentWorkflowMutation, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
 			r.shard.GetTimeSource().Now(),
-			workflow.TransactionPolicyActive,
+			definition.TransactionPolicyActive,
 		)
 		if err != nil {
 			return err
@@ -157,7 +156,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			HistorySize: currentWorkflow.GetContext().GetHistorySize(),
 		}
 
-		reapplyEventsFn = func(ctx context.Context, resetMutableState workflow.MutableState) error {
+		reapplyEventsFn = func(ctx context.Context, resetMutableState definition.MutableState) error {
 			lastVisitedRunID, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
@@ -182,7 +181,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			return nil
 		}
 	} else {
-		reapplyEventsFn = func(ctx context.Context, resetMutableState workflow.MutableState) error {
+		reapplyEventsFn = func(ctx context.Context, resetMutableState definition.MutableState) error {
 			_, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
@@ -314,7 +313,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 
 func (r *workflowResetterImpl) reapplyEventsToResetWorkflow(
 	ctx context.Context,
-	resetMutableState workflow.MutableState,
+	resetMutableState definition.MutableState,
 	resetReapplyType enumspb.ResetReapplyType,
 	reapplyEventsApplier workflowResetReapplyEventsFn,
 	additionalReapplyEvents []*historypb.HistoryEvent,
@@ -351,7 +350,7 @@ func (r *workflowResetterImpl) persistToDB(
 	now := r.shard.GetTimeSource().Now()
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 		now,
-		workflow.TransactionPolicyActive,
+		definition.TransactionPolicyActive,
 	)
 	if err != nil {
 		return err
@@ -465,7 +464,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 }
 
 func (r *workflowResetterImpl) failWorkflowTask(
-	resetMutableState workflow.MutableState,
+	resetMutableState definition.MutableState,
 	baseRunID string,
 	baseRebuildLastEventID int64,
 	baseRebuildLastEventVersion int64,
@@ -514,7 +513,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 
 func (r *workflowResetterImpl) failInflightActivity(
 	now time.Time,
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	terminateReason string,
 ) error {
 
@@ -572,7 +571,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 }
 
 func (r *workflowResetterImpl) terminateWorkflow(
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	terminateReason string,
 ) error {
 
@@ -589,7 +588,7 @@ func (r *workflowResetterImpl) terminateWorkflow(
 
 func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	ctx context.Context,
-	resetMutableState workflow.MutableState,
+	resetMutableState definition.MutableState,
 	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
@@ -630,7 +629,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
-			workflow.CallerTypeAPI,
+			definition.CallerTypeTask,
 		)
 		if err != nil {
 			return 0, nil, err
@@ -682,7 +681,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 
 func (r *workflowResetterImpl) reapplyWorkflowEvents(
 	ctx context.Context,
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
@@ -723,7 +722,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 }
 
 func (r *workflowResetterImpl) reapplyEvents(
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	events []*historypb.HistoryEvent,
 ) error {
 

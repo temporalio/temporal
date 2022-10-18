@@ -40,10 +40,9 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -59,8 +58,8 @@ type (
 )
 
 func newTransferQueueActiveProcessor(
-	shard shard.Context,
-	workflowCache workflow.Cache,
+	shard definition.ShardContext,
+	workflowCache definition.WorkflowCache,
 	scheduler queues.Scheduler,
 	priorityAssigner queues.PriorityAssigner,
 	archivalClient archiver.Client,
@@ -230,8 +229,8 @@ func newTransferQueueActiveProcessor(
 }
 
 func newTransferQueueFailoverProcessor(
-	shard shard.Context,
-	workflowCache workflow.Cache,
+	shard definition.ShardContext,
+	workflowCache definition.WorkflowCache,
 	scheduler queues.Scheduler,
 	priorityAssigner queues.PriorityAssigner,
 	archivalClient archiver.Client,

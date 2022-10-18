@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -48,8 +49,8 @@ type (
 		*require.Assertions
 
 		controller         *gomock.Controller
-		mockShard          *shard.MockContext
-		mockEngine         *shard.MockEngine
+		mockShard          *definition.MockShardContext
+		mockEngine         *definition.MockEngine
 		mockNamespaceCache *namespace.MockRegistry
 
 		logger log.Logger
@@ -67,8 +68,8 @@ func (s *transactionSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = shard.NewMockContext(s.controller)
-	s.mockEngine = shard.NewMockEngine(s.controller)
+	s.mockShard = definition.NewMockShardContext(s.controller)
+	s.mockEngine = definition.NewMockEngine(s.controller)
 	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 	s.logger = log.NewTestLogger()
 

@@ -53,7 +53,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -68,9 +68,9 @@ type (
 		hasBufferedEvents               bool
 		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
-		newMutableState                 workflow.MutableState
+		newMutableState                 definition.MutableState
 		stopProcessing                  bool // should stop processing any more commands
-		mutableState                    workflow.MutableState
+		mutableState                    definition.MutableState
 		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
 
 		// validation
@@ -82,7 +82,7 @@ type (
 		namespaceRegistry namespace.Registry
 		metricsClient     metrics.Client
 		config            *configs.Config
-		shard             shard.Context
+		shard             definition.ShardContext
 		tokenSerializer   common.TaskTokenSerializer
 	}
 
@@ -109,14 +109,14 @@ type (
 func newWorkflowTaskHandler(
 	identity string,
 	workflowTaskCompletedID int64,
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	attrValidator *commandAttrValidator,
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
 	metricsClient metrics.Client,
 	config *configs.Config,
-	shard shard.Context,
+	shard definition.ShardContext,
 	searchAttributesMapper searchattribute.Mapper,
 ) *workflowTaskHandlerImpl {
 

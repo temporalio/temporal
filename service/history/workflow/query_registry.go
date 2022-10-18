@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/definition"
 )
 
 var (
@@ -38,42 +39,22 @@ var (
 )
 
 type (
-	QueryRegistry interface {
-		HasBufferedQuery() bool
-		GetBufferedIDs() []string
-		HasCompletedQuery() bool
-		GetCompletedIDs() []string
-		HasUnblockedQuery() bool
-		GetUnblockedIDs() []string
-		HasFailedQuery() bool
-		GetFailedIDs() []string
-
-		GetQueryCompletionCh(string) (<-chan struct{}, error)
-		GetQueryInput(string) (*querypb.WorkflowQuery, error)
-		GetCompletionState(string) (*QueryCompletionState, error)
-
-		BufferQuery(queryInput *querypb.WorkflowQuery) (string, <-chan struct{})
-		SetCompletionState(string, *QueryCompletionState) error
-		RemoveQuery(id string)
-		Clear()
-	}
-
 	queryRegistryImpl struct {
 		sync.RWMutex
 
-		buffered  map[string]query
-		completed map[string]query
-		unblocked map[string]query
-		failed    map[string]query
+		buffered  map[string]definition.Query
+		completed map[string]definition.Query
+		unblocked map[string]definition.Query
+		failed    map[string]definition.Query
 	}
 )
 
-func NewQueryRegistry() QueryRegistry {
+func NewQueryRegistry() definition.QueryRegistry {
 	return &queryRegistryImpl{
-		buffered:  make(map[string]query),
-		completed: make(map[string]query),
-		unblocked: make(map[string]query),
-		failed:    make(map[string]query),
+		buffered:  make(map[string]definition.Query),
+		completed: make(map[string]definition.Query),
+		unblocked: make(map[string]definition.Query),
+		failed:    make(map[string]definition.Query),
 	}
 }
 
@@ -132,7 +113,7 @@ func (r *queryRegistryImpl) GetQueryCompletionCh(id string) (<-chan struct{}, er
 	if err != nil {
 		return nil, err
 	}
-	return q.getCompletionCh(), nil
+	return q.GetCompletionCh(), nil
 }
 
 func (r *queryRegistryImpl) GetQueryInput(id string) (*querypb.WorkflowQuery, error) {
@@ -142,10 +123,10 @@ func (r *queryRegistryImpl) GetQueryInput(id string) (*querypb.WorkflowQuery, er
 	if err != nil {
 		return nil, err
 	}
-	return q.getQueryInput(), nil
+	return q.GetQueryInput(), nil
 }
 
-func (r *queryRegistryImpl) GetCompletionState(id string) (*QueryCompletionState, error) {
+func (r *queryRegistryImpl) GetCompletionState(id string) (*definition.QueryCompletionState, error) {
 	r.RLock()
 	defer r.RUnlock()
 	q, err := r.getQueryNoLock(id)
@@ -159,19 +140,19 @@ func (r *queryRegistryImpl) BufferQuery(queryInput *querypb.WorkflowQuery) (stri
 	r.Lock()
 	defer r.Unlock()
 	q := newQuery(queryInput)
-	id := q.getID()
+	id := q.GetID()
 	r.buffered[id] = q
-	return id, q.getCompletionCh()
+	return id, q.GetCompletionCh()
 }
 
-func (r *queryRegistryImpl) SetCompletionState(id string, completionState *QueryCompletionState) error {
+func (r *queryRegistryImpl) SetCompletionState(id string, completionState *definition.QueryCompletionState) error {
 	r.Lock()
 	defer r.Unlock()
 	q, ok := r.buffered[id]
 	if !ok {
 		return errQueryNotExists
 	}
-	if err := q.setCompletionState(completionState); err != nil {
+	if err := q.SetCompletionState(completionState); err != nil {
 		return err
 	}
 	delete(r.buffered, id)
@@ -199,16 +180,16 @@ func (r *queryRegistryImpl) Clear() {
 	r.Lock()
 	defer r.Unlock()
 	for id, q := range r.buffered {
-		_ = q.setCompletionState(&QueryCompletionState{
+		_ = q.SetCompletionState(&definition.QueryCompletionState{
 			Type: QueryCompletionTypeFailed,
 			Err:  consts.ErrBufferedQueryCleared,
 		})
 		r.failed[id] = q
 	}
-	r.buffered = make(map[string]query)
+	r.buffered = make(map[string]definition.Query)
 }
 
-func (r *queryRegistryImpl) getQueryNoLock(id string) (query, error) {
+func (r *queryRegistryImpl) getQueryNoLock(id string) (definition.Query, error) {
 	if q, ok := r.buffered[id]; ok {
 		return q, nil
 	}
@@ -224,7 +205,7 @@ func (r *queryRegistryImpl) getQueryNoLock(id string) (query, error) {
 	return nil, errQueryNotExists
 }
 
-func (r *queryRegistryImpl) getIDs(m map[string]query) []string {
+func (r *queryRegistryImpl) getIDs(m map[string]definition.Query) []string {
 	result := make([]string, len(m))
 	index := 0
 	for id := range m {

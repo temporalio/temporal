@@ -29,14 +29,14 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/shard"
 )
 
 func GetStatus(
 	ctx context.Context,
 	request *historyservice.GetReplicationStatusRequest,
-	shard shard.Context,
+	shard definition.ShardContext,
 	replicationAckMgr replication.AckManager,
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
 	resp := &historyservice.ShardReplicationStatus{

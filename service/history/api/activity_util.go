@@ -31,7 +31,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 func SetActivityTaskRunID(
@@ -64,7 +64,7 @@ func SetActivityTaskRunID(
 
 func GetActivityScheduledEventID(
 	activityID string,
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 ) (int64, error) {
 
 	if activityID == "" {

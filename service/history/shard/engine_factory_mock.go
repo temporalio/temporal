@@ -29,9 +29,11 @@
 package shard
 
 import (
-	reflect "reflect"
+	"reflect"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
+
+	"go.temporal.io/server/service/history/definition"
 )
 
 // MockEngineFactory is a mock of EngineFactory interface.
@@ -58,10 +60,10 @@ func (m *MockEngineFactory) EXPECT() *MockEngineFactoryMockRecorder {
 }
 
 // CreateEngine mocks base method.
-func (m *MockEngineFactory) CreateEngine(context Context) Engine {
+func (m *MockEngineFactory) CreateEngine(context definition.ShardContext) definition.Engine {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateEngine", context)
-	ret0, _ := ret[0].(Engine)
+	ret0, _ := ret[0].(definition.Engine)
 	return ret0
 }
 

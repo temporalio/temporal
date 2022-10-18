@@ -31,20 +31,18 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 func Invoke(
 	ctx context.Context,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
-	shard shard.Context,
+	shard definition.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.StartWorkflowExecutionResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(startRequest.GetNamespaceId()))
@@ -78,7 +76,7 @@ func Invoke(
 	now := shard.GetTimeSource().Now()
 	newWorkflow, newWorkflowEventsSeq, err := workflowContext.GetMutableState().CloseTransactionAsSnapshot(
 		now,
-		workflow.TransactionPolicyActive,
+		definition.TransactionPolicyActive,
 	)
 	if err != nil {
 		return nil, err
@@ -157,7 +155,7 @@ func Invoke(
 				prevRunID,
 			),
 			prevExecutionUpdateAction,
-			func() (workflow.Context, workflow.MutableState, error) {
+			func() (definition.WorkflowContext, definition.MutableState, error) {
 				workflowContext, err := api.NewWorkflowWithSignal(
 					ctx,
 					shard,

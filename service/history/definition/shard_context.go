@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package shard
+package definition
 
 import (
 	"context"
@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -45,21 +44,20 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination shard_context_mock.go
 
 type (
-	// Context represents a history engine shard
-	Context interface {
+	// ShardContext represents a history engine shard
+	ShardContext interface {
 		GetShardID() int32
 		GetExecutionManager() persistence.ExecutionManager
 		GetNamespaceRegistry() namespace.Registry
 		GetClusterMetadata() cluster.Metadata
 		GetConfig() *configs.Config
-		GetEventsCache() events.Cache
+		GetEventsCache() EventCache
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
 		GetMetricsClient() metrics.Client
@@ -117,7 +115,7 @@ type (
 		GetWorkflowExecution(ctx context.Context, request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error)
 		// DeleteWorkflowExecution deletes workflow execution, current workflow execution, and add task to delete visibility.
 		// If branchToken != nil, then delete history also, otherwise leave history.
-		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime *time.Time, closeTime *time.Time, closeExecutionVisibilityTaskID int64) error
+		DeleteWorkflowExecution(ctx context.Context, workflowKey WorkflowKey, branchToken []byte, startTime *time.Time, closeTime *time.Time, closeExecutionVisibilityTaskID int64) error
 
 		GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error)
 		GetHistoryClient() historyservice.HistoryServiceClient
@@ -127,6 +125,7 @@ type (
 		GetSearchAttributesMapper() searchattribute.Mapper
 		GetArchivalMetadata() archiver.ArchivalMetadata
 
+		IsValid() bool
 		Unload()
 	}
 )

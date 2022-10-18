@@ -37,21 +37,18 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 func GetOrPollMutableState(
 	ctx context.Context,
 	request *historyservice.GetMutableStateRequest,
-	shard shard.Context,
+	shard definition.ShardContext,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
-	eventNotifier events.Notifier,
+	eventNotifier definition.Notifier,
 ) (*historyservice.GetMutableStateResponse, error) {
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -176,7 +173,7 @@ func GetMutableState(
 }
 
 func MutableStateToGetResponse(
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 ) (*historyservice.GetMutableStateResponse, error) {
 	currentBranchToken, err := mutableState.GetCurrentBranchToken()
 	if err != nil {

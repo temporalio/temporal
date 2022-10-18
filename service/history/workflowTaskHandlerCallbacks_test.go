@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -64,7 +65,7 @@ type (
 		suite.Suite
 
 		controller       *gomock.Controller
-		mockEventsCache  *events.MockCache
+		mockEventsCache  *definition.MockEventCache
 		mockExecutionMgr *persistence.MockExecutionManager
 
 		logger log.Logger
@@ -294,9 +295,9 @@ func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_QueryTooLar
 	s.assertQueryCounts(queryRegistry, 0, 5, 0, 5)
 }
 
-func (s *WorkflowTaskHandlerCallbackSuite) setupBufferedQueriesMocks() (workflow.QueryRegistry, *workflow.MockMutableState) {
+func (s *WorkflowTaskHandlerCallbackSuite) setupBufferedQueriesMocks() (definition.QueryRegistry, *definition.MockMutableState) {
 	queryRegistry := s.constructQueryRegistry(10)
-	mockMutableState := workflow.NewMockMutableState(s.controller)
+	mockMutableState := definition.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetQueryRegistry().Return(queryRegistry)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: tests.WorkflowID,
@@ -318,7 +319,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) constructQueryResults(ids []string, r
 	return results
 }
 
-func (s *WorkflowTaskHandlerCallbackSuite) constructQueryRegistry(numQueries int) workflow.QueryRegistry {
+func (s *WorkflowTaskHandlerCallbackSuite) constructQueryRegistry(numQueries int) definition.QueryRegistry {
 	queryRegistry := workflow.NewQueryRegistry()
 	for i := 0; i < numQueries; i++ {
 		queryRegistry.BufferQuery(&querypb.WorkflowQuery{})
@@ -326,7 +327,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) constructQueryRegistry(numQueries int
 	return queryRegistry
 }
 
-func (s *WorkflowTaskHandlerCallbackSuite) assertQueryCounts(queryRegistry workflow.QueryRegistry, buffered, completed, unblocked, failed int) {
+func (s *WorkflowTaskHandlerCallbackSuite) assertQueryCounts(queryRegistry definition.QueryRegistry, buffered, completed, unblocked, failed int) {
 	s.Len(queryRegistry.GetBufferedIDs(), buffered)
 	s.Len(queryRegistry.GetCompletedIDs(), completed)
 	s.Len(queryRegistry.GetUnblockedIDs(), unblocked)

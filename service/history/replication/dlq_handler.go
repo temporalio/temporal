@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -72,9 +72,9 @@ type (
 	dlqHandlerImpl struct {
 		taskExecutorsLock    sync.Mutex
 		taskExecutors        map[string]TaskExecutor
-		shard                shard.Context
+		shard                definition.ShardContext
 		deleteManager        workflow.DeleteManager
-		workflowCache        workflow.Cache
+		workflowCache        definition.WorkflowCache
 		resender             xdc.NDCHistoryResender
 		taskExecutorProvider TaskExecutorProvider
 		logger               log.Logger
@@ -82,9 +82,9 @@ type (
 )
 
 func NewLazyDLQHandler(
-	shard shard.Context,
+	shard definition.ShardContext,
 	deleteManager workflow.DeleteManager,
-	workflowCache workflow.Cache,
+	workflowCache definition.WorkflowCache,
 	clientBean client.Bean,
 	taskExecutorProvider TaskExecutorProvider,
 ) DLQHandler {
@@ -99,9 +99,9 @@ func NewLazyDLQHandler(
 }
 
 func newDLQHandler(
-	shard shard.Context,
+	shard definition.ShardContext,
 	deleteManager workflow.DeleteManager,
-	workflowCache workflow.Cache,
+	workflowCache definition.WorkflowCache,
 	clientBean client.Bean,
 	taskExecutors map[string]TaskExecutor,
 	taskExecutorProvider TaskExecutorProvider,

@@ -29,11 +29,12 @@
 package ndc
 
 import (
-	context "context"
-	reflect "reflect"
+	"context"
+	"reflect"
 
-	gomock "github.com/golang/mock/gomock"
-	workflow "go.temporal.io/server/service/history/workflow"
+	"github.com/golang/mock/gomock"
+
+	"go.temporal.io/server/service/history/definition"
 )
 
 // MockConflictResolver is a mock of ConflictResolver interface.
@@ -60,10 +61,10 @@ func (m *MockConflictResolver) EXPECT() *MockConflictResolverMockRecorder {
 }
 
 // prepareMutableState mocks base method.
-func (m *MockConflictResolver) prepareMutableState(ctx context.Context, branchIndex int32, incomingVersion int64) (workflow.MutableState, bool, error) {
+func (m *MockConflictResolver) prepareMutableState(ctx context.Context, branchIndex int32, incomingVersion int64) (definition.MutableState, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "prepareMutableState", ctx, branchIndex, incomingVersion)
-	ret0, _ := ret[0].(workflow.MutableState)
+	ret0, _ := ret[0].(definition.MutableState)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

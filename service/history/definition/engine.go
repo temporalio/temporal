@@ -24,7 +24,7 @@
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination engine_mock.go
 
-package shard
+package definition
 
 import (
 	"context"
@@ -37,7 +37,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -88,7 +87,7 @@ type (
 		GetReplicationStatus(ctx context.Context, request *historyservice.GetReplicationStatusRequest) (*historyservice.ShardReplicationStatus, error)
 		UpdateWorkflow(ctx context.Context, request *historyservice.UpdateWorkflowRequest) (*historyservice.UpdateWorkflowResponse, error)
 
-		NotifyNewHistoryEvent(event *events.Notification)
+		NotifyNewHistoryEvent(event *Notification)
 		NotifyNewTasks(clusterName string, tasks map[tasks.Category][]tasks.Task)
 	}
 )

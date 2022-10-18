@@ -29,12 +29,13 @@
 package ndc
 
 import (
-	context "context"
-	reflect "reflect"
+	"context"
+	"reflect"
 
-	gomock "github.com/golang/mock/gomock"
-	history "go.temporal.io/api/history/v1"
-	workflow "go.temporal.io/server/service/history/workflow"
+	"github.com/golang/mock/gomock"
+	"go.temporal.io/api/history/v1"
+
+	"go.temporal.io/server/service/history/definition"
 )
 
 // MockEventsReapplier is a mock of EventsReapplier interface.
@@ -61,7 +62,7 @@ func (m *MockEventsReapplier) EXPECT() *MockEventsReapplierMockRecorder {
 }
 
 // ReapplyEvents mocks base method.
-func (m *MockEventsReapplier) ReapplyEvents(ctx context.Context, ms workflow.MutableState, historyEvents []*history.HistoryEvent, runID string) ([]*history.HistoryEvent, error) {
+func (m *MockEventsReapplier) ReapplyEvents(ctx context.Context, ms definition.MutableState, historyEvents []*history.HistoryEvent, runID string) ([]*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, ms, historyEvents, runID)
 	ret0, _ := ret[0].([]*history.HistoryEvent)

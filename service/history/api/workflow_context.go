@@ -25,24 +25,23 @@
 package api
 
 import (
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type WorkflowContext interface {
-	GetContext() workflow.Context
-	GetMutableState() workflow.MutableState
-	GetReleaseFn() workflow.ReleaseCacheFunc
+	GetContext() definition.WorkflowContext
+	GetMutableState() definition.MutableState
+	GetReleaseFn() definition.ReleaseFunc
 
 	GetNamespaceEntry() *namespace.Namespace
 	GetWorkflowKey() definition.WorkflowKey
 }
 
 type WorkflowContextImpl struct {
-	context      workflow.Context
-	mutableState workflow.MutableState
-	releaseFn    workflow.ReleaseCacheFunc
+	context      definition.WorkflowContext
+	mutableState definition.MutableState
+	releaseFn    definition.ReleaseFunc
 }
 
 type UpdateWorkflowAction struct {
@@ -64,9 +63,9 @@ type UpdateWorkflowActionFunc func(WorkflowContext) (*UpdateWorkflowAction, erro
 var _ WorkflowContext = (*WorkflowContextImpl)(nil)
 
 func NewWorkflowContext(
-	context workflow.Context,
-	releaseFn workflow.ReleaseCacheFunc,
-	mutableState workflow.MutableState,
+	context definition.WorkflowContext,
+	releaseFn definition.ReleaseFunc,
+	mutableState definition.MutableState,
 ) *WorkflowContextImpl {
 
 	return &WorkflowContextImpl{
@@ -76,15 +75,15 @@ func NewWorkflowContext(
 	}
 }
 
-func (w *WorkflowContextImpl) GetContext() workflow.Context {
+func (w *WorkflowContextImpl) GetContext() definition.WorkflowContext {
 	return w.context
 }
 
-func (w *WorkflowContextImpl) GetMutableState() workflow.MutableState {
+func (w *WorkflowContextImpl) GetMutableState() definition.MutableState {
 	return w.mutableState
 }
 
-func (w *WorkflowContextImpl) GetReleaseFn() workflow.ReleaseCacheFunc {
+func (w *WorkflowContextImpl) GetReleaseFn() definition.ReleaseFunc {
 	return w.releaseFn
 }
 

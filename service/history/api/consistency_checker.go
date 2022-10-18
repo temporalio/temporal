@@ -33,21 +33,19 @@ import (
 
 	clockspb "go.temporal.io/server/api/clock/v1"
 
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/vclock"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
-	MutableStateConsistencyPredicate func(mutableState workflow.MutableState) bool
+	MutableStateConsistencyPredicate func(mutableState definition.MutableState) bool
 
 	WorkflowConsistencyChecker interface {
-		GetWorkflowCache() workflow.Cache
+		GetWorkflowCache() definition.WorkflowCache
 		GetCurrentRunID(
 			ctx context.Context,
 			namespaceID string,
@@ -62,14 +60,14 @@ type (
 	}
 
 	WorkflowConsistencyCheckerImpl struct {
-		shardContext  shard.Context
-		workflowCache workflow.Cache
+		shardContext  definition.ShardContext
+		workflowCache definition.WorkflowCache
 	}
 )
 
 func NewWorkflowConsistencyChecker(
-	shardContext shard.Context,
-	workflowCache workflow.Cache,
+	shardContext definition.ShardContext,
+	workflowCache definition.WorkflowCache,
 ) *WorkflowConsistencyCheckerImpl {
 	return &WorkflowConsistencyCheckerImpl{
 		shardContext:  shardContext,
@@ -77,7 +75,7 @@ func NewWorkflowConsistencyChecker(
 	}
 }
 
-func (c *WorkflowConsistencyCheckerImpl) GetWorkflowCache() workflow.Cache {
+func (c *WorkflowConsistencyCheckerImpl) GetWorkflowCache() definition.WorkflowCache {
 	return c.workflowCache
 }
 
@@ -169,7 +167,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		workflow.CallerTypeAPI,
+		definition.CallerTypeAPI,
 	)
 	if err != nil {
 		return nil, err
@@ -202,7 +200,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 			WorkflowId: workflowKey.WorkflowID,
 			RunId:      workflowKey.RunID,
 		},
-		workflow.CallerTypeAPI,
+		definition.CallerTypeAPI,
 	)
 	if err != nil {
 		return nil, err
@@ -318,7 +316,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentRunID(
 
 func assertShardOwnership(
 	ctx context.Context,
-	shardContext shard.Context,
+	shardContext definition.ShardContext,
 	shardOwnershipAsserted *bool,
 ) error {
 	if !*shardOwnershipAsserted {
@@ -329,13 +327,13 @@ func assertShardOwnership(
 }
 
 func BypassMutableStateConsistencyPredicate(
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 ) bool {
 	return true
 }
 
 func FailMutableStateConsistencyPredicate(
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 ) bool {
 	return false
 }
@@ -344,7 +342,7 @@ func HistoryEventConsistencyPredicate(
 	eventID int64,
 	eventVersion int64,
 ) MutableStateConsistencyPredicate {
-	return func(mutableState workflow.MutableState) bool {
+	return func(mutableState definition.MutableState) bool {
 		if eventVersion != 0 {
 			_, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
 				mutableState.GetExecutionInfo().GetVersionHistories(),

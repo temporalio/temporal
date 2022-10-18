@@ -36,13 +36,12 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 func SignalWithStartWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	currentWorkflowContext api.WorkflowContext,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
@@ -77,7 +76,7 @@ func SignalWithStartWorkflow(
 
 func startAndSignalWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	currentWorkflowContext api.WorkflowContext,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
@@ -177,7 +176,7 @@ func startAndSignalWorkflowActionFn(
 
 func startAndSignalWithCurrentWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	currentWorkflowContext api.WorkflowContext,
 	currentWorkflowUpdateAction api.UpdateWorkflowActionFunc,
 	newWorkflowContext api.WorkflowContext,
@@ -187,7 +186,7 @@ func startAndSignalWithCurrentWorkflow(
 		ctx,
 		currentWorkflowContext,
 		currentWorkflowUpdateAction,
-		func() (workflow.Context, workflow.MutableState, error) {
+		func() (definition.WorkflowContext, definition.MutableState, error) {
 			return newWorkflowContext.GetContext(), newWorkflowContext.GetMutableState(), nil
 		},
 	)
@@ -200,7 +199,7 @@ func startAndSignalWithCurrentWorkflow(
 
 func startAndSignalWithoutCurrentWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	casPredicate *api.CreateWorkflowCASPredicate,
 	newWorkflowContext api.WorkflowContext,
 	requestID string,
@@ -208,7 +207,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	now := shard.GetTimeSource().Now()
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowContext.GetMutableState().CloseTransactionAsSnapshot(
 		now,
-		workflow.TransactionPolicyActive,
+		definition.TransactionPolicyActive,
 	)
 	if err != nil {
 		return "", err
@@ -253,7 +252,7 @@ func startAndSignalWithoutCurrentWorkflow(
 
 func signalWorkflow(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	workflowContext api.WorkflowContext,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) error {

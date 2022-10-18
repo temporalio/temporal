@@ -45,6 +45,7 @@ import (
 
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/definition"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -86,11 +87,11 @@ type (
 		mockTxProcessor         *queues.MockQueue
 		mockTimerProcessor      *queues.MockQueue
 		mockVisibilityProcessor *queues.MockQueue
-		mockEventsCache         *events.MockCache
+		mockEventsCache         *definition.MockEventCache
 		mockNamespaceCache      *namespace.MockRegistry
 		mockClusterMetadata     *cluster.MockMetadata
 
-		workflowCache    workflow.Cache
+		workflowCache    definition.WorkflowCache
 		historyEngine    *historyEngineImpl
 		mockExecutionMgr *persistence.MockExecutionManager
 
@@ -449,7 +450,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccess() {
 		metrics.AddMetricsContext(context.Background()),
 		tests.NamespaceID,
 		workflowExecution,
-		workflow.CallerTypeAPI,
+		definition.CallerTypeTask,
 	)
 	s.NoError(err)
 	loadedMS, err := ctx.LoadMutableState(context.Background())
@@ -550,7 +551,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
-		events.EventKey{
+		definition.EventKey{
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowExecution.GetWorkflowId(),
 			RunID:       workflowExecution.GetRunId(),
@@ -760,7 +761,7 @@ func (s *engine2Suite) createExecutionStartedState(
 	we commonpb.WorkflowExecution, tl string,
 	identity string,
 	startWorkflowTask bool,
-) workflow.MutableState {
+) definition.MutableState {
 	return s.createExecutionStartedStateWithParent(we, tl, nil, identity, startWorkflowTask)
 }
 
@@ -769,7 +770,7 @@ func (s *engine2Suite) createExecutionStartedStateWithParent(
 	parentInfo *workflowspb.ParentExecutionInfo,
 	identity string,
 	startWorkflowTask bool,
-) workflow.MutableState {
+) definition.MutableState {
 	ms := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
 		s.logger, we.GetRunId())
 	addWorkflowExecutionStartedEventWithParent(ms, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, parentInfo, identity)
@@ -1807,7 +1808,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	s.mockExecutionMgr.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
-		events.EventKey{
+		definition.EventKey{
 			NamespaceID: tests.NamespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
@@ -1819,7 +1820,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	).Return(startEvent, nil).AnyTimes()
 	s.mockEventsCache.EXPECT().GetEvent(
 		gomock.Any(),
-		events.EventKey{
+		definition.EventKey{
 			NamespaceID: tests.NamespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
@@ -1834,12 +1835,12 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	s.NoError(err)
 }
 
-func (s *engine2Suite) getMutableState(namespaceID namespace.ID, we commonpb.WorkflowExecution) workflow.MutableState {
+func (s *engine2Suite) getMutableState(namespaceID namespace.ID, we commonpb.WorkflowExecution) definition.MutableState {
 	weContext, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		metrics.AddMetricsContext(context.Background()),
 		namespaceID,
 		we,
-		workflow.CallerTypeAPI,
+		definition.CallerTypeTask,
 	)
 	if err != nil {
 		return nil

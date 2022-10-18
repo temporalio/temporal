@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tests"
 )
 
@@ -1658,7 +1659,7 @@ func (s *historyBuilderSuite) testAppendFlushFinishEventWithoutBufferSingleBatch
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
 
-	s.Equal(&HistoryMutation{
+	s.Equal(&definition.HistoryMutation{
 		DBEventsBatches:        [][]*historypb.HistoryEvent{{event1, event2}},
 		DBClearBuffer:          false,
 		DBBufferBatch:          nil,
@@ -1733,7 +1734,7 @@ func (s *historyBuilderSuite) testAppendFlushFinishEventWithoutBufferMultiBatch(
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
 
-	s.Equal(&HistoryMutation{
+	s.Equal(&definition.HistoryMutation{
 		DBEventsBatches: [][]*historypb.HistoryEvent{
 			{event11, event12},
 			{event21, event22},
@@ -1769,7 +1770,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithoutDBBuf
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
 
-	s.Equal(&HistoryMutation{
+	s.Equal(&definition.HistoryMutation{
 		DBEventsBatches:        nil,
 		DBClearBuffer:          false,
 		DBBufferBatch:          []*historypb.HistoryEvent{event1, event2},
@@ -1801,7 +1802,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithoutDBBuf
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
 
-	s.Equal(&HistoryMutation{
+	s.Equal(&definition.HistoryMutation{
 		DBEventsBatches:        [][]*historypb.HistoryEvent{{event1, event2}},
 		DBClearBuffer:          false,
 		DBBufferBatch:          nil,
@@ -1831,7 +1832,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_WithDBBuf
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
 
-	s.Equal(&HistoryMutation{
+	s.Equal(&definition.HistoryMutation{
 		DBEventsBatches:        nil,
 		DBClearBuffer:          false,
 		DBBufferBatch:          nil,
@@ -1861,7 +1862,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_WithDBBuf
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
 
-	s.Equal(&HistoryMutation{
+	s.Equal(&definition.HistoryMutation{
 		DBEventsBatches:        [][]*historypb.HistoryEvent{{event1, event2}},
 		DBClearBuffer:          true,
 		DBBufferBatch:          nil,
@@ -1898,7 +1899,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
 
-	s.Equal(&HistoryMutation{
+	s.Equal(&definition.HistoryMutation{
 		DBEventsBatches:        nil,
 		DBClearBuffer:          false,
 		DBBufferBatch:          []*historypb.HistoryEvent{event1, event2},
@@ -1935,7 +1936,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer
 	s.NoError(err)
 	s.assertEventIDTaskID(historyMutation)
 
-	s.Equal(&HistoryMutation{
+	s.Equal(&definition.HistoryMutation{
 		DBEventsBatches:        [][]*historypb.HistoryEvent{{event0, event1, event2}},
 		DBClearBuffer:          true,
 		DBBufferBatch:          nil,
@@ -2283,7 +2284,7 @@ func (s *historyBuilderSuite) TestReorder() {
 }
 
 func (s *historyBuilderSuite) assertEventIDTaskID(
-	historyMutation *HistoryMutation,
+	historyMutation *definition.HistoryMutation,
 ) {
 
 	for _, event := range historyMutation.DBBufferBatch {

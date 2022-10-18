@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/definition"
 )
 
 var Module = fx.Options(
@@ -71,7 +72,7 @@ func ControllerProvider(
 	hostInfoProvider membership.HostInfoProvider,
 	engineFactory EngineFactory,
 	tracerProvider trace.TracerProvider,
-) Controller {
+) definition.ShardController {
 	return &ControllerImpl{
 		status:                      common.DaemonStatusInitialized,
 		membershipUpdateCh:          make(chan *membership.ChangedEvent, 10),

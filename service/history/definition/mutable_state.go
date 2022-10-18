@@ -24,7 +24,7 @@
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination mutable_state_mock.go
 
-package workflow
+package definition
 
 import (
 	"context"
@@ -44,7 +44,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -61,8 +60,6 @@ const (
 func (policy TransactionPolicy) Ptr() *TransactionPolicy {
 	return &policy
 }
-
-var emptyTasks = []tasks.Task{}
 
 type (
 	// TODO: This should be part of persistence layer
@@ -194,9 +191,9 @@ type (
 		IsSignalRequested(requestID string) bool
 		IsStickyTaskQueueEnabled() bool
 		IsWorkflowExecutionRunning() bool
-		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
+		IsResourceDuplicated(resourceDedupKey DeduplicationID) bool
 		IsWorkflowPendingOnWorkflowTaskBackoff() bool
-		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
+		UpdateDuplicatedResource(resourceDedupKey DeduplicationID)
 		ReplicateActivityInfo(*historyservice.SyncActivityRequest, bool) error
 		ReplicateActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
 		ReplicateActivityTaskCanceledEvent(*historypb.HistoryEvent) error
@@ -240,7 +237,7 @@ type (
 		ReplicateWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
 		SetCurrentBranchToken(branchToken []byte) error
-		SetHistoryBuilder(hBuilder *HistoryBuilder)
+		SetHistoryBuilder(hBuilder HistoryBuilder)
 		SetHistoryTree(ctx context.Context, treeID string) error
 		UpdateActivity(*persistencespb.ActivityInfo) error
 		UpdateActivityWithTimerHeartbeat(*persistencespb.ActivityInfo, time.Time) error

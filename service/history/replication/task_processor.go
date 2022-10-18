@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -77,8 +78,8 @@ type (
 		currentCluster          string
 		sourceCluster           string
 		status                  int32
-		shard                   shard.Context
-		historyEngine           shard.Engine
+		shard                   definition.ShardContext
+		historyEngine           definition.Engine
 		historySerializer       serialization.Serializer
 		config                  *configs.Config
 		metricsClient           metrics.Client
@@ -109,8 +110,8 @@ type (
 
 // NewTaskProcessor creates a new replication task processor.
 func NewTaskProcessor(
-	shard shard.Context,
-	historyEngine shard.Engine,
+	shard definition.ShardContext,
+	historyEngine definition.Engine,
 	config *configs.Config,
 	metricsClient metrics.Client,
 	replicationTaskFetcher taskFetcher,

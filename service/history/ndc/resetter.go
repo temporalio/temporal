@@ -34,14 +34,12 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 const (
@@ -57,11 +55,11 @@ type (
 			baseLastEventVersion int64,
 			incomingFirstEventID int64,
 			incomingFirstEventVersion int64,
-		) (workflow.MutableState, error)
+		) (definition.MutableState, error)
 	}
 
 	resetterImpl struct {
-		shard          shard.Context
+		shard          definition.ShardContext
 		transactionMgr transactionMgr
 		executionMgr   persistence.ExecutionManager
 		stateRebuilder StateRebuilder
@@ -69,7 +67,7 @@ type (
 		namespaceID namespace.ID
 		workflowID  string
 		baseRunID   string
-		newContext  workflow.Context
+		newContext  definition.WorkflowContext
 		newRunID    string
 
 		logger log.Logger
@@ -79,12 +77,12 @@ type (
 var _ resetter = (*resetterImpl)(nil)
 
 func NewResetter(
-	shard shard.Context,
+	shard definition.ShardContext,
 	transactionMgr transactionMgr,
 	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
-	newContext workflow.Context,
+	newContext definition.WorkflowContext,
 	newRunID string,
 	logger log.Logger,
 ) *resetterImpl {
@@ -111,7 +109,7 @@ func (r *resetterImpl) resetWorkflow(
 	baseLastEventVersion int64,
 	incomingFirstEventID int64,
 	incomingFirstEventVersion int64,
-) (workflow.MutableState, error) {
+) (definition.MutableState, error) {
 
 	baseBranchToken, err := r.getBaseBranchToken(
 		ctx,

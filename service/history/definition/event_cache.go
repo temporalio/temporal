@@ -22,22 +22,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package shard
+package definition
 
 import (
-	"go.temporal.io/server/common"
+	"context"
+
+	historypb "go.temporal.io/api/history/v1"
+
 	"go.temporal.io/server/common/namespace"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination controller_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination event_cache_mock.go
 
 type (
-	Controller interface {
-		common.Daemon
+	EventKey struct {
+		NamespaceID namespace.ID
+		WorkflowID  string
+		RunID       string
+		EventID     int64
+		Version     int64
+	}
 
-		GetShardByID(shardID int32) (Context, error)
-		GetShardByNamespaceWorkflow(namespaceID namespace.ID, workflowID string) (Context, error)
-		CloseShardByID(shardID int32)
-		ShardIDs() []int32
+	EventCache interface {
+		GetEvent(ctx context.Context, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
+		PutEvent(key EventKey, event *historypb.HistoryEvent)
+		DeleteEvent(key EventKey)
 	}
 )

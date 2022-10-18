@@ -36,13 +36,12 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -53,29 +52,29 @@ type (
 			ctx context.Context,
 			nsID namespace.ID,
 			we commonpb.WorkflowExecution,
-			ms MutableState,
+			ms definition.MutableState,
 			workflowClosedVersion int64,
 		) error
 		DeleteWorkflowExecution(
 			ctx context.Context,
 			nsID namespace.ID,
 			we commonpb.WorkflowExecution,
-			weCtx Context,
-			ms MutableState,
+			weCtx definition.WorkflowContext,
+			ms definition.MutableState,
 			forceDeleteFromOpenVisibility bool,
 		) error
 		DeleteWorkflowExecutionByRetention(
 			ctx context.Context,
 			nsID namespace.ID,
 			we commonpb.WorkflowExecution,
-			weCtx Context,
-			ms MutableState,
+			weCtx definition.WorkflowContext,
+			ms definition.MutableState,
 		) error
 	}
 
 	DeleteManagerImpl struct {
-		shard          shard.Context
-		historyCache   Cache
+		shard          definition.ShardContext
+		historyCache   definition.WorkflowCache
 		config         *configs.Config
 		metricsClient  metrics.Client
 		archivalClient archiver.Client
@@ -86,8 +85,8 @@ type (
 var _ DeleteManager = (*DeleteManagerImpl)(nil)
 
 func NewDeleteManager(
-	shard shard.Context,
-	cache Cache,
+	shard definition.ShardContext,
+	cache definition.WorkflowCache,
 	config *configs.Config,
 	archiverClient archiver.Client,
 	timeSource clock.TimeSource,
@@ -108,7 +107,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	ctx context.Context,
 	nsID namespace.ID,
 	we commonpb.WorkflowExecution,
-	ms MutableState,
+	ms definition.MutableState,
 	workflowClosedVersion int64,
 ) error {
 
@@ -138,8 +137,8 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	nsID namespace.ID,
 	we commonpb.WorkflowExecution,
-	weCtx Context,
-	ms MutableState,
+	weCtx definition.WorkflowContext,
+	ms definition.MutableState,
 	forceDeleteFromOpenVisibility bool,
 ) error {
 
@@ -159,8 +158,8 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	ctx context.Context,
 	nsID namespace.ID,
 	we commonpb.WorkflowExecution,
-	weCtx Context,
-	ms MutableState,
+	weCtx definition.WorkflowContext,
+	ms definition.MutableState,
 ) error {
 
 	return m.deleteWorkflowExecutionInternal(
@@ -179,8 +178,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	we commonpb.WorkflowExecution,
-	weCtx Context,
-	ms MutableState,
+	weCtx definition.WorkflowContext,
+	ms definition.MutableState,
 	archiveIfEnabled bool,
 	forceDeleteFromOpenVisibility bool,
 	scope metrics.Scope,
@@ -254,8 +253,8 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	namespaceID namespace.ID,
 	workflowExecution commonpb.WorkflowExecution,
 	currentBranchToken []byte,
-	weCtx Context,
-	ms MutableState,
+	weCtx definition.WorkflowContext,
+	ms definition.MutableState,
 	scope metrics.Scope,
 ) (deletionPromised bool, err error) {
 

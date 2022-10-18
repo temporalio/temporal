@@ -48,6 +48,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -62,12 +63,12 @@ type (
 		remoteCluster      string
 		mockResource       *resource.Test
 		mockShard          *shard.ContextTest
-		mockEngine         *shard.MockEngine
+		mockEngine         *definition.MockEngine
 		config             *configs.Config
 		historyClient      *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *namespace.MockRegistry
 		clusterMetadata    *cluster.MockMetadata
-		workflowCache      *workflow.MockCache
+		workflowCache      *definition.MockWorkflowCache
 		nDCHistoryResender *xdc.MockNDCHistoryResender
 
 		replicationTaskExecutor *taskExecutorImpl
@@ -105,13 +106,13 @@ func (s *taskExecutorSuite) SetupTest() {
 			}},
 		s.config,
 	)
-	s.mockEngine = shard.NewMockEngine(s.controller)
+	s.mockEngine = definition.NewMockEngine(s.controller)
 	s.mockResource = s.mockShard.Resource
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.clusterMetadata = s.mockResource.ClusterMetadata
 	s.nDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
-	s.workflowCache = workflow.NewMockCache(s.controller)
+	s.workflowCache = definition.NewMockWorkflowCache(s.controller)
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()

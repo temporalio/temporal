@@ -51,7 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -63,10 +63,10 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
-		mockEventsCache     *events.MockCache
+		mockEventsCache     *definition.MockEventCache
 		mockNamespaceCache  *namespace.MockRegistry
 		mockTaskGenerator   *MockTaskGenerator
-		mockMutableState    *MockMutableState
+		mockMutableState    *definition.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockTaskGeneratorForNew *MockTaskGenerator
@@ -79,7 +79,7 @@ type (
 	}
 
 	testTaskGeneratorProvider struct {
-		mockMutableState *MockMutableState
+		mockMutableState *definition.MockMutableState
 
 		mockTaskGenerator       *MockTaskGenerator
 		mockTaskGeneratorForNew *MockTaskGenerator
@@ -104,7 +104,7 @@ func (s *stateBuilderSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskGenerator = NewMockTaskGenerator(s.controller)
-	s.mockMutableState = NewMockMutableState(s.controller)
+	s.mockMutableState = definition.NewMockMutableState(s.controller)
 	s.mockTaskGeneratorForNew = NewMockTaskGenerator(s.controller)
 
 	s.mockShard = shard.NewTestContext(
@@ -748,7 +748,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskScheduled() {
 			Attempt:             workflowTaskAttempt,
 		}},
 	}
-	wt := &WorkflowTaskInfo{
+	wt := &definition.WorkflowTaskInfo{
 		Version:             event.GetVersion(),
 		ScheduledEventID:    event.GetEventId(),
 		StartedEventID:      common.EmptyEventID,
@@ -797,7 +797,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 			RequestId:        workflowTaskRequestID,
 		}},
 	}
-	wt := &WorkflowTaskInfo{
+	wt := &definition.WorkflowTaskInfo{
 		Version:             event.GetVersion(),
 		ScheduledEventID:    scheduledEventID,
 		StartedEventID:      event.GetEventId(),
@@ -807,7 +807,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 		Attempt:             1,
 	}
 	s.mockMutableState.EXPECT().ReplicateWorkflowTaskStartedEvent(
-		(*WorkflowTaskInfo)(nil), event.GetVersion(), scheduledEventID, event.GetEventId(), workflowTaskRequestID, timestamp.TimeValue(event.GetEventTime()),
+		(*definition.WorkflowTaskInfo)(nil), event.GetVersion(), scheduledEventID, event.GetEventId(), workflowTaskRequestID, timestamp.TimeValue(event.GetEventTime()),
 	).Return(wt, nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateStartWorkflowTaskTasks(
@@ -849,7 +849,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskTimedOut() {
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	newScheduledEventID := int64(233)
 	s.executionInfo.TaskQueue = taskqueue.GetName()
-	s.mockMutableState.EXPECT().ReplicateTransientWorkflowTaskScheduled().Return(&WorkflowTaskInfo{
+	s.mockMutableState.EXPECT().ReplicateTransientWorkflowTaskScheduled().Return(&definition.WorkflowTaskInfo{
 		Version:          version,
 		ScheduledEventID: newScheduledEventID,
 		TaskQueue:        taskqueue,
@@ -893,7 +893,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskFailed() {
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	newScheduledEventID := int64(233)
 	s.executionInfo.TaskQueue = taskqueue.GetName()
-	s.mockMutableState.EXPECT().ReplicateTransientWorkflowTaskScheduled().Return(&WorkflowTaskInfo{
+	s.mockMutableState.EXPECT().ReplicateTransientWorkflowTaskScheduled().Return(&definition.WorkflowTaskInfo{
 		Version:          version,
 		ScheduledEventID: newScheduledEventID,
 		TaskQueue:        taskqueue,
@@ -1797,8 +1797,8 @@ func (s *stateBuilderSuite) TestApplyEventsNewEventsNotHandled() {
 }
 
 func (p *testTaskGeneratorProvider) NewTaskGenerator(
-	_ shard.Context,
-	mutableState MutableState,
+	_ definition.ShardContext,
+	mutableState definition.MutableState,
 ) TaskGenerator {
 	if mutableState == p.mockMutableState {
 		return p.mockTaskGenerator

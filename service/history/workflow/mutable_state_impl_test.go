@@ -43,7 +43,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -52,7 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -65,7 +64,7 @@ type (
 		controller      *gomock.Controller
 		mockConfig      *configs.Config
 		mockShard       *shard.ContextTest
-		mockEventsCache *events.MockCache
+		mockEventsCache *definition.MockEventCache
 
 		mutableState *MutableStateImpl
 		logger       log.Logger
@@ -90,7 +89,7 @@ func (s *mutableStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockEventsCache = events.NewMockCache(s.controller)
+	s.mockEventsCache = definition.NewMockEventCache(s.controller)
 
 	s.mockConfig = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
@@ -204,7 +203,7 @@ func (s *mutableStateSuite) TestChecksum() {
 		{
 			name: "closeTransactionAsSnapshot",
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.Checksum, error) {
-				snapshot, _, err := ms.CloseTransactionAsSnapshot(time.Now().UTC(), TransactionPolicyPassive)
+				snapshot, _, err := ms.CloseTransactionAsSnapshot(time.Now().UTC(), definition.TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -215,7 +214,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			name:                 "closeTransactionAsMutation",
 			enableBufferedEvents: true,
 			closeTxFunc: func(ms *MutableStateImpl) (*persistencespb.Checksum, error) {
-				mutation, _, err := ms.CloseTransactionAsMutation(time.Now().UTC(), TransactionPolicyPassive)
+				mutation, _, err := ms.CloseTransactionAsMutation(time.Now().UTC(), definition.TransactionPolicyPassive)
 				if err != nil {
 					return nil, err
 				}
@@ -508,7 +507,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	eventID++
 
 	s.mockEventsCache.EXPECT().PutEvent(
-		events.EventKey{
+		definition.EventKey{
 			NamespaceID: namespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
@@ -603,7 +602,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		newWorkflowTaskScheduleEvent,
 		newWorkflowTaskStartedEvent,
 	}))
-	_, _, err = s.mutableState.CloseTransactionAsMutation(time.Now().UTC(), TransactionPolicyPassive)
+	_, _, err = s.mutableState.CloseTransactionAsMutation(time.Now().UTC(), definition.TransactionPolicyPassive)
 	s.NoError(err)
 
 	return newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent

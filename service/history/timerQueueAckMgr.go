@@ -30,6 +30,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/exp/maps"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -38,10 +40,9 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"golang.org/x/exp/maps"
 )
 
 var (
@@ -52,7 +53,7 @@ type (
 	timerQueueAckMgrImpl struct {
 		scope               int
 		isFailover          bool
-		shard               shard.Context
+		shard               definition.ShardContext
 		executionMgr        persistence.ExecutionManager
 		logger              log.Logger
 		metricsClient       metrics.Client
@@ -97,7 +98,7 @@ var _ timerQueueAckMgr = (*timerQueueAckMgrImpl)(nil)
 
 func newTimerQueueAckMgr(
 	scope int,
-	shard shard.Context,
+	shard definition.ShardContext,
 	minLevel time.Time,
 	timeNow timeNow,
 	updateTimerAckLevel updateTimerAckLevel,
@@ -136,7 +137,7 @@ func newTimerQueueAckMgr(
 }
 
 func newTimerQueueFailoverAckMgr(
-	shard shard.Context,
+	shard definition.ShardContext,
 	minLevel time.Time,
 	maxLevel time.Time,
 	timeNow timeNow,

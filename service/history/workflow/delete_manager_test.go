@@ -43,11 +43,10 @@ import (
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -58,9 +57,9 @@ type (
 		*require.Assertions
 
 		controller            *gomock.Controller
-		mockCache             *MockCache
+		mockCache             *definition.MockWorkflowCache
 		mockArchivalClient    *archiver.MockClient
-		mockShardContext      *shard.MockContext
+		mockShardContext      *definition.MockShardContext
 		mockClock             *clock.EventTimeSource
 		mockNamespaceRegistry *namespace.MockRegistry
 		mockMetadata          *cluster.MockMetadata
@@ -86,14 +85,14 @@ func (s *deleteManagerWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockCache = NewMockCache(s.controller)
+	s.mockCache = definition.NewMockWorkflowCache(s.controller)
 	s.mockArchivalClient = archiver.NewMockClient(s.controller)
 	s.mockClock = clock.NewEventTimeSource()
 	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.mockMetadata = cluster.NewMockMetadata(s.controller)
 
 	config := tests.NewDynamicConfig()
-	s.mockShardContext = shard.NewMockContext(s.controller)
+	s.mockShardContext = definition.NewMockShardContext(s.controller)
 	s.mockShardContext.EXPECT().GetMetricsClient().Return(metrics.NoopClient).AnyTimes()
 	s.mockShardContext.EXPECT().GetNamespaceRegistry().Return(s.mockNamespaceRegistry).AnyTimes()
 	s.mockShardContext.EXPECT().GetClusterMetadata().Return(s.mockMetadata).AnyTimes()
@@ -113,8 +112,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		RunId:      tests.RunID,
 	}
 
-	mockWeCtx := NewMockContext(s.controller)
-	mockMutableState := NewMockMutableState(s.controller)
+	mockWeCtx := definition.NewMockWorkflowContext(s.controller)
+	mockMutableState := definition.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
@@ -155,8 +154,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		RunId:      tests.RunID,
 	}
 
-	mockWeCtx := NewMockContext(s.controller)
-	mockMutableState := NewMockMutableState(s.controller)
+	mockWeCtx := definition.NewMockWorkflowContext(s.controller)
+	mockMutableState := definition.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
@@ -197,8 +196,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 	}
 	now := time.Now()
 
-	mockWeCtx := NewMockContext(s.controller)
-	mockMutableState := NewMockMutableState(s.controller)
+	mockWeCtx := definition.NewMockWorkflowContext(s.controller)
+	mockMutableState := definition.NewMockMutableState(s.controller)
 	closeExecutionVisibilityTaskID := int64(39)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
@@ -236,8 +235,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 		RunId:      tests.RunID,
 	}
 
-	mockWeCtx := NewMockContext(s.controller)
-	mockMutableState := NewMockMutableState(s.controller)
+	mockWeCtx := definition.NewMockWorkflowContext(s.controller)
+	mockMutableState := definition.NewMockMutableState(s.controller)
 
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
@@ -290,8 +289,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 		RunId:      tests.RunID,
 	}
 
-	mockWeCtx := NewMockContext(s.controller)
-	mockMutableState := NewMockMutableState(s.controller)
+	mockWeCtx := definition.NewMockWorkflowContext(s.controller)
+	mockMutableState := definition.NewMockMutableState(s.controller)
 
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})

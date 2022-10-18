@@ -52,6 +52,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/definition"
 )
 
 const (
@@ -92,7 +93,7 @@ type (
 	}
 )
 
-var _ Controller = (*ControllerImpl)(nil)
+var _ definition.ShardController = (*ControllerImpl)(nil)
 
 func (c *ControllerImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
@@ -159,7 +160,7 @@ func (c *ControllerImpl) Status() int32 {
 func (c *ControllerImpl) GetShardByNamespaceWorkflow(
 	namespaceID namespace.ID,
 	workflowID string,
-) (Context, error) {
+) (definition.ShardContext, error) {
 	shardID := c.config.GetShardID(namespaceID, workflowID)
 	return c.GetShardByID(shardID)
 }
@@ -169,7 +170,7 @@ func (c *ControllerImpl) GetShardByNamespaceWorkflow(
 // Callers can use GetEngine on the shard to block on rangeid lease acquisition.
 func (c *ControllerImpl) GetShardByID(
 	shardID int32,
-) (Context, error) {
+) (definition.ShardContext, error) {
 	sw := c.metricsScope.StartTimer(metrics.GetEngineForShardLatency)
 	defer sw.Stop()
 	return c.getOrCreateShardContext(shardID)
@@ -210,7 +211,7 @@ func (c *ControllerImpl) shardClosedCallback(shard *ContextImpl) {
 func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, error) {
 	c.RLock()
 	if shard, ok := c.historyShards[shardID]; ok {
-		if shard.isValid() {
+		if shard.IsValid() {
 			c.RUnlock()
 			return shard, nil
 		}
@@ -233,7 +234,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 
 	// Check again with exclusive lock
 	if shard, ok := c.historyShards[shardID]; ok {
-		if shard.isValid() {
+		if shard.IsValid() {
 			return shard, nil
 		}
 

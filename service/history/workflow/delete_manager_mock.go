@@ -33,8 +33,10 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1 "go.temporal.io/api/common/v1"
+	common "go.temporal.io/api/common/v1"
+
 	namespace "go.temporal.io/server/common/namespace"
+	definition "go.temporal.io/server/service/history/definition"
 )
 
 // MockDeleteManager is a mock of DeleteManager interface.
@@ -61,7 +63,7 @@ func (m *MockDeleteManager) EXPECT() *MockDeleteManagerMockRecorder {
 }
 
 // AddDeleteWorkflowExecutionTask mocks base method.
-func (m *MockDeleteManager) AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we v1.WorkflowExecution, ms MutableState, workflowClosedVersion int64) error {
+func (m *MockDeleteManager) AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we common.WorkflowExecution, ms definition.MutableState, workflowClosedVersion int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddDeleteWorkflowExecutionTask", ctx, nsID, we, ms, workflowClosedVersion)
 	ret0, _ := ret[0].(error)
@@ -75,7 +77,7 @@ func (mr *MockDeleteManagerMockRecorder) AddDeleteWorkflowExecutionTask(ctx, nsI
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockDeleteManager) DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we v1.WorkflowExecution, weCtx Context, ms MutableState, forceDeleteFromOpenVisibility bool) error {
+func (m *MockDeleteManager) DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we common.WorkflowExecution, weCtx definition.WorkflowContext, ms definition.MutableState, forceDeleteFromOpenVisibility bool) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, nsID, we, weCtx, ms, forceDeleteFromOpenVisibility)
 	ret0, _ := ret[0].(error)
@@ -89,7 +91,7 @@ func (mr *MockDeleteManagerMockRecorder) DeleteWorkflowExecution(ctx, nsID, we, 
 }
 
 // DeleteWorkflowExecutionByRetention mocks base method.
-func (m *MockDeleteManager) DeleteWorkflowExecutionByRetention(ctx context.Context, nsID namespace.ID, we v1.WorkflowExecution, weCtx Context, ms MutableState) error {
+func (m *MockDeleteManager) DeleteWorkflowExecutionByRetention(ctx context.Context, nsID namespace.ID, we common.WorkflowExecution, weCtx definition.WorkflowContext, ms definition.MutableState) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteWorkflowExecutionByRetention", ctx, nsID, we, weCtx, ms)
 	ret0, _ := ret[0].(error)

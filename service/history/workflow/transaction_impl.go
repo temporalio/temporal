@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -49,7 +49,7 @@ type (
 		status      enumspb.WorkflowExecutionStatus
 	}
 	TransactionImpl struct {
-		shard  shard.Context
+		shard  definition.ShardContext
 		logger log.Logger
 	}
 )
@@ -57,7 +57,7 @@ type (
 var _ Transaction = (*TransactionImpl)(nil)
 
 func NewTransaction(
-	shard shard.Context,
+	shard definition.ShardContext,
 ) *TransactionImpl {
 	return &TransactionImpl{
 		shard:  shard,
@@ -229,7 +229,7 @@ func (t *TransactionImpl) SetWorkflowExecution(
 
 func PersistWorkflowEvents(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	workflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
 
@@ -246,7 +246,7 @@ func PersistWorkflowEvents(
 
 func persistFirstWorkflowEvents(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	workflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
 
@@ -281,7 +281,7 @@ func persistFirstWorkflowEvents(
 
 func persistNonFirstWorkflowEvents(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	workflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
 
@@ -317,7 +317,7 @@ func persistNonFirstWorkflowEvents(
 
 func appendHistoryEvents(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 	request *persistence.AppendHistoryNodesRequest,
@@ -329,7 +329,7 @@ func appendHistoryEvents(
 
 func createWorkflowExecution(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
 
@@ -369,7 +369,7 @@ func createWorkflowExecution(
 
 func conflictResolveWorkflowExecution(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 
@@ -418,7 +418,7 @@ func conflictResolveWorkflowExecution(
 
 func getWorkflowExecution(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	request *persistence.GetWorkflowExecutionRequest,
 ) (*persistence.GetWorkflowExecutionResponse, error) {
 
@@ -455,7 +455,7 @@ func getWorkflowExecution(
 
 func updateWorkflowExecution(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
 
@@ -494,7 +494,7 @@ func updateWorkflowExecution(
 
 func setWorkflowExecution(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	request *persistence.SetWorkflowExecutionRequest,
 ) (*persistence.SetWorkflowExecutionResponse, error) {
 
@@ -514,7 +514,7 @@ func setWorkflowExecution(
 }
 
 func NotifyWorkflowSnapshotTasks(
-	engine shard.Engine,
+	engine definition.Engine,
 	workflowSnapshot *persistence.WorkflowSnapshot,
 	clusterName string,
 ) {
@@ -525,7 +525,7 @@ func NotifyWorkflowSnapshotTasks(
 }
 
 func NotifyWorkflowMutationTasks(
-	engine shard.Engine,
+	engine definition.Engine,
 	workflowMutation *persistence.WorkflowMutation,
 	clusterName string,
 ) {
@@ -536,7 +536,7 @@ func NotifyWorkflowMutationTasks(
 }
 
 func NotifyNewHistorySnapshotEvent(
-	engine shard.Engine,
+	engine definition.Engine,
 	workflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
@@ -562,7 +562,7 @@ func NotifyNewHistorySnapshotEvent(
 	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartedEventId
 	nextEventID := workflowSnapshot.NextEventID
 
-	engine.NotifyNewHistoryEvent(events.NewNotification(
+	engine.NotifyNewHistoryEvent(definition.NewNotification(
 		namespaceID,
 		&commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
@@ -580,7 +580,7 @@ func NotifyNewHistorySnapshotEvent(
 }
 
 func NotifyNewHistoryMutationEvent(
-	engine shard.Engine,
+	engine definition.Engine,
 	workflowMutation *persistence.WorkflowMutation,
 ) error {
 
@@ -606,7 +606,7 @@ func NotifyNewHistoryMutationEvent(
 	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartedEventId
 	nextEventID := workflowMutation.NextEventID
 
-	engine.NotifyNewHistoryEvent(events.NewNotification(
+	engine.NotifyNewHistoryEvent(definition.NewNotification(
 		namespaceID,
 		&commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
@@ -624,7 +624,7 @@ func NotifyNewHistoryMutationEvent(
 }
 
 func emitMutationMetrics(
-	shard shard.Context,
+	shard definition.ShardContext,
 	namespace *namespace.Namespace,
 	stats ...*persistence.MutableStateStatistics,
 ) {
@@ -639,7 +639,7 @@ func emitMutationMetrics(
 }
 
 func emitGetMetrics(
-	shard shard.Context,
+	shard definition.ShardContext,
 	namespace *namespace.Namespace,
 	stats ...*persistence.MutableStateStatistics,
 ) {
@@ -680,7 +680,7 @@ func mutationToCompletionMetric(
 }
 
 func emitCompletionMetrics(
-	shard shard.Context,
+	shard definition.ShardContext,
 	namespace *namespace.Namespace,
 	completionMetrics ...completionMetric,
 ) {

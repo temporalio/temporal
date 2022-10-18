@@ -35,13 +35,12 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -54,7 +53,7 @@ type (
 
 func NewWorkflowWithSignal(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	runID string,
@@ -114,10 +113,10 @@ func NewWorkflowWithSignal(
 
 func CreateMutableState(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	runID string,
-) (workflow.MutableState, error) {
+) (definition.MutableState, error) {
 	newMutableState := workflow.NewMutableState(
 		shard,
 		shard.GetEventsCache(),
@@ -132,7 +131,7 @@ func CreateMutableState(
 }
 
 func GenerateFirstWorkflowTask(
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	parentInfo *workflowspb.ParentExecutionInfo,
 	startEvent *historypb.HistoryEvent,
 ) error {
@@ -149,9 +148,9 @@ func GenerateFirstWorkflowTask(
 }
 
 func NewWorkflowVersionCheck(
-	shard shard.Context,
+	shard definition.ShardContext,
 	prevLastWriteVersion int64,
-	newMutableState workflow.MutableState,
+	newMutableState definition.MutableState,
 ) error {
 	if prevLastWriteVersion == common.EmptyVersion {
 		return nil
@@ -171,7 +170,7 @@ func NewWorkflowVersionCheck(
 
 func ValidateStart(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	workflowInputSize int,
@@ -219,7 +218,7 @@ func ValidateStart(
 func ValidateStartWorkflowExecutionRequest(
 	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
-	shard shard.Context,
+	shard definition.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	operation string,
 ) error {
@@ -279,7 +278,7 @@ func ValidateStartWorkflowExecutionRequest(
 func OverrideStartWorkflowExecutionRequest(
 	request *workflowservice.StartWorkflowExecutionRequest,
 	metricsScope int,
-	shard shard.Context,
+	shard definition.ShardContext,
 	metricsClient metrics.Client,
 ) {
 	// workflow execution timeout is left as is

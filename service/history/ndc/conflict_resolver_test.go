@@ -36,13 +36,12 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -52,8 +51,8 @@ type (
 
 		controller       *gomock.Controller
 		mockShard        *shard.ContextTest
-		mockContext      *workflow.MockContext
-		mockMutableState *workflow.MockMutableState
+		mockContext      *definition.MockWorkflowContext
+		mockMutableState *definition.MockMutableState
 		mockStateBuilder *MockStateRebuilder
 
 		logger log.Logger
@@ -76,8 +75,8 @@ func (s *conflictResolverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockContext = workflow.NewMockContext(s.controller)
-	s.mockMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockContext = definition.NewMockWorkflowContext(s.controller)
+	s.mockMutableState = definition.NewMockMutableState(s.controller)
 	s.mockStateBuilder = NewMockStateRebuilder(s.controller)
 
 	s.mockShard = shard.NewTestContext(
@@ -147,7 +146,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 		s.workflowID,
 		s.runID,
 	)
-	mockRebuildMutableState := workflow.NewMockMutableState(s.controller)
+	mockRebuildMutableState := definition.NewMockMutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
 		&persistencespb.WorkflowExecutionInfo{
 			VersionHistories: versionhistory.NewVersionHistories(
@@ -244,7 +243,7 @@ func (s *conflictResolverSuite) TestPrepareMutableState_Rebuild() {
 		s.workflowID,
 		s.runID,
 	)
-	mockRebuildMutableState := workflow.NewMockMutableState(s.controller)
+	mockRebuildMutableState := definition.NewMockMutableState(s.controller)
 	mockRebuildMutableState.EXPECT().GetExecutionInfo().Return(
 		&persistencespb.WorkflowExecutionInfo{
 			VersionHistories: versionhistory.NewVersionHistories(
