@@ -2154,6 +2154,8 @@ const (
 
 	NoopImplementationIsUsed
 
+	ClosedWorkflowBufferEventCount
+
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
 
@@ -2636,6 +2638,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ElasticsearchDocumentGenerateFailuresCount:                NewCounterDef("elasticsearch_document_generate_failures_counter"),
 
 		NoopImplementationIsUsed: NewCounterDef("noop_implementation_is_used"),
+
+		ClosedWorkflowBufferEventCount: NewCounterDef("closed_workflow_buffer_event_counter"),
 	},
 	History: {
 		TaskRequests: NewCounterDef("task_requests"),
