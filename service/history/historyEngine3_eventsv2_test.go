@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -70,10 +71,10 @@ type (
 		mockTxProcessor         *queues.MockQueue
 		mockTimerProcessor      *queues.MockQueue
 		mockVisibilityProcessor *queues.MockQueue
-		mockEventsCache         *events.MockCache
+		mockEventsCache         *definition.MockEventCache
 		mockNamespaceCache      *namespace.MockRegistry
 		mockClusterMetadata     *cluster.MockMetadata
-		workflowCache           workflow.Cache
+		workflowCache           definition.WorkflowCache
 		historyEngine           *historyEngineImpl
 		mockExecutionMgr        *persistence.MockExecutionManager
 

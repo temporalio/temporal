@@ -37,6 +37,7 @@ import (
 
 	"go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/service/history/definition"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -65,7 +66,7 @@ type (
 
 		controller          *gomock.Controller
 		mockResource        *resourcetest.Test
-		mockHistoryEngine   *MockEngine
+		mockHistoryEngine   *definition.MockEngine
 		mockClusterMetadata *cluster.MockMetadata
 		mockServiceResolver *membership.MockServiceResolver
 
@@ -125,7 +126,7 @@ func (s *controllerSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resourcetest.NewTest(s.controller, metrics.History)
-	s.mockHistoryEngine = NewMockEngine(s.controller)
+	s.mockHistoryEngine = definition.NewMockEngine(s.controller)
 	s.mockEngineFactory = NewMockEngineFactory(s.controller)
 
 	s.mockShardManager = s.mockResource.ShardMgr
@@ -436,9 +437,9 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		s.mockResource,
 		s.mockHostInfoProvider,
 	)
-	historyEngines := make(map[int32]*MockEngine)
+	historyEngines := make(map[int32]*definition.MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		mockEngine := NewMockEngine(s.controller)
+		mockEngine := definition.NewMockEngine(s.controller)
 		historyEngines[shardID] = mockEngine
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
@@ -539,9 +540,9 @@ func (s *controllerSuite) TestShardControllerClosed() {
 		s.mockHostInfoProvider,
 	)
 
-	historyEngines := make(map[int32]*MockEngine)
+	historyEngines := make(map[int32]*definition.MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		mockEngine := NewMockEngine(s.controller)
+		mockEngine := definition.NewMockEngine(s.controller)
 		historyEngines[shardID] = mockEngine
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
@@ -588,7 +589,7 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
-	mockEngine := NewMockEngine(s.controller)
+	mockEngine := definition.NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
 	s.setupMocksForAcquireShard(0, mockEngine, 5, 6, false)
 
@@ -603,7 +604,7 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 		time.Sleep(1 * time.Millisecond)
 	}
 	s.Equal(0, len(s.shardController.ShardIDs()))
-	s.False(shard.isValid())
+	s.False(shard.IsValid())
 }
 
 func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
@@ -611,7 +612,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelGetOrCreate() {
 
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
-	mockEngine := NewMockEngine(s.controller)
+	mockEngine := definition.NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
 
 	shardID := int32(0)
@@ -652,7 +653,7 @@ func (s *controllerSuite) TestShardExplicitUnloadCancelAcquire() {
 
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
-	mockEngine := NewMockEngine(s.controller)
+	mockEngine := definition.NewMockEngine(s.controller)
 	mockEngine.EXPECT().Stop().AnyTimes()
 
 	shardID := int32(0)
@@ -722,8 +723,8 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 		queueStates := s.queueStates()
 
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).AnyTimes()
-		s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).DoAndReturn(func(shard Context) Engine {
-			mockEngine := NewMockEngine(disconnectedMockController)
+		s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).DoAndReturn(func(shard definition.ShardContext) definition.Engine {
+			mockEngine := definition.NewMockEngine(disconnectedMockController)
 			status := new(int32)
 			mockEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
 			mockEngine.EXPECT().Start().Do(func() {
@@ -764,7 +765,7 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 		s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	}
 
-	randomLoadedShard := func() (int32, Context) {
+	randomLoadedShard := func() (int32, definition.ShardContext) {
 		s.shardController.Lock()
 		defer s.shardController.Unlock()
 		if len(s.shardController.historyShards) == 0 {
@@ -829,7 +830,7 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 
 func (s *controllerSuite) setupMocksForAcquireShard(
 	shardID int32,
-	mockEngine *MockEngine,
+	mockEngine *definition.MockEngine,
 	currentRangeID, newRangeID int64,
 	required bool,
 ) {
@@ -962,7 +963,7 @@ var _ fmt.Stringer = (*ContextImpl)(nil)
 type contextMatcher int32
 
 func (s contextMatcher) Matches(x interface{}) bool {
-	context, ok := x.(Context)
+	context, ok := x.(definition.ShardContext)
 	return ok && context.GetShardID() == int32(s)
 }
 

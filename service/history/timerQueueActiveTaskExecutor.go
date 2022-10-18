@@ -40,7 +40,6 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,6 +47,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -64,8 +64,8 @@ type (
 )
 
 func newTimerQueueActiveTaskExecutor(
-	shard shard.Context,
-	workflowCache workflow.Cache,
+	shard definition.ShardContext,
+	workflowCache definition.WorkflowCache,
 	workflowDeleteManager workflow.DeleteManager,
 	queueProcessor *timerQueueActiveProcessorImpl,
 	logger log.Logger,
@@ -583,15 +583,15 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 }
 
 func (t *timerQueueActiveTaskExecutor) getTimerSequence(
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 ) workflow.TimerSequence {
 	return workflow.NewTimerSequence(mutableState)
 }
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	ctx context.Context,
-	context workflow.Context,
-	mutableState workflow.MutableState,
+	context definition.WorkflowContext,
+	mutableState definition.MutableState,
 	scheduleNewWorkflowTask bool,
 ) error {
 	var err error

@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_mock.go
-
 package workflow
 
 import (
@@ -40,7 +38,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -50,7 +47,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -58,96 +55,9 @@ const (
 	defaultRemoteCallTimeout = 30 * time.Second
 )
 
-const (
-	CallerTypeAPI  CallerType = 0
-	CallerTypeTask CallerType = 1
-)
-
-type (
-	CallerType int
-
-	Context interface {
-		GetWorkflowKey() definition.WorkflowKey
-
-		LoadMutableState(ctx context.Context) (MutableState, error)
-		LoadExecutionStats(ctx context.Context) (*persistencespb.ExecutionStats, error)
-		Clear()
-
-		Lock(ctx context.Context, caller CallerType) error
-		Unlock(caller CallerType)
-
-		GetHistorySize() int64
-		SetHistorySize(size int64)
-
-		ReapplyEvents(
-			eventBatches []*persistence.WorkflowEvents,
-		) error
-
-		PersistWorkflowEvents(
-			ctx context.Context,
-			workflowEvents *persistence.WorkflowEvents,
-		) (int64, error)
-
-		CreateWorkflowExecution(
-			ctx context.Context,
-			now time.Time,
-			createMode persistence.CreateWorkflowMode,
-			prevRunID string,
-			prevLastWriteVersion int64,
-			newMutableState MutableState,
-			newWorkflow *persistence.WorkflowSnapshot,
-			newWorkflowEvents []*persistence.WorkflowEvents,
-		) error
-		ConflictResolveWorkflowExecution(
-			ctx context.Context,
-			now time.Time,
-			conflictResolveMode persistence.ConflictResolveWorkflowMode,
-			resetMutableState MutableState,
-			newContext Context,
-			newMutableState MutableState,
-			currentContext Context,
-			currentMutableState MutableState,
-			currentTransactionPolicy *TransactionPolicy,
-		) error
-		UpdateWorkflowExecutionAsActive(
-			ctx context.Context,
-			now time.Time,
-		) error
-		UpdateWorkflowExecutionWithNewAsActive(
-			ctx context.Context,
-			now time.Time,
-			newContext Context,
-			newMutableState MutableState,
-		) error
-		UpdateWorkflowExecutionAsPassive(
-			ctx context.Context,
-			now time.Time,
-		) error
-		UpdateWorkflowExecutionWithNewAsPassive(
-			ctx context.Context,
-			now time.Time,
-			newContext Context,
-			newMutableState MutableState,
-		) error
-		UpdateWorkflowExecutionWithNew(
-			ctx context.Context,
-			now time.Time,
-			updateMode persistence.UpdateWorkflowMode,
-			newContext Context,
-			newMutableState MutableState,
-			currentWorkflowTransactionPolicy TransactionPolicy,
-			newWorkflowTransactionPolicy *TransactionPolicy,
-		) error
-		SetWorkflowExecution(
-			ctx context.Context,
-			now time.Time,
-		) error
-	}
-)
-
 type (
 	ContextImpl struct {
-		shard          shard.Context
+		shard          definition.ShardContext
 		workflowKey    definition.WorkflowKey
 		logger         log.Logger
 		metricsHandler metrics.MetricsHandler
@@ -156,15 +66,15 @@ type (
 		transaction    Transaction
 
 		mutex        locks.PriorityMutex
-		MutableState MutableState
+		MutableState definition.MutableState
 		stats        *persistencespb.ExecutionStats
 	}
 )
 
-var _ Context = (*ContextImpl)(nil)
+var _ definition.WorkflowContext = (*ContextImpl)(nil)
 
 func NewContext(
-	shard shard.Context,
+	shard definition.ShardContext,
 	workflowKey definition.WorkflowKey,
 	logger log.Logger,
 ) *ContextImpl {
@@ -185,12 +95,12 @@ func NewContext(
 
 func (c *ContextImpl) Lock(
 	ctx context.Context,
-	caller CallerType,
+	caller definition.CallerType,
 ) error {
 	switch caller {
-	case CallerTypeAPI:
+	case definition.CallerTypeAPI:
 		return c.mutex.LockHigh(ctx)
-	case CallerTypeTask:
+	case definition.CallerTypeTask:
 		return c.mutex.LockLow(ctx)
 	default:
 		panic(fmt.Sprintf("unknown caller type: %v", caller))
@@ -198,12 +108,12 @@ func (c *ContextImpl) Lock(
 }
 
 func (c *ContextImpl) Unlock(
-	caller CallerType,
+	caller definition.CallerType,
 ) {
 	switch caller {
-	case CallerTypeAPI:
+	case definition.CallerTypeAPI:
 		c.mutex.UnlockHigh()
-	case CallerTypeTask:
+	case definition.CallerTypeTask:
 		c.mutex.UnlockLow()
 	default:
 		panic(fmt.Sprintf("unknown caller type: %v", caller))
@@ -251,7 +161,7 @@ func (c *ContextImpl) LoadExecutionStats(ctx context.Context) (*persistencespb.E
 	return c.stats, nil
 }
 
-func (c *ContextImpl) LoadMutableState(ctx context.Context) (MutableState, error) {
+func (c *ContextImpl) LoadMutableState(ctx context.Context) (definition.MutableState, error) {
 	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(
 		namespace.ID(c.workflowKey.NamespaceID),
 	)
@@ -305,7 +215,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context) (MutableState, error
 		return nil, err
 	}
 	if flushBeforeReady {
-		return nil, serviceerror.NewInternal("Context counter flushBeforeReady status after loading mutable state from DB")
+		return nil, serviceerror.NewInternal("WorkflowContext counter flushBeforeReady status after loading mutable state from DB")
 	}
 
 	return c.MutableState, nil
@@ -324,7 +234,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	createMode persistence.CreateWorkflowMode,
 	prevRunID string,
 	prevLastWriteVersion int64,
-	newMutableState MutableState,
+	newMutableState definition.MutableState,
 	newWorkflow *persistence.WorkflowSnapshot,
 	newWorkflowEvents []*persistence.WorkflowEvents,
 ) (retError error) {
@@ -370,12 +280,12 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	now time.Time,
 	conflictResolveMode persistence.ConflictResolveWorkflowMode,
-	resetMutableState MutableState,
-	newContext Context,
-	newMutableState MutableState,
-	currentContext Context,
-	currentMutableState MutableState,
-	currentTransactionPolicy *TransactionPolicy,
+	resetMutableState definition.MutableState,
+	newContext definition.WorkflowContext,
+	newMutableState definition.MutableState,
+	currentContext definition.WorkflowContext,
+	currentMutableState definition.MutableState,
+	currentTransactionPolicy *definition.TransactionPolicy,
 ) (retError error) {
 
 	defer func() {
@@ -386,7 +296,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 
 	resetWorkflow, resetWorkflowEventsSeq, err := resetMutableState.CloseTransactionAsSnapshot(
 		now,
-		TransactionPolicyPassive,
+		definition.TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
@@ -407,7 +317,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 
 		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
 			now,
-			TransactionPolicyPassive,
+			definition.TransactionPolicyPassive,
 		)
 		if err != nil {
 			return err
@@ -494,7 +404,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		nil,
 		nil,
-		TransactionPolicyActive,
+		definition.TransactionPolicyActive,
 		nil,
 	); err != nil {
 		return err
@@ -513,8 +423,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsActive(
 	ctx context.Context,
 	now time.Time,
-	newContext Context,
-	newMutableState MutableState,
+	newContext definition.WorkflowContext,
+	newMutableState definition.MutableState,
 ) error {
 
 	return c.UpdateWorkflowExecutionWithNew(
@@ -523,8 +433,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsActive(
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		newContext,
 		newMutableState,
-		TransactionPolicyActive,
-		TransactionPolicyActive.Ptr(),
+		definition.TransactionPolicyActive,
+		definition.TransactionPolicyActive.Ptr(),
 	)
 }
 
@@ -539,7 +449,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsPassive(
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		nil,
 		nil,
-		TransactionPolicyPassive,
+		definition.TransactionPolicyPassive,
 		nil,
 	)
 }
@@ -547,8 +457,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsPassive(
 func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsPassive(
 	ctx context.Context,
 	now time.Time,
-	newContext Context,
-	newMutableState MutableState,
+	newContext definition.WorkflowContext,
+	newMutableState definition.MutableState,
 ) error {
 
 	return c.UpdateWorkflowExecutionWithNew(
@@ -557,8 +467,8 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsPassive(
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		newContext,
 		newMutableState,
-		TransactionPolicyPassive,
-		TransactionPolicyPassive.Ptr(),
+		definition.TransactionPolicyPassive,
+		definition.TransactionPolicyPassive.Ptr(),
 	)
 }
 
@@ -566,10 +476,10 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	ctx context.Context,
 	now time.Time,
 	updateMode persistence.UpdateWorkflowMode,
-	newContext Context,
-	newMutableState MutableState,
-	currentWorkflowTransactionPolicy TransactionPolicy,
-	newWorkflowTransactionPolicy *TransactionPolicy,
+	newContext definition.WorkflowContext,
+	newMutableState definition.MutableState,
+	currentWorkflowTransactionPolicy definition.TransactionPolicy,
+	newWorkflowTransactionPolicy *definition.TransactionPolicy,
 ) (retError error) {
 
 	defer func() {
@@ -667,7 +577,7 @@ func (c *ContextImpl) SetWorkflowExecution(ctx context.Context, now time.Time) (
 
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsSnapshot(
 		now,
-		TransactionPolicyPassive,
+		definition.TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
@@ -784,7 +694,7 @@ func (c *ContextImpl) ReapplyEvents(
 	for _, events := range eventBatches {
 		if namespace.ID(events.NamespaceID) != namespaceID ||
 			events.WorkflowID != workflowID {
-			return serviceerror.NewInternal("Context encountered mismatch namespaceID / workflowID in events reapplication.")
+			return serviceerror.NewInternal("WorkflowContext encountered mismatch namespaceID / workflowID in events reapplication.")
 		}
 
 		for _, e := range events.Events {
@@ -925,7 +835,7 @@ func (c *ContextImpl) enforceSizeCheck(
 
 func emitStateTransitionCount(
 	metricsHandler metrics.MetricsHandler,
-	mutableState MutableState,
+	mutableState definition.MutableState,
 ) {
 	if mutableState == nil {
 		return

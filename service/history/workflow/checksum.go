@@ -31,6 +31,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/checksum"
 	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/service/history/definition"
+
 	"golang.org/x/exp/maps"
 )
 
@@ -38,7 +40,7 @@ const (
 	mutableStateChecksumPayloadV1 = int32(1)
 )
 
-func generateMutableStateChecksum(ms MutableState) (*persistencespb.Checksum, error) {
+func generateMutableStateChecksum(ms definition.MutableState) (*persistencespb.Checksum, error) {
 	payload := newMutableStateChecksumPayload(ms)
 	csum, err := checksum.GenerateCRC32(payload, mutableStateChecksumPayloadV1)
 	if err != nil {
@@ -48,7 +50,7 @@ func generateMutableStateChecksum(ms MutableState) (*persistencespb.Checksum, er
 }
 
 func verifyMutableStateChecksum(
-	ms MutableState,
+	ms definition.MutableState,
 	csum *persistencespb.Checksum,
 ) error {
 	if csum.Version != mutableStateChecksumPayloadV1 {
@@ -58,7 +60,7 @@ func verifyMutableStateChecksum(
 	return checksum.Verify(payload, csum)
 }
 
-func newMutableStateChecksumPayload(ms MutableState) *checksumspb.MutableStateChecksumPayload {
+func newMutableStateChecksumPayload(ms definition.MutableState) *checksumspb.MutableStateChecksumPayload {
 	executionInfo := ms.GetExecutionInfo()
 	executionState := ms.GetExecutionState()
 	payload := &checksumspb.MutableStateChecksumPayload{

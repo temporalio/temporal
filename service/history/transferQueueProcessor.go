@@ -45,10 +45,10 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -60,8 +60,8 @@ type (
 	transferQueueProcessorImpl struct {
 		singleProcessor           bool
 		currentClusterName        string
-		shard                     shard.Context
-		workflowCache             workflow.Cache
+		shard                     definition.ShardContext
+		workflowCache             definition.WorkflowCache
 		archivalClient            archiver.Client
 		sdkClientFactory          sdk.ClientFactory
 		taskAllocator             taskAllocator
@@ -85,8 +85,8 @@ type (
 )
 
 func newTransferQueueProcessor(
-	shard shard.Context,
-	workflowCache workflow.Cache,
+	shard definition.ShardContext,
+	workflowCache definition.WorkflowCache,
 	scheduler queues.Scheduler,
 	priorityAssigner queues.PriorityAssigner,
 	clientBean client.Bean,

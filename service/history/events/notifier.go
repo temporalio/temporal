@@ -29,17 +29,14 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/history/definition"
 )
 
 const (
@@ -47,25 +44,6 @@ const (
 )
 
 type (
-	Notifier interface {
-		common.Daemon
-		NotifyNewHistoryEvent(event *Notification)
-		WatchHistoryEvent(identifier definition.WorkflowKey) (string, chan *Notification, error)
-		UnwatchHistoryEvent(identifier definition.WorkflowKey, subscriberID string) error
-	}
-
-	Notification struct {
-		ID                     definition.WorkflowKey
-		LastFirstEventID       int64
-		LastFirstEventTxnID    int64
-		NextEventID            int64
-		PreviousStartedEventID int64
-		Timestamp              time.Time
-		CurrentBranchToken     []byte
-		WorkflowState          enumsspb.WorkflowExecutionState
-		WorkflowStatus         enumspb.WorkflowExecutionStatus
-	}
-
 	NotifierImpl struct {
 		timeSource     clock.TimeSource
 		metricsHandler metrics.MetricsHandler
@@ -74,7 +52,7 @@ type (
 		// stop signal channel
 		closeChan chan bool
 		// this channel will never close
-		eventsChan chan *Notification
+		eventsChan chan *definition.Notification
 		// function which calculate the shard ID from given namespaceID and workflowID pair
 		workflowIDToShardID func(namespace.ID, string) int32
 
@@ -86,35 +64,7 @@ type (
 	}
 )
 
-var _ Notifier = (*NotifierImpl)(nil)
-
-func NewNotification(
-	namespaceID string,
-	workflowExecution *commonpb.WorkflowExecution,
-	lastFirstEventID int64,
-	lastFirstEventTxnID int64,
-	nextEventID int64,
-	previousStartedEventID int64,
-	currentBranchToken []byte,
-	workflowState enumsspb.WorkflowExecutionState,
-	workflowStatus enumspb.WorkflowExecutionStatus,
-) *Notification {
-
-	return &Notification{
-		ID: definition.NewWorkflowKey(
-			namespaceID,
-			workflowExecution.GetWorkflowId(),
-			workflowExecution.GetRunId(),
-		),
-		LastFirstEventID:       lastFirstEventID,
-		LastFirstEventTxnID:    lastFirstEventTxnID,
-		NextEventID:            nextEventID,
-		PreviousStartedEventID: previousStartedEventID,
-		CurrentBranchToken:     currentBranchToken,
-		WorkflowState:          workflowState,
-		WorkflowStatus:         workflowStatus,
-	}
-}
+var _ definition.Notifier = (*NotifierImpl)(nil)
 
 func NewNotifier(
 	timeSource clock.TimeSource,
@@ -123,7 +73,7 @@ func NewNotifier(
 ) *NotifierImpl {
 
 	hashFn := func(key interface{}) uint32 {
-		notification, ok := key.(Notification)
+		notification, ok := key.(definition.Notification)
 		if !ok {
 			return 0
 		}
@@ -134,7 +84,7 @@ func NewNotifier(
 		metricsHandler: metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryEventNotificationScope)),
 		status:         common.DaemonStatusInitialized,
 		closeChan:      make(chan bool),
-		eventsChan:     make(chan *Notification, eventsChanSize),
+		eventsChan:     make(chan *definition.Notification, eventsChanSize),
 
 		workflowIDToShardID: workflowIDToShardID,
 
@@ -143,16 +93,16 @@ func NewNotifier(
 }
 
 func (notifier *NotifierImpl) WatchHistoryEvent(
-	identifier definition.WorkflowKey) (string, chan *Notification, error) {
+	identifier definition.WorkflowKey) (string, chan *definition.Notification, error) {
 
-	channel := make(chan *Notification, 1)
+	channel := make(chan *definition.Notification, 1)
 	subscriberID := uuid.New()
-	subscribers := map[string]chan *Notification{
+	subscribers := map[string]chan *definition.Notification{
 		subscriberID: channel,
 	}
 
 	_, _, err := notifier.eventsPubsubs.PutOrDo(identifier, subscribers, func(key interface{}, value interface{}) error {
-		subscribers := value.(map[string]chan *Notification)
+		subscribers := value.(map[string]chan *definition.Notification)
 
 		if _, ok := subscribers[subscriberID]; ok {
 			// UUID collision
@@ -174,7 +124,7 @@ func (notifier *NotifierImpl) UnwatchHistoryEvent(
 
 	success := true
 	notifier.eventsPubsubs.RemoveIf(identifier, func(key interface{}, value interface{}) bool {
-		subscribers := value.(map[string]chan *Notification)
+		subscribers := value.(map[string]chan *definition.Notification)
 
 		if _, ok := subscribers[subscriberID]; !ok {
 			// cannot find the subscribe ID, which means there is a bug
@@ -194,13 +144,13 @@ func (notifier *NotifierImpl) UnwatchHistoryEvent(
 	return nil
 }
 
-func (notifier *NotifierImpl) dispatchHistoryEventNotification(event *Notification) {
+func (notifier *NotifierImpl) dispatchHistoryEventNotification(event *definition.Notification) {
 	identifier := event.ID
 
 	startTime := time.Now().UTC()
 	defer notifier.metricsHandler.Timer(metrics.HistoryEventNotificationFanoutLatency.GetMetricName()).Record(time.Since(startTime))
 	_, _, _ = notifier.eventsPubsubs.GetAndDo(identifier, func(key interface{}, value interface{}) error {
-		subscribers := value.(map[string]chan *Notification)
+		subscribers := value.(map[string]chan *definition.Notification)
 
 		for _, channel := range subscribers {
 			select {
@@ -214,7 +164,7 @@ func (notifier *NotifierImpl) dispatchHistoryEventNotification(event *Notificati
 	})
 }
 
-func (notifier *NotifierImpl) enqueueHistoryEventNotification(event *Notification) {
+func (notifier *NotifierImpl) enqueueHistoryEventNotification(event *definition.Notification) {
 	// set the Timestamp just before enqueuing the event
 	event.Timestamp = notifier.timeSource.Now()
 	select {
@@ -258,6 +208,6 @@ func (notifier *NotifierImpl) Stop() {
 	close(notifier.closeChan)
 }
 
-func (notifier *NotifierImpl) NotifyNewHistoryEvent(event *Notification) {
+func (notifier *NotifierImpl) NotifyNewHistoryEvent(event *definition.Notification) {
 	notifier.enqueueHistoryEventNotification(event)
 }

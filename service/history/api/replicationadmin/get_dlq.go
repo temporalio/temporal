@@ -29,14 +29,14 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/shard"
 )
 
 func GetDLQ(
 	ctx context.Context,
 	request *historyservice.GetDLQMessagesRequest,
-	shard shard.Context,
+	shard definition.ShardContext,
 	replicationDLQHandler replication.DLQHandler,
 ) (*historyservice.GetDLQMessagesResponse, error) {
 	_, ok := shard.GetClusterMetadata().GetAllClusterInfo()[request.GetSourceCluster()]

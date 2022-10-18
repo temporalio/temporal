@@ -47,13 +47,11 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -67,8 +65,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -104,6 +101,8 @@ var (
 	ErrMissingSignalInitiatedEvent = serviceerror.NewInternal("unable to get signal initiated event")
 )
 
+var emptyTasks = []tasks.Task{}
+
 type (
 	MutableStateImpl struct {
 		pendingActivityTimerHeartbeats map[int64]time.Time                    // Scheduled Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
@@ -137,7 +136,7 @@ type (
 		executionInfo  *persistencespb.WorkflowExecutionInfo // Workflow mutable state info.
 		executionState *persistencespb.WorkflowExecutionState
 
-		hBuilder *HistoryBuilder
+		hBuilder definition.HistoryBuilder
 
 		// in memory only attributes
 		// indicate the current version
@@ -169,11 +168,11 @@ type (
 
 		taskGenerator       TaskGenerator
 		workflowTaskManager *workflowTaskStateMachine
-		QueryRegistry       QueryRegistry
+		QueryRegistry       definition.QueryRegistry
 
-		shard           shard.Context
+		shard           definition.ShardContext
 		clusterMetadata cluster.Metadata
-		eventsCache     events.Cache
+		eventsCache     definition.EventCache
 		config          *configs.Config
 		timeSource      clock.TimeSource
 		logger          log.Logger
@@ -181,11 +180,11 @@ type (
 	}
 )
 
-var _ MutableState = (*MutableStateImpl)(nil)
+var _ definition.MutableState = (*MutableStateImpl)(nil)
 
 func NewMutableState(
-	shard shard.Context,
-	eventsCache events.Cache,
+	shard definition.ShardContext,
+	eventsCache definition.EventCache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	startTime time.Time,
@@ -270,8 +269,8 @@ func NewMutableState(
 }
 
 func newMutableStateFromDB(
-	shard shard.Context,
-	eventsCache events.Cache,
+	shard definition.ShardContext,
+	eventsCache definition.EventCache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	dbRecord *persistencespb.WorkflowMutableState,
@@ -352,8 +351,8 @@ func newMutableStateFromDB(
 }
 
 func NewSanitizedMutableState(
-	shard shard.Context,
-	eventsCache events.Cache,
+	shard definition.ShardContext,
+	eventsCache definition.EventCache,
 	logger log.Logger,
 	namespaceEntry *namespace.Namespace,
 	mutableStateRecord *persistencespb.WorkflowMutableState,
@@ -466,7 +465,7 @@ func (e *MutableStateImpl) SetCurrentBranchToken(
 	return nil
 }
 
-func (e *MutableStateImpl) SetHistoryBuilder(hBuilder *HistoryBuilder) {
+func (e *MutableStateImpl) SetHistoryBuilder(hBuilder definition.HistoryBuilder) {
 	e.hBuilder = hBuilder
 }
 
@@ -614,7 +613,7 @@ func (e *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
 	return wType
 }
 
-func (e *MutableStateImpl) GetQueryRegistry() QueryRegistry {
+func (e *MutableStateImpl) GetQueryRegistry() definition.QueryRegistry {
 	return e.QueryRegistry
 }
 
@@ -634,7 +633,7 @@ func (e *MutableStateImpl) GetActivityScheduledEvent(
 	}
 	event, err := e.eventsCache.GetEvent(
 		ctx,
-		events.EventKey{
+		definition.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
@@ -714,7 +713,7 @@ func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
 	}
 	event, err := e.eventsCache.GetEvent(
 		ctx,
-		events.EventKey{
+		definition.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
@@ -757,7 +756,7 @@ func (e *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
 	}
 	event, err := e.eventsCache.GetEvent(
 		ctx,
-		events.EventKey{
+		definition.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
@@ -831,7 +830,7 @@ func (e *MutableStateImpl) GetSignalExternalInitiatedEvent(
 	}
 	event, err := e.eventsCache.GetEvent(
 		ctx,
-		events.EventKey{
+		definition.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
@@ -869,7 +868,7 @@ func (e *MutableStateImpl) GetCompletionEvent(
 
 	event, err := e.eventsCache.GetEvent(
 		ctx,
-		events.EventKey{
+		definition.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
@@ -919,7 +918,7 @@ func (e *MutableStateImpl) GetStartEvent(
 
 	event, err := e.eventsCache.GetEvent(
 		ctx,
-		events.EventKey{
+		definition.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
@@ -1024,7 +1023,7 @@ func (e *MutableStateImpl) writeEventToCache(
 	// For completion event: store it within events cache so we can communicate the result to parent execution
 	// during the processing of DeleteTransferTask without loading this event from database
 	e.eventsCache.PutEvent(
-		events.EventKey{
+		definition.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
@@ -1237,7 +1236,7 @@ func (e *MutableStateImpl) DeleteUserTimer(
 // GetWorkflowTaskInfo returns details about the in-progress workflow task
 func (e *MutableStateImpl) GetWorkflowTaskInfo(
 	scheduledEventID int64,
-) (*WorkflowTaskInfo, bool) {
+) (*definition.WorkflowTaskInfo, bool) {
 	return e.workflowTaskManager.GetWorkflowTaskInfo(scheduledEventID)
 }
 
@@ -1269,7 +1268,7 @@ func (e *MutableStateImpl) HasPendingWorkflowTask() bool {
 	return e.workflowTaskManager.HasPendingWorkflowTask()
 }
 
-func (e *MutableStateImpl) GetPendingWorkflowTask() (*WorkflowTaskInfo, bool) {
+func (e *MutableStateImpl) GetPendingWorkflowTask() (*definition.WorkflowTaskInfo, bool) {
 	return e.workflowTaskManager.GetPendingWorkflowTask()
 }
 
@@ -1277,7 +1276,7 @@ func (e *MutableStateImpl) HasInFlightWorkflowTask() bool {
 	return e.workflowTaskManager.HasInFlightWorkflowTask()
 }
 
-func (e *MutableStateImpl) GetInFlightWorkflowTask() (*WorkflowTaskInfo, bool) {
+func (e *MutableStateImpl) GetInFlightWorkflowTask() (*definition.WorkflowTaskInfo, bool) {
 	return e.workflowTaskManager.GetInFlightWorkflowTask()
 }
 
@@ -1304,7 +1303,7 @@ func (e *MutableStateImpl) ClearTransientWorkflowTask() error {
 		return serviceerror.NewInternal("cannot clear transient workflow task when there are buffered events")
 	}
 	// no buffered event
-	resetWorkflowTaskInfo := &WorkflowTaskInfo{
+	resetWorkflowTaskInfo := &definition.WorkflowTaskInfo{
 		Version:             common.EmptyVersion,
 		ScheduledEventID:    common.EmptyEventID,
 		StartedEventID:      common.EmptyEventID,
@@ -1417,7 +1416,7 @@ func (e *MutableStateImpl) DeleteSignalRequested(
 func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	execution commonpb.WorkflowExecution,
-	previousExecutionState MutableState,
+	previousExecutionState definition.MutableState,
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	firstRunID string,
 ) (*historypb.HistoryEvent, error) {
@@ -1690,7 +1689,7 @@ func (e *MutableStateImpl) AddFirstWorkflowTaskScheduled(
 
 func (e *MutableStateImpl) AddWorkflowTaskScheduledEvent(
 	bypassTaskGeneration bool,
-) (*WorkflowTaskInfo, error) {
+) (*definition.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
@@ -1702,7 +1701,7 @@ func (e *MutableStateImpl) AddWorkflowTaskScheduledEvent(
 func (e *MutableStateImpl) AddWorkflowTaskScheduledEventAsHeartbeat(
 	bypassTaskGeneration bool,
 	originalScheduledTimestamp *time.Time,
-) (*WorkflowTaskInfo, error) {
+) (*definition.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskScheduled
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, err
@@ -1710,7 +1709,7 @@ func (e *MutableStateImpl) AddWorkflowTaskScheduledEventAsHeartbeat(
 	return e.workflowTaskManager.AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration, originalScheduledTimestamp)
 }
 
-func (e *MutableStateImpl) ReplicateTransientWorkflowTaskScheduled() (*WorkflowTaskInfo, error) {
+func (e *MutableStateImpl) ReplicateTransientWorkflowTaskScheduled() (*definition.WorkflowTaskInfo, error) {
 	return e.workflowTaskManager.ReplicateTransientWorkflowTaskScheduled()
 }
 
@@ -1722,7 +1721,7 @@ func (e *MutableStateImpl) ReplicateWorkflowTaskScheduledEvent(
 	attempt int32,
 	scheduleTimestamp *time.Time,
 	originalScheduledTimestamp *time.Time,
-) (*WorkflowTaskInfo, error) {
+) (*definition.WorkflowTaskInfo, error) {
 	return e.workflowTaskManager.ReplicateWorkflowTaskScheduledEvent(version, scheduledEventID, taskQueue, startToCloseTimeout, attempt, scheduleTimestamp, originalScheduledTimestamp)
 }
 
@@ -1731,7 +1730,7 @@ func (e *MutableStateImpl) AddWorkflowTaskStartedEvent(
 	requestID string,
 	taskQueue *taskqueuepb.TaskQueue,
 	identity string,
-) (*historypb.HistoryEvent, *WorkflowTaskInfo, error) {
+) (*historypb.HistoryEvent, *definition.WorkflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, nil, err
@@ -1740,19 +1739,19 @@ func (e *MutableStateImpl) AddWorkflowTaskStartedEvent(
 }
 
 func (e *MutableStateImpl) ReplicateWorkflowTaskStartedEvent(
-	workflowTask *WorkflowTaskInfo,
+	workflowTask *definition.WorkflowTaskInfo,
 	version int64,
 	scheduledEventID int64,
 	startedEventID int64,
 	requestID string,
 	timestamp time.Time,
-) (*WorkflowTaskInfo, error) {
+) (*definition.WorkflowTaskInfo, error) {
 
 	return e.workflowTaskManager.ReplicateWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID, startedEventID, requestID, timestamp)
 }
 
 func (e *MutableStateImpl) CreateTransientWorkflowTask(
-	workflowTask *WorkflowTaskInfo,
+	workflowTask *definition.WorkflowTaskInfo,
 	identity string,
 ) *historyspb.TransientWorkflowTaskInfo {
 	return e.workflowTaskManager.CreateTransientWorkflowTaskEvents(workflowTask, identity)
@@ -3163,7 +3162,7 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 	workflowTaskCompletedEventID int64,
 	parentNamespace namespace.Name,
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
-) (*historypb.HistoryEvent, MutableState, error) {
+) (*historypb.HistoryEvent, definition.MutableState, error) {
 
 	opTag := tag.WorkflowActionWorkflowContinueAsNew
 	if err := e.checkMutability(opTag); err != nil {
@@ -3829,7 +3828,7 @@ func (e *MutableStateImpl) StartTransaction(
 
 func (e *MutableStateImpl) CloseTransactionAsMutation(
 	now time.Time,
-	transactionPolicy TransactionPolicy,
+	transactionPolicy definition.TransactionPolicy,
 ) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
 
 	if err := e.prepareCloseTransaction(
@@ -3860,8 +3859,8 @@ func (e *MutableStateImpl) CloseTransactionAsMutation(
 
 	// we generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
-	// code that modifies the returned object lives inside Context.resetWorkflowExecution
-	// currently, the updates done inside Context.resetWorkflowExecution doesn't
+	// code that modifies the returned object lives inside WorkflowContext.resetWorkflowExecution
+	// currently, the updates done inside WorkflowContext.resetWorkflowExecution doesn't
 	// impact the checksum calculation
 	checksum := e.generateChecksum()
 
@@ -3907,7 +3906,7 @@ func (e *MutableStateImpl) CloseTransactionAsMutation(
 
 func (e *MutableStateImpl) CloseTransactionAsSnapshot(
 	now time.Time,
-	transactionPolicy TransactionPolicy,
+	transactionPolicy definition.TransactionPolicy,
 ) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
 
 	if err := e.prepareCloseTransaction(
@@ -3943,8 +3942,8 @@ func (e *MutableStateImpl) CloseTransactionAsSnapshot(
 
 	// we generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
-	// code that modifies the returned object lives inside Context.resetWorkflowExecution
-	// currently, the updates done inside Context.resetWorkflowExecution doesn't
+	// code that modifies the returned object lives inside WorkflowContext.resetWorkflowExecution
+	// currently, the updates done inside WorkflowContext.resetWorkflowExecution doesn't
 	// impact the checksum calculation
 	checksum := e.generateChecksum()
 
@@ -4000,7 +3999,7 @@ func (e *MutableStateImpl) GenerateMigrationTasks() (tasks.Task, error) {
 }
 
 func (e *MutableStateImpl) prepareCloseTransaction(
-	transactionPolicy TransactionPolicy,
+	transactionPolicy definition.TransactionPolicy,
 ) error {
 
 	if err := e.closeTransactionWithPolicyCheck(
@@ -4032,7 +4031,7 @@ func (e *MutableStateImpl) prepareCloseTransaction(
 }
 
 func (e *MutableStateImpl) cleanupTransaction(
-	_ TransactionPolicy,
+	_ definition.TransactionPolicy,
 ) error {
 
 	e.updateActivityInfos = make(map[int64]*persistencespb.ActivityInfo)
@@ -4073,7 +4072,7 @@ func (e *MutableStateImpl) cleanupTransaction(
 
 func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 	now time.Time,
-	transactionPolicy TransactionPolicy,
+	transactionPolicy definition.TransactionPolicy,
 ) ([]*persistence.WorkflowEvents, []*historypb.HistoryEvent, bool, error) {
 
 	currentBranchToken, err := e.GetCurrentBranchToken()
@@ -4130,7 +4129,7 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 		e.syncActivityToReplicationTask(now, transactionPolicy)...,
 	)
 
-	if transactionPolicy == TransactionPolicyPassive &&
+	if transactionPolicy == definition.TransactionPolicyPassive &&
 		len(e.InsertTasks[tasks.CategoryReplication]) > 0 {
 		return nil, nil, false, serviceerror.NewInternal("should not generate replication task when close transaction as passive")
 	}
@@ -4139,11 +4138,11 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 }
 
 func (e *MutableStateImpl) eventsToReplicationTask(
-	transactionPolicy TransactionPolicy,
+	transactionPolicy definition.TransactionPolicy,
 	events []*historypb.HistoryEvent,
 ) error {
 
-	if transactionPolicy == TransactionPolicyPassive ||
+	if transactionPolicy == definition.TransactionPolicyPassive ||
 		!e.canReplicateEvents() ||
 		len(events) == 0 {
 		return nil
@@ -4161,10 +4160,10 @@ func (e *MutableStateImpl) eventsToReplicationTask(
 
 func (e *MutableStateImpl) syncActivityToReplicationTask(
 	now time.Time,
-	transactionPolicy TransactionPolicy,
+	transactionPolicy definition.TransactionPolicy,
 ) []tasks.Task {
 
-	if transactionPolicy == TransactionPolicyPassive ||
+	if transactionPolicy == definition.TransactionPolicyPassive ||
 		!e.canReplicateEvents() {
 		return emptyTasks
 	}
@@ -4200,10 +4199,10 @@ func (e *MutableStateImpl) updatePendingEventIDs(
 
 func (e *MutableStateImpl) updateWithLastWriteEvent(
 	lastEvent *historypb.HistoryEvent,
-	transactionPolicy TransactionPolicy,
+	transactionPolicy definition.TransactionPolicy,
 ) error {
 
-	if transactionPolicy == TransactionPolicyPassive {
+	if transactionPolicy == definition.TransactionPolicyPassive {
 		// already handled in mutable state.
 		return nil
 	}
@@ -4230,11 +4229,11 @@ func (e *MutableStateImpl) canReplicateEvents() bool {
 // NOTE: do not apply this check on every batch, since transient
 // workflow task && workflow finish will be broken (the first batch)
 func (e *MutableStateImpl) validateNoEventsAfterWorkflowFinish(
-	transactionPolicy TransactionPolicy,
+	transactionPolicy definition.TransactionPolicy,
 	workflowEventSeq []*persistence.WorkflowEvents,
 ) error {
 
-	if transactionPolicy == TransactionPolicyPassive ||
+	if transactionPolicy == definition.TransactionPolicyPassive ||
 		len(workflowEventSeq) == 0 {
 		return nil
 	}
@@ -4380,10 +4379,10 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, e
 }
 
 func (e *MutableStateImpl) closeTransactionWithPolicyCheck(
-	transactionPolicy TransactionPolicy,
+	transactionPolicy definition.TransactionPolicy,
 ) error {
 
-	if transactionPolicy == TransactionPolicyPassive ||
+	if transactionPolicy == definition.TransactionPolicyPassive ||
 		!e.canReplicateEvents() {
 		return nil
 	}
@@ -4402,10 +4401,10 @@ func (e *MutableStateImpl) closeTransactionWithPolicyCheck(
 }
 
 func (e *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
-	transactionPolicy TransactionPolicy,
+	transactionPolicy definition.TransactionPolicy,
 ) error {
 
-	if transactionPolicy == TransactionPolicyPassive ||
+	if transactionPolicy == definition.TransactionPolicyPassive ||
 		!e.IsWorkflowExecutionRunning() {
 		return nil
 	}
@@ -4434,10 +4433,10 @@ func (e *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
 }
 
 func (e *MutableStateImpl) closeTransactionHandleWorkflowReset(
-	transactionPolicy TransactionPolicy,
+	transactionPolicy definition.TransactionPolicy,
 ) error {
 
-	if transactionPolicy == TransactionPolicyPassive ||
+	if transactionPolicy == definition.TransactionPolicyPassive ||
 		!e.IsWorkflowExecutionRunning() {
 		return nil
 	}
@@ -4475,10 +4474,10 @@ func (e *MutableStateImpl) closeTransactionHandleWorkflowReset(
 }
 
 func (e *MutableStateImpl) closeTransactionHandleActivityUserTimerTasks(
-	transactionPolicy TransactionPolicy,
+	transactionPolicy definition.TransactionPolicy,
 ) error {
 
-	if transactionPolicy == TransactionPolicyPassive ||
+	if transactionPolicy == definition.TransactionPolicyPassive ||
 		!e.IsWorkflowExecutionRunning() {
 		return nil
 	}

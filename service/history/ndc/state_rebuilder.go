@@ -38,14 +38,12 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -61,13 +59,13 @@ type (
 			targetWorkflowIdentifier definition.WorkflowKey,
 			targetBranchToken []byte,
 			requestID string,
-		) (workflow.MutableState, int64, error)
+		) (definition.MutableState, int64, error)
 	}
 
 	StateRebuilderImpl struct {
-		shard             shard.Context
+		shard             definition.ShardContext
 		namespaceRegistry namespace.Registry
-		eventsCache       events.Cache
+		eventsCache       definition.EventCache
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
 		taskRefresher     workflow.TaskRefresher
@@ -85,7 +83,7 @@ type (
 var _ StateRebuilder = (*StateRebuilderImpl)(nil)
 
 func NewStateRebuilder(
-	shard shard.Context,
+	shard definition.ShardContext,
 	logger log.Logger,
 ) *StateRebuilderImpl {
 
@@ -117,7 +115,7 @@ func (r *StateRebuilderImpl) Rebuild(
 	targetWorkflowIdentifier definition.WorkflowKey,
 	targetBranchToken []byte,
 	requestID string,
-) (workflow.MutableState, int64, error) {
+) (definition.MutableState, int64, error) {
 	iter := collection.NewPagingIterator(r.getPaginationFn(
 		ctx,
 		common.FirstEventID,
@@ -186,7 +184,7 @@ func (r *StateRebuilderImpl) Rebuild(
 	}
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
-	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(now, workflow.TransactionPolicyPassive)
+	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(now, definition.TransactionPolicyPassive)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -204,7 +202,7 @@ func (r *StateRebuilderImpl) Rebuild(
 func (r *StateRebuilderImpl) initializeBuilders(
 	namespaceEntry *namespace.Namespace,
 	now time.Time,
-) (workflow.MutableState, workflow.MutableStateRebuilder) {
+) (definition.MutableState, workflow.MutableStateRebuilder) {
 	resetMutableState := workflow.NewMutableState(
 		r.shard,
 		r.shard.GetEventsCache(),

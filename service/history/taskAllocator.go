@@ -30,7 +30,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type (
@@ -44,7 +44,7 @@ type (
 
 	taskAllocatorImpl struct {
 		currentClusterName string
-		shard              shard.Context
+		shard              definition.ShardContext
 		namespaceRegistry  namespace.Registry
 		logger             log.Logger
 
@@ -53,7 +53,7 @@ type (
 )
 
 // newTaskAllocator create a new task allocator
-func newTaskAllocator(shard shard.Context) taskAllocator {
+func newTaskAllocator(shard definition.ShardContext) taskAllocator {
 	return &taskAllocatorImpl{
 		currentClusterName: shard.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              shard,

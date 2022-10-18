@@ -43,7 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -54,11 +54,11 @@ type (
 
 	TaskExecutorParams struct {
 		RemoteCluster   string // TODO: Remove this remote cluster from executor then it can use singleton.
-		Shard           shard.Context
+		Shard           definition.ShardContext
 		HistoryResender xdc.NDCHistoryResender
-		HistoryEngine   shard.Engine
+		HistoryEngine   definition.Engine
 		DeleteManager   workflow.DeleteManager
-		WorkflowCache   workflow.Cache
+		WorkflowCache   definition.WorkflowCache
 	}
 
 	TaskExecutorProvider func(params TaskExecutorParams) TaskExecutor
@@ -66,12 +66,12 @@ type (
 	taskExecutorImpl struct {
 		currentCluster     string
 		remoteCluster      string
-		shard              shard.Context
+		shard              definition.ShardContext
 		namespaceRegistry  namespace.Registry
 		nDCHistoryResender xdc.NDCHistoryResender
-		historyEngine      shard.Engine
+		historyEngine      definition.Engine
 		deleteManager      workflow.DeleteManager
-		workflowCache      workflow.Cache
+		workflowCache      definition.WorkflowCache
 		metricsHandler     metrics.MetricsHandler
 		logger             log.Logger
 	}
@@ -81,11 +81,11 @@ type (
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
 func NewTaskExecutor(
 	remoteCluster string,
-	shard shard.Context,
+	shard definition.ShardContext,
 	nDCHistoryResender xdc.NDCHistoryResender,
-	historyEngine shard.Engine,
+	historyEngine definition.Engine,
 	deleteManager workflow.DeleteManager,
-	workflowCache workflow.Cache,
+	workflowCache definition.WorkflowCache,
 ) TaskExecutor {
 	return &taskExecutorImpl{
 		currentCluster:     shard.GetClusterMetadata().GetCurrentClusterName(),
@@ -350,7 +350,7 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, nsID, ex, workflow.CallerTypeTask)
+	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, nsID, ex, definition.CallerTypeTask)
 	if err != nil {
 		return err
 	}

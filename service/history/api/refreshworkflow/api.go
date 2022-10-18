@@ -27,18 +27,17 @@ package refreshworkflow
 import (
 	"context"
 
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
-	shard shard.Context,
+	shard definition.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (retError error) {
 	err := api.ValidateNamespaceUUID(namespace.ID(workflowKey.NamespaceID))

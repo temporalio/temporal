@@ -41,8 +41,8 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
@@ -61,9 +61,9 @@ const (
 type (
 	transferQueueTaskExecutorBase struct {
 		currentClusterName       string
-		shard                    shard.Context
+		shard                    definition.ShardContext
 		registry                 namespace.Registry
-		cache                    workflow.Cache
+		cache                    definition.WorkflowCache
 		archivalClient           archiver.Client
 		logger                   log.Logger
 		metricHandler            metrics.MetricsHandler
@@ -76,8 +76,8 @@ type (
 )
 
 func newTransferQueueTaskExecutorBase(
-	shard shard.Context,
-	workflowCache workflow.Cache,
+	shard definition.ShardContext,
+	workflowCache definition.WorkflowCache,
 	archivalClient archiver.Client,
 	logger log.Logger,
 	metricHandler metrics.MetricsHandler,
@@ -246,7 +246,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
-		workflow.CallerTypeTask,
+		definition.CallerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -298,7 +298,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 	)
 }
 
-func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms workflow.MutableState, weCtx workflow.Context) bool {
+func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms definition.MutableState, weCtx definition.WorkflowContext) bool {
 	closeTransferTaskId := ms.GetExecutionInfo().CloseTransferTaskId
 	// taskID == 0 if workflow closed before this field was added (v1.17).
 	if closeTransferTaskId == 0 {

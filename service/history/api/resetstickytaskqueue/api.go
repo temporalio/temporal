@@ -28,17 +28,16 @@ import (
 	"context"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 )
 
 func Invoke(
 	ctx context.Context,
 	resetRequest *historyservice.ResetStickyTaskQueueRequest,
-	shard shard.Context,
+	shard definition.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (*historyservice.ResetStickyTaskQueueResponse, error) {
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())

@@ -22,22 +22,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package shard
+package definition
 
 import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination controller_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination shard_controller_mock.go
 
 type (
-	Controller interface {
+	ShardController interface {
 		common.Daemon
 		common.Pingable
 
-		GetShardByID(shardID int32) (Context, error)
-		GetShardByNamespaceWorkflow(namespaceID namespace.ID, workflowID string) (Context, error)
+		GetShardByID(shardID int32) (ShardContext, error)
+		GetShardByNamespaceWorkflow(namespaceID namespace.ID, workflowID string) (ShardContext, error)
 		CloseShardByID(shardID int32)
 		ShardIDs() []int32
 	}

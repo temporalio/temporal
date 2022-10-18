@@ -39,12 +39,10 @@ import (
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type (
@@ -53,8 +51,8 @@ type (
 		*require.Assertions
 
 		controller    *gomock.Controller
-		shardContext  *shard.MockContext
-		workflowCache *workflow.MockCache
+		shardContext  *definition.MockShardContext
+		workflowCache *definition.MockWorkflowCache
 
 		shardID      int32
 		namespaceID  string
@@ -81,8 +79,8 @@ func (s *workflowConsistencyCheckerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.shardContext = shard.NewMockContext(s.controller)
-	s.workflowCache = workflow.NewMockCache(s.controller)
+	s.shardContext = definition.NewMockShardContext(s.controller)
+	s.workflowCache = definition.NewMockWorkflowCache(s.controller)
 
 	s.shardID = rand.Int31()
 	s.namespaceID = uuid.New().String()
@@ -102,8 +100,8 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	ctx := context.Background()
 	shardOwnershipAsserted := false
 
-	wfContext := workflow.NewMockContext(s.controller)
-	mutableState := workflow.NewMockMutableState(s.controller)
+	wfContext := definition.NewMockWorkflowContext(s.controller)
+	mutableState := definition.NewMockMutableState(s.controller)
 	released := false
 	releaseFn := func(err error) { released = true }
 
@@ -114,7 +112,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		},
-		workflow.CallerTypeAPI,
+		definition.CallerTypeAPI,
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx).Return(mutableState, nil)
 
@@ -133,9 +131,9 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	ctx := context.Background()
 	shardOwnershipAsserted := false
 
-	wfContext := workflow.NewMockContext(s.controller)
-	mutableState1 := workflow.NewMockMutableState(s.controller)
-	mutableState2 := workflow.NewMockMutableState(s.controller)
+	wfContext := definition.NewMockWorkflowContext(s.controller)
+	mutableState1 := definition.NewMockMutableState(s.controller)
+	mutableState2 := definition.NewMockMutableState(s.controller)
 	released := false
 	releaseFn := func(err error) { released = true }
 
@@ -146,7 +144,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		},
-		workflow.CallerTypeAPI,
+		definition.CallerTypeAPI,
 	).Return(wfContext, releaseFn, nil)
 	gomock.InOrder(
 		wfContext.EXPECT().LoadMutableState(ctx).Return(mutableState1, nil),
@@ -169,7 +167,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	ctx := context.Background()
 	shardOwnershipAsserted := false
 
-	wfContext := workflow.NewMockContext(s.controller)
+	wfContext := definition.NewMockWorkflowContext(s.controller)
 	released := false
 	releaseFn := func(err error) { released = true }
 
@@ -180,7 +178,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		},
-		workflow.CallerTypeAPI,
+		definition.CallerTypeAPI,
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx).Return(nil, serviceerror.NewNotFound(""))
 
@@ -201,7 +199,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	ctx := context.Background()
 	shardOwnershipAsserted := false
 
-	wfContext := workflow.NewMockContext(s.controller)
+	wfContext := definition.NewMockWorkflowContext(s.controller)
 	released := false
 	releaseFn := func(err error) { released = true }
 
@@ -212,7 +210,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		},
-		workflow.CallerTypeAPI,
+		definition.CallerTypeAPI,
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx).Return(nil, serviceerror.NewNotFound(""))
 
@@ -233,7 +231,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	ctx := context.Background()
 	shardOwnershipAsserted := false
 
-	wfContext := workflow.NewMockContext(s.controller)
+	wfContext := definition.NewMockWorkflowContext(s.controller)
 	released := false
 	releaseFn := func(err error) { released = true }
 
@@ -244,7 +242,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 			WorkflowId: s.workflowID,
 			RunId:      s.currentRunID,
 		},
-		workflow.CallerTypeAPI,
+		definition.CallerTypeAPI,
 	).Return(wfContext, releaseFn, nil)
 	wfContext.EXPECT().LoadMutableState(ctx).Return(nil, serviceerror.NewUnavailable(""))
 
@@ -412,7 +410,7 @@ func (s *workflowConsistencyCheckerSuite) TestHistoryEventConsistencyPredicate()
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			mockMutableState := workflow.NewMockMutableState(s.controller)
+			mockMutableState := definition.NewMockMutableState(s.controller)
 			mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 				VersionHistories: tc.versionHistories,
 			})

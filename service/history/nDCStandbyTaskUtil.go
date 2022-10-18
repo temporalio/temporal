@@ -38,12 +38,12 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
-	standbyActionFn     func(context.Context, workflow.Context, workflow.MutableState) (interface{}, error)
+	standbyActionFn     func(context.Context, definition.WorkflowContext, definition.MutableState) (interface{}, error)
 	standbyPostActionFn func(context.Context, tasks.Task, interface{}, log.Logger) error
 
 	standbyCurrentTimeFn func() time.Time
@@ -140,7 +140,7 @@ func newHistoryResendInfo(
 }
 
 func newActivityTaskPostActionInfo(
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	activityScheduleToStartTimeout time.Duration,
 ) (*activityTaskPostActionInfo, error) {
 	resendInfo, err := getHistoryResendInfo(mutableState)
@@ -155,7 +155,7 @@ func newActivityTaskPostActionInfo(
 }
 
 func newActivityRetryTimePostActionInfo(
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	taskQueue string,
 	activityScheduleToStartTimeout time.Duration,
 ) (*activityTaskPostActionInfo, error) {
@@ -172,7 +172,7 @@ func newActivityRetryTimePostActionInfo(
 }
 
 func newWorkflowTaskPostActionInfo(
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	workflowTaskScheduleToStartTimeout int64,
 	taskqueue taskqueuepb.TaskQueue,
 ) (*workflowTaskPostActionInfo, error) {
@@ -189,7 +189,7 @@ func newWorkflowTaskPostActionInfo(
 }
 
 func getHistoryResendInfo(
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 ) (*historyResendInfo, error) {
 
 	currentBranch, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())

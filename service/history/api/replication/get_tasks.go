@@ -31,14 +31,14 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
 func GetTasks(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	replicationAckMgr replication.AckManager,
 	pollingCluster string,
 	ackMessageID int64,

@@ -59,7 +59,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/definition"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -72,6 +71,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -104,7 +104,7 @@ type (
 		mockArchiverProvider        *provider.MockArchiverProvider
 		mockParentClosePolicyClient *parentclosepolicy.MockClient
 
-		workflowCache                   workflow.Cache
+		workflowCache                   definition.WorkflowCache
 		logger                          log.Logger
 		namespaceID                     namespace.ID
 		namespace                       namespace.Name
@@ -2537,7 +2537,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 		s.Run(c.Name, func() {
 			ctrl := gomock.NewController(s.T())
 
-			mockMutableState := workflow.NewMockMutableState(ctrl)
+			mockMutableState := definition.NewMockMutableState(ctrl)
 			var closeTransferTaskId int64
 			if c.CloseTransferTaskIdSet {
 				closeTransferTaskId = 10
@@ -2553,14 +2553,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			namespaceEntry := tests.GlobalNamespaceEntry
 			mockMutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
 
-			mockWorkflowContext := workflow.NewMockContext(ctrl)
+			mockWorkflowContext := definition.NewMockWorkflowContext(ctrl)
 			mockWorkflowContext.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
 			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 
-			mockWorkflowCache := workflow.NewMockCache(ctrl)
+			mockWorkflowCache := definition.NewMockWorkflowCache(ctrl)
 			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
 				gomock.Any(),
-			).Return(mockWorkflowContext, workflow.ReleaseCacheFunc(func(err error) {
+			).Return(mockWorkflowContext, definition.ReleaseFunc(func(err error) {
 			}), nil)
 
 			mockClusterMetadata := cluster.NewMockMetadata(ctrl)
@@ -2568,7 +2568,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName).AnyTimes()
 			mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 
-			mockShard := shard.NewMockContext(ctrl)
+			mockShard := definition.NewMockShardContext(ctrl)
 			mockShard.EXPECT().GetConfig().Return(&configs.Config{
 				TransferProcessorEnsureCloseBeforeDelete: func() bool {
 					return c.EnsureCloseBeforeDelete
@@ -2641,7 +2641,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 
 func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 	task *tasks.WorkflowTask,
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 ) *matchingservice.AddWorkflowTaskRequest {
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: task.TaskQueue,
@@ -2734,7 +2734,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 	namespace namespace.Name,
 	childNamespace namespace.Name,
 	task *tasks.StartChildExecutionTask,
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	ci *persistencespb.ChildExecutionInfo,
 ) *historyservice.StartWorkflowExecutionRequest {
 	event, err := mutableState.GetChildExecutionInitiatedEvent(context.Background(), task.InitiatedEventID)
@@ -2776,7 +2776,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) createPersistenceMutableState(
-	ms workflow.MutableState,
+	ms definition.MutableState,
 	lastEventID int64,
 	lastEventVersion int64,
 ) *persistencespb.WorkflowMutableState {

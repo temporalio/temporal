@@ -36,21 +36,20 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/workflow"
 )
 
 func Invoke(
 	ctx context.Context,
 	request *historyservice.QueryWorkflowRequest,
-	shard shard.Context,
+	shard definition.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -221,7 +220,7 @@ func queryDirectlyThroughMatching(
 	msResp *historyservice.GetMutableStateResponse,
 	namespaceID string,
 	queryRequest *workflowservice.QueryWorkflowRequest,
-	shard shard.Context,
+	shard definition.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,

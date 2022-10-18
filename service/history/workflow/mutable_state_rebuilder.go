@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type (
@@ -53,16 +53,16 @@ type (
 			execution commonpb.WorkflowExecution,
 			history []*historypb.HistoryEvent,
 			newRunHistory []*historypb.HistoryEvent,
-		) (MutableState, error)
+		) (definition.MutableState, error)
 	}
 
 	MutableStateRebuilderImpl struct {
-		shard             shard.Context
+		shard             definition.ShardContext
 		clusterMetadata   cluster.Metadata
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
 
-		mutableState MutableState
+		mutableState definition.MutableState
 	}
 )
 
@@ -74,9 +74,9 @@ const (
 var _ MutableStateRebuilder = (*MutableStateRebuilderImpl)(nil)
 
 func NewMutableStateRebuilder(
-	shard shard.Context,
+	shard definition.ShardContext,
 	logger log.Logger,
-	mutableState MutableState,
+	mutableState definition.MutableState,
 ) *MutableStateRebuilderImpl {
 
 	return &MutableStateRebuilderImpl{
@@ -95,13 +95,13 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	execution commonpb.WorkflowExecution,
 	history []*historypb.HistoryEvent,
 	newRunHistory []*historypb.HistoryEvent,
-) (MutableState, error) {
+) (definition.MutableState, error) {
 
 	if len(history) == 0 {
 		return nil, serviceerror.NewInternal(ErrMessageHistorySizeZero)
 	}
 	firstEvent := history[0]
-	var newRunMutableState MutableState
+	var newRunMutableState definition.MutableState
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
 

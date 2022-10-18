@@ -58,10 +58,10 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 
 	"go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -122,7 +122,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 			namespaceRegistry.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceEntry.ID(), nil).AnyTimes()
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
 
-			mutableState := NewMockMutableState(ctrl)
+			mutableState := definition.NewMockMutableState(ctrl)
 			mutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 			mutableState.EXPECT().GetExecutionInfo().Return(&persistence.WorkflowExecutionInfo{
 				NamespaceId: namespaceEntry.ID().String(),

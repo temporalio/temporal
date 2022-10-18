@@ -42,7 +42,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -53,13 +53,13 @@ type (
 		*require.Assertions
 
 		controller   *gomock.Controller
-		shardContext *shard.MockContext
+		shardContext *definition.MockShardContext
 
 		namespaceID string
 		workflowID  string
 
-		currentContext      *workflow.MockContext
-		currentMutableState *workflow.MockMutableState
+		currentContext      *definition.MockWorkflowContext
+		currentMutableState *definition.MockMutableState
 		currentRunID        string
 	}
 )
@@ -80,13 +80,13 @@ func (s *signalWithStartWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.shardContext = shard.NewMockContext(s.controller)
+	s.shardContext = definition.NewMockShardContext(s.controller)
 
 	s.namespaceID = uuid.New().String()
 	s.workflowID = uuid.New().String()
 
-	s.currentContext = workflow.NewMockContext(s.controller)
-	s.currentMutableState = workflow.NewMockMutableState(s.controller)
+	s.currentContext = definition.NewMockWorkflowContext(s.controller)
+	s.currentMutableState = definition.NewMockMutableState(s.controller)
 	s.currentRunID = uuid.New().String()
 
 	s.shardContext.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
@@ -145,7 +145,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 		request.GetHeader(),
 	).Return(&history.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
-	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(&workflow.WorkflowTaskInfo{}, nil)
+	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(&definition.WorkflowTaskInfo{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, gomock.Any()).Return(nil)
 
 	err := signalWorkflow(

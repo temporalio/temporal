@@ -37,9 +37,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -57,7 +57,7 @@ type (
 
 	queueProcessorBase struct {
 		clusterName    string
-		shard          shard.Context
+		shard          definition.ShardContext
 		timeSource     clock.TimeSource
 		options        *QueueProcessorOptions
 		queueProcessor common.Daemon
@@ -85,11 +85,11 @@ var (
 
 func newQueueProcessorBase(
 	clusterName string,
-	shard shard.Context,
+	shard definition.ShardContext,
 	options *QueueProcessorOptions,
 	queueProcessor common.Daemon,
 	queueAckMgr queueAckMgr,
-	historyCache workflow.Cache,
+	historyCache definition.WorkflowCache,
 	scheduler queues.Scheduler,
 	rescheduler queues.Rescheduler,
 	rateLimiter quotas.RateLimiter,

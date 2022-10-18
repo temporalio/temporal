@@ -31,18 +31,16 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 func Invoke(
 	ctx context.Context,
 	request *historyservice.RecordChildExecutionCompletedRequest,
-	shard shard.Context,
+	shard definition.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.RecordChildExecutionCompletedResponse, retError error) {
 	_, err := api.GetActiveNamespace(shard, namespace.ID(request.GetNamespaceId()))
@@ -56,7 +54,7 @@ func Invoke(
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
 		request.Clock,
-		func(mutableState workflow.MutableState) bool {
+		func(mutableState definition.MutableState) bool {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// current branch already closed, we won't perform any operation, pass the check
 				return true

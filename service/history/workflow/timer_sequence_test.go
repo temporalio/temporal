@@ -35,8 +35,8 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -47,7 +47,7 @@ type (
 		*require.Assertions
 
 		controller       *gomock.Controller
-		mockMutableState *MockMutableState
+		mockMutableState *definition.MockMutableState
 
 		workflowKey   definition.WorkflowKey
 		timerSequence *timerSequenceImpl
@@ -71,7 +71,7 @@ func (s *timerSequenceSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMutableState = NewMockMutableState(s.controller)
+	s.mockMutableState = definition.NewMockMutableState(s.controller)
 
 	s.workflowKey = definition.NewWorkflowKey(
 		tests.NamespaceID.String(),

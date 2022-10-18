@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -55,7 +56,7 @@ type (
 		controller *gomock.Controller
 		mockShard  *shard.ContextTest
 
-		cache Cache
+		cache *CacheImpl
 	}
 )
 
@@ -101,12 +102,12 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
-	mockMS1 := NewMockMutableState(s.controller)
+	mockMS1 := definition.NewMockMutableState(s.controller)
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		namespaceID,
 		execution1,
-		CallerTypeAPI,
+		definition.CallerTypeAPI,
 	)
 	s.Nil(err)
 	ctx.(*ContextImpl).MutableState = mockMS1
@@ -115,7 +116,7 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 		context.Background(),
 		namespaceID,
 		execution1,
-		CallerTypeAPI,
+		definition.CallerTypeAPI,
 	)
 	s.Nil(err)
 	s.Equal(mockMS1, ctx.(*ContextImpl).MutableState)
@@ -129,7 +130,7 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 		context.Background(),
 		namespaceID,
 		execution2,
-		CallerTypeAPI,
+		definition.CallerTypeAPI,
 	)
 	s.Nil(err)
 	s.NotEqual(mockMS1, ctx.(*ContextImpl).MutableState)
@@ -149,7 +150,7 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		namespaceID,
 		we,
-		CallerTypeAPI,
+		definition.CallerTypeAPI,
 	)
 	s.Nil(err)
 
@@ -158,12 +159,12 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 		RunId:      uuid.New(),
 	}
 
-	// Cache is full because context is pinned, should get an error now
+	// WorkflowCache is full because context is pinned, should get an error now
 	_, _, err2 := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		namespaceID,
 		we2,
-		CallerTypeAPI,
+		definition.CallerTypeAPI,
 	)
 	s.NotNil(err2)
 
@@ -174,7 +175,7 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		namespaceID,
 		we2,
-		CallerTypeAPI,
+		definition.CallerTypeAPI,
 	)
 	s.Nil(err3)
 	release2(err3)
@@ -184,7 +185,7 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 		context.Background(),
 		namespaceID,
 		we,
-		CallerTypeAPI,
+		definition.CallerTypeAPI,
 	)
 	s.Nil(err4)
 	s.False(ctx == newContext)
@@ -204,12 +205,12 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		namespaceID,
 		we,
-		CallerTypeAPI,
+		definition.CallerTypeAPI,
 	)
 	s.Nil(err)
 	// since we are just testing whether the release function will clear the cache
 	// all we need is a fake MutableState
-	mock := NewMockMutableState(s.controller)
+	mock := definition.NewMockMutableState(s.controller)
 	ctx.(*ContextImpl).MutableState = mock
 
 	release(nil)
@@ -220,7 +221,7 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		namespaceID,
 		we,
-		CallerTypeAPI,
+		definition.CallerTypeAPI,
 	)
 	s.Nil(err)
 
@@ -234,7 +235,7 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 		context.Background(),
 		namespaceID,
 		we,
-		CallerTypeAPI,
+		definition.CallerTypeAPI,
 	)
 	s.Nil(err)
 	s.Nil(ctx.(*ContextImpl).MutableState)
@@ -269,14 +270,14 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 				WorkflowId: workflowId,
 				RunId:      runID,
 			},
-			CallerTypeAPI,
+			definition.CallerTypeAPI,
 		)
 		s.Nil(err)
 		// since each time the is reset to nil
 		s.Nil(ctx.(*ContextImpl).MutableState)
 		// since we are just testing whether the release function will clear the cache
 		// all we need is a fake MutableState
-		mock := NewMockMutableState(s.controller)
+		mock := definition.NewMockMutableState(s.controller)
 		mock.EXPECT().GetQueryRegistry().Return(NewQueryRegistry())
 		ctx.(*ContextImpl).MutableState = mock
 		release(errors.New("some random error message"))
@@ -294,7 +295,7 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 			WorkflowId: workflowId,
 			RunId:      runID,
 		},
-		CallerTypeAPI,
+		definition.CallerTypeAPI,
 	)
 	s.Nil(err)
 	// since we are just testing whether the release function will clear the cache
@@ -331,7 +332,7 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 		startGroup.Done()
 		startGroup.Wait()
 
-		var releaseFn ReleaseCacheFunc
+		var releaseFn definition.ReleaseFunc
 		var err error
 		for {
 			_, releaseFn, err = s.cache.GetOrCreateWorkflowExecution(
@@ -341,7 +342,7 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 					WorkflowId: workflowID,
 					RunId:      runID,
 				},
-				CallerTypeAPI,
+				definition.CallerTypeAPI,
 			)
 			if err == nil {
 				break

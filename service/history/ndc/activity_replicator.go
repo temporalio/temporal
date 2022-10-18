@@ -30,7 +30,7 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tasks"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -68,15 +67,15 @@ type (
 	}
 
 	ActivityReplicatorImpl struct {
-		historyCache    workflow.Cache
+		historyCache    definition.WorkflowCache
 		clusterMetadata cluster.Metadata
 		logger          log.Logger
 	}
 )
 
 func NewActivityReplicator(
-	shard shard.Context,
-	historyCache workflow.Cache,
+	shard definition.ShardContext,
+	historyCache definition.WorkflowCache,
 	logger log.Logger,
 ) *ActivityReplicatorImpl {
 
@@ -107,7 +106,7 @@ func (r *ActivityReplicatorImpl) SyncActivity(
 		ctx,
 		namespaceID,
 		execution,
-		workflow.CallerTypeAPI,
+		definition.CallerTypeTask,
 	)
 	if err != nil {
 		// for get workflow execution context, with valid run id
@@ -211,7 +210,7 @@ func (r *ActivityReplicatorImpl) SyncActivity(
 		updateMode,
 		nil, // no new workflow
 		nil, // no new workflow
-		workflow.TransactionPolicyPassive,
+		definition.TransactionPolicyPassive,
 		nil,
 	)
 }
@@ -279,7 +278,7 @@ func (r *ActivityReplicatorImpl) testVersionHistory(
 	workflowID string,
 	runID string,
 	scheduledEventID int64,
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	incomingVersionHistory *historyspb.VersionHistory,
 ) (bool, error) {
 

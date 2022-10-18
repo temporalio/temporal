@@ -29,13 +29,13 @@ import (
 
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/shard"
 )
 
 func GetDLQTasks(
 	ctx context.Context,
-	shard shard.Context,
+	shard definition.ShardContext,
 	replicationAckMgr replication.AckManager,
 	taskInfos []*replicationspb.ReplicationTaskInfo,
 ) ([]*replicationspb.ReplicationTask, error) {

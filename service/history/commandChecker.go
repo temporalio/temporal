@@ -47,7 +47,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type (
@@ -68,7 +68,7 @@ type (
 		memoSizeLimitWarn  int
 		memoSizeLimitError int
 
-		mutableState              workflow.MutableState
+		mutableState              definition.MutableState
 		searchAttributesValidator *searchattribute.Validator
 		executionStats            *persistencespb.ExecutionStats
 		metricsHandler            metrics.MetricsHandler
@@ -101,7 +101,7 @@ func newWorkflowSizeChecker(
 	blobSizeLimitError int,
 	memoSizeLimitWarn int,
 	memoSizeLimitError int,
-	mutableState workflow.MutableState,
+	mutableState definition.MutableState,
 	searchAttributesValidator *searchattribute.Validator,
 	executionStats *persistencespb.ExecutionStats,
 	metricsHandler metrics.MetricsHandler,

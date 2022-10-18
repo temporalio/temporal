@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -63,6 +62,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
@@ -91,13 +91,13 @@ type (
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.MetricsHandler
-		eventsCache         events.Cache
+		eventsCache         definition.EventCache
 		closeCallback       func(*ContextImpl)
 		config              *configs.Config
 		contextTaggedLogger log.Logger
 		throttledLogger     log.Logger
 		engineFactory       EngineFactory
-		engineFuture        *future.FutureImpl[Engine]
+		engineFuture        *future.FutureImpl[definition.Engine]
 
 		persistenceShardManager persistence.ShardManager
 		clientBean              client.Bean
@@ -111,7 +111,7 @@ type (
 		archivalMetadata        archiver.ArchivalMetadata
 		hostInfoProvider        membership.HostInfoProvider
 
-		// Context that lives for the lifetime of the shard context
+		// ShardContext that lives for the lifetime of the shard context
 		lifecycleCtx    context.Context
 		lifecycleCancel context.CancelFunc
 
@@ -148,13 +148,13 @@ type (
 	contextRequest interface{}
 
 	contextRequestAcquire    struct{}
-	contextRequestAcquired   struct{ engine Engine }
+	contextRequestAcquired   struct{ engine definition.Engine }
 	contextRequestLost       struct{}
 	contextRequestStop       struct{}
 	contextRequestFinishStop struct{}
 )
 
-var _ Context = (*ContextImpl)(nil)
+var _ definition.ShardContext = (*ContextImpl)(nil)
 
 var (
 	// ErrShardStatusUnknown means we're not sure if we have the shard lock or not. This may be returned
@@ -206,7 +206,7 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 
 func (s *ContextImpl) GetEngine(
 	ctx context.Context,
-) (Engine, error) {
+) (definition.Engine, error) {
 	return s.engineFuture.Get(ctx)
 }
 
@@ -1130,7 +1130,7 @@ func (s *ContextImpl) GetConfig() *configs.Config {
 	return s.config
 }
 
-func (s *ContextImpl) GetEventsCache() events.Cache {
+func (s *ContextImpl) GetEventsCache() definition.EventCache {
 	// constant from initialization (except for tests), no need for locks
 	return s.eventsCache
 }
@@ -1487,7 +1487,7 @@ func (s *ContextImpl) maybeRecordShardAcquisitionLatency(ownershipChanged bool) 
 	}
 }
 
-func (s *ContextImpl) createEngine() Engine {
+func (s *ContextImpl) createEngine() definition.Engine {
 	s.contextTaggedLogger.Info("", tag.LifeCycleStarting, tag.ComponentShardEngine)
 	engine := s.engineFactory.CreateEngine(s)
 	engine.Start()
@@ -1521,7 +1521,7 @@ func (s *ContextImpl) finishStop() {
 	}
 }
 
-func (s *ContextImpl) isValid() bool {
+func (s *ContextImpl) IsValid() bool {
 	s.stateLock.Lock()
 	defer s.stateLock.Unlock()
 	return s.state < contextStateStopping
@@ -1884,7 +1884,7 @@ func (s *ContextImpl) acquireShard() {
 	ownershipChanged := false
 
 	op := func() error {
-		if !s.isValid() {
+		if !s.IsValid() {
 			return s.newShardClosedErrorWithShardID()
 		}
 
@@ -1910,7 +1910,7 @@ func (s *ContextImpl) acquireShard() {
 		s.contextTaggedLogger.Info("Acquired shard")
 
 		// The first time we get the shard, we have to create the engine
-		var engine Engine
+		var engine definition.Engine
 		if !s.engineFuture.Ready() {
 			s.maybeRecordShardAcquisitionLatency(ownershipChanged)
 			engine = s.createEngine()
@@ -1994,7 +1994,7 @@ func newContext(
 		handoverNamespaces:      make(map[string]*namespaceHandOverInfo),
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
-		engineFuture:            future.NewFuture[Engine](),
+		engineFuture:            future.NewFuture[definition.Engine](),
 	}
 	shardContext.eventsCache = events.NewEventsCache(
 		shardContext.GetShardID(),

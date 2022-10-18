@@ -31,10 +31,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/service/history/definition"
 )
 
 const (
-	QueryCompletionTypeSucceeded QueryCompletionType = iota
+	QueryCompletionTypeSucceeded definition.QueryCompletionType = iota
 	QueryCompletionTypeUnblocked
 	QueryCompletionTypeFailed
 )
@@ -46,16 +48,6 @@ var (
 )
 
 type (
-	QueryCompletionType int
-
-	query interface {
-		getID() string
-		getCompletionCh() <-chan struct{}
-		getQueryInput() *querypb.WorkflowQuery
-		GetCompletionState() (*QueryCompletionState, error)
-		setCompletionState(*QueryCompletionState) error
-	}
-
 	queryImpl struct {
 		id           string
 		queryInput   *querypb.WorkflowQuery
@@ -63,15 +55,9 @@ type (
 
 		completionState atomic.Value
 	}
-
-	QueryCompletionState struct {
-		Type   QueryCompletionType
-		Result *querypb.WorkflowQueryResult
-		Err    error
-	}
 )
 
-func newQuery(queryInput *querypb.WorkflowQuery) query {
+func newQuery(queryInput *querypb.WorkflowQuery) definition.Query {
 	return &queryImpl{
 		id:           uuid.New(),
 		queryInput:   queryInput,
@@ -79,27 +65,27 @@ func newQuery(queryInput *querypb.WorkflowQuery) query {
 	}
 }
 
-func (q *queryImpl) getID() string {
+func (q *queryImpl) GetID() string {
 	return q.id
 }
 
-func (q *queryImpl) getCompletionCh() <-chan struct{} {
+func (q *queryImpl) GetCompletionCh() <-chan struct{} {
 	return q.completionCh
 }
 
-func (q *queryImpl) getQueryInput() *querypb.WorkflowQuery {
+func (q *queryImpl) GetQueryInput() *querypb.WorkflowQuery {
 	return q.queryInput
 }
 
-func (q *queryImpl) GetCompletionState() (*QueryCompletionState, error) {
+func (q *queryImpl) GetCompletionState() (*definition.QueryCompletionState, error) {
 	ts := q.completionState.Load()
 	if ts == nil {
 		return nil, errQueryNotInCompletionState
 	}
-	return ts.(*QueryCompletionState), nil
+	return ts.(*definition.QueryCompletionState), nil
 }
 
-func (q *queryImpl) setCompletionState(completionState *QueryCompletionState) error {
+func (q *queryImpl) SetCompletionState(completionState *definition.QueryCompletionState) error {
 	if err := q.validateCompletionState(completionState); err != nil {
 		return err
 	}
@@ -113,7 +99,7 @@ func (q *queryImpl) setCompletionState(completionState *QueryCompletionState) er
 }
 
 func (q *queryImpl) validateCompletionState(
-	completionState *QueryCompletionState,
+	completionState *definition.QueryCompletionState,
 ) error {
 	if completionState == nil {
 		return errCompletionStateInvalid

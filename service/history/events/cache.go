@@ -38,25 +38,11 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type (
-	EventKey struct {
-		NamespaceID namespace.ID
-		WorkflowID  string
-		RunID       string
-		EventID     int64
-		Version     int64
-	}
-
-	Cache interface {
-		GetEvent(ctx context.Context, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
-		PutEvent(key EventKey, event *historypb.HistoryEvent)
-		DeleteEvent(key EventKey)
-	}
-
 	CacheImpl struct {
 		cache.Cache
 		eventsMgr      persistence.ExecutionManager
@@ -71,7 +57,7 @@ var (
 	errEventNotFoundInBatch = serviceerror.NewInternal("History event not found within expected batch")
 )
 
-var _ Cache = (*CacheImpl)(nil)
+var _ definition.EventCache = (*CacheImpl)(nil)
 
 func NewEventsCache(
 	shardID int32,
@@ -97,7 +83,7 @@ func NewEventsCache(
 	}
 }
 
-func (e *CacheImpl) validateKey(key EventKey) bool {
+func (e *CacheImpl) validateKey(key definition.EventKey) bool {
 	if len(key.NamespaceID) == 0 || len(key.WorkflowID) == 0 || len(key.RunID) == 0 || key.EventID < common.FirstEventID {
 		// This is definitely a bug, but just warn and don't crash so we can find anywhere this happens.
 		e.logger.Warn("one or more ids is invalid in event cache",
@@ -110,7 +96,7 @@ func (e *CacheImpl) validateKey(key EventKey) bool {
 	return true
 }
 
-func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
+func (e *CacheImpl) GetEvent(ctx context.Context, key definition.EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
 	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope))
 	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
 	startTime := time.Now().UTC()
@@ -146,7 +132,7 @@ func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int
 	return event, nil
 }
 
-func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
+func (e *CacheImpl) PutEvent(key definition.EventKey, event *historypb.HistoryEvent) {
 	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCachePutEventScope))
 	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
 	startTime := time.Now().UTC()
@@ -158,7 +144,7 @@ func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
 	e.Put(key, event)
 }
 
-func (e *CacheImpl) DeleteEvent(key EventKey) {
+func (e *CacheImpl) DeleteEvent(key definition.EventKey) {
 	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheDeleteEventScope))
 	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
 	startTime := time.Now().UTC()
@@ -170,7 +156,7 @@ func (e *CacheImpl) DeleteEvent(key EventKey) {
 
 func (e *CacheImpl) getHistoryEventFromStore(
 	ctx context.Context,
-	key EventKey,
+	key definition.EventKey,
 	firstEventID int64,
 	branchToken []byte,
 ) (*historypb.HistoryEvent, error) {

@@ -44,11 +44,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -66,8 +65,8 @@ var (
 )
 
 func newTransferQueueStandbyTaskExecutor(
-	shard shard.Context,
-	workflowCache workflow.Cache,
+	shard definition.ShardContext,
+	workflowCache definition.WorkflowCache,
 	archivalClient archiver.Client,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
@@ -133,7 +132,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 	transferTask *tasks.ActivityTask,
 ) error {
 	processTaskIfClosed := false
-	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext definition.WorkflowContext, mutableState definition.MutableState) (interface{}, error) {
 		activityInfo, ok := mutableState.GetActivityInfo(transferTask.ScheduledEventID)
 		if !ok {
 			return nil, nil
@@ -172,7 +171,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 	transferTask *tasks.WorkflowTask,
 ) error {
 	processTaskIfClosed := false
-	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext definition.WorkflowContext, mutableState definition.MutableState) (interface{}, error) {
 		wtInfo, ok := mutableState.GetWorkflowTaskInfo(transferTask.ScheduledEventID)
 		if !ok {
 			return nil, nil
@@ -230,7 +229,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 	transferTask *tasks.CloseExecutionTask,
 ) error {
 	processTaskIfClosed := true
-	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(ctx context.Context, wfContext definition.WorkflowContext, mutableState definition.MutableState) (interface{}, error) {
 		if mutableState.IsWorkflowExecutionRunning() {
 			// this can happen if workflow is reset.
 			return nil, nil
@@ -347,7 +346,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 	transferTask *tasks.CancelExecutionTask,
 ) error {
 	processTaskIfClosed := false
-	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext definition.WorkflowContext, mutableState definition.MutableState) (interface{}, error) {
 		requestCancelInfo, ok := mutableState.GetRequestCancelInfo(transferTask.InitiatedEventID)
 		if !ok {
 			return nil, nil
@@ -382,7 +381,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 	transferTask *tasks.SignalExecutionTask,
 ) error {
 	processTaskIfClosed := false
-	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext definition.WorkflowContext, mutableState definition.MutableState) (interface{}, error) {
 		signalInfo, ok := mutableState.GetSignalInfo(transferTask.InitiatedEventID)
 		if !ok {
 			return nil, nil
@@ -417,7 +416,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 	transferTask *tasks.StartChildExecutionTask,
 ) error {
 	processTaskIfClosed := true
-	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(ctx context.Context, wfContext definition.WorkflowContext, mutableState definition.MutableState) (interface{}, error) {
 		childWorkflowInfo, ok := mutableState.GetChildExecutionInfo(transferTask.InitiatedEventID)
 		if !ok {
 			return nil, nil

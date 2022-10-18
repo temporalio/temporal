@@ -28,9 +28,7 @@ import (
 	"context"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 func GetAndUpdateWorkflowWithNew(
@@ -39,8 +37,8 @@ func GetAndUpdateWorkflowWithNew(
 	consistencyCheckFn MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action UpdateWorkflowActionFunc,
-	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
-	shard shard.Context,
+	newWorkflowFn func() (definition.WorkflowContext, definition.MutableState, error),
+	shard definition.ShardContext,
 	workflowConsistencyChecker WorkflowConsistencyChecker,
 ) (retError error) {
 	workflowContext, err := workflowConsistencyChecker.GetWorkflowContext(
@@ -58,11 +56,11 @@ func GetAndUpdateWorkflowWithNew(
 }
 
 func UpdateWorkflowWithNew(
-	shard shard.Context,
+	shard definition.ShardContext,
 	ctx context.Context,
 	workflowContext WorkflowContext,
 	action UpdateWorkflowActionFunc,
-	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
+	newWorkflowFn func() (definition.WorkflowContext, definition.MutableState, error),
 ) (retError error) {
 
 	// conduct caller action

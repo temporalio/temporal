@@ -35,7 +35,7 @@ import (
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type (
@@ -158,7 +158,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 		now,
-		workflow.TransactionPolicyPassive,
+		definition.TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
@@ -214,7 +214,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	if err != nil {
 		return err
 	}
-	if targetWorkflowPolicy != workflow.TransactionPolicyPassive {
+	if targetWorkflowPolicy != definition.TransactionPolicyPassive {
 		return serviceerror.NewInternal("transactionMgrForNewWorkflow createAsZombie encountered target workflow policy not being passive")
 	}
 
@@ -286,7 +286,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 		targetWorkflow.GetContext(),
 		targetWorkflow.GetMutableState(),
 		currentWorkflowPolicy,
-		workflow.TransactionPolicyPassive.Ptr(),
+		definition.TransactionPolicyPassive.Ptr(),
 	)
 }
 

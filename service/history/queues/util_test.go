@@ -30,7 +30,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )

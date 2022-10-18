@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -54,7 +53,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -75,7 +74,7 @@ type (
 	workflowTaskHandlerCallbacksImpl struct {
 		currentClusterName         string
 		config                     *configs.Config
-		shard                      shard.Context
+		shard                      definition.ShardContext
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 		timeSource                 clock.TimeSource
 		namespaceRegistry          namespace.Registry
@@ -342,7 +341,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	workflowContext, err := handler.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		token.Clock,
-		func(mutableState workflow.MutableState) bool {
+		func(mutableState definition.MutableState) bool {
 			_, ok := mutableState.GetWorkflowTaskInfo(scheduledEventID)
 			if !ok && scheduledEventID >= mutableState.GetNextEventID() {
 				handler.metricsHandler.Counter(metrics.StaleMutableStateCounter.GetMetricName()).Record(
@@ -422,7 +421,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	var (
 		wtFailedCause               *workflowTaskFailedCause
 		activityNotStartedCancelled bool
-		newMutableState             workflow.MutableState
+		newMutableState             definition.MutableState
 
 		hasUnhandledEvents bool
 		responseMutations  []workflowTaskResponseMutation
@@ -532,7 +531,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	var newWorkflowTaskScheduledEventID int64
 	if createNewWorkflowTask {
 		bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
-		var newWorkflowTask *workflow.WorkflowTaskInfo
+		var newWorkflowTask *definition.WorkflowTaskInfo
 		var err error
 		if workflowTaskHeartbeating && !workflowTaskHeartbeatTimeout {
 			newWorkflowTask, err = ms.AddWorkflowTaskScheduledEventAsHeartbeat(
@@ -693,8 +692,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) verifyFirstWorkflowTaskSchedule
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStartedResponse(
-	ms workflow.MutableState,
-	workflowTask *workflow.WorkflowTaskInfo,
+	ms definition.MutableState,
+	workflowTask *definition.WorkflowTaskInfo,
 	identity string,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 
@@ -743,7 +742,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	return response, nil
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *namespace.Namespace, workflowTaskHeartbeating bool) {
+func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms definition.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *namespace.Namespace, workflowTaskHeartbeating bool) {
 	queryRegistry := ms.GetQueryRegistry()
 	if !queryRegistry.HasBufferedQuery() {
 		return
@@ -786,7 +785,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workfl
 				tag.WorkflowRunID(runID),
 				tag.QueryID(id),
 				tag.Error(err))
-			failedCompletionState := &workflow.QueryCompletionState{
+			failedCompletionState := &definition.QueryCompletionState{
 				Type: workflow.QueryCompletionTypeFailed,
 				Err:  err,
 			}
@@ -801,7 +800,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workfl
 				scope.Counter(metrics.QueryRegistryInvalidStateCount.GetMetricName()).Record(1)
 			}
 		} else {
-			succeededCompletionState := &workflow.QueryCompletionState{
+			succeededCompletionState := &definition.QueryCompletionState{
 				Type:   workflow.QueryCompletionTypeSucceeded,
 				Result: result,
 			}
@@ -823,7 +822,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workfl
 	if !createNewWorkflowTask {
 		buffered := queryRegistry.GetBufferedIDs()
 		for _, id := range buffered {
-			unblockCompletionState := &workflow.QueryCompletionState{
+			unblockCompletionState := &definition.QueryCompletionState{
 				Type: workflow.QueryCompletionTypeUnblocked,
 			}
 			if err := queryRegistry.SetCompletionState(id, unblockCompletionState); err != nil {
@@ -842,12 +841,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(ms workfl
 
 func failWorkflowTask(
 	ctx context.Context,
-	wfContext workflow.Context,
+	wfContext definition.WorkflowContext,
 	scheduledEventID int64,
 	startedEventID int64,
 	wtFailedCause *workflowTaskFailedCause,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
-) (workflow.MutableState, error) {
+) (definition.MutableState, error) {
 
 	// clear any updates we have accumulated so far
 	wfContext.Clear()

@@ -34,6 +34,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type QueryRegistrySuite struct {
@@ -62,7 +63,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(false, completionChs...)
 
 	for i := 0; i < 25; i++ {
-		err := qr.SetCompletionState(ids[i], &QueryCompletionState{
+		err := qr.SetCompletionState(ids[i], &definition.QueryCompletionState{
 			Type: QueryCompletionTypeSucceeded,
 			Result: &querypb.WorkflowQueryResult{
 				ResultType: enumspb.QUERY_RESULT_TYPE_ANSWERED,
@@ -79,7 +80,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(false, completionChs[25:]...)
 
 	for i := 25; i < 50; i++ {
-		err := qr.SetCompletionState(ids[i], &QueryCompletionState{
+		err := qr.SetCompletionState(ids[i], &definition.QueryCompletionState{
 			Type: QueryCompletionTypeUnblocked,
 		})
 		s.NoError(err)
@@ -93,7 +94,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(false, completionChs[50:]...)
 
 	for i := 50; i < 75; i++ {
-		err := qr.SetCompletionState(ids[i], &QueryCompletionState{
+		err := qr.SetCompletionState(ids[i], &definition.QueryCompletionState{
 			Type: QueryCompletionTypeFailed,
 			Err:  errors.New("err"),
 		})
@@ -111,16 +112,16 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	for i := 0; i < 75; i++ {
 		switch i % 3 {
 		case 0:
-			s.Equal(errQueryNotExists, qr.SetCompletionState(ids[i], &QueryCompletionState{
+			s.Equal(errQueryNotExists, qr.SetCompletionState(ids[i], &definition.QueryCompletionState{
 				Type:   QueryCompletionTypeSucceeded,
 				Result: &querypb.WorkflowQueryResult{},
 			}))
 		case 1:
-			s.Equal(errQueryNotExists, qr.SetCompletionState(ids[i], &QueryCompletionState{
+			s.Equal(errQueryNotExists, qr.SetCompletionState(ids[i], &definition.QueryCompletionState{
 				Type: QueryCompletionTypeUnblocked,
 			}))
 		case 2:
-			s.Equal(errQueryNotExists, qr.SetCompletionState(ids[i], &QueryCompletionState{
+			s.Equal(errQueryNotExists, qr.SetCompletionState(ids[i], &definition.QueryCompletionState{
 				Type: QueryCompletionTypeFailed,
 				Err:  errors.New("err"),
 			}))
@@ -159,7 +160,7 @@ func (s *QueryRegistrySuite) TestQueryRegistry() {
 	s.assertChanState(false, completionChs[75:]...)
 }
 
-func (s *QueryRegistrySuite) assertBufferedState(qr QueryRegistry, ids ...string) {
+func (s *QueryRegistrySuite) assertBufferedState(qr definition.QueryRegistry, ids ...string) {
 	for _, id := range ids {
 		completionCh, err := qr.GetQueryCompletionCh(id)
 		s.NoError(err)
@@ -173,7 +174,7 @@ func (s *QueryRegistrySuite) assertBufferedState(qr QueryRegistry, ids ...string
 	}
 }
 
-func (s *QueryRegistrySuite) assertCompletedState(qr QueryRegistry, ids ...string) {
+func (s *QueryRegistrySuite) assertCompletedState(qr definition.QueryRegistry, ids ...string) {
 	for _, id := range ids {
 		completionCh, err := qr.GetQueryCompletionCh(id)
 		s.NoError(err)
@@ -190,7 +191,7 @@ func (s *QueryRegistrySuite) assertCompletedState(qr QueryRegistry, ids ...strin
 	}
 }
 
-func (s *QueryRegistrySuite) assertUnblockedState(qr QueryRegistry, ids ...string) {
+func (s *QueryRegistrySuite) assertUnblockedState(qr definition.QueryRegistry, ids ...string) {
 	for _, id := range ids {
 		completionCh, err := qr.GetQueryCompletionCh(id)
 		s.NoError(err)
@@ -207,7 +208,7 @@ func (s *QueryRegistrySuite) assertUnblockedState(qr QueryRegistry, ids ...strin
 	}
 }
 
-func (s *QueryRegistrySuite) assertFailedState(qr QueryRegistry, ids ...string) {
+func (s *QueryRegistrySuite) assertFailedState(qr definition.QueryRegistry, ids ...string) {
 	for _, id := range ids {
 		completionCh, err := qr.GetQueryCompletionCh(id)
 		s.NoError(err)
@@ -224,14 +225,14 @@ func (s *QueryRegistrySuite) assertFailedState(qr QueryRegistry, ids ...string) 
 	}
 }
 
-func (s *QueryRegistrySuite) assertHasQueries(qr QueryRegistry, buffered, completed, unblocked, failed bool) {
+func (s *QueryRegistrySuite) assertHasQueries(qr definition.QueryRegistry, buffered, completed, unblocked, failed bool) {
 	s.Equal(buffered, qr.HasBufferedQuery())
 	s.Equal(completed, qr.HasCompletedQuery())
 	s.Equal(unblocked, qr.HasUnblockedQuery())
 	s.Equal(failed, qr.HasFailedQuery())
 }
 
-func (s *QueryRegistrySuite) assertQuerySizes(qr QueryRegistry, buffered, completed, unblocked, failed int) {
+func (s *QueryRegistrySuite) assertQuerySizes(qr definition.QueryRegistry, buffered, completed, unblocked, failed int) {
 	s.Len(qr.GetBufferedIDs(), buffered)
 	s.Len(qr.GetCompletedIDs(), completed)
 	s.Len(qr.GetUnblockedIDs(), unblocked)

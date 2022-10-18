@@ -37,47 +37,33 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type (
-	ReleaseCacheFunc func(err error)
-
-	Cache interface {
-		GetOrCreateWorkflowExecution(
-			ctx context.Context,
-			namespaceID namespace.ID,
-			execution commonpb.WorkflowExecution,
-			caller CallerType,
-		) (Context, ReleaseCacheFunc, error)
-	}
-
 	CacheImpl struct {
 		cache.Cache
-		shard          shard.Context
+		shard          definition.ShardContext
 		logger         log.Logger
 		metricsHandler metrics.MetricsHandler
 		config         *configs.Config
 	}
-
-	NewCacheFn func(shard shard.Context) Cache
 )
 
-var NoopReleaseFn ReleaseCacheFunc = func(err error) {}
+var NoopReleaseFn definition.ReleaseFunc = func(err error) {}
 
 const (
 	cacheNotReleased int32 = 0
 	cacheReleased    int32 = 1
 )
 
-func NewCache(shard shard.Context) Cache {
+func NewCache(shard definition.ShardContext) *CacheImpl {
 	opts := &cache.Options{}
 	config := shard.GetConfig()
 	opts.InitialCapacity = config.HistoryCacheInitialSize()
@@ -97,8 +83,8 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
-	caller CallerType,
-) (Context, ReleaseCacheFunc, error) {
+	caller definition.CallerType,
+) (definition.WorkflowContext, definition.ReleaseFunc, error) {
 
 	if err := c.validateWorkflowExecutionInfo(ctx, namespaceID, &execution); err != nil {
 		return nil, nil, err
@@ -129,11 +115,11 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	execution commonpb.WorkflowExecution,
 	handler metrics.MetricsHandler,
 	forceClearContext bool,
-	caller CallerType,
-) (Context, ReleaseCacheFunc, error) {
+	caller definition.CallerType,
+) (definition.WorkflowContext, definition.ReleaseFunc, error) {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
-	workflowCtx, cacheHit := c.Get(key).(Context)
+	workflowCtx, cacheHit := c.Get(key).(definition.WorkflowContext)
 	if !cacheHit {
 		handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
 		// Let's create the workflow execution workflowCtx
@@ -143,7 +129,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 			handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
 			return nil, nil, err
 		}
-		workflowCtx = elem.(Context)
+		workflowCtx = elem.(definition.WorkflowContext)
 	}
 
 	// TODO This will create a closure on every request.
@@ -162,9 +148,9 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 
 func (c *CacheImpl) makeReleaseFunc(
 	key definition.WorkflowKey,
-	context Context,
+	context definition.WorkflowContext,
 	forceClearContext bool,
-	caller CallerType,
+	caller definition.CallerType,
 ) func(error) {
 
 	status := cacheNotReleased

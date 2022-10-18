@@ -42,7 +42,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/internal/goro"
-	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/definition"
 )
 
 type (
@@ -57,7 +57,7 @@ type (
 		// root pingables:
 		NamespaceRegistry namespace.Registry
 		ClusterMetadata   cluster.Metadata
-		ShardController   shard.Controller `optional:"true"`
+		ShardController   definition.ShardController `optional:"true"`
 	}
 
 	config struct {

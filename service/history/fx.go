@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -259,7 +260,7 @@ func EventNotifierProvider(
 	timeSource clock.TimeSource,
 	metricsHandler metrics.MetricsHandler,
 	config *configs.Config,
-) events.Notifier {
+) definition.Notifier {
 	return events.NewNotifier(
 		timeSource,
 		metricsHandler,

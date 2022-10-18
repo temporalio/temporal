@@ -31,8 +31,8 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -47,7 +47,7 @@ type (
 	transferQueueShutdown  func() error
 
 	transferQueueProcessorBase struct {
-		shard                  shard.Context
+		shard                  definition.ShardContext
 		options                *QueueProcessorOptions
 		executionManager       persistence.ExecutionManager
 		maxReadLevel           maxReadLevel
@@ -58,7 +58,7 @@ type (
 )
 
 func newTransferQueueProcessorBase(
-	shard shard.Context,
+	shard definition.ShardContext,
 	options *QueueProcessorOptions,
 	maxReadLevel maxReadLevel,
 	updateTransferAckLevel updateTransferAckLevel,
@@ -106,7 +106,7 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 }
 
 func newTransferTaskShardScheduler(
-	shard shard.Context,
+	shard definition.ShardContext,
 	logger log.Logger,
 ) queues.Scheduler {
 	config := shard.GetConfig()

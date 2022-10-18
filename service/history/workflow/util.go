@@ -38,11 +38,12 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/definition"
 )
 
 func failWorkflowTask(
-	mutableState MutableState,
-	workflowTask *WorkflowTaskInfo,
+	mutableState definition.MutableState,
+	workflowTask *definition.WorkflowTaskInfo,
 	workflowTaskFailureCause enumspb.WorkflowTaskFailedCause,
 ) error {
 
@@ -65,7 +66,7 @@ func failWorkflowTask(
 }
 
 func ScheduleWorkflowTask(
-	mutableState MutableState,
+	mutableState definition.MutableState,
 ) error {
 
 	if mutableState.HasPendingWorkflowTask() {
@@ -81,11 +82,11 @@ func ScheduleWorkflowTask(
 
 func RetryWorkflow(
 	ctx context.Context,
-	mutableState MutableState,
+	mutableState definition.MutableState,
 	eventBatchFirstEventID int64,
 	parentNamespace namespace.Name,
 	continueAsNewAttributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
-) (MutableState, error) {
+) (definition.MutableState, error) {
 
 	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
 		if err := failWorkflowTask(
@@ -111,7 +112,7 @@ func RetryWorkflow(
 }
 
 func TimeoutWorkflow(
-	mutableState MutableState,
+	mutableState definition.MutableState,
 	eventBatchFirstEventID int64,
 	retryState enumspb.RetryState,
 	continuedRunID string,
@@ -136,7 +137,7 @@ func TimeoutWorkflow(
 }
 
 func TerminateWorkflow(
-	mutableState MutableState,
+	mutableState definition.MutableState,
 	eventBatchFirstEventID int64,
 	terminateReason string,
 	terminateDetails *commonpb.Payloads,

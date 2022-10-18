@@ -33,7 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	definition "go.temporal.io/server/common/definition"
+	definition "go.temporal.io/server/service/history/definition"
 )
 
 // MockworkflowRebuilder is a mock of workflowRebuilder interface.
