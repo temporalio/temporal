@@ -79,7 +79,6 @@ type (
 		root    common.Pingable
 		ch      chan common.PingCheck
 		workers int32
-		ctx     context.Context // cancelled when loop should exit
 	}
 )
 
@@ -124,15 +123,15 @@ func (dd *deadlockDetector) Stop() error {
 }
 
 func (dd *deadlockDetector) detected(name string) {
-	dd.logger.Error("deadlock detected", tag.Name(name))
+	dd.logger.Error("potential deadlock detected", tag.Name(name))
+
+	if dd.config.DumpGoroutines() {
+		dd.dumpGoroutines()
+	}
 
 	if dd.config.FailHealthCheck() {
 		dd.logger.Info("marking grpc services unhealthy")
 		dd.healthServer.Shutdown()
-	}
-
-	if dd.config.DumpGoroutines() {
-		dd.dumpGoroutines()
 	}
 
 	if dd.config.AbortProcess() {
@@ -158,15 +157,10 @@ func (dd *deadlockDetector) dumpGoroutines() {
 }
 
 func (lc *loopContext) run(ctx context.Context) error {
-	lc.ctx = ctx
-	// start with one worker
-	go lc.worker()
-	atomic.StoreInt32(&lc.workers, 1)
-
 	for {
 		// ping blocks until it has passed all checks to a worker goroutine (using an
 		// unbuffered channel).
-		lc.ping([]common.Pingable{lc.root})
+		lc.ping(ctx, []common.Pingable{lc.root})
 
 		select {
 		case <-time.After(lc.dd.config.Interval()):
@@ -176,37 +170,44 @@ func (lc *loopContext) run(ctx context.Context) error {
 	}
 }
 
-func (lc *loopContext) ping(pingables []common.Pingable) {
+func (lc *loopContext) ping(ctx context.Context, pingables []common.Pingable) {
 	for _, pingable := range pingables {
 		for _, check := range pingable.GetPingChecks() {
 			select {
 			case lc.ch <- check:
-			case <-lc.ctx.Done():
+			case <-ctx.Done():
 			default:
 				// maybe add another worker if blocked
 				w := atomic.LoadInt32(&lc.workers)
 				if w < int32(lc.dd.config.MaxWorkersPerRoot()) && atomic.CompareAndSwapInt32(&lc.workers, w, w+1) {
-					go lc.worker()
+					lc.dd.loops.Go(lc.worker)
 				}
 				// blocking send
 				select {
 				case lc.ch <- check:
-				case <-lc.ctx.Done():
+				case <-ctx.Done():
 				}
 			}
 		}
 	}
 }
 
-func (lc *loopContext) worker() {
-	for check := range lc.ch {
+func (lc *loopContext) worker(ctx context.Context) error {
+	for {
+		var check common.PingCheck
+		select {
+		case check = <-lc.ch:
+		case <-ctx.Done():
+			return nil
+		}
+
 		lc.dd.logger.Debug("starting ping check", tag.Name(check.Name))
 
 		// Using AfterFunc is cheaper than creating another goroutine to be the waiter, since
 		// we expect to always cancel it. If the go runtime is so messed up that it can't
 		// create a goroutine, that's a bigger problem than we can handle.
 		t := time.AfterFunc(check.Timeout, func() {
-			if lc.ctx.Err() != nil {
+			if ctx.Err() != nil {
 				// deadlock detector was stopped
 				return
 			}
@@ -217,6 +218,6 @@ func (lc *loopContext) worker() {
 
 		lc.dd.logger.Debug("ping check succeeded", tag.Name(check.Name))
 
-		lc.ping(newPingables)
+		lc.ping(ctx, newPingables)
 	}
 }
