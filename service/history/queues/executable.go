@@ -210,14 +210,13 @@ func (e *executableImpl) Execute() error {
 	}
 	e.lastActiveness = isActive
 
-	var userLatency time.Duration
+	e.userLatency = 0
 	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
-		userLatency = time.Duration(duration)
+		e.userLatency = time.Duration(duration)
 	}
-	e.userLatency += userLatency
 
 	e.taggedMetricsHandler.Timer(TaskProcessingLatency).Record(time.Since(startTime))
-	e.taggedMetricsHandler.Timer(TaskNoUserProcessingLatency).Record(time.Since(startTime) - userLatency)
+	e.taggedMetricsHandler.Timer(TaskProcessingUserLatency).Record(e.userLatency)
 
 	priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 	priorityTaggedProvider.Counter(TaskRequests).Record(1)
@@ -356,14 +355,11 @@ func (e *executableImpl) Ack() {
 		)
 		e.taggedMetricsHandler.Histogram(TaskAttempt, metrics.Dimensionless).Record(int64(e.attempt))
 
-		priorityTaggedProvider := e.taggedMetricsHandler.WithTags(metrics.TaskPriorityTag(e.lowestPriority.String()))
-		priorityTaggedProvider.Timer(TaskLatency).Record(time.Since(e.loadTime))
-		priorityTaggedProvider.Timer(TaskUserLatency).Record(e.userLatency)
-		priorityTaggedProvider.Timer(TaskNoUserLatency).Record(time.Since(e.loadTime) - e.userLatency)
-
-		readerIDTaggedProvider := priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))
-		readerIDTaggedProvider.Timer(TaskQueueLatency).Record(time.Since(e.GetVisibilityTime()))
-		readerIDTaggedProvider.Timer(TaskNoUserQueueLatency).Record(time.Since(e.GetVisibilityTime()) - e.userLatency)
+		e.taggedMetricsHandler.Timer(TaskQueueLatency).Record(
+			time.Since(e.GetVisibilityTime()),
+			metrics.TaskPriorityTag(e.lowestPriority.String()),
+			metrics.QueueReaderIDTag(e.readerID),
+		)
 	}
 }
 

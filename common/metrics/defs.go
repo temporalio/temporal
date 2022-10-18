@@ -2173,12 +2173,11 @@ const (
 	TaskNotActiveCounter
 	TaskLimitExceededCounter
 	TaskBatchCompleteCounter
+	TaskLoadLatency
+	TaskScheduleLatency
 	TaskProcessingLatency
-	TaskNoUserProcessingLatency
+	TaskProcessingUserLatency
 	TaskQueueLatency
-	TaskUserLatency
-	TaskNoUserLatency
-	TaskNoUserQueueLatency
 	TaskReschedulerPendingTasks
 	TaskScheduleToStartLatency
 	TaskThrottledCounter
@@ -2643,10 +2642,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	History: {
 		TaskRequests: NewCounterDef("task_requests"),
 
-		TaskLatency:       NewTimerDef("task_latency"),               // overall/all attempts within single worker
-		TaskUserLatency:   NewTimerDef("task_latency_userlatency"),   // from task generated to task complete
-		TaskNoUserLatency: NewTimerDef("task_latency_nouserlatency"), // from task generated to task complete
-
 		TaskAttemptTimer:         NewDimensionlessHistogramDef("task_attempt"),
 		TaskFailures:             NewCounterDef("task_errors"),
 		TaskDiscarded:            NewCounterDef("task_errors_discarded"),
@@ -2658,11 +2653,11 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 
 		TaskScheduleToStartLatency: NewTimerDef("task_schedule_to_start_latency"),
 
-		TaskProcessingLatency:       NewTimerDef("task_latency_processing"),               // per-attempt
-		TaskNoUserProcessingLatency: NewTimerDef("task_latency_processing_nouserlatency"), // per-attempt
-
-		TaskQueueLatency:       NewTimerDef("task_latency_queue"),               // from task generated to task complete
-		TaskNoUserQueueLatency: NewTimerDef("task_latency_queue_nouserlatency"), // from task generated to task complete
+		TaskLoadLatency:           NewTimerDef("task_latency_load"),
+		TaskScheduleLatency:       NewTimerDef("task_latency_schedule"),   // per-attempt
+		TaskProcessingLatency:     NewTimerDef("task_latency_processing"), // per-attempt
+		TaskProcessingUserLatency: NewTimerDef("task_latency_user"),       // per-attempt
+		TaskQueueLatency:          NewTimerDef("task_latency_queue"),      // from task generated to task complete
 
 		TransferTaskMissingEventCounter:                   NewCounterDef("transfer_task_missing_event_counter"),
 		TaskBatchCompleteCounter:                          NewCounterDef("task_batch_complete_counter"),
