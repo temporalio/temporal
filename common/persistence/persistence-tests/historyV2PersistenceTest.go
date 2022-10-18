@@ -32,12 +32,19 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/service/worker/scanner/history"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
@@ -172,6 +179,82 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 	}
 
 	s.Equal(0, len(trees))
+}
+
+func (s *HistoryV2PersistenceSuite) TestHistoryScavenger() {
+	controller := gomock.NewController(s.T())
+	historyServiceClient := historyservicemock.NewMockHistoryServiceClient(controller)
+	scavenger := history.NewScavenger(
+		1,
+		s.ExecutionManager,
+		999,
+		historyServiceClient,
+		history.ScavengerHeartbeatDetails{},
+		func() time.Duration {
+			return 0
+		},
+		metrics.NoopClient,
+		s.Logger,
+	)
+	scavenger.IsInTest = true
+
+	resp, err := s.ExecutionManager.GetAllHistoryTreeBranches(s.ctx, &p.GetAllHistoryTreeBranchesRequest{
+		PageSize: 1,
+	})
+	s.Nil(err)
+	s.Equal(0, len(resp.Branches), "some trees were leaked in other tests")
+
+	numGarbageBranches := 12
+	numNonGarbageBranches := 43
+	nonGarbageBranches := make(map[string]bool)
+	for i := 0; i < numGarbageBranches+numNonGarbageBranches; i++ {
+		workflowID := uuid.New()
+		retErr := serviceerror.NewNotFound("")
+		treeID := uuid.NewRandom().String()
+		branch, err := s.ExecutionManager.NewHistoryBranch(s.ctx, &p.NewHistoryBranchRequest{
+			TreeID: treeID,
+		})
+		if i >= numGarbageBranches {
+			retErr = nil
+			nonGarbageBranches[string(branch.BranchToken)] = true
+		}
+		historyServiceClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
+			NamespaceId: "namespaceID1",
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      "runID1",
+			},
+		}).Return(nil, retErr)
+
+		s.Require().NoError(err)
+		err = s.appendNewBranchAndFirstNode(
+			branch.BranchToken,
+			s.genRandomEvents([]int64{int64(i + 1)}, 1),
+			1,
+			p.BuildHistoryGarbageCleanupInfo("namespaceID1", workflowID, "runID1"),
+		)
+		s.Require().NoError(err)
+	}
+	run, err := scavenger.Run(s.ctx)
+	s.Require().NoError(err)
+	s.Assert().Equal(numGarbageBranches+numNonGarbageBranches, run.SuccessCount)
+	s.Assert().Equal(0, run.ErrorCount)
+	branches, err := s.ExecutionManager.GetAllHistoryTreeBranches(s.ctx, &p.GetAllHistoryTreeBranchesRequest{
+		NextPageToken: nil,
+		PageSize:      numGarbageBranches + numNonGarbageBranches,
+	})
+	s.Require().NoError(err)
+	s.Require().Len(branches.Branches, numNonGarbageBranches)
+	for _, branch := range branches.Branches {
+		branchToken := string(branch.BranchToken)
+		_, ok := nonGarbageBranches[branchToken]
+		s.Assert().True(ok)
+		delete(nonGarbageBranches, branchToken)
+		err := s.deleteHistoryBranch(branch.BranchToken)
+		s.Require().NoError(err)
+	}
+	s.Require().NoError(err)
+	s.Require().Len(nonGarbageBranches, 0)
 }
 
 // TestReadBranchByPagination test

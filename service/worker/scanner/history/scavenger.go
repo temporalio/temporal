@@ -64,7 +64,7 @@ type (
 		rateLimiter quotas.RateLimiter
 		metrics     metrics.Client
 		logger      log.Logger
-		isInTest    bool
+		IsInTest    bool // TODO: get rid of this. It's used to skip heartbeats currently
 		// only clean up history branches that older than this age
 		// Our history archiver delete mutable state, and then upload history to blob store and then delete history.
 		historyDataMinAge dynamicconfig.DurationPropertyFn
@@ -204,7 +204,7 @@ func (s *Scavenger) heartbeat(ctx context.Context) {
 	s.Lock()
 	defer s.Unlock()
 
-	if !s.isInTest {
+	if !s.IsInTest {
 		activity.RecordHeartbeat(ctx, s.hbd)
 	}
 }

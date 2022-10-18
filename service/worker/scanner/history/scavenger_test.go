@@ -89,7 +89,7 @@ func (s *ScavengerTestSuite) createTestScavenger(
 	historyClient := historyservicemock.NewMockHistoryServiceClient(controller)
 	dataAge := dynamicconfig.GetDurationPropertyFn(time.Hour)
 	scvgr := NewScavenger(s.numShards, db, rps, historyClient, ScavengerHeartbeatDetails{}, dataAge, s.metric, s.logger)
-	scvgr.isInTest = true
+	scvgr.IsInTest = true
 	return db, historyClient, scvgr, controller
 }
 

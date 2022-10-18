@@ -184,7 +184,7 @@ func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger
 // Setup sets up the test base, must be called as part of SetupSuite
 func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	var err error
-	shardID := int32(10)
+	shardID := int32(1) // since there is only one shard, its id must be 1,
 	if clusterMetadataConfig == nil {
 		clusterMetadataConfig = cluster.NewTestClusterMetadataConfig(false, false)
 	}
