@@ -2163,7 +2163,6 @@ const (
 // History Metrics enum
 const (
 	TaskRequests = iota + NumCommonMetrics
-	TaskLatency
 	TaskFailures
 	TaskDiscarded
 	TaskSkipped
