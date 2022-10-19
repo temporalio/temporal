@@ -29,13 +29,12 @@
 package ndc
 
 import (
-	"context"
-	"reflect"
+	context "context"
+	reflect "reflect"
 
-	"github.com/golang/mock/gomock"
-	"go.temporal.io/api/history/v1"
-
-	"go.temporal.io/server/service/history/definition"
+	gomock "github.com/golang/mock/gomock"
+	history "go.temporal.io/api/history/v1"
+	definition "go.temporal.io/server/service/history/definition"
 )
 
 // MockEventsReapplier is a mock of EventsReapplier interface.

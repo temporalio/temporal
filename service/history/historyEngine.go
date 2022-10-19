@@ -131,9 +131,9 @@ func NewEngineWithShardContext(
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,
 	eventNotifier definition.Notifier,
+	eventsReapplier ndc.EventsReapplier,
 	config *configs.Config,
 	rawMatchingClient matchingservice.MatchingServiceClient,
-	workflowCache definition.WorkflowCache,
 	archivalClient archiver.Client,
 	eventSerializer serialization.Serializer,
 	queueProcessorFactories []QueueFactory,
@@ -149,7 +149,7 @@ func NewEngineWithShardContext(
 
 	workflowDeleteManager := workflow.NewDeleteManager(
 		shard,
-		workflowCache,
+		workflowConsistencyChecker.GetWorkflowCache(),
 		config,
 		archivalClient,
 		shard.GetTimeSource(),
@@ -173,46 +173,45 @@ func NewEngineWithShardContext(
 		rawMatchingClient:          rawMatchingClient,
 		workflowDeleteManager:      workflowDeleteManager,
 		eventSerializer:            eventSerializer,
+		eventsReapplier:            eventsReapplier,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
 	for _, factory := range queueProcessorFactories {
-		processor := factory.CreateQueue(shard, workflowCache)
+		processor := factory.CreateQueue(shard, workflowConsistencyChecker.GetWorkflowCache())
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
-
-	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsClient(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(
 			shard,
-			workflowCache,
+			workflowConsistencyChecker.GetWorkflowCache(),
 			executionManager,
 			logger,
 		)
 		historyEngImpl.nDCReplicator = ndc.NewHistoryReplicator(
 			shard,
-			workflowCache,
+			workflowConsistencyChecker.GetWorkflowCache(),
 			historyEngImpl.eventsReapplier,
 			logger,
 			eventSerializer,
 		)
 		historyEngImpl.nDCActivityReplicator = ndc.NewActivityReplicator(
 			shard,
-			workflowCache,
+			workflowConsistencyChecker.GetWorkflowCache(),
 			logger,
 		)
 	}
 	historyEngImpl.workflowRebuilder = NewWorkflowRebuilder(
 		shard,
-		workflowCache,
+		workflowConsistencyChecker.GetWorkflowCache(),
 		logger,
 	)
 	historyEngImpl.workflowResetter = ndc.NewWorkflowResetter(
 		shard,
-		workflowCache,
+		workflowConsistencyChecker.GetWorkflowCache(),
 		logger,
 	)
 
@@ -228,7 +227,7 @@ func NewEngineWithShardContext(
 	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(
 		shard,
 		workflowDeleteManager,
-		workflowCache,
+		workflowConsistencyChecker.GetWorkflowCache(),
 		clientBean,
 		replicationTaskExecutorProvider,
 	)
@@ -236,7 +235,7 @@ func NewEngineWithShardContext(
 		config,
 		shard,
 		historyEngImpl,
-		workflowCache,
+		workflowConsistencyChecker.GetWorkflowCache(),
 		workflowDeleteManager,
 		clientBean,
 		eventSerializer,

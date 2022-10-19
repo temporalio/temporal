@@ -29,11 +29,10 @@
 package shard
 
 import (
-	"reflect"
+	reflect "reflect"
 
-	"github.com/golang/mock/gomock"
-
-	"go.temporal.io/server/service/history/definition"
+	gomock "github.com/golang/mock/gomock"
+	definition "go.temporal.io/server/service/history/definition"
 )
 
 // MockEngineFactory is a mock of EngineFactory interface.

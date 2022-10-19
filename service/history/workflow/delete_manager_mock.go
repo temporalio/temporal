@@ -34,7 +34,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/api/common/v1"
-
 	namespace "go.temporal.io/server/common/namespace"
 	definition "go.temporal.io/server/service/history/definition"
 )

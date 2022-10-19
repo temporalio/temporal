@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	warchiver "go.temporal.io/server/service/worker/archiver"
@@ -67,6 +68,7 @@ var Module = fx.Options(
 	shard.Module,
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
+	fx.Provide(WorkflowCacheProvider),
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
@@ -77,6 +79,7 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
+	fx.Provide(EventReapplierProvider),
 	fx.Provide(ArchivalClientProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
@@ -114,28 +117,36 @@ func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.S
 
 func HandlerProvider(args NewHandlerArgs) *Handler {
 	handler := &Handler{
-		status:                        common.DaemonStatusInitialized,
-		config:                        args.Config,
-		tokenSerializer:               common.NewProtoTaskTokenSerializer(),
-		logger:                        args.Logger,
-		throttledLogger:               args.ThrottledLogger,
-		persistenceExecutionManager:   args.PersistenceExecutionManager,
-		persistenceShardManager:       args.PersistenceShardManager,
-		persistenceVisibilityManager:  args.PersistenceVisibilityManager,
-		historyServiceResolver:        args.HistoryServiceResolver,
-		metricsClient:                 args.MetricsClient,
-		payloadSerializer:             args.PayloadSerializer,
-		timeSource:                    args.TimeSource,
-		namespaceRegistry:             args.NamespaceRegistry,
-		saProvider:                    args.SaProvider,
-		saMapper:                      args.SaMapper,
-		clusterMetadata:               args.ClusterMetadata,
-		archivalMetadata:              args.ArchivalMetadata,
-		hostInfoProvider:              args.HostInfoProvider,
-		controller:                    args.ShardController,
-		eventNotifier:                 args.EventNotifier,
-		replicationTaskFetcherFactory: args.ReplicationTaskFetcherFactory,
-		tracer:                        args.TracerProvider.Tracer(consts.LibraryName),
+		status:                          common.DaemonStatusInitialized,
+		archivalClient:                  args.ArchivalClient,
+		config:                          args.Config,
+		clientBean:                      args.ClientBean,
+		tokenSerializer:                 common.NewProtoTaskTokenSerializer(),
+		logger:                          args.Logger,
+		throttledLogger:                 args.ThrottledLogger,
+		persistenceExecutionManager:     args.PersistenceExecutionManager,
+		persistenceShardManager:         args.PersistenceShardManager,
+		persistenceVisibilityManager:    args.PersistenceVisibilityManager,
+		historyServiceResolver:          args.HistoryServiceResolver,
+		metricsClient:                   args.MetricsClient,
+		matchingClient:                  args.MatchingClient,
+		rawMatchingClient:               args.RawMatchingClient,
+		payloadSerializer:               args.PayloadSerializer,
+		timeSource:                      args.TimeSource,
+		namespaceRegistry:               args.NamespaceRegistry,
+		saProvider:                      args.SaProvider,
+		saMapper:                        args.SaMapper,
+		clusterMetadata:                 args.ClusterMetadata,
+		archivalMetadata:                args.ArchivalMetadata,
+		hostInfoProvider:                args.HostInfoProvider,
+		controller:                      args.ShardController,
+		eventNotifier:                   args.EventNotifier,
+		eventReapplier:                  args.EventReapplier,
+		eventSerializer:                 args.EventSerializer,
+		replicationTaskFetcherFactory:   args.ReplicationTaskFetcherFactory,
+		replicationTaskExecutorProvider: args.ReplicationTaskExecutorProvider,
+		tracer:                          args.TracerProvider.Tracer(consts.LibraryName),
+		workflowCache:                   args.WorkflowCache,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -160,6 +171,12 @@ func ConfigProvider(
 		persistenceConfig.NumHistoryShards,
 		persistenceConfig.AdvancedVisibilityConfigExist(),
 		esConfig.GetVisibilityIndex())
+}
+
+func WorkflowCacheProvider(
+	config *configs.Config,
+) *Cache {
+	return NewCache(config.NumberOfShards)
 }
 
 func ThrottledLoggerRpsFnProvider(serviceConfig *configs.Config) resource.ThrottledLoggerRpsFn {
@@ -263,6 +280,16 @@ func EventNotifierProvider(
 		timeSource,
 		metricsClient,
 		config.GetShardID,
+	)
+}
+
+func EventReapplierProvider(
+	metricsClient metrics.Client,
+	logger resource.SnTaggedLogger,
+) ndc.EventsReapplier {
+	return ndc.NewEventsReapplier(
+		metricsClient,
+		logger,
 	)
 }
 

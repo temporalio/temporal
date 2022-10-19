@@ -374,18 +374,6 @@ func (mr *MockExecutableMockRecorder) SetTaskID(id interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTaskID", reflect.TypeOf((*MockExecutable)(nil).SetTaskID), id)
 }
 
-// SetVersion mocks base method.
-func (m *MockExecutable) SetVersion(version int64) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetVersion", version)
-}
-
-// SetVersion indicates an expected call of SetVersion.
-func (mr *MockExecutableMockRecorder) SetVersion(version interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVersion", reflect.TypeOf((*MockExecutable)(nil).SetVersion), version)
-}
-
 // SetVisibilityTime mocks base method.
 func (m *MockExecutable) SetVisibilityTime(timestamp time.Time) {
 	m.ctrl.T.Helper()

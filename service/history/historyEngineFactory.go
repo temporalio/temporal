@@ -32,11 +32,10 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/definition"
+	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/replication"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -48,6 +47,7 @@ type (
 		MatchingClient                  resource.MatchingClient
 		SdkClientFactory                sdk.ClientFactory
 		EventNotifier                   definition.Notifier
+		EventsReapplier                 ndc.EventsReapplier
 		Config                          *configs.Config
 		RawMatchingClient               resource.MatchingRawClient
 		ArchivalClient                  archiver.Client
@@ -56,6 +56,7 @@ type (
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
 		TracerProvider                  trace.TracerProvider
+		WorkflowCache                   *Cache
 	}
 
 	historyEngineFactory struct {
@@ -66,17 +67,16 @@ type (
 func (f *historyEngineFactory) CreateEngine(
 	shard definition.ShardContext,
 ) definition.Engine {
-	workflowCache := workflow.NewCache(shard)
-	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, workflowCache)
+	workflowConsistencyChecker := f.WorkflowCache.GetOrCreate(shard)
 	return NewEngineWithShardContext(
 		shard,
 		f.ClientBean,
 		f.MatchingClient,
 		f.SdkClientFactory,
 		f.EventNotifier,
+		f.EventsReapplier,
 		f.Config,
 		f.RawMatchingClient,
-		workflowCache,
 		f.ArchivalClient,
 		f.EventSerializer,
 		f.QueueFactories,

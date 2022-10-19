@@ -45,6 +45,7 @@ import (
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -64,10 +65,35 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/deleteworkflow"
+	"go.temporal.io/server/service/history/api/describemutablestate"
+	"go.temporal.io/server/service/history/api/describeworkflow"
+	"go.temporal.io/server/service/history/api/queryworkflow"
+	"go.temporal.io/server/service/history/api/reapplyevents"
+	"go.temporal.io/server/service/history/api/recordactivitytaskheartbeat"
+	"go.temporal.io/server/service/history/api/recordactivitytaskstarted"
+	"go.temporal.io/server/service/history/api/recordchildworkflowcompleted"
+	"go.temporal.io/server/service/history/api/refreshworkflow"
+	"go.temporal.io/server/service/history/api/removesignalmutablestate"
+	replicationapi "go.temporal.io/server/service/history/api/replication"
+	"go.temporal.io/server/service/history/api/requestcancelworkflow"
+	"go.temporal.io/server/service/history/api/resetstickytaskqueue"
+	"go.temporal.io/server/service/history/api/resetworkflow"
+	"go.temporal.io/server/service/history/api/respondactivitytaskcanceled"
+	"go.temporal.io/server/service/history/api/respondactivitytaskcompleted"
+	"go.temporal.io/server/service/history/api/respondactivitytaskfailed"
+	"go.temporal.io/server/service/history/api/signalwithstartworkflow"
+	"go.temporal.io/server/service/history/api/signalworkflow"
+	"go.temporal.io/server/service/history/api/startworkflow"
+	"go.temporal.io/server/service/history/api/terminateworkflow"
+	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/definition"
+	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
+	archiverclient "go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -76,53 +102,69 @@ type (
 	Handler struct {
 		status int32
 
-		tokenSerializer               common.TaskTokenSerializer
-		startWG                       sync.WaitGroup
-		config                        *configs.Config
-		eventNotifier                 definition.Notifier
-		replicationTaskFetcherFactory replication.TaskFetcherFactory
-		logger                        log.Logger
-		throttledLogger               log.Logger
-		persistenceExecutionManager   persistence.ExecutionManager
-		persistenceShardManager       persistence.ShardManager
-		persistenceVisibilityManager  manager.VisibilityManager
-		historyServiceResolver        membership.ServiceResolver
-		metricsClient                 metrics.Client
-		payloadSerializer             serialization.Serializer
-		timeSource                    clock.TimeSource
-		namespaceRegistry             namespace.Registry
-		saProvider                    searchattribute.Provider
-		saMapper                      searchattribute.Mapper
-		clusterMetadata               cluster.Metadata
-		archivalMetadata              archiver.ArchivalMetadata
-		hostInfoProvider              membership.HostInfoProvider
-		controller                    definition.ShardController
-		tracer                        trace.Tracer
+		archivalClient                  archiverclient.Client
+		clientBean                      client.Bean
+		tokenSerializer                 common.TaskTokenSerializer
+		startWG                         sync.WaitGroup
+		config                          *configs.Config
+		eventNotifier                   definition.Notifier
+		eventReapplier                  ndc.EventsReapplier
+		eventSerializer                 serialization.Serializer
+		logger                          log.Logger
+		throttledLogger                 log.Logger
+		persistenceExecutionManager     persistence.ExecutionManager
+		persistenceShardManager         persistence.ShardManager
+		persistenceVisibilityManager    manager.VisibilityManager
+		historyServiceResolver          membership.ServiceResolver
+		metricsClient                   metrics.Client
+		matchingClient                  resource.MatchingClient
+		rawMatchingClient               resource.MatchingRawClient
+		payloadSerializer               serialization.Serializer
+		timeSource                      clock.TimeSource
+		namespaceRegistry               namespace.Registry
+		saProvider                      searchattribute.Provider
+		saMapper                        searchattribute.Mapper
+		clusterMetadata                 cluster.Metadata
+		archivalMetadata                archiver.ArchivalMetadata
+		hostInfoProvider                membership.HostInfoProvider
+		controller                      definition.ShardController
+		replicationTaskFetcherFactory   replication.TaskFetcherFactory
+		replicationTaskExecutorProvider replication.TaskExecutorProvider
+		tracer                          trace.Tracer
+		workflowCache                   *Cache
 	}
 
 	NewHandlerArgs struct {
 		fx.In
 
-		Config                        *configs.Config
-		Logger                        resource.SnTaggedLogger
-		ThrottledLogger               resource.ThrottledLogger
-		PersistenceExecutionManager   persistence.ExecutionManager
-		PersistenceShardManager       persistence.ShardManager
-		PersistenceVisibilityManager  manager.VisibilityManager
-		HistoryServiceResolver        membership.ServiceResolver
-		MetricsClient                 metrics.Client
-		PayloadSerializer             serialization.Serializer
-		TimeSource                    clock.TimeSource
-		NamespaceRegistry             namespace.Registry
-		SaProvider                    searchattribute.Provider
-		SaMapper                      searchattribute.Mapper
-		ClusterMetadata               cluster.Metadata
-		ArchivalMetadata              archiver.ArchivalMetadata
-		HostInfoProvider              membership.HostInfoProvider
-		ShardController               definition.ShardController
-		EventNotifier                 definition.Notifier
-		ReplicationTaskFetcherFactory replication.TaskFetcherFactory
-		TracerProvider                trace.TracerProvider
+		ArchivalClient                  archiverclient.Client
+		Config                          *configs.Config
+		ClientBean                      client.Bean
+		Logger                          resource.SnTaggedLogger
+		ThrottledLogger                 resource.ThrottledLogger
+		PersistenceExecutionManager     persistence.ExecutionManager
+		PersistenceShardManager         persistence.ShardManager
+		PersistenceVisibilityManager    manager.VisibilityManager
+		HistoryServiceResolver          membership.ServiceResolver
+		MetricsClient                   metrics.Client
+		MatchingClient                  resource.MatchingClient
+		RawMatchingClient               resource.MatchingRawClient
+		PayloadSerializer               serialization.Serializer
+		TimeSource                      clock.TimeSource
+		NamespaceRegistry               namespace.Registry
+		SaProvider                      searchattribute.Provider
+		SaMapper                        searchattribute.Mapper
+		ClusterMetadata                 cluster.Metadata
+		ArchivalMetadata                archiver.ArchivalMetadata
+		HostInfoProvider                membership.HostInfoProvider
+		ShardController                 definition.ShardController
+		EventNotifier                   definition.Notifier
+		EventReapplier                  ndc.EventsReapplier
+		EventSerializer                 serialization.Serializer
+		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
+		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
+		TracerProvider                  trace.TracerProvider
+		WorkflowCache                   *Cache
 	}
 )
 
@@ -232,16 +274,11 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := recordactivitytaskheartbeat.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	response, err2 := engine.RecordActivityTaskHeartbeat(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-
 	return response, nil
 }
 
@@ -261,12 +298,8 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-
-	response, err := engine.RecordActivityTaskStarted(ctx, request)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := recordactivitytaskstarted.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -345,17 +378,12 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := respondactivitytaskcompleted.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.RespondActivityTaskCompleted(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-
-	return resp, nil
+	return response, nil
 }
 
 // RespondActivityTaskFailed - records failure of an activity task
@@ -384,17 +412,12 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := respondactivitytaskfailed.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.RespondActivityTaskFailed(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-
-	return resp, nil
+	return response, nil
 }
 
 // RespondActivityTaskCanceled - records failure of an activity task
@@ -423,17 +446,12 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := respondactivitytaskcanceled.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.RespondActivityTaskCanceled(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-
-	return resp, nil
+	return response, nil
 }
 
 // RespondWorkflowTaskCompleted - records completion of a workflow task
@@ -542,13 +560,8 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-
-	response, err := engine.StartWorkflowExecution(ctx, request)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := startworkflow.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -656,15 +669,19 @@ func (h *Handler) RebuildMutableState(ctx context.Context, request *historyservi
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-
-	if err := engine.RebuildMutableState(ctx, namespaceID, commonpb.WorkflowExecution{
-		WorkflowId: workflowExecution.WorkflowId,
-		RunId:      workflowExecution.RunId,
-	}); err != nil {
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	if err := NewWorkflowRebuilder(
+		shardContext,
+		workflowCache.GetWorkflowCache(),
+		shardContext.GetLogger(),
+	).rebuild(
+		ctx,
+		definition.NewWorkflowKey(
+			request.GetNamespaceId(),
+			workflowExecution.GetWorkflowId(),
+			workflowExecution.GetRunId(),
+		),
+	); err != nil {
 		return nil, h.convertError(err)
 	}
 	return &historyservice.RebuildMutableStateResponse{}, nil
@@ -690,16 +707,12 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := describemutablestate.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.DescribeMutableState(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-	return resp, nil
+	return response, nil
 }
 
 // GetMutableState - returns the id of the next event in the execution's history
@@ -722,16 +735,12 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := api.GetOrPollMutableState(ctx, request, shardContext, workflowCache, h.eventNotifier)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.GetMutableState(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-	return resp, nil
+	return response, nil
 }
 
 // PollMutableState - returns the id of the next event in the execution's history
@@ -754,16 +763,38 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := api.GetOrPollMutableState(
+		ctx,
+		&historyservice.GetMutableStateRequest{
+			NamespaceId:         request.GetNamespaceId(),
+			Execution:           request.Execution,
+			ExpectedNextEventId: request.ExpectedNextEventId,
+			CurrentBranchToken:  request.CurrentBranchToken,
+		},
+		shardContext,
+		workflowCache,
+		h.eventNotifier,
+	)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.PollMutableState(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-	return resp, nil
+	return &historyservice.PollMutableStateResponse{
+		Execution:                             response.Execution,
+		WorkflowType:                          response.WorkflowType,
+		NextEventId:                           response.NextEventId,
+		PreviousStartedEventId:                response.PreviousStartedEventId,
+		LastFirstEventId:                      response.LastFirstEventId,
+		LastFirstEventTxnId:                   response.LastFirstEventTxnId,
+		TaskQueue:                             response.TaskQueue,
+		StickyTaskQueue:                       response.StickyTaskQueue,
+		StickyTaskQueueScheduleToStartTimeout: response.StickyTaskQueueScheduleToStartTimeout,
+		CurrentBranchToken:                    response.CurrentBranchToken,
+		VersionHistories:                      response.VersionHistories,
+		WorkflowState:                         response.WorkflowState,
+		WorkflowStatus:                        response.WorkflowStatus,
+		FirstExecutionRunId:                   response.FirstExecutionRunId,
+	}, nil
 }
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
@@ -786,16 +817,12 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := describeworkflow.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.DescribeWorkflowExecution(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-	return resp, nil
+	return response, nil
 }
 
 // RequestCancelWorkflowExecution - requests cancellation of a workflow
@@ -813,28 +840,17 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 	}
 
 	cancelRequest := request.CancelRequest
-	h.logger.Debug("RequestCancelWorkflowExecution",
-		tag.WorkflowNamespace(cancelRequest.GetNamespace()),
-		tag.WorkflowNamespaceID(request.GetNamespaceId()),
-		tag.WorkflowID(cancelRequest.WorkflowExecution.GetWorkflowId()),
-		tag.WorkflowRunID(cancelRequest.WorkflowExecution.GetRunId()))
-
 	workflowID := cancelRequest.WorkflowExecution.GetWorkflowId()
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := requestcancelworkflow.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.RequestCancelWorkflowExecution(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-
-	return resp, nil
+	return response, nil
 }
 
 // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
@@ -858,17 +874,12 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := signalworkflow.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.SignalWorkflowExecution(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-
-	return resp, nil
+	return response, nil
 }
 
 // SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
@@ -895,13 +906,10 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
 
 	for {
-		resp, err2 := engine.SignalWithStartWorkflowExecution(ctx, request)
+		resp, err2 := signalwithstartworkflow.Invoke(ctx, request, shardContext, workflowCache)
 		if err2 == nil {
 			return resp, nil
 		}
@@ -952,17 +960,12 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := removesignalmutablestate.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.RemoveSignalMutableState(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-
-	return resp, nil
+	return response, nil
 }
 
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
@@ -986,17 +989,12 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := terminateworkflow.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.TerminateWorkflowExecution(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-
-	return resp, nil
+	return response, nil
 }
 
 func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historyservice.DeleteWorkflowExecutionRequest) (_ *historyservice.DeleteWorkflowExecutionResponse, retError error) {
@@ -1018,12 +1016,15 @@ func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historys
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-
-	resp, err := engine.DeleteWorkflowExecution(ctx, request)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	workflowDeleteManager := workflow.NewDeleteManager(
+		shardContext,
+		workflowCache.GetWorkflowCache(),
+		h.config,
+		h.archivalClient,
+		shardContext.GetTimeSource(),
+	)
+	resp, err := deleteworkflow.Invoke(ctx, request, shardContext, workflowCache, workflowDeleteManager)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
@@ -1051,17 +1052,12 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := resetworkflow.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.ResetWorkflowExecution(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-
-	return resp, nil
+	return response, nil
 }
 
 // QueryWorkflow queries a workflow.
@@ -1083,17 +1079,12 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := queryworkflow.Invoke(ctx, request, shardContext, workflowCache, h.matchingClient, h.rawMatchingClient)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.QueryWorkflow(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-
-	return resp, nil
+	return response, nil
 }
 
 // ScheduleWorkflowTask is used for creating a workflow task for already started workflow execution.  This is mainly
@@ -1200,17 +1191,12 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := recordchildworkflowcompleted.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.RecordChildExecutionCompleted(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-
-	return resp, nil
+	return response, nil
 }
 
 func (h *Handler) VerifyChildExecutionCompletionRecorded(
@@ -1237,17 +1223,12 @@ func (h *Handler) VerifyChildExecutionCompletionRecorded(
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := verifychildworkflowcompletionrecorded.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err2 := engine.VerifyChildExecutionCompletionRecorded(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-
-	return resp, nil
+	return response, nil
 }
 
 // ResetStickyTaskQueue reset the volatile information in mutable state of a given workflow.
@@ -1273,17 +1254,12 @@ func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyserv
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	response, err := resetstickytaskqueue.Invoke(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	resp, err := engine.ResetStickyTaskQueue(ctx, request)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-
-	return resp, nil
+	return response, nil
 }
 
 // ReplicateEventsV2 is called by processor to replicate history events for passive namespaces
@@ -1310,16 +1286,18 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	historyReplicator := ndc.NewHistoryReplicator(
+		shardContext,
+		workflowCache.GetWorkflowCache(),
+		h.eventReapplier,
+		h.logger,
+		h.eventSerializer,
+	)
+	err = historyReplicator.ApplyEvents(ctx, request)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	err2 := engine.ReplicateEventsV2(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
-	}
-
 	return &historyservice.ReplicateEventsV2Response{}, nil
 }
 
@@ -1392,16 +1370,16 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	activityReplicator := ndc.NewActivityReplicator(
+		shardContext,
+		workflowCache.GetWorkflowCache(),
+		h.logger,
+	)
+	err = activityReplicator.SyncActivity(ctx, request)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	err = engine.SyncActivity(ctx, request)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-
 	return &historyservice.SyncActivityResponse{}, nil
 }
 
@@ -1553,16 +1531,9 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
-	workflowID := request.GetRequest().GetWorkflowExecution().GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-
+	execution := request.GetRequest().GetWorkflowExecution()
+	workflowID := execution.GetWorkflowId()
+	runID := execution.GetRunId()
 	// deserialize history event object
 	historyEvents, err := h.payloadSerializer.DeserializeEvents(&commonpb.DataBlob{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
@@ -1572,14 +1543,28 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 		return nil, h.convertError(err)
 	}
 
-	execution := request.GetRequest().GetWorkflowExecution()
-	if err := engine.ReapplyEvents(
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	workflowResetter := ndc.NewWorkflowResetter(
+		shardContext,
+		workflowCache.GetWorkflowCache(),
+		h.logger,
+	)
+	err = reapplyevents.Invoke(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
-		execution.GetWorkflowId(),
-		execution.GetRunId(),
+		workflowID,
+		runID,
 		historyEvents,
-	); err != nil {
+		shardContext,
+		workflowCache,
+		workflowResetter,
+		h.eventReapplier,
+	)
+	if err != nil {
 		return nil, h.convertError(err)
 	}
 	return &historyservice.ReapplyEventsResponse{}, nil
@@ -1676,25 +1661,20 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	err = refreshworkflow.Invoke(
+		ctx,
+		definition.NewWorkflowKey(
+			request.NamespaceId,
+			request.Request.GetExecution().GetWorkflowId(),
+			request.Request.GetExecution().GetRunId(),
+		),
+		shardContext,
+		workflowCache,
+	)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-
-	err = engine.RefreshWorkflowTasks(
-		ctx,
-		namespaceID,
-		commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowId,
-			RunId:      execution.RunId,
-		},
-	)
-
-	if err != nil {
-		err = h.convertError(err)
-		return nil, err
-	}
-
 	return &historyservice.RefreshWorkflowTasksResponse{}, nil
 }
 
@@ -1715,18 +1695,12 @@ func (h *Handler) GenerateLastHistoryReplicationTasks(
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return nil, h.convertError(err)
-	}
-
-	resp, err := engine.GenerateLastHistoryReplicationTasks(ctx, request)
-
+	workflowCache := h.workflowCache.GetOrCreate(shardContext)
+	resp, err := replicationapi.GenerateTask(ctx, request, shardContext, workflowCache)
 	if err != nil {
 		err = h.convertError(err)
 		return nil, err
 	}
-
 	return resp, nil
 }
 

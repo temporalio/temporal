@@ -29,15 +29,14 @@
 package workflow
 
 import (
-	"context"
-	"reflect"
+	context "context"
+	reflect "reflect"
 
-	"github.com/golang/mock/gomock"
-	v1 "go.temporal.io/api/common/v1"
-	v10 "go.temporal.io/api/history/v1"
-
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/history/definition"
+	gomock "github.com/golang/mock/gomock"
+	common "go.temporal.io/api/common/v1"
+	history "go.temporal.io/api/history/v1"
+	namespace "go.temporal.io/server/common/namespace"
+	definition "go.temporal.io/server/service/history/definition"
 )
 
 // MockMutableStateRebuilder is a mock of MutableStateRebuilder interface.
@@ -64,7 +63,7 @@ func (m *MockMutableStateRebuilder) EXPECT() *MockMutableStateRebuilderMockRecor
 }
 
 // ApplyEvents mocks base method.
-func (m *MockMutableStateRebuilder) ApplyEvents(ctx context.Context, namespaceID namespace.ID, requestID string, execution v1.WorkflowExecution, history, newRunHistory []*v10.HistoryEvent) (definition.MutableState, error) {
+func (m *MockMutableStateRebuilder) ApplyEvents(ctx context.Context, namespaceID namespace.ID, requestID string, execution common.WorkflowExecution, history, newRunHistory []*history.HistoryEvent) (definition.MutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ApplyEvents", ctx, namespaceID, requestID, execution, history, newRunHistory)
 	ret0, _ := ret[0].(definition.MutableState)

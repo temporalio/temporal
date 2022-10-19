@@ -33,7 +33,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-
 	definition "go.temporal.io/server/service/history/definition"
 )
 

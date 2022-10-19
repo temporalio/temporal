@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/definition"
-	definition2 "go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -51,7 +50,7 @@ func Invoke(
 	workflowID string,
 	runID string,
 	reapplyEvents []*historypb.HistoryEvent,
-	shard definition2.ShardContext,
+	shard definition.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	workflowResetter ndc.WorkflowResetter,
 	eventsReapplier ndc.EventsReapplier,
@@ -104,7 +103,7 @@ func Invoke(
 					// The reapply is from the same cluster. Ignoring.
 					continue
 				}
-				dedupResource := definition2.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
+				dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 				if mutableState.IsResourceDuplicated(dedupResource) {
 					// already apply the signal
 					continue

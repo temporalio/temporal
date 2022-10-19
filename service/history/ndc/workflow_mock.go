@@ -29,11 +29,10 @@
 package ndc
 
 import (
-	"reflect"
+	reflect "reflect"
 
-	"github.com/golang/mock/gomock"
-
-	"go.temporal.io/server/service/history/definition"
+	gomock "github.com/golang/mock/gomock"
+	definition "go.temporal.io/server/service/history/definition"
 )
 
 // MockWorkflow is a mock of Workflow interface.

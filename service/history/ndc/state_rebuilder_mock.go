@@ -29,13 +29,12 @@
 package ndc
 
 import (
-	"context"
-	"reflect"
-	"time"
+	context "context"
+	reflect "reflect"
+	time "time"
 
-	"github.com/golang/mock/gomock"
-
-	"go.temporal.io/server/service/history/definition"
+	gomock "github.com/golang/mock/gomock"
+	definition "go.temporal.io/server/service/history/definition"
 )
 
 // MockStateRebuilder is a mock of StateRebuilder interface.
