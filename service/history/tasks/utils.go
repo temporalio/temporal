@@ -92,7 +92,7 @@ func GetTransferTaskEventID(
 		eventID = task.InitiatedEventID
 	case *ResetWorkflowTask:
 		eventID = common.FirstEventID
-	case *fakeTask:
+	case *FakeTask:
 		// no-op
 	default:
 		panic(serviceerror.NewInternal("unknown transfer task"))
@@ -120,7 +120,7 @@ func GetTimerTaskEventID(
 		eventID = common.FirstEventID
 	case *DeleteHistoryEventTask:
 		eventID = common.FirstEventID
-	case *fakeTask:
+	case *FakeTask:
 		// no-op
 	default:
 		panic(serviceerror.NewInternal("unknown timer task"))
