@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -284,7 +285,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				return nil, err
 			}
 
-			verifyCompletionRecorded = verifyCompletionRecorded && !IsTerminatedByResetter(completionEvent)
+			verifyCompletionRecorded = verifyCompletionRecorded && !ndc.IsTerminatedByResetter(completionEvent)
 		}
 
 		if verifyCompletionRecorded {

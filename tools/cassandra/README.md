@@ -11,7 +11,7 @@ then run:
 ``` 
 make install-schema
 ```
-to create schama in your `cassandra` instance.
+to create schema in your `cassandra` instance.
 
 ## For production
 

@@ -154,7 +154,7 @@ func (p *ackMgrImpl) GetMaxTaskInfo() (int64, time.Time) {
 		// use ImmediateTaskMaxReadLevel which is the max task id of any immediate task queues.
 		// ImmediateTaskMaxReadLevel will be the lower bound of new range_id if shard reload. Remote cluster will quickly (in
 		// a few seconds) ack to the latest ImmediateTaskMaxReadLevel if there is no replication tasks at all.
-		taskID := p.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, p.currentClusterName).Prev().TaskID
+		taskID := p.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, p.currentClusterName, false).Prev().TaskID
 		maxTaskID = &taskID
 	}
 	maxVisibilityTimestamp := p.maxTaskVisibilityTimestamp
@@ -267,7 +267,9 @@ func (p *ackMgrImpl) getTasks(
 	batchSize int,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
 
-	if minTaskID == maxTaskID {
+	if minTaskID > maxTaskID {
+		return nil, 0, serviceerror.NewUnavailable("min task ID < max task ID, probably due to shard re-balancing")
+	} else if minTaskID == maxTaskID {
 		return []*replicationspb.ReplicationTask{}, maxTaskID, nil
 	}
 
@@ -317,7 +319,7 @@ func (p *ackMgrImpl) taskIDsRange(
 	lastReadMessageID int64,
 ) (minTaskID int64, maxTaskID int64) {
 	minTaskID = lastReadMessageID
-	maxTaskID = p.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, p.currentClusterName).Prev().TaskID
+	maxTaskID = p.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, p.currentClusterName, false).Prev().TaskID
 
 	p.Lock()
 	defer p.Unlock()

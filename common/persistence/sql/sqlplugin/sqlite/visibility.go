@@ -85,6 +85,22 @@ const (
 		 WHERE namespace_id = ? AND status != 1
 		 AND run_id = ?`
 
+	templateGetWorkflowExecution = `
+		SELECT
+			workflow_id,
+			run_id,
+			start_time,
+			execution_time,
+			memo,
+			encoding,
+			close_time,
+			workflow_type_name,
+			status,
+			history_length,
+			task_queue 
+		FROM executions_visibility
+		WHERE namespace_id = ? AND run_id = ?`
+
 	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE namespace_id = ? AND run_id = ?"
 )
 
@@ -262,4 +278,22 @@ func (mdb *db) SelectFromVisibility(
 		}
 	}
 	return rows, nil
+}
+
+// GetFromVisibility reads one row from visibility table
+func (mdb *db) GetFromVisibility(
+	ctx context.Context,
+	filter sqlplugin.VisibilityGetFilter,
+) (*sqlplugin.VisibilityRow, error) {
+	var row sqlplugin.VisibilityRow
+	err := mdb.conn.GetContext(ctx,
+		&row,
+		templateGetWorkflowExecution,
+		filter.NamespaceID,
+		filter.RunID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }

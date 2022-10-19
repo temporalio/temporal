@@ -210,3 +210,13 @@ func (m *visibilityManagerRateLimited) CountWorkflowExecutions(
 	}
 	return m.delegate.CountWorkflowExecutions(ctx, request)
 }
+
+func (m *visibilityManagerRateLimited) GetWorkflowExecution(
+	ctx context.Context,
+	request *manager.GetWorkflowExecutionRequest,
+) (*manager.GetWorkflowExecutionResponse, error) {
+	if ok := m.readRateLimiter.Allow(); !ok {
+		return nil, persistence.ErrPersistenceLimitExceeded
+	}
+	return m.delegate.GetWorkflowExecution(ctx, request)
+}

@@ -603,6 +603,39 @@ func (s *visibilityStore) CountWorkflowExecutions(
 	return response, nil
 }
 
+func (s *visibilityStore) GetWorkflowExecution(
+	ctx context.Context,
+	request *manager.GetWorkflowExecutionRequest,
+) (*store.InternalGetWorkflowExecutionResponse, error) {
+	docID := getDocID(request.WorkflowID, request.RunID)
+	result, err := s.esClient.Get(ctx, s.index, docID)
+	if err != nil {
+		return nil, convertElasticsearchClientError("GetWorkflowExecution failed", err)
+	}
+
+	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(
+			fmt.Sprintf("Unable to read search attribute types: %v", err),
+		)
+	}
+
+	if !result.Found {
+		return nil, serviceerror.NewNotFound(
+			fmt.Sprintf("Workflow execution with run id %s not found.", request.RunID),
+		)
+	}
+
+	workflowExecutionInfo, err := s.parseESDoc(result.Id, result.Source, typeMap, request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	return &store.InternalGetWorkflowExecutionResponse{
+		Execution: workflowExecutionInfo,
+	}, nil
+}
+
 func (s *visibilityStore) buildSearchParameters(
 	request *manager.ListWorkflowExecutionsRequest,
 	boolQuery *elastic.BoolQuery,
@@ -759,7 +792,7 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 	}
 	var lastHitSort []interface{}
 	for _, hit := range searchResult.Hits.Hits {
-		workflowExecutionInfo, err := s.parseESDoc(hit, typeMap, namespace)
+		workflowExecutionInfo, err := s.parseESDoc(hit.Id, hit.Source, typeMap, namespace)
 		if err != nil {
 			return nil, err
 		}
@@ -856,19 +889,19 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 	return doc, nil
 }
 
-func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap, namespace namespace.Name) (*store.InternalWorkflowExecutionInfo, error) {
+func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, saTypeMap searchattribute.NameTypeMap, namespace namespace.Name) (*store.InternalWorkflowExecutionInfo, error) {
 	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) error {
 		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
 		return serviceerror.NewInternal(fmt.Sprintf("Unable to parse Elasticsearch document(%s) %q field value %q: %v", docID, fieldName, fieldValue, err))
 	}
 
 	var sourceMap map[string]interface{}
-	d := json.NewDecoder(bytes.NewReader(hit.Source))
+	d := json.NewDecoder(bytes.NewReader(docSource))
 	// Very important line. See finishParseJSONValue bellow.
 	d.UseNumber()
 	if err := d.Decode(&sourceMap); err != nil {
 		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to unmarshal JSON from Elasticsearch document(%s): %v", hit.Id, err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to unmarshal JSON from Elasticsearch document(%s): %v", docID, err))
 	}
 
 	var (
@@ -888,16 +921,16 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		case searchattribute.Memo:
 			var memoStr string
 			if memoStr, isValidType = fieldValue.(string); !isValidType {
-				return nil, logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), hit.Id)
+				return nil, logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), docID)
 			}
 			var err error
 			if memo, err = base64.StdEncoding.DecodeString(memoStr); err != nil {
-				return nil, logParseError(fieldName, memoStr[:10], err, hit.Id)
+				return nil, logParseError(fieldName, memoStr[:10], err, docID)
 			}
 			continue
 		case searchattribute.MemoEncoding:
 			if memoEncoding, isValidType = fieldValue.(string); !isValidType {
-				return nil, logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), hit.Id)
+				return nil, logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), docID)
 			}
 			continue
 		}
@@ -909,12 +942,12 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 				continue
 			}
 			s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to get type for Elasticsearch document(%s) field %q: %v", hit.Id, fieldName, err))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to get type for Elasticsearch document(%s) field %q: %v", docID, fieldName, err))
 		}
 
 		fieldValueParsed, err := finishParseJSONValue(fieldValue, fieldType)
 		if err != nil {
-			return nil, logParseError(fieldName, fieldValue, err, hit.Id)
+			return nil, logParseError(fieldName, fieldValue, err, docID)
 		}
 
 		switch fieldName {
@@ -954,7 +987,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		record.SearchAttributes, err = searchattribute.Encode(customSearchAttributes, &saTypeMap)
 		if err != nil {
 			s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to encode custom search attributes of Elasticsearch document(%s): %v", hit.Id, err))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to encode custom search attributes of Elasticsearch document(%s): %v", docID, err))
 		}
 		aliasedSas, err := searchattribute.AliasFields(s.searchAttributesMapper, record.SearchAttributes, namespace.String())
 		if err != nil {
@@ -970,7 +1003,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		record.Memo = persistence.NewDataBlob(memo, memoEncoding)
 	} else if memo != nil {
 		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
-		return nil, serviceerror.NewInternal(fmt.Sprintf("%q field is missing in Elasticsearch document(%s)", searchattribute.MemoEncoding, hit.Id))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("%q field is missing in Elasticsearch document(%s)", searchattribute.MemoEncoding, docID))
 	}
 
 	return record, nil

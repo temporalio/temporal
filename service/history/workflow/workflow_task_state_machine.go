@@ -313,7 +313,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	// TODO merge active & passive task generation
 	if !bypassTaskGeneration {
 		if err := m.ms.taskGenerator.GenerateScheduleWorkflowTaskTasks(
-			scheduledTime, // schedule time is now
 			scheduledEventID,
 		); err != nil {
 			return nil, err
@@ -351,7 +350,6 @@ func (m *workflowTaskStateMachine) AddFirstWorkflowTaskScheduled(
 	var err error
 	if workflowTaskBackoffDuration != 0 {
 		if err = m.ms.taskGenerator.GenerateDelayedWorkflowTasks(
-			timestamp.TimeValue(startEvent.GetEventTime()),
 			startEvent,
 		); err != nil {
 			return err
@@ -420,7 +418,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 
 	// TODO merge active & passive task generation
 	if err := m.ms.taskGenerator.GenerateStartWorkflowTaskTasks(
-		startTime, // start time is now
 		scheduledEventID,
 	); err != nil {
 		return nil, nil, err

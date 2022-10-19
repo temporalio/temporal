@@ -62,11 +62,13 @@ const (
 
 	getHistoryTreeQuery = `SELECT branch_id, data, data_encoding FROM history_tree WHERE shard_id = ? AND tree_id = ? `
 
+	// conceptually this query is WHERE (shard_id, tree_id, branch_id) > (?, ?, ?)
+	// but mysql doesn't execute it efficiently unless it's spelled out like this
 	paginateBranchesQuery = `SELECT shard_id, tree_id, branch_id, data, data_encoding
-        FROM history_tree
-        WHERE (shard_id, tree_id, branch_id) > (?, ?, ?)
-        ORDER BY shard_id, tree_id, branch_id
-        LIMIT ?`
+		FROM history_tree
+		WHERE (shard_id = ? AND ((tree_id = ? AND branch_id > ?) OR tree_id > ?)) OR shard_id > ?
+		ORDER BY shard_id, tree_id, branch_id
+		LIMIT ?`
 
 	deleteHistoryTreeQuery = `DELETE FROM history_tree WHERE shard_id = ? AND tree_id = ? AND branch_id = ? `
 )
@@ -210,6 +212,8 @@ func (mdb *db) PaginateBranchesFromHistoryTree(
 		page.ShardID,
 		page.TreeID,
 		page.BranchID,
+		page.TreeID,
+		page.ShardID,
 		page.Limit,
 	)
 	return rows, err

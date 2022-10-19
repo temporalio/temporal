@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -74,6 +75,7 @@ var (
 	testLatestTime   = time.Unix(0, 2547596872371000000).UTC()
 	testWorkflowType = "test-wf-type"
 	testWorkflowID   = "test-wid"
+	testRunID        = "test-rid"
 	testStatus       = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 
 	testSearchResult = &elastic.SearchResult{
@@ -851,8 +853,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc() {
-	searchHit := &elastic.SearchHit{
-		Source: []byte(`{"ExecutionStatus": "Running",
+	docSource := []byte(`{"ExecutionStatus": "Running",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
           "StateTransitionCount": 10,
@@ -860,10 +861,9 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
           "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
           "StartTime": "2021-06-11T15:04:07.980-07:00",
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
-          "WorkflowType": "TestWorkflowExecute"}`),
-	}
+          "WorkflowType": "TestWorkflowExecute"}`)
 	// test for open
-	info, err := s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap, testNamespace)
+	info, err := s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
@@ -877,8 +877,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	s.Nil(info.SearchAttributes)
 
 	// test for close
-	searchHit = &elastic.SearchHit{
-		Source: []byte(`{"ExecutionStatus": "Completed",
+	docSource = []byte(`{"ExecutionStatus": "Completed",
           "CloseTime": "2021-06-11T16:04:07Z",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
@@ -887,9 +886,8 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
           "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
           "StartTime": "2021-06-11T15:04:07.980-07:00",
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
-          "WorkflowType": "TestWorkflowExecute"}`),
-	}
-	info, err = s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap, testNamespace)
+          "WorkflowType": "TestWorkflowExecute"}`)
+	info, err = s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
@@ -907,18 +905,15 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	s.Nil(info.SearchAttributes)
 
 	// test for error case
-	searchHit = &elastic.SearchHit{
-		Source: []byte(`corrupted data`),
-	}
+	docSource = []byte(`corrupted data`)
 	s.mockMetricsClient.EXPECT().IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
-	info, err = s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap, testNamespace)
+	info, err = s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
 	s.Error(err)
 	s.Nil(info)
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
-	searchHit := &elastic.SearchHit{
-		Source: []byte(`{"ExecutionStatus": "Completed",
+	docSource := []byte(`{"ExecutionStatus": "Completed",
           "TemporalChangeVersion": ["ver1", "ver2"],
           "CustomKeywordField": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "CustomTextField": "text text",
@@ -926,9 +921,8 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
           "CustomDoubleField": [1234.1234,5678.5678],
           "CustomIntField": [111,222],
           "CustomBoolField": true,
-          "UnknownField": "random"}`),
-	}
-	info, err := s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap, testNamespace)
+          "UnknownField": "random"}`)
+	info, err := s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
 	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &searchattribute.TestNameTypeMap)
@@ -961,8 +955,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
-	searchHit := &elastic.SearchHit{
-		Source: []byte(`{"ExecutionStatus": "Completed",
+	docSource := []byte(`{"ExecutionStatus": "Completed",
           "TemporalChangeVersion": ["ver1", "ver2"],
           "CustomKeywordField": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "CustomTextField": "text text",
@@ -970,8 +963,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
           "CustomDoubleField": [1234.1234,5678.5678],
           "CustomIntField": [111,222],
           "CustomBoolField": true,
-          "UnknownField": "random"}`),
-	}
+          "UnknownField": "random"}`)
 	s.visibilityStore.searchAttributesMapper = s.mockSearchAttributesMapper
 
 	s.mockSearchAttributesMapper.EXPECT().GetAlias(gomock.Any(), testNamespace.String()).DoAndReturn(
@@ -979,7 +971,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 			return "AliasOf" + fieldName, nil
 		}).Times(6)
 
-	info, err := s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap, testNamespace)
+	info, err := s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
 	s.NoError(err)
 	s.NotNil(info)
 
@@ -998,7 +990,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 		func(fieldName string, namespace string) (string, error) {
 			return "", serviceerror.NewUnavailable("error")
 		})
-	info, err = s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap, testNamespace)
+	info, err = s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
 	s.Error(err)
 	s.Nil(info)
 
@@ -1276,6 +1268,51 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)
 	s.True(strings.HasPrefix(err.Error(), "invalid query"), err.Error())
+}
+
+func (s *ESVisibilitySuite) TestGetWorkflowExecution() {
+	now := timestamp.TimePtr(time.Now())
+	s.mockESClient.EXPECT().Get(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
+		func(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {
+			s.Equal(testIndex, index)
+			s.Equal(testWorkflowID+delimiter+testRunID, docID)
+			data := map[string]interface{}{
+				"ExecutionStatus":      "Running",
+				"NamespaceId":          testNamespaceID.String(),
+				"StateTransitionCount": 22,
+				"VisibilityTaskKey":    "7-619",
+				"RunId":                testRunID,
+				"StartTime":            "2021-06-11T15:04:07.980-07:00",
+				"WorkflowId":           testWorkflowID,
+				"WorkflowType":         "basic.stressWorkflowExecute",
+			}
+			source, _ := json.Marshal(data)
+			return &elastic.GetResult{Found: true, Source: source}, nil
+		})
+
+	request := &manager.GetWorkflowExecutionRequest{
+		NamespaceID: testNamespaceID,
+		Namespace:   testNamespace,
+		WorkflowID:  testWorkflowID,
+		RunID:       testRunID,
+		CloseTime:   now,
+	}
+	_, err := s.visibilityStore.GetWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+
+	// test unavailable error
+	s.mockESClient.EXPECT().Get(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
+		func(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {
+			s.Equal(testIndex, index)
+			s.Equal(testWorkflowID+delimiter+testRunID, docID)
+			return nil, errTestESSearch
+		})
+
+	_, err = s.visibilityStore.GetWorkflowExecution(context.Background(), request)
+	s.Error(err)
+	_, ok := err.(*serviceerror.Unavailable)
+	s.True(ok)
+	s.Contains(err.Error(), "GetWorkflowExecution failed")
 }
 
 func (s *ESVisibilitySuite) Test_detailedErrorMessage() {

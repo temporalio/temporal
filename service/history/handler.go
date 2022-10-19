@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/replication"
@@ -956,12 +957,12 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.RemoveSignalMutableState(ctx, request)
+	resp, err2 := engine.RemoveSignalMutableState(ctx, request)
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}
 
-	return &historyservice.RemoveSignalMutableStateResponse{}, nil
+	return resp, nil
 }
 
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
@@ -1022,12 +1023,11 @@ func (h *Handler) DeleteWorkflowExecution(ctx context.Context, request *historys
 		return nil, h.convertError(err)
 	}
 
-	err2 := engine.DeleteWorkflowExecution(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
+	resp, err := engine.DeleteWorkflowExecution(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
 	}
-
-	return &historyservice.DeleteWorkflowExecutionResponse{}, nil
+	return resp, nil
 }
 
 // ResetWorkflowExecution reset an existing workflow execution
@@ -1295,7 +1295,7 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 		return nil, errShuttingDown
 	}
 
-	if err := h.validateReplicationConfig(); err != nil {
+	if err := api.ValidateReplicationConfig(h.clusterMetadata); err != nil {
 		return nil, err
 	}
 
@@ -1370,7 +1370,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 		return nil, errShuttingDown
 	}
 
-	if err := h.validateReplicationConfig(); err != nil {
+	if err := api.ValidateReplicationConfig(h.clusterMetadata); err != nil {
 		return nil, err
 	}
 
@@ -1413,7 +1413,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
-	if err := h.validateReplicationConfig(); err != nil {
+	if err := api.ValidateReplicationConfig(h.clusterMetadata); err != nil {
 		return nil, err
 	}
 
@@ -1474,7 +1474,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
-	if err := h.validateReplicationConfig(); err != nil {
+	if err := api.ValidateReplicationConfig(h.clusterMetadata); err != nil {
 		return nil, err
 	}
 
@@ -1628,12 +1628,11 @@ func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.
 		return nil, h.convertError(err)
 	}
 
-	err = engine.PurgeDLQMessages(ctx, request)
+	resp, err := engine.PurgeDLQMessages(ctx, request)
 	if err != nil {
-		err = h.convertError(err)
-		return nil, err
+		return nil, h.convertError(err)
 	}
-	return &historyservice.PurgeDLQMessagesResponse{}, nil
+	return resp, nil
 }
 
 func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.MergeDLQMessagesRequest) (_ *historyservice.MergeDLQMessagesResponse, retError error) {
@@ -1741,7 +1740,7 @@ func (h *Handler) GetReplicationStatus(
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
-	if err := h.validateReplicationConfig(); err != nil {
+	if err := api.ValidateReplicationConfig(h.clusterMetadata); err != nil {
 		return nil, err
 	}
 
@@ -1861,13 +1860,6 @@ func (h *Handler) convertError(err error) error {
 	}
 
 	return err
-}
-
-func (h *Handler) validateReplicationConfig() error {
-	if !h.clusterMetadata.IsGlobalNamespaceEnabled() {
-		return serviceerror.NewUnavailable("The cluster has global namespace disabled. The operation is not supported.")
-	}
-	return nil
 }
 
 func validateTaskToken(taskToken *tokenspb.Task) error {

@@ -45,6 +45,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -2175,6 +2176,21 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 	s.Equal(1, len(nsResp.ReplicationConfig.Clusters))
 	time.Sleep(cacheRefreshInterval)
 
+	// Start wf1 (in local ns)
+	workflowID8 := "global-ns-wf-1"
+	run8, err := client1.ExecuteWorkflow(testCtx, sdkclient.StartWorkflowOptions{
+		ID:                 workflowID8,
+		TaskQueue:          taskqueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, testWorkflowFn, time.Millisecond*10)
+
+	s.NoError(err)
+	s.NotEmpty(run8.GetRunID())
+	s.logger.Info("start wf8", tag.WorkflowRunID(run8.GetRunID()))
+	// wait until wf1 complete
+	err = run8.Get(testCtx, nil)
+	s.NoError(err)
+
 	// this will buffer after ns promotion
 	err = client1.SignalWorkflow(testCtx, workflowID7, run7.GetRunID(), "signal-name", "signal-value")
 	s.NoError(err)
@@ -2284,11 +2300,36 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 		Namespace: namespace,
 	})
 	s.NoError(err)
+	feClient2 := s.cluster2.GetFrontendClient()
 	verify := func(wfID string, expectedRunID string) {
 		desc1, err := client2.DescribeWorkflowExecution(testCtx, wfID, "")
 		s.NoError(err)
 		s.Equal(expectedRunID, desc1.WorkflowExecutionInfo.Execution.RunId)
 		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.WorkflowExecutionInfo.Status)
+		resp, err := feClient2.GetWorkflowExecutionHistoryReverse(testCtx, &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+			Namespace: namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: wfID,
+				RunId:      expectedRunID,
+			},
+			MaximumPageSize: 1,
+			NextPageToken:   nil,
+		})
+		s.NoError(err)
+		s.True(len(resp.GetHistory().GetEvents()) > 0)
+		listWorkflowResp, err := feClient2.ListClosedWorkflowExecutions(
+			testCtx,
+			&workflowservice.ListClosedWorkflowExecutionsRequest{
+				Namespace:       namespace,
+				MaximumPageSize: 1000,
+				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+					ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+						WorkflowId: wfID,
+					}},
+			},
+		)
+		s.NoError(err)
+		s.True(len(listWorkflowResp.GetExecutions()) > 0)
 	}
 	verify(workflowID, run1.GetRunID())
 	verify(workflowID2, run2.GetRunID())

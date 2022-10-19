@@ -164,6 +164,13 @@ func (s *standardStore) CountWorkflowExecutions(
 	return s.store.CountWorkflowExecutions(ctx, request)
 }
 
+func (s *standardStore) GetWorkflowExecution(
+	ctx context.Context,
+	request *manager.GetWorkflowExecutionRequest,
+) (*store.InternalGetWorkflowExecutionResponse, error) {
+	return s.store.GetWorkflowExecution(ctx, request)
+}
+
 func (s *standardStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,

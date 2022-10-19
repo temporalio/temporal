@@ -42,8 +42,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/archiver"
@@ -114,63 +112,11 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	workflowClosedVersion int64,
 ) error {
 
-	// In active cluster, create `DeleteWorkflowExecutionTask` only if workflow is closed successfully
-	// and all pending transfer and visibility tasks are completed.
-	// This check is required to avoid race condition between close and delete tasks.
-	// Otherwise, mutable state might be deleted before close task is executed, and therefore close task will be dropped.
-	//
-	// In passive cluster, transfer task queue check can be ignored but not visibility task queue.
-	// If visibility close task is executed after visibility record is deleted then it will resurrect record in closed state.
-	//
-	// Unfortunately, queue states/ack levels are updated with delay (default 30s),
-	// therefore this API will return error if workflow is deleted within 30 seconds after close.
-	// The check is on API call side, not on task processor side, because delete visibility task doesn't have access to mutable state.
-
-	currentClusterName := m.shard.GetClusterMetadata().GetCurrentClusterName()
-	nsActive := ms.GetNamespaceEntry().ActiveInCluster(currentClusterName)
-	closeTransferTaskId := ms.GetExecutionInfo().CloseTransferTaskId
-	closeTransferTaskCheckPassed := true
-	if nsActive && closeTransferTaskId != 0 { // taskID == 0 if workflow still running in passive cluster or closed before this field was added (v1.17).
-		// check if close execution transfer task is completed
-		transferQueueState, ok := m.shard.GetQueueState(tasks.CategoryTransfer)
-		if !ok {
-			// Use cluster ack level for transfer queue ack level because it gets updated more often.
-			transferQueueAckLevel := m.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, currentClusterName).TaskID
-			closeTransferTaskCheckPassed = ms.GetExecutionInfo().CloseTransferTaskId <= transferQueueAckLevel
-		} else {
-			fakeCloseTransferTask := &tasks.CloseExecutionTask{
-				WorkflowKey: definition.NewWorkflowKey(nsID.String(), we.GetWorkflowId(), we.GetRunId()),
-				TaskID:      closeTransferTaskId,
-			}
-			closeTransferTaskCheckPassed = queues.IsTaskAcked(fakeCloseTransferTask, transferQueueState)
-		}
-	}
-
-	closeExecutionVisibilityTaskID := ms.GetExecutionInfo().CloseVisibilityTaskId
-	closeVisibilityTaskCheckPassed := true
-	if closeExecutionVisibilityTaskID != 0 { // taskID == 0 if workflow still running in passive cluster or closed before this field was added (v1.17).
-		// check if close execution visibility task is completed
-		visibilityQueueState, ok := m.shard.GetQueueState(tasks.CategoryVisibility)
-		if !ok {
-			// Use global ack level visibility queue ack level because cluster level is not updated.
-			visibilityQueueAckLevel := m.shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID
-			closeVisibilityTaskCheckPassed = ms.GetExecutionInfo().CloseVisibilityTaskId <= visibilityQueueAckLevel
-		} else {
-			fakeCloseVisibiltyTask := &tasks.CloseExecutionVisibilityTask{
-				WorkflowKey: definition.NewWorkflowKey(nsID.String(), we.GetWorkflowId(), we.GetRunId()),
-				TaskID:      closeExecutionVisibilityTaskID,
-			}
-			closeVisibilityTaskCheckPassed = queues.IsTaskAcked(fakeCloseVisibiltyTask, visibilityQueueState)
-		}
-	}
-
-	if !closeTransferTaskCheckPassed || !closeVisibilityTaskCheckPassed {
-		return consts.ErrWorkflowNotReady
-	}
-
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(m.shard, ms)
 
-	deleteTask, err := taskGenerator.GenerateDeleteExecutionTask(m.timeSource.Now())
+	// We can make this task immediately because the task itself will keep rescheduling itself until the workflow is
+	// closed before actually deleting the workflow.
+	deleteTask, err := taskGenerator.GenerateDeleteExecutionTask()
 	if err != nil {
 		return err
 	}

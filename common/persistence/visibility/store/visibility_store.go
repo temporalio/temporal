@@ -61,6 +61,7 @@ type (
 		ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
 		CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error)
+		GetWorkflowExecution(ctx context.Context, request *manager.GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 	}
 
 	// InternalWorkflowExecutionInfo is visibility info for internal response
@@ -86,6 +87,11 @@ type (
 		// Token to read next page if there are more workflow executions beyond page size.
 		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
 		NextPageToken []byte
+	}
+
+	// InternalGetWorkflowExecutionResponse is response from GetWorkflowExecution
+	InternalGetWorkflowExecutionResponse struct {
+		Execution *InternalWorkflowExecutionInfo
 	}
 
 	// InternalVisibilityRequestBase is a base request to visibility APIs.

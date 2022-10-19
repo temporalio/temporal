@@ -236,7 +236,7 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 
 		var ackLevel int64
 		if clusterName == currentCluster {
-			ackLevel = r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, clusterName).TaskID
+			ackLevel = r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, clusterName, false).TaskID
 		} else {
 			ackLevel = r.shard.GetQueueClusterAckLevel(tasks.CategoryReplication, clusterName).TaskID
 		}
@@ -255,7 +255,7 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 		metrics.ReplicationTaskFetcherScope,
 	).RecordDistribution(
 		metrics.ReplicationTasksLag,
-		int(r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, currentCluster).Prev().TaskID-*minAckedTaskID),
+		int(r.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, currentCluster, false).Prev().TaskID-*minAckedTaskID),
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)

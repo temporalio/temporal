@@ -90,6 +90,13 @@ const (
 		`AND start_time <= ? ` +
 		`AND workflow_id = ? `
 
+	templateGetOpenWorkflowExecutionByRunID = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue ` +
+		`FROM open_executions ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
+		`AND start_time = ? ` +
+		`AND run_id = ? `
+
 	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
 		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
@@ -112,6 +119,13 @@ const (
 		`AND close_time >= ? ` +
 		`AND close_time <= ? ` +
 		`AND workflow_id = ? `
+
+	templateGetClosedWorkflowExecutionByRunID = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
+		`FROM closed_executions ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
+		`AND close_time = ? ` +
+		`AND run_id = ? `
 
 	templateGetClosedWorkflowExecutionsByStatus = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
 		`FROM closed_executions ` +
@@ -499,6 +513,66 @@ func (v *visibilityStore) CountWorkflowExecutions(
 	_ *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
 	return nil, store.OperationNotSupportedErr
+}
+
+func (v *visibilityStore) GetWorkflowExecution(
+	ctx context.Context,
+	request *manager.GetWorkflowExecutionRequest,
+) (*store.InternalGetWorkflowExecutionResponse, error) {
+	if request.StartTime == nil && request.CloseTime == nil {
+		return nil, store.OperationNotSupportedErr
+	}
+	var wfexecution *store.InternalWorkflowExecutionInfo
+	var err error
+	if request.CloseTime != nil {
+		wfexecution, err = v.getClosedWorkflowExecution(ctx, request)
+	} else {
+		wfexecution, err = v.getOpenWorkflowExecution(ctx, request)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &store.InternalGetWorkflowExecutionResponse{
+		Execution: wfexecution,
+	}, nil
+}
+
+func (v *visibilityStore) getOpenWorkflowExecution(
+	ctx context.Context,
+	request *manager.GetWorkflowExecutionRequest,
+) (*store.InternalWorkflowExecutionInfo, error) {
+	if request.StartTime == nil {
+		return nil, store.OperationNotSupportedErr
+	}
+	query := v.session.Query(
+		templateGetOpenWorkflowExecutionByRunID,
+		request.NamespaceID.String(),
+		namespacePartition,
+		persistence.UnixMilliseconds(*request.StartTime),
+		request.RunID,
+	).Consistency(v.lowConslevel).WithContext(ctx)
+	iter := query.PageSize(1).Iter()
+	wfexecution, _ := readOpenWorkflowExecutionRecord(iter)
+	return wfexecution, nil
+}
+
+func (v *visibilityStore) getClosedWorkflowExecution(
+	ctx context.Context,
+	request *manager.GetWorkflowExecutionRequest,
+) (*store.InternalWorkflowExecutionInfo, error) {
+	if request.CloseTime == nil {
+		return nil, store.OperationNotSupportedErr
+	}
+	query := v.session.Query(
+		templateGetClosedWorkflowExecutionByRunID,
+		request.NamespaceID.String(),
+		namespacePartition,
+		persistence.UnixMilliseconds(*request.CloseTime),
+		request.RunID,
+	).Consistency(v.lowConslevel).WithContext(ctx)
+	iter := query.PageSize(1).Iter()
+	wfexecution, _ := readClosedWorkflowExecutionRecord(iter)
+	return wfexecution, nil
 }
 
 func readOpenWorkflowExecutionRecord(iter gocql.Iter) (*store.InternalWorkflowExecutionInfo, bool) {

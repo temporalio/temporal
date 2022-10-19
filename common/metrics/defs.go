@@ -299,6 +299,8 @@ const (
 	VisibilityPersistenceScanWorkflowExecutionsScope
 	// VisibilityPersistenceCountWorkflowExecutionsScope tracks CountWorkflowExecutions calls made by service to visibility persistence layer
 	VisibilityPersistenceCountWorkflowExecutionsScope
+	// VisibilityPersistenceGetWorkflowExecutionScope tracks GetWorkflowExecution calls made by service to visibility persistence layer
+	VisibilityPersistenceGetWorkflowExecutionScope
 
 	// PersistenceEnqueueMessageScope tracks Enqueue calls made by service to persistence layer
 	PersistenceEnqueueMessageScope
@@ -1444,6 +1446,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		VisibilityPersistenceListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
 		VisibilityPersistenceScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
 		VisibilityPersistenceCountWorkflowExecutionsScope:                  {operation: "CountWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceGetWorkflowExecutionScope:                     {operation: "GetWorkflowExecution", tags: map[string]string{visibilityTypeTagName: unknownValue}},
 
 		PersistenceAppendHistoryNodesScope:         {operation: "AppendHistoryNodes"},
 		PersistenceAppendRawHistoryNodesScope:      {operation: "AppendRawHistoryNodes"},
@@ -2154,6 +2157,8 @@ const (
 
 	NoopImplementationIsUsed
 
+	ClosedWorkflowBufferEventCount
+
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
 
@@ -2636,6 +2641,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ElasticsearchDocumentGenerateFailuresCount:                NewCounterDef("elasticsearch_document_generate_failures_counter"),
 
 		NoopImplementationIsUsed: NewCounterDef("noop_implementation_is_used"),
+
+		ClosedWorkflowBufferEventCount: NewCounterDef("closed_workflow_buffer_event_counter"),
 	},
 	History: {
 		TaskRequests: NewCounterDef("task_requests"),

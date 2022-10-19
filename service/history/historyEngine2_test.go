@@ -1794,7 +1794,7 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 	ms := workflow.TestGlobalMutableState(s.historyEngine.shard, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.RunID)
 	startEvent := addWorkflowExecutionStartedEvent(ms, execution, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
 	startVersion := startEvent.GetVersion()
-	_, err := ms.AddTimeoutWorkflowEvent(
+	timeoutEvent, err := ms.AddTimeoutWorkflowEvent(
 		ms.GetNextEventID(),
 		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
 		uuid.New(),
@@ -1815,6 +1815,18 @@ func (s *engine2Suite) TestRefreshWorkflowTasks() {
 			Version:     startVersion,
 		},
 		common.FirstEventID,
+		gomock.Any(),
+	).Return(startEvent, nil).AnyTimes()
+	s.mockEventsCache.EXPECT().GetEvent(
+		gomock.Any(),
+		events.EventKey{
+			NamespaceID: tests.NamespaceID,
+			WorkflowID:  execution.GetWorkflowId(),
+			RunID:       execution.GetRunId(),
+			EventID:     timeoutEvent.GetEventId(),
+			Version:     startVersion,
+		},
+		timeoutEvent.GetEventId(),
 		gomock.Any(),
 	).Return(startEvent, nil).AnyTimes()
 

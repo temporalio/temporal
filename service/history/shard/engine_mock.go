@@ -67,11 +67,12 @@ func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockEngine) DeleteWorkflowExecution(ctx context.Context, deleteRequest *historyservice.DeleteWorkflowExecutionRequest) error {
+func (m *MockEngine) DeleteWorkflowExecution(ctx context.Context, deleteRequest *historyservice.DeleteWorkflowExecutionRequest) (*historyservice.DeleteWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, deleteRequest)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.DeleteWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
@@ -255,11 +256,12 @@ func (mr *MockEngineMockRecorder) PollMutableState(ctx, request interface{}) *go
 }
 
 // PurgeDLQMessages mocks base method.
-func (m *MockEngine) PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) error {
+func (m *MockEngine) PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) (*historyservice.PurgeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PurgeDLQMessages", ctx, messagesRequest)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.PurgeDLQMessagesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // PurgeDLQMessages indicates an expected call of PurgeDLQMessages.
@@ -386,11 +388,12 @@ func (mr *MockEngineMockRecorder) RefreshWorkflowTasks(ctx, namespaceUUID, execu
 }
 
 // RemoveSignalMutableState mocks base method.
-func (m *MockEngine) RemoveSignalMutableState(ctx context.Context, request *historyservice.RemoveSignalMutableStateRequest) error {
+func (m *MockEngine) RemoveSignalMutableState(ctx context.Context, request *historyservice.RemoveSignalMutableStateRequest) (*historyservice.RemoveSignalMutableStateResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveSignalMutableState", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*historyservice.RemoveSignalMutableStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // RemoveSignalMutableState indicates an expected call of RemoveSignalMutableState.
