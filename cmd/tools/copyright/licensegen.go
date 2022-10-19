@@ -65,7 +65,7 @@ var (
 // command line utility that adds license header
 // to the source files. Usage as follows:
 //
-//  ./cmd/tools/copyright/licensegen.go
+//	./cmd/tools/copyright/licensegen.go
 func main() {
 	var cfg config
 	flag.StringVar(&cfg.licenseFile, "licenseFile", licenseFileName, "directory to scan")

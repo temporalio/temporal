@@ -79,8 +79,8 @@ type (
 //
 // The scavenger will retry on all persistence errors infinitely and will only stop under
 // two conditions
-//  - either all executions are processed successfully (or)
-//  - Stop() method is called to stop the scavenger
+//   - either all executions are processed successfully (or)
+//   - Stop() method is called to stop the scavenger
 func NewScavenger(
 	activityContext context.Context,
 	numHistoryShards int32,

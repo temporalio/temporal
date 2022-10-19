@@ -53,14 +53,14 @@ const scannerTaskQueuePrefix = "temporal-sys-tl-scanner"
 // with the assumption that the executor will schedule this task later
 //
 // Each loop of the handler proceeds as follows
-//    - Retrieve the next batch of tasks sorted by task_id for this task queue from persistence
-//    - If there are 0 tasks for this task queue, try deleting the task queue if its idle
-//    - If any of the tasks in the batch isn't expired, we are done. Since tasks are retrieved
-//      in sorted order, if one of the tasks isn't expired, chances are, none of the tasks above
-//      it are expired as well - so, we give up and wait for the next run
-//    - Delete the entire batch of tasks
-//    - If the number of tasks retrieved is less than batchSize, there are no more tasks in the task queue
-//      Try deleting the task queue if its idle
+//   - Retrieve the next batch of tasks sorted by task_id for this task queue from persistence
+//   - If there are 0 tasks for this task queue, try deleting the task queue if its idle
+//   - If any of the tasks in the batch isn't expired, we are done. Since tasks are retrieved
+//     in sorted order, if one of the tasks isn't expired, chances are, none of the tasks above
+//     it are expired as well - so, we give up and wait for the next run
+//   - Delete the entire batch of tasks
+//   - If the number of tasks retrieved is less than batchSize, there are no more tasks in the task queue
+//     Try deleting the task queue if its idle
 func (s *Scavenger) deleteHandler(key *p.TaskQueueKey, state *taskQueueState) handlerStatus {
 	var err error
 	var nProcessed, nDeleted int
@@ -143,9 +143,10 @@ func (s *Scavenger) deleteHandlerLog(key *p.TaskQueueKey, state *taskQueueState,
 }
 
 // TODO https://github.com/temporalio/temporal/issues/1021
-//  there should be more validation logic here
-//  1. if task has valid TTL -> TTL reached -> delete
-//  2. if task has 0 TTL / no TTL -> logic need to additionally check if corresponding workflow still exists
+//
+//	there should be more validation logic here
+//	1. if task has valid TTL -> TTL reached -> delete
+//	2. if task has 0 TTL / no TTL -> logic need to additionally check if corresponding workflow still exists
 func IsTaskExpired(t *persistencespb.AllocatedTaskInfo) bool {
 	expiry := timestamp.TimeValue(t.GetData().GetExpiryTime())
 	return expiry.Unix() > 0 && expiry.Before(time.Now())

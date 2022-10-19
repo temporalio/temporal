@@ -88,10 +88,10 @@ var (
 // forwarder is tied to a single task queue. All of the exposed
 // methods can return the following errors:
 // Returns following errors:
-//  - errNoParent: If this task queue doesn't have a parent to forward to
-//  - errTaskQueueKind: If the task queue is a sticky task queue. Sticky task queues are never partitioned
-//  - errForwarderSlowDown: When the rate limit is exceeded
-//  - errInvalidTaskType: If the task queue type is invalid
+//   - errNoParent: If this task queue doesn't have a parent to forward to
+//   - errTaskQueueKind: If the task queue is a sticky task queue. Sticky task queues are never partitioned
+//   - errForwarderSlowDown: When the rate limit is exceeded
+//   - errInvalidTaskType: If the task queue type is invalid
 func newForwarder(
 	cfg *forwarderConfig,
 	taskQueueID *taskQueueID,

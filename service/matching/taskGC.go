@@ -48,8 +48,8 @@ var maxTimeBetweenTaskDeletes = time.Second
 //
 // In order for the taskGC to actually delete tasks when Run() is called, one of
 // two conditions must be met
-//  - Size Threshold: More than MaxDeleteBatchSize tasks are waiting to be deleted (rough estimation)
-//  - Time Threshold: Time since previous delete was attempted exceeds maxTimeBetweenTaskDeletes
+//   - Size Threshold: More than MaxDeleteBatchSize tasks are waiting to be deleted (rough estimation)
+//   - Time Threshold: Time since previous delete was attempted exceeds maxTimeBetweenTaskDeletes
 //
 // Finally, the Run() method is safe to be called from multiple threads. The underlying
 // implementation will make sure only one caller executes Run() and others simply bail out

@@ -396,7 +396,8 @@ func (s *dbTaskManagerSuite) TestDeleteAckedTasks_Failed() {
 }
 
 // TODO @wxing1292 add necessary tests
-//  once there is concensus about whether to keep the `task move to end` behavior
+//
+//	once there is concensus about whether to keep the `task move to end` behavior
 func (s *dbTaskManagerSuite) TestFinishTask_Success() {}
 
 func (s *dbTaskManagerSuite) TestFinishTask_Error() {}

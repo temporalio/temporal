@@ -30,7 +30,7 @@
 // types with Start()/Stop() lifecycle functions and to unify the multiplicity
 // of approaches that have been adopted over time.
 //
-//  Note: If you're looking for a short-lived (e.g.  request-scoped) group of
-//  transient goroutines, you probably want `errgroup.Group` from
-//  https://golang.org/x/sync/errgroup.
+//	Note: If you're looking for a short-lived (e.g.  request-scoped) group of
+//	transient goroutines, you probably want `errgroup.Group` from
+//	https://golang.org/x/sync/errgroup.
 package goro

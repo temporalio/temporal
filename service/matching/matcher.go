@@ -129,9 +129,9 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scope metrics.Scop
 // correct context timeout.
 //
 // returns error when:
-//  - ratelimit is exceeded (does not apply to query task)
-//  - context deadline is exceeded
-//  - task is matched and consumer returns error in response channel
+//   - ratelimit is exceeded (does not apply to query task)
+//   - context deadline is exceeded
+//   - task is matched and consumer returns error in response channel
 func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
 	if !task.isForwarded() {
 		if err := tm.rateLimiter.Wait(ctx); err != nil {
