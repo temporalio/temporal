@@ -423,6 +423,8 @@ func (e *MutableStateImpl) getCurrentBranchTokenAndEventVersion(eventID int64) (
 // SetHistoryTree set treeID/historyBranches
 func (e *MutableStateImpl) SetHistoryTree(
 	ctx context.Context,
+	executionTimeout *time.Duration,
+	runTimeout *time.Duration,
 	treeID string,
 ) error {
 
@@ -434,8 +436,8 @@ func (e *MutableStateImpl) SetHistoryTree(
 		ctx,
 		&persistence.NewHistoryBranchRequest{
 			TreeID:            treeID,
-			RunTimeout:        e.executionInfo.WorkflowRunTimeout,
-			ExecutionTimeout:  e.executionInfo.WorkflowExecutionTimeout,
+			RunTimeout:        runTimeout,
+			ExecutionTimeout:  executionTimeout,
 			RetentionDuration: retentionDuration,
 		},
 	)
@@ -3212,7 +3214,12 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
 	)
 
-	if err = newMutableState.SetHistoryTree(ctx, newRunID); err != nil {
+	if err = newMutableState.SetHistoryTree(
+		ctx,
+		e.executionInfo.WorkflowExecutionTimeout,
+		e.executionInfo.WorkflowRunTimeout,
+		newRunID,
+	); err != nil {
 		return nil, nil, err
 	}
 

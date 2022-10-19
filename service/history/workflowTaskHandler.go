@@ -1167,6 +1167,8 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 		ctx,
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
+		handler.mutableState.GetExecutionInfo().WorkflowExecutionTimeout,
+		handler.mutableState.GetExecutionInfo().WorkflowRunTimeout,
 		newRunID,
 	)
 	if err != nil {
@@ -1212,6 +1214,8 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		ctx,
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
+		handler.mutableState.GetExecutionInfo().WorkflowExecutionTimeout,
+		handler.mutableState.GetExecutionInfo().WorkflowRunTimeout,
 		newRunID,
 	)
 	if err != nil {

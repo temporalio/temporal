@@ -532,6 +532,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		ctx,
 		t.shard,
 		mutableState.GetNamespaceEntry(),
+		mutableState.GetExecutionInfo().WorkflowExecutionTimeout,
+		mutableState.GetExecutionInfo().WorkflowRunTimeout,
 		newRunID,
 	)
 	if err != nil {
