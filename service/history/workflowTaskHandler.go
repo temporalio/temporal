@@ -1163,17 +1163,14 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newMutableState, err := api.CreateMutableState(
-		ctx,
+	newMutableState := workflow.NewMutableState(
 		handler.shard,
+		handler.shard.GetEventsCache(),
+		handler.shard.GetLogger(),
 		handler.mutableState.GetNamespaceEntry(),
-		handler.mutableState.GetExecutionInfo().WorkflowExecutionTimeout,
-		handler.mutableState.GetExecutionInfo().WorkflowRunTimeout,
-		newRunID,
+		handler.shard.GetTimeSource().Now(),
 	)
-	if err != nil {
-		return err
-	}
+
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,
 		handler.mutableState,
@@ -1184,6 +1181,16 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 		failure,
 		backoffInterval,
 		enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY,
+	)
+	if err != nil {
+		return err
+	}
+
+	err = newMutableState.SetHistoryTree(
+		ctx,
+		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
+		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
+		newRunID,
 	)
 	if err != nil {
 		return err
