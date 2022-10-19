@@ -28,7 +28,6 @@ package workflow
 
 import (
 	"context"
-	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -45,7 +44,7 @@ import (
 
 type (
 	TaskRefresher interface {
-		RefreshTasks(ctx context.Context, now time.Time, mutableState MutableState) error
+		RefreshTasks(ctx context.Context, mutableState MutableState) error
 	}
 
 	TaskRefresherImpl struct {
@@ -76,7 +75,6 @@ func NewTaskRefresher(
 
 func (r *TaskRefresherImpl) RefreshTasks(
 	ctx context.Context,
-	now time.Time,
 	mutableState MutableState,
 ) error {
 
@@ -87,7 +85,6 @@ func (r *TaskRefresherImpl) RefreshTasks(
 
 	if err := r.refreshTasksForWorkflowStart(
 		ctx,
-		now,
 		mutableState,
 		taskGenerator,
 	); err != nil {
@@ -96,7 +93,6 @@ func (r *TaskRefresherImpl) RefreshTasks(
 
 	if err := r.refreshTasksForWorkflowClose(
 		ctx,
-		now,
 		mutableState,
 		taskGenerator,
 	); err != nil {
@@ -105,7 +101,6 @@ func (r *TaskRefresherImpl) RefreshTasks(
 
 	if err := r.refreshTasksForRecordWorkflowStarted(
 		ctx,
-		now,
 		mutableState,
 		taskGenerator,
 	); err != nil {
@@ -113,7 +108,6 @@ func (r *TaskRefresherImpl) RefreshTasks(
 	}
 
 	if err := r.refreshWorkflowTaskTasks(
-		now,
 		mutableState,
 		taskGenerator,
 	); err != nil {
@@ -122,7 +116,6 @@ func (r *TaskRefresherImpl) RefreshTasks(
 
 	if err := r.refreshTasksForActivity(
 		ctx,
-		now,
 		mutableState,
 		taskGenerator,
 	); err != nil {
@@ -137,7 +130,6 @@ func (r *TaskRefresherImpl) RefreshTasks(
 
 	if err := r.refreshTasksForChildWorkflow(
 		ctx,
-		now,
 		mutableState,
 		taskGenerator,
 	); err != nil {
@@ -146,7 +138,6 @@ func (r *TaskRefresherImpl) RefreshTasks(
 
 	if err := r.refreshTasksForRequestCancelExternalWorkflow(
 		ctx,
-		now,
 		mutableState,
 		taskGenerator,
 	); err != nil {
@@ -155,7 +146,6 @@ func (r *TaskRefresherImpl) RefreshTasks(
 
 	if err := r.refreshTasksForSignalExternalWorkflow(
 		ctx,
-		now,
 		mutableState,
 		taskGenerator,
 	); err != nil {
@@ -164,7 +154,6 @@ func (r *TaskRefresherImpl) RefreshTasks(
 
 	if r.config.AdvancedVisibilityWritingMode() != visibility.AdvancedVisibilityWritingModeOff {
 		if err := r.refreshTasksForWorkflowSearchAttr(
-			now,
 			taskGenerator,
 		); err != nil {
 			return err
@@ -176,7 +165,6 @@ func (r *TaskRefresherImpl) RefreshTasks(
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 	ctx context.Context,
-	now time.Time,
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
@@ -187,7 +175,6 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 	}
 
 	if err := taskGenerator.GenerateWorkflowStartTasks(
-		now,
 		startEvent,
 	); err != nil {
 		return err
@@ -196,7 +183,6 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	if !mutableState.HasProcessedOrPendingWorkflowTask() && timestamp.DurationValue(startAttr.GetFirstWorkflowTaskBackoff()) > 0 {
 		if err := taskGenerator.GenerateDelayedWorkflowTasks(
-			now,
 			startEvent,
 		); err != nil {
 			return err
@@ -208,7 +194,6 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowStart(
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	ctx context.Context,
-	now time.Time,
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
@@ -222,7 +207,6 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 		}
 
 		return taskGenerator.GenerateWorkflowCloseTasks(
-			now,
 			closeEvent,
 			false,
 		)
@@ -233,7 +217,6 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 
 func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 	ctx context.Context,
-	now time.Time,
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
@@ -247,7 +230,6 @@ func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 
 	if executionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return taskGenerator.GenerateRecordWorkflowStartedTasks(
-			now,
 			startEvent,
 		)
 	}
@@ -256,7 +238,6 @@ func (r *TaskRefresherImpl) refreshTasksForRecordWorkflowStarted(
 }
 
 func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
-	now time.Time,
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
@@ -274,21 +255,18 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 	// workflowTask already started
 	if workflowTask.StartedEventID != common.EmptyEventID {
 		return taskGenerator.GenerateStartWorkflowTaskTasks(
-			now,
 			workflowTask.ScheduledEventID,
 		)
 	}
 
 	// workflowTask only scheduled
 	return taskGenerator.GenerateScheduleWorkflowTaskTasks(
-		now,
 		workflowTask.ScheduledEventID,
 	)
 }
 
 func (r *TaskRefresherImpl) refreshTasksForActivity(
 	ctx context.Context,
-	now time.Time,
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
@@ -335,7 +313,6 @@ Loop:
 		}
 
 		if err := taskGenerator.GenerateActivityTasks(
-			now,
 			scheduleEvent,
 		); err != nil {
 			return err
@@ -380,7 +357,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 
 func (r *TaskRefresherImpl) refreshTasksForChildWorkflow(
 	ctx context.Context,
-	now time.Time,
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
@@ -417,7 +393,6 @@ Loop:
 		}
 
 		if err := taskGenerator.GenerateChildWorkflowTasks(
-			now,
 			scheduleEvent,
 		); err != nil {
 			return err
@@ -429,7 +404,6 @@ Loop:
 
 func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 	ctx context.Context,
-	now time.Time,
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
@@ -461,7 +435,6 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 		}
 
 		if err := taskGenerator.GenerateRequestCancelExternalTasks(
-			now,
 			initiateEvent,
 		); err != nil {
 			return err
@@ -473,7 +446,6 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 
 func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 	ctx context.Context,
-	now time.Time,
 	mutableState MutableState,
 	taskGenerator TaskGenerator,
 ) error {
@@ -505,7 +477,6 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 		}
 
 		if err := taskGenerator.GenerateSignalExternalTasks(
-			now,
 			initiateEvent,
 		); err != nil {
 			return err
@@ -516,11 +487,8 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 }
 
 func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
-	now time.Time,
 	taskGenerator TaskGenerator,
 ) error {
 
-	return taskGenerator.GenerateUpsertVisibilityTask(
-		now,
-	)
+	return taskGenerator.GenerateUpsertVisibilityTask()
 }

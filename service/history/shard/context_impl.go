@@ -694,7 +694,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	}
 
 	transferExclusiveMaxReadLevel := int64(0)
-	if err := s.allocateTaskIDsLocked(
+	if err := s.allocateTaskIDAndTimestampLocked(
 		namespaceEntry,
 		workflowID,
 		request.NewWorkflowSnapshot.Tasks,
@@ -702,6 +702,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	); err != nil {
 		return nil, err
 	}
+	s.updateCloseTaskIDs(request.NewWorkflowSnapshot.ExecutionInfo, request.NewWorkflowSnapshot.Tasks)
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
@@ -738,7 +739,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	}
 
 	transferExclusiveMaxReadLevel := int64(0)
-	if err := s.allocateTaskIDsLocked(
+	if err := s.allocateTaskIDAndTimestampLocked(
 		namespaceEntry,
 		workflowID,
 		request.UpdateWorkflowMutation.Tasks,
@@ -748,7 +749,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	}
 	s.updateCloseTaskIDs(request.UpdateWorkflowMutation.ExecutionInfo, request.UpdateWorkflowMutation.Tasks)
 	if request.NewWorkflowSnapshot != nil {
-		if err := s.allocateTaskIDsLocked(
+		if err := s.allocateTaskIDAndTimestampLocked(
 			namespaceEntry,
 			workflowID,
 			request.NewWorkflowSnapshot.Tasks,
@@ -810,7 +811,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 
 	transferExclusiveMaxReadLevel := int64(0)
 	if request.CurrentWorkflowMutation != nil {
-		if err := s.allocateTaskIDsLocked(
+		if err := s.allocateTaskIDAndTimestampLocked(
 			namespaceEntry,
 			workflowID,
 			request.CurrentWorkflowMutation.Tasks,
@@ -819,7 +820,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 			return nil, err
 		}
 	}
-	if err := s.allocateTaskIDsLocked(
+	if err := s.allocateTaskIDAndTimestampLocked(
 		namespaceEntry,
 		workflowID,
 		request.ResetWorkflowSnapshot.Tasks,
@@ -828,7 +829,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		return nil, err
 	}
 	if request.NewWorkflowSnapshot != nil {
-		if err := s.allocateTaskIDsLocked(
+		if err := s.allocateTaskIDAndTimestampLocked(
 			namespaceEntry,
 			workflowID,
 			request.NewWorkflowSnapshot.Tasks,
@@ -873,7 +874,7 @@ func (s *ContextImpl) SetWorkflowExecution(
 	}
 
 	transferExclusiveMaxReadLevel := int64(0)
-	if err := s.allocateTaskIDsLocked(
+	if err := s.allocateTaskIDAndTimestampLocked(
 		namespaceEntry,
 		workflowID,
 		request.SetWorkflowSnapshot.Tasks,
@@ -927,7 +928,7 @@ func (s *ContextImpl) addTasksLocked(
 	namespaceEntry *namespace.Namespace,
 ) error {
 	transferExclusiveMaxReadLevel := int64(0)
-	if err := s.allocateTaskIDsLocked(
+	if err := s.allocateTaskIDAndTimestampLocked(
 		namespaceEntry,
 		request.WorkflowID,
 		request.Tasks,
@@ -1321,12 +1322,13 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 	metricsScope.RecordDistribution(metrics.ShardInfoTimerFailoverInProgressHistogram, timerFailoverInProgress)
 }
 
-func (s *ContextImpl) allocateTaskIDsLocked(
+func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	newTasks map[tasks.Category][]tasks.Task,
 	transferExclusiveMaxReadLevel *int64,
 ) error {
+	now := s.timeSource.Now()
 	currentCluster := s.GetClusterMetadata().GetCurrentClusterName()
 	for category, tasksByCategory := range newTasks {
 		for _, task := range tasksByCategory {
@@ -1338,6 +1340,12 @@ func (s *ContextImpl) allocateTaskIDsLocked(
 			s.contextTaggedLogger.Debug("Assigning task ID", tag.TaskID(id))
 			task.SetTaskID(id)
 			*transferExclusiveMaxReadLevel = id + 1
+
+			// for immediate task, visibility timestamp is only used for emitting task processing metrics.
+			// always set it's value to now so that the metrics emitted only include task processing latency.
+			if category.Type() == tasks.CategoryTypeImmediate {
+				task.SetVisibilityTime(now)
+			}
 
 			// if scheduled task, check if fire time is in the past
 			if category.Type() == tasks.CategoryTypeScheduled {

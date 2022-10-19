@@ -22,14 +22,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package refreshworkflow
+package describemutablestate
 
 import (
 	"context"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -37,46 +37,44 @@ import (
 
 func Invoke(
 	ctx context.Context,
-	workflowKey definition.WorkflowKey,
+	req *historyservice.DescribeMutableStateRequest,
 	shard shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-) (retError error) {
-	err := api.ValidateNamespaceUUID(namespace.ID(workflowKey.NamespaceID))
+) (_ *historyservice.DescribeMutableStateResponse, retError error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	err := api.ValidateNamespaceUUID(namespaceID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	wfContext, err := workflowConsistencyChecker.GetWorkflowContext(
+	weCtx, err := workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
-		workflowKey,
+		definition.NewWorkflowKey(
+			req.NamespaceId,
+			req.Execution.WorkflowId,
+			req.Execution.RunId,
+		),
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer func() { wfContext.GetReleaseFn()(retError) }()
+	defer func() { weCtx.GetReleaseFn()(retError) }()
 
-	mutableState := wfContext.GetMutableState()
-	mutableStateTaskRefresher := workflow.NewTaskRefresher(
-		shard,
-		shard.GetConfig(),
-		shard.GetNamespaceRegistry(),
-		shard.GetEventsCache(),
-		shard.GetLogger(),
-	)
+	response := &historyservice.DescribeMutableStateResponse{}
+	if weCtx.GetContext().(*workflow.ContextImpl).MutableState != nil {
+		msb := weCtx.GetContext().(*workflow.ContextImpl).MutableState
+		response.CacheMutableState = msb.CloneToProto()
+	}
 
-	err = mutableStateTaskRefresher.RefreshTasks(ctx, mutableState)
+	// clear mutable state to force reload from persistence. This API returns both cached and persisted version.
+	weCtx.GetContext().Clear()
+	mutableState, err := weCtx.GetContext().LoadMutableState(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
-		ShardID: shard.GetShardID(),
-		// RangeID is set by shard
-		NamespaceID: workflowKey.NamespaceID,
-		WorkflowID:  workflowKey.WorkflowID,
-		RunID:       workflowKey.RunID,
-		Tasks:       mutableState.PopTasks(),
-	})
+	response.DatabaseMutableState = mutableState.CloneToProto()
+	return response, nil
 }

@@ -576,7 +576,7 @@ func (d *HandlerImpl) UpdateNamespace(
 			configVersion++
 		}
 
-		if configurationChanged || activeClusterChanged {
+		if (configurationChanged || activeClusterChanged) && isGlobalNamespace {
 			// N.B., it should be sufficient to check only for activeClusterChanged. In order to be defensive, we also
 			// check for configurationChanged. If nothing needs to be updated this will be a no-op.
 			failoverHistory = d.maybeUpdateFailoverHistory(

@@ -44,81 +44,56 @@ import (
 type (
 	TaskGenerator interface {
 		GenerateWorkflowStartTasks(
-			now time.Time,
 			startEvent *historypb.HistoryEvent,
 		) error
 		GenerateWorkflowCloseTasks(
-			now time.Time,
 			// TODO: remove closeEvent parameter
 			// when deprecating the backward compatible logic
 			// for getting close time from close event.
 			closeEvent *historypb.HistoryEvent,
 			deleteAfterClose bool,
 		) error
-		GenerateDeleteExecutionTask(
-			now time.Time,
-		) (*tasks.DeleteExecutionTask, error)
+		GenerateDeleteExecutionTask() (*tasks.DeleteExecutionTask, error)
 		GenerateRecordWorkflowStartedTasks(
-			now time.Time,
 			startEvent *historypb.HistoryEvent,
 		) error
 		GenerateDelayedWorkflowTasks(
-			now time.Time,
 			startEvent *historypb.HistoryEvent,
 		) error
 		GenerateScheduleWorkflowTaskTasks(
-			now time.Time,
 			workflowTaskScheduledEventID int64,
 		) error
 		GenerateStartWorkflowTaskTasks(
-			now time.Time,
 			workflowTaskScheduledEventID int64,
 		) error
 		GenerateActivityTasks(
-			now time.Time,
 			event *historypb.HistoryEvent,
 		) error
 		GenerateActivityRetryTasks(
 			activityScheduledEventID int64,
 		) error
 		GenerateChildWorkflowTasks(
-			now time.Time,
 			event *historypb.HistoryEvent,
 		) error
 		GenerateRequestCancelExternalTasks(
-			now time.Time,
 			event *historypb.HistoryEvent,
 		) error
 		GenerateSignalExternalTasks(
-			now time.Time,
 			event *historypb.HistoryEvent,
 		) error
-		GenerateUpsertVisibilityTask(
-			now time.Time,
-		) error
-		GenerateWorkflowResetTasks(
-			now time.Time,
-		) error
+		GenerateUpsertVisibilityTask() error
+		GenerateWorkflowResetTasks() error
 
 		// these 2 APIs should only be called when mutable state transaction is being closed
-
-		GenerateActivityTimerTasks(
-			now time.Time,
-		) error
-		GenerateUserTimerTasks(
-			now time.Time,
-		) error
+		GenerateActivityTimerTasks() error
+		GenerateUserTimerTasks() error
 
 		// replication tasks
-
 		GenerateHistoryReplicationTasks(
-			now time.Time,
 			branchToken []byte,
 			events []*historypb.HistoryEvent,
 		) error
-		GenerateMigrationTasks(
-			now time.Time,
-		) (tasks.Task, error)
+		GenerateMigrationTasks() (tasks.Task, error)
 	}
 
 	TaskGeneratorImpl struct {
@@ -142,7 +117,6 @@ func NewTaskGenerator(
 }
 
 func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
-	_ time.Time,
 	startEvent *historypb.HistoryEvent,
 ) error {
 
@@ -164,7 +138,6 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
-	now time.Time,
 	closeEvent *historypb.HistoryEvent,
 	deleteAfterClose bool,
 ) error {
@@ -189,11 +162,10 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 
 	closeTasks := []tasks.Task{
 		&tasks.CloseExecutionTask{
-			// TaskID is set by shard
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: now,
-			Version:             currentVersion,
-			DeleteAfterClose:    deleteAfterClose,
+			// TaskID, Visiblitytimestamp is set by shard
+			WorkflowKey:      r.mutableState.GetWorkflowKey(),
+			Version:          currentVersion,
+			DeleteAfterClose: deleteAfterClose,
 		},
 	}
 
@@ -216,10 +188,9 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 		closeTime := timestamp.TimeValue(closeEvent.GetEventTime())
 		closeTasks = append(closeTasks,
 			&tasks.CloseExecutionVisibilityTask{
-				// TaskID is set by shard
-				WorkflowKey:         r.mutableState.GetWorkflowKey(),
-				VisibilityTimestamp: now,
-				Version:             currentVersion,
+				// TaskID, VisibilityTimestamp is set by shard
+				WorkflowKey: r.mutableState.GetWorkflowKey(),
+				Version:     currentVersion,
 			},
 			&tasks.DeleteHistoryEventTask{
 				// TaskID is set by shard
@@ -235,19 +206,14 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateDeleteExecutionTask(
-	now time.Time,
-) (*tasks.DeleteExecutionTask, error) {
-
+func (r *TaskGeneratorImpl) GenerateDeleteExecutionTask() (*tasks.DeleteExecutionTask, error) {
 	return &tasks.DeleteExecutionTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: now,
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey: r.mutableState.GetWorkflowKey(),
 	}, nil
 }
 
 func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
-	now time.Time,
 	startEvent *historypb.HistoryEvent,
 ) error {
 
@@ -281,23 +247,20 @@ func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
-	now time.Time,
 	startEvent *historypb.HistoryEvent,
 ) error {
 
 	startVersion := startEvent.GetVersion()
 
 	r.mutableState.AddTasks(&tasks.StartExecutionVisibilityTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: now,
-		Version:             startVersion,
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey: r.mutableState.GetWorkflowKey(),
+		Version:     startVersion,
 	})
 	return nil
 }
 
 func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
-	now time.Time,
 	workflowTaskScheduledEventID int64,
 ) error {
 
@@ -309,12 +272,11 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	}
 
 	r.mutableState.AddTasks(&tasks.WorkflowTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: now,
-		TaskQueue:           workflowTask.TaskQueue.GetName(),
-		ScheduledEventID:    workflowTask.ScheduledEventID,
-		Version:             workflowTask.Version,
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey:      r.mutableState.GetWorkflowKey(),
+		TaskQueue:        workflowTask.TaskQueue.GetName(),
+		ScheduledEventID: workflowTask.ScheduledEventID,
+		Version:          workflowTask.Version,
 	})
 
 	if r.mutableState.IsStickyTaskQueueEnabled() {
@@ -336,7 +298,6 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
-	_ time.Time,
 	workflowTaskScheduledEventID int64,
 ) error {
 
@@ -364,7 +325,6 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateActivityTasks(
-	now time.Time,
 	event *historypb.HistoryEvent,
 ) error {
 
@@ -375,12 +335,11 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 	}
 
 	r.mutableState.AddTasks(&tasks.ActivityTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: now,
-		TaskQueue:           activityInfo.TaskQueue,
-		ScheduledEventID:    activityInfo.ScheduledEventId,
-		Version:             activityInfo.Version,
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey:      r.mutableState.GetWorkflowKey(),
+		TaskQueue:        activityInfo.TaskQueue,
+		ScheduledEventID: activityInfo.ScheduledEventId,
+		Version:          activityInfo.Version,
 	})
 
 	return nil
@@ -407,7 +366,6 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
-	now time.Time,
 	event *historypb.HistoryEvent,
 ) error {
 
@@ -425,20 +383,18 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 	}
 
 	r.mutableState.AddTasks(&tasks.StartChildExecutionTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: now,
-		TargetNamespaceID:   targetNamespaceID.String(),
-		TargetWorkflowID:    childWorkflowInfo.StartedWorkflowId,
-		InitiatedEventID:    childWorkflowInfo.InitiatedEventId,
-		Version:             childWorkflowInfo.Version,
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey:       r.mutableState.GetWorkflowKey(),
+		TargetNamespaceID: targetNamespaceID.String(),
+		TargetWorkflowID:  childWorkflowInfo.StartedWorkflowId,
+		InitiatedEventID:  childWorkflowInfo.InitiatedEventId,
+		Version:           childWorkflowInfo.Version,
 	})
 
 	return nil
 }
 
 func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
-	now time.Time,
 	event *historypb.HistoryEvent,
 ) error {
 
@@ -460,9 +416,8 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 	}
 
 	r.mutableState.AddTasks(&tasks.CancelExecutionTask{
-		// TaskID is set by shard
+		// TaskID, VisibilityTimestamp is set by shard
 		WorkflowKey:             r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp:     now,
 		TargetNamespaceID:       targetNamespaceID.String(),
 		TargetWorkflowID:        targetWorkflowID,
 		TargetRunID:             targetRunID,
@@ -475,7 +430,6 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 }
 
 func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
-	now time.Time,
 	event *historypb.HistoryEvent,
 ) error {
 
@@ -497,9 +451,8 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 	}
 
 	r.mutableState.AddTasks(&tasks.SignalExecutionTask{
-		// TaskID is set by shard
+		// TaskID, VisibilityTimestamp is set by shard
 		WorkflowKey:             r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp:     now,
 		TargetNamespaceID:       targetNamespaceID.String(),
 		TargetWorkflowID:        targetWorkflowID,
 		TargetRunID:             targetRunID,
@@ -511,54 +464,41 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateUpsertVisibilityTask(
-	now time.Time,
-) error {
+func (r *TaskGeneratorImpl) GenerateUpsertVisibilityTask() error {
 	currentVersion := r.mutableState.GetCurrentVersion()
 
 	r.mutableState.AddTasks(&tasks.UpsertExecutionVisibilityTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: now,
-		Version:             currentVersion, // task processing does not check this version
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey: r.mutableState.GetWorkflowKey(),
+		Version:     currentVersion, // task processing does not check this version
 	})
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateWorkflowResetTasks(
-	now time.Time,
-) error {
+func (r *TaskGeneratorImpl) GenerateWorkflowResetTasks() error {
 
 	currentVersion := r.mutableState.GetCurrentVersion()
 
 	r.mutableState.AddTasks(&tasks.ResetWorkflowTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: now,
-		Version:             currentVersion,
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey: r.mutableState.GetWorkflowKey(),
+		Version:     currentVersion,
 	})
 
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateActivityTimerTasks(
-	now time.Time,
-) error {
-
+func (r *TaskGeneratorImpl) GenerateActivityTimerTasks() error {
 	_, err := r.getTimerSequence().CreateNextActivityTimer()
 	return err
 }
 
-func (r *TaskGeneratorImpl) GenerateUserTimerTasks(
-	now time.Time,
-) error {
-
+func (r *TaskGeneratorImpl) GenerateUserTimerTasks() error {
 	_, err := r.getTimerSequence().CreateNextUserTimer()
 	return err
 }
 
 func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
-	now time.Time,
 	branchToken []byte,
 	events []*historypb.HistoryEvent,
 ) error {
@@ -570,19 +510,16 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	version := firstEvent.GetVersion()
 
 	r.mutableState.AddTasks(&tasks.HistoryReplicationTask{
-		// TaskID is set by shard
-		VisibilityTimestamp: now,
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		FirstEventID:        firstEvent.GetEventId(),
-		NextEventID:         lastEvent.GetEventId() + 1,
-		Version:             version,
+		// TaskID, VisibilityTimestamp is set by shard
+		WorkflowKey:  r.mutableState.GetWorkflowKey(),
+		FirstEventID: firstEvent.GetEventId(),
+		NextEventID:  lastEvent.GetEventId() + 1,
+		Version:      version,
 	})
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateMigrationTasks(
-	now time.Time,
-) (tasks.Task, error) {
+func (r *TaskGeneratorImpl) GenerateMigrationTasks() (tasks.Task, error) {
 	executionInfo := r.mutableState.GetExecutionInfo()
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
 	if err != nil {
@@ -595,18 +532,17 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(
 
 	if r.mutableState.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return &tasks.SyncWorkflowStateTask{
-			VisibilityTimestamp: now,
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			Version:             lastItem.GetVersion(),
+			// TaskID, VisibilityTimestamp is set by shard
+			WorkflowKey: r.mutableState.GetWorkflowKey(),
+			Version:     lastItem.GetVersion(),
 		}, nil
 	} else {
 		return &tasks.HistoryReplicationTask{
-			// TaskID is set by shard
-			VisibilityTimestamp: now,
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			FirstEventID:        executionInfo.LastFirstEventId,
-			NextEventID:         lastItem.GetEventId() + 1,
-			Version:             lastItem.GetVersion(),
+			// TaskID, VisibilityTimestamp is set by shard
+			WorkflowKey:  r.mutableState.GetWorkflowKey(),
+			FirstEventID: executionInfo.LastFirstEventId,
+			NextEventID:  lastItem.GetEventId() + 1,
+			Version:      lastItem.GetVersion(),
 		}, nil
 	}
 }

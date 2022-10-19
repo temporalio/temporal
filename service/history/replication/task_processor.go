@@ -478,6 +478,11 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 			tasks = append(tasks, task)
 		}
 		p.maxRxReceivedTaskID = resp.GetLastRetrievedMessageId()
+		if len(tasks) == 0 {
+			// Update processed timestamp to the source cluster time when there is no replication task
+			p.maxRxProcessedTimestamp = timestamp.TimeValue(resp.GetSyncShardStatus().GetStatusTime())
+		}
+
 		if resp.GetHasMore() {
 			p.rxTaskBackoff = time.Duration(0)
 		} else {

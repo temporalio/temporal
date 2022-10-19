@@ -395,19 +395,23 @@ func iterateRanges(ranges []*schedpb.Range, f func(i int)) {
 
 // Parses the string into a Range.
 // Accepts strings of the form:
-//   *        matches always
-//   x        matches when the field equals x
-//   x-z      matches when the field is between x and z inclusive
-//   x-z/y    matches when the field is between x and z inclusive, skipping by y
-//   x/y      matches when the field is between x and max inclusive, skipping by y
-//   j,k,l    matches when the field is one of the listed values/ranges
+//
+//   - *        matches always
+//   - x        matches when the field equals x
+//   - x-z      matches when the field is between x and z inclusive
+//   - x-z/y    matches when the field is between x and z inclusive, skipping by y
+//   - x/y      matches when the field is between x and max inclusive, skipping by y
+//   - j,k,l    matches when the field is one of the listed values/ranges
+//
 // Each comma-separated value can be a range, and any range can have a skip value, e.g.:
-//   1-5             matches 1,2,3,4,5
-//   1-5/2           matches 1,3,5
-//   3/5             matches 3,8,13,18,23,28 (assuming max=30)
-//   1-5/2,8         matches 1,3,5,8
-//   1-5/2,8-11      matches 1,3,5,8,9,10,11
-//   1-5/2,8-16/3,2  matches 1,2,3,5,8,11,14
+//
+// - 1-5             matches 1,2,3,4,5
+// - 1-5/2           matches 1,3,5
+// - 3/5             matches 3,8,13,18,23,28 (assuming max=30)
+// - 1-5/2,8         matches 1,3,5,8
+// - 1-5/2,8-11      matches 1,3,5,8,9,10,11
+// - 1-5/2,8-16/3,2  matches 1,2,3,5,8,11,14
+//
 // Calls f for all values that should be considered matching. Values don't have to appear
 // in order, and f may be called out of order as well.
 // Handles day-of-week names or month names according to parseMode.
