@@ -432,8 +432,6 @@ func (e *MutableStateImpl) SetHistoryTree(
 	runTimeout *time.Duration,
 	treeID string,
 ) error {
-	// NOTE: Unfortunately execution timeout and run timeout are not yet initialized into e.executionInfo at this point.
-	// TODO: Consider explicitly initializing mutable state with these timeout parameters instead of passing them in.
 
 	var retentionDuration *time.Duration
 	if duration := e.namespaceEntry.Retention(); duration > 0 {
@@ -3212,21 +3210,21 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
 	)
 
+	if err = newMutableState.SetHistoryTree(
+		ctx,
+		e.executionInfo.WorkflowExecutionTimeout,
+		e.executionInfo.WorkflowRunTimeout,
+		newRunID,
+	); err != nil {
+		return nil, nil, err
+	}
+
 	if _, err = newMutableState.addWorkflowExecutionStartedEventForContinueAsNew(
 		parentInfo,
 		newExecution,
 		e,
 		command,
 		firstRunID,
-	); err != nil {
-		return nil, nil, err
-	}
-
-	if err = newMutableState.SetHistoryTree(
-		ctx,
-		newMutableState.executionInfo.WorkflowExecutionTimeout,
-		newMutableState.executionInfo.WorkflowRunTimeout,
-		newRunID,
 	); err != nil {
 		return nil, nil, err
 	}

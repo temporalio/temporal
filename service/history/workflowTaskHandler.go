@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -1162,14 +1163,17 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newMutableState := workflow.NewMutableState(
+	newMutableState, err := api.CreateMutableState(
+		ctx,
 		handler.shard,
-		handler.shard.GetEventsCache(),
-		handler.shard.GetLogger(),
 		handler.mutableState.GetNamespaceEntry(),
-		handler.shard.GetTimeSource().Now(),
+		handler.mutableState.GetExecutionInfo().WorkflowExecutionTimeout,
+		handler.mutableState.GetExecutionInfo().WorkflowRunTimeout,
+		newRunID,
 	)
-
+	if err != nil {
+		return err
+	}
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,
 		handler.mutableState,
@@ -1180,16 +1184,6 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 		failure,
 		backoffInterval,
 		enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY,
-	)
-	if err != nil {
-		return err
-	}
-
-	err = newMutableState.SetHistoryTree(
-		ctx,
-		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
-		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
-		newRunID,
 	)
 	if err != nil {
 		return err
@@ -1216,14 +1210,17 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		lastCompletionResult = startAttr.LastCompletionResult
 	}
 
-	newMutableState := workflow.NewMutableState(
+	newMutableState, err := api.CreateMutableState(
+		ctx,
 		handler.shard,
-		handler.shard.GetEventsCache(),
-		handler.shard.GetLogger(),
 		handler.mutableState.GetNamespaceEntry(),
-		handler.shard.GetTimeSource().Now(),
+		handler.mutableState.GetExecutionInfo().WorkflowExecutionTimeout,
+		handler.mutableState.GetExecutionInfo().WorkflowRunTimeout,
+		newRunID,
 	)
-
+	if err != nil {
+		return err
+	}
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,
 		handler.mutableState,
@@ -1234,16 +1231,6 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		failure,
 		backoffInterval,
 		enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
-	)
-	if err != nil {
-		return err
-	}
-
-	err = newMutableState.SetHistoryTree(
-		ctx,
-		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
-		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
-		newRunID,
 	)
 	if err != nil {
 		return err

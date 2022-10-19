@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -527,13 +528,17 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newMutableState := workflow.NewMutableState(
+	newMutableState, err := api.CreateMutableState(
+		ctx,
 		t.shard,
-		t.shard.GetEventsCache(),
-		t.shard.GetLogger(),
 		mutableState.GetNamespaceEntry(),
-		t.shard.GetTimeSource().Now(),
+		mutableState.GetExecutionInfo().WorkflowExecutionTimeout,
+		mutableState.GetExecutionInfo().WorkflowRunTimeout,
+		newRunID,
 	)
+	if err != nil {
+		return err
+	}
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,
 		mutableState,
@@ -545,15 +550,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		backoffInterval,
 		initiator,
 	)
-	if err != nil {
-		return err
-	}
-
-	err = newMutableState.SetHistoryTree(
-		ctx,
-		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
-		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
-		newRunID)
 	if err != nil {
 		return err
 	}
