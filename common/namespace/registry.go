@@ -251,6 +251,7 @@ func (r *registry) GetPingChecks() []common.PingCheck {
 			Timeout: 10 * time.Second,
 			Ping: func() []common.Pingable {
 				r.cacheLock.Lock()
+				//lint:ignore SA2001 just checking if we can acquire the lock
 				r.cacheLock.Unlock()
 				return nil
 			},
@@ -261,6 +262,7 @@ func (r *registry) GetPingChecks() []common.PingCheck {
 			Timeout: 10 * time.Second,
 			Ping: func() []common.Pingable {
 				r.callbackLock.Lock()
+				//lint:ignore SA2001 just checking if we can acquire the lock
 				r.callbackLock.Unlock()
 				return nil
 			},

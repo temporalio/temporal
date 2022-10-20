@@ -197,6 +197,7 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 		Ping: func() []common.Pingable {
 			// call rwLock.Lock directly to bypass metrics since this isn't a real request
 			s.rwLock.Lock()
+			//lint:ignore SA2001 just checking if we can acquire the lock
 			s.rwLock.Unlock()
 			return nil
 		},
