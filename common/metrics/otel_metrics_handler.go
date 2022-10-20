@@ -49,6 +49,7 @@ var _ MetricsHandler = (*otelMetricsHandler)(nil)
 
 func NewOtelMetricsHandler(l log.Logger, o OpenTelemetryProvider, cfg ClientConfig) *otelMetricsHandler {
 	return &otelMetricsHandler{
+		l:           l,
 		provider:    o,
 		excludeTags: configExcludeTags(cfg),
 	}
