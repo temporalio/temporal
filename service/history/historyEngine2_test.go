@@ -777,7 +777,7 @@ func (s *engine2Suite) createExecutionStartedStateWithParent(
 	if startWorkflowTask {
 		addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, tl, identity)
 	}
-	_ = ms.SetHistoryTree(context.Background(), we.GetRunId())
+	_ = ms.SetHistoryTree(context.Background(), nil, nil, we.GetRunId())
 	versionHistory, _ := versionhistory.GetCurrentVersionHistory(
 		ms.GetExecutionInfo().VersionHistories,
 	)
