@@ -201,7 +201,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 		event,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
-	s.mockMutableState.EXPECT().SetHistoryTree(gomock.Any(), tests.RunID).Return(nil)
+	s.mockMutableState.EXPECT().SetHistoryTree(gomock.Any(), nil, timestamp.DurationFromSeconds(100), tests.RunID).Return(nil)
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil)
 	s.Nil(err)
@@ -250,7 +250,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 		event,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
-	s.mockMutableState.EXPECT().SetHistoryTree(gomock.Any(), tests.RunID).Return(nil)
+	s.mockMutableState.EXPECT().SetHistoryTree(gomock.Any(), nil, timestamp.DurationFromSeconds(100), tests.RunID).Return(nil)
 
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil)
 	s.Nil(err)

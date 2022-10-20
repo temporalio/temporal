@@ -31,45 +31,48 @@ import (
 )
 
 type (
-	// TimerTasksRow represents a row in timer_tasks table
-	TimerTasksRow struct {
+	// HistoryScheduledTasksRow represents a row in history_scheduled_tasks table
+	HistoryScheduledTasksRow struct {
 		ShardID             int32
+		CategoryID          int32
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Data                []byte
 		DataEncoding        string
 	}
 
-	// TimerTasksFilter contains the column names within timer_tasks table that
+	// HistoryScheduledTasksFilter contains the column names within history_scheduled_tasks table that
 	// can be used to filter results through a WHERE clause
-	TimerTasksFilter struct {
+	HistoryScheduledTasksFilter struct {
 		ShardID             int32
+		CategoryID          int32
 		TaskID              int64
 		VisibilityTimestamp time.Time
 	}
 
-	// TimerTasksFilter contains the column names within timer_tasks table that
+	// HistoryScheduledTasksFilter contains the column names within history_scheduled_tasks table that
 	// can be used to filter results through a WHERE clause
-	TimerTasksRangeFilter struct {
+	HistoryScheduledTasksRangeFilter struct {
 		ShardID                         int32
+		CategoryID                      int32
 		InclusiveMinTaskID              int64
 		InclusiveMinVisibilityTimestamp time.Time
 		ExclusiveMaxVisibilityTimestamp time.Time
 		PageSize                        int
 	}
 
-	// HistoryTimerTask is the SQL persistence interface for history timer tasks
-	HistoryTimerTask interface {
-		// InsertIntoTimerTasks inserts rows that into timer_tasks table.
-		InsertIntoTimerTasks(ctx context.Context, rows []TimerTasksRow) (sql.Result, error)
-		// SelectFromTimerTasks returns one or more rows from timer_tasks table
-		SelectFromTimerTasks(ctx context.Context, filter TimerTasksFilter) ([]TimerTasksRow, error)
-		// RangeSelectFromTimerTasks returns one or more rows from timer_tasks table
-		RangeSelectFromTimerTasks(ctx context.Context, filter TimerTasksRangeFilter) ([]TimerTasksRow, error)
-		// DeleteFromTimerTasks deletes one or more rows from timer_tasks table
-		DeleteFromTimerTasks(ctx context.Context, filter TimerTasksFilter) (sql.Result, error)
-		// RangeDeleteFromTimerTasks deletes one or more rows from timer_tasks table
-		//  TimerTasksRangeFilter - {TaskID, PageSize} will be ignored
-		RangeDeleteFromTimerTasks(ctx context.Context, filter TimerTasksRangeFilter) (sql.Result, error)
+	// HistoryScheduledTask is the SQL persistence interface for history scheduled tasks
+	HistoryScheduledTask interface {
+		// InsertIntoHistoryScheduledTasks inserts rows that into history_scheduled_tasks table.
+		InsertIntoHistoryScheduledTasks(ctx context.Context, rows []HistoryScheduledTasksRow) (sql.Result, error)
+		// SelectFromScheduledTasks returns one or more rows from history_scheduled_tasks table
+		SelectFromHistoryScheduledTasks(ctx context.Context, filter HistoryScheduledTasksFilter) ([]HistoryScheduledTasksRow, error)
+		// RangeSelectFromScheduledTasks returns one or more rows from history_scheduled_tasks table
+		RangeSelectFromHistoryScheduledTasks(ctx context.Context, filter HistoryScheduledTasksRangeFilter) ([]HistoryScheduledTasksRow, error)
+		// DeleteFromScheduledTasks deletes one or more rows from history_scheduled_tasks table
+		DeleteFromHistoryScheduledTasks(ctx context.Context, filter HistoryScheduledTasksFilter) (sql.Result, error)
+		// RangeDeleteFromScheduledTasks deletes one or more rows from history_scheduled_tasks table
+		//  ScheduledTasksRangeFilter - {TaskID, PageSize} will be ignored
+		RangeDeleteFromHistoryScheduledTasks(ctx context.Context, filter HistoryScheduledTasksRangeFilter) (sql.Result, error)
 	}
 )

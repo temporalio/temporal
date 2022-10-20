@@ -26,6 +26,7 @@ package api
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -61,7 +62,14 @@ func NewWorkflowWithSignal(
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (WorkflowContext, error) {
-	newMutableState, err := CreateMutableState(ctx, shard, namespaceEntry, runID)
+	newMutableState, err := CreateMutableState(
+		ctx,
+		shard,
+		namespaceEntry,
+		startRequest.StartRequest.WorkflowExecutionTimeout,
+		startRequest.StartRequest.WorkflowRunTimeout,
+		runID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -116,6 +124,8 @@ func CreateMutableState(
 	ctx context.Context,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
+	executionTimeout *time.Duration,
+	runTimeout *time.Duration,
 	runID string,
 ) (workflow.MutableState, error) {
 	newMutableState := workflow.NewMutableState(
@@ -125,7 +135,7 @@ func CreateMutableState(
 		namespaceEntry,
 		shard.GetTimeSource().Now(),
 	)
-	if err := newMutableState.SetHistoryTree(ctx, runID); err != nil {
+	if err := newMutableState.SetHistoryTree(ctx, executionTimeout, runTimeout, runID); err != nil {
 		return nil, err
 	}
 	return newMutableState, nil
