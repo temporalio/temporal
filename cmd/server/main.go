@@ -181,7 +181,8 @@ func buildCLI() *cli.App {
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to instantiate claim mapper: %v.", err), 1)
 				}
-				s := temporal.NewServer(
+				// TODO: check err here
+				s, _ := temporal.NewServer(
 					temporal.ForServices(services),
 					temporal.WithConfig(cfg),
 					temporal.WithDynamicConfigClient(dynamicConfigClient),

@@ -22,38 +22,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package temporal
+package host
 
 import (
-	"time"
+	"path"
+	"testing"
 
-	"go.temporal.io/server/common/primitives"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/temporal"
+	"go.temporal.io/server/tests"
 )
 
-const (
-	mismatchLogMessage  = "Supplied configuration key/value mismatches persisted cluster metadata. Continuing with the persisted value as this value cannot be changed once initialized."
-	serviceStartTimeout = time.Duration(15) * time.Second
-	serviceStopTimeout  = time.Duration(60) * time.Second
-)
-
-type (
-	Server interface {
-		Start() error
-		Stop()
-	}
-)
-
-// Services is the list of all valid temporal services
-var (
-	Services = []string{
-		primitives.FrontendService,
-		primitives.HistoryService,
-		primitives.MatchingService,
-		primitives.WorkerService,
-	}
-)
-
-// NewServer returns a new instance of server that serves one or many services.
-func NewServer(opts ...ServerOption) (Server, error) {
-	return NewServerFx(opts...)
+// TestNewServer verifies that NewServer doesn't cause any fx errors
+func TestNewServer(t *testing.T) {
+	dir, err := tests.GetTemporalPackageDir()
+	require.NoError(t, err)
+	configDir := path.Join(dir, "config")
+	var cfg config.Config
+	err = config.Load("", configDir, "cass", &cfg)
+	require.NoError(t, err)
+	cfg.DynamicConfigClient.Filepath = path.Join(configDir, "dynamicconfig", "development-cass.yaml")
+	_, err = temporal.NewServer(
+		temporal.ForServices(temporal.Services),
+		temporal.WithConfig(&cfg),
+	)
+	assert.NoError(t, err)
+	// TODO: add tests for Server.Run(), etc.
 }

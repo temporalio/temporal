@@ -131,7 +131,7 @@ type (
 	}
 )
 
-func NewServerFx(opts ...ServerOption) *ServerFx {
+func NewServerFx(opts ...ServerOption) (*ServerFx, error) {
 	app := fx.New(
 		pprof.Module,
 		ServerFxImplModule,
@@ -152,7 +152,7 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 	s := &ServerFx{
 		app,
 	}
-	return s
+	return s, app.Err()
 }
 
 func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
