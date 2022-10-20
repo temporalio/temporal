@@ -358,12 +358,12 @@ func (c *ControllerImpl) acquireShards() {
 		// After 1s we will move on but the shard will continue trying in the background.
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
-		// trust the AssertOwnership will handle shard ownership lost
-		_ = shard.AssertOwnership(ctx)
+		_, _ = shard.GetEngine(ctx)
 
 		ctx, cancel = context.WithTimeout(context.Background(), shardIOTimeout)
 		defer cancel()
-		_, _ = shard.GetEngine(ctx)
+		// trust the AssertOwnership will handle shard ownership lost
+		_ = shard.AssertOwnership(ctx)
 	}
 
 	concurrency := util.Max(c.config.AcquireShardConcurrency(), 1)
