@@ -206,8 +206,8 @@ func (s *ContextImpl) AssertOwnership(
 	s.wLock()
 	defer s.wUnlock()
 
-	if s.shardInfo == nil {
-		return s.errorByState()
+	if err := s.errorByState(); err != nil {
+		return err
 	}
 
 	rangeID := s.shardInfo.GetRangeId()
