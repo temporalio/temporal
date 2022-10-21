@@ -353,11 +353,17 @@ func (c *ControllerImpl) acquireShards() {
 			c.contextTaggedLogger.Error("Unable to create history shard context", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 			return
 		}
+
 		// Wait up to 1s for the shard to acquire the rangeid lock.
 		// After 1s we will move on but the shard will continue trying in the background.
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 		_, _ = shard.GetEngine(ctx)
+
+		ctx, cancel = context.WithTimeout(context.Background(), shardIOTimeout)
+		defer cancel()
+		// trust the AssertOwnership will handle shard ownership lost
+		_ = shard.AssertOwnership(ctx)
 	}
 
 	concurrency := util.Max(c.config.AcquireShardConcurrency(), 1)

@@ -210,10 +210,9 @@ func (s *ContextImpl) AssertOwnership(
 		return err
 	}
 
-	rangeID := s.getRangeIDLocked()
 	err := s.persistenceShardManager.AssertShardOwnership(ctx, &persistence.AssertShardOwnershipRequest{
 		ShardID: s.shardID,
-		RangeID: rangeID,
+		RangeID: s.getRangeIDLocked(),
 	})
 	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, 0); err != nil {
 		return err
