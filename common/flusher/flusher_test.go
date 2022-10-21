@@ -141,6 +141,67 @@ func (s *flusherSuite) TestBuffer_Switch() {
 	s.Equal([]*fakeTask{}, writer.Get())
 }
 
+func (s *flusherSuite) TestBuffer_Timer() {
+	bufferCapacity := 2
+	numBuffer := 2
+	flushTimeout := time.Millisecond
+	writer := &fakeWriter{}
+	flushBuffer := NewFlusher[*fakeTask](
+		bufferCapacity,
+		numBuffer,
+		flushTimeout,
+		writer,
+		log.NewTestLogger(),
+	)
+	flushBuffer.Start()
+	defer flushBuffer.Stop()
+
+	task := newFakeTask()
+	fut := flushBuffer.Buffer(task)
+	_, err := fut.Get(s.ctx)
+	s.NoError(err)
+
+	flushBuffer.Lock()
+	s.Equal(0, len(flushBuffer.flushBuffer))
+	s.Nil(flushBuffer.flushBufferPointer)
+	s.Equal(1, len(flushBuffer.freeBufferChan))
+	s.Equal(0, len(flushBuffer.fullBufferChan))
+	flushBuffer.Unlock()
+
+	s.Equal([]*fakeTask{task}, writer.Get())
+}
+
+func (s *flusherSuite) TestBuffer_Flush() {
+	bufferCapacity := 2
+	numBuffer := 2
+	flushTimeout := time.Minute
+	writer := &fakeWriter{}
+	flushBuffer := NewFlusher[*fakeTask](
+		bufferCapacity,
+		numBuffer,
+		flushTimeout,
+		writer,
+		log.NewTestLogger(),
+	)
+	flushBuffer.Start()
+	defer flushBuffer.Stop()
+
+	task := newFakeTask()
+	fut := flushBuffer.Buffer(task)
+	flushBuffer.Flush()
+	_, err := fut.Get(s.ctx)
+	s.NoError(err)
+
+	flushBuffer.Lock()
+	s.Equal(0, len(flushBuffer.flushBuffer))
+	s.Nil(flushBuffer.flushBufferPointer)
+	s.Equal(1, len(flushBuffer.freeBufferChan))
+	s.Equal(0, len(flushBuffer.fullBufferChan))
+	flushBuffer.Unlock()
+
+	s.Equal([]*fakeTask{task}, writer.Get())
+}
+
 func (s *flusherSuite) TestBuffer_Full() {
 	bufferCapacity := 1
 	numBuffer := 2
@@ -176,36 +237,6 @@ func (s *flusherSuite) TestBuffer_Full() {
 	buffer = <-flushBuffer.fullBufferChan
 	s.Equal(task1, buffer[0].Item)
 	s.Equal([]*fakeTask{}, writer.Get())
-}
-
-func (s *flusherSuite) TestBuffer_Timer() {
-	bufferCapacity := 2
-	numBuffer := 2
-	flushTimeout := time.Millisecond
-	writer := &fakeWriter{}
-	flushBuffer := NewFlusher[*fakeTask](
-		bufferCapacity,
-		numBuffer,
-		flushTimeout,
-		writer,
-		log.NewTestLogger(),
-	)
-	flushBuffer.Start()
-	defer flushBuffer.Stop()
-
-	task := newFakeTask()
-	fut := flushBuffer.Buffer(task)
-	_, err := fut.Get(s.ctx)
-	s.NoError(err)
-
-	flushBuffer.Lock()
-	s.Equal(0, len(flushBuffer.flushBuffer))
-	s.Nil(flushBuffer.flushBufferPointer)
-	s.Equal(1, len(flushBuffer.freeBufferChan))
-	s.Equal(0, len(flushBuffer.fullBufferChan))
-	flushBuffer.Unlock()
-
-	s.Equal([]*fakeTask{task}, writer.Get())
 }
 
 func (s *flusherSuite) TestBuffer_Shutdown() {
