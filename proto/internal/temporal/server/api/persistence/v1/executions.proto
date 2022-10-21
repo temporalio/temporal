@@ -225,6 +225,17 @@ message TimerTaskInfo {
     bytes branch_token = 12;
 }
 
+
+message ArchivalTaskInfo {
+    int64 task_id = 1;
+    string namespace_id = 2;
+    string workflow_id = 3;
+    string run_id = 4;
+    temporal.server.api.enums.v1.TaskType task_type = 5;
+    int64 version = 6;
+    google.protobuf.Timestamp visibility_time = 7 [(gogoproto.stdtime) = true];
+}
+
 // activity_map column
 message ActivityInfo {
     int64 version = 1;

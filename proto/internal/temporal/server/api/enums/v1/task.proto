@@ -43,6 +43,8 @@ enum TaskCategory {
     TASK_CATEGORY_REPLICATION = 3;
     // Visibility is the task type for visibility task.
     TASK_CATEGORY_VISIBILITY = 4;
+    // Archival is the task type for workflow archival tasks.
+    TASK_CATEGORY_ARCHIVAL = 5;
 }
 
 enum TaskType {
@@ -72,4 +74,5 @@ enum TaskType {
     reserved 23;
     TASK_TYPE_TRANSFER_DELETE_EXECUTION = 24;
     TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE = 25;
+    TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION = 26;
 }
