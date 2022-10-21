@@ -255,7 +255,8 @@ func (s *taskSerializerSuite) TestTimerWorkflowCleanupTask() {
 		Version:             rand.Int63(),
 		BranchToken:         []byte{123},
 	}
-
+	s.assertEqualTasks(workflowCleanupTimer)
+	workflowCleanupTimer.WorkflowDataAlreadyArchived = true
 	s.assertEqualTasks(workflowCleanupTimer)
 }
 
