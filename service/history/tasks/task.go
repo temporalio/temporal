@@ -45,7 +45,6 @@ type (
 		GetCategory() Category
 		GetType() enumsspb.TaskType
 
-		SetVersion(version int64)
 		SetTaskID(id int64)
 		SetVisibilityTime(timestamp time.Time)
 	}
