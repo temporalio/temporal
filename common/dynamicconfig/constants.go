@@ -65,6 +65,11 @@ const (
 	VisibilityArchivalState = "system.visibilityArchivalState"
 	// EnableReadFromVisibilityArchival is key for enabling reading visibility from archival store
 	EnableReadFromVisibilityArchival = "system.enableReadFromVisibilityArchival"
+	// DurableArchivalEnabled means we generate a task to archive workflow data on the archival queue instead of
+	// the transfer queue.
+	//
+	// WARNING: do not use this dynamic config flag. It is not fully implemented yet
+	DurableArchivalEnabled = "history.durableArchivalEnabled"
 	// EnableNamespaceNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster
 	// for signal / start / signal with start API if namespace is not active
 	EnableNamespaceNotActiveAutoForwarding = "system.enableNamespaceNotActiveAutoForwarding"

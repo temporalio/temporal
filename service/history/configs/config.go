@@ -136,6 +136,7 @@ type Config struct {
 	TransferProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
 	TransferProcessorVisibilityArchivalTimeLimit        dynamicconfig.DurationPropertyFn
 	TransferProcessorEnsureCloseBeforeDelete            dynamicconfig.BoolPropertyFn
+	DurableArchivalEnabled                              dynamicconfig.BoolPropertyFn
 
 	// ReplicatorQueueProcessor settings
 	// TODO: clean up unused replicator settings
@@ -367,6 +368,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TransferProcessorPollBackoffInterval:                dc.GetDurationProperty(dynamicconfig.TransferProcessorPollBackoffInterval, 5*time.Second),
 		TransferProcessorVisibilityArchivalTimeLimit:        dc.GetDurationProperty(dynamicconfig.TransferProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
 		TransferProcessorEnsureCloseBeforeDelete:            dc.GetBoolProperty(dynamicconfig.TransferProcessorEnsureCloseBeforeDelete, true),
+		DurableArchivalEnabled:                              dc.GetBoolProperty(dynamicconfig.DurableArchivalEnabled, false),
 
 		ReplicatorTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.ReplicatorTaskBatchSize, 100),
 		ReplicatorTaskWorkerCount:                             dc.GetIntProperty(dynamicconfig.ReplicatorTaskWorkerCount, 10),
