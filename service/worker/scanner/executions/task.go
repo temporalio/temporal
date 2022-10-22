@@ -215,6 +215,8 @@ func (t *task) handleFailures(
 			switch err.(type) {
 			case *serviceerror.NotFound,
 				*serviceerror.NamespaceNotFound:
+				t.logger.Error("Garbage data in DB after namespace is deleted", tag.WorkflowNamespaceID(executionInfo.GetNamespaceId()))
+				// We cannot do much in this case. It just ignores this error.
 				return nil
 			case nil:
 				// continue to delete

@@ -96,7 +96,7 @@ var (
 		ID:                    executionsScannerWFID,
 		TaskQueue:             executionsScannerTaskQueueName,
 		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		//CronSchedule:          "0 */12 * * *",
+		CronSchedule:          "0 */12 * * *",
 	}
 )
 
