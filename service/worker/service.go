@@ -186,7 +186,9 @@ func NewService(
 		perNamespaceWorkerManager: perNamespaceWorkerManager,
 		workerFactory:             workerFactory,
 	}
-	s.initScanner()
+	if err := s.initScanner(); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -468,7 +470,12 @@ func (s *Service) startBatcher() {
 	}
 }
 
-func (s *Service) initScanner() {
+func (s *Service) initScanner() error {
+	currentCluster := s.clusterMetadata.GetCurrentClusterName()
+	adminClient, err := s.clientBean.GetRemoteAdminClient(currentCluster)
+	if err != nil {
+		return err
+	}
 	s.scanner = scanner.New(
 		s.logger,
 		s.config.ScannerCfg,
@@ -477,9 +484,11 @@ func (s *Service) initScanner() {
 		s.executionManager,
 		s.taskManager,
 		s.historyClient,
+		adminClient,
 		s.namespaceRegistry,
 		s.workerFactory,
 	)
+	return nil
 }
 
 func (s *Service) startScanner() {

@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -59,6 +60,7 @@ type (
 		executionManager            persistence.ExecutionManager
 		registry                    namespace.Registry
 		historyClient               historyservice.HistoryServiceClient
+		adminClient                 adminservice.AdminServiceClient
 		executor                    executor.Executor
 		rateLimiter                 quotas.RateLimiter
 		perShardQPS                 dynamicconfig.IntPropertyFn
@@ -90,6 +92,7 @@ func NewScavenger(
 	executionManager persistence.ExecutionManager,
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
+	adminClient adminservice.AdminServiceClient,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) *Scavenger {
@@ -99,6 +102,7 @@ func NewScavenger(
 		executionManager: executionManager,
 		registry:         registry,
 		historyClient:    historyClient,
+		adminClient:      adminClient,
 		executor: executor.NewFixedSizePoolExecutor(
 			executorPoolSize,
 			executorMaxDeferredTasks,
@@ -170,6 +174,7 @@ func (s *Scavenger) run() {
 			s.executionManager,
 			s.registry,
 			s.historyClient,
+			s.adminClient,
 			s.metrics,
 			s.logger,
 			s,

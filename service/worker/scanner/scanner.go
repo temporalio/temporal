@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
@@ -88,6 +89,7 @@ type (
 		executionManager  persistence.ExecutionManager
 		taskManager       persistence.TaskManager
 		historyClient     historyservice.HistoryServiceClient
+		adminClient       adminservice.AdminServiceClient
 		workerFactory     sdk.WorkerFactory
 		namespaceRegistry namespace.Registry
 	}
@@ -114,6 +116,7 @@ func New(
 	executionManager persistence.ExecutionManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
+	adminClient adminservice.AdminServiceClient,
 	registry namespace.Registry,
 	workerFactory sdk.WorkerFactory,
 ) *Scanner {
@@ -126,6 +129,7 @@ func New(
 			executionManager:  executionManager,
 			taskManager:       taskManager,
 			historyClient:     historyClient,
+			adminClient:       adminClient,
 			workerFactory:     workerFactory,
 			namespaceRegistry: registry,
 		},
