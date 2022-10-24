@@ -30,6 +30,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -156,6 +157,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			mockSdkClientFactory := sdk.NewMockClientFactory(ctrl)
 			mockSdkClient := mocksdk.NewMockClient(ctrl)
 			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
+			mockAdminClient := adminservicemock.NewMockAdminServiceClient(ctrl)
 			scanner := New(
 				log.NewNoopLogger(),
 				&Config{
@@ -195,6 +197,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				p.NewMockExecutionManager(ctrl),
 				p.NewMockTaskManager(ctrl),
 				historyservicemock.NewMockHistoryServiceClient(ctrl),
+				mockAdminClient,
 				mockNamespaceRegistry,
 				mockWorkerFactory,
 			)
