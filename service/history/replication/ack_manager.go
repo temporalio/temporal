@@ -579,7 +579,8 @@ func (p *ackMgrImpl) processReplication(
 	ms, err := context.LoadMutableState(ctx)
 	switch err.(type) {
 	case nil:
-		if !processTaskIfClosed {
+		if !processTaskIfClosed && !ms.IsWorkflowExecutionRunning() {
+			// workflow already finished, no need to process the replication task
 			return nil, nil
 		}
 		return action(ms)
