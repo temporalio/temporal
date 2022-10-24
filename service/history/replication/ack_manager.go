@@ -579,7 +579,7 @@ func (p *ackMgrImpl) processReplication(
 	ms, err := context.LoadMutableState(ctx)
 	switch err.(type) {
 	case nil:
-		if !processTaskIfClosed && !ms.IsWorkflowExecutionRunning() {
+		if !processTaskIfClosed {
 			// workflow already finished, no need to process the replication task
 			return nil, nil
 		}
@@ -601,6 +601,9 @@ func (p *ackMgrImpl) processNewRunReplication(
 	task *replicationspb.ReplicationTask,
 ) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
 
+	if task == nil {
+		return nil, nil
+	}
 	attr, ok := task.Attributes.(*replicationspb.ReplicationTask_HistoryTaskAttributes)
 	if !ok {
 		return nil, serviceerror.NewInternal("Wrong replication task to process new run replication.")
