@@ -539,6 +539,7 @@ func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRet
 func CreateHistoryStartWorkflowRequest(
 	namespaceID string,
 	startRequest *workflowservice.StartWorkflowExecutionRequest,
+	requestRunID string,
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	now time.Time,
 ) *historyservice.StartWorkflowExecutionRequest {
@@ -559,6 +560,7 @@ func CreateHistoryStartWorkflowRequest(
 	if len(startRequest.CronSchedule) != 0 {
 		histRequest.ContinueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
 	}
+	histRequest.RunId = requestRunID
 
 	return histRequest
 }

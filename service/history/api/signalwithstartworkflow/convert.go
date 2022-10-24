@@ -58,5 +58,5 @@ func ConvertToStartRequest(
 		Header:                   request.GetHeader(),
 	}
 
-	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, nil, now)
+	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, "", nil, now)
 }

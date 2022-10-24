@@ -396,7 +396,16 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	}
 	wh.logger.Debug("Start workflow execution request namespaceID.", tag.WorkflowNamespaceID(namespaceID.String()))
 
-	resp, err := wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), request, nil, time.Now().UTC()))
+	resp, err := wh.historyClient.StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(
+			namespaceID.String(),
+			request,
+			"",
+			nil,
+			time.Now().UTC(),
+		),
+	)
 
 	if err != nil {
 		return nil, err
@@ -2992,7 +3001,16 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		Memo:                  request.Memo,
 		SearchAttributes:      request.SearchAttributes,
 	}
-	_, err = wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC()))
+	_, err = wh.historyClient.StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(
+			namespaceID.String(),
+			startReq,
+			"",
+			nil,
+			time.Now().UTC(),
+		),
+	)
 
 	if err != nil {
 		return nil, err
@@ -3770,7 +3788,16 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		SearchAttributes:      searchAttributes,
 	}
 
-	_, err = wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), startReq, nil, time.Now().UTC()))
+	_, err = wh.historyClient.StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(
+			namespaceID.String(),
+			startReq,
+			"",
+			nil,
+			time.Now().UTC(),
+		),
+	)
 	if err != nil {
 		return nil, err
 	}

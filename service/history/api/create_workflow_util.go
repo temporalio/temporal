@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
@@ -94,7 +93,7 @@ func NewWorkflowWithSignal(
 	// Generate first workflow task event if not child WF and no first workflow task backoff
 	if err := GenerateFirstWorkflowTask(
 		newMutableState,
-		startRequest.ParentExecutionInfo,
+		startRequest,
 		startEvent,
 	); err != nil {
 		return nil, err
@@ -133,19 +132,20 @@ func CreateMutableState(
 
 func GenerateFirstWorkflowTask(
 	mutableState workflow.MutableState,
-	parentInfo *workflowspb.ParentExecutionInfo,
+	startRequest *historyservice.StartWorkflowExecutionRequest,
 	startEvent *historypb.HistoryEvent,
 ) error {
-
-	if parentInfo == nil {
-		// WorkflowTask is only created when it is not a Child Workflow and no backoff is needed
-		if err := mutableState.AddFirstWorkflowTaskScheduled(
-			startEvent,
-		); err != nil {
-			return err
-		}
+	if startRequest.ParentExecutionInfo != nil && len(startRequest.RunId) == 0 {
+		// new start child workflow logic will set RunId and won't have a separate call
+		// for scheduling the first workflow task
+		// so only skip creating first workflow logic when creating child with empty
+		// runID (old start child logic)
+		return nil
 	}
-	return nil
+
+	// WorkflowTask is only created when no backoff is needed
+	// otherwise, a WorkflowBackoffTimerTask will be created
+	return mutableState.AddFirstWorkflowTaskScheduled(startEvent)
 }
 
 func NewWorkflowVersionCheck(
@@ -218,16 +218,16 @@ func ValidateStart(
 
 func ValidateStartWorkflowExecutionRequest(
 	ctx context.Context,
-	request *workflowservice.StartWorkflowExecutionRequest,
+	startRequest *historyservice.StartWorkflowExecutionRequest,
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
 	operation string,
 ) error {
-
+	request := startRequest.StartRequest
 	workflowID := request.GetWorkflowId()
 	maxIDLengthLimit := shard.GetConfig().MaxIDLengthLimit()
 
-	if len(request.GetRequestId()) == 0 {
+	if len(startRequest.RunId) == 0 && len(request.GetRequestId()) == 0 {
 		return serviceerror.NewInvalidArgument("Missing request ID.")
 	}
 	if timestamp.DurationValue(request.GetWorkflowExecutionTimeout()) < 0 {

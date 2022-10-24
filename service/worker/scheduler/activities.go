@@ -81,6 +81,7 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedspb.StartWorkf
 	request := common.CreateHistoryStartWorkflowRequest(
 		req.NamespaceId,
 		req.Request,
+		"",
 		nil,
 		time.Now().UTC(),
 	)

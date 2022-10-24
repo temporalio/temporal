@@ -693,6 +693,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 			Version:               failoverVersion,
 			InitiatedEventId:      80,
 			InitiatedEventBatchId: 20,
+			RequestRunId:          uuid.New(),
 			StartedEventId:        common.EmptyEventID,
 			CreateRequestId:       uuid.New(),
 			Namespace:             tests.Namespace.String(),

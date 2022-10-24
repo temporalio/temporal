@@ -233,40 +233,6 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	s.Equal(&expectedResponse, response)
 }
 
-func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
-	testNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String()}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "",
-	)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
-	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
-
-	namespaceID := tests.NamespaceID
-	workflowID := "workflowID"
-	workflowType := "workflowType"
-	taskQueue := "testTaskQueue"
-	identity := "testIdentity"
-
-	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.CreateWorkflowExecutionResponse, nil)
-
-	requestID := uuid.New()
-	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
-		Attempt:     1,
-		NamespaceId: namespaceID.String(),
-		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                namespaceID.String(),
-			WorkflowId:               workflowID,
-			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
-			Identity:                 identity,
-			RequestId:                requestID,
-		},
-	})
-	s.Nil(err)
-	s.NotNil(resp.RunId)
-}
-
 func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	testNamespaceEntry := namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String()}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "",

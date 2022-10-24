@@ -285,6 +285,7 @@ message ChildExecutionInfo {
     string started_workflow_id = 5;
     string started_run_id = 6;
     reserved 7;
+    // TODO: deprecate this field, fully rely on request_run_id for deduplication
     string create_request_id = 8;
     string namespace = 9;
     string workflow_type_name = 10;
@@ -292,6 +293,11 @@ message ChildExecutionInfo {
     int64 initiated_event_id = 12;
     temporal.server.api.clock.v1.VectorClock clock = 13;
     string namespace_id = 14;
+    // run_id used for creating the child workflow execution.
+    // note the actual started_run_id may be different from this request_run_id,
+    // if either source or target shard is running an old version.
+    // or in standby cluster (which will always generate its own request_run_id)
+    string request_run_id = 15;
 }
 
 // request_cancel_map column

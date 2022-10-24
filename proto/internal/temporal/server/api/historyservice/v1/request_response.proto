@@ -60,6 +60,10 @@ message StartWorkflowExecutionRequest {
     temporal.api.failure.v1.Failure continued_failure = 7;
     temporal.api.common.v1.Payloads last_completion_result = 8;
     google.protobuf.Duration first_workflow_task_backoff = 9 [(gogoproto.stdduration) = true];
+    // If specified, requestID in start_request is ignored and
+    // run_id will be used for deduplication. If not specified, a random uuid will be
+    // generated and rely on requestID for deduplication.
+    string run_id = 10;
 }
 
 message StartWorkflowExecutionResponse {

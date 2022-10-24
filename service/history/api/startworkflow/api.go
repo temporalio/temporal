@@ -55,19 +55,43 @@ func Invoke(
 
 	request := startRequest.StartRequest
 	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, shard, shard.GetMetricsClient())
-	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, shard, namespaceEntry, "StartWorkflowExecution")
+	err = api.ValidateStartWorkflowExecutionRequest(ctx, startRequest, shard, namespaceEntry, "StartWorkflowExecution")
 	if err != nil {
 		return nil, err
 	}
 
 	workflowID := request.GetWorkflowId()
-	runID := uuid.New()
+	runID := startRequest.RunId
+	if len(runID) != 0 {
+		// check if the request runID already exists or not
+		_, err := shard.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
+			ShardID:     shard.GetShardID(),
+			NamespaceID: startRequest.GetNamespaceId(),
+			WorkflowID:  workflowID,
+			RunID:       runID,
+		})
+		switch err.(type) {
+		case nil:
+			// requested run already started before
+			return &historyservice.StartWorkflowExecutionResponse{
+				RunId: runID,
+			}, nil
+		case *serviceerror.NotFound:
+			// no-op
+			// requested runID not found, continue the creation logic
+		default:
+			return nil, err
+		}
+	} else {
+		runID = uuid.New().String()
+	}
+
 	workflowContext, err := api.NewWorkflowWithSignal(
 		ctx,
 		shard,
 		namespaceEntry,
 		workflowID,
-		runID.String(),
+		runID,
 		startRequest,
 		nil,
 	)
@@ -103,7 +127,7 @@ func Invoke(
 	)
 	if err == nil {
 		return &historyservice.StartWorkflowExecutionResponse{
-			RunId: runID.String(),
+			RunId: runID,
 		}, nil
 	}
 
@@ -138,7 +162,7 @@ func Invoke(
 		t.State,
 		t.Status,
 		workflowID,
-		runID.String(),
+		runID,
 		startRequest.StartRequest.GetWorkflowIdReusePolicy(),
 	)
 	if err != nil {
@@ -163,7 +187,7 @@ func Invoke(
 					shard,
 					namespaceEntry,
 					workflowID,
-					runID.String(),
+					runID,
 					startRequest,
 					nil)
 				if err != nil {
@@ -177,7 +201,7 @@ func Invoke(
 		switch err {
 		case nil:
 			return &historyservice.StartWorkflowExecutionResponse{
-				RunId: runID.String(),
+				RunId: runID,
 			}, nil
 		case consts.ErrWorkflowCompleted:
 			// previous workflow already closed
@@ -200,7 +224,7 @@ func Invoke(
 		return nil, err
 	}
 	return &historyservice.StartWorkflowExecutionResponse{
-		RunId: runID.String(),
+		RunId: runID,
 	}, nil
 
 }

@@ -1285,8 +1285,6 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionFailed() {
 	}, event)
 }
 
-/* signal to external workflow */
-
 /* child workflow */
 func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 	workflowTaskCompletionEventID := rand.Int63()
@@ -1321,6 +1319,8 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 		testNamespaceID,
 	)
 	s.Equal(event, s.flush())
+	eventAttributes := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+	s.NotEmpty(eventAttributes.RequestRunId)
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
 		TaskId:    s.nextTaskID,
@@ -1333,6 +1333,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 				Namespace:                    testNamespaceName.String(),
 				NamespaceId:                  testNamespaceID.String(),
 				WorkflowId:                   testWorkflowID,
+				RequestRunId:                 eventAttributes.RequestRunId,
 				WorkflowType:                 testWorkflowType,
 				TaskQueue:                    testTaskQueue,
 				Input:                        testPayloads,

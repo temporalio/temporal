@@ -36,6 +36,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -427,15 +428,14 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 
 		workflowClosed := !mutableState.IsWorkflowExecutionRunning()
 		childStarted := childWorkflowInfo.StartedEventId != common.EmptyEventID
-		childAbandon := childWorkflowInfo.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON
+		abandonChild := childWorkflowInfo.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON
 
-		if workflowClosed && !(childStarted && childAbandon) {
-			// NOTE: ideally for workflowClosed, child not started, parent close policy is abandon case,
-			// we should continue to start the child workflow in active cluster, so standby logic also need to
-			// perform the verification. However, we can't do that due to some technial reasons.
-			// Please check the comments in processStartChildExecution in transferQueueActiveTaskExecutor.go
-			// for details.
+		if workflowClosed && !abandonChild {
 			return nil, nil
+		}
+
+		if workflowClosed && !childStarted && abandonChild {
+			return t.verifyAbandonedChildStartedAfterWorkflowClose(ctx, childWorkflowInfo)
 		}
 
 		if !childStarted {
@@ -448,31 +448,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			}, nil
 		}
 
-		_, err := t.historyClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
-			NamespaceId: transferTask.TargetNamespaceID,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: childWorkflowInfo.StartedWorkflowId,
-				RunId:      childWorkflowInfo.StartedRunId,
-			},
-			Clock: childWorkflowInfo.Clock,
-		})
-		switch err.(type) {
-		case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
-			return nil, nil
-		case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
-			return &startChildExecutionPostActionInfo{}, nil
-		default:
-			t.logger.Error("Failed to verify first workflow task scheduled",
-				tag.WorkflowNamespaceID(transferTask.GetNamespaceID()),
-				tag.WorkflowID(transferTask.GetWorkflowID()),
-				tag.WorkflowRunID(transferTask.GetRunID()),
-				tag.Error(err),
-			)
-
-			// NOTE: we do not return the error here which will cause the mutable state to be cleared and reloaded upon retry
-			// it's unnecessary as the error is in the target workflow, not this workflow.
-			return nil, errVerificationFailed
-		}
+		return t.verifyChildWorkflowFirstWorkflowTaskScheduled(ctx, childWorkflowInfo)
 	}
 
 	return t.processTransfer(
@@ -489,6 +465,86 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			standbyTransferTaskPostActionTaskDiscarded,
 		),
 	)
+}
+
+func (t *transferQueueStandbyTaskExecutor) verifyAbandonedChildStartedAfterWorkflowClose(
+	ctx context.Context,
+	childInfo *persistencespb.ChildExecutionInfo,
+) (interface{}, error) {
+	if childInfo.RequestRunId == "" {
+		// parent shard in source cluster is using old path,
+		// and won't start child after workflow close.
+		// so skip the check
+		return nil, nil
+	}
+
+	// verify child started by describing the workflow
+	_, err := t.historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+		NamespaceId: childInfo.NamespaceId,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: childInfo.StartedWorkflowId,
+			// NOTE: don't use StartedRunID, that field is empty as we know child is not started yet.
+			RunId: childInfo.RequestRunId,
+		},
+	})
+	switch err.(type) {
+	case nil:
+		// we only know parent shard in source cluster is using the new code path
+		// but don't know if the child shard in source cluster is using the new code path or not.
+		// so still need to verify if first workflow task is scheduled.
+		return t.verifyChildWorkflowFirstWorkflowTaskScheduled(ctx, childInfo)
+	case *serviceerror.NamespaceNotFound:
+		return nil, nil
+	case *serviceerror.NotFound:
+		return &startChildExecutionPostActionInfo{}, nil
+	default:
+		t.logger.Error("Failed to verify child workflow exists",
+			tag.WorkflowNamespaceID(childInfo.NamespaceId),
+			tag.WorkflowID(childInfo.StartedWorkflowId),
+			tag.WorkflowRunID(childInfo.RequestRunId),
+			tag.Error(err),
+		)
+
+		// NOTE: we do not return the error here which will cause the mutable state to be cleared and reloaded upon retry
+		// it's unnecessary as the error is in the target workflow, not this workflow.
+		return nil, errVerificationFailed
+	}
+}
+
+func (t *transferQueueStandbyTaskExecutor) verifyChildWorkflowFirstWorkflowTaskScheduled(
+	ctx context.Context,
+	childInfo *persistencespb.ChildExecutionInfo,
+) (interface{}, error) {
+	if childInfo.RequestRunId == childInfo.StartedRunId {
+		// skip the check as we know both parent and child shard in source cluster are running new code path
+		return nil, nil
+	}
+
+	_, err := t.historyClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+		NamespaceId: childInfo.NamespaceId,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: childInfo.StartedWorkflowId,
+			RunId:      childInfo.StartedRunId,
+		},
+		Clock: childInfo.Clock,
+	})
+	switch err.(type) {
+	case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
+		return nil, nil
+	case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
+		return &startChildExecutionPostActionInfo{}, nil
+	default:
+		t.logger.Error("Failed to verify first workflow task scheduled",
+			tag.WorkflowNamespaceID(childInfo.NamespaceId),
+			tag.WorkflowID(childInfo.StartedWorkflowId),
+			tag.WorkflowRunID(childInfo.StartedRunId),
+			tag.Error(err),
+		)
+
+		// NOTE: we do not return the error here which will cause the mutable state to be cleared and reloaded upon retry
+		// it's unnecessary as the error is in the target workflow, not this workflow.
+		return nil, errVerificationFailed
+	}
 }
 
 func (t *transferQueueStandbyTaskExecutor) processTransfer(

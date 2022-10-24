@@ -3327,6 +3327,7 @@ func (e *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 		StartedEventId:        common.EmptyEventID,
 		StartedWorkflowId:     attributes.GetWorkflowId(),
 		CreateRequestId:       createRequestID,
+		RequestRunId:          attributes.GetRequestRunId(),
 		Namespace:             attributes.GetNamespace(),
 		NamespaceId:           attributes.GetNamespaceId(),
 		WorkflowTypeName:      attributes.GetWorkflowType().GetName(),

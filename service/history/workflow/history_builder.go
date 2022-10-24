@@ -27,6 +27,7 @@ package workflow
 import (
 	"time"
 
+	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -846,6 +847,7 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 			Namespace:                    command.Namespace,
 			NamespaceId:                  targetNamespaceID.String(),
 			WorkflowId:                   command.WorkflowId,
+			RequestRunId:                 uuid.New(),
 			WorkflowType:                 command.WorkflowType,
 			TaskQueue:                    command.TaskQueue,
 			Header:                       command.Header,

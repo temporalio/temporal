@@ -722,92 +722,70 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// 8 cases in total
 	workflowRunning := mutableState.IsWorkflowExecutionRunning()
 	childStarted := childInfo.StartedEventId != common.EmptyEventID
-	if !workflowRunning && (!childStarted || childInfo.ParentClosePolicy != enumspb.PARENT_CLOSE_POLICY_ABANDON) {
-		// three cases here:
-		// case 1: workflow not running, child started, parent close policy is not abandon
-		// case 2: workflow not running, child not started, parent close policy is not abandon
-		// case 3: workflow not running, child not started, parent close policy is abandon
-		//
-		// NOTE: ideally for case 3, we should continue to start child. However, with current start child
-		// and standby start child verification logic, we can't do that because:
-		// 1. Once workflow is closed, we can't update mutable state or record child started event.
-		// If the RPC call for scheduling first workflow task times out but the call actually succeeds on child workflow.
-		// Then the child workflow can run, complete and another unrelated workflow can reuse this workflowID.
-		// Now when the start child task retries, we can't rely on requestID to dedup the start child call. (We can use runID instead of requestID to dedup)
-		// 2. No update to mutable state and child started event means we are not able to replicate the information
-		// to the standby cluster, so standby start child logic won't be able to verify the child has started.
-		// To resolve the issue above, we need to
-		// 1. Start child workflow and schedule the first workflow task in one transaction. Use runID to perform deduplication
-		// 2. Standby start child logic need to verify if child worflow actually started instead of relying on the information
-		// in parent mutable state.
+	abandonChild := childInfo.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON
+	if !workflowRunning && !abandonChild {
+		// case 1: workflow not running, child started, parent close policy is not abandon (rely on parent close policy to cancel/terminate wf)
+		// case 2: workflow not running, child not started, parent close policy is not abandon (not started child at all)
 		return nil
 	}
+	if !workflowRunning && !childStarted && abandonChild {
+		// case 3: workflow not running, child not started, parent close policy is abandon
 
-	// ChildExecution already started, just create WorkflowTask and complete transfer task
-	// If parent already closed, since child workflow started event already written to history,
-	// still schedule the workflowTask if the parent close policy is Abandon.
-	// If parent close policy cancel or terminate, parent close policy will be applied in another
-	// transfer task.
-	// case 4, 5: workflow started, child started, parent close policy is or is not abandon
-	// case 6: workflow closed, child started, parent close policy is abandon
-	if childStarted {
-		childExecution := &commonpb.WorkflowExecution{
-			WorkflowId: childInfo.StartedWorkflowId,
-			RunId:      childInfo.StartedRunId,
+		if len(childInfo.RequestRunId) == 0 {
+			// for backward-compatibility, if childInfo is created without RequestRunID
+			// then we can't use runID to dedup start execution call, so skip starting the child
+			return nil
 		}
-		childClock := childInfo.Clock
+
+		initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, task.InitiatedEventID)
+		if err != nil {
+			return err
+		}
+
+		startedRunID, childClock, err := t.startWorkflow(
+			ctx,
+			task,
+			childInfo,
+			initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes(),
+		)
+		switch err.(type) {
+		case nil:
+			// NOTE: during upgrade, if this call fails, it's possible that created child workflow runs and completes,
+			// and another run reuses the workflowID. Then when this task retries, child workflow maybe created again.
+			return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childInfo, startedRunID, childClock)
+		case *serviceerror.WorkflowExecutionAlreadyStarted,
+			*serviceerror.NamespaceNotFound:
+			// workflow already closed, don't record start failed
+			t.logger.Info("Failed to start abandoned child workflow after parent close", tag.ErrorType(err), tag.Error(err))
+			return nil
+		default:
+			return err
+		}
+	}
+
+	if childStarted {
+		// case 4, 5: workflow running, child started, parent close policy is or is not abandon
+		// case 6: workflow closed, child started, parent close policy is abandon
+
 		// NOTE: do not access anything related mutable state after this lock release
 		// release the context lock since we no longer need mutable state and
 		// the rest of logic is making RPC call, which takes time.
 		release(nil)
-		return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, childClock)
+		return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childInfo, childInfo.StartedRunId, childInfo.Clock)
 	}
 
 	// remaining 2 cases:
 	// case 7, 8: workflow running, child not started, parent close policy is or is not abandon
-
 	initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, task.InitiatedEventID)
 	if err != nil {
 		return err
 	}
 	attributes := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 
-	var parentNamespaceName namespace.Name
-	if namespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(task.NamespaceID)); err != nil {
-		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
-			return err
-		}
-		// It is possible that the parent namespace got deleted. Use namespaceID instead as this is only needed for the history event.
-		parentNamespaceName = namespace.Name(task.NamespaceID)
-	} else {
-		parentNamespaceName = namespaceEntry.Name()
-	}
-
-	var targetNamespaceName namespace.Name
-	if namespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(task.TargetNamespaceID)); err != nil {
-		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
-			return err
-		}
-		// It is possible that target namespace got deleted. Record failure.
-		t.logger.Debug("Target namespace is not found.", tag.WorkflowNamespaceID(task.TargetNamespaceID))
-		err = t.recordStartChildExecutionFailed(
-			ctx,
-			task,
-			weContext,
-			attributes,
-			enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
-		)
-		return err
-	} else {
-		targetNamespaceName = namespaceEntry.Name()
-	}
-
-	childRunID, childClock, err := t.startWorkflow(
+	startedRunID, childClock, err := t.startWorkflow(
 		ctx,
 		task,
-		parentNamespaceName,
-		targetNamespaceName,
-		childInfo.CreateRequestId,
+		childInfo,
 		attributes,
 	)
 	if err != nil {
@@ -823,7 +801,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		case *serviceerror.NamespaceNotFound:
 			failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
 		default:
-			t.logger.Error("Unexpected error type returned from StartWorkflowExecution API call for child workflow.", tag.ErrorType(err), tag.Error(err))
+			t.logger.Error("Unexpected error type for starting child workflow.", tag.ErrorType(err), tag.Error(err))
 			return err
 		}
 
@@ -837,10 +815,10 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 
 	t.logger.Debug("Child Execution started successfully",
-		tag.WorkflowID(attributes.WorkflowId), tag.WorkflowRunID(childRunID))
+		tag.WorkflowID(attributes.WorkflowId), tag.WorkflowRunID(startedRunID))
 
 	// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
-	err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, childRunID, childClock)
+	err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, startedRunID, childClock)
 	if err != nil {
 		return err
 	}
@@ -849,10 +827,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// Release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, &commonpb.WorkflowExecution{
-		WorkflowId: task.TargetWorkflowID,
-		RunId:      childRunID,
-	}, childClock)
+	return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childInfo, startedRunID, childClock)
 }
 
 func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
@@ -1046,12 +1021,22 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 	ctx context.Context,
 	namespaceID string,
-	execution *commonpb.WorkflowExecution,
+	childInfo *persistencespb.ChildExecutionInfo,
+	startedRunID string,
 	clock *clockspb.VectorClock,
 ) error {
+	if startedRunID == childInfo.RequestRunId {
+		// create first workflow task can be skipped if
+		// since we know both source and target shard are running new code path
+		return nil
+	}
+
 	_, err := t.historyClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
-		NamespaceId:         namespaceID,
-		WorkflowExecution:   execution,
+		NamespaceId: namespaceID,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: childInfo.StartedWorkflowId,
+			RunId:      startedRunID,
+		},
 		IsFirstWorkflowTask: true,
 		Clock:               clock,
 	})
@@ -1293,15 +1278,35 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecution(
 func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	ctx context.Context,
 	task *tasks.StartChildExecutionTask,
-	namespace namespace.Name,
-	targetNamespace namespace.Name,
-	childRequestID string,
+	childInfo *persistencespb.ChildExecutionInfo,
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 ) (string, *clockspb.VectorClock, error) {
+	var parentNamespaceName string
+	if namespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(task.NamespaceID)); err != nil {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
+			return "", nil, err
+		}
+		// It is possible that the parent namespace got deleted. Use namespaceID instead as this is only needed for the history event.
+		parentNamespaceName = task.NamespaceID
+	} else {
+		parentNamespaceName = namespaceEntry.Name().String()
+	}
+
+	namespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(task.TargetNamespaceID))
+	if err != nil {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
+			// It is possible that target namespace got deleted
+			t.logger.Debug("Target namespace is not found.", tag.WorkflowNamespaceID(task.TargetNamespaceID))
+		}
+		return "", nil, err
+
+	}
+	targetNamespaceName := namespaceEntry.Name().String()
+
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
 		&workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                targetNamespace.String(),
+			Namespace:                targetNamespaceName,
 			WorkflowId:               attributes.WorkflowId,
 			WorkflowType:             attributes.WorkflowType,
 			TaskQueue:                attributes.TaskQueue,
@@ -1312,16 +1317,17 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 			WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
 
 			// Use the same request ID to dedupe StartWorkflowExecution calls
-			RequestId:             childRequestID,
+			RequestId:             childInfo.CreateRequestId,
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
 			RetryPolicy:           attributes.RetryPolicy,
 			CronSchedule:          attributes.CronSchedule,
 			Memo:                  attributes.Memo,
 			SearchAttributes:      attributes.SearchAttributes,
 		},
+		childInfo.RequestRunId,
 		&workflowspb.ParentExecutionInfo{
 			NamespaceId: task.NamespaceID,
-			Namespace:   namespace.String(),
+			Namespace:   parentNamespaceName,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: task.WorkflowID,
 				RunId:      task.RunID,
@@ -1423,55 +1429,71 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		return nil
 	}
 
-	scope := t.metricsClient.Scope(metrics.TransferActiveTaskCloseExecutionScope)
+	executions := make([]parentclosepolicy.RequestDetail, 0, len(childInfos))
+	for _, childInfo := range childInfos {
+		if childInfo.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON {
+			continue
+		}
 
-	if t.shard.GetConfig().EnableParentClosePolicyWorker() &&
-		len(childInfos) >= t.shard.GetConfig().ParentClosePolicyThreshold(parentNamespaceName) {
-
-		executions := make([]parentclosepolicy.RequestDetail, 0, len(childInfos))
-		for _, childInfo := range childInfos {
-			if childInfo.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON {
+		childNamespaceID := namespace.ID(childInfo.GetNamespaceId())
+		if childNamespaceID.IsEmpty() {
+			// TODO (alex): Remove after childInfo.NamespaceId is back filled. Backward compatibility: old childInfo doesn't have NamespaceId set.
+			// TODO (alex): consider reverse lookup of namespace name from ID but namespace name is not actually used.
+			var err error
+			childNamespaceID, err = t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
+			switch err.(type) {
+			case nil:
+			case *serviceerror.NamespaceNotFound:
+				// If child namespace is deleted there is nothing to close.
 				continue
+			default:
+				return err
 			}
-
-			childNamespaceID := namespace.ID(childInfo.GetNamespaceId())
-			if childNamespaceID.IsEmpty() {
-				// TODO (alex): Remove after childInfo.NamespaceId is back filled. Backward compatibility: old childInfo doesn't have NamespaceId set.
-				// TODO (alex): consider reverse lookup of namespace name from ID but namespace name is not actually used.
-				var err error
-				childNamespaceID, err = t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
-				switch err.(type) {
-				case nil:
-				case *serviceerror.NamespaceNotFound:
-					// If child namespace is deleted there is nothing to close.
-					continue
-				default:
-					return err
-				}
-			}
-
-			executions = append(executions, parentclosepolicy.RequestDetail{
-				Namespace:   childInfo.Namespace,
-				NamespaceID: childNamespaceID.String(),
-				WorkflowID:  childInfo.StartedWorkflowId,
-				RunID:       childInfo.StartedRunId,
-				Policy:      childInfo.ParentClosePolicy,
-			})
 		}
 
-		if len(executions) == 0 {
-			return nil
-		}
+		childRunID := childInfo.StartedRunId
+		// NOTE: child may be started but start not recorded even if parent close policy is not abandon.
+		// This is because the start child call may fail, and before retrying the task,
+		// parent workflow can get closed. But the start child call actually succeeds.
+		// NOTE: this also means there's a chance that the start child call can succeeds after we try to
+		// apply parent close policy, leaving child workflow not terminated/cancelled even after parent
+		// workflow is closed. But chance is very small and unlike to happen, so we're not handing it here.
 
-		request := parentclosepolicy.Request{
-			ParentExecution: parentExecution,
-			Executions:      executions,
-		}
-		return t.parentClosePolicyClient.SendParentClosePolicyRequest(ctx, request)
+		// TODO: uncomment the following code in 1.20
+		// Ideally when StartedRunID is empty, we should first fallback to RequestRunID.
+		// However, we have no idea if target/child shard will respect RequestRunID or not
+		// so we can't not use RequestRunID to terminate or cancel
+		//
+		// if childRunID == "" {
+		// 	childRunID = childInfo.RequestRunId
+		// }
+
+		// NOTE: childRunID can still be empty here, in which case we simply apply parent close policy
+		// to the current run of the child workflowID and rely on the ChildWorkflowOnly flag to do the
+		// right thing
+		executions = append(executions, parentclosepolicy.RequestDetail{
+			Namespace:   childInfo.Namespace,
+			NamespaceID: childNamespaceID.String(),
+			WorkflowID:  childInfo.StartedWorkflowId,
+			RunID:       childRunID,
+			Policy:      childInfo.ParentClosePolicy,
+		})
+	}
+	if len(executions) == 0 {
+		return nil
 	}
 
-	for _, childInfo := range childInfos {
-		err := t.applyParentClosePolicy(ctx, &parentExecution, childInfo)
+	if t.shard.GetConfig().EnableParentClosePolicyWorker() &&
+		len(executions) >= t.shard.GetConfig().ParentClosePolicyThreshold(parentNamespaceName) {
+		return t.parentClosePolicyClient.SendParentClosePolicyRequest(ctx, parentclosepolicy.Request{
+			ParentExecution: parentExecution,
+			Executions:      executions,
+		})
+	}
+
+	scope := t.metricsClient.Scope(metrics.TransferActiveTaskCloseExecutionScope)
+	for _, childExecution := range executions {
+		err := t.applyParentClosePolicy(ctx, &parentExecution, &childExecution)
 		switch err.(type) {
 		case nil:
 			scope.IncCounter(metrics.ParentClosePolicyProcessorSuccess)
@@ -1490,34 +1512,26 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	ctx context.Context,
 	parentExecution *commonpb.WorkflowExecution,
-	childInfo *persistencespb.ChildExecutionInfo,
+	childExecution *parentclosepolicy.RequestDetail,
 ) error {
-	switch childInfo.ParentClosePolicy {
+	switch childExecution.Policy {
 	case enumspb.PARENT_CLOSE_POLICY_ABANDON:
 		// noop
 		return nil
 
 	case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
-		childNamespaceID := namespace.ID(childInfo.GetNamespaceId())
-		if childNamespaceID.IsEmpty() {
-			// TODO (alex): Remove after childInfo.NamespaceId is back filled. Backward compatibility: old childInfo doesn't have NamespaceId set.
-			// TODO (alex): consider reverse lookup of namespace name from ID but namespace name is not actually used.
-			var err error
-			childNamespaceID, err = t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
-			if err != nil {
-				return err
-			}
-		}
 		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
-			NamespaceId: childNamespaceID.String(),
+			NamespaceId: childExecution.NamespaceID,
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
-				Namespace: childInfo.GetNamespace(),
+				Namespace: childExecution.Namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: childInfo.GetStartedWorkflowId(),
+					WorkflowId: childExecution.WorkflowID,
 				},
-				// Include StartedRunID as FirstExecutionRunID on the request to allow child to be terminated across runs.
+				// Include runID as FirstExecutionRunID on the request to allow child to be terminated across runs.
 				// If the child does continue as new it still propagates the RunID of first execution.
-				FirstExecutionRunId: childInfo.GetStartedRunId(),
+				// use childInfo.CreateRunID is started runID is empty as child may be started by not recorded
+				// even if parent close policy is not abandon.
+				FirstExecutionRunId: childExecution.RunID,
 				Reason:              "by parent close policy",
 				Identity:            consts.IdentityHistoryService,
 			},
@@ -1527,27 +1541,18 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return err
 
 	case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
-		childNamespaceID := namespace.ID(childInfo.GetNamespaceId())
-		if childNamespaceID.IsEmpty() {
-			// TODO (alex): Remove after childInfo.NamespaceId is back filled. Backward compatibility: old childInfo doesn't have NamespaceId set.
-			// TODO (alex): consider reverse lookup of namespace name from ID but namespace name is not actually used.
-			var err error
-			childNamespaceID, err = t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
-			if err != nil {
-				return err
-			}
-		}
-
 		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
-			NamespaceId: childNamespaceID.String(),
+			NamespaceId: childExecution.NamespaceID,
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-				Namespace: childInfo.GetNamespace(),
+				Namespace: childExecution.Namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: childInfo.GetStartedWorkflowId(),
+					WorkflowId: childExecution.WorkflowID,
 				},
 				// Include StartedRunID as FirstExecutionRunID on the request to allow child to be canceled across runs.
 				// If the child does continue as new it still propagates the RunID of first execution.
-				FirstExecutionRunId: childInfo.GetStartedRunId(),
+				// use childInfo.CreateRunID is started runID is empty as child may be started by not recorded
+				// even if parent close policy is not abandon.
+				FirstExecutionRunId: childExecution.RunID,
 				Identity:            consts.IdentityHistoryService,
 			},
 			ExternalWorkflowExecution: parentExecution,
@@ -1556,7 +1561,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return err
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy))
+		return serviceerror.NewInternal(fmt.Sprintf("unknown parent close policy: %v", childExecution.Policy))
 	}
 }
 
