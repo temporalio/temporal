@@ -28,6 +28,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/server/common/util"
 	"golang.org/x/exp/maps"
 )
 
@@ -89,10 +90,7 @@ func MergeMapOfPayload(
 	if m2 == nil {
 		return maps.Clone(m1)
 	}
-	ret := maps.Clone(m1)
-	if ret == nil {
-		ret = make(map[string]*commonpb.Payload)
-	}
+	ret := util.CloneMapNonNil(m1)
 	for k, v := range m2 {
 		if proto.Equal(v, nilPayload) || proto.Equal(v, emptySlicePayload) {
 			delete(ret, k)
