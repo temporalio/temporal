@@ -580,7 +580,6 @@ func (p *ackMgrImpl) processReplication(
 	switch err.(type) {
 	case nil:
 		if !processTaskIfClosed {
-			// workflow already finished, no need to process the replication task
 			return nil, nil
 		}
 		return action(ms)
