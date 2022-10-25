@@ -40,12 +40,12 @@ import (
 	"golang.org/x/exp/maps"
 
 	"go.temporal.io/server/common/log"
-	ossmetrics "go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (
 	Handler struct {
-		ossmetrics.MetricsHandler
+		metrics.MetricsHandler
 		exporter *prometheus.Exporter
 	}
 
@@ -71,7 +71,7 @@ func MustNewHandler(logger log.Logger) *Handler {
 func NewHandler(logger log.Logger) (*Handler, error) {
 	ctrl := controller.New(
 		processor.NewFactory(
-			ossmetrics.NewOtelAggregatorSelector(nil),
+			metrics.NewOtelAggregatorSelector(nil),
 			aggregation.CumulativeTemporalitySelector(),
 			processor.WithMemory(true),
 		),
@@ -89,8 +89,8 @@ func NewHandler(logger log.Logger) (*Handler, error) {
 	provider := &otelProvider{
 		meter: ctrl.Meter("temporal"),
 	}
-	clientConfig := ossmetrics.ClientConfig{}
-	otelHandler := ossmetrics.NewOtelMetricsHandler(logger, provider, clientConfig)
+	clientConfig := metrics.ClientConfig{}
+	otelHandler := metrics.NewOtelMetricsHandler(logger, provider, clientConfig)
 
 	metricsHandler := &Handler{
 		MetricsHandler: otelHandler,
@@ -150,7 +150,7 @@ func (mh *Handler) MustSnapshot() Snapshot {
 	return s
 }
 
-var _ ossmetrics.OpenTelemetryProvider = (*otelProvider)(nil)
+var _ metrics.OpenTelemetryProvider = (*otelProvider)(nil)
 
 type otelProvider struct {
 	meter metric.Meter
@@ -162,7 +162,7 @@ func (m *otelProvider) GetMeter() metric.Meter {
 
 func (m *otelProvider) Stop(log.Logger) {}
 
-func (s Snapshot) getValue(name string, metricType dto.MetricType, tags ...ossmetrics.Tag) (float64, error) {
+func (s Snapshot) getValue(name string, metricType dto.MetricType, tags ...metrics.Tag) (float64, error) {
 	labelValues := map[string]string{}
 	for _, tag := range tags {
 		labelValues[tag.Key()] = tag.Value()
@@ -180,11 +180,11 @@ func (s Snapshot) getValue(name string, metricType dto.MetricType, tags ...ossme
 	return sample.sampleValue, nil
 }
 
-func (s Snapshot) Counter(name string, tags ...ossmetrics.Tag) (float64, error) {
+func (s Snapshot) Counter(name string, tags ...metrics.Tag) (float64, error) {
 	return s.getValue(name, dto.MetricType_COUNTER, tags...)
 }
 
-func (s Snapshot) MustCounter(name string, tags ...ossmetrics.Tag) float64 {
+func (s Snapshot) MustCounter(name string, tags ...metrics.Tag) float64 {
 	v, err := s.Counter(name, tags...)
 	if err != nil {
 		panic(err)
@@ -192,11 +192,11 @@ func (s Snapshot) MustCounter(name string, tags ...ossmetrics.Tag) float64 {
 	return v
 }
 
-func (s Snapshot) Gauge(name string, tags ...ossmetrics.Tag) (float64, error) {
+func (s Snapshot) Gauge(name string, tags ...metrics.Tag) (float64, error) {
 	return s.getValue(name, dto.MetricType_GAUGE, tags...)
 }
 
-func (s Snapshot) MustGauge(name string, tags ...ossmetrics.Tag) float64 {
+func (s Snapshot) MustGauge(name string, tags ...metrics.Tag) float64 {
 	v, err := s.Gauge(name, tags...)
 	if err != nil {
 		panic(err)

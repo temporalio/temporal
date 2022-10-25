@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.temporal.io/server/common/log"
-	ossmetrics "go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics"
 )
 
 func TestBasic(t *testing.T) {
@@ -38,9 +38,9 @@ func TestBasic(t *testing.T) {
 	handler := MustNewHandler(logger)
 
 	counterName := "counter1"
-	counterTags := []ossmetrics.Tag{
-		ossmetrics.StringTag("l2", "v2"),
-		ossmetrics.StringTag("l1", "v1"),
+	counterTags := []metrics.Tag{
+		metrics.StringTag("l2", "v2"),
+		metrics.StringTag("l1", "v1"),
 	}
 	counter := handler.WithTags(counterTags...).Counter(counterName)
 	counter.Record(1)
@@ -50,9 +50,9 @@ func TestBasic(t *testing.T) {
 	require.Equal(t, float64(2), s1.MustCounter(counterName, counterTags...))
 
 	gaugeName := "gauge1"
-	gaugeTags := []ossmetrics.Tag{
-		ossmetrics.StringTag("l3", "v3"),
-		ossmetrics.StringTag("l4", "v4"),
+	gaugeTags := []metrics.Tag{
+		metrics.StringTag("l3", "v3"),
+		metrics.StringTag("l4", "v4"),
 	}
 	gauge := handler.WithTags(gaugeTags...).Gauge(gaugeName)
 	gauge.Record(-2)
