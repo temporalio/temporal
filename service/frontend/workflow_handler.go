@@ -3727,6 +3727,9 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
 		identity = op.CancellationOperation.GetIdentity()
 		operationType = batcher.BatchTypeCancel
+	case *workflowservice.StartBatchOperationRequest_DeletionOperation:
+		identity = op.DeletionOperation.GetIdentity()
+		operationType = batcher.BatchTypeDelete
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %T is not supported", op))
 	}
@@ -3739,6 +3742,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		TerminateParams: batcher.TerminateParams{},
 		CancelParams:    batcher.CancelParams{},
 		SignalParams:    signalParams,
+		DeleteParams:    batcher.DeleteParams{},
 	}
 	inputPayload, err := sdk.PreferProtoDataConverter.ToPayloads(input)
 	if err != nil {
@@ -3878,6 +3882,8 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		operationType = enumspb.BATCH_OPERATION_TYPE_SIGNAL
 	case batcher.BatchTypeTerminate:
 		operationType = enumspb.BATCH_OPERATION_TYPE_TERMINATE
+	case batcher.BatchTypeDelete:
+		operationType = enumspb.BATCH_OPERATION_TYPE_DELETE
 	default:
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("The operation type %s is not supported", operationTypeString))
 	}
