@@ -827,6 +827,9 @@ const (
 
 	DynamicConfigScope
 
+	// DeadlockDetectorScope is a scope for deadlock detector
+	DeadlockDetectorScope
+
 	NumCommonScopes
 )
 
@@ -1713,7 +1716,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		BlobstoreClientDeleteScope:          {operation: "BlobstoreClientDelete", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientDirectoryExistsScope: {operation: "BlobstoreClientDirectoryExists", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 
-		DynamicConfigScope: {operation: "DynamicConfig"},
+		DynamicConfigScope:    {operation: "DynamicConfig"},
+		DeadlockDetectorScope: {operation: "DeadlockDetector"},
 	},
 	// Frontend Scope Names
 	Frontend: {
@@ -2153,6 +2157,14 @@ const (
 	DeleteNamespaceWorkflowFailuresCount
 
 	NoopImplementationIsUsed
+
+	// timers for deadlock detector
+	ShardControllerLockLatency
+	ShardLockLatency
+	ClusterMetadataLockLatency
+	ClusterMetadataCallbackLockLatency
+	NamespaceRegistryLockLatency
+	NamespaceRegistryCallbackLockLatency
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -2636,6 +2648,13 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ElasticsearchDocumentGenerateFailuresCount:                NewCounterDef("elasticsearch_document_generate_failures_counter"),
 
 		NoopImplementationIsUsed: NewCounterDef("noop_implementation_is_used"),
+
+		ShardControllerLockLatency:           NewTimerDef("shard_controller_lock_latency"),
+		ShardLockLatency:                     NewTimerDef("shard_lock_latency"),
+		ClusterMetadataLockLatency:           NewTimerDef("cluster_metadata_lock_latency"),
+		ClusterMetadataCallbackLockLatency:   NewTimerDef("cluster_metadata_callback_lock_latency"),
+		NamespaceRegistryLockLatency:         NewTimerDef("namespace_registry_lock_latency"),
+		NamespaceRegistryCallbackLockLatency: NewTimerDef("namespace_registry_callback_lock_latency"),
 	},
 	History: {
 		TaskRequests: NewCounterDef("task_requests"),

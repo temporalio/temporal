@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/internal/goro"
 )
@@ -261,6 +262,7 @@ func (m *metadataImpl) GetPingChecks() []common.PingCheck {
 				m.clusterLock.Unlock()
 				return nil
 			},
+			MetricsTimer: metrics.ClusterMetadataLockLatency,
 		},
 		{
 			Name: "cluster metadata callback lock",
@@ -273,6 +275,7 @@ func (m *metadataImpl) GetPingChecks() []common.PingCheck {
 				m.clusterCallbackLock.Unlock()
 				return nil
 			},
+			MetricsTimer: metrics.ClusterMetadataCallbackLockLatency,
 		},
 	}
 }

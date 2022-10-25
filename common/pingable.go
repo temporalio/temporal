@@ -44,5 +44,9 @@ type (
 		// on a mutex, returning nil. Ping can also return more Pingables for sub-components
 		// that will be checked independently. These should form a tree and not lead to cycles.
 		Ping func() []Pingable
+
+		// Metrics recording:
+		// Timer id within DeadlockDetectorScope (or zero for no metrics)
+		MetricsTimer int
 	}
 )

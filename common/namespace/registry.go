@@ -255,6 +255,7 @@ func (r *registry) GetPingChecks() []common.PingCheck {
 				r.cacheLock.Unlock()
 				return nil
 			},
+			MetricsTimer: metrics.NamespaceRegistryLockLatency,
 		},
 		{
 			Name: "namespace registry callback lock",
@@ -266,6 +267,7 @@ func (r *registry) GetPingChecks() []common.PingCheck {
 				r.callbackLock.Unlock()
 				return nil
 			},
+			MetricsTimer: metrics.NamespaceRegistryCallbackLockLatency,
 		},
 	}
 }

@@ -201,6 +201,7 @@ func (s *ContextImpl) GetPingChecks() []common.PingCheck {
 			s.rwLock.Unlock()
 			return nil
 		},
+		MetricsTimer: metrics.ShardLockLatency,
 	}}
 }
 

@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/internal/goro"
 	"go.temporal.io/server/service/history/shard"
@@ -48,9 +49,10 @@ type (
 	params struct {
 		fx.In
 
-		Logger       log.SnTaggedLogger
-		Collection   *dynamicconfig.Collection
-		HealthServer *health.Server
+		Logger        log.SnTaggedLogger
+		Collection    *dynamicconfig.Collection
+		HealthServer  *health.Server
+		MetricsClient metrics.Client
 
 		// root pingables:
 		NamespaceRegistry namespace.Registry
@@ -69,6 +71,7 @@ type (
 	deadlockDetector struct {
 		logger       log.Logger
 		healthServer *health.Server
+		metricsScope metrics.Scope
 		config       config
 		roots        []common.Pingable
 		loops        goro.Group
@@ -93,6 +96,7 @@ func NewDeadlockDetector(params params) *deadlockDetector {
 	return &deadlockDetector{
 		logger:       params.Logger,
 		healthServer: params.HealthServer,
+		metricsScope: params.MetricsClient.Scope(metrics.DeadlockDetectorScope),
 		config: config{
 			DumpGoroutines:    params.Collection.GetBoolProperty(dynamicconfig.DeadlockDumpGoroutines, true),
 			FailHealthCheck:   params.Collection.GetBoolProperty(dynamicconfig.DeadlockFailHealthCheck, true),
@@ -153,6 +157,7 @@ func (dd *deadlockDetector) dumpGoroutines() {
 	}
 	// write it as a single log line with embedded newlines.
 	// the value starts with "goroutine profile: total ...\n" so it should be clear
+	dd.logger.Info("dumping goroutine profile for suspected deadlock")
 	dd.logger.Info(b.String())
 }
 
@@ -176,6 +181,7 @@ func (lc *loopContext) ping(ctx context.Context, pingables []common.Pingable) {
 			select {
 			case lc.ch <- check:
 			case <-ctx.Done():
+				return
 			default:
 				// maybe add another worker if blocked
 				w := atomic.LoadInt32(&lc.workers)
@@ -186,6 +192,7 @@ func (lc *loopContext) ping(ctx context.Context, pingables []common.Pingable) {
 				select {
 				case lc.ch <- check:
 				case <-ctx.Done():
+					return
 				}
 			}
 		}
@@ -203,6 +210,11 @@ func (lc *loopContext) worker(ctx context.Context) error {
 
 		lc.dd.logger.Debug("starting ping check", tag.Name(check.Name))
 
+		var sw metrics.Stopwatch
+		if check.MetricsTimer > 0 {
+			sw = lc.dd.metricsScope.StartTimer(check.MetricsTimer)
+		}
+
 		// Using AfterFunc is cheaper than creating another goroutine to be the waiter, since
 		// we expect to always cancel it. If the go runtime is so messed up that it can't
 		// create a goroutine, that's a bigger problem than we can handle.
@@ -215,6 +227,9 @@ func (lc *loopContext) worker(ctx context.Context) error {
 		})
 		newPingables := check.Ping()
 		t.Stop()
+		if sw != nil {
+			sw.Stop()
+		}
 
 		lc.dd.logger.Debug("ping check succeeded", tag.Name(check.Name))
 
