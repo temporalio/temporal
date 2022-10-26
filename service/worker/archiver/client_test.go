@@ -34,6 +34,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/multierr"
 
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -45,6 +46,8 @@ import (
 )
 
 type clientSuite struct {
+	skipRetrySignal bool
+
 	*require.Assertions
 	suite.Suite
 
@@ -61,7 +64,16 @@ type clientSuite struct {
 }
 
 func TestClientSuite(t *testing.T) {
-	suite.Run(t, new(clientSuite))
+	// run the same testing suite with two options
+	t.Run("SignalArchivalWorkflowOnFailure", func(t *testing.T) {
+		// in this case, we will send a signal to the archival workflow for each target we failed to archive inline
+		suite.Run(t, &clientSuite{skipRetrySignal: false})
+	})
+	t.Run("DoNothingOnFailure", func(t *testing.T) {
+		// in this case, for each target we failed to archive, we'll just add it to the returned error, but we won't
+		// retry anything.
+		suite.Run(t, &clientSuite{skipRetrySignal: true})
+	})
 }
 
 func (s *clientSuite) SetupTest() {
@@ -104,6 +116,7 @@ func (s *clientSuite) TestArchiveVisibilityInlineSuccess() {
 			Targets:       []ArchivalTarget{ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
+		SkipRetrySignal:      s.skipRetrySignal,
 	})
 	s.NoError(err)
 	s.NotNil(resp)
@@ -116,9 +129,11 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalSuccess() {
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveFailureCount)
-	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
-	s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestOneTarget(ArchiveTargetVisibility),
-		gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	if !s.skipRetrySignal {
+		s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
+		s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestOneTarget(ArchiveTargetVisibility),
+			gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	}
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
@@ -126,10 +141,17 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalSuccess() {
 			Targets:       []ArchivalTarget{ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
+		SkipRetrySignal:      s.skipRetrySignal,
 	})
-	s.NoError(err)
-	s.NotNil(resp)
-	s.False(resp.HistoryArchivedInline)
+	if s.skipRetrySignal {
+		errs := multierr.Errors(err)
+		s.Len(errs, 1)
+		s.ErrorContains(errs[0], "some random error")
+	} else {
+		s.NoError(err)
+		s.NotNil(resp)
+		s.False(resp.HistoryArchivedInline)
+	}
 }
 
 func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalFail() {
@@ -138,10 +160,12 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalFail() {
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveFailureCount)
-	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
-	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalFailureCount)
-	s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestOneTarget(ArchiveTargetVisibility),
-		gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
+	if !s.skipRetrySignal {
+		s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
+		s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalFailureCount)
+		s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestOneTarget(ArchiveTargetVisibility),
+			gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
+	}
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
@@ -149,9 +173,16 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalFail() {
 			Targets:       []ArchivalTarget{ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
+		SkipRetrySignal:      s.skipRetrySignal,
 	})
-	s.Error(err)
-	s.Nil(resp)
+	if s.skipRetrySignal {
+		errs := multierr.Errors(err)
+		s.Len(errs, 1)
+		s.ErrorContains(errs[0], "some random error")
+	} else {
+		s.Error(err)
+		s.Nil(resp)
+	}
 }
 
 func (s *clientSuite) TestArchiveHistoryInlineSuccess() {
@@ -165,6 +196,7 @@ func (s *clientSuite) TestArchiveHistoryInlineSuccess() {
 			Targets:    []ArchivalTarget{ArchiveTargetHistory},
 		},
 		AttemptArchiveInline: true,
+		SkipRetrySignal:      s.skipRetrySignal,
 	})
 	s.NoError(err)
 	s.NotNil(resp)
@@ -177,9 +209,11 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalSuccess() {
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveFailureCount)
-	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
-	s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestOneTarget(ArchiveTargetHistory),
-		gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	if !s.skipRetrySignal {
+		s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
+		s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestOneTarget(ArchiveTargetHistory),
+			gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	}
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
@@ -187,10 +221,17 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalSuccess() {
 			Targets:    []ArchivalTarget{ArchiveTargetHistory},
 		},
 		AttemptArchiveInline: true,
+		SkipRetrySignal:      s.skipRetrySignal,
 	})
-	s.NoError(err)
-	s.NotNil(resp)
-	s.False(resp.HistoryArchivedInline)
+	if s.skipRetrySignal {
+		errs := multierr.Errors(err)
+		s.Len(errs, 1)
+		s.ErrorContains(errs[0], "some random error")
+	} else {
+		s.NoError(err)
+		s.NotNil(resp)
+		s.False(resp.HistoryArchivedInline)
+	}
 }
 
 func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalFail() {
@@ -199,10 +240,12 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalFail() {
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveFailureCount)
-	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
-	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalFailureCount)
-	s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestOneTarget(ArchiveTargetHistory),
-		gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
+	if !s.skipRetrySignal {
+		s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
+		s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalFailureCount)
+		s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestOneTarget(ArchiveTargetHistory),
+			gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
+	}
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
@@ -210,9 +253,16 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalFail() {
 			Targets:    []ArchivalTarget{ArchiveTargetHistory},
 		},
 		AttemptArchiveInline: true,
+		SkipRetrySignal:      s.skipRetrySignal,
 	})
-	s.Error(err)
-	s.Nil(resp)
+	if s.skipRetrySignal {
+		errs := multierr.Errors(err)
+		s.Len(errs, 1)
+		s.ErrorContains(errs[0], "some random error")
+	} else {
+		s.Error(err)
+		s.Nil(resp)
+	}
 }
 
 func (s *clientSuite) TestArchiveInline_HistoryFail_VisibilitySuccess() {
@@ -225,9 +275,11 @@ func (s *clientSuite) TestArchiveInline_HistoryFail_VisibilitySuccess() {
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveFailureCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
-	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
-	s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestOneTarget(ArchiveTargetHistory),
-		gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	if !s.skipRetrySignal {
+		s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
+		s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestOneTarget(ArchiveTargetHistory),
+			gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	}
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
@@ -236,10 +288,17 @@ func (s *clientSuite) TestArchiveInline_HistoryFail_VisibilitySuccess() {
 			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
+		SkipRetrySignal:      s.skipRetrySignal,
 	})
-	s.NoError(err)
-	s.NotNil(resp)
-	s.False(resp.HistoryArchivedInline)
+	if s.skipRetrySignal {
+		errs := multierr.Errors(err)
+		s.Len(errs, 1)
+		s.ErrorContains(errs[0], "some random error")
+	} else {
+		s.NoError(err)
+		s.NotNil(resp)
+		s.False(resp.HistoryArchivedInline)
+	}
 }
 
 func (s *clientSuite) TestArchiveInline_VisibilityFail_HistorySuccess() {
@@ -252,9 +311,11 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistorySuccess() {
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveFailureCount)
-	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
-	s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestOneTarget(ArchiveTargetVisibility),
-		gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	if !s.skipRetrySignal {
+		s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
+		s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestOneTarget(ArchiveTargetVisibility),
+			gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	}
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
@@ -263,26 +324,37 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistorySuccess() {
 			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
+		SkipRetrySignal:      s.skipRetrySignal,
 	})
-	s.NoError(err)
-	s.NotNil(resp)
-	s.True(resp.HistoryArchivedInline)
+	if s.skipRetrySignal {
+		errs := multierr.Errors(err)
+		s.Len(errs, 1)
+		s.ErrorContains(errs[0], "some random error")
+	} else {
+		s.NoError(err)
+		s.NotNil(resp)
+		s.True(resp.HistoryArchivedInline)
+	}
 }
 
 func (s *clientSuite) TestArchiveInline_VisibilityFail_HistoryFail() {
 	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil)
 	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil)
-	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error"))
-	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error"))
+	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(),
+		gomock.Any()).Return(errors.New("random error 1"))
+	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(),
+		gomock.Any()).Return(errors.New("random error 2"))
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveFailureCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveFailureCount)
-	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
-	s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestBothTargets{},
-		gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	if !s.skipRetrySignal {
+		s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
+		s.sdkClient.EXPECT().SignalWithStartWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), archiveRequestBothTargets{},
+			gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	}
 
 	resp, err := s.client.Archive(context.Background(), &ClientRequest{
 		ArchiveRequest: &ArchiveRequest{
@@ -291,10 +363,18 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistoryFail() {
 			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
+		SkipRetrySignal:      s.skipRetrySignal,
 	})
-	s.NoError(err)
-	s.NotNil(resp)
-	s.False(resp.HistoryArchivedInline)
+	if s.skipRetrySignal {
+		errs := multierr.Errors(err)
+		s.Len(errs, 2)
+		s.ErrorContains(err, "random error 1")
+		s.ErrorContains(err, "random error 2")
+	} else {
+		s.NoError(err)
+		s.NotNil(resp)
+		s.False(resp.HistoryArchivedInline)
+	}
 }
 
 func (s *clientSuite) TestArchiveInline_VisibilitySuccess_HistorySuccess() {
@@ -314,6 +394,7 @@ func (s *clientSuite) TestArchiveInline_VisibilitySuccess_HistorySuccess() {
 			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: true,
+		SkipRetrySignal:      s.skipRetrySignal,
 	})
 	s.NoError(err)
 	s.NotNil(resp)
@@ -334,6 +415,7 @@ func (s *clientSuite) TestArchiveSendSignal_Success() {
 			Targets:       []ArchivalTarget{ArchiveTargetHistory, ArchiveTargetVisibility},
 		},
 		AttemptArchiveInline: false,
+		SkipRetrySignal:      s.skipRetrySignal,
 	})
 	s.NoError(err)
 	s.NotNil(resp)
@@ -346,6 +428,7 @@ func (s *clientSuite) TestArchiveUnknownTarget() {
 			Targets: []ArchivalTarget{3},
 		},
 		AttemptArchiveInline: true,
+		SkipRetrySignal:      s.skipRetrySignal,
 	})
 	s.NoError(err)
 	s.NotNil(resp)

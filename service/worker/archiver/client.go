@@ -36,6 +36,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.uber.org/multierr"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -56,6 +57,11 @@ type (
 		ArchiveRequest       *ArchiveRequest
 		CallerService        string
 		AttemptArchiveInline bool
+		// SkipRetrySignal will skip sending a signal to the archival workflow to retry archival if the inline attempt
+		// fails. Note that this does nothing if AttemptArchiveInline is false. We will set this to true for durable
+		// archival because the archival queue handles retries, and then we can  remove this condition when the old
+		// behavior is deleted.
+		SkipRetrySignal bool
 	}
 
 	// ClientResponse is the archive response returned from the archiver client
@@ -178,12 +184,20 @@ func (c *client) Archive(ctx context.Context, request *ClientRequest) (*ClientRe
 		}
 
 		targets := []ArchivalTarget{}
+		// errs is a multierr containing the errors from each target we failed to archive
+		var errs error
 		for i, target := range request.ArchiveRequest.Targets {
-			if <-results[i] != nil {
+			if err := <-results[i]; err != nil {
 				targets = append(targets, target)
+				errs = multierr.Combine(errs, err)
 			} else if target == ArchiveTargetHistory {
 				resp.HistoryArchivedInline = true
 			}
+		}
+		// if this option is on, then we can just return here because we aren't responsible for retrying failures in
+		// this block of code.
+		if request.SkipRetrySignal {
+			return resp, errs
 		}
 		request.ArchiveRequest.Targets = targets
 	}
