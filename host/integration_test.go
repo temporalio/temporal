@@ -35,23 +35,27 @@ import (
 )
 
 type (
-	integrationSuite struct {
+	baseIntegrationSuite struct {
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
 		IntegrationBase
 	}
+
+	integrationSuite struct {
+		baseIntegrationSuite
+	}
 )
 
-func (s *integrationSuite) SetupSuite() {
+func (s *baseIntegrationSuite) SetupSuite() {
 	s.setupSuite("testdata/integration_test_cluster.yaml")
 }
 
-func (s *integrationSuite) TearDownSuite() {
+func (s *baseIntegrationSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-func (s *integrationSuite) SetupTest() {
+func (s *baseIntegrationSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }
@@ -61,7 +65,7 @@ func TestIntegrationSuite(t *testing.T) {
 	suite.Run(t, new(integrationSuite))
 }
 
-func (s *integrationSuite) sendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
+func (s *baseIntegrationSuite) sendSignal(namespace string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
 	_, err := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         namespace,
