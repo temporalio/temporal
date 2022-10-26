@@ -191,9 +191,11 @@ func ExecutionsScavengerActivity(
 		ctx.cfg.ExecutionScannerPerHostQPS,
 		ctx.cfg.ExecutionScannerPerShardQPS,
 		ctx.cfg.ExecutionDataDurationBuffer,
+		ctx.cfg.ExecutionScannerWorkerCount,
 		ctx.executionManager,
 		ctx.namespaceRegistry,
 		ctx.historyClient,
+		ctx.adminClient,
 		metricsClient,
 		ctx.logger,
 	)
