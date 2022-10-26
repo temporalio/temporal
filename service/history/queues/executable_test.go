@@ -155,6 +155,14 @@ func (s *executableSuite) TestHandleErr_ErrTaskDiscarded() {
 	s.NoError(executable.HandleErr(consts.ErrTaskDiscarded))
 }
 
+func (s *executableSuite) TestHandleErr_ErrTaskVersionMismatch() {
+	executable := s.newTestExecutable(func(_ tasks.Task) bool {
+		return true
+	})
+
+	s.NoError(executable.HandleErr(consts.ErrTaskVersionMismatch))
+}
+
 func (s *executableSuite) TestHandleErr_NamespaceNotActiveError() {
 	now := time.Now().UTC()
 	err := serviceerror.NewNamespaceNotActive("", "", "")

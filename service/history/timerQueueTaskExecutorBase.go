@@ -130,8 +130,8 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	if ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); !ok {
-		return nil
+	if err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); err != nil {
+		return err
 	}
 
 	return t.deleteManager.DeleteWorkflowExecutionByRetention(
