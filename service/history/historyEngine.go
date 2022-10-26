@@ -181,7 +181,7 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
 	for _, factory := range queueProcessorFactories {
-		processor := factory.CreateQueue(shard, historyEngImpl, workflowCache)
+		processor := factory.CreateQueue(shard, workflowCache)
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 

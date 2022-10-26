@@ -2463,9 +2463,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockMutableState.EXPECT().GetNamespaceEntry().Return(namespaceEntry).AnyTimes()
 
 			mockWorkflowContext := workflow.NewMockContext(ctrl)
-			mockWorkflowContext.EXPECT().GetNamespaceID().Return(namespace.ID(workflowKey.NamespaceID)).AnyTimes()
-			mockWorkflowContext.EXPECT().GetWorkflowID().Return(workflowKey.WorkflowID).AnyTimes()
-			mockWorkflowContext.EXPECT().GetRunID().Return(workflowKey.RunID).AnyTimes()
+			mockWorkflowContext.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
 			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 
 			mockWorkflowCache := workflow.NewMockCache(ctrl)

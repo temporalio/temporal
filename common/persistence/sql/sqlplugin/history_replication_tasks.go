@@ -56,6 +56,7 @@ type (
 
 	// HistoryReplicationTask is the SQL persistence interface for history replication tasks
 	HistoryReplicationTask interface {
+		// InsertIntoReplicationTasks inserts rows that into replication_tasks table.
 		InsertIntoReplicationTasks(ctx context.Context, rows []ReplicationTasksRow) (sql.Result, error)
 		// SelectFromReplicationTasks returns one or more rows from replication_tasks table
 		SelectFromReplicationTasks(ctx context.Context, filter ReplicationTasksFilter) ([]ReplicationTasksRow, error)

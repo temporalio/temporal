@@ -41,7 +41,7 @@ type Timestamp struct {
 }
 
 // TimestampFromProto returns a Timestamp from proto time
-//noinspection GoNameStartsWithPackageName
+// noinspection GoNameStartsWithPackageName
 func TimestampFromProto(ts *types.Timestamp) *Timestamp {
 	// todo: should we validate against proto min/max time here?
 	return &Timestamp{
@@ -53,7 +53,7 @@ func TimestampFromProto(ts *types.Timestamp) *Timestamp {
 }
 
 // TimestampFromTimePtr returns a Timestamp from a time.time
-//noinspection GoNameStartsWithPackageName
+// noinspection GoNameStartsWithPackageName
 func TimestampFromTime(t time.Time) *Timestamp {
 	// todo: should we validate against proto min/max time here?
 	c := time.Unix(0, t.UnixNano()).UTC()
@@ -63,7 +63,7 @@ func TimestampFromTime(t time.Time) *Timestamp {
 }
 
 // TimestampFromTimePtr returns a Timestamp from a time.time
-//noinspection GoNameStartsWithPackageName
+// noinspection GoNameStartsWithPackageName
 func TimestampFromTimePtr(t *time.Time) *Timestamp {
 	// todo: should we validate against proto min/max time here?
 	c := time.Unix(0, t.UnixNano()).UTC()
@@ -73,7 +73,7 @@ func TimestampFromTimePtr(t *time.Time) *Timestamp {
 }
 
 // TimestampNow returns a timestamp that represents Now()
-//noinspection GoNameStartsWithPackageName
+// noinspection GoNameStartsWithPackageName
 func TimestampNow() *Timestamp {
 	return &Timestamp{
 		protoTime: types.TimestampNow(),
@@ -81,7 +81,7 @@ func TimestampNow() *Timestamp {
 }
 
 // TimestampNowAddSeconds returns a timestamp that represents Now() + some number of seconds
-//noinspection GoNameStartsWithPackageName
+// noinspection GoNameStartsWithPackageName
 func TimestampNowAddSeconds(seconds int64) *Timestamp {
 	t := TimestampNow()
 	t.protoTime.Seconds += seconds
@@ -89,14 +89,14 @@ func TimestampNowAddSeconds(seconds int64) *Timestamp {
 }
 
 // TimestampEpoch returns the unix epoch -TimestampFromTime(time.Unix(0, 0)).UTC()
-//noinspection GoNameStartsWithPackageName
+// noinspection GoNameStartsWithPackageName
 func TimestampEpoch() *Timestamp {
 	epoch := time.Unix(0, 0).UTC()
 	return TimestampFromTimePtr(&epoch)
 }
 
 // ToProto returns the proto representation
-//noinspection GoReceiverNames
+// noinspection GoReceiverNames
 func (t *Timestamp) ToProto() *types.Timestamp {
 	if t.protoTime != nil {
 		return t.protoTime
@@ -107,7 +107,7 @@ func (t *Timestamp) ToProto() *types.Timestamp {
 }
 
 // ToTime returns the time.time representation
-//noinspection GoReceiverNames
+// noinspection GoReceiverNames
 func (t *Timestamp) ToTime() *time.Time {
 	if t.goTime != nil {
 		return t.goTime
@@ -118,7 +118,7 @@ func (t *Timestamp) ToTime() *time.Time {
 }
 
 // Before returns true when t1 is after t2, false otherwise
-//noinspection GoReceiverNames
+// noinspection GoReceiverNames
 func (t1 *Timestamp) After(t2 *Timestamp) bool {
 	if t1.goTime != nil && t2.goTime != nil {
 		// both go time
@@ -130,7 +130,7 @@ func (t1 *Timestamp) After(t2 *Timestamp) bool {
 }
 
 // Before returns true when t1 is before t2, false otherwise
-//noinspection GoReceiverNames
+// noinspection GoReceiverNames
 func (t1 *Timestamp) Before(t2 *Timestamp) bool {
 	if t1.goTime != nil && t2.goTime != nil {
 		// both go time
@@ -142,7 +142,7 @@ func (t1 *Timestamp) Before(t2 *Timestamp) bool {
 }
 
 // SamesAs returns true when t1 is the same time as t2, false otherwise
-//noinspection GoReceiverNames
+// noinspection GoReceiverNames
 func (t1 *Timestamp) SameAs(t2 *Timestamp) bool {
 	if t1.goTime != nil && t2.goTime != nil {
 		// both go time
@@ -154,7 +154,7 @@ func (t1 *Timestamp) SameAs(t2 *Timestamp) bool {
 }
 
 // UnixNano returns the int64 representation of nanoseconds since 1970 (see time.UnixNano)
-//noinspection GoReceiverNames
+// noinspection GoReceiverNames
 func (t *Timestamp) UnixNano() int64 {
 	if t.goTime != nil {
 		return t.goTime.UnixNano()

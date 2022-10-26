@@ -83,7 +83,7 @@ type (
 	scannerContext struct {
 		cfg               *Config
 		logger            log.Logger
-		sdkSystemClient   sdkclient.Client
+		sdkClientFactory  sdk.ClientFactory
 		metricsClient     metrics.Client
 		executionManager  persistence.ExecutionManager
 		taskManager       persistence.TaskManager
@@ -109,7 +109,7 @@ type (
 func New(
 	logger log.Logger,
 	cfg *Config,
-	sdkSystemClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	metricsClient metrics.Client,
 	executionManager persistence.ExecutionManager,
 	taskManager persistence.TaskManager,
@@ -120,7 +120,7 @@ func New(
 	return &Scanner{
 		context: scannerContext{
 			cfg:               cfg,
-			sdkSystemClient:   sdkSystemClient,
+			sdkClientFactory:  sdkClientFactory,
 			logger:            logger,
 			metricsClient:     metricsClient,
 			executionManager:  executionManager,
@@ -166,7 +166,7 @@ func (s *Scanner) Start() error {
 	}
 
 	for _, tl := range workerTaskQueueNames {
-		work := s.context.workerFactory.New(s.context.sdkSystemClient, tl, workerOpts)
+		work := s.context.workerFactory.New(s.context.sdkClientFactory.GetSystemClient(), tl, workerOpts)
 
 		work.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tqScannerWFTypeName})
 		work.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
@@ -198,7 +198,7 @@ func (s *Scanner) startWorkflowWithRetry(
 		WithMaximumInterval(time.Minute).
 		WithExpirationInterval(backoff.NoInterval)
 	err := backoff.ThrottleRetry(func() error {
-		return s.startWorkflow(s.context.sdkSystemClient, options, workflowType, workflowArgs...)
+		return s.startWorkflow(s.context.sdkClientFactory.GetSystemClient(), options, workflowType, workflowArgs...)
 	}, policy, func(err error) bool {
 		return true
 	})

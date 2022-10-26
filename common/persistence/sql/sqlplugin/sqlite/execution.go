@@ -85,6 +85,32 @@ namespace_id = :namespace_id AND
 workflow_id = :workflow_id
 `
 
+	createHistoryImmediateTasksQuery = `INSERT INTO history_immediate_tasks(shard_id, category_id, task_id, data, data_encoding) 
+ VALUES(:shard_id, :category_id, :task_id, :data, :data_encoding)`
+
+	getHistoryImmediateTaskQuery = `SELECT task_id, data, data_encoding 
+ FROM history_immediate_tasks WHERE shard_id = ? AND category_id = ? AND task_id = ?`
+	getHistoryImmediateTasksQuery = `SELECT task_id, data, data_encoding 
+ FROM history_immediate_tasks WHERE shard_id = ? AND category_id = ? AND task_id >= ? AND task_id < ? ORDER BY task_id LIMIT ?`
+
+	deleteHistoryImmediateTaskQuery       = `DELETE FROM history_immediate_tasks WHERE shard_id = ? AND category_id = ? AND task_id = ?`
+	rangeDeleteHistoryImmediateTasksQuery = `DELETE FROM history_immediate_tasks WHERE shard_id = ? AND category_id = ? AND task_id >= ? AND task_id < ?`
+
+	createHistoryScheduledTasksQuery = `INSERT INTO history_scheduled_tasks (shard_id, category_id, visibility_timestamp, task_id, data, data_encoding)
+  VALUES (:shard_id, :category_id, :visibility_timestamp, :task_id, :data, :data_encoding)`
+
+	getHistoryScheduledTaskQuery = `SELECT visibility_timestamp, task_id, data, data_encoding FROM history_scheduled_tasks 
+  WHERE shard_id = ? AND category_id = ? AND visibility_timestamp = ? AND task_id = ?`
+	getHistoryScheduledTasksQuery = `SELECT visibility_timestamp, task_id, data, data_encoding FROM history_scheduled_tasks 
+  WHERE shard_id = ? 
+  AND category_id = ? 
+  AND ((visibility_timestamp >= ? AND task_id >= ?) OR visibility_timestamp > ?) 
+  AND visibility_timestamp < ?
+  ORDER BY visibility_timestamp,task_id LIMIT ?`
+
+	deleteHistoryScheduledTaskQuery       = `DELETE FROM history_scheduled_tasks WHERE shard_id = ? AND category_id = ? AND visibility_timestamp = ? AND task_id = ?`
+	rangeDeleteHistoryScheduledTasksQuery = `DELETE FROM history_scheduled_tasks WHERE shard_id = ? AND category_id = ? AND visibility_timestamp >= ? AND visibility_timestamp < ?`
+
 	createTransferTasksQuery = `INSERT INTO transfer_tasks(shard_id, task_id, data, data_encoding) 
  VALUES(:shard_id, :task_id, :data, :data_encoding)`
 
@@ -350,6 +376,179 @@ func (mdb *db) LockCurrentExecutionsJoinExecutions(
 		filter.WorkflowID,
 	)
 	return rows, err
+}
+
+// InsertIntoHistoryImmediateTasks inserts one or more rows into history_immediate_tasks table
+func (mdb *db) InsertIntoHistoryImmediateTasks(
+	ctx context.Context,
+	rows []sqlplugin.HistoryImmediateTasksRow,
+) (sql.Result, error) {
+	return mdb.conn.NamedExecContext(ctx,
+		createHistoryImmediateTasksQuery,
+		rows,
+	)
+}
+
+// SelectFromHistoryImmediateTasks reads one or more rows from transfer_tasks table
+func (mdb *db) SelectFromHistoryImmediateTasks(
+	ctx context.Context,
+	filter sqlplugin.HistoryImmediateTasksFilter,
+) ([]sqlplugin.HistoryImmediateTasksRow, error) {
+	var rows []sqlplugin.HistoryImmediateTasksRow
+	if err := mdb.conn.SelectContext(ctx,
+		&rows,
+		getHistoryImmediateTaskQuery,
+		filter.ShardID,
+		filter.CategoryID,
+		filter.TaskID,
+	); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// RangeSelectFromHistoryImmediateTasks reads one or more rows from transfer_tasks table
+func (mdb *db) RangeSelectFromHistoryImmediateTasks(
+	ctx context.Context,
+	filter sqlplugin.HistoryImmediateTasksRangeFilter,
+) ([]sqlplugin.HistoryImmediateTasksRow, error) {
+	var rows []sqlplugin.HistoryImmediateTasksRow
+	if err := mdb.conn.SelectContext(ctx,
+		&rows,
+		getHistoryImmediateTasksQuery,
+		filter.ShardID,
+		filter.CategoryID,
+		filter.InclusiveMinTaskID,
+		filter.ExclusiveMaxTaskID,
+		filter.PageSize,
+	); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// DeleteFromHistoryImmediateTasks deletes one or more rows from transfer_tasks table
+func (mdb *db) DeleteFromHistoryImmediateTasks(
+	ctx context.Context,
+	filter sqlplugin.HistoryImmediateTasksFilter,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		deleteHistoryImmediateTaskQuery,
+		filter.ShardID,
+		filter.CategoryID,
+		filter.TaskID,
+	)
+}
+
+// RangeDeleteFromHistoryImmediateTasks deletes one or more rows from transfer_tasks table
+func (mdb *db) RangeDeleteFromHistoryImmediateTasks(
+	ctx context.Context,
+	filter sqlplugin.HistoryImmediateTasksRangeFilter,
+) (sql.Result, error) {
+	return mdb.conn.ExecContext(ctx,
+		rangeDeleteHistoryImmediateTasksQuery,
+		filter.ShardID,
+		filter.CategoryID,
+		filter.InclusiveMinTaskID,
+		filter.ExclusiveMaxTaskID,
+	)
+}
+
+// InsertIntoHistoryScheduledTasks inserts one or more rows into timer_tasks table
+func (mdb *db) InsertIntoHistoryScheduledTasks(
+	ctx context.Context,
+	rows []sqlplugin.HistoryScheduledTasksRow,
+) (sql.Result, error) {
+	for i := range rows {
+		rows[i].VisibilityTimestamp = mdb.converter.ToSQLiteDateTime(rows[i].VisibilityTimestamp)
+	}
+	return mdb.conn.NamedExecContext(
+		ctx,
+		createHistoryScheduledTasksQuery,
+		rows,
+	)
+}
+
+// SelectFromHistoryScheduledTasks reads one or more rows from timer_tasks table
+func (mdb *db) SelectFromHistoryScheduledTasks(
+	ctx context.Context,
+	filter sqlplugin.HistoryScheduledTasksFilter,
+) ([]sqlplugin.HistoryScheduledTasksRow, error) {
+	var rows []sqlplugin.HistoryScheduledTasksRow
+	filter.VisibilityTimestamp = mdb.converter.ToSQLiteDateTime(filter.VisibilityTimestamp)
+	err := mdb.conn.SelectContext(ctx,
+		&rows,
+		getHistoryScheduledTaskQuery,
+		filter.ShardID,
+		filter.CategoryID,
+		filter.VisibilityTimestamp,
+		filter.TaskID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		rows[i].VisibilityTimestamp = mdb.converter.ToSQLiteDateTime(rows[i].VisibilityTimestamp)
+	}
+	return rows, nil
+}
+
+// RangeSelectFromHistoryScheduledTasks reads one or more rows from timer_tasks table
+func (mdb *db) RangeSelectFromHistoryScheduledTasks(
+	ctx context.Context,
+	filter sqlplugin.HistoryScheduledTasksRangeFilter,
+) ([]sqlplugin.HistoryScheduledTasksRow, error) {
+	var rows []sqlplugin.HistoryScheduledTasksRow
+	filter.InclusiveMinVisibilityTimestamp = mdb.converter.ToSQLiteDateTime(filter.InclusiveMinVisibilityTimestamp)
+	filter.ExclusiveMaxVisibilityTimestamp = mdb.converter.ToSQLiteDateTime(filter.ExclusiveMaxVisibilityTimestamp)
+	if err := mdb.conn.SelectContext(ctx,
+		&rows,
+		getHistoryScheduledTasksQuery,
+		filter.ShardID,
+		filter.CategoryID,
+		filter.InclusiveMinVisibilityTimestamp,
+		filter.InclusiveMinTaskID,
+		filter.InclusiveMinVisibilityTimestamp,
+		filter.ExclusiveMaxVisibilityTimestamp,
+		filter.PageSize,
+	); err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		rows[i].VisibilityTimestamp = mdb.converter.ToSQLiteDateTime(rows[i].VisibilityTimestamp)
+	}
+	return rows, nil
+}
+
+// DeleteFromHistoryScheduledTasks deletes one or more rows from timer_tasks table
+func (mdb *db) DeleteFromHistoryScheduledTasks(
+	ctx context.Context,
+	filter sqlplugin.HistoryScheduledTasksFilter,
+) (sql.Result, error) {
+	filter.VisibilityTimestamp = mdb.converter.ToSQLiteDateTime(filter.VisibilityTimestamp)
+	return mdb.conn.ExecContext(ctx,
+		deleteHistoryScheduledTaskQuery,
+		filter.ShardID,
+		filter.CategoryID,
+		filter.VisibilityTimestamp,
+		filter.TaskID,
+	)
+}
+
+// RangeDeleteFromHistoryScheduledTasks deletes one or more rows from timer_tasks table
+func (mdb *db) RangeDeleteFromHistoryScheduledTasks(
+	ctx context.Context,
+	filter sqlplugin.HistoryScheduledTasksRangeFilter,
+) (sql.Result, error) {
+	filter.InclusiveMinVisibilityTimestamp = mdb.converter.ToSQLiteDateTime(filter.InclusiveMinVisibilityTimestamp)
+	filter.ExclusiveMaxVisibilityTimestamp = mdb.converter.ToSQLiteDateTime(filter.ExclusiveMaxVisibilityTimestamp)
+	return mdb.conn.ExecContext(ctx,
+		rangeDeleteHistoryScheduledTasksQuery,
+		filter.ShardID,
+		filter.CategoryID,
+		filter.InclusiveMinVisibilityTimestamp,
+		filter.ExclusiveMaxVisibilityTimestamp,
+	)
 }
 
 // InsertIntoTransferTasks inserts one or more rows into transfer_tasks table

@@ -2632,7 +2632,7 @@ func (m *VerifyFirstWorkflowTaskScheduledResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_VerifyFirstWorkflowTaskScheduledResponse proto.InternalMessageInfo
 
-//*
+// *
 // RecordChildExecutionCompletedRequest is used for reporting the completion of child execution to parent workflow
 // execution which started it.  When a child execution is completed it creates this request and calls the
 // RecordChildExecutionCompleted API with the workflowExecution of parent.  It also sets the completedExecution of the
@@ -5321,7 +5321,8 @@ func (m *DeleteWorkflowVisibilityRecordResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_DeleteWorkflowVisibilityRecordResponse proto.InternalMessageInfo
 
 // (-- api-linter: core::0134=disabled
-//     aip.dev/not-precedent: This service does not follow the update method AIP --)
+//
+//	aip.dev/not-precedent: This service does not follow the update method AIP --)
 type UpdateWorkflowRequest struct {
 	NamespaceId string                    `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	Request     *v1.UpdateWorkflowRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`

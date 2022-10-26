@@ -6,7 +6,7 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 ## Prerequisites
 
 ### Build prerequisites 
-* [Go Lang](https://golang.org/) (minimum version required is 1.18):
+* [Go Lang](https://golang.org/) (minimum version required is 1.19):
   - Install on macOS with `brew install go`.
   - Install on Ubuntu with `sudo apt install golang`.
 * [Protocol buffers compiler](https://github.com/protocolbuffers/protobuf/) (only if you are going to change `proto` files):
@@ -108,7 +108,7 @@ Now you can create default namespace with `tctl`:
 ```bash
 tctl --namespace default namespace register
 ```
-and run samples from [Go](https://github.com/temporalio/samples-go) and [Java](https://github.com/temporalio/samples-java) samples repos. Also, you can access web UI at `localhost:8088`.
+and run samples from [Go](https://github.com/temporalio/samples-go) and [Java](https://github.com/temporalio/samples-java) samples repos. Also, you can access web UI at `localhost:8080`.
 
 When you are done, press `Ctrl+C` to stop the server. Don't forget to stop dependencies (with `Ctrl+C`) and clean up resources:
 ```bash
