@@ -77,6 +77,13 @@ func mkExistingDefault(id string) *workflowservice.UpdateWorkerBuildIdOrderingRe
 		},
 	}
 }
+func mkPromoteInSet(id string) *workflowservice.UpdateWorkerBuildIdOrderingRequest {
+	return &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+		Operation: &workflowservice.UpdateWorkerBuildIdOrderingRequest_PromoteVersionIdWithinSet{
+			PromoteVersionIdWithinSet: id,
+		},
+	}
+}
 
 func TestNewDefaultUpdate(t *testing.T) {
 	data := mkInitialData(2)
@@ -236,4 +243,48 @@ func TestLimitsMaxSize(t *testing.T) {
 	for i := 0; i < len(data.VersionSets); i++ {
 		assert.Equal(t, fmt.Sprintf("%d", i+10), data.VersionSets[i].Versions[0])
 	}
+}
+
+func TestPromoteWithinVersion(t *testing.T) {
+	data := mkInitialData(3)
+
+	for i := 1; i <= 5; i++ {
+		req := mkNewCompatReq(fmt.Sprintf("0.%d", i), "0", false)
+		err := UpdateVersionsGraph(data, req, 0)
+		assert.NoError(t, err)
+	}
+
+	req := mkPromoteInSet("0.1")
+	err := UpdateVersionsGraph(data, req, 0)
+	assert.NoError(t, err)
+
+	curd := data.VersionSets[0].Versions[len(data.VersionSets[0].Versions)-1]
+	assert.Equal(t, "0.1", curd)
+}
+
+func TestAddAlreadyExtantVersionAsDefaultErrors(t *testing.T) {
+	data := mkInitialData(3)
+
+	req := mkNewDefReq("0")
+	err := UpdateVersionsGraph(data, req, 0)
+	assert.Error(t, err)
+	assert.IsType(t, &serviceerror.InvalidArgument{}, err)
+}
+
+func TestMakeSetDefaultTargetingNonexistentVersionErrors(t *testing.T) {
+	data := mkInitialData(3)
+
+	req := mkExistingDefault("crab boi")
+	err := UpdateVersionsGraph(data, req, 0)
+	assert.Error(t, err)
+	assert.IsType(t, &serviceerror.NotFound{}, err)
+}
+
+func TestPromoteWithinSetTargetingNonexistentVersionErrors(t *testing.T) {
+	data := mkInitialData(3)
+
+	req := mkPromoteInSet("i'd rather be writing rust ;)")
+	err := UpdateVersionsGraph(data, req, 0)
+	assert.Error(t, err)
+	assert.IsType(t, &serviceerror.NotFound{}, err)
 }

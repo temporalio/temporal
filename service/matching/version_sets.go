@@ -105,7 +105,7 @@ func UpdateVersionsGraph(existingData *persistence.VersioningData, req *workflow
 func updateImpl(existingData *persistence.VersioningData, req *workflowservice.UpdateWorkerBuildIdOrderingRequest) error {
 	// First find if the targeted version is already in the sets
 	targetedVersion := extractTargetedVersion(req)
-	targetSetIx, _ := findVersion(existingData, targetedVersion)
+	targetSetIx, versionInSetIx := findVersion(existingData, targetedVersion)
 
 	if _, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdOrderingRequest_NewDefaultVersionId); ok {
 		// If it's not already in the sets, add it as the new default set
@@ -140,6 +140,11 @@ func updateImpl(existingData *persistence.VersioningData, req *workflowservice.U
 			return serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
 		}
 		makeDefaultSet(existingData, targetSetIx)
+	} else if _, ok := req.GetOperation().(*workflowservice.UpdateWorkerBuildIdOrderingRequest_PromoteVersionIdWithinSet); ok {
+		if targetSetIx == -1 {
+			return serviceerror.NewNotFound(fmt.Sprintf("targeted version %v not found", targetedVersion))
+		}
+		makeVersionInSetDefault(existingData, targetSetIx, versionInSetIx)
 	}
 
 	return nil
@@ -150,6 +155,8 @@ func extractTargetedVersion(req *workflowservice.UpdateWorkerBuildIdOrderingRequ
 		return req.GetNewCompatibleVersion().GetNewVersionId()
 	} else if req.GetExistingVersionIdInSetToPromote() != "" {
 		return req.GetExistingVersionIdInSetToPromote()
+	} else if req.GetPromoteVersionIdWithinSet() != "" {
+		return req.GetPromoteVersionIdWithinSet()
 	}
 	return req.GetNewDefaultVersionId()
 }
@@ -175,4 +182,14 @@ func makeDefaultSet(data *persistence.VersioningData, setIx int) {
 	moveMe := data.VersionSets[setIx]
 	copy(data.VersionSets[setIx:], data.VersionSets[setIx+1:])
 	data.VersionSets[len(data.VersionSets)-1] = moveMe
+}
+
+func makeVersionInSetDefault(data *persistence.VersioningData, setIx, versionIx int) {
+	setVersions := data.VersionSets[setIx].Versions
+	if len(setVersions) <= 1 {
+		return
+	}
+	moveMe := setVersions[versionIx]
+	copy(setVersions[versionIx:], setVersions[versionIx+1:])
+	setVersions[len(setVersions)-1] = moveMe
 }
