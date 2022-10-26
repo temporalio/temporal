@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -44,9 +45,8 @@ import (
 )
 
 const (
-	executorPoolSize         = 4
 	executorPollInterval     = time.Minute
-	executorMaxDeferredTasks = 10000
+	executorMaxDeferredTasks = 50000
 )
 
 type (
@@ -59,6 +59,7 @@ type (
 		executionManager            persistence.ExecutionManager
 		registry                    namespace.Registry
 		historyClient               historyservice.HistoryServiceClient
+		adminClient                 adminservice.AdminServiceClient
 		executor                    executor.Executor
 		rateLimiter                 quotas.RateLimiter
 		perShardQPS                 dynamicconfig.IntPropertyFn
@@ -87,9 +88,11 @@ func NewScavenger(
 	perHostQPS dynamicconfig.IntPropertyFn,
 	perShardQPS dynamicconfig.IntPropertyFn,
 	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
+	executionTaskWorker dynamicconfig.IntPropertyFn,
 	executionManager persistence.ExecutionManager,
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
+	adminClient adminservice.AdminServiceClient,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) *Scavenger {
@@ -99,8 +102,9 @@ func NewScavenger(
 		executionManager: executionManager,
 		registry:         registry,
 		historyClient:    historyClient,
+		adminClient:      adminClient,
 		executor: executor.NewFixedSizePoolExecutor(
-			executorPoolSize,
+			executionTaskWorker(),
 			executorMaxDeferredTasks,
 			metricsClient,
 			metrics.ExecutionsScavengerScope,
@@ -170,6 +174,7 @@ func (s *Scavenger) run() {
 			s.executionManager,
 			s.registry,
 			s.historyClient,
+			s.adminClient,
 			s.metrics,
 			s.logger,
 			s,
