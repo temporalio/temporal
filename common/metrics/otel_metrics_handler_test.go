@@ -113,7 +113,7 @@ func TestMeter(t *testing.T) {
 		},
 		{
 			InstrumentName: "temp",
-			Sum:            number.NewFloat64Number(-100),
+			LastValue:      number.NewFloat64Number(100),
 			Attributes: []attribute.KeyValue{
 				{
 					Key:   attribute.Key("location"),
@@ -121,7 +121,7 @@ func TestMeter(t *testing.T) {
 				},
 			},
 			InstrumentationLibrary: lib,
-			AggregationKind:        aggregation.SumKind,
+			AggregationKind:        aggregation.LastValueKind,
 			NumberKind:             number.Float64Kind,
 		},
 		{
@@ -150,13 +150,14 @@ func valuesEqual(v1, v2 attribute.Value) bool {
 func recordMetrics(mp MetricsHandler) {
 	c := mp.Counter("hits")
 	g := mp.Gauge("temp")
+
 	d := mp.Timer("latency")
 	h := mp.Histogram("transmission", Bytes)
 	t := mp.Counter("hits-tagged")
 	e := mp.Counter("hits-tagged-excluded")
 
 	c.Record(8)
-	g.Record(-100, StringTag("location", "Mare Imbrium"))
+	g.Record(100, StringTag("location", "Mare Imbrium"))
 	d.Record(1248 * time.Millisecond)
 	d.Record(5255 * time.Millisecond)
 	h.Record(1234567)
