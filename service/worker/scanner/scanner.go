@@ -77,6 +77,8 @@ type (
 		ExecutionScannerPerShardQPS dynamicconfig.IntPropertyFn
 		// ExecutionDataDurationBuffer is the data TTL duration buffer of execution data
 		ExecutionDataDurationBuffer dynamicconfig.DurationPropertyFn
+		// ExecutionScannerWorkerCount is the execution scavenger task worker number
+		ExecutionScannerWorkerCount dynamicconfig.IntPropertyFn
 	}
 
 	// scannerContext is the context object that get's

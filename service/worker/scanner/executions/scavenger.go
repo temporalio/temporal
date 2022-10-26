@@ -45,9 +45,8 @@ import (
 )
 
 const (
-	executorPoolSize         = 4
 	executorPollInterval     = time.Minute
-	executorMaxDeferredTasks = 10000
+	executorMaxDeferredTasks = 50000
 )
 
 type (
@@ -89,6 +88,7 @@ func NewScavenger(
 	perHostQPS dynamicconfig.IntPropertyFn,
 	perShardQPS dynamicconfig.IntPropertyFn,
 	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
+	executionTaskWorker dynamicconfig.IntPropertyFn,
 	executionManager persistence.ExecutionManager,
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
@@ -104,7 +104,7 @@ func NewScavenger(
 		historyClient:    historyClient,
 		adminClient:      adminClient,
 		executor: executor.NewFixedSizePoolExecutor(
-			executorPoolSize,
+			executionTaskWorker(),
 			executorMaxDeferredTasks,
 			metricsClient,
 			metrics.ExecutionsScavengerScope,

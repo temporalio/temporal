@@ -300,6 +300,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				dynamicconfig.ExecutionDataDurationBuffer,
 				time.Hour*24*30,
 			),
+			ExecutionScannerWorkerCount: dc.GetIntProperty(
+				dynamicconfig.ExecutionScannerWorkerCount,
+				8,
+			),
 		},
 		EnableBatcher:      dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
 		BatcherRPS:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BatcherRPS, batcher.DefaultRPS),

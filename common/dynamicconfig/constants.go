@@ -645,6 +645,8 @@ const (
 	ExecutionScannerPerShardQPS = "worker.executionScannerPerShardQPS"
 	// ExecutionDataDurationBuffer is the data TTL duration buffer of execution data
 	ExecutionDataDurationBuffer = "worker.executionDataDurationBuffer"
+	// ExecutionScannerWorkerCount is the execution scavenger worker count
+	ExecutionScannerWorkerCount = "worker.executionScannerWorkerCount"
 	// TaskQueueScannerEnabled indicates if task queue scanner should be started as part of worker.Scanner
 	TaskQueueScannerEnabled = "worker.taskQueueScannerEnabled"
 	// HistoryScannerEnabled indicates if history scanner should be started as part of worker.Scanner
