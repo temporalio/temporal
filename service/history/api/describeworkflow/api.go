@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
@@ -47,6 +48,7 @@ func Invoke(
 	req *historyservice.DescribeWorkflowExecutionRequest,
 	shard shard.Context,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	persistenceVisibilityMgr manager.VisibilityManager,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -188,6 +190,26 @@ func Invoke(
 			result.PendingWorkflowTask.State = enumspb.PENDING_WORKFLOW_TASK_STATE_STARTED
 			result.PendingWorkflowTask.StartedTime = pendingWorkflowTask.StartedTime
 		}
+	}
+
+	if executionInfo.CloseVisibilityTaskCompleted {
+		// If close visibility task has completed, then search attributes and memo
+		// were removed from mutable state, and we need to fetch from visibility.
+		visResponse, err := persistenceVisibilityMgr.GetWorkflowExecution(
+			ctx,
+			&manager.GetWorkflowExecutionRequest{
+				NamespaceID: namespaceID,
+				Namespace:   namespace.Name(req.Request.GetNamespace()),
+				RunID:       executionState.RunId,
+				WorkflowID:  executionInfo.WorkflowId,
+				CloseTime:   executionInfo.CloseTime,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+		result.WorkflowExecutionInfo.SearchAttributes = visResponse.Execution.SearchAttributes
+		result.WorkflowExecutionInfo.Memo = visResponse.Execution.Memo
 	}
 
 	return result, nil

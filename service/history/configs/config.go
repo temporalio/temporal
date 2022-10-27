@@ -47,12 +47,15 @@ type Config struct {
 	PersistenceNamespaceMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnablePersistencePriorityRateLimiting dynamicconfig.BoolPropertyFn
 
-	StandardVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
-	StandardVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
-	AdvancedVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
-	AdvancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
-	AdvancedVisibilityWritingMode            dynamicconfig.StringPropertyFn
-	EnableWriteToSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFn
+	StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
+	StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
+	AdvancedVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
+	AdvancedVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
+	AdvancedVisibilityWritingMode             dynamicconfig.StringPropertyFn
+	EnableWriteToSecondaryAdvancedVisibility  dynamicconfig.BoolPropertyFn
+	EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VisibilityDisableOrderByClause            dynamicconfig.BoolPropertyFn
 
 	EmitShardDiffLog      dynamicconfig.BoolPropertyFn
 	MaxAutoResetPoints    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -296,12 +299,15 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		MaxAutoResetPoints:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, DefaultHistoryMaxAutoResetPoints),
 		DefaultWorkflowTaskTimeout:            dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 
-		StandardVisibilityPersistenceMaxReadQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
-		StandardVisibilityPersistenceMaxWriteQPS: dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
-		AdvancedVisibilityPersistenceMaxReadQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
-		AdvancedVisibilityPersistenceMaxWriteQPS: dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
-		AdvancedVisibilityWritingMode:            dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, visibility.DefaultAdvancedVisibilityWritingMode(isAdvancedVisibilityConfigExist)),
-		EnableWriteToSecondaryAdvancedVisibility: dc.GetBoolProperty(dynamicconfig.EnableWriteToSecondaryAdvancedVisibility, false),
+		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
+		StandardVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
+		AdvancedVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
+		AdvancedVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
+		AdvancedVisibilityWritingMode:             dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, visibility.DefaultAdvancedVisibilityWritingMode(isAdvancedVisibilityConfigExist)),
+		EnableWriteToSecondaryAdvancedVisibility:  dc.GetBoolProperty(dynamicconfig.EnableWriteToSecondaryAdvancedVisibility, false),
+		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, isAdvancedVisibilityConfigExist),
+		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
+		VisibilityDisableOrderByClause:            dc.GetBoolProperty(dynamicconfig.VisibilityDisableOrderByClause, false),
 
 		EmitShardDiffLog:                     dc.GetBoolProperty(dynamicconfig.EmitShardDiffLog, false),
 		HistoryCacheInitialSize:              dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),

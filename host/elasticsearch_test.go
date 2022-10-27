@@ -37,6 +37,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -1362,6 +1363,45 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecutionSearchAttribu
 		s.True(typeSet)
 		s.True(len(attrType) > 0)
 	}
+
+	// process close workflow task and assert search attributes is correct after workflow is closed
+	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
+		false,
+		false,
+		true,
+		true,
+		0,
+		1,
+		true,
+		nil)
+	s.NoError(err)
+	s.NotNil(newTask)
+	s.Nil(newTask.WorkflowTask)
+
+	time.Sleep(waitForESToSettle)
+
+	// verify search attributes from DescribeWorkflowExecution
+	descRequest = &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+		},
+	}
+	descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
+	s.Equal(
+		len(expectedSearchAttributes.GetIndexedFields()),
+		len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()),
+	)
+	for attrName, expectedPayload := range expectedSearchAttributes.GetIndexedFields() {
+		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
+		s.True(ok)
+		s.Equal(expectedPayload.GetData(), respAttr.GetData())
+		attrType, typeSet := respAttr.GetMetadata()[searchattribute.MetadataType]
+		s.True(typeSet)
+		s.True(len(attrType) > 0)
+	}
 }
 
 func (s *elasticsearchIntegrationSuite) TestModifyWorkflowExecutionProperties() {
@@ -1483,6 +1523,15 @@ func (s *elasticsearchIntegrationSuite) TestModifyWorkflowExecutionProperties() 
 
 	time.Sleep(waitForESToSettle)
 
+	attrValPayload1, _ := payload.Encode("test memo val 1")
+	attrValPayload2, _ := payload.Encode("test memo val 2")
+	expectedMemo := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			"test_memo_key_1": attrValPayload1,
+			"test_memo_key_2": attrValPayload2,
+		},
+	}
+
 	// verify memo data is on ES
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -1494,25 +1543,8 @@ func (s *elasticsearchIntegrationSuite) TestModifyWorkflowExecutionProperties() 
 		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
-			execution := resp.GetExecutions()[0]
-			retrievedMemo := execution.Memo
-			if retrievedMemo != nil && len(retrievedMemo.GetFields()) == 2 {
-				var memoVal *string
-				memoValBytes := retrievedMemo.GetFields()["test_memo_key_1"]
-				err = payload.Decode(memoValBytes, &memoVal)
-				s.NoError(err)
-				s.NotNil(memoVal)
-				s.Equal("test memo val 1", *memoVal)
-
-				memoValBytes = retrievedMemo.GetFields()["test_memo_key_2"]
-				err = payload.Decode(memoValBytes, &memoVal)
-				s.NoError(err)
-				s.NotNil(memoVal)
-				s.Equal("test memo val 2", *memoVal)
-
-				verified = true
-				break
-			}
+			s.True(proto.Equal(expectedMemo, resp.Executions[0].Memo))
+			verified = true
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}
@@ -1539,6 +1571,15 @@ func (s *elasticsearchIntegrationSuite) TestModifyWorkflowExecutionProperties() 
 
 	time.Sleep(waitForESToSettle)
 
+	attrValPayload1, _ = payload.Encode("test memo val 1 new")
+	attrValPayload3, _ := payload.Encode("test memo val 3")
+	expectedMemo = &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			"test_memo_key_1": attrValPayload1,
+			"test_memo_key_3": attrValPayload3,
+		},
+	}
+
 	// verify memo data is on ES
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -1550,29 +1591,39 @@ func (s *elasticsearchIntegrationSuite) TestModifyWorkflowExecutionProperties() 
 		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
-			execution := resp.GetExecutions()[0]
-			retrievedMemo := execution.Memo
-			if retrievedMemo != nil && len(retrievedMemo.GetFields()) == 2 {
-				var memoVal *string
-				memoValBytes := retrievedMemo.GetFields()["test_memo_key_1"]
-				err = payload.Decode(memoValBytes, &memoVal)
-				s.NoError(err)
-				s.NotNil(memoVal)
-				s.Equal("test memo val 1 new", *memoVal)
-
-				memoValBytes = retrievedMemo.GetFields()["test_memo_key_3"]
-				err = payload.Decode(memoValBytes, &memoVal)
-				s.NoError(err)
-				s.NotNil(memoVal)
-				s.Equal("test memo val 3", *memoVal)
-
-				verified = true
-				break
-			}
+			s.True(proto.Equal(expectedMemo, resp.Executions[0].Memo))
+			verified = true
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}
 	s.True(verified)
+
+	// process close workflow task and assert workflow task is handled correctly.
+	_, newTask, err = poller.PollAndProcessWorkflowTaskWithAttemptAndRetryAndForceNewWorkflowTask(
+		false,
+		false,
+		true,
+		true,
+		0,
+		1,
+		true,
+		nil)
+	s.NoError(err)
+	s.NotNil(newTask)
+	s.Nil(newTask.WorkflowTask)
+
+	time.Sleep(waitForESToSettle)
+
+	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+		},
+	}
+	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
+	s.True(proto.Equal(expectedMemo, descResp.WorkflowExecutionInfo.Memo))
 }
 
 func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(listRequest *workflowservice.ListWorkflowExecutionsRequest) {

@@ -360,7 +360,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	// release the context lock since we no longer need mutable state and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.recordCloseExecution(
+	err = t.recordCloseExecution(
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		task.GetWorkflowID(),
@@ -378,6 +378,10 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		searchAttr,
 		historySizeBytes,
 	)
+	if err != nil {
+		return err
+	}
+	return t.cleanupExecutionInfo(ctx, task)
 }
 
 func (t *visibilityQueueTaskExecutor) recordCloseExecution(
@@ -475,6 +479,42 @@ func (t *visibilityQueueTaskExecutor) isCloseExecutionVisibilityTaskPending(task
 		TaskID:      CloseExecutionVisibilityTaskID,
 	}
 	return !queues.IsTaskAcked(queryTask, visibilityQueueState)
+}
+
+// cleanupExecutionInfo cleans up workflow execution info after visibility close
+// task has been processed and acked by visibility store.
+func (t *visibilityQueueTaskExecutor) cleanupExecutionInfo(
+	ctx context.Context,
+	task *tasks.CloseExecutionVisibilityTask,
+) (retError error) {
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := weContext.LoadMutableState(ctx)
+	if err != nil {
+		return err
+	}
+	if mutableState == nil || mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	if err != nil {
+		return err
+	}
+	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	if err != nil {
+		return err
+	}
+
+	executionInfo := mutableState.GetExecutionInfo()
+	executionInfo.Memo = nil
+	executionInfo.SearchAttributes = nil
+	executionInfo.CloseVisibilityTaskCompleted = true
+	return weContext.SetWorkflowExecution(ctx, t.shard.GetTimeSource().Now())
 }
 
 func getWorkflowMemo(
