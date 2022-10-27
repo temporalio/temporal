@@ -30,6 +30,7 @@ import (
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/api"
@@ -58,6 +59,7 @@ type (
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
 		TracerProvider                  trace.TracerProvider
+		PersistenceVisibilityMgr        manager.VisibilityManager
 	}
 
 	historyEngineFactory struct {
@@ -86,5 +88,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.ReplicationTaskExecutorProvider,
 		workflowConsistencyChecker,
 		f.TracerProvider,
+		f.PersistenceVisibilityMgr,
 	)
 }

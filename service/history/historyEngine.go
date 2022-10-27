@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -118,6 +119,7 @@ type (
 		matchingClient             matchingservice.MatchingServiceClient
 		rawMatchingClient          matchingservice.MatchingServiceClient
 		replicationDLQHandler      replication.DLQHandler
+		persistenceVisibilityMgr   manager.VisibilityManager
 		searchAttributesValidator  *searchattribute.Validator
 		workflowDeleteManager      workflow.DeleteManager
 		eventSerializer            serialization.Serializer
@@ -143,6 +145,7 @@ func NewEngineWithShardContext(
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tracerProvider trace.TracerProvider,
+	persistenceVisibilityMgr manager.VisibilityManager,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -173,6 +176,7 @@ func NewEngineWithShardContext(
 		sdkClientFactory:           sdkClientFactory,
 		matchingClient:             matchingClient,
 		rawMatchingClient:          rawMatchingClient,
+		persistenceVisibilityMgr:   persistenceVisibilityMgr,
 		workflowDeleteManager:      workflowDeleteManager,
 		eventSerializer:            eventSerializer,
 		workflowConsistencyChecker: workflowConsistencyChecker,
@@ -498,7 +502,13 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DescribeWorkflowExecutionRequest,
 ) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
-	return describeworkflow.Invoke(ctx, request, e.shard, e.workflowConsistencyChecker)
+	return describeworkflow.Invoke(
+		ctx,
+		request,
+		e.shard,
+		e.workflowConsistencyChecker,
+		e.persistenceVisibilityMgr,
+	)
 }
 
 func (e *historyEngineImpl) RecordActivityTaskStarted(

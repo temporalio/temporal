@@ -168,16 +168,26 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	s.NotNil(openExecutionInfo)
 	s.Equal(memo, openExecutionInfo.Memo)
 
-	// make progress of workflow
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	s.NoError(err)
-
-	// verify history
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
 		RunId:      we.GetRunId(),
 	}
+
+	// verify DescribeWorkflowExecution result: workflow running
+	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: execution,
+	}
+	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
+	s.NoError(err)
+	s.Equal(memo, descResp.WorkflowExecutionInfo.Memo)
+
+	// make progress of workflow
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+
+	// verify history
 	historyResponse, historyErr := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
 		Execution: execution,
@@ -189,17 +199,13 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 	startdEventAttributes := firstEvent.GetWorkflowExecutionStartedEventAttributes()
 	s.Equal(memo, startdEventAttributes.Memo)
 
-	// verify DescribeWorkflowExecution result
-	descRequest := &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
-		Execution: execution,
-	}
-	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
+	// verify DescribeWorkflowExecution result: workflow closed, but close visibility task not completed
+	descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
 	s.Equal(memo, descResp.WorkflowExecutionInfo.Memo)
 
 	// verify closed visibility
-	var closdExecutionInfo *workflowpb.WorkflowExecutionInfo
+	var closedExecutionInfo *workflowpb.WorkflowExecutionInfo
 	for i := 0; i < 10; i++ {
 		resp, err1 := s.engine.ListClosedWorkflowExecutions(NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.namespace,
@@ -214,12 +220,17 @@ func (s *integrationSuite) startWithMemoHelper(startFn startFunc, id string, tas
 		})
 		s.NoError(err1)
 		if len(resp.Executions) == 1 {
-			closdExecutionInfo = resp.Executions[0]
+			closedExecutionInfo = resp.Executions[0]
 			break
 		}
 		s.Logger.Info("Closed WorkflowExecution is not yet visible")
 		time.Sleep(100 * time.Millisecond)
 	}
-	s.NotNil(closdExecutionInfo)
-	s.Equal(memo, closdExecutionInfo.Memo)
+	s.NotNil(closedExecutionInfo)
+	s.Equal(memo, closedExecutionInfo.Memo)
+
+	// verify DescribeWorkflowExecution result: workflow closed and close visibility task completed
+	descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
+	s.NoError(err)
+	s.Equal(memo, descResp.WorkflowExecutionInfo.Memo)
 }

@@ -1718,6 +1718,82 @@ func (s *workflowHandlerSuite) TestGetSearchAttributes() {
 	s.NotNil(resp)
 }
 
+func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_RunningStatus() {
+	config := s.newConfig()
+	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	now := timestamp.TimePtr(time.Now())
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(
+		s.testNamespaceID,
+		nil,
+	).AnyTimes()
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&historyservice.DescribeWorkflowExecutionResponse{
+			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: testWorkflowID,
+					RunId:      testRunID,
+				},
+				StartTime:        now,
+				CloseTime:        now,
+				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				ExecutionTime:    now,
+				Memo:             nil,
+				SearchAttributes: nil,
+			},
+		},
+		nil,
+	)
+
+	request := &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.testNamespace.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+		},
+	}
+	_, err := wh.DescribeWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+}
+
+func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_CompletedStatus() {
+	config := s.newConfig()
+	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	now := timestamp.TimePtr(time.Now())
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(
+		s.testNamespaceID,
+		nil,
+	).AnyTimes()
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&historyservice.DescribeWorkflowExecutionResponse{
+			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: testWorkflowID,
+					RunId:      testRunID,
+				},
+				StartTime:        now,
+				CloseTime:        now,
+				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				ExecutionTime:    now,
+				Memo:             nil,
+				SearchAttributes: nil,
+			},
+		},
+		nil,
+	)
+
+	request := &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.testNamespace.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+		},
+	}
+	_, err := wh.DescribeWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+}
+
 func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 	config := s.newConfig()
 	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
