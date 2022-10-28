@@ -655,6 +655,8 @@ const (
 	ExecutionsScannerEnabled = "worker.executionsScannerEnabled"
 	// HistoryScannerDataMinAge indicates the history scanner cleanup minimum age.
 	HistoryScannerDataMinAge = "worker.historyScannerDataMinAge"
+	// HistoryScannerVerifyRetention indicates the history scanner verify data retention.
+	HistoryScannerVerifyRetention = "worker.historyScannerVerifyRetention"
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher = "worker.enableBatcher"
 	// BatcherRPS controls number the rps of batch operations

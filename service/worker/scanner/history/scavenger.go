@@ -33,13 +33,16 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -61,13 +64,16 @@ type (
 		numShards   int32
 		db          persistence.ExecutionManager
 		client      historyservice.HistoryServiceClient
+		adminClient adminservice.AdminServiceClient
+		registry    namespace.Registry
 		rateLimiter quotas.RateLimiter
 		metrics     metrics.Client
 		logger      log.Logger
 		isInTest    bool
 		// only clean up history branches that older than this age
 		// Our history archiver delete mutable state, and then upload history to blob store and then delete history.
-		historyDataMinAge dynamicconfig.DurationPropertyFn
+		historyDataMinAge           dynamicconfig.DurationPropertyFn
+		enableRetentionVerification dynamicconfig.BoolPropertyFn
 
 		sync.WaitGroup
 		sync.Mutex
@@ -100,22 +106,28 @@ func NewScavenger(
 	db persistence.ExecutionManager,
 	rps int,
 	client historyservice.HistoryServiceClient,
+	adminClient adminservice.AdminServiceClient,
+	registry namespace.Registry,
 	hbd ScavengerHeartbeatDetails,
 	historyDataMinAge dynamicconfig.DurationPropertyFn,
+	enableRetentionVerification dynamicconfig.BoolPropertyFn,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) *Scavenger {
 
 	return &Scavenger{
-		numShards: numShards,
-		db:        db,
-		client:    client,
+		numShards:   numShards,
+		db:          db,
+		client:      client,
+		adminClient: adminClient,
+		registry:    registry,
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(rps) },
 		),
-		historyDataMinAge: historyDataMinAge,
-		metrics:           metricsClient,
-		logger:            logger,
+		historyDataMinAge:           historyDataMinAge,
+		enableRetentionVerification: enableRetentionVerification,
+		metrics:                     metricsClient,
+		logger:                      logger,
 
 		hbd: hbd,
 	}
@@ -249,7 +261,7 @@ func (s *Scavenger) handleTask(
 ) error {
 	// this checks if the mutableState still exists
 	// if not then the history branch is garbage, we need to delete the history branch
-	_, err := s.client.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+	ms, err := s.client.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
 		NamespaceId: task.namespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.workflowID,
@@ -258,6 +270,9 @@ func (s *Scavenger) handleTask(
 	})
 	switch err.(type) {
 	case nil:
+		if s.enableRetentionVerification() {
+			return s.cleanUpWorkflowPassedRetention(ctx, ms.GetDatabaseMutableState())
+		}
 		return nil
 	case *serviceerror.NotFound:
 		// case handled below
@@ -315,6 +330,46 @@ func (s *Scavenger) getPaginationFn(
 
 		return paginateItems, resp.NextPageToken, nil
 	}
+}
+
+func (s *Scavenger) cleanUpWorkflowPassedRetention(
+	ctx context.Context,
+	mutableState *persistencepb.WorkflowMutableState,
+) error {
+	executionInfo := mutableState.GetExecutionInfo()
+	ns, err := s.registry.GetNamespaceByID(namespace.ID(executionInfo.GetNamespaceId()))
+	switch err.(type) {
+	case *serviceerror.NotFound,
+		*serviceerror.NamespaceNotFound:
+		return nil
+	case nil:
+		// continue to delete
+	default:
+		return err
+	}
+
+	retention := ns.Retention()
+	finalUpdateTime := executionInfo.GetLastUpdateTime()
+	ttl := time.Now().UTC().Sub(timestamp.TimeValue(finalUpdateTime))
+	if ttl > 0 && ttl > retention+s.historyDataMinAge() {
+		_, err = s.adminClient.DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
+			Namespace: ns.Name().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: executionInfo.GetWorkflowId(),
+				RunId:      mutableState.GetExecutionState().GetRunId(),
+			},
+		})
+		if err != nil {
+			// This is experimental. Ignoring the error so it will not block the history scavenger.
+			s.logger.Warn("Failed to delete workflow passed retention in history scavenger",
+				tag.Error(err),
+				tag.WorkflowNamespace(ns.Name().String()),
+				tag.WorkflowID(executionInfo.GetWorkflowId()),
+				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
+			)
+		}
+	}
+	return nil
 }
 
 func getTaskLoggingTags(err error, task taskDetail) []tag.Tag {

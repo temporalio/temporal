@@ -71,6 +71,8 @@ type (
 		// HistoryScannerDataMinAge indicates the cleanup threshold of history branch data
 		// Only clean up history branches that older than this threshold
 		HistoryScannerDataMinAge dynamicconfig.DurationPropertyFn
+		// HistoryScannerVerifyRetention indicates if the history scavenger to do retention verification
+		HistoryScannerVerifyRetention dynamicconfig.BoolPropertyFn
 		// ExecutionScannerPerHostQPS the max rate of calls to scan execution data per host
 		ExecutionScannerPerHostQPS dynamicconfig.IntPropertyFn
 		// ExecutionScannerPerShardQPS the max rate of calls to scan execution data per shard
