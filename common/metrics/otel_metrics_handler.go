@@ -26,6 +26,7 @@ package metrics
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -103,7 +104,8 @@ func (omp *otelMetricsHandler) Timer(timer string) TimerMetric {
 
 // Histogram obtains a histogram for the given name and MetricOptions.
 func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramMetric {
-	c, err := omp.provider.GetMeter().SyncInt64().Histogram(histogram, instrument.WithUnit(otelunit.Unit(unit)))
+	histogramName := strings.Join([]string{histogram, string(unit)}, "_")
+	c, err := omp.provider.GetMeter().SyncInt64().Histogram(histogramName, instrument.WithUnit(otelunit.Unit(unit)))
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", histogram), tag.Error(err))
 	}
