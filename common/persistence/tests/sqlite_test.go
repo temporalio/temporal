@@ -25,30 +25,21 @@
 package tests
 
 import (
-	"fmt"
 	"os"
-	"path"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/persistence"
-	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/environment"
 )
 
 // TODO merge the initialization with existing persistence setup
 const (
 	testSQLiteClusterName = "temporal_sqlite_cluster"
-	testSQLiteSchemaDir   = "../../../schema/sqlite/v3" // specify if mode is not "memory"
 )
 
 func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
@@ -309,59 +300,4 @@ func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
 
 	s := NewTaskQueueTaskSuite(t, taskQueueStore, logger)
 	suite.Run(t, s)
-}
-
-// NewSQLiteMemoryConfig returns a new SQLite config for test
-func NewSQLiteMemoryConfig() *config.SQL {
-	return &config.SQL{
-		User:              "",
-		Password:          "",
-		ConnectAddr:       environment.Localhost,
-		ConnectProtocol:   "tcp",
-		PluginName:        "sqlite",
-		DatabaseName:      "default",
-		ConnectAttributes: map[string]string{"mode": "memory", "cache": "private"},
-	}
-}
-
-// NewSQLiteMemoryConfig returns a new SQLite config for test
-func NewSQLiteFileConfig() *config.SQL {
-	return &config.SQL{
-		User:              "",
-		Password:          "",
-		ConnectAddr:       environment.Localhost,
-		ConnectProtocol:   "tcp",
-		PluginName:        "sqlite",
-		DatabaseName:      "test_" + persistencetests.GenerateRandomDBName(3),
-		ConnectAttributes: map[string]string{"cache": "private"},
-	}
-}
-
-func SetupSQLiteDatabase(cfg *config.SQL) {
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
-	if err != nil {
-		panic(fmt.Sprintf("unable to create SQLite admin DB: %v", err))
-	}
-	defer func() { _ = db.Close() }()
-
-	err = db.CreateDatabase(cfg.DatabaseName)
-	if err != nil {
-		panic(fmt.Sprintf("unable to create SQLite database: %v", err))
-	}
-
-	LoadSchema(db, path.Join(testSQLiteSchemaDir, "temporal", "schema.sql"))
-	LoadSchema(db, path.Join(testSQLiteSchemaDir, "visibility", "schema.sql"))
-}
-
-func LoadSchema(db sqlplugin.AdminDB, schemaFile string) {
-	statements, err := persistence.LoadAndSplitQuery([]string{schemaFile})
-	if err != nil {
-		panic(fmt.Sprintf("LoadSchema %+v", tag.Error(err)))
-	}
-
-	for _, stmt := range statements {
-		if err = db.Exec(stmt); err != nil {
-			panic(fmt.Sprintf("LoadSchema %+v", tag.Error(err)))
-		}
-	}
 }
