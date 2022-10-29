@@ -30,8 +30,7 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/server/service/history/replication"
-
+	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -39,24 +38,18 @@ import (
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc"
-
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
-
-	"github.com/pborman/uuid"
-
-	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/telemetry"
+	"google.golang.org/grpc"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -68,11 +61,14 @@ import (
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
@@ -126,7 +122,6 @@ type (
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                  log.Logger
 		ClientFactoryProvider   client.FactoryProvider
-		MetricsClient           metrics.Client
 		DynamicConfigClient     dynamicconfig.Client
 		DynamicConfigCollection *dynamicconfig.Collection
 		TLSConfigProvider       encryption.TLSConfigProvider
@@ -199,7 +194,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	// MetricsClient
-	var metricsClient metrics.Client = metrics.NewClient(provider, metrics.Server)
+	var metricsClient metrics.Client = metrics.NewClient(
+		provider.WithTags(metrics.ServiceNameTag(primitives.ServerService)),
+		metrics.Server,
+	)
 
 	// DynamicConfigClient
 	dcClient := so.dynamicConfigClient
@@ -274,7 +272,6 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 
 		Logger:                  logger,
 		ClientFactoryProvider:   clientFactoryProvider,
-		MetricsClient:           metricsClient,
 		DynamicConfigClient:     dcClient,
 		DynamicConfigCollection: dynamicconfig.NewCollection(dcClient, logger),
 		TLSConfigProvider:       tlsConfigProvider,
@@ -375,7 +372,9 @@ func HistoryServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
+		fx.Provide(func() metrics.MetricsHandler {
+			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+		}),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
@@ -435,7 +434,9 @@ func MatchingServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
+		fx.Provide(func() metrics.MetricsHandler {
+			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+		}),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Supply(params.SpanExporters),
@@ -492,7 +493,9 @@ func FrontendServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
+		fx.Provide(func() metrics.MetricsHandler {
+			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+		}),
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
@@ -550,7 +553,9 @@ func WorkerServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
+		fx.Provide(func() metrics.MetricsHandler {
+			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+		}),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Supply(params.SpanExporters),
