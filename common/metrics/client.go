@@ -38,10 +38,8 @@ type (
 var _ Client = (*client)(nil)
 
 func NewClient(provider MetricsHandler, idx ServiceIdx) *client {
-	serviceTypeTagValue, _ := MetricsServiceIdxToServiceName(idx)
-
 	return &client{
-		provider:   provider.WithTags(ServiceTypeTag(serviceTypeTagValue), NamespaceTag(namespaceAllValue)),
+		provider:   provider,
 		serviceIdx: idx,
 	}
 }
