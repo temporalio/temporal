@@ -73,6 +73,7 @@ type (
 		// only clean up history branches that older than this age
 		// Our history archiver delete mutable state, and then upload history to blob store and then delete history.
 		historyDataMinAge           dynamicconfig.DurationPropertyFn
+		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
 		enableRetentionVerification dynamicconfig.BoolPropertyFn
 
 		sync.WaitGroup
@@ -110,6 +111,7 @@ func NewScavenger(
 	registry namespace.Registry,
 	hbd ScavengerHeartbeatDetails,
 	historyDataMinAge dynamicconfig.DurationPropertyFn,
+	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
 	enableRetentionVerification dynamicconfig.BoolPropertyFn,
 	metricsClient metrics.Client,
 	logger log.Logger,
@@ -125,6 +127,7 @@ func NewScavenger(
 			func() float64 { return float64(rps) },
 		),
 		historyDataMinAge:           historyDataMinAge,
+		executionDataDurationBuffer: executionDataDurationBuffer,
 		enableRetentionVerification: enableRetentionVerification,
 		metrics:                     metricsClient,
 		logger:                      logger,
@@ -339,8 +342,8 @@ func (s *Scavenger) cleanUpWorkflowPassedRetention(
 	executionInfo := mutableState.GetExecutionInfo()
 	ns, err := s.registry.GetNamespaceByID(namespace.ID(executionInfo.GetNamespaceId()))
 	switch err.(type) {
-	case *serviceerror.NotFound,
-		*serviceerror.NamespaceNotFound:
+	case *serviceerror.NamespaceNotFound:
+		// TODO delete the workflow data after issue #3536 close
 		return nil
 	case nil:
 		// continue to delete
@@ -351,7 +354,7 @@ func (s *Scavenger) cleanUpWorkflowPassedRetention(
 	retention := ns.Retention()
 	finalUpdateTime := executionInfo.GetLastUpdateTime()
 	ttl := time.Now().UTC().Sub(timestamp.TimeValue(finalUpdateTime))
-	if ttl > 0 && ttl > retention+s.historyDataMinAge() {
+	if ttl > 0 && ttl > retention+s.executionDataDurationBuffer() {
 		_, err = s.adminClient.DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
 			Namespace: ns.Name().String(),
 			Execution: &commonpb.WorkflowExecution{

@@ -36,6 +36,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -106,6 +107,7 @@ func (s *ScavengerTestSuite) createTestScavenger(
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockRegistry = namespace.NewMockRegistry(s.controller)
 	dataAge := dynamicconfig.GetDurationPropertyFn(time.Hour)
+	executionDataAge := dynamicconfig.GetDurationPropertyFn(time.Second)
 	enableRetentionVerification := dynamicconfig.GetBoolPropertyFn(true)
 	s.scavenger = NewScavenger(
 		s.numShards,
@@ -116,6 +118,7 @@ func (s *ScavengerTestSuite) createTestScavenger(
 		s.mockRegistry,
 		ScavengerHeartbeatDetails{},
 		dataAge,
+		executionDataAge,
 		enableRetentionVerification,
 		s.metric,
 		s.logger,
@@ -566,10 +569,27 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			},
 		},
 	}
-	workflowPassedRetention := &historyservice.DescribeMutableStateResponse{
+	workflowPastRetention2 := &historyservice.DescribeMutableStateResponse{
 		DatabaseMutableState: &persistencepb.WorkflowMutableState{
 			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
+				WorkflowId:     "workflowID2",
+				NamespaceId:    "namespaceID2",
 				LastUpdateTime: timestamp.TimePtr(time.Now().Truncate(time.Hour * 10)),
+			},
+			ExecutionState: &persistencepb.WorkflowExecutionState{
+				RunId: "runID2",
+			},
+		},
+	}
+	workflowPastRetention4 := &historyservice.DescribeMutableStateResponse{
+		DatabaseMutableState: &persistencepb.WorkflowMutableState{
+			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
+				WorkflowId:     "workflowID4",
+				NamespaceId:    "namespaceID4",
+				LastUpdateTime: timestamp.TimePtr(time.Now().Truncate(time.Hour * 10)),
+			},
+			ExecutionState: &persistencepb.WorkflowExecutionState{
+				RunId: "runID4",
 			},
 		},
 	}
@@ -587,7 +607,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
-	}).Return(workflowPassedRetention, nil)
+	}).Return(workflowPastRetention2, nil)
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID3",
 		Execution: &commonpb.WorkflowExecution{
@@ -601,8 +621,19 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
-	}).Return(workflowPassedRetention, nil)
-	s.mockAdminClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
+	}).Return(workflowPastRetention4, nil)
+	s.mockAdminClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), &adminservice.DeleteWorkflowExecutionRequest{
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflowID2",
+			RunId:      "runID2",
+		},
+	}).Return(nil, nil).Times(1)
+	s.mockAdminClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), &adminservice.DeleteWorkflowExecutionRequest{
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflowID4",
+			RunId:      "runID4",
+		},
+	}).Return(nil, nil).Times(1)
 
 	hbd, err := s.scavenger.Run(context.Background())
 	s.Nil(err)

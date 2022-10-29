@@ -154,6 +154,7 @@ func HistoryScavengerActivity(
 		ctx.namespaceRegistry,
 		hbd,
 		ctx.cfg.HistoryScannerDataMinAge,
+		ctx.cfg.ExecutionDataDurationBuffer,
 		ctx.cfg.HistoryScannerVerifyRetention,
 		ctx.metricsClient,
 		ctx.logger,
