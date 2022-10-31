@@ -274,7 +274,7 @@ func (s *Scavenger) handleTask(
 	switch err.(type) {
 	case nil:
 		if s.enableRetentionVerification() {
-			return s.cleanUpWorkflowPassedRetention(ctx, ms.GetDatabaseMutableState())
+			return s.cleanUpWorkflowPastRetention(ctx, ms.GetDatabaseMutableState())
 		}
 		return nil
 	case *serviceerror.NotFound:
@@ -335,7 +335,7 @@ func (s *Scavenger) getPaginationFn(
 	}
 }
 
-func (s *Scavenger) cleanUpWorkflowPassedRetention(
+func (s *Scavenger) cleanUpWorkflowPastRetention(
 	ctx context.Context,
 	mutableState *persistencepb.WorkflowMutableState,
 ) error {
@@ -353,8 +353,8 @@ func (s *Scavenger) cleanUpWorkflowPassedRetention(
 
 	retention := ns.Retention()
 	finalUpdateTime := executionInfo.GetLastUpdateTime()
-	ttl := time.Now().UTC().Sub(timestamp.TimeValue(finalUpdateTime))
-	if ttl > 0 && ttl > retention+s.executionDataDurationBuffer() {
+	age := time.Now().UTC().Sub(timestamp.TimeValue(finalUpdateTime))
+	if age > 0 && age > retention+s.executionDataDurationBuffer() {
 		_, err = s.adminClient.DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
 			Namespace: ns.Name().String(),
 			Execution: &commonpb.WorkflowExecution{
@@ -364,7 +364,7 @@ func (s *Scavenger) cleanUpWorkflowPassedRetention(
 		})
 		if err != nil {
 			// This is experimental. Ignoring the error so it will not block the history scavenger.
-			s.logger.Warn("Failed to delete workflow passed retention in history scavenger",
+			s.logger.Warn("Failed to delete workflow past retention in history scavenger",
 				tag.Error(err),
 				tag.WorkflowNamespace(ns.Name().String()),
 				tag.WorkflowID(executionInfo.GetWorkflowId()),

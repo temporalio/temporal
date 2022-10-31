@@ -520,6 +520,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 }
 
 func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
+	retention := time.Hour
 	s.mockExecutionManager.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &persistence.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
 	}).Return(&persistence.GetAllHistoryTreeBranchesResponse{
@@ -527,12 +528,12 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 		Branches: []persistence.HistoryBranchDetail{
 			{
 				BranchToken: s.toBranchToken("treeID1", "branchID1"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
 				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID1", "workflowID1", "runID1"),
 			},
 			{
 				BranchToken: s.toBranchToken("treeID2", "branchID2"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
 				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
@@ -545,19 +546,19 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 		Branches: []persistence.HistoryBranchDetail{
 			{
 				BranchToken: s.toBranchToken("treeID3", "branchID3"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
 				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID3", "workflowID3", "runID3"),
 			},
 			{
 				BranchToken: s.toBranchToken("treeID4", "branchID4"),
-				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-s.scavenger.historyDataMinAge() * 2),
+				ForkTime:    timestamp.TimeNowPtrUtcAddDuration(-retention * 2),
 				Info:        persistence.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
 	}, nil)
 	mockedNamespace := namespace.NewNamespaceForTest(
 		nil,
-		&persistencepb.NamespaceConfig{Retention: timestamp.DurationPtr(time.Hour)},
+		&persistencepb.NamespaceConfig{Retention: timestamp.DurationPtr(retention)},
 		false,
 		nil,
 		0,
