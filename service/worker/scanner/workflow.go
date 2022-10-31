@@ -150,8 +150,12 @@ func HistoryScavengerActivity(
 		ctx.executionManager,
 		rps,
 		ctx.historyClient,
+		ctx.adminClient,
+		ctx.namespaceRegistry,
 		hbd,
 		ctx.cfg.HistoryScannerDataMinAge,
+		ctx.cfg.ExecutionDataDurationBuffer,
+		ctx.cfg.HistoryScannerVerifyRetention,
 		ctx.metricsClient,
 		ctx.logger,
 	)

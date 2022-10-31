@@ -288,6 +288,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				dynamicconfig.HistoryScannerDataMinAge,
 				60*24*time.Hour,
 			),
+			HistoryScannerVerifyRetention: dc.GetBoolProperty(
+				dynamicconfig.HistoryScannerVerifyRetention,
+				false,
+			),
 			ExecutionScannerPerHostQPS: dc.GetIntProperty(
 				dynamicconfig.ExecutionScannerPerHostQPS,
 				10,
@@ -298,7 +302,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 			),
 			ExecutionDataDurationBuffer: dc.GetDurationProperty(
 				dynamicconfig.ExecutionDataDurationBuffer,
-				time.Hour*24*30,
+				time.Hour*24*90,
 			),
 			ExecutionScannerWorkerCount: dc.GetIntProperty(
 				dynamicconfig.ExecutionScannerWorkerCount,
