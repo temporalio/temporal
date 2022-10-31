@@ -12,7 +12,7 @@ require (
 	github.com/emirpasic/gods v1.18.1
 	github.com/fatih/color v1.13.0
 	github.com/go-sql-driver/mysql v1.5.0
-	github.com/gocql/gocql v1.2.0
+	github.com/gocql/gocql v1.2.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.1
 	github.com/golang-jwt/jwt/v4 v4.4.2
