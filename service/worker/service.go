@@ -302,7 +302,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 			),
 			ExecutionDataDurationBuffer: dc.GetDurationProperty(
 				dynamicconfig.ExecutionDataDurationBuffer,
-				time.Hour*24*30,
+				time.Hour*24*90,
 			),
 			ExecutionScannerWorkerCount: dc.GetIntProperty(
 				dynamicconfig.ExecutionScannerWorkerCount,
