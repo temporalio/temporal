@@ -22,18 +22,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package host
+//go:build !TEMPORAL_DEBUG
 
-import (
-	"context"
-	"time"
+package debug
 
-	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/rpc"
+const (
+	Enabled = false
+
+	TimeoutMultiplier = 1
 )
-
-// NewContext create new context with default timeout 90 seconds.
-func NewContext() context.Context {
-	ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(90 * time.Second * debug.TimeoutMultiplier)
-	return ctx
-}

@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 )
@@ -46,9 +47,9 @@ var _ matchingservice.MatchingServiceClient = (*clientImpl)(nil)
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
-	DefaultTimeout = time.Minute
+	DefaultTimeout = time.Minute * debug.TimeoutMultiplier
 	// DefaultLongPollTimeout is the long poll default timeout used to make calls
-	DefaultLongPollTimeout = time.Minute * 2
+	DefaultLongPollTimeout = time.Minute * 2 * debug.TimeoutMultiplier
 )
 
 type clientImpl struct {
