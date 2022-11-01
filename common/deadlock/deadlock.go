@@ -99,7 +99,7 @@ func NewDeadlockDetector(params params) *deadlockDetector {
 		metricsScope: params.MetricsClient.Scope(metrics.DeadlockDetectorScope),
 		config: config{
 			DumpGoroutines:    params.Collection.GetBoolProperty(dynamicconfig.DeadlockDumpGoroutines, true),
-			FailHealthCheck:   params.Collection.GetBoolProperty(dynamicconfig.DeadlockFailHealthCheck, true),
+			FailHealthCheck:   params.Collection.GetBoolProperty(dynamicconfig.DeadlockFailHealthCheck, false),
 			AbortProcess:      params.Collection.GetBoolProperty(dynamicconfig.DeadlockAbortProcess, false),
 			Interval:          params.Collection.GetDurationProperty(dynamicconfig.DeadlockInterval, 30*time.Second),
 			MaxWorkersPerRoot: params.Collection.GetIntProperty(dynamicconfig.DeadlockMaxWorkersPerRoot, 10),
