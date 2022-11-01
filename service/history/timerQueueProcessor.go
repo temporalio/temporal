@@ -303,7 +303,8 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 			}
 			return
 		case <-timer.C:
-			if err := backoff.ThrottleRetry(func() error {
+			// TODO: We should have a better approach to handle shard and its component lifecycle
+			_ = backoff.ThrottleRetry(func() error {
 				err := t.completeTimers()
 				if err != nil {
 					t.logger.Info("Failed to complete timer task", tag.Error(err))
@@ -315,12 +316,8 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 					return false
 				default:
 				}
-				return !shard.IsShardOwnershipLostError(err)
-			}); shard.IsShardOwnershipLostError(err) {
-				// shard is unloaded, timer processor should quit as well
-				go t.Stop()
-				return
-			}
+				return true
+			})
 
 			timer.Reset(t.config.TimerProcessorCompleteTimerInterval())
 		}
