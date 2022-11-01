@@ -87,7 +87,6 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
 	fx.Provide(func(so []grpc.ServerOption) *grpc.Server { return grpc.NewServer(so...) }),
-	fx.Provide(healthServerProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
@@ -106,7 +105,7 @@ func NewServiceProvider(
 	operatorHandler *OperatorHandlerImpl,
 	versionChecker *VersionChecker,
 	visibilityMgr manager.VisibilityManager,
-	logger resource.SnTaggedLogger,
+	logger log.SnTaggedLogger,
 	grpcListener net.Listener,
 	metricsHandler metrics.MetricsHandler,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
@@ -296,7 +295,7 @@ func NamespaceRateLimitInterceptorProvider(
 func NamespaceCountLimitInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
-	logger resource.SnTaggedLogger,
+	logger log.SnTaggedLogger,
 ) *interceptor.NamespaceCountLimitInterceptor {
 	return interceptor.NewNamespaceCountLimitInterceptor(
 		namespaceRegistry,
@@ -387,10 +386,6 @@ func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.S
 	return membershipMonitor.GetResolver(common.FrontendServiceName)
 }
 
-func healthServerProvider() *health.Server {
-	return health.NewServer()
-}
-
 func AdminHandlerProvider(
 	persistenceConfig *config.Persistence,
 	config *Config,
@@ -398,7 +393,7 @@ func AdminHandlerProvider(
 	esConfig *esclient.Config,
 	esClient esclient.Client,
 	visibilityMrg manager.VisibilityManager,
-	logger resource.SnTaggedLogger,
+	logger log.SnTaggedLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	taskManager persistence.TaskManager,
@@ -456,7 +451,7 @@ func OperatorHandlerProvider(
 	config *Config,
 	esConfig *esclient.Config,
 	esClient esclient.Client,
-	logger resource.SnTaggedLogger,
+	logger log.SnTaggedLogger,
 	sdkClientFactory sdk.ClientFactory,
 	metricsClient metrics.Client,
 	saProvider searchattribute.Provider,
@@ -493,8 +488,8 @@ func HandlerProvider(
 	versionChecker *VersionChecker,
 	namespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
-	logger resource.SnTaggedLogger,
-	throttledLogger resource.ThrottledLogger,
+	logger log.SnTaggedLogger,
+	throttledLogger log.ThrottledLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	persistenceMetadataManager persistence.MetadataManager,

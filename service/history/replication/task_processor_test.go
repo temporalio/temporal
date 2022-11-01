@@ -54,7 +54,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -67,7 +67,7 @@ type (
 		*require.Assertions
 
 		controller                  *gomock.Controller
-		mockResource                *resource.Test
+		mockResource                *resourcetest.Test
 		mockShard                   *shard.ContextTest
 		mockEngine                  *shard.MockEngine
 		mockNamespaceCache          *namespace.MockRegistry

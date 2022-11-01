@@ -130,6 +130,7 @@ type (
 	// Registry provides access to Namespace objects by name or by ID.
 	Registry interface {
 		common.Daemon
+		common.Pingable
 		RegisterNamespaceChangeCallback(listenerID any, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn)
 		UnregisterNamespaceChangeCallback(listenerID any)
 		GetNamespace(name Name) (*Namespace, error)
@@ -240,6 +241,35 @@ func (r *registry) Stop() {
 	defer atomic.StoreInt32(&r.status, stopped)
 	r.refresher.Cancel()
 	<-r.refresher.Done()
+}
+
+func (r *registry) GetPingChecks() []common.PingCheck {
+	return []common.PingCheck{
+		{
+			Name: "namespace registry lock",
+			// we don't do any persistence ops, this shouldn't be blocked
+			Timeout: 10 * time.Second,
+			Ping: func() []common.Pingable {
+				r.cacheLock.Lock()
+				//lint:ignore SA2001 just checking if we can acquire the lock
+				r.cacheLock.Unlock()
+				return nil
+			},
+			MetricsTimer: metrics.NamespaceRegistryLockLatency,
+		},
+		{
+			Name: "namespace registry callback lock",
+			// we don't do any persistence ops, this shouldn't be blocked
+			Timeout: 10 * time.Second,
+			Ping: func() []common.Pingable {
+				r.callbackLock.Lock()
+				//lint:ignore SA2001 just checking if we can acquire the lock
+				r.callbackLock.Unlock()
+				return nil
+			},
+			MetricsTimer: metrics.NamespaceRegistryCallbackLockLatency,
+		},
+	}
 }
 
 func (r *registry) getAllNamespace() map[ID]*Namespace {

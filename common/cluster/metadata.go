@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/internal/goro"
 )
@@ -53,6 +54,7 @@ const (
 type (
 	Metadata interface {
 		common.Daemon
+		common.Pingable
 
 		// IsGlobalNamespaceEnabled whether the global namespace is enabled,
 		// this attr should be discarded when cross DC is made public
@@ -246,6 +248,36 @@ func (m *metadataImpl) Stop() {
 
 	m.refresher.Cancel()
 	<-m.refresher.Done()
+}
+
+func (m *metadataImpl) GetPingChecks() []common.PingCheck {
+	return []common.PingCheck{
+		{
+			Name: "cluster metadata lock",
+			// we don't do any persistence ops under clusterLock, use a short timeout
+			Timeout: 10 * time.Second,
+			Ping: func() []common.Pingable {
+				m.clusterLock.Lock()
+				//lint:ignore SA2001 just checking if we can acquire the lock
+				m.clusterLock.Unlock()
+				return nil
+			},
+			MetricsTimer: metrics.ClusterMetadataLockLatency,
+		},
+		{
+			Name: "cluster metadata callback lock",
+			// listeners get called under clusterCallbackLock, they may do some more work, but
+			// not persistence ops.
+			Timeout: 10 * time.Second,
+			Ping: func() []common.Pingable {
+				m.clusterCallbackLock.Lock()
+				//lint:ignore SA2001 just checking if we can acquire the lock
+				m.clusterCallbackLock.Unlock()
+				return nil
+			},
+			MetricsTimer: metrics.ClusterMetadataCallbackLockLatency,
+		},
+	}
 }
 
 func (m *metadataImpl) IsGlobalNamespaceEnabled() bool {

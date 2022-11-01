@@ -44,7 +44,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
@@ -60,7 +60,7 @@ type (
 		controller *gomock.Controller
 
 		remoteCluster      string
-		mockResource       *resource.Test
+		mockResource       *resourcetest.Test
 		mockShard          *shard.ContextTest
 		mockEngine         *shard.MockEngine
 		config             *configs.Config

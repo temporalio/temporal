@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/resourcetest"
 
 	"google.golang.org/grpc/health"
 
@@ -67,7 +68,6 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -77,7 +77,7 @@ type (
 		*require.Assertions
 
 		controller         *gomock.Controller
-		mockResource       *resource.Test
+		mockResource       *resourcetest.Test
 		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *namespace.MockRegistry
 
@@ -119,7 +119,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
+	s.mockResource = resourcetest.NewTest(s.controller, metrics.Frontend)
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockExecutionMgr = s.mockResource.ExecutionMgr

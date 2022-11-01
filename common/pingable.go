@@ -22,23 +22,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package shard
+package common
 
-import (
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/namespace"
-)
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination controller_mock.go
+import "time"
 
 type (
-	Controller interface {
-		common.Daemon
-		common.Pingable
+	// Pingable is interface to check for liveness of a component, to detect deadlocks.
+	// This call should not block.
+	Pingable interface {
+		GetPingChecks() []PingCheck
+	}
 
-		GetShardByID(shardID int32) (Context, error)
-		GetShardByNamespaceWorkflow(namespaceID namespace.ID, workflowID string) (Context, error)
-		CloseShardByID(shardID int32)
-		ShardIDs() []int32
+	PingCheck struct {
+		// Name of this component.
+		Name string
+		// The longest time that Ping can take. If it doesn't return in that much time, that's
+		// considered a deadlock and the deadlock detector may take actions to recover, like
+		// killing the process.
+		Timeout time.Duration
+		// Perform the check. The typical implementation will just be Lock() and then Unlock()
+		// on a mutex, returning nil. Ping can also return more Pingables for sub-components
+		// that will be checked independently. These should form a tree and not lead to cycles.
+		Ping func() []Pingable
+
+		// Metrics recording:
+		// Timer id within DeadlockDetectorScope (or zero for no metrics)
+		MetricsTimer int
 	}
 )

@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -53,7 +52,7 @@ var Module = fx.Options(
 func ControllerProvider(
 	config *configs.Config,
 	logger log.Logger,
-	throttledLogger resource.ThrottledLogger,
+	throttledLogger log.ThrottledLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
 	persistenceShardManager persistence.ShardManager,
 	clientBean client.Bean,

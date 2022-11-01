@@ -112,8 +112,8 @@ func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.S
 
 func HandlerProvider(
 	config *Config,
-	logger resource.SnTaggedLogger,
-	throttledLogger resource.ThrottledLogger,
+	logger log.SnTaggedLogger,
+	throttledLogger log.ThrottledLogger,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
 	matchingRawClient resource.MatchingRawClient,

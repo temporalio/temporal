@@ -44,7 +44,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -58,7 +58,7 @@ type (
 		*require.Assertions
 		controller *gomock.Controller
 
-		mockResource     *resource.Test
+		mockResource     *resourcetest.Test
 		mockShard        *shard.ContextTest
 		config           *configs.Config
 		mockClientBean   *client.MockBean

@@ -149,6 +149,24 @@ func (c *ControllerImpl) Stop() {
 	c.contextTaggedLogger.Info("", tag.LifeCycleStopped)
 }
 
+func (c *ControllerImpl) GetPingChecks() []common.PingCheck {
+	return []common.PingCheck{{
+		Name:    "shard controller",
+		Timeout: 10 * time.Second,
+		Ping: func() []common.Pingable {
+			// we only need to read but get write lock to make sure we can
+			c.Lock()
+			defer c.Unlock()
+			out := make([]common.Pingable, 0, len(c.historyShards))
+			for _, shard := range c.historyShards {
+				out = append(out, shard)
+			}
+			return out
+		},
+		MetricsTimer: metrics.ShardControllerLockLatency,
+	}}
+}
+
 func (c *ControllerImpl) Status() int32 {
 	return atomic.LoadInt32(&c.status)
 }

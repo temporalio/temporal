@@ -66,4 +66,8 @@ type (
 	SkipLogger interface {
 		Skip(extraSkip int) Logger
 	}
+
+	// Special logger types for use with fx
+	SnTaggedLogger  Logger
+	ThrottledLogger Logger
 )

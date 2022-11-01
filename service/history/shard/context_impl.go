@@ -88,6 +88,7 @@ type (
 	ContextImpl struct {
 		// These fields are constant:
 		shardID             int32
+		stringRepr          string
 		executionManager    persistence.ExecutionManager
 		metricsClient       metrics.Client
 		metricsHandler      metrics.MetricsHandler
@@ -174,7 +175,7 @@ const (
 
 func (s *ContextImpl) String() string {
 	// constant from initialization, no need for locks
-	return fmt.Sprintf("Shard(%d)", s.shardID)
+	return s.stringRepr
 }
 
 func (s *ContextImpl) GetShardID() int32 {
@@ -185,6 +186,23 @@ func (s *ContextImpl) GetShardID() int32 {
 func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	// constant from initialization, no need for locks
 	return s.executionManager
+}
+
+func (s *ContextImpl) GetPingChecks() []common.PingCheck {
+	return []common.PingCheck{{
+		Name: s.String(),
+		// rwLock may be held for the duration of a persistence op, which are called with a
+		// timeout of shardIOTimeout. add a few more seconds for reliability.
+		Timeout: shardIOTimeout + 5*time.Second,
+		Ping: func() []common.Pingable {
+			// call rwLock.Lock directly to bypass metrics since this isn't a real request
+			s.rwLock.Lock()
+			//lint:ignore SA2001 just checking if we can acquire the lock
+			s.rwLock.Unlock()
+			return nil
+		},
+		MetricsTimer: metrics.ShardLockLatency,
+	}}
 }
 
 func (s *ContextImpl) GetEngine(
@@ -1952,6 +1970,7 @@ func newContext(
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
+		stringRepr:              fmt.Sprintf("Shard(%d)", shardID),
 		executionManager:        persistenceExecutionManager,
 		metricsClient:           metricsClient,
 		metricsHandler:          metricsHandler,

@@ -30,11 +30,6 @@ import (
 	"go.uber.org/fx"
 )
 
-var RegistryModule = fx.Options(
-	fx.Provide(NewRegistry),
-	fx.Invoke(RegistryLifetimeHooks),
-)
-
 var RegistryLifetimeHooksModule = fx.Options(
 	fx.Invoke(RegistryLifetimeHooks),
 )

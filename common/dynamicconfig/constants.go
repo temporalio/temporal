@@ -92,6 +92,17 @@ const (
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
 
+	// Whether the deadlock detector should dump goroutines
+	DeadlockDumpGoroutines = "system.deadlock.DumpGoroutines"
+	// Whether the deadlock detector should cause the grpc server to fail health checks
+	DeadlockFailHealthCheck = "system.deadlock.FailHealthCheck"
+	// Whether the deadlock detector should abort the process
+	DeadlockAbortProcess = "system.deadlock.AbortProcess"
+	// How often the detector checks each root.
+	DeadlockInterval = "system.deadlock.Interval"
+	// How many extra goroutines can be created per root.
+	DeadlockMaxWorkersPerRoot = "system.deadlock.MaxWorkersPerRoot"
+
 	// keys for size limit
 
 	// BlobSizeLimitError is the per event blob size limit
