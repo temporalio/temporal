@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/build"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -148,6 +149,7 @@ func buildCLI() *cli.App {
 					tag.NewStringTag("go-version", build.InfoData.GoVersion),
 					tag.NewBoolTag("cgo-enabled", build.InfoData.CgoEnabled),
 					tag.NewStringTag("server-version", headers.ServerVersion),
+					tag.NewBoolTag("debug-mode", debug.Enabled),
 				)
 
 				var dynamicConfigClient dynamicconfig.Client

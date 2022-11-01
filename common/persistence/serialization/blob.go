@@ -94,6 +94,15 @@ func VisibilityTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.V
 	return result, proto3Decode(blob, encoding, result)
 }
 
+func ArchivalTaskInfoToBlob(info *persistencespb.ArchivalTaskInfo) (commonpb.DataBlob, error) {
+	return proto3Encode(info)
+}
+
+func ArchivalTaskInfoFromBlob(blob []byte, encoding string) (*persistencespb.ArchivalTaskInfo, error) {
+	result := &persistencespb.ArchivalTaskInfo{}
+	return result, proto3Decode(blob, encoding, result)
+}
+
 func QueueMetadataToBlob(metadata *persistencespb.QueueMetadata) (commonpb.DataBlob, error) {
 	// TODO change ENCODING_TYPE_JSON to ENCODING_TYPE_PROTO3
 	return encode(metadata, enumspb.ENCODING_TYPE_JSON)

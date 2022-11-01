@@ -42,6 +42,8 @@ const (
 var (
 	// ErrTaskDiscarded is the error indicating that the standby timer / transfer task is pending for too long and discarded.
 	ErrTaskDiscarded = errors.New("passive task pending for too long")
+	// ErrTaskVersionMismatch is an error indicating the task is discarded due to version mismatch.
+	ErrTaskVersionMismatch = errors.New("task discarded due to version mismatch")
 	// ErrTaskRetry is the error indicating that the standby timer / transfer task should be retried since condition in mutable state is not met.
 	ErrTaskRetry = errors.New("passive task should retry due to condition in mutable state is not met")
 	// ErrDependencyTaskNotCompleted is the error returned when a task this task depends on is not completed yet

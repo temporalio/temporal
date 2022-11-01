@@ -923,18 +923,18 @@ func (mr *MockMutableStateMockRecorder) FlushBufferedEvents() *gomock.Call {
 }
 
 // GenerateMigrationTasks mocks base method.
-func (m *MockMutableState) GenerateMigrationTasks(now time.Time) (tasks.Task, error) {
+func (m *MockMutableState) GenerateMigrationTasks() (tasks.Task, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateMigrationTasks", now)
+	ret := m.ctrl.Call(m, "GenerateMigrationTasks")
 	ret0, _ := ret[0].(tasks.Task)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GenerateMigrationTasks indicates an expected call of GenerateMigrationTasks.
-func (mr *MockMutableStateMockRecorder) GenerateMigrationTasks(now interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) GenerateMigrationTasks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockMutableState)(nil).GenerateMigrationTasks), now)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockMutableState)(nil).GenerateMigrationTasks))
 }
 
 // GetActivityByActivityID mocks base method.
@@ -2368,17 +2368,17 @@ func (mr *MockMutableStateMockRecorder) SetHistoryBuilder(hBuilder interface{}) 
 }
 
 // SetHistoryTree mocks base method.
-func (m *MockMutableState) SetHistoryTree(ctx context.Context, treeID string) error {
+func (m *MockMutableState) SetHistoryTree(ctx context.Context, executionTimeout, runTimeout *time.Duration, treeID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetHistoryTree", ctx, treeID)
+	ret := m.ctrl.Call(m, "SetHistoryTree", ctx, executionTimeout, runTimeout, treeID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetHistoryTree indicates an expected call of SetHistoryTree.
-func (mr *MockMutableStateMockRecorder) SetHistoryTree(ctx, treeID interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) SetHistoryTree(ctx, executionTimeout, runTimeout, treeID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryTree", reflect.TypeOf((*MockMutableState)(nil).SetHistoryTree), ctx, treeID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryTree", reflect.TypeOf((*MockMutableState)(nil).SetHistoryTree), ctx, executionTimeout, runTimeout, treeID)
 }
 
 // SetUpdateCondition mocks base method.

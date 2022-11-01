@@ -217,9 +217,10 @@ func (m *MetadataStore) UpdateNamespace(
 // It may leave database in inconsistent state and must be retried until success.
 // Step 1. Update row in `namespaces_by_id` table with the new name.
 // Step 2. Batch of:
-//         Insert row into `namespaces` table with new name and new `notification_version`.
-//         Delete row from `namespaces` table with old name.
-//         Update `notification_version` in metadata row.
+//
+//	Insert row into `namespaces` table with new name and new `notification_version`.
+//	Delete row from `namespaces` table with old name.
+//	Update `notification_version` in metadata row.
 //
 // NOTE: `namespaces_by_id` is currently used only for `DescribeNamespace` API and namespace Id collision check.
 func (m *MetadataStore) RenameNamespace(

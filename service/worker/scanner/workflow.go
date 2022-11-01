@@ -150,8 +150,12 @@ func HistoryScavengerActivity(
 		ctx.executionManager,
 		rps,
 		ctx.historyClient,
+		ctx.adminClient,
+		ctx.namespaceRegistry,
 		hbd,
 		ctx.cfg.HistoryScannerDataMinAge,
+		ctx.cfg.ExecutionDataDurationBuffer,
+		ctx.cfg.HistoryScannerVerifyRetention,
 		ctx.metricsClient,
 		ctx.logger,
 	)
@@ -186,8 +190,16 @@ func ExecutionsScavengerActivity(
 
 	metricsClient := ctx.metricsClient
 	scavenger := executions.NewScavenger(
+		activityCtx,
 		ctx.cfg.Persistence.NumHistoryShards,
+		ctx.cfg.ExecutionScannerPerHostQPS,
+		ctx.cfg.ExecutionScannerPerShardQPS,
+		ctx.cfg.ExecutionDataDurationBuffer,
+		ctx.cfg.ExecutionScannerWorkerCount,
 		ctx.executionManager,
+		ctx.namespaceRegistry,
+		ctx.historyClient,
+		ctx.adminClient,
 		metricsClient,
 		ctx.logger,
 	)

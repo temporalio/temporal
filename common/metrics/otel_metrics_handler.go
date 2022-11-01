@@ -49,6 +49,7 @@ var _ MetricsHandler = (*otelMetricsHandler)(nil)
 
 func NewOtelMetricsHandler(l log.Logger, o OpenTelemetryProvider, cfg ClientConfig) *otelMetricsHandler {
 	return &otelMetricsHandler{
+		l:           l,
 		provider:    o,
 		excludeTags: configExcludeTags(cfg),
 	}
@@ -78,13 +79,13 @@ func (omp *otelMetricsHandler) Counter(counter string) CounterMetric {
 
 // Gauge obtains a gauge for the given name and MetricOptions.
 func (omp *otelMetricsHandler) Gauge(gauge string) GaugeMetric {
-	c, err := omp.provider.GetMeter().SyncFloat64().UpDownCounter(gauge)
+	c, err := omp.provider.GetMeter().AsyncFloat64().Gauge(gauge)
 	if err != nil {
 		omp.l.Fatal("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
 	}
 
 	return GaugeMetricFunc(func(i float64, t ...Tag) {
-		c.Add(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		c.Observe(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
 	})
 }
 

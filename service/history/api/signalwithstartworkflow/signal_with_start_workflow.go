@@ -62,7 +62,7 @@ func SignalWithStartWorkflow(
 		); err != nil {
 			return "", err
 		}
-		return currentWorkflowContext.GetRunID(), nil
+		return currentWorkflowContext.GetWorkflowKey().RunID, nil
 	}
 
 	return startAndSignalWorkflow(
@@ -153,7 +153,7 @@ func startAndSignalWorkflowActionFn(
 		currentExecutionState.RunId,
 		currentExecutionState.State,
 		currentExecutionState.Status,
-		currentWorkflowContext.GetWorkflowID(),
+		currentWorkflowContext.GetWorkflowKey().WorkflowID,
 		newRunID,
 		workflowIDReusePolicy,
 	)
@@ -240,7 +240,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	)
 	switch failedErr := err.(type) {
 	case nil:
-		return newWorkflowContext.GetRunID(), nil
+		return newWorkflowContext.GetWorkflowKey().RunID, nil
 	case *persistence.CurrentWorkflowConditionFailedError:
 		if failedErr.RequestID == requestID {
 			return failedErr.RunID, nil

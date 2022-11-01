@@ -68,10 +68,9 @@ const (
 //
 // The hierarchy is as follows from lowest to highest
 //
-//   base.yaml
-//       env.yaml   -- environment is one of the input params ex-development
-//         env_az.yaml -- zone is another input param
-//
+//	base.yaml
+//	    env.yaml   -- environment is one of the input params ex-development
+//	      env_az.yaml -- zone is another input param
 func Load(env string, configDir string, zone string, config interface{}) error {
 	if len(env) == 0 {
 		env = envDevelopment

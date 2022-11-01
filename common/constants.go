@@ -27,6 +27,8 @@ package common
 import (
 	"math"
 	"time"
+
+	"go.temporal.io/server/common/debug"
 )
 
 const (
@@ -83,7 +85,7 @@ const (
 
 const (
 	// DefaultWorkflowTaskTimeout sets the Default Workflow Task timeout for a Workflow
-	DefaultWorkflowTaskTimeout = 10 * time.Second
+	DefaultWorkflowTaskTimeout = 10 * time.Second * debug.TimeoutMultiplier
 
 	// MaxWorkflowTaskStartToCloseTimeout sets the Max Workflow Task start to close timeout for a Workflow
 	MaxWorkflowTaskStartToCloseTimeout = 120 * time.Second

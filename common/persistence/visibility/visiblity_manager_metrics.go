@@ -208,6 +208,16 @@ func (m *visibilityManagerMetrics) CountWorkflowExecutions(
 	return response, m.updateErrorMetric(scope, err)
 }
 
+func (m *visibilityManagerMetrics) GetWorkflowExecution(
+	ctx context.Context,
+	request *manager.GetWorkflowExecutionRequest,
+) (*manager.GetWorkflowExecutionResponse, error) {
+	scope, sw := m.tagScope(metrics.VisibilityPersistenceGetWorkflowExecutionScope)
+	response, err := m.delegate.GetWorkflowExecution(ctx, request)
+	sw.Stop()
+	return response, m.updateErrorMetric(scope, err)
+}
+
 func (m *visibilityManagerMetrics) tagScope(scope int) (metrics.Scope, metrics.Stopwatch) {
 	taggedScope := m.metricClient.Scope(scope, m.visibilityTypeMetricsTag)
 	taggedScope.IncCounter(metrics.VisibilityPersistenceRequests)

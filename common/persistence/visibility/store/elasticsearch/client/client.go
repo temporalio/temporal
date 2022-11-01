@@ -42,6 +42,7 @@ const (
 type (
 	// Client is a wrapper around Elasticsearch client library.
 	Client interface {
+		Get(ctx context.Context, index string, docID string) (*elastic.GetResult, error)
 		Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error)
 		Count(ctx context.Context, index string, query elastic.Query) (int64, error)
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error)

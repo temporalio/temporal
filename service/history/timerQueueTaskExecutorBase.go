@@ -130,16 +130,20 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	if ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); !ok {
-		return nil
+	if err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); err != nil {
+		return err
 	}
 
+	// We should only archive if it is enabled, and the data wasn't already archived. If WorkflowDataAlreadyArchived
+	// flag is set to true, then the data was already archived, so we can skip it.
+	archiveIfEnabled := !task.WorkflowDataAlreadyArchived
 	return t.deleteManager.DeleteWorkflowExecutionByRetention(
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
 		weContext,
 		mutableState,
+		archiveIfEnabled,
 	)
 }
 

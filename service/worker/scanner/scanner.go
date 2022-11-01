@@ -26,6 +26,7 @@ package scanner
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -34,21 +35,19 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/sdk"
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
-)
-
-const (
-	// scannerStartUpDelay is to let services warm up
-	scannerStartUpDelay = time.Second * 4
 )
 
 type (
@@ -72,18 +71,31 @@ type (
 		// HistoryScannerDataMinAge indicates the cleanup threshold of history branch data
 		// Only clean up history branches that older than this threshold
 		HistoryScannerDataMinAge dynamicconfig.DurationPropertyFn
+		// HistoryScannerVerifyRetention indicates if the history scavenger to do retention verification
+		HistoryScannerVerifyRetention dynamicconfig.BoolPropertyFn
+		// ExecutionScannerPerHostQPS the max rate of calls to scan execution data per host
+		ExecutionScannerPerHostQPS dynamicconfig.IntPropertyFn
+		// ExecutionScannerPerShardQPS the max rate of calls to scan execution data per shard
+		ExecutionScannerPerShardQPS dynamicconfig.IntPropertyFn
+		// ExecutionDataDurationBuffer is the data TTL duration buffer of execution data
+		ExecutionDataDurationBuffer dynamicconfig.DurationPropertyFn
+		// ExecutionScannerWorkerCount is the execution scavenger task worker number
+		ExecutionScannerWorkerCount dynamicconfig.IntPropertyFn
 	}
 
 	// scannerContext is the context object that get's
 	// passed around within the scanner workflows / activities
 	scannerContext struct {
-		cfg              *Config
-		logger           log.Logger
-		sdkSystemClient  sdkclient.Client
-		metricsClient    metrics.Client
-		executionManager persistence.ExecutionManager
-		taskManager      persistence.TaskManager
-		historyClient    historyservice.HistoryServiceClient
+		cfg               *Config
+		logger            log.Logger
+		sdkClientFactory  sdk.ClientFactory
+		metricsClient     metrics.Client
+		executionManager  persistence.ExecutionManager
+		taskManager       persistence.TaskManager
+		historyClient     historyservice.HistoryServiceClient
+		adminClient       adminservice.AdminServiceClient
+		workerFactory     sdk.WorkerFactory
+		namespaceRegistry namespace.Registry
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -91,6 +103,7 @@ type (
 	// and emit stats for analytics
 	Scanner struct {
 		context scannerContext
+		wg      sync.WaitGroup
 	}
 )
 
@@ -102,21 +115,27 @@ type (
 func New(
 	logger log.Logger,
 	cfg *Config,
-	sdkSystemClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	metricsClient metrics.Client,
 	executionManager persistence.ExecutionManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
+	adminClient adminservice.AdminServiceClient,
+	registry namespace.Registry,
+	workerFactory sdk.WorkerFactory,
 ) *Scanner {
 	return &Scanner{
 		context: scannerContext{
-			cfg:              cfg,
-			sdkSystemClient:  sdkSystemClient,
-			logger:           logger,
-			metricsClient:    metricsClient,
-			executionManager: executionManager,
-			taskManager:      taskManager,
-			historyClient:    historyClient,
+			cfg:               cfg,
+			sdkClientFactory:  sdkClientFactory,
+			logger:            logger,
+			metricsClient:     metricsClient,
+			executionManager:  executionManager,
+			taskManager:       taskManager,
+			historyClient:     historyClient,
+			adminClient:       adminClient,
+			workerFactory:     workerFactory,
+			namespaceRegistry: registry,
 		},
 	}
 }
@@ -137,20 +156,25 @@ func (s *Scanner) Start() error {
 
 	var workerTaskQueueNames []string
 	if s.context.cfg.ExecutionsScannerEnabled() {
+		s.wg.Add(1)
 		go s.startWorkflowWithRetry(executionsScannerWFStartOptions, executionsScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, executionsScannerTaskQueueName)
 	}
 
 	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskQueueScannerEnabled() {
+		s.wg.Add(1)
 		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tqScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, tqScannerTaskQueueName)
-	} else if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeNoSQL && s.context.cfg.HistoryScannerEnabled() {
+	}
+
+	if s.context.cfg.HistoryScannerEnabled() {
+		s.wg.Add(1)
 		go s.startWorkflowWithRetry(historyScannerWFStartOptions, historyScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, historyScannerTaskQueueName)
 	}
 
 	for _, tl := range workerTaskQueueNames {
-		work := worker.New(s.context.sdkSystemClient, tl, workerOpts)
+		work := s.context.workerFactory.New(s.context.sdkClientFactory.GetSystemClient(), tl, workerOpts)
 
 		work.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tqScannerWFTypeName})
 		work.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
@@ -167,20 +191,22 @@ func (s *Scanner) Start() error {
 	return nil
 }
 
+func (s *Scanner) Stop() {
+	s.wg.Wait()
+}
+
 func (s *Scanner) startWorkflowWithRetry(
 	options sdkclient.StartWorkflowOptions,
 	workflowType string,
 	workflowArgs ...interface{},
 ) {
-
-	// let history / matching service warm up
-	time.Sleep(scannerStartUpDelay)
+	defer s.wg.Done()
 
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
 		WithMaximumInterval(time.Minute).
 		WithExpirationInterval(backoff.NoInterval)
 	err := backoff.ThrottleRetry(func() error {
-		return s.startWorkflow(s.context.sdkSystemClient, options, workflowType, workflowArgs...)
+		return s.startWorkflow(s.context.sdkClientFactory.GetSystemClient(), options, workflowType, workflowArgs...)
 	}, policy, func(err error) bool {
 		return true
 	})

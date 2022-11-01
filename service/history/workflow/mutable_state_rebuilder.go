@@ -101,7 +101,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 		return nil, serviceerror.NewInternal(ErrMessageHistorySizeZero)
 	}
 	firstEvent := history[0]
-	lastEvent := history[len(history)-1]
 	var newRunMutableState MutableState
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
@@ -109,13 +108,15 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	// need to clear the stickiness since workflow turned to passive
 	b.mutableState.ClearStickyness()
 
+	executionInfo := b.mutableState.GetExecutionInfo()
+
 	for _, event := range history {
 		// NOTE: stateRebuilder is also being used in the active side
-		if b.mutableState.GetExecutionInfo().GetVersionHistories() != nil {
+		if executionInfo.GetVersionHistories() != nil {
 			if err := b.mutableState.UpdateCurrentVersion(event.GetVersion(), true); err != nil {
 				return nil, err
 			}
-			versionHistories := b.mutableState.GetExecutionInfo().GetVersionHistories()
+			versionHistories := executionInfo.GetVersionHistories()
 			versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 			if err != nil {
 				return nil, err
@@ -126,7 +127,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			)); err != nil {
 				return nil, err
 			}
-			b.mutableState.GetExecutionInfo().LastEventTaskId = event.GetTaskId()
+			executionInfo.LastEventTaskId = event.GetTaskId()
 		}
 
 		switch event.GetEventType() {
@@ -151,14 +152,12 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := taskGenerator.GenerateRecordWorkflowStartedTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {
 				return nil, err
 			}
 
 			if err := taskGenerator.GenerateWorkflowStartTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {
 				return nil, err
@@ -166,7 +165,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if timestamp.DurationValue(attributes.GetFirstWorkflowTaskBackoff()) > 0 {
 				if err := taskGenerator.GenerateDelayedWorkflowTasks(
-					timestamp.TimeValue(event.GetEventTime()),
 					event,
 				); err != nil {
 					return nil, err
@@ -175,6 +173,8 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := b.mutableState.SetHistoryTree(
 				ctx,
+				executionInfo.WorkflowExecutionTimeout,
+				executionInfo.WorkflowRunTimeout,
 				execution.GetRunId(),
 			); err != nil {
 				return nil, err
@@ -200,7 +200,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			// there shall be no workflowTask schedule to start timeout
 			// NOTE: at the beginning of the loop, stickyness is cleared
 			if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				workflowTask.ScheduledEventID,
 			); err != nil {
 				return nil, err
@@ -221,7 +220,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := taskGenerator.GenerateStartWorkflowTaskTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				workflowTask.ScheduledEventID,
 			); err != nil {
 				return nil, err
@@ -252,7 +250,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				// there shall be no workflowTask schedule to start timeout
 				// NOTE: at the beginning of the loop, stickyness is cleared
 				if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
-					timestamp.TimeValue(event.GetEventTime()),
 					workflowTask.ScheduledEventID,
 				); err != nil {
 					return nil, err
@@ -275,7 +272,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				// there shall be no workflowTask schedule to start timeout
 				// NOTE: at the beginning of the loop, stickyness is cleared
 				if err := taskGenerator.GenerateScheduleWorkflowTaskTasks(
-					timestamp.TimeValue(event.GetEventTime()),
 					workflowTask.ScheduledEventID,
 				); err != nil {
 					return nil, err
@@ -291,7 +287,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := taskGenerator.GenerateActivityTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {
 				return nil, err
@@ -372,7 +367,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := taskGenerator.GenerateChildWorkflowTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {
 				return nil, err
@@ -440,7 +434,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := taskGenerator.GenerateRequestCancelExternalTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {
 				return nil, err
@@ -472,7 +465,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := taskGenerator.GenerateSignalExternalTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {
 				return nil, err
@@ -511,17 +503,13 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 		case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 			b.mutableState.ReplicateUpsertWorkflowSearchAttributesEvent(event)
-			if err := taskGenerator.GenerateUpsertVisibilityTask(
-				timestamp.TimeValue(event.GetEventTime()),
-			); err != nil {
+			if err := taskGenerator.GenerateUpsertVisibilityTask(); err != nil {
 				return nil, err
 			}
 
 		case enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED:
 			b.mutableState.ReplicateWorkflowPropertiesModifiedEvent(event)
-			if err := taskGenerator.GenerateUpsertVisibilityTask(
-				timestamp.TimeValue(event.GetEventTime()),
-			); err != nil {
+			if err := taskGenerator.GenerateUpsertVisibilityTask(); err != nil {
 				return nil, err
 			}
 
@@ -534,7 +522,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				event,
 				false,
 			); err != nil {
@@ -550,7 +537,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				event,
 				false,
 			); err != nil {
@@ -566,7 +552,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				event,
 				false,
 			); err != nil {
@@ -582,7 +567,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				event,
 				false,
 			); err != nil {
@@ -598,7 +582,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				event,
 				false,
 			); err != nil {
@@ -646,7 +629,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
-				timestamp.TimeValue(event.GetEventTime()),
 				event,
 				false,
 			); err != nil {
@@ -668,18 +650,14 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	}
 
 	// must generate the activity timer / user timer at the very end
-	if err := taskGenerator.GenerateActivityTimerTasks(
-		timestamp.TimeValue(lastEvent.GetEventTime()),
-	); err != nil {
+	if err := taskGenerator.GenerateActivityTimerTasks(); err != nil {
 		return nil, err
 	}
-	if err := taskGenerator.GenerateUserTimerTasks(
-		timestamp.TimeValue(lastEvent.GetEventTime()),
-	); err != nil {
+	if err := taskGenerator.GenerateUserTimerTasks(); err != nil {
 		return nil, err
 	}
 
-	b.mutableState.GetExecutionInfo().LastFirstEventId = firstEvent.GetEventId()
+	executionInfo.LastFirstEventId = firstEvent.GetEventId()
 
 	b.mutableState.SetHistoryBuilder(NewImmutableHistoryBuilder(history))
 

@@ -60,6 +60,11 @@ type (
 		PageSize         *int
 	}
 
+	VisibilityGetFilter struct {
+		NamespaceID string
+		RunID       string
+	}
+
 	VisibilityDeleteFilter struct {
 		NamespaceID string
 		RunID       string
@@ -80,6 +85,7 @@ type (
 		//   - OPTIONALLY specify one of following params
 		//     - workflowID, workflowTypeName, status (along with closed=true)
 		SelectFromVisibility(ctx context.Context, filter VisibilitySelectFilter) ([]VisibilityRow, error)
+		GetFromVisibility(ctx context.Context, filter VisibilityGetFilter) (*VisibilityRow, error)
 		DeleteFromVisibility(ctx context.Context, filter VisibilityDeleteFilter) (sql.Result, error)
 	}
 )

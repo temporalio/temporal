@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -304,9 +303,9 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	if !ok {
 		return nil
 	}
-	ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
-	if !ok {
-		return nil
+	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
+	if err != nil {
+		return err
 	}
 
 	if workflowTask.Attempt != task.ScheduleAttempt {
@@ -423,9 +422,9 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		}
 		return nil
 	}
-	ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
-	if !ok {
-		return nil
+	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
+	if err != nil {
+		return err
 	}
 
 	taskQueue := &taskqueuepb.TaskQueue{
@@ -477,9 +476,9 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	if err != nil {
 		return err
 	}
-	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, task.Version, task)
-	if !ok {
-		return nil
+	err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, task.Version, task)
+	if err != nil {
+		return err
 	}
 
 	eventBatchFirstEventID := mutableState.GetNextEventID()
@@ -528,15 +527,13 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newMutableState, err := api.CreateMutableState(
-		ctx,
+	newMutableState := workflow.NewMutableState(
 		t.shard,
+		t.shard.GetEventsCache(),
+		t.shard.GetLogger(),
 		mutableState.GetNamespaceEntry(),
-		newRunID,
+		t.shard.GetTimeSource().Now(),
 	)
-	if err != nil {
-		return err
-	}
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		ctx,
 		mutableState,
@@ -548,6 +545,15 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		backoffInterval,
 		initiator,
 	)
+	if err != nil {
+		return err
+	}
+
+	err = newMutableState.SetHistoryTree(
+		ctx,
+		newMutableState.GetExecutionInfo().WorkflowExecutionTimeout,
+		newMutableState.GetExecutionInfo().WorkflowRunTimeout,
+		newRunID)
 	if err != nil {
 		return err
 	}

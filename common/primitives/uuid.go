@@ -34,8 +34,8 @@ import (
 
 // UUID represents a 16-byte universally unique identifier
 // this type is a wrapper around google/uuid with the following differences
-//  - type is a byte slice instead of [16]byte
-//  - db serialization converts uuid to bytes as opposed to string
+//   - type is a byte slice instead of [16]byte
+//   - db serialization converts uuid to bytes as opposed to string
 type UUID []byte
 
 // MustParseUUID returns a UUID parsed from the given string representation
@@ -51,9 +51,9 @@ func MustParseUUID(s string) UUID {
 
 // ParseUUID returns a UUID parsed from the given string representation
 // returns:
-//  - nil if the input is empty string
-//  - error if input is malformed
-//  - UUID object if input can be parsed and is valid
+//   - nil if the input is empty string
+//   - error if input is malformed
+//   - UUID object if input can be parsed and is valid
 func ParseUUID(s string) (UUID, error) {
 	if s == "" {
 		return nil, nil
@@ -76,9 +76,9 @@ func MustValidateUUID(s string) string {
 
 // ValidateUUID parses and validates UUID contents from the given string representation
 // returns:
-//  - nil if the input is empty string
-//  - error if input is malformed
-//  - input if input can be parsed and is valid
+//   - nil if the input is empty string
+//   - error if input is malformed
+//   - input if input can be parsed and is valid
 func ValidateUUID(s string) (string, error) {
 	if s == "" {
 		return "", nil

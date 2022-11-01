@@ -70,6 +70,7 @@ type (
 			we commonpb.WorkflowExecution,
 			weCtx Context,
 			ms MutableState,
+			archiveIfEnabled bool,
 		) error
 	}
 
@@ -116,7 +117,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 
 	// We can make this task immediately because the task itself will keep rescheduling itself until the workflow is
 	// closed before actually deleting the workflow.
-	deleteTask, err := taskGenerator.GenerateDeleteExecutionTask(m.timeSource.Now())
+	deleteTask, err := taskGenerator.GenerateDeleteExecutionTask()
 	if err != nil {
 		return err
 	}
@@ -161,6 +162,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	we commonpb.WorkflowExecution,
 	weCtx Context,
 	ms MutableState,
+	archiveIfEnabled bool,
 ) error {
 
 	return m.deleteWorkflowExecutionInternal(
@@ -169,7 +171,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 		we,
 		weCtx,
 		ms,
-		true,  // When retention is fired, archive workflow execution.
+		archiveIfEnabled,
 		false, // When retention is fired, workflow execution is always closed.
 		m.metricsClient.Scope(metrics.HistoryProcessDeleteHistoryEventScope),
 	)

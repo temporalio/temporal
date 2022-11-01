@@ -67,10 +67,7 @@ type (
 	CallerType int
 
 	Context interface {
-		GetNamespace() namespace.Name
-		GetNamespaceID() namespace.ID
-		GetWorkflowID() string
-		GetRunID() string
+		GetWorkflowKey() definition.WorkflowKey
 
 		LoadMutableState(ctx context.Context) (MutableState, error)
 		LoadExecutionStats(ctx context.Context) (*persistencespb.ExecutionStats, error)
@@ -224,20 +221,14 @@ func (c *ContextImpl) Clear() {
 	}
 }
 
-func (c *ContextImpl) GetNamespaceID() namespace.ID {
-	return namespace.ID(c.workflowKey.NamespaceID)
-}
-
-func (c *ContextImpl) GetWorkflowID() string {
-	return c.workflowKey.WorkflowID
-}
-
-func (c *ContextImpl) GetRunID() string {
-	return c.workflowKey.RunID
+func (c *ContextImpl) GetWorkflowKey() definition.WorkflowKey {
+	return c.workflowKey
 }
 
 func (c *ContextImpl) GetNamespace() namespace.Name {
-	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(c.GetNamespaceID())
+	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(
+		namespace.ID(c.workflowKey.NamespaceID),
+	)
 	if err != nil {
 		return ""
 	}
@@ -261,7 +252,9 @@ func (c *ContextImpl) LoadExecutionStats(ctx context.Context) (*persistencespb.E
 }
 
 func (c *ContextImpl) LoadMutableState(ctx context.Context) (MutableState, error) {
-	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(c.GetNamespaceID())
+	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(
+		namespace.ID(c.workflowKey.NamespaceID),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -680,7 +673,8 @@ func (c *ContextImpl) SetWorkflowExecution(ctx context.Context, now time.Time) (
 		return err
 	}
 	if len(resetWorkflowEventsSeq) != 0 {
-		return serviceerror.NewInternal("SetWorkflowExecution encountered new events")
+		c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.ClosedWorkflowBufferEventCount)
+		c.logger.Warn("SetWorkflowExecution encountered new events")
 	}
 
 	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{

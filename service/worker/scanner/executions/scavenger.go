@@ -25,11 +25,16 @@
 package executions
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 
 	"go.temporal.io/server/common"
@@ -40,9 +45,8 @@ import (
 )
 
 const (
-	executorPoolSize         = 4
 	executorPollInterval     = time.Minute
-	executorMaxDeferredTasks = 10000
+	executorMaxDeferredTasks = 50000
 )
 
 type (
@@ -50,12 +54,18 @@ type (
 	Scavenger struct {
 		status           int32
 		numHistoryShards int32
+		activityContext  context.Context
 
-		executionManager persistence.ExecutionManager
-		executor         executor.Executor
-		rateLimiter      quotas.RateLimiter
-		metrics          metrics.Client
-		logger           log.Logger
+		executionManager            persistence.ExecutionManager
+		registry                    namespace.Registry
+		historyClient               historyservice.HistoryServiceClient
+		adminClient                 adminservice.AdminServiceClient
+		executor                    executor.Executor
+		rateLimiter                 quotas.RateLimiter
+		perShardQPS                 dynamicconfig.IntPropertyFn
+		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
+		metrics                     metrics.Client
+		logger                      log.Logger
 
 		stopC  chan struct{}
 		stopWG sync.WaitGroup
@@ -70,28 +80,42 @@ type (
 //
 // The scavenger will retry on all persistence errors infinitely and will only stop under
 // two conditions
-//  - either all executions are processed successfully (or)
-//  - Stop() method is called to stop the scavenger
+//   - either all executions are processed successfully (or)
+//   - Stop() method is called to stop the scavenger
 func NewScavenger(
+	activityContext context.Context,
 	numHistoryShards int32,
+	perHostQPS dynamicconfig.IntPropertyFn,
+	perShardQPS dynamicconfig.IntPropertyFn,
+	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
+	executionTaskWorker dynamicconfig.IntPropertyFn,
 	executionManager persistence.ExecutionManager,
+	registry namespace.Registry,
+	historyClient historyservice.HistoryServiceClient,
+	adminClient adminservice.AdminServiceClient,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) *Scavenger {
 	return &Scavenger{
+		activityContext:  activityContext,
 		numHistoryShards: numHistoryShards,
 		executionManager: executionManager,
+		registry:         registry,
+		historyClient:    historyClient,
+		adminClient:      adminClient,
 		executor: executor.NewFixedSizePoolExecutor(
-			executorPoolSize,
+			executionTaskWorker(),
 			executorMaxDeferredTasks,
 			metricsClient,
 			metrics.ExecutionsScavengerScope,
 		),
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(rateOverall) },
+			func() float64 { return float64(perHostQPS()) },
 		),
-		metrics: metricsClient,
-		logger:  logger,
+		perShardQPS:                 perShardQPS,
+		executionDataDurationBuffer: executionDataDurationBuffer,
+		metrics:                     metricsClient,
+		logger:                      logger,
 
 		stopC: make(chan struct{}),
 	}
@@ -145,17 +169,22 @@ func (s *Scavenger) run() {
 
 	for shardID := int32(1); shardID <= s.numHistoryShards; shardID++ {
 		submitted := s.executor.Submit(newTask(
+			s.activityContext,
 			shardID,
 			s.executionManager,
+			s.registry,
+			s.historyClient,
+			s.adminClient,
 			s.metrics,
 			s.logger,
 			s,
 			quotas.NewMultiRateLimiter([]quotas.RateLimiter{
 				quotas.NewDefaultOutgoingRateLimiter(
-					func() float64 { return float64(ratePerShard) },
+					func() float64 { return float64(s.perShardQPS()) },
 				),
 				s.rateLimiter,
 			}),
+			s.executionDataDurationBuffer,
 		))
 		if !submitted {
 			s.logger.Error("unable to submit task to executor", tag.ShardID(shardID))

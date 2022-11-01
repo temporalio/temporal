@@ -280,6 +280,11 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
+	if err == consts.ErrTaskVersionMismatch {
+		e.taggedMetricsHandler.Counter(TaskVersionMisMatch).Record(1)
+		return nil
+	}
+
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 		// TODO remove this error check special case after multi-cursor is enabled by default,
 		// since the new task life cycle will not give up until task processed / verified

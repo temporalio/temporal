@@ -63,8 +63,7 @@ func GenerateTask(
 	}
 	defer func() { wfContext.GetReleaseFn()(retError) }()
 
-	now := shard.GetTimeSource().Now()
-	task, err := wfContext.GetMutableState().GenerateMigrationTasks(now)
+	task, err := wfContext.GetMutableState().GenerateMigrationTasks()
 	if err != nil {
 		return nil, err
 	}
