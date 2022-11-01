@@ -25,15 +25,15 @@
 package matching
 
 import (
-	"fmt"
 	"math/rand"
-	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/tqname"
+	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -70,10 +70,6 @@ type (
 		nWritePartitions  dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		namespaceIDToName func(id namespace.ID) (namespace.Name, error)
 	}
-)
-
-const (
-	taskQueuePartitionPrefix = "/_sys/"
 )
 
 // NewLoadBalancer returns an instance of matching load balancer that
@@ -114,13 +110,14 @@ func (lb *defaultLoadBalancer) pickPartition(
 	forwardedFrom string,
 	nPartitions dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters,
 ) string {
-
 	if forwardedFrom != "" || taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 		return taskQueue.GetName()
 	}
 
-	if strings.HasPrefix(taskQueue.GetName(), taskQueuePartitionPrefix) {
-		// this should never happen when forwardedFrom is empty
+	tqName, err := tqname.FromBaseName(taskQueue.GetName())
+
+	// this should never happen when forwardedFrom is empty
+	if err != nil {
 		return taskQueue.GetName()
 	}
 
@@ -129,15 +126,6 @@ func (lb *defaultLoadBalancer) pickPartition(
 		return taskQueue.GetName()
 	}
 
-	n := nPartitions(namespace.String(), taskQueue.GetName(), taskQueueType)
-	if n <= 0 {
-		return taskQueue.GetName()
-	}
-
-	p := rand.Intn(n)
-	if p == 0 {
-		return taskQueue.GetName()
-	}
-
-	return fmt.Sprintf("%v%v/%v", taskQueuePartitionPrefix, taskQueue.GetName(), p)
+	n := util.Min(1, nPartitions(namespace.String(), tqName.BaseNameString(), taskQueueType))
+	return tqName.WithPartition(rand.Intn(n)).FullName()
 }

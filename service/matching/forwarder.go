@@ -120,10 +120,11 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		return errTaskQueueKind
 	}
 
-	name := fwdr.taskQueueID.Parent(fwdr.cfg.ForwarderMaxChildrenPerNode())
-	if name == "" {
+	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
+	if fwdr.taskQueueID.IsRoot() || degree == 0 {
 		return errNoParent
 	}
+	target := fwdr.taskQueueID.Parent(degree)
 
 	if !fwdr.limiter.Allow() {
 		return errForwarderSlowDown
@@ -148,28 +149,28 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 			NamespaceId: task.event.Data.GetNamespaceId(),
 			Execution:   task.workflowExecution(),
 			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: name,
+				Name: target.FullName(),
 				Kind: fwdr.taskQueueKind,
 			},
 			ScheduledEventId:       task.event.Data.GetScheduledEventId(),
 			Clock:                  task.event.Data.GetClock(),
 			Source:                 task.source,
 			ScheduleToStartTimeout: &expirationDuration,
-			ForwardedSource:        fwdr.taskQueueID.name,
+			ForwardedSource:        fwdr.taskQueueID.FullName(),
 		})
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 			NamespaceId: task.event.Data.GetNamespaceId(),
 			Execution:   task.workflowExecution(),
 			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: name,
+				Name: target.FullName(),
 				Kind: fwdr.taskQueueKind,
 			},
 			ScheduledEventId:       task.event.Data.GetScheduledEventId(),
 			Clock:                  task.event.Data.GetClock(),
 			Source:                 task.source,
 			ScheduleToStartTimeout: &expirationDuration,
-			ForwardedSource:        fwdr.taskQueueID.name,
+			ForwardedSource:        fwdr.taskQueueID.FullName(),
 		})
 	default:
 		return errInvalidTaskQueueType
@@ -188,19 +189,20 @@ func (fwdr *Forwarder) ForwardQueryTask(
 		return nil, errTaskQueueKind
 	}
 
-	name := fwdr.taskQueueID.Parent(fwdr.cfg.ForwarderMaxChildrenPerNode())
-	if name == "" {
+	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
+	if fwdr.taskQueueID.IsRoot() || degree == 0 {
 		return nil, errNoParent
 	}
+	target := fwdr.taskQueueID.Parent(degree)
 
 	resp, err := fwdr.client.QueryWorkflow(ctx, &matchingservice.QueryWorkflowRequest{
 		NamespaceId: task.query.request.GetNamespaceId(),
 		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: name,
+			Name: target.FullName(),
 			Kind: fwdr.taskQueueKind,
 		},
 		QueryRequest:    task.query.request.QueryRequest,
-		ForwardedSource: fwdr.taskQueueID.name,
+		ForwardedSource: fwdr.taskQueueID.FullName(),
 	})
 
 	return resp, fwdr.handleErr(err)
@@ -212,10 +214,11 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 		return nil, errTaskQueueKind
 	}
 
-	name := fwdr.taskQueueID.Parent(fwdr.cfg.ForwarderMaxChildrenPerNode())
-	if name == "" {
+	degree := fwdr.cfg.ForwarderMaxChildrenPerNode()
+	if fwdr.taskQueueID.IsRoot() || degree == 0 {
 		return nil, errNoParent
 	}
+	target := fwdr.taskQueueID.Parent(degree)
 
 	pollerID, _ := ctx.Value(pollerIDKey).(string)
 	identity, _ := ctx.Value(identityKey).(string)
@@ -227,12 +230,12 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: name,
+					Name: target.FullName(),
 					Kind: fwdr.taskQueueKind,
 				},
 				Identity: identity,
 			},
-			ForwardedSource: fwdr.taskQueueID.name,
+			ForwardedSource: fwdr.taskQueueID.FullName(),
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
@@ -244,12 +247,12 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: name,
+					Name: target.FullName(),
 					Kind: fwdr.taskQueueKind,
 				},
 				Identity: identity,
 			},
-			ForwardedSource: fwdr.taskQueueID.name,
+			ForwardedSource: fwdr.taskQueueID.FullName(),
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)

@@ -122,7 +122,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 ) error {
 	response, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
 		NamespaceID: db.namespaceID.String(),
-		TaskQueue:   db.taskQueue.name,
+		TaskQueue:   db.taskQueue.FullName(),
 		TaskType:    db.taskQueue.taskType,
 	})
 	switch err.(type) {
@@ -221,7 +221,7 @@ func (db *taskQueueDB) GetTasks(
 ) (*persistence.GetTasksResponse, error) {
 	return db.store.GetTasks(ctx, &persistence.GetTasksRequest{
 		NamespaceID:        db.namespaceID.String(),
-		TaskQueue:          db.taskQueue.name,
+		TaskQueue:          db.taskQueue.FullName(),
 		TaskType:           db.taskQueue.taskType,
 		PageSize:           batchSize,
 		InclusiveMinTaskID: inclusiveMinTaskID,
@@ -237,7 +237,7 @@ func (db *taskQueueDB) CompleteTask(
 	err := db.store.CompleteTask(ctx, &persistence.CompleteTaskRequest{
 		TaskQueue: &persistence.TaskQueueKey{
 			NamespaceID:   db.namespaceID.String(),
-			TaskQueueName: db.taskQueue.name,
+			TaskQueueName: db.taskQueue.FullName(),
 			TaskQueueType: db.taskQueue.taskType,
 		},
 		TaskID: taskID,
@@ -248,7 +248,8 @@ func (db *taskQueueDB) CompleteTask(
 			tag.Error(err),
 			tag.TaskID(taskID),
 			tag.WorkflowTaskQueueType(db.taskQueue.taskType),
-			tag.WorkflowTaskQueueName(db.taskQueue.name))
+			tag.WorkflowTaskQueueName(db.taskQueue.FullName()),
+		)
 	}
 	return err
 }
@@ -263,7 +264,7 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 ) (int, error) {
 	n, err := db.store.CompleteTasksLessThan(ctx, &persistence.CompleteTasksLessThanRequest{
 		NamespaceID:        db.namespaceID.String(),
-		TaskQueueName:      db.taskQueue.name,
+		TaskQueueName:      db.taskQueue.FullName(),
 		TaskType:           db.taskQueue.taskType,
 		ExclusiveMaxTaskID: exclusiveMaxTaskID,
 		Limit:              limit,
@@ -274,7 +275,8 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 			tag.Error(err),
 			tag.TaskID(exclusiveMaxTaskID),
 			tag.WorkflowTaskQueueType(db.taskQueue.taskType),
-			tag.WorkflowTaskQueueName(db.taskQueue.name))
+			tag.WorkflowTaskQueueName(db.taskQueue.FullName()),
+		)
 	}
 	return n, err
 }
@@ -303,7 +305,7 @@ func (db *taskQueueDB) getVersioningDataLocked(
 
 	tqInfo, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
 		NamespaceID: db.namespaceID.String(),
-		TaskQueue:   db.taskQueue.name,
+		TaskQueue:   db.taskQueue.FullName(),
 		TaskType:    db.taskQueue.taskType,
 	})
 	if err != nil {
@@ -388,7 +390,7 @@ func (db *taskQueueDB) expiryTime() *time.Time {
 func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	return &persistencespb.TaskQueueInfo{
 		NamespaceId:    db.namespaceID.String(),
-		Name:           db.taskQueue.name,
+		Name:           db.taskQueue.FullName(),
 		TaskType:       db.taskQueue.taskType,
 		Kind:           db.taskQueueKind,
 		AckLevel:       db.ackLevel,

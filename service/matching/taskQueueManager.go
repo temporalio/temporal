@@ -203,13 +203,13 @@ func newTaskQueueManager(
 
 	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue, taskQueueKind, e.logger)
 	logger := log.With(e.logger,
-		tag.WorkflowTaskQueueName(taskQueue.name),
+		tag.WorkflowTaskQueueName(taskQueue.FullName()),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
 		tag.WorkflowNamespace(nsName.String()))
 	metricsScope := metrics.GetPerTaskQueueScope(
 		e.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope),
 		nsName.String(),
-		taskQueue.name,
+		taskQueue.FullName(),
 		taskQueueKind,
 	).Tagged(metrics.TaskQueueTypeTag(taskQueue.taskType))
 	tlMgr := &taskQueueManagerImpl{
@@ -492,7 +492,7 @@ func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator
 			}
 			wg.Add(1)
 			go func(i int, tqt enumspb.TaskQueueType) {
-				tq := c.taskQueueID.mkName(i)
+				tq := c.taskQueueID.WithPartition(i).FullName()
 				_, err := c.matchingClient.InvalidateTaskQueueMetadata(ctx,
 					&matchingservice.InvalidateTaskQueueMetadataRequest{
 						NamespaceId:    c.taskQueueID.namespaceID.String(),
@@ -584,7 +584,7 @@ func (c *taskQueueManagerImpl) String() string {
 		buf.WriteString("Workflow")
 	}
 	rangeID := c.db.RangeID()
-	_, _ = fmt.Fprintf(buf, " task queue %v\n", c.taskQueueID.name)
+	_, _ = fmt.Fprintf(buf, " task queue %v\n", c.taskQueueID.FullName())
 	_, _ = fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
 	_, _ = fmt.Fprintf(buf, "TaskIDBlock=%+v\n", rangeIDToTaskIDBlock(rangeID, c.config.RangeSize))
 	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
@@ -619,7 +619,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 			c.logger.Error("Persistent store operation failure",
 				tag.StoreOperationStopTaskQueue,
 				tag.Error(err),
-				tag.WorkflowTaskQueueName(c.taskQueueID.name),
+				tag.WorkflowTaskQueueName(c.taskQueueID.FullName()),
 				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
 			c.signalFatalProblem(c)
 			return
@@ -745,7 +745,7 @@ func (c *taskQueueManagerImpl) fetchMetadataFromRootPartition(ctx context.Contex
 	}
 	curHash := HashVersioningData(curDat)
 
-	rootTqName := c.taskQueueID.GetRoot()
+	rootTqName := c.taskQueueID.Root().FullName()
 	if len(curHash) == 0 {
 		// if we have no data, make sure we send a sigil value, so it's known we desire versioning data
 		curHash = []byte{0}

@@ -22,14 +22,93 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package matching
+package tqname
 
 import (
 	"strconv"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestParse(t *testing.T) {
+	a := assert.New(t)
+
+	n, err := Parse("my-basic-tq-name")
+	a.NoError(err)
+	a.Equal("my-basic-tq-name", n.BaseNameString())
+	a.Equal(0, n.partition)
+	a.Equal("", n.versionSet)
+	a.Equal("my-basic-tq-name", n.FullName())
+	a.True(n.IsRoot())
+	a.Equal(0, n.Parent(5).partition)
+
+	n, err = Parse("/_sys/my-basic-tq-name/23")
+	a.NoError(err)
+	a.Equal("my-basic-tq-name", n.BaseNameString())
+	a.Equal(23, n.partition)
+	a.Equal("", n.versionSet)
+	a.Equal("/_sys/my-basic-tq-name/23", n.FullName())
+	a.False(n.IsRoot())
+	a.Equal(4, n.Parent(5).partition)
+	a.Equal(0, n.Parent(32).partition)
+
+	n, err = Parse("/_sys/my-basic-tq-name/verxyz:23")
+	a.NoError(err)
+	a.Equal("my-basic-tq-name", n.BaseNameString())
+	a.Equal(23, n.partition)
+	a.Equal("verxyz", n.versionSet)
+	a.Equal("/_sys/my-basic-tq-name/verxyz:23", n.FullName())
+}
+
+func TestFromBaseName(t *testing.T) {
+	a := assert.New(t)
+
+	n, err := FromBaseName("my-basic-tq-name")
+	a.NoError(err)
+	a.Equal("my-basic-tq-name", n.BaseNameString())
+	a.Equal(0, n.partition)
+	a.Equal("", n.versionSet)
+
+	_, err = FromBaseName("/_sys/my-basic-tq-name/23")
+	a.Error(err)
+}
+
+func TestWithPartition(t *testing.T) {
+	a := assert.New(t)
+
+	n, err := FromBaseName("tq")
+	a.NoError(err)
+	n = n.WithPartition(23)
+	a.Equal("tq", n.BaseNameString())
+	a.Equal(23, n.partition)
+	a.Equal("/_sys/tq/23", n.FullName())
+	a.False(n.IsRoot())
+}
+
+func TestWithVersionSet(t *testing.T) {
+	a := assert.New(t)
+
+	n, err := FromBaseName("tq")
+	a.NoError(err)
+	n = n.WithVersionSet("abc3")
+	a.Equal("tq", n.BaseNameString())
+	a.Equal(0, n.partition)
+	a.Equal("/_sys/tq/abc3:0", n.FullName())
+}
+
+func TestWithPartitionAndVersionSet(t *testing.T) {
+	a := assert.New(t)
+
+	n, err := FromBaseName("tq")
+	a.NoError(err)
+	n = n.WithPartition(11).WithVersionSet("abc3")
+	a.Equal("tq", n.BaseNameString())
+	a.Equal(11, n.partition)
+	a.Equal("abc3", n.versionSet)
+	a.Equal("/_sys/tq/abc3:11", n.FullName())
+}
 
 func TestValidTaskQueueNames(t *testing.T) {
 	testCases := []struct {
@@ -51,13 +130,13 @@ func TestValidTaskQueueNames(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
-			tn, err := newTaskQueueName(tc.input)
+			tn, err := Parse(tc.input)
 			require.NoError(t, err)
 			require.Equal(t, tc.partition, tn.partition)
 			require.Equal(t, tc.partition == 0, tn.IsRoot())
 			require.Equal(t, tc.baseName, tn.baseName)
-			require.Equal(t, tc.baseName, tn.GetRoot())
-			require.Equal(t, tc.input, tn.name)
+			require.Equal(t, tc.baseName, tn.BaseNameString())
+			require.Equal(t, tc.input, tn.FullName())
 		})
 	}
 }
@@ -95,9 +174,9 @@ func TestTaskQueueParentName(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name+"#"+strconv.Itoa(tc.degree), func(t *testing.T) {
-			tn, err := newTaskQueueName(tc.name)
+			tn, err := Parse(tc.name)
 			require.NoError(t, err)
-			require.Equal(t, tc.output, tn.Parent(tc.degree))
+			require.Equal(t, tc.output, tn.Parent(tc.degree).FullName())
 		})
 	}
 }
@@ -111,31 +190,13 @@ func TestInvalidTaskqueueNames(t *testing.T) {
 		"/_sys/list0",
 		"/_sys/list0/0",
 		"/_sys/list0/-1",
+		"/_sys/list0/abc",
+		"/_sys/list0:verxyz:23",
 	}
 	for _, name := range inputs {
 		t.Run(name, func(t *testing.T) {
-			_, err := newTaskQueueName(name)
+			_, err := Parse(name)
 			require.Error(t, err)
-		})
-	}
-}
-
-func TestTaskQueueCreateNameWIthPartition(t *testing.T) {
-	testCases := []struct {
-		name   string
-		part   int
-		output string
-	}{
-		{"foo", 0, "foo"},
-		{"foo", 1, "/_sys/foo/1"},
-		{"foo", 2, "/_sys/foo/2"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name+"#"+strconv.Itoa(tc.part), func(t *testing.T) {
-			tn, err := NewTaskQueueNameWithPartition(tc.name, tc.part)
-			require.NoError(t, err)
-			require.Equal(t, tc.output, tn.name)
 		})
 	}
 }
