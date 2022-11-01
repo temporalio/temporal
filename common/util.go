@@ -373,7 +373,7 @@ func WorkflowIDToHistoryShard(
 	return int32(hash%uint32(numberOfShards)) + 1 // ShardID starts with 1
 }
 
-// PrettyPrintHistory prints history in human readable format
+// PrettyPrintHistory prints history in human-readable format
 func PrettyPrintHistory(history *historypb.History, header ...string) {
 	var sb strings.Builder
 	sb.WriteString("==========================================================================\n")
