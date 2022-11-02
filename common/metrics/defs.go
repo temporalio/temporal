@@ -2317,6 +2317,8 @@ const (
 	ArchiverClientVisibilityRequestCount
 	ArchiverClientVisibilityInlineArchiveAttemptCount
 	ArchiverClientVisibilityInlineArchiveFailureCount
+	ArchiverArchiveLatency
+	ArchiverArchiveTargetLatency
 	LastRetrievedMessageID
 	LastProcessedMessageID
 	ReplicationTasksApplied
@@ -2810,6 +2812,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ArchiverClientVisibilityRequestCount:              NewCounterDef("archiver_client_visibility_request"),
 		ArchiverClientVisibilityInlineArchiveAttemptCount: NewCounterDef("archiver_client_visibility_inline_archive_attempt"),
 		ArchiverClientVisibilityInlineArchiveFailureCount: NewCounterDef("archiver_client_visibility_inline_archive_failure"),
+		ArchiverArchiveLatency:                            NewTimerDef("archiver_archive_latency"),
+		ArchiverArchiveTargetLatency:                      NewTimerDef("archiver_archive_target_latency"),
 		LastRetrievedMessageID:                            NewGaugeDef("last_retrieved_message_id"),
 		LastProcessedMessageID:                            NewGaugeDef("last_processed_message_id"),
 		ReplicationTasksApplied:                           NewCounterDef("replication_tasks_applied"),
