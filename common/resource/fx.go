@@ -101,6 +101,10 @@ var Module = fx.Options(
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
 	namespace.RegistryLifetimeHooksModule,
+	fx.Provide(fx.Annotate(
+		func(p namespace.Registry) common.Pingable { return p },
+		fx.ResultTags(`group:"deadlockDetectorRoots"`),
+	)),
 	fx.Provide(serialization.NewSerializer),
 	fx.Provide(HistoryBootstrapContainerProvider),
 	fx.Provide(VisibilityBootstrapContainerProvider),

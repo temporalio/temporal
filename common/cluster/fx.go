@@ -28,11 +28,17 @@ import (
 	"context"
 
 	"go.uber.org/fx"
+
+	"go.temporal.io/server/common"
 )
 
 var MetadataLifetimeHooksModule = fx.Options(
 	fx.Provide(NewMetadataFromConfig),
 	fx.Invoke(MetadataLifetimeHooks),
+	fx.Provide(fx.Annotate(
+		func(p Metadata) common.Pingable { return p },
+		fx.ResultTags(`group:"deadlockDetectorRoots"`),
+	)),
 )
 
 func MetadataLifetimeHooks(
