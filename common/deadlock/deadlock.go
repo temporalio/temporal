@@ -35,14 +35,11 @@ import (
 	"google.golang.org/grpc/health"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/internal/goro"
-	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -54,10 +51,7 @@ type (
 		HealthServer  *health.Server
 		MetricsClient metrics.Client
 
-		// root pingables:
-		NamespaceRegistry namespace.Registry
-		ClusterMetadata   cluster.Metadata
-		ShardController   shard.Controller `optional:"true"`
+		Roots []common.Pingable `group:"deadlockDetectorRoots"`
 	}
 
 	config struct {
@@ -86,13 +80,6 @@ type (
 )
 
 func NewDeadlockDetector(params params) *deadlockDetector {
-	roots := []common.Pingable{
-		params.NamespaceRegistry,
-		params.ClusterMetadata,
-	}
-	if params.ShardController != nil {
-		roots = append(roots, params.ShardController)
-	}
 	return &deadlockDetector{
 		logger:       params.Logger,
 		healthServer: params.HealthServer,
@@ -104,7 +91,7 @@ func NewDeadlockDetector(params params) *deadlockDetector {
 			Interval:          params.Collection.GetDurationProperty(dynamicconfig.DeadlockInterval, 30*time.Second),
 			MaxWorkersPerRoot: params.Collection.GetIntProperty(dynamicconfig.DeadlockMaxWorkersPerRoot, 10),
 		},
-		roots: roots,
+		roots: params.Roots,
 	}
 }
 
