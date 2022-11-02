@@ -32,6 +32,7 @@ import (
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -69,6 +70,7 @@ type (
 		searchAttributesMapper     searchattribute.Mapper
 		customInterceptors         []grpc.UnaryServerInterceptor
 		metricProvider             metrics.MetricsHandler
+		deadlockDetectorRoots      []common.Pingable
 	}
 )
 

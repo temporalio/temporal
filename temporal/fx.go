@@ -44,6 +44,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -118,6 +119,8 @@ type (
 		Authorizer             authorization.Authorizer
 		ClaimMapper            authorization.ClaimMapper
 		AudienceGetter         authorization.JWTAudienceMapper
+
+		DeadlockDetectorRoots []common.Pingable
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                  log.Logger
@@ -270,6 +273,8 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ClaimMapper:            so.claimMapper,
 		AudienceGetter:         so.audienceGetter,
 
+		DeadlockDetectorRoots: so.deadlockDetectorRoots,
+
 		Logger:                  logger,
 		ClientFactoryProvider:   clientFactoryProvider,
 		DynamicConfigClient:     dcClient,
@@ -331,6 +336,7 @@ type (
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
 		SpanExporters              []otelsdktrace.SpanExporter
 		InstanceID                 resource.InstanceID `optional:"true"`
+		DeadlockDetectorRoots      []common.Pingable
 	}
 )
 
@@ -384,6 +390,7 @@ func HistoryServiceProvider(
 		history.QueueModule,
 		history.Module,
 		replication.Module,
+		deadlockDetectorRoots(params.DeadlockDetectorRoots),
 		FxLogAdapter,
 	)
 
@@ -443,6 +450,7 @@ func MatchingServiceProvider(
 		ServiceTracingModule,
 		resource.DefaultOptions,
 		matching.Module,
+		deadlockDetectorRoots(params.DeadlockDetectorRoots),
 		FxLogAdapter,
 	)
 
@@ -503,6 +511,7 @@ func FrontendServiceProvider(
 		ServiceTracingModule,
 		resource.DefaultOptions,
 		frontend.Module,
+		deadlockDetectorRoots(params.DeadlockDetectorRoots),
 		FxLogAdapter,
 	)
 
@@ -562,6 +571,7 @@ func WorkerServiceProvider(
 		ServiceTracingModule,
 		resource.DefaultOptions,
 		worker.Module,
+		deadlockDetectorRoots(params.DeadlockDetectorRoots),
 		FxLogAdapter,
 	)
 
@@ -922,6 +932,20 @@ func shutdownAll(exporters []otelsdktrace.SpanExporter) func(ctx context.Context
 		}
 		return nil
 	}
+}
+
+func deadlockDetectorRoots(pingables []common.Pingable) fx.Option {
+	// We have to annotate each value individually because fx doesn't support
+	// providing a slice to a group.
+	var annotated []interface{}
+	for _, pingable := range pingables {
+		annotated = append(annotated, fx.Annotate(
+			pingable,
+			fx.As(new(common.Pingable)),
+			fx.ResultTags(`group:"deadlockDetectorRoots"`),
+		))
+	}
+	return fx.Supply(annotated...)
 }
 
 var FxLogAdapter = fx.WithLogger(func(logger log.Logger) fxevent.Logger {

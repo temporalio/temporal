@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -186,5 +187,11 @@ func WithChainedFrontendGrpcInterceptors(
 func WithCustomMetricsHandler(provider metrics.MetricsHandler) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.metricProvider = provider
+	})
+}
+
+func WithDeadlockDetectorRoot(p common.Pingable) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.deadlockDetectorRoots = append(s.deadlockDetectorRoots, p)
 	})
 }
