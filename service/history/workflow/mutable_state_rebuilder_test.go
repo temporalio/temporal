@@ -756,10 +756,11 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskScheduled() {
 		WorkflowTaskTimeout: &timeout,
 		TaskQueue:           taskqueue,
 		Attempt:             workflowTaskAttempt,
+		IsSpeculative:       false,
 	}
 	s.executionInfo.TaskQueue = taskqueue.GetName()
 	s.mockMutableState.EXPECT().ReplicateWorkflowTaskScheduledEvent(
-		event.GetVersion(), event.GetEventId(), taskqueue, &timeout, workflowTaskAttempt, event.GetEventTime(), event.GetEventTime(),
+		event.GetVersion(), event.GetEventId(), taskqueue, &timeout, workflowTaskAttempt, event.GetEventTime(), event.GetEventTime(), false,
 	).Return(wt, nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateScheduleWorkflowTaskTasks(

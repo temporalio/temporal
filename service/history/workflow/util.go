@@ -72,7 +72,7 @@ func ScheduleWorkflowTask(
 		return nil
 	}
 
-	_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
+	_, err := mutableState.AddWorkflowTaskScheduledEvent(false, false)
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow task scheduled event.")
 	}

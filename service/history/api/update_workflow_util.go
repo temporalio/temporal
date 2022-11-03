@@ -80,6 +80,7 @@ func UpdateWorkflowWithNew(
 		if !mutableState.HasPendingWorkflowTask() {
 			if _, err := mutableState.AddWorkflowTaskScheduledEvent(
 				false,
+				false,
 			); err != nil {
 				return err
 			}

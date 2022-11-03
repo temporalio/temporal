@@ -191,6 +191,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				attributes.GetAttempt(),
 				event.GetEventTime(),
 				event.GetEventTime(),
+				false, // speculative workflow tasks are not replicated.
 			)
 			if err != nil {
 				return nil, err

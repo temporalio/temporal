@@ -117,6 +117,7 @@ func (r *EventsReapplierImpl) ReapplyEvents(
 	if !ms.HasPendingWorkflowTask() {
 		if _, err := ms.AddWorkflowTaskScheduledEvent(
 			false,
+			false,
 		); err != nil {
 			return nil, err
 		}

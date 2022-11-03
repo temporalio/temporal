@@ -146,7 +146,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 		request.GetHeader(),
 	).Return(&history.HistoryEvent{}, nil)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
-	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false).Return(&workflow.WorkflowTaskInfo{}, nil)
+	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, false).Return(&workflow.WorkflowTaskInfo{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, gomock.Any()).Return(nil)
 
 	err := signalWorkflow(
