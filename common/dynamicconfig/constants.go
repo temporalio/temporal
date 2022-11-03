@@ -492,6 +492,32 @@ const (
 	// VisibilityProcessorEnsureCloseBeforeDelete means we ensure the visibility of an execution is closed before we delete its visibility records
 	VisibilityProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
 
+	// ArchivalTaskBatchSize is batch size for archivalQueueProcessor
+	ArchivalTaskBatchSize = "history.archivalTaskBatchSize"
+	// ArchivalProcessorMaxPollRPS is max poll rate per second for archivalQueueProcessor
+	ArchivalProcessorMaxPollRPS = "history.archivalProcessorMaxPollRPS"
+	// ArchivalProcessorMaxPollHostRPS is max poll rate per second for all archivalQueueProcessor on a host
+	ArchivalProcessorMaxPollHostRPS = "history.archivalProcessorMaxPollHostRPS"
+	// ArchivalTaskMaxRetryCount is max times of retry for archivalQueueProcessor
+	ArchivalTaskMaxRetryCount = "history.archivalTaskMaxRetryCount"
+	// ArchivalProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for
+	// archivalQueueProcessor
+	ArchivalProcessorSchedulerWorkerCount = "history.archivalProcessorSchedulerWorkerCount"
+	// ArchivalProcessorSchedulerRoundRobinWeights is the priority round robin weights by archival task scheduler for
+	// all namespaces
+	ArchivalProcessorSchedulerRoundRobinWeights = "history.archivalProcessorSchedulerRoundRobinWeights"
+	// ArchivalProcessorMaxPollInterval max poll interval for archivalQueueProcessor
+	ArchivalProcessorMaxPollInterval = "history.archivalProcessorMaxPollInterval"
+	// ArchivalProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
+	ArchivalProcessorMaxPollIntervalJitterCoefficient = "history.archivalProcessorMaxPollIntervalJitterCoefficient"
+	// ArchivalProcessorUpdateAckInterval is update interval for archivalQueueProcessor
+	ArchivalProcessorUpdateAckInterval = "history.archivalProcessorUpdateAckInterval"
+	// ArchivalProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
+	ArchivalProcessorUpdateAckIntervalJitterCoefficient = "history.archivalProcessorUpdateAckIntervalJitterCoefficient"
+	// ArchivalProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for
+	// archivalQueueProcessor
+	ArchivalProcessorPollBackoffInterval = "history.archivalProcessorPollBackoffInterval"
+
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"
 	// ReplicatorTaskWorkerCount is number of worker for ReplicatorProcessor
