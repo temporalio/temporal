@@ -310,7 +310,7 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 					return false
 				default:
 				}
-				return true
+				return !shard.IsShardOwnershipLostError(err)
 			})
 
 			timer.Reset(t.config.TransferProcessorCompleteTransferInterval())

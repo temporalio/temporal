@@ -282,7 +282,7 @@ func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
 					return false
 				default:
 				}
-				return true
+				return !shard.IsShardOwnershipLostError(err)
 			})
 
 			timer.Reset(t.config.VisibilityProcessorCompleteTaskInterval())

@@ -316,7 +316,7 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 					return false
 				default:
 				}
-				return true
+				return !shard.IsShardOwnershipLostError(err)
 			})
 
 			timer.Reset(t.config.TimerProcessorCompleteTimerInterval())
