@@ -25,6 +25,7 @@
 package configs
 
 import (
+	"math"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -297,6 +298,7 @@ type Config struct {
 	ArchivalProcessorSchedulerRoundRobinWeights         dynamicconfig.MapPropertyFnWithNamespaceFilter
 	ArchivalProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
 	ArchivalTaskBatchSize                               dynamicconfig.IntPropertyFn
+	ArchivalTaskMaxRetryCount                           dynamicconfig.IntPropertyFn
 	ArchivalProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
 	ArchivalProcessorMaxPollRPS                         dynamicconfig.IntPropertyFn
 	ArchivalProcessorMaxPollInterval                    dynamicconfig.DurationPropertyFn
@@ -530,6 +532,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 
 		// Archival related
 		ArchivalTaskBatchSize:                       dc.GetIntProperty(dynamicconfig.ArchivalTaskBatchSize, 100),
+		ArchivalTaskMaxRetryCount:                   dc.GetIntProperty(dynamicconfig.ArchivalTaskMaxRetryCount, math.MaxInt32),
 		ArchivalProcessorMaxPollRPS:                 dc.GetIntProperty(dynamicconfig.ArchivalProcessorMaxPollRPS, 20),
 		ArchivalProcessorMaxPollHostRPS:             dc.GetIntProperty(dynamicconfig.ArchivalProcessorMaxPollHostRPS, 0),
 		ArchivalProcessorSchedulerWorkerCount:       dc.GetIntProperty(dynamicconfig.ArchivalProcessorSchedulerWorkerCount, 512),
