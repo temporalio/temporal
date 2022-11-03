@@ -282,8 +282,8 @@ func TestArchiver(t *testing.T) {
 
 			archiver := NewArchiver(archiverProvider, logRecorder, metricsHandler, rateLimiter)
 			_, err = archiver.Archive(ctx, &Request{
-				HistoryURI:    historyURI.String(),
-				VisibilityURI: visibilityURI.String(),
+				HistoryURI:    historyURI,
+				VisibilityURI: visibilityURI,
 				Targets:       c.Targets,
 			})
 
