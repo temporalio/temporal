@@ -356,22 +356,24 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	// and the rest of logic is RPC calls, which can take time.
 	release(nil)
 
-	err = t.archiveVisibility(
-		ctx,
-		namespace.ID(task.NamespaceID),
-		task.WorkflowID,
-		task.RunID,
-		workflowTypeName,
-		workflowStartTime,
-		workflowExecutionTime,
-		*workflowCloseTime,
-		workflowStatus,
-		workflowHistoryLength,
-		visibilityMemo,
-		searchAttr,
-	)
-	if err != nil {
-		return err
+	if !task.CanSkipVisibilityArchival {
+		err = t.archiveVisibility(
+			ctx,
+			namespace.ID(task.NamespaceID),
+			task.WorkflowID,
+			task.RunID,
+			workflowTypeName,
+			workflowStartTime,
+			workflowExecutionTime,
+			*workflowCloseTime,
+			workflowStatus,
+			workflowHistoryLength,
+			visibilityMemo,
+			searchAttr,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Communicate the result to parent execution if this is Child Workflow execution
