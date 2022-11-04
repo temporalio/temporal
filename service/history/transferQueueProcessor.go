@@ -66,8 +66,7 @@ type (
 		sdkClientFactory          sdk.ClientFactory
 		taskAllocator             taskAllocator
 		config                    *configs.Config
-		metricProvider            metrics.MetricsHandler
-		metricsClient             metrics.Client
+		metricHandler             metrics.MetricsHandler
 		clientBean                client.Bean
 		matchingClient            matchingservice.MatchingServiceClient
 		historyClient             historyservice.HistoryServiceClient
@@ -116,8 +115,7 @@ func newTransferQueueProcessor(
 		sdkClientFactory:   sdkClientFactory,
 		taskAllocator:      taskAllocator,
 		config:             config,
-		metricProvider:     metricProvider,
-		metricsClient:      shard.GetMetricsClient(),
+		metricHandler:      metricProvider,
 		clientBean:         clientBean,
 		matchingClient:     matchingClient,
 		historyClient:      historyClient,
@@ -250,7 +248,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 			t.config.TransferProcessorFailoverMaxPollRPS,
 		),
 		t.logger,
-		t.metricProvider,
+		t.metricHandler,
 	)
 
 	// NOTE: READ REF BEFORE MODIFICATION
@@ -347,7 +345,9 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 		return nil
 	}
 
-	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.TaskBatchCompleteCounter)
+	t.metricHandler.Counter(metrics.TaskBatchCompleteCounter.GetMetricName()).Record(
+		1,
+		metrics.OperationTag(metrics.TransferQueueProcessorScope))
 
 	if lowerAckLevel < upperAckLevel {
 		ctx, cancel := newQueueIOContext()
@@ -410,7 +410,7 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 					t.config.TransferProcessorMaxPollRPS,
 				),
 				t.logger,
-				t.metricProvider,
+				t.metricHandler,
 				t.matchingClient,
 			)
 			processor.Start()

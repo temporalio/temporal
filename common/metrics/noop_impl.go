@@ -31,84 +31,12 @@ import (
 )
 
 var (
-	NoopClient         Client         = newNoopClient()
-	NoopScope          Scope          = newNoopScope()
-	NoopStopwatch      Stopwatch      = newNoopStopwatch()
 	NoopMetricsHandler MetricsHandler = newNoopMetricsHandler()
 )
 
 type (
-	noopClientImpl     struct{}
-	noopStopwatchImpl  struct{}
-	noopScopeImpl      struct{}
 	noopMetricsHandler struct{}
 )
-
-func newNoopClient() *noopClientImpl {
-	return &noopClientImpl{}
-}
-
-func (m *noopClientImpl) IncCounter(scope int, counter int) {}
-
-func (m *noopClientImpl) AddCounter(scope int, counter int, delta int64) {}
-
-func (m *noopClientImpl) StartTimer(scope int, timer int) Stopwatch {
-	return NoopStopwatch
-}
-
-func (m *noopClientImpl) RecordTimer(scope int, timer int, d time.Duration) {}
-
-func (m *noopClientImpl) RecordDistribution(scope int, timer int, d int) {}
-
-func (m *noopClientImpl) UpdateGauge(scope int, gauge int, value float64) {}
-
-func (m *noopClientImpl) Scope(scope int, tags ...Tag) Scope {
-	return NoopScope
-}
-
-// NoopScope returns a noop scope of metrics
-func newNoopScope() *noopScopeImpl {
-	return &noopScopeImpl{}
-}
-
-func (n *noopScopeImpl) AddCounterInternal(name string, delta int64) {
-}
-
-func (n *noopScopeImpl) StartTimerInternal(timer string) Stopwatch {
-	return NoopStopwatch
-}
-
-func (n *noopScopeImpl) RecordTimerInternal(timer string, d time.Duration) {
-}
-
-func (n *noopScopeImpl) RecordDistributionInternal(id string, unit MetricUnit, d int) {
-}
-
-func (n *noopScopeImpl) IncCounter(counter int) {}
-
-func (n *noopScopeImpl) AddCounter(counter int, delta int64) {}
-
-func (n *noopScopeImpl) StartTimer(timer int) Stopwatch {
-	return NoopStopwatch
-}
-
-func (n *noopScopeImpl) RecordTimer(timer int, d time.Duration) {}
-
-func (n *noopScopeImpl) RecordDistribution(id int, d int) {}
-
-func (n *noopScopeImpl) UpdateGauge(gauge int, value float64) {}
-
-func (n *noopScopeImpl) Tagged(tags ...Tag) Scope {
-	return n
-}
-
-// NopStopwatch return a fake tally stop watch
-func newNoopStopwatch() *noopStopwatchImpl {
-	return &noopStopwatchImpl{}
-}
-
-func (n *noopStopwatchImpl) Stop()                       {}
-func (n *noopStopwatchImpl) Subtract(nsec time.Duration) {}
 
 func newNoopMetricsHandler() *noopMetricsHandler { return &noopMetricsHandler{} }
 

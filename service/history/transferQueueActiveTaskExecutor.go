@@ -99,7 +99,7 @@ func newTransferQueueActiveTaskExecutor(
 			logger,
 		),
 		parentClosePolicyClient: parentclosepolicy.NewClient(
-			shard.GetMetricsClient(),
+			shard.GetMetricsHandler(),
 			shard.GetLogger(),
 			sdkClientFactory,
 			config.NumParentClosePolicySystemWorkflows(),
@@ -163,7 +163,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -202,7 +202,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -284,7 +284,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -436,7 +436,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -556,7 +556,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -701,7 +701,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -868,7 +868,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	}
 	defer func() { currentRelease(retError) }()
 
-	currentMutableState, err := loadMutableStateForTransferTask(ctx, currentContext, task, t.metricsClient, t.logger)
+	currentMutableState, err := loadMutableStateForTransferTask(ctx, currentContext, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -956,7 +956,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			return err
 		}
 		defer func() { baseRelease(retError) }()
-		baseMutableState, err = loadMutableStateForTransferTask(ctx, baseContext, task, t.metricsClient, t.logger)
+		baseMutableState, err = loadMutableStateForTransferTask(ctx, baseContext, task, t.metricHandler, t.logger)
 		if err != nil {
 			return err
 		}
@@ -1403,7 +1403,10 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		// This means the reset point is corrupted and not retry able.
 		// There must be a bug in our system that we must fix.(for example, history is not the same in active/passive)
-		t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.AutoResetPointCorruptionCounter)
+		t.metricHandler.Counter(metrics.AutoResetPointCorruptionCounter.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(metrics.TransferQueueProcessorScope),
+		)
 		logger.Error("Auto-Reset workflow failed and not retryable. The reset point is corrupted.", tag.Error(err))
 		return nil
 
@@ -1424,7 +1427,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		return nil
 	}
 
-	scope := t.metricsClient.Scope(metrics.TransferActiveTaskCloseExecutionScope)
+	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.TransferActiveTaskCloseExecutionScope))
 
 	if t.shard.GetConfig().EnableParentClosePolicyWorker() &&
 		len(childInfos) >= t.shard.GetConfig().ParentClosePolicyThreshold(parentNamespaceName) {
@@ -1475,13 +1478,13 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		err := t.applyParentClosePolicy(ctx, &parentExecution, childInfo)
 		switch err.(type) {
 		case nil:
-			scope.IncCounter(metrics.ParentClosePolicyProcessorSuccess)
+			scope.Counter(metrics.ParentClosePolicyProcessorSuccess.GetMetricName()).Record(1)
 		case *serviceerror.NotFound:
 			// If child execution is deleted there is nothing to close.
 		case *serviceerror.NamespaceNotFound:
 			// If child namespace is deleted there is nothing to close.
 		default:
-			scope.IncCounter(metrics.ParentClosePolicyProcessorFailures)
+			scope.Counter(metrics.ParentClosePolicyProcessorFailures.GetMetricName()).Record(1)
 			return err
 		}
 	}

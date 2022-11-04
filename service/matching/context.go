@@ -36,22 +36,22 @@ import (
 
 type handlerContext struct {
 	context.Context
-	scope  metrics.Scope
-	logger log.Logger
+	metricsHandler metrics.MetricsHandler
+	logger         log.Logger
 }
 
 func newHandlerContext(
 	ctx context.Context,
 	namespace namespace.Name,
 	taskQueue *taskqueuepb.TaskQueue,
-	metricsClient metrics.Client,
-	metricsScope int,
+	metricsHandler metrics.MetricsHandler,
+	operation string,
 	logger log.Logger,
 ) *handlerContext {
 	return &handlerContext{
 		Context: ctx,
-		scope: metrics.GetPerTaskQueueScope(
-			metricsClient.Scope(metricsScope),
+		metricsHandler: metrics.GetPerTaskQueueScope(
+			metricsHandler.WithTags(metrics.OperationTag(operation)),
 			namespace.String(),
 			taskQueue.GetName(),
 			taskQueue.GetKind(),

@@ -61,7 +61,7 @@ type (
 			r resolver.ServiceResolver,
 			clusterName string,
 			logger log.Logger,
-			metricsClient metrics.Client,
+			metricsHandler metrics.MetricsHandler,
 		) DataStoreFactory
 	}
 )
@@ -72,7 +72,7 @@ func DataStoreFactoryProvider(
 	config *config.Persistence,
 	abstractDataStoreFactory AbstractDataStoreFactory,
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 ) (DataStoreFactory, *FaultInjectionDataStoreFactory) {
 
 	var dataStoreFactory DataStoreFactory
@@ -83,7 +83,7 @@ func DataStoreFactoryProvider(
 	case defaultCfg.SQL != nil:
 		dataStoreFactory = sql.NewFactory(*defaultCfg.SQL, r, string(clusterName), logger)
 	case defaultCfg.CustomDataStoreConfig != nil:
-		dataStoreFactory = abstractDataStoreFactory.NewFactory(*defaultCfg.CustomDataStoreConfig, r, string(clusterName), logger, metricsClient)
+		dataStoreFactory = abstractDataStoreFactory.NewFactory(*defaultCfg.CustomDataStoreConfig, r, string(clusterName), logger, metricsHandler)
 	default:
 		logger.Fatal("invalid config: one of cassandra or sql params must be specified for default data store")
 	}

@@ -179,15 +179,15 @@ func (m *MockFactoryProvider) EXPECT() *MockFactoryProviderMockRecorder {
 }
 
 // NewFactory mocks base method.
-func (m *MockFactoryProvider) NewFactory(rpcFactory common.RPCFactory, monitor membership.Monitor, metricsClient metrics.Client, dc *dynamicconfig.Collection, numberOfHistoryShards int32, logger, throttledLogger log.Logger) Factory {
+func (m *MockFactoryProvider) NewFactory(rpcFactory common.RPCFactory, monitor membership.Monitor, metricsHandler metrics.MetricsHandler, dc *dynamicconfig.Collection, numberOfHistoryShards int32, logger, throttledLogger log.Logger) Factory {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewFactory", rpcFactory, monitor, metricsClient, dc, numberOfHistoryShards, logger, throttledLogger)
+	ret := m.ctrl.Call(m, "NewFactory", rpcFactory, monitor, metricsHandler, dc, numberOfHistoryShards, logger, throttledLogger)
 	ret0, _ := ret[0].(Factory)
 	return ret0
 }
 
 // NewFactory indicates an expected call of NewFactory.
-func (mr *MockFactoryProviderMockRecorder) NewFactory(rpcFactory, monitor, metricsClient, dc, numberOfHistoryShards, logger, throttledLogger interface{}) *gomock.Call {
+func (mr *MockFactoryProviderMockRecorder) NewFactory(rpcFactory, monitor, metricsHandler, dc, numberOfHistoryShards, logger, throttledLogger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewFactory", reflect.TypeOf((*MockFactoryProvider)(nil).NewFactory), rpcFactory, monitor, metricsClient, dc, numberOfHistoryShards, logger, throttledLogger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewFactory", reflect.TypeOf((*MockFactoryProvider)(nil).NewFactory), rpcFactory, monitor, metricsHandler, dc, numberOfHistoryShards, logger, throttledLogger)
 }

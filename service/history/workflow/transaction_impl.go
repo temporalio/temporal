@@ -628,11 +628,11 @@ func emitMutationMetrics(
 	namespace *namespace.Namespace,
 	stats ...*persistence.MutableStateStatistics,
 ) {
-	metricsClient := shard.GetMetricsClient()
+	metricsHandler := shard.GetMetricsHandler()
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.SessionStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsHandler.WithTags(metrics.OperationTag(metrics.SessionStatsScope), metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}
@@ -643,11 +643,11 @@ func emitGetMetrics(
 	namespace *namespace.Namespace,
 	stats ...*persistence.MutableStateStatistics,
 ) {
-	metricsClient := shard.GetMetricsClient()
+	metricsHandler := shard.GetMetricsHandler()
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.ExecutionStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionStatsScope), metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}
@@ -684,7 +684,7 @@ func emitCompletionMetrics(
 	namespace *namespace.Namespace,
 	completionMetrics ...completionMetric,
 ) {
-	metricsClient := shard.GetMetricsClient()
+	metricsHandler := shard.GetMetricsHandler()
 	namespaceName := namespace.Name()
 
 	for _, completionMetric := range completionMetrics {
@@ -692,7 +692,7 @@ func emitCompletionMetrics(
 			continue
 		}
 		emitWorkflowCompletionStats(
-			metricsClient,
+			metricsHandler,
 			namespaceName,
 			completionMetric.taskQueue,
 			completionMetric.status,

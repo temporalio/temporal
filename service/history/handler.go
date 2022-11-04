@@ -86,7 +86,7 @@ type (
 		persistenceShardManager       persistence.ShardManager
 		persistenceVisibilityManager  manager.VisibilityManager
 		historyServiceResolver        membership.ServiceResolver
-		metricsClient                 metrics.Client
+		metricsHandler                metrics.MetricsHandler
 		payloadSerializer             serialization.Serializer
 		timeSource                    clock.TimeSource
 		namespaceRegistry             namespace.Registry
@@ -109,7 +109,7 @@ type (
 		PersistenceShardManager       persistence.ShardManager
 		PersistenceVisibilityManager  manager.VisibilityManager
 		HistoryServiceResolver        membership.ServiceResolver
-		MetricsClient                 metrics.Client
+		MetricsHandler                metrics.MetricsHandler
 		PayloadSerializer             serialization.Serializer
 		TimeSource                    clock.TimeSource
 		NamespaceRegistry             namespace.Registry

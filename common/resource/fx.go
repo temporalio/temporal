@@ -117,7 +117,6 @@ var Module = fx.Options(
 	membership.GRPCResolverModule,
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
-	fx.Provide(MetricsClientProvider),
 	fx.Provide(health.NewServer),
 	deadlock.Module,
 )
@@ -184,7 +183,7 @@ func SearchAttributeManagerProvider(
 
 func NamespaceRegistryProvider(
 	logger log.SnTaggedLogger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	clusterMetadata cluster.Metadata,
 	metadataManager persistence.MetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
@@ -193,7 +192,7 @@ func NamespaceRegistryProvider(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
 		dynamicCollection.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
-		metricsClient,
+		metricsHandler,
 		logger,
 	)
 }
@@ -202,7 +201,7 @@ func ClientFactoryProvider(
 	factoryProvider client.FactoryProvider,
 	rpcFactory common.RPCFactory,
 	membershipMonitor membership.Monitor,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	dynamicCollection *dynamicconfig.Collection,
 	persistenceConfig *config.Persistence,
 	logger log.SnTaggedLogger,
@@ -211,7 +210,7 @@ func ClientFactoryProvider(
 	return factoryProvider.NewFactory(
 		rpcFactory,
 		membershipMonitor,
-		metricsClient,
+		metricsHandler,
 		dynamicCollection,
 		persistenceConfig.NumHistoryShards,
 		logger,
@@ -303,26 +302,26 @@ func RuntimeMetricsReporterProvider(
 
 func VisibilityBootstrapContainerProvider(
 	logger log.SnTaggedLogger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	clusterMetadata cluster.Metadata,
 ) *archiver.VisibilityBootstrapContainer {
 	return &archiver.VisibilityBootstrapContainer{
 		Logger:          logger,
-		MetricsClient:   metricsClient,
+		MetricsHandler:  metricsHandler,
 		ClusterMetadata: clusterMetadata,
 	}
 }
 
 func HistoryBootstrapContainerProvider(
 	logger log.SnTaggedLogger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	clusterMetadata cluster.Metadata,
 	executionManager persistence.ExecutionManager,
 ) *archiver.HistoryBootstrapContainer {
 	return &archiver.HistoryBootstrapContainer{
 		ExecutionManager: executionManager,
 		Logger:           logger,
-		MetricsClient:    metricsClient,
+		MetricsHandler:   metricsHandler,
 		ClusterMetadata:  clusterMetadata,
 	}
 }
@@ -363,12 +362,6 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient 
 		common.CreateMatchingClientRetryPolicy(),
 		common.IsServiceClientTransientError,
 	)
-}
-
-// TODO: rework to depend on...
-func MetricsClientProvider(logger log.Logger, serviceName ServiceName, provider metrics.MetricsHandler) metrics.Client {
-	serviceIdx := metrics.GetMetricsServiceIdx(string(serviceName), logger)
-	return metrics.NewClient(provider, serviceIdx)
 }
 
 func PersistenceConfigProvider(persistenceConfig config.Persistence, dc *dynamicconfig.Collection) *config.Persistence {

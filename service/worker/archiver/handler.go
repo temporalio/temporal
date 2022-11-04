@@ -45,12 +45,12 @@ type (
 	}
 
 	handler struct {
-		ctx           workflow.Context
-		logger        log.Logger
-		metricsClient metrics.Client
-		concurrency   int
-		requestCh     workflow.Channel
-		resultCh      workflow.Channel
+		ctx            workflow.Context
+		logger         log.Logger
+		metricsHandler metrics.MetricsHandler
+		concurrency    int
+		requestCh      workflow.Channel
+		resultCh       workflow.Channel
 	}
 )
 
@@ -58,26 +58,26 @@ type (
 func NewHandler(
 	ctx workflow.Context,
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	concurrency int,
 	requestCh workflow.Channel,
 ) Handler {
 	return &handler{
-		ctx:           ctx,
-		logger:        logger,
-		metricsClient: metricsClient,
-		concurrency:   concurrency,
-		requestCh:     requestCh,
-		resultCh:      workflow.NewChannel(ctx),
+		ctx:            ctx,
+		logger:         logger,
+		metricsHandler: metricsHandler.WithTags(metrics.OperationTag(metrics.ArchiverScope)),
+		concurrency:    concurrency,
+		requestCh:      requestCh,
+		resultCh:       workflow.NewChannel(ctx),
 	}
 }
 
 // Start spawns concurrency count of coroutine to handle archivals (does not block).
 func (h *handler) Start() {
-	h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverStartedCount)
+	h.metricsHandler.Counter(metrics.ArchiverStartedCount.GetMetricName()).Record(1)
 	for i := 0; i < h.concurrency; i++ {
 		workflow.Go(h.ctx, func(ctx workflow.Context) {
-			h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverCoroutineStartedCount)
+			h.metricsHandler.Counter(metrics.ArchiverCoroutineStartedCount.GetMetricName()).Record(1)
 			var handledHashes []uint64
 			for {
 				var request ArchiveRequest
@@ -88,7 +88,7 @@ func (h *handler) Start() {
 				handledHashes = append(handledHashes, hash(request))
 			}
 			h.resultCh.Send(ctx, handledHashes)
-			h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverCoroutineStoppedCount)
+			h.metricsHandler.Counter(metrics.ArchiverCoroutineStoppedCount.GetMetricName()).Record(1)
 		})
 	}
 }
@@ -102,7 +102,7 @@ func (h *handler) Finished() []uint64 {
 		h.resultCh.Receive(h.ctx, &subResult)
 		handledHashes = append(handledHashes, subResult...)
 	}
-	h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverStoppedCount)
+	h.metricsHandler.Counter(metrics.ArchiverStoppedCount.GetMetricName()).Record(1)
 	return handledHashes
 }
 
@@ -133,7 +133,8 @@ func (h *handler) handleRequest(ctx workflow.Context, request *ArchiveRequest) {
 }
 
 func (h *handler) handleHistoryRequest(ctx workflow.Context, request *ArchiveRequest) {
-	sw := h.metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverHandleHistoryRequestLatency)
+
+	startTime := time.Now().UTC()
 	logger := tagLoggerWithHistoryRequest(h.logger, request)
 	ao := workflow.ActivityOptions{
 		ScheduleToCloseTimeout: 5 * time.Minute,
@@ -144,15 +145,14 @@ func (h *handler) handleHistoryRequest(ctx workflow.Context, request *ArchiveReq
 		},
 	}
 	actCtx := workflow.WithActivityOptions(ctx, ao)
-	uploadSW := h.metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverUploadWithRetriesLatency)
 	err := workflow.ExecuteActivity(actCtx, uploadHistoryActivityFnName, *request).Get(actCtx, nil)
 	if err != nil {
 		logger.Error("failed to archive history, will move on to deleting history without archiving", tag.Error(err))
-		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount)
+		h.metricsHandler.Counter(metrics.ArchiverUploadFailedAllRetriesCount.GetMetricName()).Record(1)
 	} else {
-		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount)
+		h.metricsHandler.Counter(metrics.ArchiverUploadSuccessCount.GetMetricName()).Record(1)
 	}
-	uploadSW.Stop()
+	h.metricsHandler.Timer(metrics.ArchiverUploadWithRetriesLatency.GetMetricName()).Record(time.Since(startTime))
 
 	lao := workflow.LocalActivityOptions{
 		ScheduleToCloseTimeout: 5 * time.Minute,
@@ -163,21 +163,21 @@ func (h *handler) handleHistoryRequest(ctx workflow.Context, request *ArchiveReq
 		},
 	}
 
-	deleteSW := h.metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverDeleteWithRetriesLatency)
+	deleteTime := time.Now().UTC()
 	localActCtx := workflow.WithLocalActivityOptions(ctx, lao)
 	err = workflow.ExecuteLocalActivity(localActCtx, deleteHistoryActivity, *request).Get(localActCtx, nil)
 	if err != nil {
 		logger.Error("deleting workflow execution failed all retires, skip workflow deletion", tag.Error(err))
-		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteFailedAllRetriesCount)
+		h.metricsHandler.Counter(metrics.ArchiverDeleteFailedAllRetriesCount.GetMetricName()).Record(1)
 	} else {
-		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount)
+		h.metricsHandler.Counter(metrics.ArchiverDeleteSuccessCount.GetMetricName()).Record(1)
 	}
-	deleteSW.Stop()
-	sw.Stop()
+	h.metricsHandler.Timer(metrics.ArchiverDeleteWithRetriesLatency.GetMetricName()).Record(time.Since(deleteTime))
+	h.metricsHandler.Timer(metrics.ArchiverHandleHistoryRequestLatency.GetMetricName()).Record(time.Since(startTime))
 }
 
 func (h *handler) handleVisibilityRequest(ctx workflow.Context, request *ArchiveRequest) {
-	sw := h.metricsClient.StartTimer(metrics.ArchiverScope, metrics.ArchiverHandleVisibilityRequestLatency)
+	startTime := time.Now().UTC()
 	logger := tagLoggerWithVisibilityRequest(h.logger, request)
 	ao := workflow.ActivityOptions{
 		ScheduleToCloseTimeout: 5 * time.Minute,
@@ -191,9 +191,9 @@ func (h *handler) handleVisibilityRequest(ctx workflow.Context, request *Archive
 	err := workflow.ExecuteActivity(actCtx, archiveVisibilityActivityFnName, *request).Get(actCtx, nil)
 	if err != nil {
 		logger.Error("failed to archive workflow visibility record", tag.Error(err))
-		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverHandleVisibilityFailedAllRetiresCount)
+		h.metricsHandler.Counter(metrics.ArchiverHandleVisibilityFailedAllRetiresCount.GetMetricName()).Record(1)
 	} else {
-		h.metricsClient.IncCounter(metrics.ArchiverScope, metrics.ArchiverHandleVisibilitySuccessCount)
+		h.metricsHandler.Counter(metrics.ArchiverHandleVisibilitySuccessCount.GetMetricName()).Record(1)
 	}
-	sw.Stop()
+	h.metricsHandler.Timer(metrics.ArchiverHandleVisibilityRequestLatency.GetMetricName()).Record(time.Since(startTime))
 }
