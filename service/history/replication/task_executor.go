@@ -306,19 +306,23 @@ func (e *taskExecutorImpl) filterTask(
 	}
 
 	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
-	if err != nil {
+	switch err.(type) {
+	case nil:
+		shouldProcessTask := false
+	FilterLoop:
+		for _, targetCluster := range namespaceEntry.ClusterNames() {
+			if e.currentCluster == targetCluster {
+				shouldProcessTask = true
+				break FilterLoop
+			}
+		}
+		return shouldProcessTask, nil
+	case *serviceerror.NamespaceNotFound:
+		// Drop the task
+		return false, nil
+	default:
 		return false, err
 	}
-
-	shouldProcessTask := false
-FilterLoop:
-	for _, targetCluster := range namespaceEntry.ClusterNames() {
-		if e.currentCluster == targetCluster {
-			shouldProcessTask = true
-			break FilterLoop
-		}
-	}
-	return shouldProcessTask, nil
 }
 
 func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespaceID string, workflowID string, runID string) (retErr error) {
