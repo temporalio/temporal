@@ -54,7 +54,7 @@ type (
 		DeserializeClusterMetadata(data *commonpb.DataBlob) (*persistencespb.ClusterMetadata, error)
 
 		ShardInfoToBlob(info *persistencespb.ShardInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		ShardInfoFromBlob(data *commonpb.DataBlob, clusterName string) (*persistencespb.ShardInfo, error)
+		ShardInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ShardInfo, error)
 
 		NamespaceDetailToBlob(info *persistencespb.NamespaceDetail, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		NamespaceDetailFromBlob(data *commonpb.DataBlob) (*persistencespb.NamespaceDetail, error)
@@ -284,7 +284,7 @@ func (t *serializerImpl) ShardInfoToBlob(info *persistencespb.ShardInfo, encodin
 	return ProtoEncodeBlob(info, encodingType)
 }
 
-func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob, clusterName string) (*persistencespb.ShardInfo, error) {
+func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ShardInfo, error) {
 	shardInfo := &persistencespb.ShardInfo{}
 	err := ProtoDecodeBlob(data, shardInfo)
 
@@ -299,9 +299,24 @@ func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob, clusterName 
 	if shardInfo.GetQueueAckLevels() == nil {
 		shardInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
 	}
+	for _, queueAckLevel := range shardInfo.QueueAckLevels {
+		if queueAckLevel.ClusterAckLevel == nil {
+			queueAckLevel.ClusterAckLevel = make(map[string]int64)
+		}
+	}
 
 	if shardInfo.GetQueueStates() == nil {
 		shardInfo.QueueStates = make(map[int32]*persistencespb.QueueState)
+	}
+	for _, queueState := range shardInfo.QueueStates {
+		if queueState.ReaderStates == nil {
+			queueState.ReaderStates = make(map[int32]*persistencespb.QueueReaderState)
+		}
+		for _, readerState := range queueState.ReaderStates {
+			if readerState.Scopes == nil {
+				readerState.Scopes = make([]*persistencespb.QueueSliceScope, 0)
+			}
+		}
 	}
 
 	return shardInfo, nil
