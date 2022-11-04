@@ -34,7 +34,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -139,9 +138,9 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
 				tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
 				tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
-				tag.NewDurationTag("ActualLagging", shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
+				tag.NewDurationTag("ActualLagging", shard.MaxReplicationTaskVisibilityTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
 				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
-				tag.NewTimeTag("ShardLocalTime", *shard.ShardLocalTime),
+				tag.NewTimeTag("MaxReplicationTaskVisibilityTime", *shard.MaxReplicationTaskVisibilityTime),
 				tag.NewTimeTag("AckedTaskVisibilityTime", *clusterInfo.AckedTaskVisibilityTime),
 				tag.NewInt64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
 				tag.NewInt64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
