@@ -269,7 +269,8 @@ func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
 			}
 			return
 		case <-timer.C:
-			if err := backoff.ThrottleRetry(func() error {
+			// TODO: We should have a better approach to handle shard and its component lifecycle
+			_ = backoff.ThrottleRetry(func() error {
 				err := t.completeTask()
 				if err != nil {
 					t.logger.Info("Failed to complete transfer task", tag.Error(err))
@@ -282,11 +283,7 @@ func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
 				default:
 				}
 				return !shard.IsShardOwnershipLostError(err)
-			}); shard.IsShardOwnershipLostError(err) {
-				// shard closed, trigger shutdown and bail out
-				t.Stop()
-				return
-			}
+			})
 
 			timer.Reset(t.config.VisibilityProcessorCompleteTaskInterval())
 		}

@@ -173,6 +173,14 @@ message TransferTaskInfo {
     // (-- api-linter: core::0140::prepositions=disabled
     //     aip.dev/not-precedent: "after" is used to indicate sequence of actions. --)
     bool delete_after_close = 15;
+    message CloseExecutionTaskDetails {
+        // can_skip_visibility_archival is set to true when we can guarantee that visibility records will be archived
+        // by some other task, so this task doesn't need to worry about it.
+        bool can_skip_visibility_archival = 1;
+    }
+    oneof task_details {
+        CloseExecutionTaskDetails close_execution_task_details = 16;
+    }
 }
 
 // replication column
