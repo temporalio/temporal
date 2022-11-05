@@ -220,6 +220,7 @@ func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *comm
 	common.PrettyPrintHistory(&historypb.History{Events: events})
 }
 
+//lint:ignore U1000 will use it later
 func (s *IntegrationBase) printWorkflowHistoryCompact(namespace string, execution *commonpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
 	fmt.Println(s.formatHistoryCompact(&historypb.History{Events: events}))

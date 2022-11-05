@@ -379,6 +379,7 @@ func PrettyPrintHistory(history *historypb.History, header ...string) {
 	sb.WriteString("==========================================================================\n")
 	for _, h := range header {
 		sb.WriteString(h)
+		sb.WriteString("\n")
 	}
 	sb.WriteString("--------------------------------------------------------------------------\n")
 	_ = proto.MarshalText(&sb, history)
