@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -99,6 +100,7 @@ type (
 	TaskGeneratorImpl struct {
 		namespaceRegistry namespace.Registry
 		mutableState      MutableState
+		config            *configs.Config
 	}
 )
 
@@ -109,10 +111,12 @@ var _ TaskGenerator = (*TaskGeneratorImpl)(nil)
 func NewTaskGenerator(
 	namespaceRegistry namespace.Registry,
 	mutableState MutableState,
+	config *configs.Config,
 ) *TaskGeneratorImpl {
 	return &TaskGeneratorImpl{
 		namespaceRegistry: namespaceRegistry,
 		mutableState:      mutableState,
+		config:            config,
 	}
 }
 
@@ -185,21 +189,29 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 		// or execution info in mutable state. For immediate task, visibility timestamp
 		// should always be when the task is generated so that task_latency_queue/load
 		// truly measures only task processing/loading latency.
-		closeTime := timestamp.TimeValue(closeEvent.GetEventTime())
 		closeTasks = append(closeTasks,
 			&tasks.CloseExecutionVisibilityTask{
 				// TaskID, VisibilityTimestamp is set by shard
 				WorkflowKey: r.mutableState.GetWorkflowKey(),
 				Version:     currentVersion,
 			},
-			&tasks.DeleteHistoryEventTask{
+		)
+		if r.config.DurableArchivalEnabled() {
+			closeTasks = append(closeTasks, &tasks.ArchiveExecutionTask{
+				// TaskID and VisibilityTimestamp are set by the shard
+				WorkflowKey: r.mutableState.GetWorkflowKey(),
+				Version:     currentVersion,
+			})
+		} else {
+			closeTime := timestamp.TimeValue(closeEvent.GetEventTime())
+			closeTasks = append(closeTasks, &tasks.DeleteHistoryEventTask{
 				// TaskID is set by shard
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),
 				VisibilityTimestamp: closeTime.Add(retention),
 				Version:             currentVersion,
 				BranchToken:         branchToken,
-			},
-		)
+			})
+		}
 	}
 
 	r.mutableState.AddTasks(closeTasks...)
