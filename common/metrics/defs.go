@@ -43,12 +43,6 @@ type (
 		unit             MetricUnit
 	}
 
-	// scopeDefinition holds the tag definitions for a scope
-	scopeDefinition struct {
-		operation string            // 'operation' tag for scope
-		tags      map[string]string // additional tags for scope
-	}
-
 	// ServiceIdx is an index that uniquely identifies the service
 	ServiceIdx int
 )

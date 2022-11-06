@@ -38,11 +38,6 @@ type (
 		metricsHandler metrics.MetricsHandler
 		ctx            workflow.Context
 	}
-
-	replayMetricsScope struct {
-		metricsHandler metrics.MetricsHandler
-		ctx            workflow.Context
-	}
 )
 
 // NewReplayMetricsClient creates a metrics client which is aware of temporal's replay mode
