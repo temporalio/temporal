@@ -94,7 +94,7 @@ func archivalWorkflowHelper(
 	pumpResult := pump.Run()
 	metricsHandler.Counter(metrics.ArchiverNumPumpedRequestsCount.GetMetricName()).Record(int64(len(pumpResult.PumpedHashes)))
 	handledHashes := handler.Finished()
-	metricsHandler.Timer(metrics.ArchiverHandleAllRequestsLatency.GetMetricRollupName()).Record(time.Since(handlerTime))
+	metricsHandler.Timer(metrics.ArchiverHandleAllRequestsLatency.GetMetricName()).Record(time.Since(handlerTime))
 	metricsHandler.Counter(metrics.ArchiverNumHandledRequestsCount.GetMetricName()).Record(int64(len(handledHashes)))
 	if !hashesEqual(pumpResult.PumpedHashes, handledHashes) {
 		logger.Error("handled archival requests do not match pumped archival requests")
@@ -103,7 +103,7 @@ func archivalWorkflowHelper(
 	if pumpResult.TimeoutWithoutSignals {
 		logger.Info("workflow stopping because pump did not get any signals within timeout threshold")
 		metricsHandler.Counter(metrics.ArchiverWorkflowStoppingCount.GetMetricName()).Record(1)
-		metricsHandler.Timer(metrics.ServiceLatency.GetMetricRollupName()).Record(time.Since(startTime))
+		metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
 		return nil
 	}
 	for {
@@ -116,6 +116,6 @@ func archivalWorkflowHelper(
 	logger.Info("archival system workflow continue as new")
 	ctx = workflow.WithWorkflowRunTimeout(ctx, workflowRunTimeout)
 	ctx = workflow.WithWorkflowTaskTimeout(ctx, workflowTaskTimeout)
-	metricsHandler.Timer(metrics.ServiceLatency.GetMetricRollupName()).Record(time.Since(startTime))
+	metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
 	return workflow.NewContinueAsNewError(ctx, archivalWorkflowFnName, pumpResult.UnhandledCarryover)
 }

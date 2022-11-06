@@ -92,7 +92,7 @@ type (
 
 	archiver struct {
 		archiverProvider provider.ArchiverProvider
-		metricsScope     metrics.Scope
+		metricsHandler   metrics.MetricsHandler
 		logger           log.Logger
 		rateLimiter      quotas.RateLimiter
 	}
@@ -107,12 +107,12 @@ const (
 func NewArchiver(
 	archiverProvider provider.ArchiverProvider,
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	rateLimiter quotas.RateLimiter,
 ) Archiver {
 	return &archiver{
 		archiverProvider: archiverProvider,
-		metricsScope:     metricsClient.Scope(metrics.ArchiverClientScope),
+		metricsHandler:   metricsHandler.WithTags(metrics.OperationTag(metrics.ArchiverClientScope)),
 		logger:           logger,
 		rateLimiter:      rateLimiter,
 	}
@@ -129,7 +129,7 @@ func (a *archiver) Archive(ctx context.Context, request *Request) (res *Response
 		tag.ArchivalRequestRunID(request.RunID),
 	)
 	defer func(start time.Time) {
-		metricsScope := a.metricsScope
+		metricsScope := a.metricsHandler
 		status := "ok"
 		if err != nil {
 			status = "err"
@@ -139,8 +139,8 @@ func (a *archiver) Archive(ctx context.Context, request *Request) (res *Response
 			}
 			logger.Warn("failed to archive workflow", tag.Error(err))
 		}
-		metricsScope.Tagged(metrics.StringTag("status", status)).RecordTimer(metrics.ArchiverArchiveLatency,
-			time.Since(start))
+		metricsScope.Timer(metrics.ArchiverArchiveLatency.GetMetricName()).
+			Record(time.Since(start), metrics.StringTag("status", status))
 	}(time.Now())
 	if err := a.rateLimiter.WaitN(ctx, 2); err != nil {
 		return nil, &serviceerror.ResourceExhausted{
@@ -256,6 +256,6 @@ func (a *archiver) recordArchiveTargetResult(logger log.Logger, startTime time.T
 		metrics.StringTag("target", string(target)),
 		metrics.StringTag("status", status),
 	}
-	latency := metrics.ArchiverArchiveTargetLatency
-	a.metricsScope.Tagged(tags...).RecordTimer(latency, duration)
+	latency := metrics.ArchiverArchiveTargetLatency.GetMetricName()
+	a.metricsHandler.Timer(latency).Record(duration, tags...)
 }

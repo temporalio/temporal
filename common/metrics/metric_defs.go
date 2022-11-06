@@ -1,4 +1,87 @@
+// The MIT License
+
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package metrics
+
+// Service names for all services that emit metrics.
+const (
+	Common ServiceIdx = iota
+	Frontend
+	History
+	Matching
+	Worker
+	Server
+	UnitTestService
+)
+
+// Common tags for all services
+const (
+	OperationTagName           = "operation"
+	ServiceRoleTagName         = "service_role"
+	CacheTypeTagName           = "cache_type"
+	FailureTagName             = "failure"
+	TaskCategoryTagName        = "task_category"
+	TaskTypeTagName            = "task_type"
+	TaskPriorityTagName        = "task_priority"
+	QueueReaderIDTagName       = "queue_reader_id"
+	QueueAlertTypeTagName      = "queue_alert_type"
+	QueueTypeTagName           = "queue_type"
+	visibilityTypeTagName      = "visibility_type"
+	ErrorTypeTagName           = "error_type"
+	httpStatusTagName          = "http_status"
+	resourceExhaustedTag       = "resource_exhausted_cause"
+	standardVisibilityTagValue = "standard_visibility"
+	advancedVisibilityTagValue = "advanced_visibility"
+)
+
+// This package should hold all the metrics and tags for temporal
+const (
+	HistoryRoleTagValue       = "history"
+	MatchingRoleTagValue      = "matching"
+	FrontendRoleTagValue      = "frontend"
+	AdminRoleTagValue         = "admin"
+	DCRedirectionRoleTagValue = "dc_redirection"
+	BlobstoreRoleTagValue     = "blobstore"
+
+	MutableStateCacheTypeTagValue = "mutablestate"
+	EventsCacheTypeTagValue       = "events"
+)
+
+// Common service base metrics
+const (
+	RestartCount         = "restarts"
+	NumGoRoutinesGauge   = "num_goroutines"
+	GoMaxProcsGauge      = "gomaxprocs"
+	MemoryAllocatedGauge = "memory_allocated"
+	MemoryHeapGauge      = "memory_heap"
+	MemoryHeapIdleGauge  = "memory_heapidle"
+	MemoryHeapInuseGauge = "memory_heapinuse"
+	MemoryStackGauge     = "memory_stack"
+	NumGCCounter         = "memory_num_gc"
+	GcPauseMsTimer       = "memory_gc_pause_ms"
+)
 
 // Admin Client Operations
 const (
@@ -1469,6 +1552,7 @@ var (
 	HistoryArchiverDeterministicConstructionCheckFailedCount  = NewCounterDef("history_archiver_deterministic_construction_check_failed")
 	HistoryArchiverRunningBlobIntegrityCheckCount             = NewCounterDef("history_archiver_running_blob_integrity_check")
 	HistoryArchiverBlobIntegrityCheckFailedCount              = NewCounterDef("history_archiver_blob_integrity_check_failed")
+	HistoryWorkflowExecutionCacheLatency                      = NewTimerDef("history_workflow_execution_cache_latency")
 	VisibilityArchiverArchiveNonRetryableErrorCount           = NewCounterDef("visibility_archiver_archive_non_retryable_error")
 	VisibilityArchiverArchiveTransientErrorCount              = NewCounterDef("visibility_archiver_archive_transient_error")
 	VisibilityArchiveSuccessCount                             = NewCounterDef("visibility_archiver_archive_success")

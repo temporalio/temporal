@@ -56,8 +56,8 @@ type (
 		suite.Suite
 		controller *gomock.Controller
 
-		logger log.Logger
-		metric metrics.Client
+		logger        log.Logger
+		metricHandler metrics.MetricsHandler
 
 		numShards int32
 
@@ -89,7 +89,7 @@ func TestScavengerTestSuite(t *testing.T) {
 
 func (s *ScavengerTestSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
-	s.metric = metrics.NoopClient
+	s.metricHandler = metrics.NoopMetricsHandler
 	s.numShards = 512
 	s.createTestScavenger(100)
 }
@@ -120,7 +120,7 @@ func (s *ScavengerTestSuite) createTestScavenger(
 		dataAge,
 		executionDataAge,
 		enableRetentionVerification,
-		s.metric,
+		s.metricHandler,
 		s.logger,
 	)
 	s.scavenger.isInTest = true

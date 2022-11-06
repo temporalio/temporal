@@ -48,22 +48,27 @@ func (n *noopMetricsHandler) WithTags(...Tag) MetricsHandler {
 
 // Counter obtains a counter for the given name and MetricOptions.
 func (*noopMetricsHandler) Counter(string) CounterMetric {
-	return CounterMetricFunc(func(i int64, t ...Tag) {})
+	return NoopCounterMetricFunc
 }
 
 // Gauge obtains a gauge for the given name and MetricOptions.
 func (*noopMetricsHandler) Gauge(string) GaugeMetric {
-	return GaugeMetricFunc(func(f float64, t ...Tag) {})
+	return NoopGaugeMetricFunc
 }
 
 // Timer obtains a timer for the given name and MetricOptions.
 func (*noopMetricsHandler) Timer(string) TimerMetric {
-	return TimerMetricFunc(func(d time.Duration, t ...Tag) {})
+	return NoopTimerMetricFunc
 }
 
 // Histogram obtains a histogram for the given name and MetricOptions.
 func (*noopMetricsHandler) Histogram(string, MetricUnit) HistogramMetric {
-	return HistogramMetricFunc(func(i int64, t ...Tag) {})
+	return NoopHistogramMetricFunc
 }
 
 func (*noopMetricsHandler) Stop(log.Logger) {}
+
+var NoopCounterMetricFunc = CounterMetricFunc(func(i int64, t ...Tag) {})
+var NoopGaugeMetricFunc = GaugeMetricFunc(func(f float64, t ...Tag) {})
+var NoopTimerMetricFunc = TimerMetricFunc(func(d time.Duration, t ...Tag) {})
+var NoopHistogramMetricFunc = HistogramMetricFunc(func(i int64, t ...Tag) {})

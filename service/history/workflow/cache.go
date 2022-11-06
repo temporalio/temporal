@@ -118,7 +118,7 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 		caller,
 	)
 
-	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency, time.Since(start).Nanoseconds())
+	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(), time.Since(start).Nanoseconds())
 
 	return weCtx, weReleaseFunc, err
 }

@@ -115,7 +115,7 @@ func (s *executableSuite) TestExecute_UserLatency() {
 
 	expectedUserLatency := int64(133)
 	updateContext := func(ctx context.Context, taskInfo interface{}) {
-		metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency, expectedUserLatency)
+		metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(), expectedUserLatency)
 	}
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(nil, true, nil)

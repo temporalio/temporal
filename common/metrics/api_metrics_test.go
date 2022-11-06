@@ -69,24 +69,3 @@ func (s *apiMetricsSuite) assertAllAPIsHaveMetricsDefined(apiNames map[string]st
 			strings.Join(missingAPIs, ",\n"))
 	}
 }
-
-func (s *apiMetricsSuite) TestFrontendAPIMetrics() {
-	apiNames := frontendAPIMetricsNames()
-	apiNameToScope := FrontendAPIMetricsScopes()
-	s.assertAllAPIsHaveMetricsDefined(apiNames, apiNameToScope)
-	s.Equal(len(apiNames), len(apiNameToScope))
-}
-
-func (s *apiMetricsSuite) TestMatchingAPIMetrics() {
-	apiNames := matchingAPIMetricsNames()
-	apiNameToScope := MatchingAPIMetricsScopes()
-	s.assertAllAPIsHaveMetricsDefined(apiNames, apiNameToScope)
-	s.Equal(len(apiNames), len(apiNameToScope))
-}
-
-func (s *apiMetricsSuite) TestHistoryAPIMetrics() {
-	apiNames := historyAPIMetricsNames()
-	apiNameToScope := HistoryAPIMetricsScopes()
-	s.assertAllAPIsHaveMetricsDefined(apiNames, apiNameToScope)
-	s.Equal(len(apiNames), len(apiNameToScope))
-}

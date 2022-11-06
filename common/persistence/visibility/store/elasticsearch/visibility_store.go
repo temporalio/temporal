@@ -900,7 +900,7 @@ func (s *visibilityStore) parseESDoc(docID string, docSource json.RawMessage, sa
 	// Very important line. See finishParseJSONValue bellow.
 	d.UseNumber()
 	if err := d.Decode(&sourceMap); err != nil {
-		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Record(1)
+		s.metricsHandler.Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()) //.Record(1)
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to unmarshal JSON from Elasticsearch document(%s): %v", docID, err))
 	}
 

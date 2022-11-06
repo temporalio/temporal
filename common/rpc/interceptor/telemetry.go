@@ -134,7 +134,7 @@ func (ti *TelemetryInterceptor) Intercept(
 
 	resp, err := handler(ctx, req)
 
-	if val, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
+	if val, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName()); ok {
 		userLatencyDuration := time.Duration(val)
 		startTime.Add(userLatencyDuration)
 		metricsHandler.Timer(metrics.ServiceLatencyUserLatency.GetMetricName()).Record(userLatencyDuration)

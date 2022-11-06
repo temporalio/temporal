@@ -29,6 +29,7 @@ import (
 
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -68,26 +69,4 @@ func matchingAPIMetricsNames() map[string]string {
 
 func historyAPIMetricsNames() map[string]string {
 	return getAPINames(reflect.TypeOf((*historyservice.HistoryServiceServer)(nil)).Elem(), grpcHistoryService)
-}
-
-func getAPIMetricsScopes(apiNames map[string]string, scopeDefs map[int]scopeDefinition) map[string]int {
-	apiNameToScope := make(map[string]int, len(apiNames))
-	for scope, name := range scopeDefs {
-		if fullName, ok := apiNames[name.operation]; ok {
-			apiNameToScope[fullName] = scope
-		}
-	}
-	return apiNameToScope
-}
-
-func FrontendAPIMetricsScopes() map[string]int {
-	return getAPIMetricsScopes(frontendAPIMetricsNames(), ScopeDefs[Frontend])
-}
-
-func MatchingAPIMetricsScopes() map[string]int {
-	return getAPIMetricsScopes(matchingAPIMetricsNames(), ScopeDefs[Matching])
-}
-
-func HistoryAPIMetricsScopes() map[string]int {
-	return getAPIMetricsScopes(historyAPIMetricsNames(), ScopeDefs[History])
 }

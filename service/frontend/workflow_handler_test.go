@@ -1416,7 +1416,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 
 	history, token, err := wh.getHistory(
 		context.Background(),
-		metrics.NoopScope,
+		metrics.NoopMetricsHandler,
 		namespaceID,
 		namespace,
 		we,
