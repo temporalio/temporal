@@ -180,7 +180,11 @@ func (t *timerQueueAckMgrImpl) getFinishedChan() <-chan struct{} {
 
 func (t *timerQueueAckMgrImpl) readTimerTasks() ([]queues.Executable, *time.Time, bool, error) {
 	if t.maxQueryLevel == t.minQueryLevel {
-		t.maxQueryLevel = t.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, t.clusterName, t.singleProcessorMode).FireTime
+		highReadWatermark, err := t.shard.UpdateScheduledQueueExclusiveHighReadWatermark(t.clusterName, t.singleProcessorMode)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		t.maxQueryLevel = highReadWatermark.FireTime
 		t.maxQueryLevel = util.MaxTime(t.minQueryLevel, t.maxQueryLevel)
 	}
 	minQueryLevel := t.minQueryLevel
