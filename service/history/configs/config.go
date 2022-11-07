@@ -296,7 +296,6 @@ type Config struct {
 
 	// ArchivalQueueProcessor settings
 	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.IntPropertyFn
-	ArchivalProcessorSchedulerRoundRobinWeights         dynamicconfig.MapPropertyFnWithNamespaceFilter
 	ArchivalProcessorMaxPollHostRPS                     dynamicconfig.IntPropertyFn
 	ArchivalTaskBatchSize                               dynamicconfig.IntPropertyFn
 	ArchivalProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
@@ -306,6 +305,7 @@ type Config struct {
 	ArchivalProcessorUpdateAckInterval                  dynamicconfig.DurationPropertyFn
 	ArchivalProcessorUpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 	ArchivalProcessorArchiveDelay                       dynamicconfig.DurationPropertyFn
+	ArchivalProcessorRetryWarningLimit                  dynamicconfig.IntPropertyFn
 }
 
 const (
@@ -534,12 +534,11 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		NamespaceCacheRefreshInterval: dc.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
 
 		// Archival related
-		ArchivalTaskBatchSize:                       dc.GetIntProperty(dynamicconfig.ArchivalTaskBatchSize, 100),
-		ArchivalProcessorMaxPollRPS:                 dc.GetIntProperty(dynamicconfig.ArchivalProcessorMaxPollRPS, 20),
-		ArchivalProcessorMaxPollHostRPS:             dc.GetIntProperty(dynamicconfig.ArchivalProcessorMaxPollHostRPS, 0),
-		ArchivalProcessorSchedulerWorkerCount:       dc.GetIntProperty(dynamicconfig.ArchivalProcessorSchedulerWorkerCount, 512),
-		ArchivalProcessorSchedulerRoundRobinWeights: dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.ArchivalProcessorSchedulerRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultActiveTaskPriorityWeight)),
-		ArchivalProcessorMaxPollInterval:            dc.GetDurationProperty(dynamicconfig.ArchivalProcessorMaxPollInterval, 1*time.Minute),
+		ArchivalTaskBatchSize:                 dc.GetIntProperty(dynamicconfig.ArchivalTaskBatchSize, 100),
+		ArchivalProcessorMaxPollRPS:           dc.GetIntProperty(dynamicconfig.ArchivalProcessorMaxPollRPS, 20),
+		ArchivalProcessorMaxPollHostRPS:       dc.GetIntProperty(dynamicconfig.ArchivalProcessorMaxPollHostRPS, 0),
+		ArchivalProcessorSchedulerWorkerCount: dc.GetIntProperty(dynamicconfig.ArchivalProcessorSchedulerWorkerCount, 512),
+		ArchivalProcessorMaxPollInterval:      dc.GetDurationProperty(dynamicconfig.ArchivalProcessorMaxPollInterval, 5*time.Minute),
 		ArchivalProcessorMaxPollIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.
 			ArchivalProcessorMaxPollIntervalJitterCoefficient, 0.15),
 		ArchivalProcessorUpdateAckInterval: dc.GetDurationProperty(dynamicconfig.ArchivalProcessorUpdateAckInterval, 30*time.Second),
@@ -547,6 +546,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 			ArchivalProcessorUpdateAckIntervalJitterCoefficient, 0.15),
 		ArchivalProcessorPollBackoffInterval: dc.GetDurationProperty(dynamicconfig.ArchivalProcessorPollBackoffInterval, 5*time.Second),
 		ArchivalProcessorArchiveDelay:        dc.GetDurationProperty(dynamicconfig.ArchivalProcessorArchiveDelay, 5*time.Minute),
+		ArchivalProcessorRetryWarningLimit:   dc.GetIntProperty(dynamicconfig.ArchivalProcessorRetryWarningLimit, 100),
 	}
 
 	return cfg
