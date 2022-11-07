@@ -78,6 +78,7 @@ const (
 	OperationTransferActiveQueueProcessor  = "TransferActiveQueueProcessor"
 	OperationTransferStandbyQueueProcessor = "TransferStandbyQueueProcessor"
 	OperationVisibilityQueueProcessor      = "VisibilityQueueProcessor"
+	OperationArchivalQueueProcessor        = "ArchivalQueueProcessor"
 )
 
 // Task type tag value for active and standby tasks
@@ -100,6 +101,7 @@ const (
 	TaskTypeVisibilityTaskUpsertExecution          = "VisibilityTaskUpsertExecution"
 	TaskTypeVisibilityTaskCloseExecution           = "VisibilityTaskCloseExecution"
 	TaskTypeVisibilityTaskDeleteExecution          = "VisibilityTaskDeleteExecution"
+	TaskTypeArchivalTaskArchiveExecution           = "ArchivalTaskArchiveExecution"
 	TaskTypeTimerActiveTaskActivityTimeout         = "TimerActiveTaskActivityTimeout"
 	TaskTypeTimerActiveTaskWorkflowTaskTimeout     = "TimerActiveTaskWorkflowTaskTimeout"
 	TaskTypeTimerActiveTaskUserTimer               = "TimerActiveTaskUserTimer"
@@ -220,6 +222,17 @@ func GetVisibilityTaskTypeTagValue(
 		return TaskTypeVisibilityTaskCloseExecution
 	case *tasks.DeleteExecutionVisibilityTask:
 		return TaskTypeVisibilityTaskDeleteExecution
+	default:
+		return ""
+	}
+}
+
+func GetArchivalTaskTypeTagValue(
+	task tasks.Task,
+) string {
+	switch task.(type) {
+	case *tasks.ArchiveExecutionTask:
+		return TaskTypeArchivalTaskArchiveExecution
 	default:
 		return ""
 	}
