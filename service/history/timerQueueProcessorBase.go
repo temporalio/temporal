@@ -318,9 +318,11 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) 
 	if err != nil {
 		if common.IsResourceExhausted(err) {
 			t.notifyNewTimer(t.timeSource.Now().Add(loadTimerTaskThrottleRetryDelay))
-		} else {
+		} else if err != shard.ErrShardStatusUnknown && !shard.IsShardOwnershipLostError(err) {
 			t.notifyNewTimer(t.timeSource.Now().Add(t.readTaskRetrier.NextBackOff()))
 		}
+		// if shard status is invalid, stopping processing and wait for the notication from shard
+		// after shard is re-acquired
 		return nil, err
 	}
 	t.readTaskRetrier.Reset()
