@@ -219,7 +219,7 @@ Loop:
 		}
 
 		if dumpHistory {
-			common.PrettyPrintHistory(response.History, p.Logger)
+			common.PrettyPrintHistory(response.History)
 		}
 
 		// handle query task response
@@ -241,6 +241,8 @@ Loop:
 			return true, nil, err
 		}
 
+		var commands []*commandpb.Command
+
 		// handle normal workflow task / non query task response
 		var lastWorkflowTaskScheduleEvent *historypb.HistoryEvent
 		for _, e := range events {
@@ -252,7 +254,7 @@ Loop:
 			require.Equal(p.T, workflowTaskAttempt, lastWorkflowTaskScheduleEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt())
 		}
 
-		commands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
+		wtCommands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType, response.PreviousStartedEventId, response.StartedEventId, response.History)
 		if err != nil {
 			p.Logger.Error("Failing workflow task. Workflow task handler failed with error", tag.Error(err))
 			_, err = p.Engine.RespondWorkflowTaskFailed(NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{
@@ -261,10 +263,11 @@ Loop:
 				Failure:   newApplicationFailure(err, false, nil),
 				Identity:  p.Identity,
 			})
-			return isQueryTask, nil, err
+			return false, nil, err
 		}
 
-		p.Logger.Info("Completing Commands. Commands ", tag.Value(commands))
+		commands = append(commands, wtCommands...)
+		common.PrettyPrintCommands(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
 		if !respondStickyTaskQueue {
 			// non sticky taskqueue
 			newTask, err := p.Engine.RespondWorkflowTaskCompleted(NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -321,7 +324,9 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 		return nil, errors.New("history events are empty")
 	}
 
-	commands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType,
+	var commands []*commandpb.Command
+
+	wtCommands, err := p.WorkflowTaskHandler(response.WorkflowExecution, response.WorkflowType,
 		response.PreviousStartedEventId, response.StartedEventId, response.History)
 	if err != nil {
 		p.Logger.Error("Failing workflow task. Workflow task handler failed with error", tag.Error(err))
@@ -333,8 +338,8 @@ func (p *TaskPoller) HandlePartialWorkflowTask(response *workflowservice.PollWor
 		})
 		return nil, err
 	}
-
-	p.Logger.Info("Completing Commands", tag.Value(commands))
+	commands = append(commands, wtCommands...)
+	common.PrettyPrintCommands(commands, "Send commands to server using RespondWorkflowTaskCompleted:")
 
 	// sticky taskqueue
 	newTask, err := p.Engine.RespondWorkflowTaskCompleted(

@@ -259,21 +259,23 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, err
 		}
 
-		if err := t.archiveVisibility(
-			ctx,
-			namespace.ID(transferTask.NamespaceID),
-			transferTask.WorkflowID,
-			transferTask.RunID,
-			workflowTypeName,
-			workflowStartTime,
-			workflowExecutionTime,
-			timestamp.TimeValue(wfCloseTime),
-			workflowStatus,
-			workflowHistoryLength,
-			visibilityMemo,
-			searchAttr,
-		); err != nil {
-			return nil, err
+		if !transferTask.CanSkipVisibilityArchival {
+			if err := t.archiveVisibility(
+				ctx,
+				namespace.ID(transferTask.NamespaceID),
+				transferTask.WorkflowID,
+				transferTask.RunID,
+				workflowTypeName,
+				workflowStartTime,
+				workflowExecutionTime,
+				timestamp.TimeValue(wfCloseTime),
+				workflowStatus,
+				workflowHistoryLength,
+				visibilityMemo,
+				searchAttr,
+			); err != nil {
+				return nil, err
+			}
 		}
 
 		// verify if parent got the completion event

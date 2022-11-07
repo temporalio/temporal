@@ -30,6 +30,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -216,10 +217,13 @@ func (s *IntegrationBase) randomizeStr(id string) string {
 
 func (s *IntegrationBase) printWorkflowHistory(namespace string, execution *commonpb.WorkflowExecution) {
 	events := s.getHistory(namespace, execution)
-	history := &historypb.History{
-		Events: events,
-	}
-	common.PrettyPrintHistory(history, s.Logger)
+	common.PrettyPrintHistory(&historypb.History{Events: events})
+}
+
+//lint:ignore U1000 will use it later
+func (s *IntegrationBase) printWorkflowHistoryCompact(namespace string, execution *commonpb.WorkflowExecution) {
+	events := s.getHistory(namespace, execution)
+	fmt.Println(s.formatHistoryCompact(&historypb.History{Events: events}))
 }
 
 func (s *IntegrationBase) getHistory(namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
@@ -316,4 +320,25 @@ func (s *IntegrationBase) registerArchivalNamespace(archivalNamespace string) er
 		tag.WorkflowNamespaceID(response.ID),
 	)
 	return err
+}
+
+func (s *IntegrationBase) formatHistoryCompact(history *historypb.History) string {
+	var sb strings.Builder
+	for _, event := range history.Events {
+		sb.WriteString(fmt.Sprintf("%3d %s\n", event.GetEventId(), event.GetEventType()))
+	}
+	if sb.Len() > 0 {
+		return sb.String()[:sb.Len()-1]
+	}
+	return ""
+}
+
+func (s *IntegrationBase) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
+	expectedHistoryTrimmed := strings.Trim(expectedHistory, "\n")
+	actualHistoryStr := s.formatHistoryCompact(actualHistory)
+	s.Equal(expectedHistoryTrimmed, actualHistoryStr)
+}
+
+func (s *IntegrationBase) EqualHistoryEvents(expectedHistory string, actualHistoryEvents []*historypb.HistoryEvent) {
+	s.EqualHistory(expectedHistory, &historypb.History{Events: actualHistoryEvents})
 }
