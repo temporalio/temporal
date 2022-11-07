@@ -113,8 +113,8 @@ type (
 		Msg string
 	}
 
-	// AppendHistoryError represents a failed insert to history tree / node request
-	AppendHistoryError struct {
+	// AppendHistoryTimeoutError represents a failed insert to history tree / node request
+	AppendHistoryTimeoutError struct {
 		Msg string
 	}
 
@@ -1179,7 +1179,7 @@ func (e *InvalidPersistenceRequestError) Error() string {
 	return e.Msg
 }
 
-func (e *AppendHistoryError) Error() string {
+func (e *AppendHistoryTimeoutError) Error() string {
 	return e.Msg
 }
 

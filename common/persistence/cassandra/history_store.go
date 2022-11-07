@@ -484,7 +484,7 @@ func convertHistoryNode(
 
 func convertTimeoutError(err error) error {
 	if timeoutErr, ok := err.(*p.TimeoutError); ok {
-		return &p.AppendHistoryError{
+		return &p.AppendHistoryTimeoutError{
 			Msg: timeoutErr.Msg,
 		}
 	}

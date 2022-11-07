@@ -1563,7 +1563,7 @@ func (p *metricEmitter) updateErrorMetric(scope int, caller string, err error) {
 	switch err := err.(type) {
 	case *ShardAlreadyExistError,
 		*ShardOwnershipLostError,
-		*AppendHistoryError,
+		*AppendHistoryTimeoutError,
 		*CurrentWorkflowConditionFailedError,
 		*WorkflowConditionFailedError,
 		*ConditionFailedError,

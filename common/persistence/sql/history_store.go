@@ -79,7 +79,7 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 		case nil:
 			return nil
 		case context.DeadlineExceeded, context.Canceled:
-			return &p.AppendHistoryError{
+			return &p.AppendHistoryTimeoutError{
 				Msg: err.Error(),
 			}
 		default:
@@ -124,7 +124,7 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 			}
 			return nil
 		case context.DeadlineExceeded, context.Canceled:
-			return &p.AppendHistoryError{
+			return &p.AppendHistoryTimeoutError{
 				Msg: err.Error(),
 			}
 		default:
