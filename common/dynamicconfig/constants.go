@@ -550,6 +550,8 @@ const (
 	// ArchivalProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for
 	// archivalQueueProcessor
 	ArchivalProcessorPollBackoffInterval = "history.archivalProcessorPollBackoffInterval"
+	// ArchivalProcessorArchiveDelay is the delay before archivalQueueProcessor starts to process archival tasks
+	ArchivalProcessorArchiveDelay = "history.archivalProcessorArchiveDelay"
 
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"

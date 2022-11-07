@@ -94,7 +94,7 @@ var (
 
 	CategoryArchival = Category{
 		id:    CategoryIDArchival,
-		cType: CategoryTypeImmediate,
+		cType: CategoryTypeScheduled,
 		name:  CategoryNameArchival,
 	}
 )
