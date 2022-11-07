@@ -1626,6 +1626,7 @@ var (
 	NamespaceReplicationEnqueueDLQCount                       = NewCounterDef("namespace_replication_dlq_enqueue_requests")
 	ParentClosePolicyProcessorSuccess                         = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures                        = NewCounterDef("parent_close_policy_processor_errors")
+	NamespaceOpenWorkflowsGauge                               = NewGaugeDef("namespace_open_workflows_count")
 
 	// Replication
 	NamespaceReplicationTaskAckLevelGauge = NewGaugeDef("namespace_replication_task_ack_level")

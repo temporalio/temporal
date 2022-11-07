@@ -87,10 +87,19 @@ const (
 	EnableParentClosePolicyWorker = "system.enableParentClosePolicyWorker"
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
 	EnableStickyQuery = "system.enableStickyQuery"
-	// EnableActivityEagerExecution indicates if acitivty eager execution is enabled per namespace
+	// EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace
 	EnableActivityEagerExecution = "system.enableActivityEagerExecution"
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
+
+	// EnableNamespaceStatsReporter indicates if we allow reporting namespace stats
+	EnableNamespaceStatsReporter = "system.enableNamespaceStatsReporter"
+	// NamespaceStatsReportInterval is the interval between stats reports
+	NamespaceStatsReportInterval = "system.namespaceStatsReportInterval"
+	// EmitOpenWorkflowCount determines if we emit open workflow count metrics for a namespace
+	EmitOpenWorkflowCount = "system.emitOpenWorkflowCount"
+	// StatsReporterCountWorkflowMaxQPS is the max allowed QPS for querying workflow count from visibility
+	StatsReporterCountWorkflowMaxQPS = "system.statsReporterCountWorkflowMaxQPS"
 
 	// Whether the deadlock detector should dump goroutines
 	DeadlockDumpGoroutines = "system.deadlock.DumpGoroutines"
