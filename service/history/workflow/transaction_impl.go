@@ -375,24 +375,15 @@ func conflictResolveWorkflowExecution(
 
 	resp, err := shard.ConflictResolveWorkflowExecution(ctx, request)
 	if err != nil {
-		switch err.(type) {
-		case *persistence.CurrentWorkflowConditionFailedError,
-			*persistence.WorkflowConditionFailedError,
-			*persistence.ConditionFailedError:
-			// it is possible that workflow already exists and caller need to apply
-			// workflow ID reuse policy
-			return nil, err
-		default:
-			shard.GetLogger().Error(
-				"Persistent store operation Failure",
-				tag.WorkflowNamespaceID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId),
-				tag.WorkflowID(request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId),
-				tag.WorkflowRunID(request.ResetWorkflowSnapshot.ExecutionState.RunId),
-				tag.StoreOperationConflictResolveWorkflowExecution,
-				tag.Error(err),
-			)
-			return nil, err
-		}
+		shard.GetLogger().Error(
+			"Persistent store operation Failure",
+			tag.WorkflowNamespaceID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId),
+			tag.WorkflowID(request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId),
+			tag.WorkflowRunID(request.ResetWorkflowSnapshot.ExecutionState.RunId),
+			tag.StoreOperationConflictResolveWorkflowExecution,
+			tag.Error(err),
+		)
+		return nil, err
 	}
 
 	if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
