@@ -87,16 +87,17 @@ func (s *workflowSuite) TearDownTest() {
 }
 
 func (s *workflowSuite) TestArchivalWorkflow_Fail_HashesDoNotEqual() {
+	workflowTestMetrics.EXPECT().WithTags(gomock.Any()).Return(workflowTestMetrics)
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverWorkflowStartedCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
-	workflowTestMetrics.EXPECT().Timer(metrics.ServiceLatency).Return(metrics.NoopMetricsHandler)
-	workflowTestMetrics.EXPECT().Timer(metrics.ArchiverHandleAllRequestsLatency).Return(metrics.NoopMetricsHandler)
+	workflowTestMetrics.EXPECT().Timer(metrics.ServiceLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
+	workflowTestMetrics.EXPECT().Timer(metrics.ArchiverHandleAllRequestsLatency.GetMetricName()).Return(metrics.NoopTimerMetricFunc)
 	pumpedRequestCounter := metrics.NewMockCounterMetric(s.controller)
 	pumpedRequestCounter.EXPECT().Record(int64(3))
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumPumpedRequestsCount.GetMetricName()).Return(pumpedRequestCounter)
 	handledRequestCounter := metrics.NewMockCounterMetric(s.controller)
 	handledRequestCounter.EXPECT().Record(int64(3))
 	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverNumHandledRequestsCount.GetMetricName()).Return(handledRequestCounter)
-	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverPumpedNotEqualHandledCount.GetMetricName()).Return(metrics.NoopMetricsHandler)
+	workflowTestMetrics.EXPECT().Counter(metrics.ArchiverPumpedNotEqualHandledCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
 	workflowTestHandler.EXPECT().Start()
 	workflowTestHandler.EXPECT().Finished().Return([]uint64{9, 7, 0})
 	workflowTestPump.EXPECT().Run().Return(PumpResult{
@@ -173,6 +174,7 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
 	logger := log.NewTestLogger()
 	globalLogger = workflowTestLogger
+	globalMetricsHandler = workflowTestMetrics
 
 	globalConfig = &Config{
 		ArchiverConcurrency:           dynamicconfig.GetIntPropertyFn(50),

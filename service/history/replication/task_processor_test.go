@@ -204,7 +204,7 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_SyncActivity() {
 		VisibilityTime: &now,
 	}
 
-	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(0, nil)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return("", nil)
 	err := s.replicationTaskProcessor.handleReplicationTask(context.Background(), task)
 	s.NoError(err)
 }
@@ -243,7 +243,7 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_History() {
 		VisibilityTime: &now,
 	}
 
-	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return(0, nil)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task, false).Return("", nil)
 	err = s.replicationTaskProcessor.handleReplicationTask(context.Background(), task)
 	s.NoError(err)
 }
