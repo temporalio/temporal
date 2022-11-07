@@ -550,22 +550,33 @@ func (s *TaskSerializer) transferCloseTaskToProto(
 		TaskId:                  closeTask.TaskID,
 		VisibilityTime:          timestamp.TimePtr(closeTask.VisibilityTimestamp),
 		DeleteAfterClose:        closeTask.DeleteAfterClose,
+		TaskDetails: &persistencespb.TransferTaskInfo_CloseExecutionTaskDetails_{
+			CloseExecutionTaskDetails: &persistencespb.TransferTaskInfo_CloseExecutionTaskDetails{
+				CanSkipVisibilityArchival: closeTask.CanSkipVisibilityArchival,
+			},
+		},
 	}
 }
 
 func (s *TaskSerializer) transferCloseTaskFromProto(
 	closeTask *persistencespb.TransferTaskInfo,
 ) *tasks.CloseExecutionTask {
+	canSkipVisibilityArchival := false
+	closeExecutionTaskDetails := closeTask.GetCloseExecutionTaskDetails()
+	if closeExecutionTaskDetails != nil {
+		canSkipVisibilityArchival = closeExecutionTaskDetails.CanSkipVisibilityArchival
+	}
 	return &tasks.CloseExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			closeTask.NamespaceId,
 			closeTask.WorkflowId,
 			closeTask.RunId,
 		),
-		VisibilityTimestamp: *closeTask.VisibilityTime,
-		TaskID:              closeTask.TaskId,
-		Version:             closeTask.Version,
-		DeleteAfterClose:    closeTask.DeleteAfterClose,
+		VisibilityTimestamp:       *closeTask.VisibilityTime,
+		TaskID:                    closeTask.TaskId,
+		Version:                   closeTask.Version,
+		DeleteAfterClose:          closeTask.DeleteAfterClose,
+		CanSkipVisibilityArchival: canSkipVisibilityArchival,
 	}
 }
 

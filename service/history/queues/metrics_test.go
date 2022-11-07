@@ -22,39 +22,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workflow
+package queues
 
 import (
-	"go.temporal.io/server/service/history/shard"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"go.temporal.io/server/service/history/tasks"
 )
 
-var (
-	// The default value is just for testing purpose,
-	// so we don't have to specify its value in every test.
-	// If TaskGeneratorFactory is not provided as an fx Option,
-	// fx.Populate in fx.go and server start up will still fail.
-	taskGeneratorProvider = NewTaskGeneratorProvider()
-)
-
-type (
-	TaskGeneratorProvider interface {
-		NewTaskGenerator(shard.Context, MutableState) TaskGenerator
-	}
-
-	taskGeneratorProviderImpl struct{}
-)
-
-func NewTaskGeneratorProvider() TaskGeneratorProvider {
-	return &taskGeneratorProviderImpl{}
-}
-
-func (p *taskGeneratorProviderImpl) NewTaskGenerator(
-	shard shard.Context,
-	mutableState MutableState,
-) TaskGenerator {
-	return NewTaskGenerator(
-		shard.GetNamespaceRegistry(),
-		mutableState,
-		shard.GetConfig(),
-	)
+func TestGetArchivalTaskTypeTagValue(t *testing.T) {
+	assert.Equal(t, "ArchivalTaskArchiveExecution", GetArchivalTaskTypeTagValue(&tasks.ArchiveExecutionTask{}))
+	assert.Equal(t, "", GetArchivalTaskTypeTagValue(&tasks.CloseExecutionTask{}))
 }

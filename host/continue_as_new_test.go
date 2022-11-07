@@ -337,7 +337,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 
 		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
 			s.Logger.Info("Workflow execution timedout.  Printing history for last run:")
-			common.PrettyPrintHistory(h, s.Logger)
+			common.PrettyPrintHistory(h)
 
 			workflowComplete = true
 			break
