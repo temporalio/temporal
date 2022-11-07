@@ -535,12 +535,3 @@ func (m *sqlExecutionStore) GetHistoryTree(
 		TreeInfos: treeInfos,
 	}, nil
 }
-
-func convertTimeoutError(err error) error {
-	if err == context.DeadlineExceeded || err == context.Canceled {
-		return &p.AppendHistoryError{
-			Msg: err.Error(),
-		}
-	}
-	return err
-}
