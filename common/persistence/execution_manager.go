@@ -771,11 +771,16 @@ func (m *executionManagerImpl) GetHistoryTasks(
 	}
 
 	tasks := make([]tasks.Task, 0, len(resp.Tasks))
-	for _, blob := range resp.Tasks {
-		task, err := m.serializer.DeserializeTask(request.TaskCategory, blob)
+	for _, internalTask := range resp.Tasks {
+		task, err := m.serializer.DeserializeTask(request.TaskCategory, internalTask.Task)
 		if err != nil {
 			return nil, err
 		}
+
+		if !internalTask.VisibilityTimestamp.IsZero() {
+			task.SetVisibilityTime(internalTask.VisibilityTimestamp)
+		}
+
 		tasks = append(tasks, task)
 	}
 
@@ -825,11 +830,16 @@ func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
 
 	category := tasks.CategoryReplication
 	tasks := make([]tasks.Task, 0, len(resp.Tasks))
-	for _, blob := range resp.Tasks {
-		task, err := m.serializer.DeserializeTask(category, blob)
+	for _, internalTask := range resp.Tasks {
+		task, err := m.serializer.DeserializeTask(category, internalTask.Task)
 		if err != nil {
 			return nil, err
 		}
+
+		if !internalTask.VisibilityTimestamp.IsZero() {
+			task.SetVisibilityTime(internalTask.VisibilityTimestamp)
+		}
+
 		tasks = append(tasks, task)
 	}
 

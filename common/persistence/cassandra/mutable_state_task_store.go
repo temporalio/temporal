@@ -27,6 +27,7 @@ package cassandra
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 
@@ -79,7 +80,7 @@ const (
 		`and task_id >= ? ` +
 		`and task_id < ?`
 
-	templateGetHistoryScheduledTasksQuery = `SELECT task_data, task_encoding ` +
+	templateGetHistoryScheduledTasksQuery = `SELECT task_data, task_encoding, visibility_ts ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ?` +
@@ -195,7 +196,7 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
-	templateGetTimerTasksQuery = `SELECT timer, timer_encoding ` +
+	templateGetTimerTasksQuery = `SELECT timer, timer_encoding, visibility_ts ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ?` +
@@ -409,7 +410,9 @@ func (d *MutableStateTaskStore) getTransferTasks(
 	var encoding string
 
 	for iter.Scan(&data, &encoding) {
-		response.Tasks = append(response.Tasks, *p.NewDataBlob(data, encoding))
+		response.Tasks = append(response.Tasks, p.InternalTask{
+			Task: *p.NewDataBlob(data, encoding),
+		})
 
 		data = nil
 		encoding = ""
@@ -509,9 +512,13 @@ func (d *MutableStateTaskStore) getTimerTasks(
 	response := &p.InternalGetHistoryTasksResponse{}
 	var data []byte
 	var encoding string
+	var timestamp int64
 
-	for iter.Scan(&data, &encoding) {
-		response.Tasks = append(response.Tasks, *p.NewDataBlob(data, encoding))
+	for iter.Scan(&data, &encoding, &timestamp) {
+		response.Tasks = append(response.Tasks, p.InternalTask{
+			Task:                *p.NewDataBlob(data, encoding),
+			VisibilityTimestamp: time.Unix(0, timestamp),
+		})
 
 		data = nil
 		encoding = ""
@@ -784,7 +791,9 @@ func (d *MutableStateTaskStore) getVisibilityTasks(
 	var encoding string
 
 	for iter.Scan(&data, &encoding) {
-		response.Tasks = append(response.Tasks, *p.NewDataBlob(data, encoding))
+		response.Tasks = append(response.Tasks, p.InternalTask{
+			Task: *p.NewDataBlob(data, encoding),
+		})
 
 		data = nil
 		encoding = ""
@@ -848,7 +857,9 @@ func (d *MutableStateTaskStore) populateGetReplicationTasksResponse(
 	var encoding string
 
 	for iter.Scan(&data, &encoding) {
-		response.Tasks = append(response.Tasks, *p.NewDataBlob(data, encoding))
+		response.Tasks = append(response.Tasks, p.InternalTask{
+			Task: *p.NewDataBlob(data, encoding),
+		})
 
 		data = nil
 		encoding = ""
@@ -896,34 +907,33 @@ func (d *MutableStateTaskStore) getHistoryTasks(
 	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
+	switch request.TaskCategory.Type() {
+	case tasks.CategoryTypeImmediate:
+		return d.getHistoryImmedidateTasks(ctx, request)
+	case tasks.CategoryTypeScheduled:
+		return d.getHistoryScheduledTasks(ctx, request)
+	default:
+		panic(fmt.Sprintf("Unknown task category type: %v", request.TaskCategory.Type().String()))
+	}
+}
+
+func (d *MutableStateTaskStore) getHistoryImmedidateTasks(
+	ctx context.Context,
+	request *p.GetHistoryTasksRequest,
+) (*p.InternalGetHistoryTasksResponse, error) {
 	// execution manager should already validated the request
 	// Reading history tasks need to be quorum level consistent, otherwise we could lose task
 
-	var query gocql.Query
-	if request.TaskCategory.Type() == tasks.CategoryTypeImmediate {
-		query = d.Session.Query(templateGetHistoryImmediateTasksQuery,
-			request.ShardID,
-			request.TaskCategory.ID(),
-			rowTypeHistoryTaskNamespaceID,
-			rowTypeHistoryTaskWorkflowID,
-			rowTypeHistoryTaskRunID,
-			defaultVisibilityTimestamp,
-			request.InclusiveMinTaskKey.TaskID,
-			request.ExclusiveMaxTaskKey.TaskID,
-		).WithContext(ctx)
-	} else {
-		minTimestamp := p.UnixMilliseconds(request.InclusiveMinTaskKey.FireTime)
-		maxTimestamp := p.UnixMilliseconds(request.ExclusiveMaxTaskKey.FireTime)
-		query = d.Session.Query(templateGetHistoryScheduledTasksQuery,
-			request.ShardID,
-			request.TaskCategory.ID(),
-			rowTypeHistoryTaskNamespaceID,
-			rowTypeHistoryTaskWorkflowID,
-			rowTypeHistoryTaskRunID,
-			minTimestamp,
-			maxTimestamp,
-		).WithContext(ctx)
-	}
+	query := d.Session.Query(templateGetHistoryImmediateTasksQuery,
+		request.ShardID,
+		request.TaskCategory.ID(),
+		rowTypeHistoryTaskNamespaceID,
+		rowTypeHistoryTaskWorkflowID,
+		rowTypeHistoryTaskRunID,
+		defaultVisibilityTimestamp,
+		request.InclusiveMinTaskKey.TaskID,
+		request.ExclusiveMaxTaskKey.TaskID,
+	).WithContext(ctx)
 
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
@@ -932,7 +942,9 @@ func (d *MutableStateTaskStore) getHistoryTasks(
 	var encoding string
 
 	for iter.Scan(&data, &encoding) {
-		response.Tasks = append(response.Tasks, *p.NewDataBlob(data, encoding))
+		response.Tasks = append(response.Tasks, p.InternalTask{
+			Task: *p.NewDataBlob(data, encoding),
+		})
 
 		data = nil
 		encoding = ""
@@ -942,7 +954,53 @@ func (d *MutableStateTaskStore) getHistoryTasks(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("GetHistoryTasks", err)
+		return nil, gocql.ConvertError("GetHistoryImmediateTasks", err)
+	}
+
+	return response, nil
+}
+
+func (d *MutableStateTaskStore) getHistoryScheduledTasks(
+	ctx context.Context,
+	request *p.GetHistoryTasksRequest,
+) (*p.InternalGetHistoryTasksResponse, error) {
+	// execution manager should already validated the request
+	// Reading history tasks need to be quorum level consistent, otherwise we could lose task
+
+	minTimestamp := p.UnixMilliseconds(request.InclusiveMinTaskKey.FireTime)
+	maxTimestamp := p.UnixMilliseconds(request.ExclusiveMaxTaskKey.FireTime)
+	query := d.Session.Query(templateGetHistoryScheduledTasksQuery,
+		request.ShardID,
+		request.TaskCategory.ID(),
+		rowTypeHistoryTaskNamespaceID,
+		rowTypeHistoryTaskWorkflowID,
+		rowTypeHistoryTaskRunID,
+		minTimestamp,
+		maxTimestamp,
+	).WithContext(ctx)
+
+	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
+
+	response := &p.InternalGetHistoryTasksResponse{}
+	var data []byte
+	var encoding string
+	var timestamp int64
+
+	for iter.Scan(&data, &encoding, &timestamp) {
+		response.Tasks = append(response.Tasks, p.InternalTask{
+			Task:                *p.NewDataBlob(data, encoding),
+			VisibilityTimestamp: time.Unix(0, timestamp),
+		})
+
+		data = nil
+		encoding = ""
+	}
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, gocql.ConvertError("GetHistoryScheduledTasks", err)
 	}
 
 	return response, nil
