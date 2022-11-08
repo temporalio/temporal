@@ -354,7 +354,7 @@ func (s *Scavenger) cleanUpWorkflowPastRetention(
 	retention := ns.Retention()
 	finalUpdateTime := executionInfo.GetLastUpdateTime()
 	age := time.Now().UTC().Sub(timestamp.TimeValue(finalUpdateTime))
-	if age > 0 && age > retention+s.executionDataDurationBuffer() {
+	if age > retention+s.executionDataDurationBuffer() {
 		_, err = s.adminClient.DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
 			Namespace: ns.Name().String(),
 			Execution: &commonpb.WorkflowExecution{

@@ -105,7 +105,7 @@ func (h *HistoryStore) AppendHistoryNodes(
 			node.Events.EncodingType.String(),
 		).WithContext(ctx)
 		if err := query.Exec(); err != nil {
-			return gocql.ConvertError("AppendHistoryNodes", err)
+			return convertTimeoutError(gocql.ConvertError("AppendHistoryNodes", err))
 		}
 		return nil
 	}
@@ -128,7 +128,7 @@ func (h *HistoryStore) AppendHistoryNodes(
 		node.Events.EncodingType.String(),
 	)
 	if err := h.Session.ExecuteBatch(batch); err != nil {
-		return gocql.ConvertError("AppendHistoryNodes", err)
+		return convertTimeoutError(gocql.ConvertError("AppendHistoryNodes", err))
 	}
 	return nil
 }
@@ -480,4 +480,13 @@ func convertHistoryNode(
 		TransactionID:     txnID,
 		Events:            p.NewDataBlob(data, dataEncoding),
 	}
+}
+
+func convertTimeoutError(err error) error {
+	if timeoutErr, ok := err.(*p.TimeoutError); ok {
+		return &p.AppendHistoryTimeoutError{
+			Msg: timeoutErr.Msg,
+		}
+	}
+	return err
 }
