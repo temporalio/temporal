@@ -61,7 +61,7 @@ type (
 		workflowCache                 workflow.Cache
 		resender                      xdc.NDCHistoryResender
 		taskExecutorProvider          TaskExecutorProvider
-		metricsClient                 metrics.Client
+		metricsHandler                metrics.MetricsHandler
 		logger                        log.Logger
 
 		taskProcessorLock sync.RWMutex
@@ -106,7 +106,7 @@ func NewTaskProcessorManager(
 			shard.GetLogger(),
 		),
 		logger:               shard.GetLogger(),
-		metricsClient:        shard.GetMetricsClient(),
+		metricsHandler:       shard.GetMetricsHandler(),
 		taskProcessors:       make(map[string]TaskProcessor),
 		taskExecutorProvider: taskExecutorProvider,
 		minTxAckedTaskID:     persistence.EmptyQueueMessageID,
@@ -183,7 +183,7 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 				r.shard,
 				r.engine,
 				r.config,
-				r.shard.GetMetricsClient(),
+				r.shard.GetMetricsHandler(),
 				fetcher,
 				r.taskExecutorProvider(TaskExecutorParams{
 					RemoteCluster:   clusterName,
@@ -213,7 +213,10 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 		case <-cleanupTimer.C:
 			if err := r.cleanupReplicationTasks(); err != nil {
 				r.logger.Error("Failed to clean up replication messages.", tag.Error(err))
-				r.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupFailure)
+				r.metricsHandler.Counter(metrics.ReplicationTaskCleanupFailure.GetMetricName()).Record(
+					1,
+					metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
+				)
 			}
 			cleanupTimer.Reset(backoff.JitDuration(
 				r.config.ReplicationTaskProcessorCleanupInterval(shardID),
@@ -250,12 +253,13 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 	}
 
 	r.logger.Debug("cleaning up replication task queue", tag.ReadLevel(*minAckedTaskID))
-	r.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupCount)
-	r.metricsClient.Scope(
-		metrics.ReplicationTaskFetcherScope,
-	).RecordDistribution(
-		metrics.ReplicationTasksLag,
-		int(r.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID-*minAckedTaskID),
+	r.metricsHandler.Counter(metrics.ReplicationTaskCleanupCount.GetMetricName()).Record(
+		1,
+		metrics.OperationTag(metrics.ReplicationTaskCleanupScope),
+	)
+	r.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
+		r.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID-*minAckedTaskID,
+		metrics.OperationTag(metrics.ReplicationTaskFetcherScope),
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)

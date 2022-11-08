@@ -62,7 +62,6 @@ type (
 		GetEventsCache() events.Cache
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger
-		GetMetricsClient() metrics.Client
 		GetMetricsHandler() metrics.MetricsHandler
 		GetTimeSource() clock.TimeSource
 

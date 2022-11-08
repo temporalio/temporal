@@ -375,24 +375,15 @@ func conflictResolveWorkflowExecution(
 
 	resp, err := shard.ConflictResolveWorkflowExecution(ctx, request)
 	if err != nil {
-		switch err.(type) {
-		case *persistence.CurrentWorkflowConditionFailedError,
-			*persistence.WorkflowConditionFailedError,
-			*persistence.ConditionFailedError:
-			// it is possible that workflow already exists and caller need to apply
-			// workflow ID reuse policy
-			return nil, err
-		default:
-			shard.GetLogger().Error(
-				"Persistent store operation Failure",
-				tag.WorkflowNamespaceID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId),
-				tag.WorkflowID(request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId),
-				tag.WorkflowRunID(request.ResetWorkflowSnapshot.ExecutionState.RunId),
-				tag.StoreOperationConflictResolveWorkflowExecution,
-				tag.Error(err),
-			)
-			return nil, err
-		}
+		shard.GetLogger().Error(
+			"Persistent store operation Failure",
+			tag.WorkflowNamespaceID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId),
+			tag.WorkflowID(request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId),
+			tag.WorkflowRunID(request.ResetWorkflowSnapshot.ExecutionState.RunId),
+			tag.StoreOperationConflictResolveWorkflowExecution,
+			tag.Error(err),
+		)
+		return nil, err
 	}
 
 	if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
@@ -628,11 +619,11 @@ func emitMutationMetrics(
 	namespace *namespace.Namespace,
 	stats ...*persistence.MutableStateStatistics,
 ) {
-	metricsClient := shard.GetMetricsClient()
+	metricsHandler := shard.GetMetricsHandler()
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.SessionStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsHandler.WithTags(metrics.OperationTag(metrics.SessionStatsScope), metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}
@@ -643,11 +634,11 @@ func emitGetMetrics(
 	namespace *namespace.Namespace,
 	stats ...*persistence.MutableStateStatistics,
 ) {
-	metricsClient := shard.GetMetricsClient()
+	metricsHandler := shard.GetMetricsHandler()
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.ExecutionStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionStatsScope), metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}
@@ -684,7 +675,7 @@ func emitCompletionMetrics(
 	namespace *namespace.Namespace,
 	completionMetrics ...completionMetric,
 ) {
-	metricsClient := shard.GetMetricsClient()
+	metricsHandler := shard.GetMetricsHandler()
 	namespaceName := namespace.Name()
 
 	for _, completionMetric := range completionMetrics {
@@ -692,7 +683,7 @@ func emitCompletionMetrics(
 			continue
 		}
 		emitWorkflowCompletionStats(
-			metricsClient,
+			metricsHandler,
 			namespaceName,
 			completionMetric.taskQueue,
 			completionMetric.status,

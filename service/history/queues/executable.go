@@ -211,7 +211,7 @@ func (e *executableImpl) Execute() error {
 	e.lastActiveness = isActive
 
 	var userLatency time.Duration
-	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
+	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName()); ok {
 		userLatency = time.Duration(duration)
 	}
 	e.userLatency += userLatency

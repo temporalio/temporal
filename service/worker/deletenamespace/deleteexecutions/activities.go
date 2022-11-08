@@ -44,7 +44,7 @@ type (
 	Activities struct {
 		visibilityManager manager.VisibilityManager
 		historyClient     historyservice.HistoryServiceClient
-		metricsClient     metrics.Client
+		metricsHandler    metrics.MetricsHandler
 		logger            log.Logger
 	}
 
@@ -72,13 +72,13 @@ type (
 func NewActivities(
 	visibilityManager manager.VisibilityManager,
 	historyClient historyservice.HistoryServiceClient,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) *Activities {
 	return &Activities{
 		visibilityManager: visibilityManager,
 		historyClient:     historyClient,
-		metricsClient:     metricsClient,
+		metricsHandler:    metricsHandler.WithTags(metrics.OperationTag(metrics.DeleteExecutionsWorkflowScope)),
 		logger:            logger,
 	}
 }
@@ -95,7 +95,7 @@ func (a *Activities) GetNextPageTokenActivity(ctx context.Context, params GetNex
 
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.ListExecutionsFailuresCount)
+		a.metricsHandler.Counter(metrics.ListExecutionsFailuresCount.GetMetricName()).Record(1)
 		a.logger.Error("Unable to list all workflows to get next page token.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
 		return nil, err
 	}
@@ -118,14 +118,14 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.ListExecutionsFailuresCount)
+		a.metricsHandler.Counter(metrics.ListExecutionsFailuresCount.GetMetricName()).Record(1)
 		a.logger.Error("Unable to list all workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
 		return result, err
 	}
 	for _, execution := range resp.Executions {
 		err = rateLimiter.Wait(ctx)
 		if err != nil {
-			a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.RateLimiterFailuresCount)
+			a.metricsHandler.Counter(metrics.RateLimiterFailuresCount.GetMetricName()).Record(1)
 			a.logger.Error("Workflow executions delete rate limiter error.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
 			return result, err
 		}
@@ -136,13 +136,13 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		switch err.(type) {
 		case nil:
 			result.SuccessCount++
-			a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.DeleteExecutionsSuccessCount)
+			a.metricsHandler.Counter(metrics.DeleteExecutionsSuccessCount.GetMetricName()).Record(1)
 		case *serviceerror.NotFound: // Workflow execution doesn't exist. Do nothing.
-			a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.DeleteExecutionNotFoundCount)
+			a.metricsHandler.Counter(metrics.DeleteExecutionNotFoundCount.GetMetricName()).Record(1)
 			a.logger.Info("Workflow execution is not found.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()))
 		default:
 			result.ErrorCount++
-			a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.DeleteExecutionFailuresCount)
+			a.metricsHandler.Counter(metrics.DeleteExecutionFailuresCount.GetMetricName()).Record(1)
 			a.logger.Error("Unable to delete workflow execution.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
 		}
 		activity.RecordHeartbeat(ctx, result)

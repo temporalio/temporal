@@ -54,7 +54,7 @@ func Invoke(
 	namespaceID := namespaceEntry.ID()
 
 	request := startRequest.StartRequest
-	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, shard, shard.GetMetricsClient())
+	api.OverrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope, shard, shard.GetMetricsHandler())
 	err = api.ValidateStartWorkflowExecutionRequest(ctx, request, shard, namespaceEntry, "StartWorkflowExecution")
 	if err != nil {
 		return nil, err

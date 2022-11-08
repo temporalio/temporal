@@ -86,7 +86,7 @@ type (
 		persistenceShardManager       persistence.ShardManager
 		persistenceVisibilityManager  manager.VisibilityManager
 		historyServiceResolver        membership.ServiceResolver
-		metricsClient                 metrics.Client
+		metricsHandler                metrics.MetricsHandler
 		payloadSerializer             serialization.Serializer
 		timeSource                    clock.TimeSource
 		namespaceRegistry             namespace.Registry
@@ -109,7 +109,7 @@ type (
 		PersistenceShardManager       persistence.ShardManager
 		PersistenceVisibilityManager  manager.VisibilityManager
 		HistoryServiceResolver        membership.ServiceResolver
-		MetricsClient                 metrics.Client
+		MetricsHandler                metrics.MetricsHandler
 		PayloadSerializer             serialization.Serializer
 		TimeSource                    clock.TimeSource
 		NamespaceRegistry             namespace.Registry
@@ -1829,6 +1829,8 @@ func (h *Handler) convertError(err error) error {
 			return serviceerrors.NewShardOwnershipLost(ownerInfo.GetAddress(), hostInfo.GetAddress())
 		}
 		return serviceerrors.NewShardOwnershipLost("", hostInfo.GetAddress())
+	case *persistence.AppendHistoryTimeoutError:
+		return serviceerror.NewUnavailable(err.Msg)
 	case *persistence.WorkflowConditionFailedError:
 		return serviceerror.NewUnavailable(err.Msg)
 	case *persistence.CurrentWorkflowConditionFailedError:

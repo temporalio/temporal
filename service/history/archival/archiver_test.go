@@ -64,7 +64,7 @@ func TestArchiver(t *testing.T) {
 
 			ExpectedMetrics: []expectedMetric{
 				{
-					Metric: metrics.ArchiverArchiveLatency,
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
 					Tags:   []metrics.Tag{metrics.StringTag("status", "ok")},
 				},
 			},
@@ -75,7 +75,7 @@ func TestArchiver(t *testing.T) {
 
 			ExpectedMetrics: []expectedMetric{
 				{
-					Metric: metrics.ArchiverArchiveLatency,
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
 					Tags:   []metrics.Tag{metrics.StringTag("status", "err")},
 				},
 			},
@@ -90,11 +90,11 @@ func TestArchiver(t *testing.T) {
 
 			ExpectedMetrics: []expectedMetric{
 				{
-					Metric: metrics.ArchiverArchiveLatency,
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
 					Tags:   []metrics.Tag{metrics.StringTag("status", "ok")},
 				},
 				{
-					Metric: metrics.ArchiverArchiveTargetLatency,
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
 					Tags: []metrics.Tag{
 						metrics.StringTag("target", "history"),
 						metrics.StringTag("status", "ok"),
@@ -111,11 +111,11 @@ func TestArchiver(t *testing.T) {
 			ExpectArchiveHistory: true,
 			ExpectedMetrics: []expectedMetric{
 				{
-					Metric: metrics.ArchiverArchiveLatency,
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
 					Tags:   []metrics.Tag{metrics.StringTag("status", "err")},
 				},
 				{
-					Metric: metrics.ArchiverArchiveTargetLatency,
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
 					Tags: []metrics.Tag{
 						metrics.StringTag("target", "history"),
 						metrics.StringTag("status", "err"),
@@ -130,11 +130,11 @@ func TestArchiver(t *testing.T) {
 
 			ExpectedMetrics: []expectedMetric{
 				{
-					Metric: metrics.ArchiverArchiveLatency,
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
 					Tags:   []metrics.Tag{metrics.StringTag("status", "ok")},
 				},
 				{
-					Metric: metrics.ArchiverArchiveTargetLatency,
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
 					Tags: []metrics.Tag{
 						metrics.StringTag("target", "visibility"),
 						metrics.StringTag("status", "ok"),
@@ -153,18 +153,18 @@ func TestArchiver(t *testing.T) {
 			ExpectedReturnErrors:    []string{"example archive visibility error"},
 			ExpectedMetrics: []expectedMetric{
 				{
-					Metric: metrics.ArchiverArchiveLatency,
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
 					Tags:   []metrics.Tag{metrics.StringTag("status", "err")},
 				},
 				{
-					Metric: metrics.ArchiverArchiveTargetLatency,
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
 					Tags: []metrics.Tag{
 						metrics.StringTag("target", "history"),
 						metrics.StringTag("status", "ok"),
 					},
 				},
 				{
-					Metric: metrics.ArchiverArchiveTargetLatency,
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
 					Tags: []metrics.Tag{
 						metrics.StringTag("target", "visibility"),
 						metrics.StringTag("status", "err"),
@@ -182,18 +182,18 @@ func TestArchiver(t *testing.T) {
 			ExpectedReturnErrors:    []string{"example archive history error"},
 			ExpectedMetrics: []expectedMetric{
 				{
-					Metric: metrics.ArchiverArchiveLatency,
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
 					Tags:   []metrics.Tag{metrics.StringTag("status", "err")},
 				},
 				{
-					Metric: metrics.ArchiverArchiveTargetLatency,
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
 					Tags: []metrics.Tag{
 						metrics.StringTag("target", "history"),
 						metrics.StringTag("status", "err"),
 					},
 				},
 				{
-					Metric: metrics.ArchiverArchiveTargetLatency,
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
 					Tags: []metrics.Tag{
 						metrics.StringTag("target", "visibility"),
 						metrics.StringTag("status", "ok"),
@@ -209,18 +209,18 @@ func TestArchiver(t *testing.T) {
 			ExpectArchiveVisibility: true,
 			ExpectedMetrics: []expectedMetric{
 				{
-					Metric: metrics.ArchiverArchiveLatency,
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
 					Tags:   []metrics.Tag{metrics.StringTag("status", "ok")},
 				},
 				{
-					Metric: metrics.ArchiverArchiveTargetLatency,
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
 					Tags: []metrics.Tag{
 						metrics.StringTag("target", "history"),
 						metrics.StringTag("status", "ok"),
 					},
 				},
 				{
-					Metric: metrics.ArchiverArchiveTargetLatency,
+					Metric: metrics.ArchiverArchiveTargetLatency.GetMetricName(),
 					Tags: []metrics.Tag{
 						metrics.StringTag("target", "visibility"),
 						metrics.StringTag("status", "ok"),
@@ -238,7 +238,7 @@ func TestArchiver(t *testing.T) {
 			},
 			ExpectedMetrics: []expectedMetric{
 				{
-					Metric: metrics.ArchiverArchiveLatency,
+					Metric: metrics.ArchiverArchiveLatency.GetMetricName(),
 					Tags:   []metrics.Tag{metrics.StringTag("status", "rate_limit_exceeded")},
 				},
 			},
@@ -251,9 +251,8 @@ func TestArchiver(t *testing.T) {
 			archiverProvider := provider.NewMockArchiverProvider(controller)
 			historyArchiver := carchiver.NewMockHistoryArchiver(controller)
 			visibilityArchiver := carchiver.NewMockVisibilityArchiver(controller)
-			metricsClient := metrics.NewMockClient(controller)
-			metricsScope := metrics.NewMockScope(controller)
-			metricsClient.EXPECT().Scope(metrics.ArchiverClientScope, gomock.Any()).Return(metricsScope)
+			metricsHandler := metrics.NewMockMetricsHandler(controller)
+			metricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverClientScope)).Return(metricsHandler)
 			sdkClient := mocksdk.NewMockClient(controller)
 			sdkClientFactory := sdk.NewMockClientFactory(controller)
 			sdkClientFactory.EXPECT().GetSystemClient().Return(sdkClient).AnyTimes()
@@ -262,12 +261,7 @@ func TestArchiver(t *testing.T) {
 				Logger: log.NewNoopLogger(),
 			}
 			for _, m := range c.ExpectedMetrics {
-				scope := metricsScope
-				if len(m.Tags) > 0 {
-					scope = metrics.NewMockScope(controller)
-					metricsScope.EXPECT().Tagged(m.Tags).Return(scope)
-				}
-				scope.EXPECT().RecordTimer(m.Metric, gomock.Any())
+				metricsHandler.EXPECT().Timer(m.Metric).Return(metrics.NoopTimerMetricFunc)
 			}
 			historyURI, err := carchiver.NewURI("test:///history/archival")
 			require.NoError(t, err)
@@ -286,7 +280,7 @@ func TestArchiver(t *testing.T) {
 			rateLimiter := quotas.NewMockRateLimiter(controller)
 			rateLimiter.EXPECT().WaitN(gomock.Any(), 2).Return(c.RateLimiterWaitErr)
 
-			archiver := NewArchiver(archiverProvider, logRecorder, metricsClient, rateLimiter)
+			archiver := NewArchiver(archiverProvider, logRecorder, metricsHandler, rateLimiter)
 			_, err = archiver.Archive(ctx, &Request{
 				HistoryURI:    historyURI.String(),
 				VisibilityURI: visibilityURI.String(),
@@ -316,7 +310,7 @@ func TestArchiver(t *testing.T) {
 }
 
 type expectedMetric struct {
-	Metric int
+	Metric string
 	Tags   []metrics.Tag
 }
 

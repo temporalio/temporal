@@ -49,10 +49,10 @@ type (
 	params struct {
 		fx.In
 
-		Logger        log.SnTaggedLogger
-		Collection    *dynamicconfig.Collection
-		HealthServer  *health.Server
-		MetricsClient metrics.Client
+		Logger         log.SnTaggedLogger
+		Collection     *dynamicconfig.Collection
+		HealthServer   *health.Server
+		MetricsHandler metrics.MetricsHandler
 
 		// root pingables:
 		NamespaceRegistry namespace.Registry
@@ -69,12 +69,12 @@ type (
 	}
 
 	deadlockDetector struct {
-		logger       log.Logger
-		healthServer *health.Server
-		metricsScope metrics.Scope
-		config       config
-		roots        []common.Pingable
-		loops        goro.Group
+		logger         log.Logger
+		healthServer   *health.Server
+		metricsHandler metrics.MetricsHandler
+		config         config
+		roots          []common.Pingable
+		loops          goro.Group
 	}
 
 	loopContext struct {
@@ -94,9 +94,9 @@ func NewDeadlockDetector(params params) *deadlockDetector {
 		roots = append(roots, params.ShardController)
 	}
 	return &deadlockDetector{
-		logger:       params.Logger,
-		healthServer: params.HealthServer,
-		metricsScope: params.MetricsClient.Scope(metrics.DeadlockDetectorScope),
+		logger:         params.Logger,
+		healthServer:   params.HealthServer,
+		metricsHandler: params.MetricsHandler.WithTags(metrics.OperationTag(metrics.DeadlockDetectorScope)),
 		config: config{
 			DumpGoroutines:    params.Collection.GetBoolProperty(dynamicconfig.DeadlockDumpGoroutines, true),
 			FailHealthCheck:   params.Collection.GetBoolProperty(dynamicconfig.DeadlockFailHealthCheck, false),
@@ -209,11 +209,7 @@ func (lc *loopContext) worker(ctx context.Context) error {
 		}
 
 		lc.dd.logger.Debug("starting ping check", tag.Name(check.Name))
-
-		var sw metrics.Stopwatch
-		if check.MetricsTimer > 0 {
-			sw = lc.dd.metricsScope.StartTimer(check.MetricsTimer)
-		}
+		startTime := time.Now().UTC()
 
 		// Using AfterFunc is cheaper than creating another goroutine to be the waiter, since
 		// we expect to always cancel it. If the go runtime is so messed up that it can't
@@ -227,8 +223,8 @@ func (lc *loopContext) worker(ctx context.Context) error {
 		})
 		newPingables := check.Ping()
 		t.Stop()
-		if sw != nil {
-			sw.Stop()
+		if len(check.MetricsName) > 0 {
+			lc.dd.metricsHandler.Timer(check.MetricsName).Record(time.Since(startTime))
 		}
 
 		lc.dd.logger.Debug("ping check succeeded", tag.Name(check.Name))
