@@ -47,6 +47,6 @@ type (
 
 		// Metrics recording:
 		// Timer id within DeadlockDetectorScope (or zero for no metrics)
-		MetricsTimer int
+		MetricsName string
 	}
 )

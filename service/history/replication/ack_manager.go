@@ -69,7 +69,7 @@ type (
 		config             *configs.Config
 		workflowCache      workflow.Cache
 		executionMgr       persistence.ExecutionManager
-		metricsClient      metrics.Client
+		metricsHandler     metrics.MetricsHandler
 		logger             log.Logger
 		retryPolicy        backoff.RetryPolicy
 		pageSize           int
@@ -106,7 +106,7 @@ func NewAckManager(
 		config:             shard.GetConfig(),
 		workflowCache:      workflowCache,
 		executionMgr:       executionMgr,
-		metricsClient:      shard.GetMetricsClient(),
+		metricsHandler:     shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
 		logger:             log.With(logger, tag.ComponentReplicatorQueue),
 		retryPolicy:        retryPolicy,
 		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize(),
@@ -230,25 +230,15 @@ func (p *ackMgrImpl) GetTasks(
 	}
 
 	// Note this is a very rough indicator of how much the remote DC is behind on this shard.
-	p.metricsClient.Scope(
-		metrics.ReplicatorQueueProcessorScope,
-		metrics.TargetClusterTag(pollingCluster),
-	).RecordDistribution(
-		metrics.ReplicationTasksLag,
-		int(maxTaskID-lastTaskID),
-	)
+	p.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
+		maxTaskID-lastTaskID,
+		metrics.TargetClusterTag(pollingCluster))
 
-	p.metricsClient.RecordDistribution(
-		metrics.ReplicatorQueueProcessorScope,
-		metrics.ReplicationTasksFetched,
-		len(replicationTasks),
-	)
+	p.metricsHandler.Histogram(metrics.ReplicationTasksFetched.GetMetricName(), metrics.ReplicationTasksFetched.GetMetricUnit()).
+		Record(int64(len(replicationTasks)))
 
-	p.metricsClient.RecordDistribution(
-		metrics.ReplicatorQueueProcessorScope,
-		metrics.ReplicationTasksReturned,
-		len(replicationTasks),
-	)
+	p.metricsHandler.Histogram(metrics.ReplicationTasksReturned.GetMetricName(), metrics.ReplicationTasksReturned.GetMetricUnit()).
+		Record(int64(len(replicationTasks)))
 
 	return &replicationspb.ReplicationMessages{
 		ReplicationTasks:       replicationTasks,

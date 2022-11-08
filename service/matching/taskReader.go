@@ -128,7 +128,7 @@ dispatchLoop:
 				// might have expired while it sat in the buffer, so we should check again.
 				if taskqueue.IsTaskExpired(taskInfo) {
 					task.finish(nil)
-					tr.scope().IncCounter(metrics.ExpiredTasksPerTaskQueueCounter)
+					tr.taggedMetricsHandler().Counter(metrics.ExpiredTasksPerTaskQueueCounter.GetMetricName()).Record(1)
 					// Don't try to set read level here because it may have been advanced already.
 					break
 				}
@@ -141,7 +141,7 @@ dispatchLoop:
 					return err
 				}
 				// this should never happen unless there is a bug - don't drop the task
-				tr.scope().IncCounter(metrics.BufferThrottlePerTaskQueueCounter)
+				tr.taggedMetricsHandler().Counter(metrics.BufferThrottlePerTaskQueueCounter.GetMetricName()).Record(1)
 				tr.logger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
 				time.Sleep(taskReaderOfferThrottleWait)
 			}
@@ -265,7 +265,7 @@ func (tr *taskReader) addTasksToBuffer(
 ) error {
 	for _, t := range tasks {
 		if taskqueue.IsTaskExpired(t) {
-			tr.scope().IncCounter(metrics.ExpiredTasksPerTaskQueueCounter)
+			tr.taggedMetricsHandler().Counter(metrics.ExpiredTasksPerTaskQueueCounter.GetMetricName()).Record(1)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired
 			tr.tlMgr.taskAckManager.setReadLevel(t.GetTaskId())
@@ -305,15 +305,15 @@ func (tr *taskReader) logger() log.Logger {
 	return tr.tlMgr.logger
 }
 
-func (tr *taskReader) scope() metrics.Scope {
-	return tr.tlMgr.metricScope
+func (tr *taskReader) taggedMetricsHandler() metrics.MetricsHandler {
+	return tr.tlMgr.metricsHandler
 }
 
 func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
 	// note: this metric is only an estimation for the lag.
 	// taskID in DB may not be continuous, especially when task list ownership changes.
 	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
-	tr.scope().UpdateGauge(metrics.TaskLagPerTaskQueueGauge, float64(maxReadLevel-ackLevel))
+	tr.taggedMetricsHandler().Gauge(metrics.TaskLagPerTaskQueueGauge.GetMetricName()).Record(float64(maxReadLevel - ackLevel))
 }
 
 func (tr *taskReader) initContext(ctx context.Context) context.Context {

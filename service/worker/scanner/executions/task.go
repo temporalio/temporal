@@ -62,7 +62,7 @@ type (
 		registry         namespace.Registry
 		historyClient    historyservice.HistoryServiceClient
 		adminClient      adminservice.AdminServiceClient
-		metrics          metrics.Client
+		metricsHandler   metrics.MetricsHandler
 		logger           log.Logger
 		scavenger        *Scavenger
 
@@ -81,7 +81,7 @@ func newTask(
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
 	adminClient adminservice.AdminServiceClient,
-	metrics metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 	scavenger *Scavenger,
 	rateLimiter quotas.RateLimiter,
@@ -94,9 +94,9 @@ func newTask(
 		historyClient:    historyClient,
 		adminClient:      adminClient,
 
-		metrics:   metrics,
-		logger:    logger,
-		scavenger: scavenger,
+		metricsHandler: metricsHandler,
+		logger:         logger,
+		scavenger:      scavenger,
 
 		ctx:                         ctx,
 		rateLimiter:                 rateLimiter,
@@ -125,7 +125,7 @@ func (t *task) Run() executor.TaskStatus {
 		printValidationResult(
 			mutableState,
 			results,
-			t.metrics,
+			t.metricsHandler,
 			t.logger,
 		)
 		err = t.handleFailures(mutableState, results)
@@ -251,24 +251,18 @@ func (t *task) handleFailures(
 func printValidationResult(
 	mutableState *MutableState,
 	results []MutableStateValidationResult,
-	metricClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) {
-
-	metricsScope := metricClient.Scope(metrics.ExecutionsScavengerScope).Tagged(
-		metrics.FailureTag(""),
-	)
-	metricsScope.IncCounter(metrics.ScavengerValidationRequestsCount)
+	handler := metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionsScavengerScope), metrics.FailureTag(""))
+	handler.Counter(metrics.ScavengerValidationRequestsCount.GetMetricName()).Record(1)
 	if len(results) == 0 {
 		return
 	}
 
-	metricsScope.IncCounter(metrics.ScavengerValidationFailuresCount)
+	handler.Counter(metrics.ScavengerValidationFailuresCount.GetMetricName()).Record(1)
 	for _, result := range results {
-		metricsScope.Tagged(
-			metrics.FailureTag(result.failureType),
-		).IncCounter(metrics.ScavengerValidationFailuresCount)
-
+		handler.Counter(metrics.ScavengerValidationFailuresCount.GetMetricName()).Record(1, metrics.FailureTag(result.failureType))
 		logger.Error(
 			"validation failed for execution.",
 			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),

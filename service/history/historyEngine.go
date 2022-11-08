@@ -108,7 +108,7 @@ type (
 		replicationProcessorMgr    common.Daemon
 		eventNotifier              events.Notifier
 		tokenSerializer            common.TaskTokenSerializer
-		metricsClient              metrics.Client
+		metricsHandler             metrics.MetricsHandler
 		logger                     log.Logger
 		throttledLogger            log.Logger
 		config                     *configs.Config
@@ -170,7 +170,7 @@ func NewEngineWithShardContext(
 		tokenSerializer:            common.NewProtoTaskTokenSerializer(),
 		logger:                     log.With(logger, tag.ComponentHistoryEngine),
 		throttledLogger:            log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
-		metricsClient:              shard.GetMetricsClient(),
+		metricsHandler:             shard.GetMetricsHandler(),
 		eventNotifier:              eventNotifier,
 		config:                     config,
 		sdkClientFactory:           sdkClientFactory,
@@ -189,7 +189,7 @@ func NewEngineWithShardContext(
 		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
 
-	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsClient(), logger)
+	historyEngImpl.eventsReapplier = ndc.NewEventsReapplier(shard.GetMetricsHandler(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicationAckMgr = replication.NewAckManager(

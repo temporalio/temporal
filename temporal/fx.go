@@ -188,16 +188,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	// MetricsHandler
-	provider := so.metricProvider
-	if provider == nil {
-		provider = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
+	metricHandler := so.metricHandler
+	if metricHandler == nil {
+		metricHandler = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
 	}
-
-	// MetricsClient
-	var metricsClient metrics.Client = metrics.NewClient(
-		provider.WithTags(metrics.ServiceNameTag(primitives.ServerService)),
-		metrics.Server,
-	)
 
 	// DynamicConfigClient
 	dcClient := so.dynamicConfigClient
@@ -218,7 +212,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// TLSConfigProvider
 	tlsConfigProvider := so.tlsConfigProvider
 	if tlsConfigProvider == nil {
-		tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricsClient, logger, nil)
+		tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricHandler, logger, nil)
 		if err != nil {
 			return serverOptionsProvider{}, err
 		}
@@ -277,7 +271,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		TLSConfigProvider:       tlsConfigProvider,
 		EsConfig:                esConfig,
 		EsClient:                esClient,
-		MetricsHandler:          provider,
+		MetricsHandler:          metricHandler,
 	}, nil
 }
 
@@ -605,7 +599,7 @@ func ApplyClusterMetadataConfigProvider(
 		PersistenceNamespaceMaxQPS: nil,
 		EnablePriorityRateLimiting: nil,
 		ClusterName:                persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
-		MetricsClient:              nil,
+		MetricsHandler:             nil,
 		Logger:                     logger,
 	})
 	defer factory.Close()

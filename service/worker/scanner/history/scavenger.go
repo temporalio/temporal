@@ -61,15 +61,15 @@ type (
 
 	// Scavenger is the type that holds the state for history scavenger daemon
 	Scavenger struct {
-		numShards   int32
-		db          persistence.ExecutionManager
-		client      historyservice.HistoryServiceClient
-		adminClient adminservice.AdminServiceClient
-		registry    namespace.Registry
-		rateLimiter quotas.RateLimiter
-		metrics     metrics.Client
-		logger      log.Logger
-		isInTest    bool
+		numShards      int32
+		db             persistence.ExecutionManager
+		client         historyservice.HistoryServiceClient
+		adminClient    adminservice.AdminServiceClient
+		registry       namespace.Registry
+		rateLimiter    quotas.RateLimiter
+		metricsHandler metrics.MetricsHandler
+		logger         log.Logger
+		isInTest       bool
 		// only clean up history branches that older than this age
 		// Our history archiver delete mutable state, and then upload history to blob store and then delete history.
 		historyDataMinAge           dynamicconfig.DurationPropertyFn
@@ -113,7 +113,7 @@ func NewScavenger(
 	historyDataMinAge dynamicconfig.DurationPropertyFn,
 	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
 	enableRetentionVerification dynamicconfig.BoolPropertyFn,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) *Scavenger {
 
@@ -129,7 +129,7 @@ func NewScavenger(
 		historyDataMinAge:           historyDataMinAge,
 		executionDataDurationBuffer: executionDataDurationBuffer,
 		enableRetentionVerification: enableRetentionVerification,
-		metrics:                     metricsClient,
+		metricsHandler:              metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryScavengerScope)),
 		logger:                      logger,
 
 		hbd: hbd,
@@ -229,7 +229,7 @@ func (s *Scavenger) filterTask(
 ) *taskDetail {
 
 	if time.Now().UTC().Add(-s.historyDataMinAge()).Before(timestamp.TimeValue(branch.ForkTime)) {
-		s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerSkipCount)
+		s.metricsHandler.Counter(metrics.HistoryScavengerSkipCount.GetMetricName()).Record(1)
 
 		s.Lock()
 		defer s.Unlock()
@@ -240,7 +240,7 @@ func (s *Scavenger) filterTask(
 	namespaceID, workflowID, runID, err := persistence.SplitHistoryGarbageCleanupInfo(branch.Info)
 	if err != nil {
 		s.logger.Error("unable to parse the history cleanup info", tag.DetailInfo(branch.Info))
-		s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerErrorCount)
+		s.metricsHandler.Counter(metrics.HistoryScavengerErrorCount.GetMetricName()).Record(1)
 
 		s.Lock()
 		defer s.Unlock()
@@ -303,12 +303,12 @@ func (s *Scavenger) handleErr(
 	s.Lock()
 	defer s.Unlock()
 	if err != nil {
-		s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerErrorCount)
+		s.metricsHandler.Counter(metrics.HistoryScavengerErrorCount.GetMetricName()).Record(1)
 		s.hbd.ErrorCount++
 		return
 	}
 
-	s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerSuccessCount)
+	s.metricsHandler.Counter(metrics.HistoryScavengerSuccessCount.GetMetricName()).Record(1)
 	s.hbd.SuccessCount++
 }
 
@@ -354,7 +354,7 @@ func (s *Scavenger) cleanUpWorkflowPastRetention(
 	retention := ns.Retention()
 	finalUpdateTime := executionInfo.GetLastUpdateTime()
 	age := time.Now().UTC().Sub(timestamp.TimeValue(finalUpdateTime))
-	if age > 0 && age > retention+s.executionDataDurationBuffer() {
+	if age > retention+s.executionDataDurationBuffer() {
 		_, err = s.adminClient.DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
 			Namespace: ns.Name().String(),
 			Execution: &commonpb.WorkflowExecution{

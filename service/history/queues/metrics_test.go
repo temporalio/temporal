@@ -22,17 +22,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination interfaces_mock.go
-
-package metrics
+package queues
 
 import (
-	"github.com/uber-go/tally/v4"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"go.temporal.io/server/service/history/tasks"
 )
 
-var sanitizer = tally.NewSanitizer(tally.SanitizeOptions{
-	NameCharacters:       tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
-	KeyCharacters:        tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
-	ValueCharacters:      tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
-	ReplacementCharacter: '_',
-})
+func TestGetArchivalTaskTypeTagValue(t *testing.T) {
+	assert.Equal(t, "ArchivalTaskArchiveExecution", GetArchivalTaskTypeTagValue(&tasks.ArchiveExecutionTask{}))
+	assert.Equal(t, "", GetArchivalTaskTypeTagValue(&tasks.CloseExecutionTask{}))
+}

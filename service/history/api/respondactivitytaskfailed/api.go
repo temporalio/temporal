@@ -94,7 +94,9 @@ func Invoke(
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduledEventID >= mutableState.GetNextEventID() {
-				shard.GetMetricsClient().IncCounter(metrics.HistoryRespondActivityTaskFailedScope, metrics.StaleMutableStateCounter)
+				shard.GetMetricsHandler().Counter(metrics.StaleMutableStateCounter.GetMetricName()).Record(
+					1,
+					metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope))
 				return nil, consts.ErrStaleState
 			}
 
@@ -137,14 +139,14 @@ func Invoke(
 		workflowConsistencyChecker,
 	)
 	if err == nil && !activityStartedTime.IsZero() {
-		scope := shard.GetMetricsClient().Scope(metrics.HistoryRespondActivityTaskFailedScope).
-			Tagged(
-				metrics.NamespaceTag(namespace.String()),
-				metrics.WorkflowTypeTag(workflowTypeName),
-				metrics.ActivityTypeTag(token.ActivityType),
-				metrics.TaskQueueTag(taskQueue),
-			)
-		scope.RecordTimer(metrics.ActivityE2ELatency, time.Since(activityStartedTime))
+		shard.GetMetricsHandler().Timer(metrics.ActivityE2ELatency.GetMetricName()).Record(
+			time.Since(activityStartedTime),
+			metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
+			metrics.NamespaceTag(namespace.String()),
+			metrics.WorkflowTypeTag(workflowTypeName),
+			metrics.ActivityTypeTag(token.ActivityType),
+			metrics.TaskQueueTag(taskQueue),
+		)
 	}
 	return &historyservice.RespondActivityTaskFailedResponse{}, err
 }

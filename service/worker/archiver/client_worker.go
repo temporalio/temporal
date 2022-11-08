@@ -60,7 +60,7 @@ type (
 	// BootstrapContainer contains everything need for bootstrapping
 	BootstrapContainer struct {
 		SdkClientFactory sdk.ClientFactory
-		MetricsClient    metrics.Client
+		MetricsHandler   metrics.MetricsHandler
 		Logger           log.Logger
 		HistoryV2Manager persistence.ExecutionManager
 		NamespaceCache   namespace.Registry
@@ -98,15 +98,15 @@ const (
 // these globals exist as a work around because no primitive exists to pass such objects to workflow code
 // TODO: remove these and move to Fx
 var (
-	globalLogger        log.Logger
-	globalMetricsClient metrics.Client
-	globalConfig        *Config
+	globalLogger         log.Logger
+	globalMetricsHandler metrics.MetricsHandler
+	globalConfig         *Config
 )
 
 // NewClientWorker returns a new ClientWorker
 func NewClientWorker(container *BootstrapContainer) ClientWorker {
 	globalLogger = log.With(container.Logger, tag.ComponentArchiver, tag.WorkflowNamespace(primitives.SystemLocalNamespace))
-	globalMetricsClient = container.MetricsClient
+	globalMetricsHandler = container.MetricsHandler
 	globalConfig = container.Config
 	actCtx := context.WithValue(context.Background(), bootstrapContainerKey, container)
 	actCtx = headers.SetCallerInfo(actCtx, headers.SystemBackgroundCallerInfo)

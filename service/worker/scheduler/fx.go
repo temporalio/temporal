@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -51,7 +52,7 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsClient  metrics.Client
+		MetricsHandler metrics.MetricsHandler
 		Logger         log.Logger
 		HistoryClient  historyservice.HistoryServiceClient
 		FrontendClient workflowservice.WorkflowServiceClient

@@ -177,7 +177,7 @@ type (
 		config          *configs.Config
 		timeSource      clock.TimeSource
 		logger          log.Logger
-		metricsClient   metrics.Client
+		metricsHandler  metrics.MetricsHandler
 	}
 )
 
@@ -236,7 +236,7 @@ func NewMutableState(
 		config:          shard.GetConfig(),
 		timeSource:      shard.GetTimeSource(),
 		logger:          logger,
-		metricsClient:   shard.GetMetricsClient(),
+		metricsHandler:  shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
 	}
 
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
@@ -336,13 +336,13 @@ func newMutableStateFromDB(
 		switch {
 		case mutableState.shouldInvalidateCheckum():
 			mutableState.checksum = nil
-			mutableState.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumInvalidated)
+			mutableState.metricsHandler.Counter(metrics.MutableStateChecksumInvalidated.GetMetricName()).Record(1)
 		case mutableState.shouldVerifyChecksum():
 			if err := verifyMutableStateChecksum(mutableState, dbRecord.Checksum); err != nil {
 				// we ignore checksum verification errors for now until this
 				// feature is tested and/or we have mechanisms in place to deal
 				// with these types of errors
-				mutableState.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumMismatch)
+				mutableState.metricsHandler.Counter(metrics.MutableStateChecksumMismatch.GetMetricName()).Record(1)
 				mutableState.logError("mutable state checksum mismatch", tag.Error(err))
 			}
 		}

@@ -143,7 +143,7 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 	// this is used by shard context, not relevant to this test, so we do not care how many times "GetCurrentClusterName" is called
 	s.clusterName = cluster.TestCurrentClusterName
 	s.timerQueueAckMgr = newTimerQueueAckMgr(
-		0,
+		metrics.TimerQueueProcessorScope,
 		s.mockShard,
 		s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime,
 		func() time.Time {

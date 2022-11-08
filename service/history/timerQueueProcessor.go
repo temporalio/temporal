@@ -63,8 +63,7 @@ type (
 		shard                      shard.Context
 		taskAllocator              taskAllocator
 		config                     *configs.Config
-		metricProvider             metrics.MetricsHandler
-		metricsClient              metrics.Client
+		metricHandler              metrics.MetricsHandler
 		workflowCache              workflow.Cache
 		scheduler                  queues.Scheduler
 		priorityAssigner           queues.PriorityAssigner
@@ -91,7 +90,7 @@ func newTimerQueueProcessor(
 	clientBean client.Bean,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
-	metricProvider metrics.MetricsHandler,
+	metricHandler metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
 ) queues.Queue {
 
@@ -116,8 +115,7 @@ func newTimerQueueProcessor(
 		shard:                 shard,
 		taskAllocator:         taskAllocator,
 		config:                config,
-		metricProvider:        metricProvider,
-		metricsClient:         shard.GetMetricsClient(),
+		metricHandler:         metricHandler,
 		workflowCache:         workflowCache,
 		scheduler:             scheduler,
 		priorityAssigner:      priorityAssigner,
@@ -143,7 +141,7 @@ func newTimerQueueProcessor(
 				config.TimerProcessorMaxPollRPS,
 			),
 			logger,
-			metricProvider,
+			metricHandler,
 			singleProcessor,
 		),
 		standbyTimerProcessors: make(map[string]*timerQueueStandbyProcessorImpl),
@@ -254,7 +252,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 			t.config.TimerProcessorFailoverMaxPollRPS,
 		),
 		t.logger,
-		t.metricProvider,
+		t.metricHandler,
 	)
 
 	// NOTE: READ REF BEFORE MODIFICATION
@@ -350,7 +348,9 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 		return nil
 	}
 
-	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.TaskBatchCompleteCounter)
+	t.metricHandler.Counter(metrics.TaskBatchCompleteCounter.GetMetricName()).Record(
+		1,
+		metrics.OperationTag(metrics.TimerQueueProcessorScope))
 
 	if lowerAckLevel.FireTime.Before(upperAckLevel.FireTime) {
 		ctx, cancel := newQueueIOContext()
@@ -414,7 +414,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 					t.config.TimerProcessorMaxPollRPS,
 				),
 				t.logger,
-				t.metricProvider,
+				t.metricHandler,
 			)
 			processor.Start()
 			t.standbyTimerProcessors[clusterName] = processor

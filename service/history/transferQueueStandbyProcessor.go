@@ -78,7 +78,7 @@ func newTransferQueueStandbyProcessor(
 		UpdateAckIntervalJitterCoefficient: config.TransferProcessorUpdateAckIntervalJitterCoefficient,
 		MaxReschdulerSize:                  config.TransferProcessorMaxReschedulerSize,
 		PollBackoffInterval:                config.TransferProcessorPollBackoffInterval,
-		MetricScope:                        metrics.TransferStandbyQueueProcessorScope,
+		Operation:                          metrics.TransferStandbyQueueProcessorScope,
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
 

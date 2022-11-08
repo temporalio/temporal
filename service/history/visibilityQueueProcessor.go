@@ -60,7 +60,7 @@ type (
 		visibilityTaskFilter     taskFilter
 		ownedScheduler           queues.Scheduler // this is the scheduler owned by this visibility queue processor
 		logger                   log.Logger
-		metricsClient            metrics.Client
+		metricHandler            metrics.MetricsHandler
 
 		// from transferQueueProcessorImpl
 		config   *configs.Config
@@ -84,7 +84,7 @@ func newVisibilityQueueProcessor(
 
 	config := shard.GetConfig()
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
-	metricsClient := shard.GetMetricsClient()
+	metricHandler := shard.GetMetricsHandler()
 
 	options := &QueueProcessorOptions{
 		BatchSize:                          config.VisibilityTaskBatchSize,
@@ -94,7 +94,7 @@ func newVisibilityQueueProcessor(
 		UpdateAckIntervalJitterCoefficient: config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
 		MaxReschdulerSize:                  config.VisibilityProcessorMaxReschedulerSize,
 		PollBackoffInterval:                config.VisibilityProcessorPollBackoffInterval,
-		MetricScope:                        metrics.VisibilityQueueProcessorScope,
+		Operation:                          metrics.VisibilityQueueProcessorScope,
 	}
 	visibilityTaskFilter := func(taskInfo tasks.Task) bool {
 		return true
@@ -125,7 +125,7 @@ func newVisibilityQueueProcessor(
 		visibilityQueueShutdown:  visibilityQueueShutdown,
 		visibilityTaskFilter:     visibilityTaskFilter,
 		logger:                   logger,
-		metricsClient:            metricsClient,
+		metricHandler:            metricHandler,
 
 		config:       config,
 		ackLevel:     ackLevel,
@@ -299,7 +299,9 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 		return nil
 	}
 
-	t.metricsClient.IncCounter(metrics.VisibilityQueueProcessorScope, metrics.TaskBatchCompleteCounter)
+	t.metricHandler.Counter(metrics.TaskBatchCompleteCounter.GetMetricName()).Record(
+		1,
+		metrics.OperationTag(metrics.VisibilityQueueProcessorScope))
 
 	if lowerAckLevel < upperAckLevel {
 		ctx, cancel := newQueueIOContext()

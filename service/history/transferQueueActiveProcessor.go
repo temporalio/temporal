@@ -83,7 +83,7 @@ func newTransferQueueActiveProcessor(
 		UpdateAckIntervalJitterCoefficient: config.TransferProcessorUpdateAckIntervalJitterCoefficient,
 		MaxReschdulerSize:                  config.TransferProcessorMaxReschedulerSize,
 		PollBackoffInterval:                config.TransferProcessorPollBackoffInterval,
-		MetricScope:                        metrics.TransferActiveQueueProcessorScope,
+		Operation:                          metrics.TransferActiveQueueProcessorScope,
 	}
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
@@ -256,7 +256,7 @@ func newTransferQueueFailoverProcessor(
 		UpdateAckIntervalJitterCoefficient: config.TransferProcessorUpdateAckIntervalJitterCoefficient,
 		MaxReschdulerSize:                  config.TransferProcessorMaxReschedulerSize,
 		PollBackoffInterval:                config.TransferProcessorPollBackoffInterval,
-		MetricScope:                        metrics.TransferActiveQueueProcessorScope,
+		Operation:                          metrics.TransferActiveQueueProcessorScope,
 	}
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	failoverUUID := uuid.New()
