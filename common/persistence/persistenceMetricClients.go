@@ -1146,6 +1146,7 @@ func updateErrorMetric(handler metrics.MetricsHandler, logger log.Logger, operat
 		switch err := err.(type) {
 		case *ShardAlreadyExistError,
 			*ShardOwnershipLostError,
+			*AppendHistoryTimeoutError,
 			*CurrentWorkflowConditionFailedError,
 			*WorkflowConditionFailedError,
 			*ConditionFailedError,
