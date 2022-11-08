@@ -1448,6 +1448,10 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 		s.updateMaxReadLevelLocked(newMaxReadLevel)
 		return nil
 
+	case *persistence.AppendHistoryTimeoutError:
+		// append history can be blindly retried
+		return err
+
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
 		*persistence.ConditionFailedError,

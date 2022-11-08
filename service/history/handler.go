@@ -1829,6 +1829,8 @@ func (h *Handler) convertError(err error) error {
 			return serviceerrors.NewShardOwnershipLost(ownerInfo.GetAddress(), hostInfo.GetAddress())
 		}
 		return serviceerrors.NewShardOwnershipLost("", hostInfo.GetAddress())
+	case *persistence.AppendHistoryTimeoutError:
+		return serviceerror.NewUnavailable(err.Msg)
 	case *persistence.WorkflowConditionFailedError:
 		return serviceerror.NewUnavailable(err.Msg)
 	case *persistence.CurrentWorkflowConditionFailedError:

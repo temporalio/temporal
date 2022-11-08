@@ -575,7 +575,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
 				WorkflowId:     "workflowID2",
 				NamespaceId:    "namespaceID2",
-				LastUpdateTime: timestamp.TimePtr(time.Now().UTC().Truncate(time.Hour * 24)),
+				LastUpdateTime: timestamp.TimePtr(time.Now().UTC().Add(-time.Hour * 24)),
 			},
 			ExecutionState: &persistencepb.WorkflowExecutionState{
 				RunId: "runID2",
@@ -587,7 +587,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			ExecutionInfo: &persistencepb.WorkflowExecutionInfo{
 				WorkflowId:     "workflowID4",
 				NamespaceId:    "namespaceID4",
-				LastUpdateTime: timestamp.TimePtr(time.Now().UTC().Truncate(time.Hour * 24)),
+				LastUpdateTime: timestamp.TimePtr(time.Now().UTC().Add(-time.Hour * 24)),
 			},
 			ExecutionState: &persistencepb.WorkflowExecutionState{
 				RunId: "runID4",
