@@ -73,7 +73,7 @@ type (
 		NamespaceCache    *namespace.MockRegistry
 		TimeSource        clock.TimeSource
 		PayloadSerializer serialization.Serializer
-		MetricsClient     metrics.Client
+		MetricsHandler    metrics.MetricsHandler
 		ArchivalMetadata  *archiver.MockArchivalMetadata
 		ArchiverProvider  *provider.MockArchiverProvider
 
@@ -166,11 +166,8 @@ func NewTest(
 
 	scope := tally.NewTestScope("test", nil)
 	serviceName, _ := metrics.MetricsServiceIdxToServiceName(serviceMetricsIndex)
-	metricClient := metrics.NewClient(
-		metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
-			metrics.ServiceNameTag(serviceName),
-		),
-		serviceMetricsIndex,
+	metricsHandler := metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
+		metrics.ServiceNameTag(serviceName),
 	)
 
 	return &Test{
@@ -185,7 +182,7 @@ func NewTest(
 		NamespaceCache:    namespace.NewMockRegistry(controller),
 		TimeSource:        clock.NewRealTimeSource(),
 		PayloadSerializer: serialization.NewSerializer(),
-		MetricsClient:     metricClient,
+		MetricsHandler:    metricsHandler,
 		ArchivalMetadata:  archiver.NewMockArchivalMetadata(controller),
 		ArchiverProvider:  provider.NewMockArchiverProvider(controller),
 
@@ -277,9 +274,9 @@ func (t *Test) GetPayloadSerializer() serialization.Serializer {
 	return t.PayloadSerializer
 }
 
-// GetMetricsClient for testing
-func (t *Test) GetMetricsClient() metrics.Client {
-	return t.MetricsClient
+// GetMetricsHandler for testing
+func (t *Test) GetMetricsHandler() metrics.MetricsHandler {
+	return t.MetricsHandler
 }
 
 // GetArchivalMetadata for testing

@@ -57,7 +57,7 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsClient  metrics.Client
+		MetricsHandler metrics.MetricsHandler
 		Logger         log.Logger
 		ClientFactory  sdk.ClientFactory
 		FrontendClient workflowservice.WorkflowServiceClient

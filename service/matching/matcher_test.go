@@ -80,11 +80,11 @@ func (t *MatcherTestSuite) SetupTest() {
 	}
 	t.cfg = tlCfg
 	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, t.client)
-	t.matcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopScope)
+	t.matcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopMetricsHandler)
 
 	rootTaskQueue := newTestTaskQueueID(t.taskQueue.namespaceID, t.taskQueue.Parent(20), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	rootTaskqueueCfg := newTaskQueueConfig(rootTaskQueue, cfg, "test-namespace")
-	t.rootMatcher = newTaskMatcher(rootTaskqueueCfg, nil, metrics.NoopScope)
+	t.rootMatcher = newTaskMatcher(rootTaskqueueCfg, nil, metrics.NoopMetricsHandler)
 }
 
 func (t *MatcherTestSuite) TearDownTest() {

@@ -26,6 +26,7 @@ package interceptor
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"go.temporal.io/api/enums/v1"
@@ -46,8 +47,7 @@ type (
 
 	TelemetryInterceptor struct {
 		namespaceRegistry namespace.Registry
-		metricsClient     metrics.Client
-		scopes            map[string]int
+		metricsHandler    metrics.MetricsHandler
 		logger            log.Logger
 	}
 )
@@ -63,16 +63,16 @@ var (
 	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
 	pollActivityTaskQueue        = "PollActivityTaskQueue"
 
-	grpcActions = map[string]int{
-		"QueryWorkflow":                    metrics.FrontendQueryWorkflowScope,
-		"RecordActivityTaskHeartbeat":      metrics.FrontendRecordActivityTaskHeartbeatScope,
-		"RecordActivityTaskHeartbeatById":  metrics.FrontendRecordActivityTaskHeartbeatByIdScope,
-		"ResetWorkflowExecution":           metrics.FrontendResetWorkflowExecutionScope,
-		"StartWorkflowExecution":           metrics.FrontendStartWorkflowExecutionScope,
-		"SignalWorkflowExecution":          metrics.FrontendSignalWorkflowExecutionScope,
-		"SignalWithStartWorkflowExecution": metrics.FrontendSignalWithStartWorkflowExecutionScope,
-		respondWorkflowTaskCompleted:       metrics.FrontendRespondWorkflowTaskCompletedScope,
-		pollActivityTaskQueue:              metrics.FrontendPollActivityTaskQueueScope,
+	grpcActions = map[string]struct{}{
+		metrics.FrontendQueryWorkflowScope:                    {},
+		metrics.FrontendRecordActivityTaskHeartbeatScope:      {},
+		metrics.FrontendRecordActivityTaskHeartbeatByIdScope:  {},
+		metrics.FrontendResetWorkflowExecutionScope:           {},
+		metrics.FrontendStartWorkflowExecutionScope:           {},
+		metrics.FrontendSignalWorkflowExecutionScope:          {},
+		metrics.FrontendSignalWithStartWorkflowExecutionScope: {},
+		metrics.FrontendRespondWorkflowTaskCompletedScope:     {},
+		metrics.FrontendPollActivityTaskQueueScope:            {},
 	}
 
 	commandActions = map[enums.CommandType]struct{}{
@@ -89,31 +89,29 @@ var (
 
 func NewTelemetryInterceptor(
 	namespaceRegistry namespace.Registry,
-	metricsClient metrics.Client,
-	scopes map[string]int,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
 		namespaceRegistry: namespaceRegistry,
-		metricsClient:     metricsClient,
-		scopes:            scopes,
+		metricsHandler:    metricsHandler,
 		logger:            logger,
 	}
 }
 
 // Use this method to override scope used for reporting a metric.
 // Ideally this method should never be used.
-func (ti *TelemetryInterceptor) overrideScope(scope int, req interface{}) int {
+func (ti *TelemetryInterceptor) overrideOperationTag(operation string, req interface{}) string {
 	// GetWorkflowExecutionHistory method handles both long poll and regular calls.
 	// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
 	// remove this "if" case when that is done.
-	if scope == metrics.FrontendGetWorkflowExecutionHistoryScope {
+	if operation == metrics.FrontendGetWorkflowExecutionHistoryScope {
 		request := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
 		if request.GetWaitNewEvent() {
 			return metrics.FrontendPollWorkflowExecutionHistoryScope
 		}
 	}
-	return scope
+	return operation
 }
 
 func (ti *TelemetryInterceptor) Intercept(
@@ -123,31 +121,32 @@ func (ti *TelemetryInterceptor) Intercept(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	_, methodName := splitMethodName(info.FullMethod)
-	metricsScope, logTags := ti.metricsScopeLogTags(req, info.FullMethod, methodName)
+	metricsHandler, logTags := ti.metricsHandlerLogTags(req, info.FullMethod, methodName)
 
-	ctx = context.WithValue(ctx, metricsCtxKey, metricsScope)
-	metricsScope.IncCounter(metrics.ServiceRequests)
+	ctx = context.WithValue(ctx, metricsCtxKey, metricsHandler)
+	metricsHandler.Counter(metrics.ServiceRequests.GetMetricName()).Record(1)
 
-	timer := metricsScope.StartTimer(metrics.ServiceLatency)
-	defer timer.Stop()
-	timerNoUserLatency := metricsScope.StartTimer(metrics.ServiceLatencyNoUserLatency)
-	defer timerNoUserLatency.Stop()
+	startTime := time.Now().UTC()
+	defer func() {
+		metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
+		metricsHandler.Timer(metrics.ServiceLatencyNoUserLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 
 	resp, err := handler(ctx, req)
 
-	if val, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
+	if val, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName()); ok {
 		userLatencyDuration := time.Duration(val)
-		timerNoUserLatency.Subtract(userLatencyDuration)
-		metricsScope.RecordTimer(metrics.ServiceLatencyUserLatency, userLatencyDuration)
+		startTime.Add(userLatencyDuration)
+		metricsHandler.Timer(metrics.ServiceLatencyUserLatency.GetMetricName()).Record(userLatencyDuration)
 	}
 
 	if err != nil {
-		ti.handleError(metricsScope, logTags, err)
+		ti.handleError(metricsHandler, logTags, err)
 		return nil, err
 	}
 
 	// emit action metrics only after successful calls
-	ti.emitActionMetric(methodName, info.FullMethod, req, metricsScope, resp)
+	ti.emitActionMetric(methodName, info.FullMethod, req, metricsHandler, resp)
 
 	return resp, nil
 }
@@ -156,10 +155,10 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 	methodName string,
 	fullName string,
 	req interface{},
-	scope metrics.Scope,
+	metricsHandler metrics.MetricsHandler,
 	result interface{},
 ) {
-	if actionScope, ok := grpcActions[methodName]; !ok || actionScope != ti.scopes[fullName] {
+	if _, ok := grpcActions[methodName]; !ok || !strings.Contains(strings.ToLower(fullName), strings.ToLower(common.FrontendServiceName)) {
 		// grpcActions checks that methodName is the one that we care about.
 		// ti.scopes verifies that the scope is the one we intended to emit action metrics.
 		// This is necessary because TelemetryInterceptor is used for all services. Different service could have same
@@ -181,10 +180,10 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 				case enums.COMMAND_TYPE_RECORD_MARKER:
 					// handle RecordMarker command, they are used for localActivity, sideEffect, versioning etc.
 					markerName := command.GetRecordMarkerCommandAttributes().GetMarkerName()
-					scope.Tagged(metrics.ActionType("command_RecordMarker_" + markerName)).IncCounter(metrics.ActionCounter)
+					metricsHandler.Counter(metrics.ActionCounter.GetMetricName()).Record(1, metrics.ActionType("command_RecordMarker_"+markerName))
 				default:
 					// handle all other command action
-					scope.Tagged(metrics.ActionType("command_" + command.CommandType.String())).IncCounter(metrics.ActionCounter)
+					metricsHandler.Counter(metrics.ActionCounter.GetMetricName()).Record(1, metrics.ActionType("command_"+command.CommandType.String()))
 				}
 			}
 		}
@@ -200,43 +199,39 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 			return
 		}
 		if activityPollResponse.Attempt > 1 {
-			scope.Tagged(metrics.ActionType("activity_retry")).IncCounter(metrics.ActionCounter)
+			metricsHandler.Counter(metrics.ActionCounter.GetMetricName()).Record(1, metrics.ActionType("activity_retry"))
 		}
 
 	default:
 		// grpc action
-		scope.Tagged(metrics.ActionType("grpc_" + methodName)).IncCounter(metrics.ActionCounter)
+		metricsHandler.Counter(metrics.ActionCounter.GetMetricName()).Record(1, metrics.ActionType("grpc_"+methodName))
 	}
 }
 
-func (ti *TelemetryInterceptor) metricsScopeLogTags(
+func (ti *TelemetryInterceptor) metricsHandlerLogTags(
 	req interface{},
 	fullMethod string,
 	methodName string,
-) (metrics.Scope, []tag.Tag) {
+) (metrics.MetricsHandler, []tag.Tag) {
 
-	// if the method name is not defined, will default to
-	// unknown scope, which carries value 0
-	scopeDef := ti.scopes[fullMethod]
-	scopeDef = ti.overrideScope(scopeDef, req)
+	overridedMethodName := ti.overrideOperationTag(methodName, req)
 
 	nsName := GetNamespace(ti.namespaceRegistry, req)
 	if nsName == "" {
-		return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceUnknownTag()), []tag.Tag{tag.Operation(methodName)}
+		return ti.metricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceUnknownTag()),
+			[]tag.Tag{tag.Operation(overridedMethodName)}
 	}
-	return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceTag(nsName.String())), []tag.Tag{
-		tag.Operation(methodName),
-		tag.WorkflowNamespace(nsName.String()),
-	}
+	return ti.metricsHandler.WithTags(metrics.OperationTag(overridedMethodName), metrics.NamespaceTag(nsName.String())),
+		[]tag.Tag{tag.Operation(overridedMethodName), tag.WorkflowNamespace(nsName.String())}
 }
 
 func (ti *TelemetryInterceptor) handleError(
-	scope metrics.Scope,
+	metricsHandler metrics.MetricsHandler,
 	logTags []tag.Tag,
 	err error,
 ) {
 
-	scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ServiceErrorWithType)
+	metricsHandler.Counter(metrics.ServiceErrorWithType.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
 
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		return
@@ -266,7 +261,7 @@ func (ti *TelemetryInterceptor) handleError(
 
 	// specific metric for resource exhausted error with throttle reason
 	case *serviceerror.ResourceExhausted:
-		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)
+		metricsHandler.Counter(metrics.ServiceErrResourceExhaustedCounter.GetMetricName()).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
 
 	// Any other errors are treated as ServiceFailures against SLA.
 	// Including below known errors and any other unknown errors.
@@ -274,19 +269,19 @@ func (ti *TelemetryInterceptor) handleError(
 	//  *serviceerror.Internal
 	//	*serviceerror.Unavailable:
 	default:
-		scope.IncCounter(metrics.ServiceFailures)
+		metricsHandler.Counter(metrics.ServiceFailures.GetMetricName()).Record(1)
 		ti.logger.Error("service failures", append(logTags, tag.Error(err))...)
 	}
 }
 
-func MetricsScope(
+func GetMetricsHandlerFromContext(
 	ctx context.Context,
 	logger log.Logger,
-) metrics.Scope {
-	scope, ok := ctx.Value(metricsCtxKey).(metrics.Scope)
+) metrics.MetricsHandler {
+	handler, ok := ctx.Value(metricsCtxKey).(metrics.MetricsHandler)
 	if !ok {
 		logger.Error("unable to get metrics scope")
-		return metrics.NoopScope
+		return metrics.NoopMetricsHandler
 	}
-	return scope
+	return handler
 }

@@ -98,7 +98,7 @@ type (
 	}
 
 	client struct {
-		metricsScope     metrics.Scope
+		metricsHandler   metrics.MetricsHandler
 		logger           log.Logger
 		sdkClientFactory sdk.ClientFactory
 		numWorkflows     dynamicconfig.IntPropertyFn
@@ -122,7 +122,7 @@ const (
 
 // NewClient creates a new Client
 func NewClient(
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
 	numWorkflows dynamicconfig.IntPropertyFn,
@@ -131,7 +131,7 @@ func NewClient(
 	archiverProvider provider.ArchiverProvider,
 ) Client {
 	return &client{
-		metricsScope:     metricsClient.Scope(metrics.ArchiverClientScope),
+		metricsHandler:   metricsHandler.WithTags(metrics.OperationTag(metrics.ArchiverClientScope)),
 		logger:           logger,
 		sdkClientFactory: sdkClientFactory,
 		numWorkflows:     numWorkflows,
@@ -148,9 +148,9 @@ func (c *client) Archive(ctx context.Context, request *ClientRequest) (*ClientRe
 	for _, target := range request.ArchiveRequest.Targets {
 		switch target {
 		case ArchiveTargetHistory:
-			c.metricsScope.IncCounter(metrics.ArchiverClientHistoryRequestCount)
+			c.metricsHandler.Counter(metrics.ArchiverClientHistoryRequestCount.GetMetricName()).Record(1)
 		case ArchiveTargetVisibility:
-			c.metricsScope.IncCounter(metrics.ArchiverClientVisibilityRequestCount)
+			c.metricsHandler.Counter(metrics.ArchiverClientVisibilityRequestCount.GetMetricName()).Record(1)
 		}
 	}
 	logger := log.With(
@@ -200,12 +200,12 @@ func (c *client) archiveHistoryInline(ctx context.Context, request *ClientReques
 	var err error
 	defer func() {
 		if err != nil {
-			c.metricsScope.IncCounter(metrics.ArchiverClientHistoryInlineArchiveFailureCount)
+			c.metricsHandler.Counter(metrics.ArchiverClientHistoryInlineArchiveFailureCount.GetMetricName()).Record(1)
 			logger.Info("failed to perform workflow history archival inline", tag.Error(err))
 		}
 		errCh <- err
 	}()
-	c.metricsScope.IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
+	c.metricsHandler.Counter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount.GetMetricName()).Record(1)
 	URI, err := carchiver.NewURI(request.ArchiveRequest.HistoryURI)
 	if err != nil {
 		return
@@ -234,12 +234,12 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 	var err error
 	defer func() {
 		if err != nil {
-			c.metricsScope.IncCounter(metrics.ArchiverClientVisibilityInlineArchiveFailureCount)
+			c.metricsHandler.Counter(metrics.ArchiverClientVisibilityInlineArchiveFailureCount.GetMetricName()).Record(1)
 			logger.Info("failed to perform visibility archival inline", tag.Error(err))
 		}
 		errCh <- err
 	}()
-	c.metricsScope.IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
+	c.metricsHandler.Counter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount.GetMetricName()).Record(1)
 	var uri carchiver.URI
 	uri, err = carchiver.NewURI(request.ArchiveRequest.VisibilityURI)
 	if err != nil {
@@ -276,11 +276,11 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 }
 
 func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest, taggedLogger log.Logger) error {
-	c.metricsScope.IncCounter(metrics.ArchiverClientSendSignalCount)
+	c.metricsHandler.Counter(metrics.ArchiverClientSendSignalCount.GetMetricName()).Record(1)
 	if ok := c.rateLimiter.Allow(); !ok {
 		c.logger.Error(tooManyRequestsErrMsg)
-		c.metricsScope.Tagged(metrics.ResourceExhaustedCauseTag(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT)).
-			IncCounter(metrics.ServiceErrResourceExhaustedCounter)
+		c.metricsHandler.Counter(metrics.ServiceErrResourceExhaustedCounter.GetMetricName()).
+			Record(1, metrics.ResourceExhaustedCauseTag(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT))
 		return errors.New(tooManyRequestsErrMsg)
 	}
 
@@ -306,7 +306,7 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 			tag.WorkflowID(workflowID),
 			tag.Error(err))
 
-		c.metricsScope.IncCounter(metrics.ArchiverClientSendSignalFailureCount)
+		c.metricsHandler.Counter(metrics.ArchiverClientSendSignalFailureCount.GetMetricName()).Record(1)
 		return err
 	}
 	return nil

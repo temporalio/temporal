@@ -193,7 +193,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 					},
 				},
 				mockSdkClientFactory,
-				metrics.NoopClient,
+				metrics.NoopMetricsHandler,
 				p.NewMockExecutionManager(ctrl),
 				p.NewMockTaskManager(ctrl),
 				historyservicemock.NewMockHistoryServiceClient(ctrl),

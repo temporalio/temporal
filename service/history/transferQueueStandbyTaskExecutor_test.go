@@ -155,7 +155,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.mockShard.GetExecutionManager(),
 		false,
 		s.mockShard.GetLogger(),
-		s.mockShard.GetMetricsClient(),
+		s.mockShard.GetMetricsHandler(),
 	))
 
 	s.mockHistoryClient = s.mockShard.Resource.HistoryClient
@@ -200,7 +200,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
+		metricsHandler:     s.mockShard.GetMetricsHandler(),
 	}
 	s.mockShard.SetEngineForTesting(h)
 	s.clusterName = cluster.TestAlternativeClusterName

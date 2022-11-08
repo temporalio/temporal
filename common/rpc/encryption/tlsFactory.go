@@ -87,7 +87,7 @@ type (
 // Otherwise, it defaults to using localStoreCertProvider
 func NewTLSConfigProviderFromConfig(
 	encryptionSettings config.RootTLS,
-	client metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 	certProviderFactory CertProviderFactory,
 ) (TLSConfigProvider, error) {
@@ -97,7 +97,7 @@ func NewTLSConfigProviderFromConfig(
 	if certProviderFactory == nil {
 		certProviderFactory = NewLocalStoreCertProvider
 	}
-	return NewLocalStoreTlsProvider(&encryptionSettings, client.Scope(metrics.ServerTlsScope), logger, certProviderFactory)
+	return NewLocalStoreTlsProvider(&encryptionSettings, metricsHandler.WithTags(metrics.OperationTag(metrics.ServerTlsScope)), logger, certProviderFactory)
 }
 
 func validateRootTLS(cfg *config.RootTLS) error {

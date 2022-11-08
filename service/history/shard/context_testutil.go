@@ -84,7 +84,7 @@ func NewTestContext(
 		shardID:             shardInfo.GetShardId(),
 		stringRepr:          fmt.Sprintf("Shard(%d)", shardInfo.GetShardId()),
 		executionManager:    resourceTest.ExecutionMgr,
-		metricsClient:       resourceTest.MetricsClient,
+		metricsHandler:      resourceTest.MetricsHandler,
 		eventsCache:         eventsCache,
 		config:              config,
 		contextTaggedLogger: resourceTest.GetLogger(),

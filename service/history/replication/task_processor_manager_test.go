@@ -109,7 +109,7 @@ func (s *taskProcessorManagerSuite) SetupTest() {
 	s.mockShard.EXPECT().GetNamespaceRegistry().Return(namespace.NewMockRegistry(s.controller)).AnyTimes()
 	s.mockShard.EXPECT().GetConfig().Return(s.config).AnyTimes()
 	s.mockShard.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
-	s.mockShard.EXPECT().GetMetricsClient().Return(metrics.NoopClient).AnyTimes()
+	s.mockShard.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 	s.mockShard.EXPECT().GetPayloadSerializer().Return(serializer).AnyTimes()
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.mockShard.EXPECT().GetExecutionManager().Return(s.mockExecutionManager).AnyTimes()

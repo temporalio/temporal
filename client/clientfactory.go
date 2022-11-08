@@ -62,7 +62,7 @@ type (
 		NewFactory(
 			rpcFactory common.RPCFactory,
 			monitor membership.Monitor,
-			metricsClient metrics.Client,
+			metricsHandler metrics.MetricsHandler,
 			dc *dynamicconfig.Collection,
 			numberOfHistoryShards int32,
 			logger log.Logger,
@@ -76,7 +76,7 @@ type (
 	rpcClientFactory struct {
 		rpcFactory            common.RPCFactory
 		monitor               membership.Monitor
-		metricsClient         metrics.Client
+		metricsHandler        metrics.MetricsHandler
 		dynConfig             *dynamicconfig.Collection
 		numberOfHistoryShards int32
 		logger                log.Logger
@@ -100,7 +100,7 @@ func NewFactoryProvider() FactoryProvider {
 func (p *factoryProviderImpl) NewFactory(
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	dc *dynamicconfig.Collection,
 	numberOfHistoryShards int32,
 	logger log.Logger,
@@ -109,7 +109,7 @@ func (p *factoryProviderImpl) NewFactory(
 	return &rpcClientFactory{
 		rpcFactory:            rpcFactory,
 		monitor:               monitor,
-		metricsClient:         metricsClient,
+		metricsHandler:        metricsHandler,
 		dynConfig:             dc,
 		numberOfHistoryShards: numberOfHistoryShards,
 		logger:                logger,
@@ -130,8 +130,8 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	}
 	clientCache := common.NewClientCache(keyResolver, clientProvider)
 	client := history.NewClient(cf.numberOfHistoryShards, timeout, clientCache, cf.logger)
-	if cf.metricsClient != nil {
-		client = history.NewMetricClient(client, cf.metricsClient, cf.logger, cf.throttledLogger)
+	if cf.metricsHandler != nil {
+		client = history.NewMetricClient(client, cf.metricsHandler, cf.logger, cf.throttledLogger)
 	}
 	return client, nil
 }
@@ -159,8 +159,8 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		cf.dynConfig.GetBoolProperty(dynamicconfig.MatchingUseOldRouting, true),
 	)
 
-	if cf.metricsClient != nil {
-		client = matching.NewMetricClient(client, cf.metricsClient, cf.logger, cf.throttledLogger)
+	if cf.metricsHandler != nil {
+		client = matching.NewMetricClient(client, cf.metricsHandler, cf.logger, cf.throttledLogger)
 	}
 	return client, nil
 
@@ -210,8 +210,8 @@ func (cf *rpcClientFactory) newAdminClient(
 	longPollTimeout time.Duration,
 ) adminservice.AdminServiceClient {
 	client = admin.NewClient(timeout, longPollTimeout, client)
-	if cf.metricsClient != nil {
-		client = admin.NewMetricClient(client, cf.metricsClient, cf.throttledLogger)
+	if cf.metricsHandler != nil {
+		client = admin.NewMetricClient(client, cf.metricsHandler, cf.throttledLogger)
 	}
 	return client
 }
@@ -222,8 +222,8 @@ func (cf *rpcClientFactory) newFrontendClient(
 	longPollTimeout time.Duration,
 ) workflowservice.WorkflowServiceClient {
 	client = frontend.NewClient(timeout, longPollTimeout, client)
-	if cf.metricsClient != nil {
-		client = frontend.NewMetricClient(client, cf.metricsClient, cf.throttledLogger)
+	if cf.metricsHandler != nil {
+		client = frontend.NewMetricClient(client, cf.metricsHandler, cf.throttledLogger)
 	}
 	return client
 }

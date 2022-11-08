@@ -516,7 +516,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, taskInfo, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, taskInfo, t.metricHandler, t.logger)
 	if err != nil || mutableState == nil {
 		return err
 	}
@@ -622,9 +622,10 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return err
 	}
 
-	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientRequests)
-	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientLatency)
-	defer stopwatch.Stop()
+	scope := t.metricHandler.WithTags(metrics.OperationTag(metrics.HistoryRereplicationByTransferTaskScope))
+	scope.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	startTime := time.Now().UTC()
+	defer scope.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
 
 	adminClient, err := t.shard.GetRemoteAdminClient(remoteClusterName)
 	if err != nil {

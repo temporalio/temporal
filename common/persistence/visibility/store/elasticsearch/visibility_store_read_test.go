@@ -60,7 +60,7 @@ type (
 		visibilityStore            *visibilityStore
 		mockESClient               *client.MockClient
 		mockProcessor              *MockProcessor
-		mockMetricsClient          *metrics.MockClient
+		mockMetricsHandler         *metrics.MockMetricsHandler
 		mockSearchAttributesMapper *searchattribute.MockMapper
 	}
 )
@@ -121,7 +121,8 @@ func (s *ESVisibilitySuite) SetupTest() {
 	visibilityDisableOrderByClause := dynamicconfig.GetBoolPropertyFn(false)
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMetricsClient = metrics.NewMockClient(s.controller)
+	s.mockMetricsHandler = metrics.NewMockMetricsHandler(s.controller)
+	s.mockMetricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
 	s.mockSearchAttributesMapper = searchattribute.NewMockMapper(s.controller)
@@ -133,7 +134,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 		s.mockProcessor,
 		esProcessorAckTimeout,
 		visibilityDisableOrderByClause,
-		s.mockMetricsClient,
+		s.mockMetricsHandler,
 	)
 }
 
@@ -906,7 +907,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 
 	// test for error case
 	docSource = []byte(`corrupted data`)
-	s.mockMetricsClient.EXPECT().IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
+	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchDocumentParseFailuresCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
 	info, err = s.visibilityStore.parseESDoc("", docSource, searchattribute.TestNameTypeMap, testNamespace)
 	s.Error(err)
 	s.Nil(info)
