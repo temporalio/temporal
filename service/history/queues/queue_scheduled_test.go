@@ -97,7 +97,10 @@ func (s *scheduledQueueSuite) SetupTest() {
 		nil,
 		nil,
 		testQueueOptions,
-		nil,
+		NewReaderPriorityRateLimiter(
+			func() float64 { return 10 },
+			1,
+		),
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 	)
