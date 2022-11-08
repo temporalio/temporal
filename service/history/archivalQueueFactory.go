@@ -92,6 +92,10 @@ func NewArchivalQueueFactory(
 	}
 }
 
+func (f *archivalQueueFactory) Enabled() bool {
+	return f.Config.DurableArchivalEnabled()
+}
+
 func (f *archivalQueueFactory) CreateQueue(
 	shard shard.Context,
 	workflowCache workflow.Cache,

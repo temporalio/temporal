@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination queueFactoryBase_mock.go QueueFactory
+
 package history
 
 import (
@@ -63,6 +65,7 @@ type (
 		// 2. Move this interface to queues package after 1 is done so that there's no cycle dependency
 		// between workflow and queues package.
 		CreateQueue(shard shard.Context, cache workflow.Cache) queues.Queue
+		Enabled() bool
 	}
 
 	QueueFactoryBaseParams struct {
@@ -127,22 +130,32 @@ func QueueSchedulerRateLimiterProvider(
 func QueueFactoryLifetimeHooks(
 	params QueueFactoriesLifetimeHookParams,
 ) {
+	var factories []QueueFactory
+	for _, f := range params.Factories {
+		if f.Enabled() {
+			factories = append(factories, f)
+		}
+	}
 	params.Lifecycle.Append(
 		fx.Hook{
 			OnStart: func(context.Context) error {
-				for _, factory := range params.Factories {
+				for _, factory := range factories {
 					factory.Start()
 				}
 				return nil
 			},
 			OnStop: func(context.Context) error {
-				for _, factory := range params.Factories {
+				for _, factory := range factories {
 					factory.Stop()
 				}
 				return nil
 			},
 		},
 	)
+}
+
+func (f *QueueFactoryBase) Enabled() bool {
+	return true
 }
 
 func (f *QueueFactoryBase) Start() {
