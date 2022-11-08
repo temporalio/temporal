@@ -135,7 +135,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				DurableArchivalEnabled: func() bool {
 					return c.DurableArchivalEnabled
 				},
-				RetentionTimerJitterBase: func() time.Duration {
+				RetentionTimerJitterDuration: func() time.Duration {
 					return time.Second
 				},
 			})

@@ -205,7 +205,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			})
 		} else {
 			closeTime := timestamp.TimeValue(closeEvent.GetEventTime())
-			retentionJitterDuration := backoff.JitDuration(r.config.RetentionTimerJitterBase(), 1)
+			retentionJitterDuration := backoff.JitDuration(r.config.RetentionTimerJitterDuration(), 1) / 2
 			closeTasks = append(closeTasks, &tasks.DeleteHistoryEventTask{
 				// TaskID is set by shard
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),
