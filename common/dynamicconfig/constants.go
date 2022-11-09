@@ -94,8 +94,8 @@ const (
 
 	// EnableNamespaceStatsReporter indicates if we allow reporting namespace stats
 	EnableNamespaceStatsReporter = "system.enableNamespaceStatsReporter"
-	// NamespaceStatsReportInterval is the interval between stats reports
-	NamespaceStatsReportInterval = "system.namespaceStatsReportInterval"
+	// NamespaceStatsReportBaseInterval is the expected interval between stats reports
+	NamespaceStatsReportBaseInterval = "system.namespaceStatsReportBaseInterval"
 	// EmitOpenWorkflowCount determines if we emit open workflow count metrics for a namespace
 	EmitOpenWorkflowCount = "system.emitOpenWorkflowCount"
 	// StatsReporterCountWorkflowMaxQPS is the max allowed QPS for querying workflow count from visibility

@@ -2,6 +2,7 @@ package statsreporter
 
 import (
 	"context"
+	"go.temporal.io/server/common/membership"
 	"math"
 	"math/rand"
 	"sync/atomic"
@@ -23,15 +24,17 @@ const listNamespacePageSize = 100
 
 type StatsReporter struct {
 	status                int32
+	reporter              *goro.Handle
+	visibilityRateLimiter quotas.RateLimiter
+
 	Logger                log.Logger
 	MetricsHandler        metrics.MetricsHandler
-	reporter              *goro.Handle
 	MetadataManager       persistence.MetadataManager
 	VisibilityManager     manager.VisibilityManager
-	ReportInterval        dynamicconfig.DurationPropertyFn
+	BaseReportInterval    dynamicconfig.DurationPropertyFn
 	EmitOpenWorkflowCount dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	CountWorkflowMaxQPS   dynamicconfig.IntPropertyFn
-	visibilityRateLimiter quotas.RateLimiter
+	ServiceResolver       membership.ServiceResolver
 }
 
 // Start is called to start replicator
@@ -66,19 +69,27 @@ func (r *StatsReporter) Stop() {
 }
 
 func (r *StatsReporter) queryLoop(ctx context.Context) error {
-	timer := time.NewTicker(r.ReportInterval())
+	timer := time.NewTicker(r.waitDurationTillNextReport())
 
 	for {
 		select {
 		case <-timer.C:
 			r.reportNamespaceStats(ctx)
-			jitter := time.Second * time.Duration(math.Round(rand.Float64()*120))
-			timer.Reset(r.ReportInterval() + jitter)
+			timer.Reset(r.waitDurationTillNextReport())
 		case <-ctx.Done():
 			timer.Stop()
 			return nil
 		}
 	}
+}
+
+func (r *StatsReporter) waitDurationTillNextReport() time.Duration {
+	// BaseReportInterval is the expectation of wait across all workers.
+	// BaseReportInterval*2 is the max wait across workers.
+	// BaseReportInterval*2*worker_count is the total time each worker should wait.
+	// Then we pick a random number within the total time to distribute the load evenly.
+	totalWait := r.BaseReportInterval() * time.Duration(r.ServiceResolver.MemberCount()) * 2
+	return time.Duration(math.Round(float64(totalWait) * rand.Float64()))
 }
 
 func (r *StatsReporter) reportNamespaceStats(ctx context.Context) {

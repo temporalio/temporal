@@ -115,7 +115,7 @@ type (
 		EnableParentClosePolicyWorker         dynamicconfig.BoolPropertyFn
 		PerNamespaceWorkerCount               dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableNamespaceStatsReporter          dynamicconfig.BoolPropertyFn
-		NamespaceStatsReportInterval          dynamicconfig.DurationPropertyFn
+		NamespaceStatsReportBaseInterval      dynamicconfig.DurationPropertyFn
 		EmitOpenWorkflowCount                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		StatsReporterCountWorkflowMaxQPS      dynamicconfig.IntPropertyFn
 
@@ -342,7 +342,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 		),
 
 		EnableNamespaceStatsReporter:     dc.GetBoolProperty(dynamicconfig.EnableNamespaceStatsReporter, false),
-		NamespaceStatsReportInterval:     dc.GetDurationProperty(dynamicconfig.NamespaceStatsReportInterval, 3*time.Minute),
+		NamespaceStatsReportBaseInterval: dc.GetDurationProperty(dynamicconfig.NamespaceStatsReportBaseInterval, time.Minute),
 		EmitOpenWorkflowCount:            dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EmitOpenWorkflowCount, true),
 		StatsReporterCountWorkflowMaxQPS: dc.GetIntProperty(dynamicconfig.StatsReporterCountWorkflowMaxQPS, 10),
 
@@ -564,9 +564,10 @@ func (s *Service) startStatsReporter() {
 		MetricsHandler:        s.metricsHandler,
 		MetadataManager:       s.metadataManager,
 		VisibilityManager:     s.visibilityManager,
-		ReportInterval:        s.config.NamespaceStatsReportInterval,
+		BaseReportInterval:    s.config.NamespaceStatsReportBaseInterval,
 		EmitOpenWorkflowCount: s.config.EmitOpenWorkflowCount,
 		CountWorkflowMaxQPS:   s.config.StatsReporterCountWorkflowMaxQPS,
+		ServiceResolver:       s.workerServiceResolver,
 	}
 	reporter.Start()
 }
