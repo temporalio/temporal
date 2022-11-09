@@ -455,11 +455,9 @@ func (s *testSerializer) DeserializeTask(
 	category tasks.Category,
 	blob commonpb.DataBlob,
 ) (tasks.Task, error) {
-	switch category.ID() {
-	case tasks.CategoryIDTransfer,
-		tasks.CategoryIDTimer,
-		tasks.CategoryIDVisibility,
-		tasks.CategoryIDReplication:
+	categoryID := category.ID()
+	if categoryID != fakeImmediateTaskCategory.ID() &&
+		categoryID != fakeScheduledTaskCategory.ID() {
 		return s.Serializer.DeserializeTask(category, blob)
 	}
 

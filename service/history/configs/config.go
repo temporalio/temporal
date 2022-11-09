@@ -115,6 +115,7 @@ type Config struct {
 	TimerProcessorMaxTimeShift                       dynamicconfig.DurationPropertyFn
 	TimerProcessorHistoryArchivalSizeLimit           dynamicconfig.IntPropertyFn
 	TimerProcessorArchivalTimeLimit                  dynamicconfig.DurationPropertyFn
+	RetentionTimerJitterDuration                     dynamicconfig.DurationPropertyFn
 
 	// TransferQueueProcessor settings
 	TransferTaskHighPriorityRPS                         dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -364,6 +365,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TimerProcessorMaxTimeShift:                       dc.GetDurationProperty(dynamicconfig.TimerProcessorMaxTimeShift, 1*time.Second),
 		TimerProcessorHistoryArchivalSizeLimit:           dc.GetIntProperty(dynamicconfig.TimerProcessorHistoryArchivalSizeLimit, 500*1024),
 		TimerProcessorArchivalTimeLimit:                  dc.GetDurationProperty(dynamicconfig.TimerProcessorArchivalTimeLimit, 1*time.Second),
+		RetentionTimerJitterDuration:                     dc.GetDurationProperty(dynamicconfig.RetentionTimerJitterDuration, 30*time.Minute),
 
 		TransferTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TransferTaskBatchSize, 100),
 		TransferTaskWorkerCount:                             dc.GetIntProperty(dynamicconfig.TransferTaskWorkerCount, 10),

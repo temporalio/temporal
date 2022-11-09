@@ -326,6 +326,10 @@ func (e *taskExecutorImpl) filterTask(
 
 	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
+		if _, ok := err.(*serviceerror.NamespaceNotFound); ok {
+			// Drop the task
+			return false, nil
+		}
 		return false, err
 	}
 
