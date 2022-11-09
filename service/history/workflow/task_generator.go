@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -204,10 +205,11 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			})
 		} else {
 			closeTime := timestamp.TimeValue(closeEvent.GetEventTime())
+			retentionJitterDuration := backoff.JitDuration(r.config.RetentionTimerJitterDuration(), 1) / 2
 			closeTasks = append(closeTasks, &tasks.DeleteHistoryEventTask{
 				// TaskID is set by shard
 				WorkflowKey:         r.mutableState.GetWorkflowKey(),
-				VisibilityTimestamp: closeTime.Add(retention),
+				VisibilityTimestamp: closeTime.Add(retention).Add(retentionJitterDuration),
 				Version:             currentVersion,
 				BranchToken:         branchToken,
 			})
