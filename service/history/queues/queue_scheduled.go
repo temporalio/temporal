@@ -260,7 +260,6 @@ func (p *scheduledQueue) lookAheadTask() {
 	if rateLimitErr != nil {
 		deadline, _ := rateLimitCtx.Deadline()
 		p.timerGate.Update(deadline)
-		rateLimitCancel()
 		return
 	}
 
