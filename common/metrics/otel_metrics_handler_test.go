@@ -41,6 +41,142 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
+func BenchmarkTagsToAttributes_Old_50(b *testing.B) {
+	excludeTags := map[string]map[string]struct{}{
+		"key0": {
+			"val00": struct{}{},
+			"val01": struct{}{},
+		},
+		"key1": {
+			"val1": struct{}{},
+		},
+	}
+	input := make([][]Tag, b.N)
+	for i := 0; i < b.N; i++ {
+		input[i] = []Tag{
+			&tagImpl{
+				key:   "key0",
+				value: "val00",
+			},
+			&tagImpl{
+				key:   "key",
+				value: "val",
+			},
+		}
+	}
+	output := make([][]attribute.KeyValue, b.N)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		output[n] = tagsToAttributesOld(input[n], nil, excludeTags)
+	}
+}
+
+func BenchmarkTagsToAttributes_New_50(b *testing.B) {
+	excludeTags := map[string]map[string]struct{}{
+		"key0": {
+			"val00": struct{}{},
+			"val01": struct{}{},
+		},
+		"key1": {
+			"val1": struct{}{},
+		},
+	}
+	input := make([][]Tag, b.N)
+	for i := 0; i < b.N; i++ {
+		input[i] = []Tag{
+			&tagImpl{
+				key:   "key0",
+				value: "val00",
+			},
+			&tagImpl{
+				key:   "key",
+				value: "val",
+			},
+		}
+	}
+	output := make([][]attribute.KeyValue, b.N)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		output[n] = tagsToAttributesNew(input[n], nil, excludeTags)
+	}
+}
+
+func BenchmarkTagsToAttributes_Old_00(b *testing.B) {
+	excludeTags := map[string]map[string]struct{}{}
+	input := make([][]Tag, b.N)
+	for i := 0; i < b.N; i++ {
+		input[i] = []Tag{
+			&tagImpl{
+				key:   "key0",
+				value: "val00",
+			},
+			&tagImpl{
+				key:   "key",
+				value: "val",
+			},
+		}
+	}
+	output := make([][]attribute.KeyValue, b.N)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		output[n] = tagsToAttributesOld(input[n], nil, excludeTags)
+	}
+}
+
+func BenchmarkTagsToAttributes_New_00(b *testing.B) {
+	excludeTags := map[string]map[string]struct{}{}
+	input := make([][]Tag, b.N)
+	for i := 0; i < b.N; i++ {
+		input[i] = []Tag{
+			&tagImpl{
+				key:   "key0",
+				value: "val00",
+			},
+			&tagImpl{
+				key:   "key",
+				value: "val",
+			},
+		}
+	}
+	output := make([][]attribute.KeyValue, b.N)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		output[n] = tagsToAttributesNew(input[n], nil, excludeTags)
+	}
+}
+
+func TestTagsToAttributes(t *testing.T) {
+	excludeTags := map[string]map[string]struct{}{
+		"key0": {
+			"val00": struct{}{},
+			"val01": struct{}{},
+		},
+		"key1": {
+			"val1": struct{}{},
+		},
+	}
+	input := []Tag{
+		&tagImpl{
+			key:   "key0",
+			value: "val00",
+		},
+		&tagImpl{
+			key:   "key",
+			value: "val",
+		},
+	}
+
+	assert.EqualValues(t, tagsToAttributesOld(input, nil, excludeTags), tagsToAttributesNew(input, nil, excludeTags))
+}
+
 type testProvider struct {
 	meter metric.Meter
 }

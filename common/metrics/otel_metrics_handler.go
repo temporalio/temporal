@@ -73,7 +73,7 @@ func (omp *otelMetricsHandler) Counter(counter string) CounterMetric {
 	}
 
 	return CounterMetricFunc(func(i int64, t ...Tag) {
-		c.Add(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		c.Add(context.Background(), i, tagsToAttributesNew(omp.tags, t, omp.excludeTags)...)
 	})
 }
 
@@ -85,7 +85,7 @@ func (omp *otelMetricsHandler) Gauge(gauge string) GaugeMetric {
 	}
 
 	return GaugeMetricFunc(func(i float64, t ...Tag) {
-		c.Observe(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		c.Observe(context.Background(), i, tagsToAttributesNew(omp.tags, t, omp.excludeTags)...)
 	})
 }
 
@@ -97,7 +97,7 @@ func (omp *otelMetricsHandler) Timer(timer string) TimerMetric {
 	}
 
 	return TimerMetricFunc(func(i time.Duration, t ...Tag) {
-		c.Record(context.Background(), i.Milliseconds(), tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		c.Record(context.Background(), i.Milliseconds(), tagsToAttributesNew(omp.tags, t, omp.excludeTags)...)
 	})
 }
 
@@ -109,7 +109,7 @@ func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) Hist
 	}
 
 	return CounterMetricFunc(func(i int64, t ...Tag) {
-		c.Record(context.Background(), i, tagsToAttributes(omp.tags, t, omp.excludeTags)...)
+		c.Record(context.Background(), i, tagsToAttributesNew(omp.tags, t, omp.excludeTags)...)
 	})
 }
 
@@ -117,8 +117,8 @@ func (omp *otelMetricsHandler) Stop(l log.Logger) {
 	omp.provider.Stop(l)
 }
 
-// tagsToAttributes helper to merge registred tags and additional tags converting to attribute.KeyValue struct
-func tagsToAttributes(t1 []Tag, t2 []Tag, e excludeTags) []attribute.KeyValue {
+// tagsToAttributesOld helper to merge registred tags and additional tags converting to attribute.KeyValue struct
+func tagsToAttributesOld(t1 []Tag, t2 []Tag, e excludeTags) []attribute.KeyValue {
 	var attrs []attribute.KeyValue
 
 	convert := func(tag Tag) attribute.KeyValue {
@@ -140,4 +140,46 @@ func tagsToAttributes(t1 []Tag, t2 []Tag, e excludeTags) []attribute.KeyValue {
 	}
 
 	return attrs
+}
+
+// tagsToAttributesNew helper to merge registred tags and additional tags converting to attribute.KeyValue struct
+func tagsToAttributesNew(t1 []Tag, t2 []Tag, excludes excludeTags) []attribute.KeyValue {
+	length := len(t1) + len(t2)
+	if length == 0 {
+		return nil
+	}
+
+	result := make([]attribute.KeyValue, length)
+	pos := 0
+	if len(excludes) == 0 {
+		for _, tag := range t1 {
+			result[pos] = attribute.String(tag.Key(), tag.Value())
+			pos++
+		}
+		for _, tag := range t2 {
+			result[pos] = attribute.String(tag.Key(), tag.Value())
+			pos++
+		}
+		return result
+	} else {
+		convert := func(tag Tag) attribute.KeyValue {
+			if vals, ok := excludes[tag.Key()]; ok {
+				if _, ok := vals[tag.Value()]; !ok {
+					return attribute.String(tag.Key(), tagExcludedValue)
+				}
+			}
+
+			return attribute.String(tag.Key(), tag.Value())
+		}
+
+		for _, tag := range t1 {
+			result[pos] = convert(tag)
+			pos++
+		}
+		for _, tag := range t2 {
+			result[pos] = convert(tag)
+			pos++
+		}
+		return result
+	}
 }
