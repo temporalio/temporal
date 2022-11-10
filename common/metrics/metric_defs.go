@@ -1019,7 +1019,7 @@ const (
 	// HistoryDeleteWorkflowExecutionScope tracks DeleteWorkflowExecutions API calls
 	HistoryDeleteWorkflowExecutionScope = "DeleteWorkflowExecution"
 	// HistoryCacheGetOrCreateScope is the scope used by history cache
-	HistoryCacheGetOrCreateScope = "CacheGetOrCreate"
+	HistoryCacheGetOrCreateScope = "HistoryCacheGetOrCreate"
 	// HistoryCacheGetOrCreateCurrentScope is the scope used by history cache
 	HistoryCacheGetOrCreateCurrentScope = "CacheGetOrCreateCurrent"
 	// TaskPriorityAssignerScope is the scope used by all metric emitted by task priority assigner
