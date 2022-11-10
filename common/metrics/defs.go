@@ -93,10 +93,6 @@ func NewTimerDef(name string) metricDefinition {
 	return metricDefinition{metricName: MetricName(name), metricType: Timer, unit: Milliseconds}
 }
 
-func NewRollupTimerDef(name string, rollupName string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricRollupName: MetricName(rollupName), metricType: Timer, unit: Milliseconds}
-}
-
 func NewBytesHistogramDef(name string) metricDefinition {
 	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Bytes}
 }
@@ -107,11 +103,6 @@ func NewDimensionlessHistogramDef(name string) metricDefinition {
 
 func NewCounterDef(name string) metricDefinition {
 	return metricDefinition{metricName: MetricName(name), metricType: Counter}
-}
-
-// Rollup counter name is used to report aggregated metric excluding namespace tag.
-func NewRollupCounterDef(name string, rollupName string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricRollupName: MetricName(rollupName), metricType: Counter}
 }
 
 func NewGaugeDef(name string) metricDefinition {

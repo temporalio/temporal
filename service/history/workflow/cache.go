@@ -88,7 +88,7 @@ func NewCache(shard shard.Context) Cache {
 		Cache:          cache.New(config.HistoryCacheMaxSize(), opts),
 		shard:          shard,
 		logger:         log.With(shard.GetLogger(), tag.ComponentHistoryCache),
-		metricsHandler: shard.GetMetricsHandler(),
+		metricsHandler: shard.GetMetricsHandler().WithTags(metrics.StringTag(metrics.CacheTypeTagName, metrics.MutableStateCacheTypeTagValue)),
 		config:         config,
 	}
 }
