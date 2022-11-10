@@ -53,8 +53,13 @@ func (svr *SchemaVersionReader) ReadSchemaVersion(keyspace string) (string, erro
 	iter := query.Iter()
 	var version string
 	success := iter.Scan(&version)
-	if err := iter.Close(); err != nil || !success {
+	err := iter.Close()
+	if err == nil && !success {
+		err = fmt.Errorf("no schema version found for keyspace %q", keyspace)
+	}
+	if err != nil {
 		return "", fmt.Errorf("unable to get current schema version from Cassandra: %w", err)
 	}
+
 	return version, nil
 }
