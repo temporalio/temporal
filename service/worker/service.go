@@ -30,6 +30,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/quotas"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -560,13 +562,14 @@ func (s *Service) startArchiver() {
 
 func (s *Service) startStatsReporter() {
 	reporter := &statsreporter.StatsReporter{
-		Logger:                s.logger,
-		MetricsHandler:        s.metricsHandler,
-		MetadataManager:       s.metadataManager,
-		VisibilityManager:     s.visibilityManager,
+		Logger:            s.logger,
+		MetricsHandler:    s.metricsHandler,
+		MetadataManager:   s.metadataManager,
+		VisibilityManager: s.visibilityManager,
+		VisibilityRateLimiter: quotas.NewDefaultOutgoingRateLimiter(
+			func() float64 { return float64(s.config.StatsReporterCountWorkflowMaxQPS()) }),
 		BaseReportInterval:    s.config.NamespaceStatsReportBaseInterval,
 		EmitOpenWorkflowCount: s.config.EmitOpenWorkflowCount,
-		CountWorkflowMaxQPS:   s.config.StatsReporterCountWorkflowMaxQPS,
 		ServiceResolver:       s.workerServiceResolver,
 	}
 	reporter.Start()

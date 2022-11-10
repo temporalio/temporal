@@ -47,9 +47,8 @@ import (
 const listNamespacePageSize = 100
 
 type StatsReporter struct {
-	status                int32
-	reporter              *goro.Handle
-	visibilityRateLimiter quotas.RateLimiter
+	status   int32
+	reporter *goro.Handle
 
 	Logger                log.Logger
 	MetricsHandler        metrics.MetricsHandler
@@ -57,7 +56,7 @@ type StatsReporter struct {
 	VisibilityManager     manager.VisibilityManager
 	BaseReportInterval    dynamicconfig.DurationPropertyFn
 	EmitOpenWorkflowCount dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	CountWorkflowMaxQPS   dynamicconfig.IntPropertyFn
+	VisibilityRateLimiter quotas.RateLimiter
 	ServiceResolver       membership.ServiceResolver
 }
 
@@ -72,9 +71,6 @@ func (r *StatsReporter) Start() {
 	}
 
 	r.reporter = goro.NewHandle(context.Background()).Go(r.queryLoop)
-	r.visibilityRateLimiter = quotas.NewDefaultOutgoingRateLimiter(
-		func() float64 { return float64(r.CountWorkflowMaxQPS()) },
-	)
 	r.Logger.Info("Stats reporter started.")
 }
 
@@ -143,7 +139,7 @@ func (r *StatsReporter) reportNamespaceStats(ctx context.Context) {
 }
 
 func (r *StatsReporter) emitOpenWorkflowCountForNamespace(ctx context.Context, namespace string, namespaceID string) {
-	if err := r.visibilityRateLimiter.Wait(ctx); err != nil {
+	if err := r.VisibilityRateLimiter.Wait(ctx); err != nil {
 		r.Logger.Error("Failed to wait for visibility rate limiter.", tag.Error(err))
 		return
 	}
