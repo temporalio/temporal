@@ -26,7 +26,6 @@ package cassandra
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -64,8 +63,6 @@ type (
 		AddressTranslator        *config.CassandraAddressTranslator
 	}
 )
-
-var errGetSchemaVersion = errors.New("unable to get current schema version from cassandra")
 
 const (
 	defaultTimeout = 30 // Timeout in seconds
@@ -190,12 +187,9 @@ func (client *cqlClient) ReadSchemaVersion() (string, error) {
 
 	iter := query.Iter()
 	var version string
-	if !iter.Scan(&version) {
-		iter.Close()
-		return "", errGetSchemaVersion
-	}
-	if err := iter.Close(); err != nil {
-		return "", err
+	success := iter.Scan(&version)
+	if err := iter.Close(); err != nil || !success {
+		return "", fmt.Errorf("unable to get current schema version from Cassandra: %w", err)
 	}
 	return version, nil
 }

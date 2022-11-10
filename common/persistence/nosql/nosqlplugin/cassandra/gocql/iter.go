@@ -22,39 +22,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package gocql
 
 import (
-	"fmt"
-
-	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	"github.com/gocql/gocql"
 )
 
-const (
-	readSchemaVersionCQL = `SELECT curr_version from schema_version where keyspace_name=?`
-)
+type iter struct {
+	session   *session
+	gocqlIter *gocql.Iter
+}
 
-type (
-	SchemaVersionReader struct {
-		session gocql.Session
-	}
-)
-
-func NewSchemaVersionReader(session gocql.Session) *SchemaVersionReader {
-	return &SchemaVersionReader{
-		session: session,
+func newIter(session *session, gocqlIter *gocql.Iter) Iter {
+	return &iter{
+		session:   session,
+		gocqlIter: gocqlIter,
 	}
 }
 
-// ReadSchemaVersion returns the current schema version for the Keyspace
-func (svr *SchemaVersionReader) ReadSchemaVersion(keyspace string) (string, error) {
-	query := svr.session.Query(readSchemaVersionCQL, keyspace)
+func (it *iter) Scan(dest ...interface{}) bool {
+	return it.gocqlIter.Scan(dest...)
+}
 
-	iter := query.Iter()
-	var version string
-	success := iter.Scan(&version)
-	if err := iter.Close(); err != nil || !success {
-		return "", fmt.Errorf("unable to get current schema version from Cassandra: %w", err)
-	}
-	return version, nil
+func (it *iter) MapScan(m map[string]interface{}) bool {
+	return it.gocqlIter.MapScan(m)
+}
+
+func (it *iter) PageState() []byte {
+	return it.gocqlIter.PageState()
+}
+
+func (it *iter) Close() (retError error) {
+	defer func() { it.session.handleError(retError) }()
+
+	return it.gocqlIter.Close()
 }
