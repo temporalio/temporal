@@ -262,7 +262,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 		attr.GetInput().Size(),
 		"ScheduleActivityTaskCommandAttributes.Input exceeds size limit.",
 	); err != nil {
-		return nil, handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
+		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
 	}
 
 	enums.SetDefaultTaskQueueKind(&attr.GetTaskQueue().Kind)
@@ -473,7 +473,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 		attr.GetResult().Size(),
 		"CompleteWorkflowExecutionCommandAttributes.Result exceeds size limit.",
 	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
 	}
 
 	// If the workflow task has more than one completion event than just pick the first one
@@ -532,7 +532,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 		"FailWorkflowExecutionCommandAttributes.Failure exceeds size limit.",
 	)
 	if err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_FAIL_WORKFLOW_EXECUTION_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_FAIL_WORKFLOW_EXECUTION_ATTRIBUTES, err)
 	}
 
 	// If the workflow task has more than one completion event than just pick the first one
@@ -707,7 +707,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
 		common.GetPayloadsMapSize(attr.GetDetails()),
 		"RecordMarkerCommandAttributes.Details exceeds size limit.",
 	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_RECORD_MARKER_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_RECORD_MARKER_ATTRIBUTES, err)
 	}
 
 	_, err := handler.mutableState.AddRecordMarkerEvent(handler.workflowTaskCompletedID, attr)
@@ -760,7 +760,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		attr.GetInput().Size(),
 		"ContinueAsNewWorkflowExecutionCommandAttributes. Input exceeds size limit.",
 	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
 	}
 
 	if err := handler.sizeLimitChecker.checkIfMemoSizeExceedsLimit(
@@ -768,7 +768,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
 		"ContinueAsNewWorkflowExecutionCommandAttributes. Memo exceeds size limit.",
 	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
 	}
 
 	// search attribute validation must be done after unaliasing keys
@@ -777,7 +777,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		namespaceName,
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
 	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, err)
 	}
 
 	// If the workflow task has more than one completion event than just pick the first one
@@ -875,7 +875,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		attr.GetInput().Size(),
 		"StartChildWorkflowExecutionCommandAttributes. Input exceeds size limit.",
 	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
 	}
 
 	if err := handler.sizeLimitChecker.checkIfMemoSizeExceedsLimit(
@@ -883,7 +883,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 		"StartChildWorkflowExecutionCommandAttributes.Memo exceeds size limit.",
 	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
 	}
 
 	// search attribute validation must be done after unaliasing keys
@@ -892,7 +892,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		targetNamespace,
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
 	}
 
 	enabled := handler.config.EnableParentClosePolicy(parentNamespace.String())
@@ -950,7 +950,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 		attr.GetInput().Size(),
 		"SignalExternalWorkflowExecutionCommandAttributes.Input exceeds size limit.",
 	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, err)
 	}
 
 	signalRequestID := uuid.New() // for deduplicate
@@ -1010,7 +1010,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		payloadsMapSize(attr.GetSearchAttributes().GetIndexedFields()),
 		"UpsertWorkflowSearchAttributesCommandAttributes exceeds size limit.",
 	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
 
 	// new search attributes size limit check
@@ -1026,7 +1026,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES.String()),
 	)
 	if err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, err)
 	}
 
 	_, err = handler.mutableState.AddUpsertWorkflowSearchAttributesEvent(
@@ -1066,7 +1066,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
 		payloadsMapSize(attr.GetUpsertedMemo().GetFields()),
 		"ModifyWorkflowPropertiesCommandAttributes exceeds size limit.",
 	); err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, err)
 	}
 
 	// new memo size limit check
@@ -1078,7 +1078,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandModifyWorkflowProperties(
 		"ModifyWorkflowPropertiesCommandAttributes. Memo exceeds size limit.",
 	)
 	if err != nil {
-		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, err)
+		return handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_MODIFY_WORKFLOW_PROPERTIES_ATTRIBUTES, err)
 	}
 
 	_, err = handler.mutableState.AddWorkflowPropertiesModifiedEvent(
@@ -1224,7 +1224,7 @@ func (handler *workflowTaskHandlerImpl) failCommand(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) failWorkflow(
+func (handler *workflowTaskHandlerImpl) failWorkflowTask(
 	failedCause enumspb.WorkflowTaskFailedCause,
 	causeErr error,
 ) error {
