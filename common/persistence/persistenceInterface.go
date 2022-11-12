@@ -488,7 +488,7 @@ type (
 	}
 
 	InternalGetHistoryTaskResponse struct {
-		Task commonpb.DataBlob
+		InternalTask
 	}
 
 	InternalGetHistoryTasksResponse struct {

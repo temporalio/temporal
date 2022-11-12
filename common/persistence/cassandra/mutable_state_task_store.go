@@ -186,7 +186,7 @@ const (
 
 	templateRangeCompleteHistoryScheduledTasksQuery = templateRangeCompleteTimerTaskQuery
 
-	templateGetTimerTaskQuery = `SELECT timer, timer_encoding ` +
+	templateGetTimerTaskQuery = `SELECT timer, timer_encoding` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -384,7 +384,11 @@ func (d *MutableStateTaskStore) getTransferTask(
 	if err := query.Scan(&data, &encoding); err != nil {
 		return nil, gocql.ConvertError("GetTransferTask", err)
 	}
-	return &p.InternalGetHistoryTaskResponse{Task: *p.NewDataBlob(data, encoding)}, nil
+	return &p.InternalGetHistoryTaskResponse{
+		InternalTask: p.InternalTask{
+			Task: *p.NewDataBlob(data, encoding),
+		},
+	}, nil
 }
 
 func (d *MutableStateTaskStore) getTransferTasks(
@@ -488,7 +492,12 @@ func (d *MutableStateTaskStore) getTimerTask(
 		return nil, gocql.ConvertError("GetTimerTask", err)
 	}
 
-	return &p.InternalGetHistoryTaskResponse{Task: *p.NewDataBlob(data, encoding)}, nil
+	return &p.InternalGetHistoryTaskResponse{
+		InternalTask: p.InternalTask{
+			Task:                *p.NewDataBlob(data, encoding),
+			VisibilityTimestamp: visibilityTs,
+		},
+	}, nil
 }
 
 func (d *MutableStateTaskStore) getTimerTasks(
@@ -512,12 +521,12 @@ func (d *MutableStateTaskStore) getTimerTasks(
 	response := &p.InternalGetHistoryTasksResponse{}
 	var data []byte
 	var encoding string
-	var timestamp int64
+	var timestamp time.Time
 
 	for iter.Scan(&data, &encoding, &timestamp) {
 		response.Tasks = append(response.Tasks, p.InternalTask{
 			Task:                *p.NewDataBlob(data, encoding),
-			VisibilityTimestamp: time.Unix(0, timestamp),
+			VisibilityTimestamp: timestamp,
 		})
 
 		data = nil
@@ -595,7 +604,11 @@ func (d *MutableStateTaskStore) getReplicationTask(
 		return nil, gocql.ConvertError("GetReplicationTask", err)
 	}
 
-	return &p.InternalGetHistoryTaskResponse{Task: *p.NewDataBlob(data, encoding)}, nil
+	return &p.InternalGetHistoryTaskResponse{
+		InternalTask: p.InternalTask{
+			Task: *p.NewDataBlob(data, encoding),
+		},
+	}, nil
 }
 
 func (d *MutableStateTaskStore) getReplicationTasks(
@@ -765,7 +778,11 @@ func (d *MutableStateTaskStore) getVisibilityTask(
 	if err := query.Scan(&data, &encoding); err != nil {
 		return nil, gocql.ConvertError("GetVisibilityTask", err)
 	}
-	return &p.InternalGetHistoryTaskResponse{Task: *p.NewDataBlob(data, encoding)}, nil
+	return &p.InternalGetHistoryTaskResponse{
+		InternalTask: p.InternalTask{
+			Task: *p.NewDataBlob(data, encoding),
+		},
+	}, nil
 }
 
 func (d *MutableStateTaskStore) getVisibilityTasks(
@@ -900,7 +917,16 @@ func (d *MutableStateTaskStore) getHistoryTask(
 	if err := query.Scan(&data, &encoding); err != nil {
 		return nil, gocql.ConvertError("GetHistoryTask", err)
 	}
-	return &p.InternalGetHistoryTaskResponse{Task: *p.NewDataBlob(data, encoding)}, nil
+
+	task := p.InternalTask{
+		Task: *p.NewDataBlob(data, encoding),
+	}
+	if ts != defaultVisibilityTimestamp {
+		task.VisibilityTimestamp = time.Unix(0, ts)
+	}
+	return &p.InternalGetHistoryTaskResponse{
+		InternalTask: task,
+	}, nil
 }
 
 func (d *MutableStateTaskStore) getHistoryTasks(
@@ -984,12 +1010,12 @@ func (d *MutableStateTaskStore) getHistoryScheduledTasks(
 	response := &p.InternalGetHistoryTasksResponse{}
 	var data []byte
 	var encoding string
-	var timestamp int64
+	var timestamp time.Time
 
 	for iter.Scan(&data, &encoding, &timestamp) {
 		response.Tasks = append(response.Tasks, p.InternalTask{
 			Task:                *p.NewDataBlob(data, encoding),
-			VisibilityTimestamp: time.Unix(0, timestamp),
+			VisibilityTimestamp: timestamp,
 		})
 
 		data = nil

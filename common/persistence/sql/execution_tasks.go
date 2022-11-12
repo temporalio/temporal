@@ -154,7 +154,9 @@ func (m *sqlExecutionStore) getHistoryImmediateTask(
 
 	immedidateTaskRow := rows[0]
 	resp := &p.InternalGetHistoryTaskResponse{
-		Task: *p.NewDataBlob(immedidateTaskRow.Data, immedidateTaskRow.DataEncoding),
+		InternalTask: p.InternalTask{
+			Task: *p.NewDataBlob(immedidateTaskRow.Data, immedidateTaskRow.DataEncoding),
+		},
 	}
 	return resp, nil
 }
@@ -311,7 +313,10 @@ func (m *sqlExecutionStore) getHistoryScheduledTask(
 
 	scheduledTaskRow := rows[0]
 	resp := &p.InternalGetHistoryTaskResponse{
-		Task: *p.NewDataBlob(scheduledTaskRow.Data, scheduledTaskRow.DataEncoding),
+		InternalTask: p.InternalTask{
+			Task:                *p.NewDataBlob(scheduledTaskRow.Data, scheduledTaskRow.DataEncoding),
+			VisibilityTimestamp: scheduledTaskRow.VisibilityTimestamp,
+		},
 	}
 	return resp, nil
 }
@@ -444,8 +449,11 @@ func (m *sqlExecutionStore) getTransferTask(
 
 	transferRow := rows[0]
 	resp := &p.InternalGetHistoryTaskResponse{
-		Task: *p.NewDataBlob(transferRow.Data, transferRow.DataEncoding),
+		InternalTask: p.InternalTask{
+			Task: *p.NewDataBlob(transferRow.Data, transferRow.DataEncoding),
+		},
 	}
+
 	return resp, nil
 }
 
@@ -538,8 +546,12 @@ func (m *sqlExecutionStore) getTimerTask(
 
 	timerRow := rows[0]
 	resp := &p.InternalGetHistoryTaskResponse{
-		Task: *p.NewDataBlob(timerRow.Data, timerRow.DataEncoding),
+		InternalTask: p.InternalTask{
+			Task:                *p.NewDataBlob(timerRow.Data, timerRow.DataEncoding),
+			VisibilityTimestamp: timerRow.VisibilityTimestamp,
+		},
 	}
+
 	return resp, nil
 }
 
@@ -639,7 +651,11 @@ func (m *sqlExecutionStore) getReplicationTask(
 	}
 
 	replicationRow := rows[0]
-	resp := &p.InternalGetHistoryTaskResponse{Task: *p.NewDataBlob(replicationRow.Data, replicationRow.DataEncoding)}
+	resp := &p.InternalGetHistoryTaskResponse{
+		InternalTask: p.InternalTask{
+			Task: *p.NewDataBlob(replicationRow.Data, replicationRow.DataEncoding),
+		},
+	}
 	return resp, nil
 }
 
@@ -877,7 +893,11 @@ func (m *sqlExecutionStore) getVisibilityTask(
 	}
 
 	visibilityRow := rows[0]
-	resp := &p.InternalGetHistoryTaskResponse{Task: *p.NewDataBlob(visibilityRow.Data, visibilityRow.DataEncoding)}
+	resp := &p.InternalGetHistoryTaskResponse{
+		InternalTask: p.InternalTask{
+			Task: *p.NewDataBlob(visibilityRow.Data, visibilityRow.DataEncoding),
+		},
+	}
 	return resp, nil
 }
 

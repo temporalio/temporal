@@ -748,6 +748,9 @@ func (m *executionManagerImpl) GetHistoryTask(
 	if err != nil {
 		return nil, err
 	}
+	if !resp.VisibilityTimestamp.IsZero() {
+		task.SetVisibilityTime(resp.VisibilityTimestamp)
+	}
 	return &GetHistoryTaskResponse{
 		Task: task,
 	}, nil
