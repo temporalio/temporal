@@ -107,6 +107,8 @@ const (
 
 const numItemsInGarbageInfo = 3
 
+const ScheduledTaskMinPrecision = time.Millisecond
+
 type (
 	// InvalidPersistenceRequestError represents invalid request to persistence
 	InvalidPersistenceRequestError struct {

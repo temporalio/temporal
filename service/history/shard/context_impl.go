@@ -330,7 +330,7 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(
 		currentTime = s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 
-	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
+	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(persistence.ScheduledTaskMinPrecision)
 	if singleProcessorMode {
 		// When generating scheduled tasks, the task's timestamp will be compared to the namespace's active cluster's
 		// maxReadLevel to avoid generatnig a task before maxReadLevel.
@@ -1371,7 +1371,9 @@ func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
 					currentCluster = namespaceEntry.ActiveClusterName()
 				}
 				readCursorTS := s.scheduledTaskMaxReadLevelMap[currentCluster]
-				if ts.Before(readCursorTS) {
+				if ts.Truncate(persistence.ScheduledTaskMinPrecision).Before(readCursorTS) {
+					// make sure scheduled task timestamp is higher than max read level after truncation
+					// as persistence layer may lose precision when persisting the task.
 					// This can happen if shard move and new host have a time SKU, or there is db write delay.
 					// We generate a new timer ID using timerMaxReadLevel.
 					s.contextTaggedLogger.Debug("New timer generated is less than read level",
@@ -1380,7 +1382,7 @@ func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
 						tag.Timestamp(ts),
 						tag.CursorTimestamp(readCursorTS),
 						tag.ValueShardAllocateTimerBeforeRead)
-					task.SetVisibilityTime(s.scheduledTaskMaxReadLevelMap[currentCluster].Add(time.Millisecond))
+					task.SetVisibilityTime(s.scheduledTaskMaxReadLevelMap[currentCluster].Add(persistence.ScheduledTaskMinPrecision))
 				}
 
 				visibilityTs := task.GetVisibilityTime()
@@ -1797,7 +1799,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 			maxReadTime = util.MaxTime(maxReadTime, timestamp.TimeValue(queueState.ExclusiveReaderHighWatermark.FireTime))
 		}
 
-		scheduledTaskMaxReadLevelMap[clusterName] = maxReadTime.Truncate(time.Millisecond)
+		scheduledTaskMaxReadLevelMap[clusterName] = maxReadTime.Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision)
 
 		if clusterName != currentClusterName {
 			remoteClusterInfos[clusterName] = &remoteClusterInfo{CurrentTime: maxReadTime}
