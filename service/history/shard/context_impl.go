@@ -1869,7 +1869,7 @@ func (s *ContextImpl) acquireShard() {
 	//
 	// We stop retrying on any of:
 	// 1. We succeed in acquiring the rangeid lock.
-	// 2. We get any error other than transient errors.
+	// 2. We get ShardOwnershipLostError or lifecycleCtx ended.
 	// 3. The state changes to Stopping or Stopped.
 	//
 	// If the shard controller sees that service resolver has assigned ownership to someone
@@ -1933,7 +1933,18 @@ func (s *ContextImpl) acquireShard() {
 		return nil
 	}
 
-	err := backoff.ThrottleRetry(op, policy, common.IsPersistenceTransientError)
+	// keep retrying except ShardOwnershipLostError or lifecycle context ended
+	acquireShardRetryable := func(err error) bool {
+		if s.lifecycleCtx.Err() != nil {
+			return false
+		}
+		switch err.(type) {
+		case *persistence.ShardOwnershipLostError:
+			return false
+		}
+		return true
+	}
+	err := backoff.ThrottleRetry(op, policy, acquireShardRetryable)
 	if err != nil {
 		// We got an unretryable error (perhaps context cancelled or ShardOwnershipLostError).
 		s.contextTaggedLogger.Error("Couldn't acquire shard", tag.Error(err))
