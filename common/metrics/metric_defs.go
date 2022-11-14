@@ -1156,6 +1156,22 @@ const (
 	ArchiverClientScope = "ArchiverClient"
 	// DeadlockDetectorScope is a scope for deadlock detector
 	DeadlockDetectorScope = "DeadlockDetector"
+	// OperationTimerQueueProcessorScope is a scope for timer queue base processor
+	OperationTimerQueueProcessorScope = "TimerQueueProcessor"
+	// OperationTimerActiveQueueProcessorScope is a scope for timer queue active processor
+	OperationTimerActiveQueueProcessorScope = "TimerActiveQueueProcessor"
+	// OperationTimerStandbyQueueProcessorScope is a scope for timer queue standby processor
+	OperationTimerStandbyQueueProcessorScope = "TimerStandbyQueueProcessor"
+	// OperationTransferQueueProcessorScope is a scope for transfer queue base processor
+	OperationTransferQueueProcessorScope = "TransferQueueProcessor"
+	// OperationTransferActiveQueueProcessorScope is a scope for transfer queue active processor
+	OperationTransferActiveQueueProcessorScope = "TransferActiveQueueProcessor"
+	// OperationTransferStandbyQueueProcessorScope is a scope for transfer queue standby processor
+	OperationTransferStandbyQueueProcessorScope = "TransferStandbyQueueProcessor"
+	// OperationVisibilityQueueProcessorScope is a scope for visibility queue processor
+	OperationVisibilityQueueProcessorScope = "VisibilityQueueProcessor"
+	// OperationArchivalQueueProcessorScope is a scope for archival queue processor
+	OperationArchivalQueueProcessorScope = "ArchivalQueueProcessor"
 )
 
 // Matching Scope
@@ -1245,6 +1261,43 @@ const (
 	DeleteExecutionsWorkflowScope   = "DeleteExecutionsWorkflow"
 )
 
+// History task type
+const (
+	TaskTypeTransferActiveTaskActivity             = "TransferActiveTaskActivity"
+	TaskTypeTransferActiveTaskWorkflowTask         = "TransferActiveTaskWorkflowTask"
+	TaskTypeTransferActiveTaskCloseExecution       = "TransferActiveTaskCloseExecution"
+	TaskTypeTransferActiveTaskCancelExecution      = "TransferActiveTaskCancelExecution"
+	TaskTypeTransferActiveTaskSignalExecution      = "TransferActiveTaskSignalExecution"
+	TaskTypeTransferActiveTaskStartChildExecution  = "TransferActiveTaskStartChildExecution"
+	TaskTypeTransferActiveTaskResetWorkflow        = "TransferActiveTaskResetWorkflow"
+	TaskTypeTransferStandbyTaskActivity            = "TransferStandbyTaskActivity"
+	TaskTypeTransferStandbyTaskWorkflowTask        = "TransferStandbyTaskWorkflowTask"
+	TaskTypeTransferStandbyTaskCloseExecution      = "TransferStandbyTaskCloseExecution"
+	TaskTypeTransferStandbyTaskCancelExecution     = "TransferStandbyTaskCancelExecution"
+	TaskTypeTransferStandbyTaskSignalExecution     = "TransferStandbyTaskSignalExecution"
+	TaskTypeTransferStandbyTaskStartChildExecution = "TransferStandbyTaskStartChildExecution"
+	TaskTypeTransferStandbyTaskResetWorkflow       = "TransferStandbyTaskResetWorkflow"
+	TaskTypeVisibilityTaskStartExecution           = "VisibilityTaskStartExecution"
+	TaskTypeVisibilityTaskUpsertExecution          = "VisibilityTaskUpsertExecution"
+	TaskTypeVisibilityTaskCloseExecution           = "VisibilityTaskCloseExecution"
+	TaskTypeVisibilityTaskDeleteExecution          = "VisibilityTaskDeleteExecution"
+	TaskTypeArchivalTaskArchiveExecution           = "ArchivalTaskArchiveExecution"
+	TaskTypeTimerActiveTaskActivityTimeout         = "TimerActiveTaskActivityTimeout"
+	TaskTypeTimerActiveTaskWorkflowTaskTimeout     = "TimerActiveTaskWorkflowTaskTimeout"
+	TaskTypeTimerActiveTaskUserTimer               = "TimerActiveTaskUserTimer"
+	TaskTypeTimerActiveTaskWorkflowTimeout         = "TimerActiveTaskWorkflowTimeout"
+	TaskTypeTimerActiveTaskActivityRetryTimer      = "TimerActiveTaskActivityRetryTimer"
+	TaskTypeTimerActiveTaskWorkflowBackoffTimer    = "TimerActiveTaskWorkflowBackoffTimer"
+	TaskTypeTimerActiveTaskDeleteHistoryEvent      = "TimerActiveTaskDeleteHistoryEvent"
+	TaskTypeTimerStandbyTaskActivityTimeout        = "TimerStandbyTaskActivityTimeout"
+	TaskTypeTimerStandbyTaskWorkflowTaskTimeout    = "TimerStandbyTaskWorkflowTaskTimeout"
+	TaskTypeTimerStandbyTaskUserTimer              = "TimerStandbyTaskUserTimer"
+	TaskTypeTimerStandbyTaskWorkflowTimeout        = "TimerStandbyTaskWorkflowTimeout"
+	TaskTypeTimerStandbyTaskActivityRetryTimer     = "TimerStandbyTaskActivityRetryTimer"
+	TaskTypeTimerStandbyTaskWorkflowBackoffTimer   = "TimerStandbyTaskWorkflowBackoffTimer"
+	TaskTypeTimerStandbyTaskDeleteHistoryEvent     = "TimerStandbyTaskDeleteHistoryEvent"
+)
+
 var (
 	ServiceRequests                               = NewCounterDef("service_requests")
 	ServicePendingRequests                        = NewGaugeDef("service_pending_requests")
@@ -1292,6 +1345,8 @@ var (
 	HistoryCount                                  = NewDimensionlessHistogramDef("history_count")
 	SearchAttributesSize                          = NewBytesHistogramDef("search_attributes_size")
 	MemoSize                                      = NewBytesHistogramDef("memo_size")
+	NumPendingChildWorkflowsHigh                  = NewCounterDef("num_pending_child_workflows_high")
+	NumPendingChildWorkflowsTooHigh               = NewCounterDef("num_pending_child_workflows_too_high")
 
 	// Frontend
 	AddSearchAttributesWorkflowSuccessCount  = NewCounterDef("add_search_attributes_workflow_success")
@@ -1345,26 +1400,36 @@ var (
 	SyncShardFromRemoteCounter                        = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure                        = NewCounterDef("syncshard_remote_failed")
 	TaskRequests                                      = NewCounterDef("task_requests")
-	TaskLatency                                       = NewTimerDef("task_latency")               // overall/all attempts within single worker
-	TaskUserLatency                                   = NewTimerDef("task_latency_userlatency")   // from task generated to task complete
-	TaskNoUserLatency                                 = NewTimerDef("task_latency_nouserlatency") // from task generated to task complete
+	TaskLatency                                       = NewTimerDef("task_latency")               // task in-memory latency across multiple attempts
+	TaskUserLatency                                   = NewTimerDef("task_latency_userlatency")   // workflow lock latency across multiple attempts
+	TaskNoUserLatency                                 = NewTimerDef("task_latency_nouserlatency") // same as TaskLatency, but excludes workflow lock latency
 	TaskAttemptTimer                                  = NewDimensionlessHistogramDef("task_attempt")
 	TaskFailures                                      = NewCounterDef("task_errors")
 	TaskDiscarded                                     = NewCounterDef("task_errors_discarded")
 	TaskSkipped                                       = NewCounterDef("task_skipped")
+	TaskVersionMisMatch                               = NewCounterDef("task_errors_version_mismatch")
+	TaskAttempt                                       = NewCounterDef("task_attempt")
 	TaskStandbyRetryCounter                           = NewCounterDef("task_errors_standby_retry_counter")
 	TaskWorkflowBusyCounter                           = NewCounterDef("task_errors_workflow_busy")
 	TaskNotActiveCounter                              = NewCounterDef("task_errors_not_active_counter")
 	TaskLimitExceededCounter                          = NewCounterDef("task_errors_limit_exceeded_counter")
 	TaskScheduleToStartLatency                        = NewTimerDef("task_schedule_to_start_latency")
-	TaskProcessingLatency                             = NewTimerDef("task_latency_processing")               // per-attempt
-	TaskNoUserProcessingLatency                       = NewTimerDef("task_latency_processing_nouserlatency") // per-attempt
-	TaskQueueLatency                                  = NewTimerDef("task_latency_queue")                    // from task generated to task complete
-	TaskNoUserQueueLatency                            = NewTimerDef("task_latency_queue_nouserlatency")      // from task generated to task complete
+	TaskLoadLatency                                   = NewTimerDef("task_latency_load")     // latency from task generation to task loading (persistence scheduleToStart)
+	TaskScheduleLatency                               = NewTimerDef("task_latency_schedule") // latency from task submission to in-memory queue to processing (in-memory scheduleToStart)
+	TasksDependencyTaskNotCompleted                   = NewCounterDef("task_dependency_task_not_completed")
+	TaskProcessingLatency                             = NewTimerDef("task_latency_processing")               // latency for processing task one time
+	TaskNoUserProcessingLatency                       = NewTimerDef("task_latency_processing_nouserlatency") // same as TaskProcessingLatency, but excludes workflow lock latency
+	TaskQueueLatency                                  = NewTimerDef("task_latency_queue")                    // task e2e latency
+	TaskNoUserQueueLatency                            = NewTimerDef("task_latency_queue_nouserlatency")      // same as TaskQueueLatency, but excludes workflow lock latency
 	TransferTaskMissingEventCounter                   = NewCounterDef("transfer_task_missing_event_counter")
 	TaskBatchCompleteCounter                          = NewCounterDef("task_batch_complete_counter")
 	TaskReschedulerPendingTasks                       = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
 	TaskThrottledCounter                              = NewCounterDef("task_throttled_counter")
+	PendingTasksCounter                               = NewCounterDef("pending_tasks")
+	QueueScheduleLatency                              = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
+	QueueReaderCountHistogram                         = NewDimensionlessHistogramDef("queue_reader_count")
+	QueueSliceCountHistogram                          = NewDimensionlessHistogramDef("queue_slice_count")
+	QueueActionCounter                                = NewCounterDef("queue_actions")
 	ActivityE2ELatency                                = NewTimerDef("activity_end_to_end_latency")
 	AckLevelUpdateCounter                             = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                       = NewCounterDef("ack_level_update_failed")

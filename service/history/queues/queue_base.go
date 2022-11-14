@@ -350,9 +350,12 @@ func (p *queueBase) checkpoint() {
 			newExclusiveDeletionHighWatermark = tasks.MinKey(newExclusiveDeletionHighWatermark, scope.Range.InclusiveMin)
 		}
 	}
-	p.metricsHandler.Histogram(QueueReaderCountHistogram, metrics.Dimensionless).Record(int64(len(readerScopes)))
-	p.metricsHandler.Histogram(QueueSliceCountHistogram, metrics.Dimensionless).Record(int64(p.monitor.GetTotalSliceCount()))
-	p.metricsHandler.Histogram(PendingTasksCounter, metrics.Dimensionless).Record(int64(p.monitor.GetTotalPendingTaskCount()))
+	p.metricsHandler.Histogram(metrics.QueueReaderCountHistogram.GetMetricName(), metrics.QueueReaderCountHistogram.GetMetricUnit()).
+		Record(int64(len(readerScopes)))
+	p.metricsHandler.Histogram(metrics.QueueSliceCountHistogram.GetMetricName(), metrics.QueueSliceCountHistogram.GetMetricUnit()).
+		Record(int64(p.monitor.GetTotalSliceCount()))
+	p.metricsHandler.Histogram(metrics.PendingTasksCounter.GetMetricName(), metrics.PendingTasksCounter.GetMetricUnit()).
+		Record(int64(p.monitor.GetTotalPendingTaskCount()))
 
 	// NOTE: Must range complete task first.
 	// Otherwise, if state is updated first, later deletion fails and shard get reloaded
@@ -360,7 +363,7 @@ func (p *queueBase) checkpoint() {
 	//
 	// Emit metric before the deletion watermark comparsion so we have the emit even if there's no task
 	// for the queue
-	p.metricsHandler.Counter(TaskBatchCompleteCounter).Record(1)
+	p.metricsHandler.Counter(metrics.TaskBatchCompleteCounter.GetMetricName()).Record(1)
 	if newExclusiveDeletionHighWatermark.CompareTo(p.exclusiveDeletionHighWatermark) > 0 {
 		err := p.rangeCompleteTasks(p.exclusiveDeletionHighWatermark, newExclusiveDeletionHighWatermark)
 		if err != nil {
@@ -402,13 +405,13 @@ func (p *queueBase) rangeCompleteTasks(
 func (p *queueBase) updateQueueState(
 	readerScopes map[int32][]Scope,
 ) error {
-	p.metricsHandler.Counter(AckLevelUpdateCounter).Record(1)
+	p.metricsHandler.Counter(metrics.AckLevelUpdateCounter.GetMetricName()).Record(1)
 	err := p.shard.UpdateQueueState(p.category, ToPersistenceQueueState(&queueState{
 		readerScopes:                 readerScopes,
 		exclusiveReaderHighWatermark: p.nonReadableScope.Range.InclusiveMin,
 	}))
 	if err != nil {
-		p.metricsHandler.Counter(AckLevelUpdateFailedCounter).Record(1)
+		p.metricsHandler.Counter(metrics.AckLevelUpdateFailedCounter.GetMetricName()).Record(1)
 		p.logger.Error("Error updating queue state", tag.Error(err), tag.OperationFailed)
 	}
 	return err
