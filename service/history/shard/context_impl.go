@@ -330,6 +330,9 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(
 		currentTime = s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 
+	// Truncation here is just to make sure max read level has the same precision as the old logic
+	// in case existing code can't work correctly with precision higher than 1ms.
+	// Once we validate the rest of the code can worker correctly with higher precision, the truncation should be removed.
 	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(persistence.ScheduledTaskMinPrecision)
 	if singleProcessorMode {
 		// When generating scheduled tasks, the task's timestamp will be compared to the namespace's active cluster's
@@ -1799,6 +1802,11 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 			maxReadTime = util.MaxTime(maxReadTime, timestamp.TimeValue(queueState.ExclusiveReaderHighWatermark.FireTime))
 		}
 
+		// we only need to make sure max read level >= persisted ack level/exclusiveReaderHighWatermark
+		// Add().Truncate() here is just to make sure max read level has the same precision as the old logic
+		// in case existing code can't work correctly with precision higher than 1ms.
+		// Once we validate the rest of the code can worker correctly with higher precision, the code should simply be
+		// scheduledTaskMaxReadLevelMap[clusterName] = maxReadTime
 		scheduledTaskMaxReadLevelMap[clusterName] = maxReadTime.Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision)
 
 		if clusterName != currentClusterName {
