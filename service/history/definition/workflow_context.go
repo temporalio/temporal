@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination workflow_context_mock.go
+
 package definition
 
 import (
@@ -37,8 +39,6 @@ const (
 	CallerTypeAPI  CallerType = 0
 	CallerTypeTask CallerType = 1
 )
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination workflow_context_mock.go
 
 type (
 	CallerType int

@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination event_notifier_mock.go
+
 package definition
 
 import (
@@ -34,8 +36,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 )
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination event_notifier_mock.go
 
 type (
 	Notifier interface {

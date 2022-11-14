@@ -22,14 +22,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination shard_controller_mock.go
+
 package definition
 
 import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 )
-
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination shard_controller_mock.go
 
 type (
 	ShardController interface {

@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination transaction_mock.go
+
 package workflow
 
 import (
@@ -30,7 +32,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 )
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination transaction_mock.go
 type (
 	Transaction interface {
 		CreateWorkflowExecution(
