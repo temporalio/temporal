@@ -78,7 +78,7 @@ func NewTimerQueueFactory(
 			},
 			params.NamespaceRegistry,
 			params.TimeSource,
-			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTimerQueueProcessor)),
+			params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
 			params.Logger,
 		)
 	}
@@ -195,7 +195,7 @@ func (f *timerQueueFactory) CreateQueue(
 			},
 			f.HostReaderRateLimiter,
 			logger,
-			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTimerQueueProcessor)),
+			f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
 		)
 	}
 

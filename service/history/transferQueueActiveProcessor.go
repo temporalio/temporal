@@ -127,7 +127,7 @@ func newTransferQueueActiveProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationTransferActiveQueueProcessor)),
+		metricProvider.WithTags(metrics.OperationTag(metrics.OperationTransferActiveQueueProcessorScope)),
 	)
 
 	transferTaskFilter := func(task tasks.Task) bool {
@@ -322,7 +322,7 @@ func newTransferQueueFailoverProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationTransferActiveQueueProcessor)),
+		metricProvider.WithTags(metrics.OperationTag(metrics.OperationTransferActiveQueueProcessorScope)),
 	)
 
 	queueAckMgr := newQueueFailoverAckMgr(

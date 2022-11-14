@@ -147,7 +147,7 @@ func newVisibilityQueueProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
+		metricProvider.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
 	)
 
 	queueAckMgr := newQueueAckMgr(

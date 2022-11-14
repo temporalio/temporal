@@ -197,7 +197,7 @@ func (p *scheduledQueue) processEventLoop() {
 		case <-p.shutdownCh:
 			return
 		case <-p.newTimerCh:
-			p.metricsHandler.Counter(NewTimerNotifyCounter).Record(1)
+			p.metricsHandler.Counter(metrics.NewTimerNotifyCounter.GetMetricName()).Record(1)
 			p.processNewTime()
 		case <-p.timerGate.FireChan():
 			p.processNewRange()

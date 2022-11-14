@@ -37,10 +37,9 @@ type (
 
 	// metricDefinition contains the definition for a metric
 	metricDefinition struct {
-		metricType       MetricType // metric type
-		metricName       MetricName // metric name
-		metricRollupName MetricName // optional. if non-empty, this name must be used for rolled-up version of this metric
-		unit             MetricUnit
+		metricType MetricType // metric type
+		metricName MetricName // metric name
+		unit       MetricUnit
 	}
 
 	// ServiceIdx is an index that uniquely identifies the service
@@ -81,20 +80,12 @@ func (md metricDefinition) GetMetricName() string {
 	return md.metricName.String()
 }
 
-func (md metricDefinition) GetMetricRollupName() string {
-	return md.metricRollupName.String()
-}
-
 func (md metricDefinition) GetMetricUnit() MetricUnit {
 	return md.unit
 }
 
 func NewTimerDef(name string) metricDefinition {
 	return metricDefinition{metricName: MetricName(name), metricType: Timer, unit: Milliseconds}
-}
-
-func NewRollupTimerDef(name string, rollupName string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricRollupName: MetricName(rollupName), metricType: Timer, unit: Milliseconds}
 }
 
 func NewBytesHistogramDef(name string) metricDefinition {
@@ -107,11 +98,6 @@ func NewDimensionlessHistogramDef(name string) metricDefinition {
 
 func NewCounterDef(name string) metricDefinition {
 	return metricDefinition{metricName: MetricName(name), metricType: Counter}
-}
-
-// Rollup counter name is used to report aggregated metric excluding namespace tag.
-func NewRollupCounterDef(name string, rollupName string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricRollupName: MetricName(rollupName), metricType: Counter}
 }
 
 func NewGaugeDef(name string) metricDefinition {
