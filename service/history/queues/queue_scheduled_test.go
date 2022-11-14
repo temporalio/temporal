@@ -136,8 +136,6 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider() {
 	for _, key := range testTaskKeys {
 		mockTask := tasks.NewMockTask(s.controller)
 		mockTask.EXPECT().GetKey().Return(key).AnyTimes()
-		mockTask.EXPECT().GetVisibilityTime().Return(key.FireTime).Times(1)
-		mockTask.EXPECT().SetVisibilityTime(key.FireTime.Truncate(persistence.ScheduledTaskMinPrecision)).Times(1)
 		mockTasks = append(mockTasks, mockTask)
 
 		if r.ContainsKey(key) {
