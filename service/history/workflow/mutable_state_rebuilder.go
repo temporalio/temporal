@@ -636,7 +636,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			}
 
 		case enumspb.EVENT_TYPE_WORKFLOW_UPDATE_ACCEPTED,
-			enumspb.EVENT_TYPE_WORKFLOW_UPDATE_REQUESTED,
 			enumspb.EVENT_TYPE_WORKFLOW_UPDATE_COMPLETED:
 			return nil, serviceerror.NewUnimplemented("Workflow Update rebuild not implemented")
 
