@@ -186,7 +186,7 @@ const (
 
 	templateRangeCompleteHistoryScheduledTasksQuery = templateRangeCompleteTimerTaskQuery
 
-	templateGetTimerTaskQuery = `SELECT timer, timer_encoding` +
+	templateGetTimerTaskQuery = `SELECT timer, timer_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
