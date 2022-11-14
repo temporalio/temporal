@@ -42,7 +42,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -52,8 +51,8 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/definition"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 var (
@@ -791,7 +790,7 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 	} {
 		t.Run(c.Name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			mutableState := workflow.NewMockMutableState(ctrl)
+			mutableState := definition.NewMockMutableState(ctrl)
 			logger := log.NewMockLogger(ctrl)
 			metricsHandler := metrics.NewMockMetricsHandler(ctrl)
 
