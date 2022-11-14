@@ -37,10 +37,9 @@ type (
 
 	// metricDefinition contains the definition for a metric
 	metricDefinition struct {
-		metricType       MetricType // metric type
-		metricName       MetricName // metric name
-		metricRollupName MetricName // optional. if non-empty, this name must be used for rolled-up version of this metric
-		unit             MetricUnit
+		metricType MetricType // metric type
+		metricName MetricName // metric name
+		unit       MetricUnit
 	}
 
 	// ServiceIdx is an index that uniquely identifies the service
@@ -79,10 +78,6 @@ func (md metricDefinition) GetMetricType() MetricType {
 
 func (md metricDefinition) GetMetricName() string {
 	return md.metricName.String()
-}
-
-func (md metricDefinition) GetMetricRollupName() string {
-	return md.metricRollupName.String()
 }
 
 func (md metricDefinition) GetMetricUnit() MetricUnit {

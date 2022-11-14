@@ -153,7 +153,7 @@ func newTransferQueueStandbyProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationTransferStandbyQueueProcessor)),
+		metricProvider.WithTags(metrics.OperationTag(metrics.OperationTransferStandbyQueueProcessorScope)),
 	)
 
 	queueAckMgr := newQueueAckMgr(
