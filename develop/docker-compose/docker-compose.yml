@@ -69,7 +69,7 @@ services:
       - "--web.console.templates=/usr/share/prometheus/consoles"
   grafana:
     # Use http://localhost:3000/ to access Grafana (admin/admin).
-    image: grafana/grafana:8.1.5
+    image: grafana/grafana:9.1.4
     container_name: temporal-dev-grafana
     depends_on:
       - prometheus
