@@ -41,6 +41,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
@@ -49,6 +50,8 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"
 )
@@ -59,10 +62,11 @@ type (
 		// not merely log an error
 		*require.Assertions
 		IntegrationBase
-		hostPort  string
-		sdkClient sdkclient.Client
-		worker    worker.Worker
-		taskQueue string
+		hostPort                  string
+		sdkClient                 sdkclient.Client
+		worker                    worker.Worker
+		taskQueue                 string
+		maxPendingChildExecutions int
 	}
 )
 
@@ -77,6 +81,12 @@ func TestClientIntegrationSuite(t *testing.T) {
 }
 
 func (s *clientIntegrationSuite) SetupSuite() {
+	// maxPendingChildWorkflows should be NumPendingChildExecutionLimitError, but that value is 1000, and it takes
+	// too long to test (which is the point of this limit)
+	s.maxPendingChildExecutions = 10
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+		dynamicconfig.NumPendingChildExecutionLimitError: s.maxPendingChildExecutions,
+	}
 	s.setupSuite("testdata/clientintegrationtestcluster.yaml")
 
 	s.hostPort = "127.0.0.1:7134"
@@ -102,7 +112,10 @@ func (s *clientIntegrationSuite) SetupTest() {
 	}
 	s.sdkClient = sdkClient
 	s.taskQueue = s.randomizeStr("tq")
-	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{})
+
+	// We need to set this timeout to 0 to disable the deadlock detector. Otherwise, the deadlock detector will cause
+	// TestTooManyChildWorkflows to fail because it thinks there is a deadlocked due to the blocked child workflows.
+	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{DeadlockDetectionTimeout: 0})
 	if err := s.worker.Start(); err != nil {
 		s.Logger.Fatal("Error when start worker", tag.Error(err))
 	}
@@ -440,6 +453,118 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 	d := dc.(*testDataConverter)
 	s.Equal(2, d.NumOfCallToPayloads)
 	s.Equal(2, d.NumOfCallFromPayloads)
+}
+
+func (s *clientIntegrationSuite) TestTooManyChildWorkflows() {
+	// To ensure that there is one pending child workflow before we try to create the next one,
+	// we create a child workflow here that signals the parent when it has started and then blocks forever.
+	parentWorkflowId := "client-integration-too-many-child-workflows"
+	blockingChildWorkflow := func(ctx workflow.Context) error {
+		workflow.SignalExternalWorkflow(ctx, parentWorkflowId, "", "blocking-child-started", nil)
+		workflow.GetSignalChannel(ctx, "unblock-child").Receive(ctx, nil)
+		return nil
+	}
+	childWorkflow := func(ctx workflow.Context) error {
+		return nil
+	}
+
+	// define a workflow which creates N blocked children, and then tries to create another, which should fail because
+	// it's now past the limit
+	maxPendingChildWorkflows := s.maxPendingChildExecutions
+	parentWorkflow := func(ctx workflow.Context) error {
+		childStarted := workflow.GetSignalChannel(ctx, "blocking-child-started")
+		for i := 0; i < maxPendingChildWorkflows; i++ {
+			childOptions := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+				WorkflowID: fmt.Sprintf("child-%d", i+1),
+			})
+			workflow.ExecuteChildWorkflow(childOptions, blockingChildWorkflow)
+		}
+		for i := 0; i < maxPendingChildWorkflows; i++ {
+			childStarted.Receive(ctx, nil)
+		}
+		return workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			WorkflowID: fmt.Sprintf("child-%d", maxPendingChildWorkflows+1),
+		}), childWorkflow).Get(ctx, nil)
+	}
+
+	// register all the workflows
+	s.worker.RegisterWorkflow(blockingChildWorkflow)
+	s.worker.RegisterWorkflow(childWorkflow)
+	s.worker.RegisterWorkflow(parentWorkflow)
+
+	// start the parent workflow
+	timeout := time.Minute * 5
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(timeout)
+	defer cancel()
+	options := sdkclient.StartWorkflowOptions{
+		ID:                 parentWorkflowId,
+		TaskQueue:          s.taskQueue,
+		WorkflowRunTimeout: timeout,
+	}
+	future, err := s.sdkClient.ExecuteWorkflow(ctx, options, parentWorkflow)
+	s.NoError(err)
+
+	// retry policy for some asynchronous operations
+	retry := func(operationCtx backoff.OperationCtx) error {
+		return backoff.ThrottleRetryContext(
+			ctx,
+			operationCtx,
+			backoff.NewExponentialRetryPolicy(time.Second),
+			func(err error) bool {
+				// all errors are retryable
+				return true
+			},
+		)
+	}
+
+	// wait until the workflow task to create the child workflow is retried
+	s.NoError(retry(func(ctx context.Context) error {
+		result, err := s.sdkClient.DescribeWorkflowExecution(ctx, parentWorkflowId, "")
+		s.NoError(err)
+		if result.PendingWorkflowTask != nil {
+			if result.PendingWorkflowTask.Attempt > 1 {
+				s.Len(result.PendingChildren, s.maxPendingChildExecutions)
+				return nil
+			}
+		}
+		return fmt.Errorf("the task to create the child workflow was never retried")
+	}))
+
+	// unblock the last child, allowing it to complete, which lowers the number of pending child workflows
+	s.NoError(s.sdkClient.SignalWorkflow(
+		ctx,
+		fmt.Sprintf("child-%d", maxPendingChildWorkflows),
+		"",
+		"unblock-child",
+		nil,
+	))
+
+	// verify that the parent workflow completes soon after the number of pending child workflows drops
+	s.NoError(retry(func(ctx context.Context) error {
+		return future.Get(ctx, nil)
+	}))
+
+	// verify that the workflow's history contains a task that failed because it would otherwise exceed the pending
+	// child workflow limit
+	history := s.sdkClient.GetWorkflowHistory(
+		ctx,
+		parentWorkflowId,
+		"",
+		true,
+		enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+	)
+	for history.HasNext() {
+		event, err := history.Next()
+		s.NoError(err)
+		switch a := event.Attributes.(type) {
+		case *historypb.HistoryEvent_WorkflowTaskFailedEventAttributes:
+			if a.WorkflowTaskFailedEventAttributes.Cause == enumspb.
+				WORKFLOW_TASK_FAILED_CAUSE_PENDING_CHILD_WORKFLOWS_LIMIT_EXCEEDED {
+				return
+			}
+		}
+	}
+	s.Fail("did not find a history event for the failure")
 }
 
 func (s *clientIntegrationSuite) Test_StickyWorkerRestartWorkflowTask() {
