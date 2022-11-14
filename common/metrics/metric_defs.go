@@ -1398,9 +1398,9 @@ var (
 	SyncShardFromRemoteCounter                        = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure                        = NewCounterDef("syncshard_remote_failed")
 	TaskRequests                                      = NewCounterDef("task_requests")
-	TaskLatency                                       = NewTimerDef("task_latency")               // overall/all attempts within single worker
-	TaskUserLatency                                   = NewTimerDef("task_latency_userlatency")   // from task generated to task complete
-	TaskNoUserLatency                                 = NewTimerDef("task_latency_nouserlatency") // from task generated to task complete
+	TaskLatency                                       = NewTimerDef("task_latency")               // task in-memory latency across multiple attempts
+	TaskUserLatency                                   = NewTimerDef("task_latency_userlatency")   // workflow lock latency across multiple attempts
+	TaskNoUserLatency                                 = NewTimerDef("task_latency_nouserlatency") // same as TaskLatency, but excludes workflow lock latency
 	TaskAttemptTimer                                  = NewDimensionlessHistogramDef("task_attempt")
 	TaskFailures                                      = NewCounterDef("task_errors")
 	TaskDiscarded                                     = NewCounterDef("task_errors_discarded")
@@ -1415,10 +1415,10 @@ var (
 	TaskLoadLatency                                   = NewTimerDef("task_latency_load")     // latency from task generation to task loading (persistence scheduleToStart)
 	TaskScheduleLatency                               = NewTimerDef("task_latency_schedule") // latency from task submission to in-memory queue to processing (in-memory scheduleToStart)
 	TasksDependencyTaskNotCompleted                   = NewCounterDef("task_dependency_task_not_completed")
-	TaskProcessingLatency                             = NewTimerDef("task_latency_processing")               // per-attempt
-	TaskNoUserProcessingLatency                       = NewTimerDef("task_latency_processing_nouserlatency") // per-attempt
-	TaskQueueLatency                                  = NewTimerDef("task_latency_queue")                    // from task generated to task complete
-	TaskNoUserQueueLatency                            = NewTimerDef("task_latency_queue_nouserlatency")      // from task generated to task complete
+	TaskProcessingLatency                             = NewTimerDef("task_latency_processing")               // latency for processing task one time
+	TaskNoUserProcessingLatency                       = NewTimerDef("task_latency_processing_nouserlatency") // same as TaskProcessingLatency, but excludes workflow lock latency
+	TaskQueueLatency                                  = NewTimerDef("task_latency_queue")                    // task e2e latency
+	TaskNoUserQueueLatency                            = NewTimerDef("task_latency_queue_nouserlatency")      // same as TaskQueueLatency, but excludes workflow lock latency
 	TransferTaskMissingEventCounter                   = NewCounterDef("transfer_task_missing_event_counter")
 	TaskBatchCompleteCounter                          = NewCounterDef("task_batch_complete_counter")
 	TaskReschedulerPendingTasks                       = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
