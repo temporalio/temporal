@@ -376,7 +376,13 @@ func (s *Scavenger) cleanUpWorkflowPastRetention(
 				tag.WorkflowID(executionInfo.GetWorkflowId()),
 				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
 			)
+			return nil
 		}
+		s.logger.Info("Delete workflow data past retention via history scavenger",
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.WorkflowID(executionInfo.GetWorkflowId()),
+			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
+		)
 	}
 	return nil
 }
