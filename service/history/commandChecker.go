@@ -191,6 +191,8 @@ func (c *workflowSizeChecker) checkCountConstraint(numPending int, errLimit int,
 		tag.WorkflowRunID(key.RunID),
 	)
 
+	numPending := len(c.mutableState.GetPendingChildExecutionInfos())
+	errLimit := c.numPendingChildExecutionsLimit
 	if withinLimit(numPending, errLimit) {
 		return nil
 	}
@@ -200,6 +202,7 @@ func (c *workflowSizeChecker) checkCountConstraint(numPending int, errLimit int,
 		resourceName,
 		numPending,
 		errLimit,
+		dynamicconfig.NumPendingChildExecutionsLimitError,
 	)
 	logger.Error(err.Error(), tag.Error(err))
 	return err

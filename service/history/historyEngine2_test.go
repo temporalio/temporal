@@ -1005,7 +1005,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 
 	s.Error(err)
 	s.Assert().Equal([]string{"the number of pending child workflow executions, 5, " +
-		"has reached the per-workflow limit of 5"}, s.errorMessages)
+		"has reached the error limit of 5 established with \"limit.numPendingChildExecutions.error\""}, s.errorMessages)
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
