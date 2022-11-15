@@ -278,22 +278,7 @@ func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
 	return result, nil
 }
 
-func (s *ContextImpl) GetQueueExclusiveHighReadWatermark(
-	category tasks.Category,
-	cluster string,
-	singleProcessorMode bool,
-) tasks.Key {
-	switch categoryType := category.Type(); categoryType {
-	case tasks.CategoryTypeImmediate:
-		return s.getImmediateTaskExclusiveMaxReadLevel()
-	case tasks.CategoryTypeScheduled:
-		return s.updateScheduledTaskMaxReadLevel(cluster, singleProcessorMode)
-	default:
-		panic(fmt.Sprintf("invalid task category type: %v", categoryType))
-	}
-}
-
-func (s *ContextImpl) getImmediateTaskExclusiveMaxReadLevel() tasks.Key {
+func (s *ContextImpl) GetImmediateQueueExclusiveHighReadWatermark() tasks.Key {
 	s.rLock()
 	defer s.rUnlock()
 	return tasks.NewImmediateKey(s.immediateTaskExclusiveMaxReadLevel)
@@ -310,10 +295,10 @@ func (s *ContextImpl) getScheduledTaskMaxReadLevel(cluster string) tasks.Key {
 	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
 }
 
-func (s *ContextImpl) updateScheduledTaskMaxReadLevel(
+func (s *ContextImpl) UpdateScheduledQueueExclusiveHighReadWatermark(
 	cluster string,
 	singleProcessorMode bool,
-) tasks.Key {
+) (tasks.Key, error) {
 	s.wLock()
 	defer s.wUnlock()
 
@@ -321,8 +306,8 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(
 		s.scheduledTaskMaxReadLevelMap[cluster] = tasks.DefaultFireTime
 	}
 
-	if s.errorByState() != nil {
-		return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
+	if err := s.errorByState(); err != nil {
+		return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0), err
 	}
 
 	currentTime := s.timeSource.Now()
@@ -343,7 +328,7 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(
 		s.scheduledTaskMaxReadLevelMap[cluster] = util.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
 	}
 
-	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
+	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0), nil
 }
 
 // NOTE: the ack level returned is inclusive for immediate task category (acked),

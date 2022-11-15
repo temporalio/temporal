@@ -26,6 +26,7 @@ package queues
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -95,6 +96,7 @@ type (
 
 		exclusiveDeletionHighWatermark tasks.Key
 		nonReadableScope               Scope
+		readerRateLimiter              quotas.RequestRateLimiter
 		readerGroup                    *ReaderGroup
 		nextForceNewSliceTime          time.Time
 
@@ -176,6 +178,11 @@ func newQueueBase(
 		)
 	}
 
+	readerRateLimiter := newShardReaderRateLimiter(
+		options.MaxPollRPS,
+		hostReaderRateLimiter,
+		options.MaxReaderCount(),
+	)
 	readerInitializer := func(readerID int32, slices []Slice) Reader {
 		readerOptions := options.ReaderOptions // make a copy
 		if readerID != DefaultReaderId {
@@ -194,11 +201,7 @@ func newQueueBase(
 			scheduler,
 			rescheduler,
 			timeSource,
-			newShardReaderRateLimiter(
-				options.MaxPollRPS,
-				hostReaderRateLimiter,
-				options.MaxReaderCount(),
-			),
+			readerRateLimiter,
 			monitor,
 			logger,
 			metricsHandler,
@@ -245,7 +248,8 @@ func newQueueBase(
 			NewRange(exclusiveReaderHighWatermark, tasks.MaximumKey),
 			predicates.Universal[tasks.Task](),
 		),
-		readerGroup: readerGroup,
+		readerRateLimiter: readerRateLimiter,
+		readerGroup:       readerGroup,
 
 		// pollTimer and checkpointTimer are initialized on Start()
 		checkpointRetrier: backoff.NewRetrier(
@@ -292,15 +296,25 @@ func (p *queueBase) UnlockTaskProcessing() {
 	// no-op
 }
 
-func (p *queueBase) processNewRange() {
-	newMaxKey := p.shard.GetQueueExclusiveHighReadWatermark(
-		p.category,
-		p.shard.GetClusterMetadata().GetCurrentClusterName(),
-		true,
-	)
+func (p *queueBase) processNewRange() error {
+	var newMaxKey tasks.Key
+	switch categoryType := p.category.Type(); categoryType {
+	case tasks.CategoryTypeImmediate:
+		newMaxKey = p.shard.GetImmediateQueueExclusiveHighReadWatermark()
+	case tasks.CategoryTypeScheduled:
+		var err error
+		if newMaxKey, err = p.shard.UpdateScheduledQueueExclusiveHighReadWatermark(
+			p.shard.GetClusterMetadata().GetCurrentClusterName(),
+			true,
+		); err != nil {
+			return err
+		}
+	default:
+		panic(fmt.Sprintf("Unknown task category type: %v", categoryType.String()))
+	}
 
 	if !p.nonReadableScope.CanSplitByRange(newMaxKey) {
-		return
+		return nil
 	}
 
 	var newReadScope Scope
@@ -315,7 +329,7 @@ func (p *queueBase) processNewRange() {
 	reader, ok := p.readerGroup.ReaderByID(DefaultReaderId)
 	if !ok {
 		p.readerGroup.NewReader(DefaultReaderId, newSlice)
-		return
+		return nil
 	}
 
 	if now := p.timeSource.Now(); now.After(p.nextForceNewSliceTime) {
@@ -324,6 +338,7 @@ func (p *queueBase) processNewRange() {
 	} else {
 		reader.MergeSlices(newSlice)
 	}
+	return nil
 }
 
 func (p *queueBase) checkpoint() {

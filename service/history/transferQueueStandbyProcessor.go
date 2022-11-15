@@ -100,7 +100,7 @@ func newTransferQueueStandbyProcessor(
 	}
 	maxReadLevel := func() int64 {
 		// we are creating standby processor, so we know we are not in single processor mode
-		return shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTransfer, clusterName, false).TaskID
+		return shard.GetImmediateQueueExclusiveHighReadWatermark().TaskID
 	}
 	updateClusterAckLevel := func(ackLevel int64) error {
 		return shard.UpdateQueueClusterAckLevel(tasks.CategoryTransfer, clusterName, tasks.NewImmediateKey(ackLevel))

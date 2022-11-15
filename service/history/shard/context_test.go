@@ -186,14 +186,17 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 func (s *contextSuite) TestTimerMaxReadLevelUpdate_MultiProcessor() {
 	now := time.Now()
 	s.timeSource.Update(now)
-	maxReadLevel := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName, false)
+	maxReadLevel, err := s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, false)
+	s.NoError(err)
 
 	s.timeSource.Update(now.Add(-time.Minute))
-	newMaxReadLevel := s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName, false)
+	newMaxReadLevel, err := s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, false)
+	s.NoError(err)
 	s.Equal(maxReadLevel, newMaxReadLevel)
 
 	s.timeSource.Update(now.Add(time.Minute))
-	newMaxReadLevel = s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName, false)
+	newMaxReadLevel, err = s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, false)
+	s.NoError(err)
 	s.True(newMaxReadLevel.FireTime.After(maxReadLevel.FireTime))
 }
 
@@ -202,14 +205,14 @@ func (s *contextSuite) TestTimerMaxReadLevelUpdate_SingleProcessor() {
 	s.timeSource.Update(now)
 
 	// make sure the scheduledTaskMaxReadLevelMap has value for both current cluster and alternative cluster
-	s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName, false)
-	s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestAlternativeClusterName, false)
+	s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, false)
+	s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestAlternativeClusterName, false)
 
 	now = time.Now().Add(time.Minute)
 	s.timeSource.Update(now)
 
 	// update in single processor mode
-	s.mockShard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, cluster.TestCurrentClusterName, true)
+	s.mockShard.UpdateScheduledQueueExclusiveHighReadWatermark(cluster.TestCurrentClusterName, true)
 	scheduledTaskMaxReadLevelMap := s.mockShard.(*ContextTest).scheduledTaskMaxReadLevelMap
 	s.Len(scheduledTaskMaxReadLevelMap, 2)
 	s.True(scheduledTaskMaxReadLevelMap[cluster.TestCurrentClusterName].After(now))
