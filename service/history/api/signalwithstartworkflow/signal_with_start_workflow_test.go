@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/service/history/api"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -111,7 +112,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 	ctx := context.Background()
 	currentWorkflowContext := api.NewWorkflowContext(
 		s.currentContext,
-		workflow.NoopReleaseFn,
+		historyCache.NoopReleaseFn,
 		s.currentMutableState,
 	)
 	request := s.randomRequest()
@@ -131,7 +132,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 	ctx := context.Background()
 	currentWorkflowContext := api.NewWorkflowContext(
 		s.currentContext,
-		workflow.NoopReleaseFn,
+		historyCache.NoopReleaseFn,
 		s.currentMutableState,
 	)
 	request := s.randomRequest()
@@ -161,7 +162,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
 	ctx := context.Background()
 	currentWorkflowContext := api.NewWorkflowContext(
 		s.currentContext,
-		workflow.NoopReleaseFn,
+		historyCache.NoopReleaseFn,
 		s.currentMutableState,
 	)
 	request := s.randomRequest()

@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	historyCache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -56,7 +57,7 @@ type (
 
 		controller        *gomock.Controller
 		mockDeleteManager *workflow.MockDeleteManager
-		mockCache         *workflow.MockCache
+		mockCache         *historyCache.MockCache
 
 		testShardContext           *shard.ContextTest
 		timerQueueTaskExecutorBase *timerQueueTaskExecutorBase
@@ -79,7 +80,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockDeleteManager = workflow.NewMockDeleteManager(s.controller)
-	s.mockCache = workflow.NewMockCache(s.controller)
+	s.mockCache = historyCache.NewMockCache(s.controller)
 
 	config := tests.NewDynamicConfig()
 	s.testShardContext = shard.NewTestContext(
@@ -131,7 +132,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 			mockWeCtx := workflow.NewMockContext(s.controller)
 			mockMutableState := workflow.NewMockMutableState(s.controller)
 
-			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
+			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, historyCache.NoopReleaseFn, nil)
 
 			mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 			mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
@@ -183,7 +184,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 			mockWeCtx := workflow.NewMockContext(s.controller)
 			mockMutableState := workflow.NewMockMutableState(s.controller)
 
-			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
+			s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, historyCache.NoopReleaseFn, nil)
 
 			mockWeCtx.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 			mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)

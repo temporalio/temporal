@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -41,6 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -78,7 +80,7 @@ type (
 
 	DeleteManagerImpl struct {
 		shard          shard.Context
-		historyCache   Cache
+		historyCache   cache.Cache
 		config         *configs.Config
 		metricsHandler metrics.MetricsHandler
 		archivalClient archiver.Client
@@ -90,7 +92,7 @@ var _ DeleteManager = (*DeleteManagerImpl)(nil)
 
 func NewDeleteManager(
 	shard shard.Context,
-	cache Cache,
+	cache historyCache.Cache,
 	config *configs.Config,
 	archiverClient archiver.Client,
 	timeSource clock.TimeSource,

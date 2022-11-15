@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/definition"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/tasks"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -68,7 +69,7 @@ type (
 	}
 
 	ActivityReplicatorImpl struct {
-		historyCache    workflow.Cache
+		historyCache    historyCache.Cache
 		clusterMetadata cluster.Metadata
 		logger          log.Logger
 	}
@@ -76,12 +77,12 @@ type (
 
 func NewActivityReplicator(
 	shard shard.Context,
-	historyCache workflow.Cache,
+	histCache historyCache.Cache,
 	logger log.Logger,
 ) *ActivityReplicatorImpl {
 
 	return &ActivityReplicatorImpl{
-		historyCache:    historyCache,
+		historyCache:    histCache,
 		clusterMetadata: shard.GetClusterMetadata(),
 		logger:          log.With(logger, tag.ComponentHistoryReplicator),
 	}

@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -64,7 +65,7 @@ type (
 		taskAllocator              taskAllocator
 		config                     *configs.Config
 		metricHandler              metrics.MetricsHandler
-		workflowCache              workflow.Cache
+		workflowCache              historyCache.Cache
 		scheduler                  queues.Scheduler
 		priorityAssigner           queues.PriorityAssigner
 		workflowDeleteManager      workflow.DeleteManager
@@ -85,7 +86,7 @@ type (
 
 func newTimerQueueProcessor(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache historyCache.Cache,
 	scheduler queues.Scheduler,
 	priorityAssigner queues.PriorityAssigner,
 	clientBean client.Bean,

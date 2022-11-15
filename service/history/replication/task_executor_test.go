@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/resourcetest"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -68,7 +69,7 @@ type (
 		historyClient      *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *namespace.MockRegistry
 		clusterMetadata    *cluster.MockMetadata
-		workflowCache      *workflow.MockCache
+		workflowCache      *historyCache.MockCache
 		nDCHistoryResender *xdc.MockNDCHistoryResender
 
 		replicationTaskExecutor *taskExecutorImpl
@@ -112,7 +113,7 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.clusterMetadata = s.mockResource.ClusterMetadata
 	s.nDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
-	s.workflowCache = workflow.NewMockCache(s.controller)
+	s.workflowCache = historyCache.NewMockCache(s.controller)
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()

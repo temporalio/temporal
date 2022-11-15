@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -82,7 +83,7 @@ type (
 		namespaceRegistry namespace.Registry
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
-		historyCache      workflow.Cache
+		historyCache      historyCache.Cache
 		newStateRebuilder stateRebuilderProvider
 		transaction       workflow.Transaction
 		logger            log.Logger
@@ -93,7 +94,7 @@ var _ WorkflowResetter = (*workflowResetterImpl)(nil)
 
 func NewWorkflowResetter(
 	shard shard.Context,
-	historyCache workflow.Cache,
+	historyCache historyCache.Cache,
 	logger log.Logger,
 ) *workflowResetterImpl {
 	return &workflowResetterImpl{
@@ -460,7 +461,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		r.clusterMetadata,
 		resetContext,
 		resetMutableState,
-		workflow.NoopReleaseFn,
+		historyCache.NoopReleaseFn,
 	), nil
 }
 

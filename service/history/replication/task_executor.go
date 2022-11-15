@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -58,7 +59,7 @@ type (
 		HistoryResender xdc.NDCHistoryResender
 		HistoryEngine   shard.Engine
 		DeleteManager   workflow.DeleteManager
-		WorkflowCache   workflow.Cache
+		WorkflowCache   historyCache.Cache
 	}
 
 	TaskExecutorProvider func(params TaskExecutorParams) TaskExecutor
@@ -71,7 +72,7 @@ type (
 		nDCHistoryResender xdc.NDCHistoryResender
 		historyEngine      shard.Engine
 		deleteManager      workflow.DeleteManager
-		workflowCache      workflow.Cache
+		workflowCache      historyCache.Cache
 		metricsHandler     metrics.MetricsHandler
 		logger             log.Logger
 	}
@@ -85,7 +86,7 @@ func NewTaskExecutor(
 	nDCHistoryResender xdc.NDCHistoryResender,
 	historyEngine shard.Engine,
 	deleteManager workflow.DeleteManager,
-	workflowCache workflow.Cache,
+	workflowCache historyCache.Cache,
 ) TaskExecutor {
 	return &taskExecutorImpl{
 		currentCluster:     shard.GetClusterMetadata().GetCurrentClusterName(),

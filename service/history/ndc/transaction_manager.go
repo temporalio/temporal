@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -154,7 +155,7 @@ type (
 	transactionMgrImpl struct {
 		shard             shard.Context
 		namespaceRegistry namespace.Registry
-		historyCache      workflow.Cache
+		historyCache      historyCache.Cache
 		clusterMetadata   cluster.Metadata
 		executionManager  persistence.ExecutionManager
 		serializer        serialization.Serializer
@@ -172,7 +173,7 @@ var _ transactionMgr = (*transactionMgrImpl)(nil)
 
 func newTransactionMgr(
 	shard shard.Context,
-	historyCache workflow.Cache,
+	histCache historyCache.Cache,
 	eventsReapplier EventsReapplier,
 	logger log.Logger,
 ) *transactionMgrImpl {
@@ -180,14 +181,14 @@ func newTransactionMgr(
 	transactionMgr := &transactionMgrImpl{
 		shard:             shard,
 		namespaceRegistry: shard.GetNamespaceRegistry(),
-		historyCache:      historyCache,
+		historyCache:      histCache,
 		clusterMetadata:   shard.GetClusterMetadata(),
 		executionManager:  shard.GetExecutionManager(),
 		serializer:        shard.GetPayloadSerializer(),
 		metricsHandler:    shard.GetMetricsHandler(),
 		workflowResetter: NewWorkflowResetter(
 			shard,
-			historyCache,
+			histCache,
 			logger,
 		),
 		eventsReapplier: eventsReapplier,

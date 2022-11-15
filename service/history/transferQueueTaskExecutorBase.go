@@ -33,6 +33,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -40,6 +42,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
@@ -48,9 +51,6 @@ import (
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
-
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 )
 
 const (
@@ -64,7 +64,7 @@ type (
 		currentClusterName       string
 		shard                    shard.Context
 		registry                 namespace.Registry
-		cache                    workflow.Cache
+		cache                    historyCache.Cache
 		archivalClient           archiver.Client
 		logger                   log.Logger
 		metricHandler            metrics.MetricsHandler
@@ -78,7 +78,7 @@ type (
 
 func newTransferQueueTaskExecutorBase(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache historyCache.Cache,
 	archivalClient archiver.Client,
 	logger log.Logger,
 	metricHandler metrics.MetricsHandler,

@@ -40,17 +40,17 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
 	visibilityQueueTaskExecutor struct {
 		shard          shard.Context
-		cache          workflow.Cache
+		cache          historyCache.Cache
 		logger         log.Logger
 		metricProvider metrics.MetricsHandler
 		visibilityMgr  manager.VisibilityManager
@@ -64,7 +64,7 @@ var errUnknownVisibilityTask = serviceerror.NewInternal("unknown visibility task
 
 func newVisibilityQueueTaskExecutor(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache historyCache.Cache,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
 	metricProvider metrics.MetricsHandler,

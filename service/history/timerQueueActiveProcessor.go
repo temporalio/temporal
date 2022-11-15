@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/xdc"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -58,7 +59,7 @@ type (
 
 func newTimerQueueActiveProcessor(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache historyCache.Cache,
 	scheduler queues.Scheduler,
 	priorityAssigner queues.PriorityAssigner,
 	workflowDeleteManager workflow.DeleteManager,
@@ -205,7 +206,7 @@ func newTimerQueueActiveProcessor(
 
 func newTimerQueueFailoverProcessor(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache historyCache.Cache,
 	scheduler queues.Scheduler,
 	priorityAssigner queues.PriorityAssigner,
 	workflowDeleteManager workflow.DeleteManager,

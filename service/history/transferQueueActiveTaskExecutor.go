@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/ndc"
@@ -76,7 +77,7 @@ type (
 
 func newTransferQueueActiveTaskExecutor(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache historyCache.Cache,
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	logger log.Logger,
@@ -940,7 +941,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 
 	var baseContext workflow.Context
 	var baseMutableState workflow.MutableState
-	var baseRelease workflow.ReleaseCacheFunc
+	var baseRelease historyCache.ReleaseCacheFunc
 	if resetPoint.GetRunId() == executionState.RunId {
 		baseContext = currentContext
 		baseMutableState = currentMutableState
@@ -1392,7 +1393,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 			t.shard.GetClusterMetadata(),
 			currentContext,
 			currentMutableState,
-			workflow.NoopReleaseFn, // this is fine since caller will defer on release
+			historyCache.NoopReleaseFn, // this is fine since caller will defer on release
 		),
 		reason,
 		nil,

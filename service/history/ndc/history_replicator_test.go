@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	historyCache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -66,7 +67,7 @@ type (
 		controller            *gomock.Controller
 		mockShard             *shard.ContextTest
 		mockEventCache        *events.MockCache
-		mockHistoryCache      *workflow.MockCache
+		mockHistoryCache      *historyCache.MockCache
 		mockNamespaceCache    *namespace.MockRegistry
 		mockRemoteAdminClient *adminservicemock.MockAdminServiceClient
 		mockExecutionManager  *persistence.MockExecutionManager
@@ -103,7 +104,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
-	s.mockHistoryCache = workflow.NewMockCache(s.controller)
+	s.mockHistoryCache = historyCache.NewMockCache(s.controller)
 	s.mockEventCache = s.mockShard.MockEventsCache
 	s.mockRemoteAdminClient = s.mockShard.Resource.RemoteAdminClient
 	eventReapplier := NewMockEventsReapplier(s.controller)
@@ -178,7 +179,7 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		namespace.ID(namespaceID),
 		we,
 		workflow.CallerTypeTask,
-	).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
+	).Return(mockWeCtx, historyCache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		gomock.Any(),
@@ -290,7 +291,7 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		namespace.ID(namespaceID),
 		we,
 		workflow.CallerTypeTask,
-	).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
+	).Return(mockWeCtx, historyCache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		gomock.Any(),

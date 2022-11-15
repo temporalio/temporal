@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	historyCache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -113,7 +114,7 @@ func (s *ackManagerSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
-	historyCache := workflow.NewCache(s.mockShard)
+	historyCache := historyCache.NewCache(s.mockShard)
 
 	s.replicationAckManager = NewAckManager(
 		s.mockShard, historyCache, s.mockExecutionMgr, s.logger,

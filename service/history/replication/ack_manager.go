@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -68,7 +69,7 @@ type (
 		currentClusterName string
 		shard              shard.Context
 		config             *configs.Config
-		workflowCache      workflow.Cache
+		workflowCache      historyCache.Cache
 		executionMgr       persistence.ExecutionManager
 		metricsHandler     metrics.MetricsHandler
 		logger             log.Logger
@@ -90,7 +91,7 @@ var (
 
 func NewAckManager(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache historyCache.Cache,
 	executionMgr persistence.ExecutionManager,
 	logger log.Logger,
 ) AckManager {

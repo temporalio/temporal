@@ -37,10 +37,10 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/xdc"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -60,7 +60,7 @@ func newTransferQueueStandbyProcessor(
 	shard shard.Context,
 	scheduler queues.Scheduler,
 	priorityAssigner queues.PriorityAssigner,
-	workflowCache workflow.Cache,
+	workflowCache historyCache.Cache,
 	archivalClient archiver.Client,
 	taskAllocator taskAllocator,
 	clientBean client.Bean,

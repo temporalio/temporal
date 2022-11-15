@@ -38,10 +38,10 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 const (
@@ -62,7 +62,7 @@ type (
 		// as that will lead to a cycle dependency issue between shard and workflow package.
 		// 2. Move this interface to queues package after 1 is done so that there's no cycle dependency
 		// between workflow and queues package.
-		CreateQueue(shard shard.Context, cache workflow.Cache) queues.Queue
+		CreateQueue(shard shard.Context, cache historyCache.Cache) queues.Queue
 	}
 
 	QueueFactoryBaseParams struct {

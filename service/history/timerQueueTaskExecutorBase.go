@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -50,7 +51,7 @@ type (
 		shard              shard.Context
 		registry           namespace.Registry
 		deleteManager      workflow.DeleteManager
-		cache              workflow.Cache
+		cache              historyCache.Cache
 		logger             log.Logger
 		matchingClient     matchingservice.MatchingServiceClient
 		metricHandler      metrics.MetricsHandler
@@ -60,7 +61,7 @@ type (
 
 func newTimerQueueTaskExecutorBase(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache historyCache.Cache,
 	deleteManager workflow.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
@@ -148,9 +149,9 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 
 func getWorkflowExecutionContextForTask(
 	ctx context.Context,
-	workflowCache workflow.Cache,
+	workflowCache historyCache.Cache,
 	task tasks.Task,
-) (workflow.Context, workflow.ReleaseCacheFunc, error) {
+) (workflow.Context, historyCache.ReleaseCacheFunc, error) {
 	namespaceID, execution := getTaskNamespaceIDAndWorkflowExecution(task)
 	return getWorkflowExecutionContext(
 		ctx,
@@ -162,10 +163,10 @@ func getWorkflowExecutionContextForTask(
 
 func getWorkflowExecutionContext(
 	ctx context.Context,
-	workflowCache workflow.Cache,
+	workflowCache historyCache.Cache,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
-) (workflow.Context, workflow.ReleaseCacheFunc, error) {
+) (workflow.Context, historyCache.ReleaseCacheFunc, error) {
 	ctx, cancel := context.WithTimeout(ctx, taskGetExecutionTimeout)
 	defer cancel()
 

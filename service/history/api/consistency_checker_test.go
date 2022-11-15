@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -54,7 +55,7 @@ type (
 
 		controller    *gomock.Controller
 		shardContext  *shard.MockContext
-		workflowCache *workflow.MockCache
+		workflowCache *historyCache.MockCache
 
 		shardID      int32
 		namespaceID  string
@@ -82,7 +83,7 @@ func (s *workflowConsistencyCheckerSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.shardContext = shard.NewMockContext(s.controller)
-	s.workflowCache = workflow.NewMockCache(s.controller)
+	s.workflowCache = historyCache.NewMockCache(s.controller)
 
 	s.shardID = rand.Int31()
 	s.namespaceID = uuid.New().String()
