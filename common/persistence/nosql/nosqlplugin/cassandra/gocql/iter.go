@@ -33,7 +33,7 @@ type iter struct {
 	gocqlIter *gocql.Iter
 }
 
-func newIter(session *session, gocqlIter *gocql.Iter) Iter {
+func newIter(session *session, gocqlIter *gocql.Iter) *iter {
 	return &iter{
 		session:   session,
 		gocqlIter: gocqlIter,
