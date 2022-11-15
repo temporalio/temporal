@@ -44,6 +44,7 @@ import (
 	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -63,7 +64,7 @@ type (
 func newTimerQueueStandbyTaskExecutor(
 	shard shard.Context,
 	workflowCache historyCache.Cache,
-	workflowDeleteManager workflow.DeleteManager,
+	workflowDeleteManager deletemanager.DeleteManager,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,

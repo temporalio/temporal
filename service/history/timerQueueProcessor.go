@@ -45,10 +45,10 @@ import (
 	"go.temporal.io/server/common/quotas"
 	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -68,7 +68,7 @@ type (
 		workflowCache              historyCache.Cache
 		scheduler                  queues.Scheduler
 		priorityAssigner           queues.PriorityAssigner
-		workflowDeleteManager      workflow.DeleteManager
+		workflowDeleteManager      deletemanager.DeleteManager
 		ackLevel                   tasks.Key
 		hostRateLimiter            quotas.RateLimiter
 		schedulerRateLimiter       queues.SchedulerRateLimiter
@@ -104,7 +104,7 @@ func newTimerQueueProcessor(
 	config := shard.GetConfig()
 	logger := log.With(shard.GetLogger(), tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
-	workflowDeleteManager := workflow.NewDeleteManager(
+	workflowDeleteManager := deletemanager.NewDeleteManager(
 		shard,
 		workflowCache,
 		config,

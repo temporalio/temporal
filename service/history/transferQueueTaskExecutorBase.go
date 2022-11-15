@@ -45,6 +45,7 @@ import (
 	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -72,7 +73,7 @@ type (
 		matchingClient           matchingservice.MatchingServiceClient
 		config                   *configs.Config
 		searchAttributesProvider searchattribute.Provider
-		workflowDeleteManager    workflow.DeleteManager
+		workflowDeleteManager    deletemanager.DeleteManager
 	}
 )
 
@@ -96,7 +97,7 @@ func newTransferQueueTaskExecutorBase(
 		matchingClient:           matchingClient,
 		config:                   shard.GetConfig(),
 		searchAttributesProvider: shard.GetSearchAttributesProvider(),
-		workflowDeleteManager: workflow.NewDeleteManager(
+		workflowDeleteManager: deletemanager.NewDeleteManager(
 			shard,
 			workflowCache,
 			shard.GetConfig(),

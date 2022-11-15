@@ -24,7 +24,7 @@
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination delete_manager_mock.go
 
-package workflow
+package deletemanager
 
 import (
 	"context"
@@ -34,7 +34,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -55,15 +55,15 @@ type (
 			ctx context.Context,
 			nsID namespace.ID,
 			we commonpb.WorkflowExecution,
-			ms MutableState,
+			ms workflow.MutableState,
 			workflowClosedVersion int64,
 		) error
 		DeleteWorkflowExecution(
 			ctx context.Context,
 			nsID namespace.ID,
 			we commonpb.WorkflowExecution,
-			weCtx Context,
-			ms MutableState,
+			weCtx workflow.Context,
+			ms workflow.MutableState,
 			forceDeleteFromOpenVisibility bool,
 			stage *tasks.DeleteWorkflowExecutionStage,
 		) error
@@ -71,8 +71,8 @@ type (
 			ctx context.Context,
 			nsID namespace.ID,
 			we commonpb.WorkflowExecution,
-			weCtx Context,
-			ms MutableState,
+			weCtx workflow.Context,
+			ms workflow.MutableState,
 			archiveIfEnabled bool,
 			stage *tasks.DeleteWorkflowExecutionStage,
 		) error
@@ -80,7 +80,7 @@ type (
 
 	DeleteManagerImpl struct {
 		shard          shard.Context
-		historyCache   cache.Cache
+		historyCache   historyCache.Cache
 		config         *configs.Config
 		metricsHandler metrics.MetricsHandler
 		archivalClient archiver.Client
@@ -113,11 +113,11 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	ctx context.Context,
 	nsID namespace.ID,
 	we commonpb.WorkflowExecution,
-	ms MutableState,
+	ms workflow.MutableState,
 	workflowClosedVersion int64,
 ) error {
 
-	taskGenerator := taskGeneratorProvider.NewTaskGenerator(m.shard, ms)
+	taskGenerator := workflow.NewTaskGeneratorProvider().NewTaskGenerator(m.shard, ms)
 
 	// We can make this task immediately because the task itself will keep rescheduling itself until the workflow is
 	// closed before actually deleting the workflow.
@@ -143,8 +143,8 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	nsID namespace.ID,
 	we commonpb.WorkflowExecution,
-	weCtx Context,
-	ms MutableState,
+	weCtx workflow.Context,
+	ms workflow.MutableState,
 	forceDeleteFromOpenVisibility bool,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
@@ -166,8 +166,8 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	ctx context.Context,
 	nsID namespace.ID,
 	we commonpb.WorkflowExecution,
-	weCtx Context,
-	ms MutableState,
+	weCtx workflow.Context,
+	ms workflow.MutableState,
 	archiveIfEnabled bool,
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
@@ -189,8 +189,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	we commonpb.WorkflowExecution,
-	weCtx Context,
-	ms MutableState,
+	weCtx workflow.Context,
+	ms workflow.MutableState,
 	archiveIfEnabled bool,
 	forceDeleteFromOpenVisibility bool,
 	stage *tasks.DeleteWorkflowExecutionStage,
@@ -266,8 +266,8 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	namespaceID namespace.ID,
 	workflowExecution commonpb.WorkflowExecution,
 	currentBranchToken []byte,
-	weCtx Context,
-	ms MutableState,
+	weCtx workflow.Context,
+	ms workflow.MutableState,
 	metricsHandler metrics.MetricsHandler,
 ) (deletionPromised bool, err error) {
 

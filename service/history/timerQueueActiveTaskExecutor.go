@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -67,7 +68,7 @@ type (
 func newTimerQueueActiveTaskExecutor(
 	shard shard.Context,
 	workflowCache historyCache.Cache,
-	workflowDeleteManager workflow.DeleteManager,
+	workflowDeleteManager deletemanager.DeleteManager,
 	queueProcessor *timerQueueActiveProcessorImpl,
 	logger log.Logger,
 	metricProvider metrics.MetricsHandler,

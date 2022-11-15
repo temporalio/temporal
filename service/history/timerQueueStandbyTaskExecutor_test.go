@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/xdc"
 	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/consts"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -82,7 +83,7 @@ type (
 		mockClusterMetadata    *cluster.MockMetadata
 		mockAdminClient        *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
-		mockDeleteManager      *workflow.MockDeleteManager
+		mockDeleteManager      *deletemanager.MockDeleteManager
 		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient
 
 		workflowCache        historyCache.Cache
@@ -168,7 +169,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.workflowCache = historyCache.NewCache(s.mockShard)
 	s.logger = s.mockShard.GetLogger()
 
-	s.mockDeleteManager = workflow.NewMockDeleteManager(s.controller)
+	s.mockDeleteManager = deletemanager.NewMockDeleteManager(s.controller)
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,

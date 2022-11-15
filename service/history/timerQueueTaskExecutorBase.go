@@ -40,6 +40,7 @@ import (
 	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -50,7 +51,7 @@ type (
 		currentClusterName string
 		shard              shard.Context
 		registry           namespace.Registry
-		deleteManager      workflow.DeleteManager
+		deleteManager      deletemanager.DeleteManager
 		cache              historyCache.Cache
 		logger             log.Logger
 		matchingClient     matchingservice.MatchingServiceClient
@@ -62,7 +63,7 @@ type (
 func newTimerQueueTaskExecutorBase(
 	shard shard.Context,
 	workflowCache historyCache.Cache,
-	deleteManager workflow.DeleteManager,
+	deleteManager deletemanager.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
 	metricHandler metrics.MetricsHandler,

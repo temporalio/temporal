@@ -79,13 +79,13 @@ import (
 	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -122,7 +122,7 @@ type (
 		replicationDLQHandler      replication.DLQHandler
 		persistenceVisibilityMgr   manager.VisibilityManager
 		searchAttributesValidator  *searchattribute.Validator
-		workflowDeleteManager      workflow.DeleteManager
+		workflowDeleteManager      deletemanager.DeleteManager
 		eventSerializer            serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 		tracer                     trace.Tracer
@@ -153,7 +153,7 @@ func NewEngineWithShardContext(
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
 
-	workflowDeleteManager := workflow.NewDeleteManager(
+	workflowDeleteManager := deletemanager.NewDeleteManager(
 		shard,
 		workflowCache,
 		config,

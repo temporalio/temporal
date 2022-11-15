@@ -44,6 +44,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	historyCache "go.temporal.io/server/service/history/cache"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -58,7 +59,7 @@ type (
 		Shard           shard.Context
 		HistoryResender xdc.NDCHistoryResender
 		HistoryEngine   shard.Engine
-		DeleteManager   workflow.DeleteManager
+		DeleteManager   deletemanager.DeleteManager
 		WorkflowCache   historyCache.Cache
 	}
 
@@ -71,7 +72,7 @@ type (
 		namespaceRegistry  namespace.Registry
 		nDCHistoryResender xdc.NDCHistoryResender
 		historyEngine      shard.Engine
-		deleteManager      workflow.DeleteManager
+		deleteManager      deletemanager.DeleteManager
 		workflowCache      historyCache.Cache
 		metricsHandler     metrics.MetricsHandler
 		logger             log.Logger
@@ -85,7 +86,7 @@ func NewTaskExecutor(
 	shard shard.Context,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	historyEngine shard.Engine,
-	deleteManager workflow.DeleteManager,
+	deleteManager deletemanager.DeleteManager,
 	workflowCache historyCache.Cache,
 ) TaskExecutor {
 	return &taskExecutorImpl{

@@ -43,11 +43,12 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	historyCache "go.temporal.io/server/service/history/cache"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -56,7 +57,7 @@ type (
 		*require.Assertions
 
 		controller        *gomock.Controller
-		mockDeleteManager *workflow.MockDeleteManager
+		mockDeleteManager *deletemanager.MockDeleteManager
 		mockCache         *historyCache.MockCache
 
 		testShardContext           *shard.ContextTest
@@ -79,7 +80,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockDeleteManager = workflow.NewMockDeleteManager(s.controller)
+	s.mockDeleteManager = deletemanager.NewMockDeleteManager(s.controller)
 	s.mockCache = historyCache.NewMockCache(s.controller)
 
 	config := tests.NewDynamicConfig()

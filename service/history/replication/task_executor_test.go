@@ -50,9 +50,9 @@ import (
 	"go.temporal.io/server/common/xdc"
 	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -123,7 +123,7 @@ func (s *taskExecutorSuite) SetupTest() {
 		s.mockShard,
 		s.nDCHistoryResender,
 		s.mockEngine,
-		workflow.NewMockDeleteManager(s.controller),
+		deletemanager.NewMockDeleteManager(s.controller),
 		s.workflowCache,
 	).(*taskExecutorImpl)
 }

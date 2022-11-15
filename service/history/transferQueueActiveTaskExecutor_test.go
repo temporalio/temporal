@@ -73,6 +73,7 @@ import (
 	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -1382,7 +1383,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_DeleteA
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Times(2)
-	mockDeleteMgr := workflow.NewMockDeleteManager(s.controller)
+	mockDeleteMgr := deletemanager.NewMockDeleteManager(s.controller)
 	mockDeleteMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.transferQueueActiveTaskExecutor.workflowDeleteManager = mockDeleteMgr
 	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
@@ -2606,7 +2607,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 					clusterName).Return(tasks.NewImmediateKey(ackLevel)).AnyTimes()
 			}
 
-			mockWorkflowDeleteManager := workflow.NewMockDeleteManager(ctrl)
+			mockWorkflowDeleteManager := deletemanager.NewMockDeleteManager(ctrl)
 			if c.ShouldDelete {
 				mockWorkflowDeleteManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
 					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
