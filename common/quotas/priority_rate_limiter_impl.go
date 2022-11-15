@@ -32,9 +32,12 @@ import (
 )
 
 type (
+	// RequestPriorityFn returns a priority for the given Request
+	RequestPriorityFn[T Request] func(req T) int
+
 	// PriorityRateLimiterImpl is a wrapper around the golang rate limiter
-	PriorityRateLimiterImpl struct {
-		requestPriorityFn      RequestPriorityFn
+	PriorityRateLimiterImpl[T Request] struct {
+		requestPriorityFn      RequestPriorityFn[T]
 		priorityToRateLimiters map[int]RateLimiter
 
 		// priority value 0 means highest priority
@@ -44,14 +47,14 @@ type (
 	}
 )
 
-var _ RequestRateLimiter = (*PriorityRateLimiterImpl)(nil)
+// var _ RequestRateLimiter = (*PriorityRateLimiterImpl)(nil)
 
 // NewPriorityRateLimiter returns a new rate limiter that can handle dynamic
 // configuration updates
-func NewPriorityRateLimiter(
-	requestPriorityFn RequestPriorityFn,
+func NewPriorityRateLimiter[T Request](
+	requestPriorityFn RequestPriorityFn[T],
 	priorityToRateLimiters map[int]RateLimiter,
-) *PriorityRateLimiterImpl {
+) *PriorityRateLimiterImpl[T] {
 	priorities := make([]int, 0, len(priorityToRateLimiters))
 	for priority := range priorityToRateLimiters {
 		priorities = append(priorities, priority)
@@ -66,7 +69,7 @@ func NewPriorityRateLimiter(
 		rateLimiters = append(rateLimiters, priorityToRateLimiters[priority])
 	}
 
-	return &PriorityRateLimiterImpl{
+	return &PriorityRateLimiterImpl[T]{
 		requestPriorityFn:      requestPriorityFn,
 		priorityToRateLimiters: priorityToRateLimiters,
 
@@ -75,44 +78,46 @@ func NewPriorityRateLimiter(
 	}
 }
 
-func (p *PriorityRateLimiterImpl) Allow(
+func (p *PriorityRateLimiterImpl[T]) Allow(
 	now time.Time,
-	request Request,
+	request T,
 ) bool {
 	decidingRateLimiter, consumeRateLimiters := p.getRateLimiters(request)
 
-	allow := decidingRateLimiter.AllowN(now, request.Token)
+	token := request.Token()
+	allow := decidingRateLimiter.AllowN(now, token)
 	if !allow {
 		return false
 	}
 
 	for _, limiter := range consumeRateLimiters {
-		_ = limiter.ReserveN(now, request.Token)
+		_ = limiter.ReserveN(now, token)
 	}
 	return allow
 }
 
-func (p *PriorityRateLimiterImpl) Reserve(
+func (p *PriorityRateLimiterImpl[T]) Reserve(
 	now time.Time,
-	request Request,
+	request T,
 ) Reservation {
 	decidingRateLimiter, consumeRateLimiters := p.getRateLimiters(request)
 
-	decidingReservation := decidingRateLimiter.ReserveN(now, request.Token)
+	token := request.Token()
+	decidingReservation := decidingRateLimiter.ReserveN(now, token)
 	if !decidingReservation.OK() {
 		return decidingReservation
 	}
 
 	otherReservations := make([]Reservation, len(consumeRateLimiters))
 	for index, limiter := range consumeRateLimiters {
-		otherReservations[index] = limiter.ReserveN(now, request.Token)
+		otherReservations[index] = limiter.ReserveN(now, token)
 	}
 	return NewPriorityReservation(decidingReservation, otherReservations)
 }
 
-func (p *PriorityRateLimiterImpl) Wait(
+func (p *PriorityRateLimiterImpl[T]) Wait(
 	ctx context.Context,
-	request Request,
+	request T,
 ) error {
 	select {
 	case <-ctx.Done():
@@ -123,7 +128,7 @@ func (p *PriorityRateLimiterImpl) Wait(
 	now := time.Now().UTC()
 	reservation := p.Reserve(now, request)
 	if !reservation.OK() {
-		return fmt.Errorf("rate: Wait(n=%d) would exceed context deadline", request.Token)
+		return fmt.Errorf("rate: Wait(n=%d) would exceed context deadline", request.Token())
 	}
 
 	delay := reservation.DelayFrom(now)
@@ -136,7 +141,7 @@ func (p *PriorityRateLimiterImpl) Wait(
 	}
 	if waitLimit < delay {
 		reservation.CancelAt(now)
-		return fmt.Errorf("rate: Wait(n=%d) would exceed context deadline", request.Token)
+		return fmt.Errorf("rate: Wait(n=%d) would exceed context deadline", request.Token())
 	}
 
 	t := time.NewTimer(delay)
@@ -151,8 +156,8 @@ func (p *PriorityRateLimiterImpl) Wait(
 	}
 }
 
-func (p *PriorityRateLimiterImpl) getRateLimiters(
-	request Request,
+func (p *PriorityRateLimiterImpl[T]) getRateLimiters(
+	request T,
 ) (RateLimiter, []RateLimiter) {
 	priority := p.requestPriorityFn(request)
 	if _, ok := p.priorityToRateLimiters[priority]; !ok {

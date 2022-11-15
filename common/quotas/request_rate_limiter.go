@@ -32,25 +32,19 @@ import (
 //go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination request_rate_limiter_mock.go
 
 type (
-	// RequestRateLimiterFn returns generate a namespace specific rate limiter
-	RequestRateLimiterFn func(req Request) RequestRateLimiter
-
-	// RequestPriorityFn returns a priority for the given Request
-	RequestPriorityFn func(req Request) int
-
 	// RequestRateLimiter corresponds to basic rate limiting functionality.
-	RequestRateLimiter interface {
+	RequestRateLimiter[T Request] interface {
 		// Allow attempts to allow a request to go through. The method returns
 		// immediately with a true or false indicating if the request can make
 		// progress
-		Allow(now time.Time, request Request) bool
+		Allow(now time.Time, request T) bool
 
 		// Reserve returns a Reservation that indicates how long the caller
 		// must wait before event happen.
-		Reserve(now time.Time, request Request) Reservation
+		Reserve(now time.Time, request T) Reservation
 
 		// Wait waits till the deadline for a rate limit token to allow the request
 		// to go through.
-		Wait(ctx context.Context, request Request) error
+		Wait(ctx context.Context, request T) error
 	}
 )

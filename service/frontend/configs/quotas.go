@@ -29,6 +29,7 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/rpc/interceptor"
 )
 
 var (
@@ -153,8 +154,8 @@ func NewRequestToRateLimiter(
 	executionRateBurstFn quotas.RateBurst,
 	visibilityRateBurstFn quotas.RateBurst,
 	otherRateBurstFn quotas.RateBurst,
-) quotas.RequestRateLimiter {
-	mapping := make(map[string]quotas.RequestRateLimiter)
+) quotas.RequestRateLimiter[interceptor.QuotaRequest] {
+	mapping := make(map[string]quotas.RequestRateLimiter[interceptor.QuotaRequest])
 
 	executionRateLimiter := NewExecutionPriorityRateLimiter(executionRateBurstFn)
 	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn)
@@ -170,17 +171,27 @@ func NewRequestToRateLimiter(
 		mapping[api] = otherRateLimiter
 	}
 
-	return quotas.NewRoutingRateLimiter(mapping)
+	return quotas.NewRoutingRateLimiter(
+		func(req interceptor.QuotaRequest) quotas.RequestRateLimiter[interceptor.QuotaRequest] {
+			if requestRateLimiter, ok := mapping[req.API]; ok {
+				return requestRateLimiter
+			}
+			return quotas.NewNoopRequestRateLimiter[interceptor.QuotaRequest]()
+		},
+		func(req interceptor.QuotaRequest) string {
+			return req.API
+		},
+	)
 }
 
 func NewExecutionPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
-) quotas.RequestRateLimiter {
+) quotas.RequestRateLimiter[interceptor.QuotaRequest] {
 	rateLimiters := make(map[int]quotas.RateLimiter)
 	for priority := range ExecutionAPIPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute)
 	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
+	return quotas.NewPriorityRateLimiter(func(req interceptor.QuotaRequest) int {
 		if priority, ok := ExecutionAPIToPriority[req.API]; ok {
 			return priority
 		}
@@ -190,12 +201,12 @@ func NewExecutionPriorityRateLimiter(
 
 func NewVisibilityPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
-) quotas.RequestRateLimiter {
+) quotas.RequestRateLimiter[interceptor.QuotaRequest] {
 	rateLimiters := make(map[int]quotas.RateLimiter)
 	for priority := range VisibilityAPIPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute)
 	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
+	return quotas.NewPriorityRateLimiter(func(req interceptor.QuotaRequest) int {
 		if priority, ok := VisibilityAPIToPriority[req.API]; ok {
 			return priority
 		}
@@ -205,12 +216,12 @@ func NewVisibilityPriorityRateLimiter(
 
 func NewOtherAPIPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
-) quotas.RequestRateLimiter {
+) quotas.RequestRateLimiter[interceptor.QuotaRequest] {
 	rateLimiters := make(map[int]quotas.RateLimiter)
 	for priority := range OtherAPIPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute)
 	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
+	return quotas.NewPriorityRateLimiter(func(req interceptor.QuotaRequest) int {
 		if priority, ok := OtherAPIToPriority[req.API]; ok {
 			return priority
 		}

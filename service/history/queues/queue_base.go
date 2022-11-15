@@ -96,7 +96,7 @@ type (
 
 		exclusiveDeletionHighWatermark tasks.Key
 		nonReadableScope               Scope
-		readerRateLimiter              quotas.RequestRateLimiter
+		readerRateLimiter              quotas.RequestRateLimiter[ReaderQuotaRequest]
 		readerGroup                    *ReaderGroup
 		nextForceNewSliceTime          time.Time
 
@@ -128,7 +128,7 @@ func newQueueBase(
 	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
-	hostReaderRateLimiter quotas.RequestRateLimiter,
+	hostReaderRateLimiter quotas.RequestRateLimiter[ReaderQuotaRequest],
 	logger log.Logger,
 	metricsHandler metrics.MetricsHandler,
 ) *queueBase {

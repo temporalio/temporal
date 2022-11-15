@@ -26,62 +26,91 @@ package quotas
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
 type (
+	// RoutingRequestRateLimiterFn returns generate a specific rate limiter
+	RoutingRequestRateLimiterFn[T Request] func(req T) RequestRateLimiter[T]
+	// RoutingRequestKeyFn returns the routing key for a rate limiter request
+	RoutingRequestKeyFn[T Request] func(req T) string
+
 	// RoutingRateLimiterImpl is a rate limiter special built for multi-tenancy
-	RoutingRateLimiterImpl struct {
-		apiToRateLimiter map[string]RequestRateLimiter
+	RoutingRateLimiterImpl[T Request] struct {
+		routingRequestRateLimiterFn RoutingRequestRateLimiterFn[T]
+		routingReuqestKeyFn         RoutingRequestKeyFn[T]
+
+		sync.RWMutex
+		routingRateLimiters map[string]RequestRateLimiter[T]
 	}
 )
 
-var _ RequestRateLimiter = (*RoutingRateLimiterImpl)(nil)
+// var _ RequestRateLimiter = (*RoutingRateLimiterImpl)(nil)
 
-func NewRoutingRateLimiter(
-	apiToRateLimiter map[string]RequestRateLimiter,
-) *RoutingRateLimiterImpl {
-	return &RoutingRateLimiterImpl{
-		apiToRateLimiter: apiToRateLimiter,
+func NewRoutingRateLimiter[T Request](
+	routingRateLimiterFn RoutingRequestRateLimiterFn[T],
+	routingReuqestKeyFn RoutingRequestKeyFn[T],
+) *RoutingRateLimiterImpl[T] {
+	return &RoutingRateLimiterImpl[T]{
+		routingRequestRateLimiterFn: routingRateLimiterFn,
+		routingReuqestKeyFn:         routingReuqestKeyFn,
+
+		routingRateLimiters: make(map[string]RequestRateLimiter[T]),
 	}
 }
 
 // Allow attempts to allow a request to go through. The method returns
 // immediately with a true or false indicating if the request can make
 // progress
-func (r *RoutingRateLimiterImpl) Allow(
+func (r *RoutingRateLimiterImpl[T]) Allow(
 	now time.Time,
-	request Request,
+	request T,
 ) bool {
-	rateLimiter, ok := r.apiToRateLimiter[request.API]
-	if !ok {
-		return true
-	}
+	rateLimiter := r.getOrInitRateLimiter(request)
 	return rateLimiter.Allow(now, request)
 }
 
 // Reserve returns a Reservation that indicates how long the caller
 // must wait before event happen.
-func (r *RoutingRateLimiterImpl) Reserve(
+func (r *RoutingRateLimiterImpl[T]) Reserve(
 	now time.Time,
-	request Request,
+	request T,
 ) Reservation {
-	rateLimiter, ok := r.apiToRateLimiter[request.API]
-	if !ok {
-		return NewNoopReservation()
-	}
+	rateLimiter := r.getOrInitRateLimiter(request)
 	return rateLimiter.Reserve(now, request)
 }
 
 // Wait waits till the deadline for a rate limit token to allow the request
 // to go through.
-func (r *RoutingRateLimiterImpl) Wait(
+func (r *RoutingRateLimiterImpl[T]) Wait(
 	ctx context.Context,
-	request Request,
+	request T,
 ) error {
-	rateLimiter, ok := r.apiToRateLimiter[request.API]
-	if !ok {
-		return nil
-	}
+	rateLimiter := r.getOrInitRateLimiter(request)
 	return rateLimiter.Wait(ctx, request)
+}
+
+func (r *RoutingRateLimiterImpl[T]) getOrInitRateLimiter(
+	req T,
+) RequestRateLimiter[T] {
+	routingKey := r.routingReuqestKeyFn(req)
+
+	r.RLock()
+	rateLimiter, ok := r.routingRateLimiters[routingKey]
+	r.RUnlock()
+	if ok {
+		return rateLimiter
+	}
+
+	newRateLimiter := r.routingRequestRateLimiterFn(req)
+	r.Lock()
+	defer r.Unlock()
+
+	rateLimiter, ok = r.routingRateLimiters[routingKey]
+	if ok {
+		return rateLimiter
+	}
+	r.routingRateLimiters[routingKey] = newRateLimiter
+	return newRateLimiter
 }

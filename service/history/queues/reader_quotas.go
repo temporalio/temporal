@@ -35,23 +35,30 @@ const (
 	readerRequestToken = 1
 )
 
+type (
+	ReaderQuotaRequest struct {
+		readerID string
+		token    int
+	}
+)
+
 func NewReaderPriorityRateLimiter(
 	rateFn quotas.RateFn,
 	maxReaders int,
-) quotas.RequestRateLimiter {
+) quotas.RequestRateLimiter[ReaderQuotaRequest] {
 	rateLimiters := make(map[int]quotas.RateLimiter, maxReaders)
 	readerCallerToPriority := make(map[string]int, maxReaders)
 	for readerId := DefaultReaderId; readerId != DefaultReaderId+maxReaders; readerId++ {
 		// use readerId as priority
 		rateLimiters[readerId] = quotas.NewDefaultOutgoingRateLimiter(rateFn)
 		// reader will use readerId (in string type) as caller when using the rate limiter
-		readerCallerToPriority[newReaderRequest(int32(readerId)).Caller] = readerId
+		readerCallerToPriority[newReaderRequest(int32(readerId)).readerID] = readerId
 	}
 	lowestPriority := DefaultReaderId + maxReaders - 1
 
-	return quotas.NewPriorityRateLimiter(
-		func(req quotas.Request) int {
-			if priority, ok := readerCallerToPriority[req.Caller]; ok {
+	return quotas.NewPriorityRateLimiter[ReaderQuotaRequest](
+		func(req ReaderQuotaRequest) int {
+			if priority, ok := readerCallerToPriority[req.readerID]; ok {
 				return priority
 			}
 			return lowestPriority
@@ -62,9 +69,9 @@ func NewReaderPriorityRateLimiter(
 
 func newShardReaderRateLimiter(
 	shardMaxPollRPS dynamicconfig.IntPropertyFn,
-	hostReaderRateLimiter quotas.RequestRateLimiter,
+	hostReaderRateLimiter quotas.RequestRateLimiter[ReaderQuotaRequest],
 	maxReaders int,
-) quotas.RequestRateLimiter {
+) quotas.RequestRateLimiter[ReaderQuotaRequest] {
 	return quotas.NewMultiRequestRateLimiter(
 		NewReaderPriorityRateLimiter(
 			func() float64 { return float64(shardMaxPollRPS()) },
@@ -76,16 +83,17 @@ func newShardReaderRateLimiter(
 
 func newReaderRequest(
 	readerID int32,
-) quotas.Request {
+) ReaderQuotaRequest {
 	// The priority is only based on readerID (caller),
 	// api, caller type and call initiation (origin)
 	// are the same for all the readers, and not related to
 	// priority so leaving those fields empty.
-	return quotas.NewRequest(
-		"",
-		readerRequestToken,
-		strconv.Itoa(int(readerID)),
-		"",
-		"",
-	)
+	return ReaderQuotaRequest{
+		readerID: strconv.Itoa(int(readerID)),
+		token:    readerRequestToken,
+	}
+}
+
+func (r ReaderQuotaRequest) Token() int {
+	return r.token
 }

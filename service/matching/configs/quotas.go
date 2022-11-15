@@ -26,6 +26,7 @@ package configs
 
 import (
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/rpc/interceptor"
 )
 
 var (
@@ -50,12 +51,12 @@ var (
 
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
-) quotas.RequestRateLimiter {
+) quotas.RequestRateLimiter[interceptor.QuotaRequest] {
 	rateLimiters := make(map[int]quotas.RateLimiter)
 	for priority := range APIPrioritiesOrdered {
 		rateLimiters[priority] = quotas.NewDefaultIncomingRateLimiter(rateFn)
 	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
+	return quotas.NewPriorityRateLimiter(func(req interceptor.QuotaRequest) int {
 		if priority, ok := APIToPriority[req.API]; ok {
 			return priority
 		}

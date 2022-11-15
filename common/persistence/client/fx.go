@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
 )
@@ -71,7 +72,7 @@ func ClusterNameProvider(config *cluster.Config) ClusterName {
 func FactoryProvider(
 	params NewFactoryParams,
 ) Factory {
-	var requestRatelimiter quotas.RequestRateLimiter
+	var requestRatelimiter quotas.RequestRateLimiter[p.QuotaRequest]
 	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
 		if params.EnablePriorityRateLimiting != nil && params.EnablePriorityRateLimiting() {
 			requestRatelimiter = NewPriorityRateLimiter(

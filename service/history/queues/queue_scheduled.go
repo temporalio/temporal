@@ -54,7 +54,7 @@ type (
 		newTimeLock sync.Mutex
 		newTime     time.Time
 
-		lookAheadRateLimitRequest quotas.Request
+		lookAheadRateLimitRequest ReaderQuotaRequest
 	}
 )
 
@@ -71,7 +71,7 @@ func NewScheduledQueue(
 	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
-	hostRateLimiter quotas.RequestRateLimiter,
+	hostRateLimiter quotas.RequestRateLimiter[ReaderQuotaRequest],
 	logger log.Logger,
 	metricsHandler metrics.MetricsHandler,
 ) *scheduledQueue {

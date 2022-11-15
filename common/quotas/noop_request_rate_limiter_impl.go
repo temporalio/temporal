@@ -24,34 +24,37 @@
 
 package quotas
 
-type (
-	Request interface {
-		Token() int
-	}
+import (
+	"context"
+	"time"
 )
 
-// type (
-// 	Request struct {
-// 		API        string
-// 		Token      int
-// 		Caller     string
-// 		CallerType string
-// 		Initiation string
-// 	}
-// )
+type (
+	// NoopRequestRateLimiterImpl is a no-op implementation for RequestRateLimiter
+	NoopRequestRateLimiterImpl[T Request] struct{}
+)
 
-// func NewRequest(
-// 	api string,
-// 	token int,
-// 	caller string,
-// 	callerType string,
-// 	initiation string,
-// ) Request {
-// 	return Request{
-// 		API:        api,
-// 		Token:      token,
-// 		Caller:     caller,
-// 		CallerType: callerType,
-// 		Initiation: initiation,
-// 	}
-// }
+func NewNoopRequestRateLimiter[T Request]() *NoopRequestRateLimiterImpl[T] {
+	return &NoopRequestRateLimiterImpl[T]{}
+}
+
+func (r *NoopRequestRateLimiterImpl[T]) Allow(
+	_ time.Time,
+	_ T,
+) bool {
+	return true
+}
+
+func (r *NoopRequestRateLimiterImpl[T]) Reserve(
+	_ time.Time,
+	_ T,
+) Reservation {
+	return NewNoopReservation()
+}
+
+func (r *NoopRequestRateLimiterImpl[T]) Wait(
+	_ context.Context,
+	_ T,
+) error {
+	return nil
+}

@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// TODO: move this file to persistence/client package
+
 package persistence
 
 import (
@@ -38,6 +40,17 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+type (
+	QuotaRequest struct {
+		API        string
+		Caller     string
+		CallerType string
+		CallOrigin string
+
+		token int
+	}
+)
+
 const (
 	RateLimitDefaultToken = 1
 )
@@ -49,37 +62,37 @@ var (
 
 type (
 	shardRateLimitedPersistenceClient struct {
-		rateLimiter quotas.RequestRateLimiter
+		rateLimiter quotas.RequestRateLimiter[QuotaRequest]
 		persistence ShardManager
 		logger      log.Logger
 	}
 
 	executionRateLimitedPersistenceClient struct {
-		rateLimiter quotas.RequestRateLimiter
+		rateLimiter quotas.RequestRateLimiter[QuotaRequest]
 		persistence ExecutionManager
 		logger      log.Logger
 	}
 
 	taskRateLimitedPersistenceClient struct {
-		rateLimiter quotas.RequestRateLimiter
+		rateLimiter quotas.RequestRateLimiter[QuotaRequest]
 		persistence TaskManager
 		logger      log.Logger
 	}
 
 	metadataRateLimitedPersistenceClient struct {
-		rateLimiter quotas.RequestRateLimiter
+		rateLimiter quotas.RequestRateLimiter[QuotaRequest]
 		persistence MetadataManager
 		logger      log.Logger
 	}
 
 	clusterMetadataRateLimitedPersistenceClient struct {
-		rateLimiter quotas.RequestRateLimiter
+		rateLimiter quotas.RequestRateLimiter[QuotaRequest]
 		persistence ClusterMetadataManager
 		logger      log.Logger
 	}
 
 	queueRateLimitedPersistenceClient struct {
-		rateLimiter quotas.RequestRateLimiter
+		rateLimiter quotas.RequestRateLimiter[QuotaRequest]
 		persistence Queue
 		logger      log.Logger
 	}
@@ -93,7 +106,11 @@ var _ ClusterMetadataManager = (*clusterMetadataRateLimitedPersistenceClient)(ni
 var _ Queue = (*queueRateLimitedPersistenceClient)(nil)
 
 // NewShardPersistenceRateLimitedClient creates a client to manage shards
-func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) ShardManager {
+func NewShardPersistenceRateLimitedClient(
+	persistence ShardManager,
+	rateLimiter quotas.RequestRateLimiter[QuotaRequest],
+	logger log.Logger,
+) ShardManager {
 	return &shardRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -102,7 +119,11 @@ func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter 
 }
 
 // NewExecutionPersistenceRateLimitedClient creates a client to manage executions
-func NewExecutionPersistenceRateLimitedClient(persistence ExecutionManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) ExecutionManager {
+func NewExecutionPersistenceRateLimitedClient(
+	persistence ExecutionManager,
+	rateLimiter quotas.RequestRateLimiter[QuotaRequest],
+	logger log.Logger,
+) ExecutionManager {
 	return &executionRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -111,7 +132,11 @@ func NewExecutionPersistenceRateLimitedClient(persistence ExecutionManager, rate
 }
 
 // NewTaskPersistenceRateLimitedClient creates a client to manage tasks
-func NewTaskPersistenceRateLimitedClient(persistence TaskManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) TaskManager {
+func NewTaskPersistenceRateLimitedClient(
+	persistence TaskManager,
+	rateLimiter quotas.RequestRateLimiter[QuotaRequest],
+	logger log.Logger,
+) TaskManager {
 	return &taskRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -120,7 +145,11 @@ func NewTaskPersistenceRateLimitedClient(persistence TaskManager, rateLimiter qu
 }
 
 // NewMetadataPersistenceRateLimitedClient creates a MetadataManager client to manage metadata
-func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) MetadataManager {
+func NewMetadataPersistenceRateLimitedClient(
+	persistence MetadataManager,
+	rateLimiter quotas.RequestRateLimiter[QuotaRequest],
+	logger log.Logger,
+) MetadataManager {
 	return &metadataRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -129,7 +158,11 @@ func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLi
 }
 
 // NewClusterMetadataPersistenceRateLimitedClient creates a MetadataManager client to manage metadata
-func NewClusterMetadataPersistenceRateLimitedClient(persistence ClusterMetadataManager, rateLimiter quotas.RequestRateLimiter, logger log.Logger) ClusterMetadataManager {
+func NewClusterMetadataPersistenceRateLimitedClient(
+	persistence ClusterMetadataManager,
+	rateLimiter quotas.RequestRateLimiter[QuotaRequest],
+	logger log.Logger,
+) ClusterMetadataManager {
 	return &clusterMetadataRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -138,7 +171,11 @@ func NewClusterMetadataPersistenceRateLimitedClient(persistence ClusterMetadataM
 }
 
 // NewQueuePersistenceRateLimitedClient creates a client to manage queue
-func NewQueuePersistenceRateLimitedClient(persistence Queue, rateLimiter quotas.RequestRateLimiter, logger log.Logger) Queue {
+func NewQueuePersistenceRateLimitedClient(
+	persistence Queue,
+	rateLimiter quotas.RequestRateLimiter[QuotaRequest],
+	logger log.Logger,
+) Queue {
 	return &queueRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
@@ -1035,20 +1072,20 @@ func (c *clusterMetadataRateLimitedPersistenceClient) DeleteClusterMetadata(
 func allow(
 	ctx context.Context,
 	api string,
-	rateLimiter quotas.RequestRateLimiter,
+	rateLimiter quotas.RequestRateLimiter[QuotaRequest],
 ) bool {
 	callerInfo := headers.GetCallerInfo(ctx)
-	return rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
-		api,
-		RateLimitDefaultToken,
-		callerInfo.CallerName,
-		callerInfo.CallerType,
-		callerInfo.CallOrigin,
-	))
+	return rateLimiter.Allow(time.Now().UTC(), QuotaRequest{
+		API:        api,
+		Caller:     callerInfo.CallerName,
+		CallerType: callerInfo.CallerType,
+		CallOrigin: callerInfo.CallOrigin,
+		token:      RateLimitDefaultToken,
+	})
 }
 
 // TODO: change the value returned so it can also be used by
-// persistence metrics client. For now, it's only used by rate
+// persistence metrics  For now, it's only used by rate
 // limit client, and we don't really care about the actual value
 // returned, as long as they are different from each task category.
 func ConstructHistoryTaskAPI(
@@ -1056,4 +1093,8 @@ func ConstructHistoryTaskAPI(
 	taskCategory tasks.Category,
 ) string {
 	return baseAPI + taskCategory.Name()
+}
+
+func (r QuotaRequest) Token() int {
+	return r.token
 }

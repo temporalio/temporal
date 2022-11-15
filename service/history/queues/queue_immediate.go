@@ -57,7 +57,7 @@ func NewImmediateQueue(
 	priorityAssigner PriorityAssigner,
 	executor Executor,
 	options *Options,
-	hostRateLimiter quotas.RequestRateLimiter,
+	hostRateLimiter quotas.RequestRateLimiter[ReaderQuotaRequest],
 	logger log.Logger,
 	metricsHandler metrics.MetricsHandler,
 ) *immediateQueue {

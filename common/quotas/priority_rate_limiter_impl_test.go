@@ -47,7 +47,12 @@ type (
 		highPriorityAPIName     string
 		lowPriorityAPIName      string
 
-		rateLimiter *PriorityRateLimiterImpl
+		rateLimiter *PriorityRateLimiterImpl[apiRequest]
+	}
+
+	apiRequest struct {
+		api   string
+		token int
 	}
 )
 
@@ -83,10 +88,9 @@ func (s *priorityStageRateLimiterSuite) SetupTest() {
 		0: s.highPriorityRateLimiter,
 		2: s.lowPriorityRateLimiter,
 	}
-	s.rateLimiter = NewPriorityRateLimiter(func(req Request) int {
-		return apiToPriority[req.API]
+	s.rateLimiter = NewPriorityRateLimiter(func(req apiRequest) int {
+		return apiToPriority[req.api]
 	}, priorityToRateLimiters)
-
 }
 
 func (s *priorityStageRateLimiterSuite) TearDownTest() {
@@ -96,10 +100,9 @@ func (s *priorityStageRateLimiterSuite) TearDownTest() {
 func (s *priorityStageRateLimiterSuite) TestAllow_HighPriority_Allow() {
 	now := time.Now()
 	token := 1
-	req := Request{
-		API:    s.highPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.highPriorityAPIName,
+		token: token,
 	}
 
 	s.highPriorityRateLimiter.EXPECT().AllowN(now, token).Return(true)
@@ -112,10 +115,9 @@ func (s *priorityStageRateLimiterSuite) TestAllow_HighPriority_Allow() {
 func (s *priorityStageRateLimiterSuite) TestAllow_HighPriority_Disallow() {
 	now := time.Now()
 	token := 1
-	req := Request{
-		API:    s.highPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.highPriorityAPIName,
+		token: token,
 	}
 
 	s.highPriorityRateLimiter.EXPECT().AllowN(now, token).Return(false)
@@ -127,10 +129,9 @@ func (s *priorityStageRateLimiterSuite) TestAllow_HighPriority_Disallow() {
 func (s *priorityStageRateLimiterSuite) TestAllow_LowPriority_Allow() {
 	now := time.Now()
 	token := 1
-	req := Request{
-		API:    s.lowPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.lowPriorityAPIName,
+		token: token,
 	}
 
 	s.lowPriorityRateLimiter.EXPECT().AllowN(now, token).Return(true)
@@ -142,10 +143,9 @@ func (s *priorityStageRateLimiterSuite) TestAllow_LowPriority_Allow() {
 func (s *priorityStageRateLimiterSuite) TestAllow_LowPriority_Disallow() {
 	now := time.Now()
 	token := 1
-	req := Request{
-		API:    s.lowPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.lowPriorityAPIName,
+		token: token,
 	}
 
 	s.lowPriorityRateLimiter.EXPECT().AllowN(now, token).Return(false)
@@ -157,10 +157,9 @@ func (s *priorityStageRateLimiterSuite) TestAllow_LowPriority_Disallow() {
 func (s *priorityStageRateLimiterSuite) TestReserve_HighPriority_OK() {
 	now := time.Now()
 	token := 1
-	req := Request{
-		API:    s.highPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.highPriorityAPIName,
+		token: token,
 	}
 
 	s.highPriorityReservation.EXPECT().OK().Return(true)
@@ -177,10 +176,9 @@ func (s *priorityStageRateLimiterSuite) TestReserve_HighPriority_OK() {
 func (s *priorityStageRateLimiterSuite) TestReserve_HighPriority_NotOK() {
 	now := time.Now()
 	token := 1
-	req := Request{
-		API:    s.highPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.highPriorityAPIName,
+		token: token,
 	}
 
 	s.highPriorityReservation.EXPECT().OK().Return(false)
@@ -193,10 +191,9 @@ func (s *priorityStageRateLimiterSuite) TestReserve_HighPriority_NotOK() {
 func (s *priorityStageRateLimiterSuite) TestReserve_LowPriority_OK() {
 	now := time.Now()
 	token := 1
-	req := Request{
-		API:    s.lowPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.lowPriorityAPIName,
+		token: token,
 	}
 
 	s.lowPriorityReservation.EXPECT().OK().Return(true)
@@ -212,10 +209,9 @@ func (s *priorityStageRateLimiterSuite) TestReserve_LowPriority_OK() {
 func (s *priorityStageRateLimiterSuite) TestReserve_LowPriority_NotOK() {
 	now := time.Now()
 	token := 1
-	req := Request{
-		API:    s.lowPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.lowPriorityAPIName,
+		token: token,
 	}
 
 	s.lowPriorityReservation.EXPECT().OK().Return(false)
@@ -229,10 +225,9 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_AlreadyExpired() {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	token := 1
-	req := Request{
-		API:    s.highPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.highPriorityAPIName,
+		token: token,
 	}
 
 	err := s.rateLimiter.Wait(ctx, req)
@@ -243,10 +238,9 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_AlreadyExpired() {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	token := 1
-	req := Request{
-		API:    s.lowPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.lowPriorityAPIName,
+		token: token,
 	}
 
 	err := s.rateLimiter.Wait(ctx, req)
@@ -254,12 +248,12 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_AlreadyExpired() {
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExpiration_Error() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	token := 1
-	req := Request{
-		API:    s.highPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.highPriorityAPIName,
+		token: token,
 	}
 
 	highPriorityReservationDelay := 2 * time.Second
@@ -277,12 +271,12 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpiration_Error() {
-	ctx, _ := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	token := 1
-	req := Request{
-		API:    s.lowPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.lowPriorityAPIName,
+		token: token,
 	}
 
 	lowPriorityReservationDelay := 3 * time.Second
@@ -299,10 +293,9 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpi
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExpiration_Cancelled() {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 	token := 1
-	req := Request{
-		API:    s.highPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.highPriorityAPIName,
+		token: token,
 	}
 
 	go func() {
@@ -327,10 +320,9 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpiration_Cancelled() {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 	token := 1
-	req := Request{
-		API:    s.lowPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.lowPriorityAPIName,
+		token: token,
 	}
 
 	go func() {
@@ -350,12 +342,12 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpi
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExpiration_NoError() {
-	ctx, _ := context.WithTimeout(context.Background(), 4*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
 	token := 1
-	req := Request{
-		API:    s.highPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.highPriorityAPIName,
+		token: token,
 	}
 
 	highPriorityReservationDelay := 2 * time.Second
@@ -371,12 +363,12 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithExp
 }
 
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpiration_NoError() {
-	ctx, _ := context.WithTimeout(context.Background(), 4*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
 	token := 1
-	req := Request{
-		API:    s.lowPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.lowPriorityAPIName,
+		token: token,
 	}
 
 	lowPriorityReservationDelay := 2 * time.Second
@@ -392,10 +384,9 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithExpi
 func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_WithoutExpiration() {
 	ctx := context.Background()
 	token := 1
-	req := Request{
-		API:    s.highPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.highPriorityAPIName,
+		token: token,
 	}
 
 	highPriorityReservationDelay := 2 * time.Second
@@ -413,10 +404,9 @@ func (s *priorityStageRateLimiterSuite) TestWait_HighPriority_NotExpired_Without
 func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithoutExpiration() {
 	ctx := context.Background()
 	token := 1
-	req := Request{
-		API:    s.lowPriorityAPIName,
-		Token:  token,
-		Caller: "",
+	req := apiRequest{
+		api:   s.lowPriorityAPIName,
+		token: token,
 	}
 
 	lowPriorityReservationDelay := 3 * time.Second
@@ -427,4 +417,12 @@ func (s *priorityStageRateLimiterSuite) TestWait_LowPriority_NotExpired_WithoutE
 
 	err := s.rateLimiter.Wait(ctx, req)
 	s.NoError(err)
+}
+
+func (r apiRequest) Token() int {
+	return r.token
+}
+
+func (r apiRequest) Key() string {
+	return r.api
 }

@@ -30,26 +30,26 @@ import (
 	"time"
 )
 
-var _ RequestRateLimiter = (*MultiRequestRateLimiterImpl)(nil)
+// var _ RequestRateLimiter = (*MultiRequestRateLimiterImpl)(nil)
 
 type (
-	MultiRequestRateLimiterImpl struct {
-		requestRateLimiters []RequestRateLimiter
+	MultiRequestRateLimiterImpl[T Request] struct {
+		requestRateLimiters []RequestRateLimiter[T]
 	}
 )
 
-func NewMultiRequestRateLimiter(
-	requestRateLimiters ...RequestRateLimiter,
-) *MultiRequestRateLimiterImpl {
+func NewMultiRequestRateLimiter[T Request](
+	requestRateLimiters ...RequestRateLimiter[T],
+) *MultiRequestRateLimiterImpl[T] {
 	if len(requestRateLimiters) == 0 {
 		panic("expect at least one rate limiter")
 	}
-	return &MultiRequestRateLimiterImpl{
+	return &MultiRequestRateLimiterImpl[T]{
 		requestRateLimiters: requestRateLimiters,
 	}
 }
 
-func (rl *MultiRequestRateLimiterImpl) Allow(now time.Time, request Request) bool {
+func (rl *MultiRequestRateLimiterImpl[T]) Allow(now time.Time, request T) bool {
 	length := len(rl.requestRateLimiters)
 	reservations := make([]Reservation, 0, length)
 
@@ -72,7 +72,7 @@ func (rl *MultiRequestRateLimiterImpl) Allow(now time.Time, request Request) boo
 	return true
 }
 
-func (rl *MultiRequestRateLimiterImpl) Reserve(now time.Time, request Request) Reservation {
+func (rl *MultiRequestRateLimiterImpl[T]) Reserve(now time.Time, request T) Reservation {
 	length := len(rl.requestRateLimiters)
 	reservations := make([]Reservation, 0, length)
 
@@ -91,7 +91,7 @@ func (rl *MultiRequestRateLimiterImpl) Reserve(now time.Time, request Request) R
 	return NewMultiReservation(true, reservations)
 }
 
-func (rl *MultiRequestRateLimiterImpl) Wait(ctx context.Context, request Request) error {
+func (rl *MultiRequestRateLimiterImpl[T]) Wait(ctx context.Context, request T) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

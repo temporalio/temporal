@@ -83,7 +83,7 @@ type (
 		scheduler      Scheduler
 		rescheduler    Rescheduler
 		timeSource     clock.TimeSource
-		ratelimiter    quotas.RequestRateLimiter
+		ratelimiter    quotas.RequestRateLimiter[ReaderQuotaRequest]
 		monitor        Monitor
 		logger         log.Logger
 		metricsHandler metrics.MetricsHandler
@@ -101,7 +101,7 @@ type (
 
 		rateLimitContext       context.Context
 		rateLimitContextCancel context.CancelFunc
-		rateLimiterRequest     quotas.Request
+		rateLimiterRequest     ReaderQuotaRequest
 	}
 )
 
@@ -112,7 +112,7 @@ func NewReader(
 	scheduler Scheduler,
 	rescheduler Rescheduler,
 	timeSource clock.TimeSource,
-	ratelimiter quotas.RequestRateLimiter,
+	ratelimiter quotas.RequestRateLimiter[ReaderQuotaRequest],
 	monitor Monitor,
 	logger log.Logger,
 	metricsHandler metrics.MetricsHandler,

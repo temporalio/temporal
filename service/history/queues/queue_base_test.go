@@ -62,7 +62,7 @@ type (
 
 		config         *configs.Config
 		options        *Options
-		rateLimiter    quotas.RequestRateLimiter
+		rateLimiter    quotas.RequestRateLimiter[ReaderQuotaRequest]
 		logger         log.Logger
 		metricsHandler metrics.MetricsHandler
 	}

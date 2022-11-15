@@ -78,7 +78,7 @@ type (
 		HostRateLimiter      quotas.RateLimiter
 
 		// used by multi-cursor queue reader
-		HostReaderRateLimiter quotas.RequestRateLimiter
+		HostReaderRateLimiter quotas.RequestRateLimiter[queues.ReaderQuotaRequest]
 	}
 
 	QueueFactoriesLifetimeHookParams struct {
