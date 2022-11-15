@@ -81,11 +81,11 @@ func TestClientIntegrationSuite(t *testing.T) {
 }
 
 func (s *clientIntegrationSuite) SetupSuite() {
-	// maxPendingChildWorkflows should be NumPendingChildExecutionLimitError, but that value is 1000, and it takes
+	// maxPendingChildWorkflows should be NumPendingChildExecutionsLimit, but that value is 1000, and it takes
 	// too long to test (which is the point of this limit)
 	s.maxPendingChildExecutions = 10
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
-		dynamicconfig.NumPendingChildExecutionLimitError: s.maxPendingChildExecutions,
+		dynamicconfig.NumPendingChildExecutionsLimitError: s.maxPendingChildExecutions,
 	}
 	s.setupSuite("testdata/clientintegrationtestcluster.yaml")
 
