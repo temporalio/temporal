@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
@@ -598,6 +599,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			},
 			ExecutionState: &persistencepb.WorkflowExecutionState{
 				RunId: "runID2",
+				State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			},
 		},
 	}
@@ -610,6 +612,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			},
 			ExecutionState: &persistencepb.WorkflowExecutionState{
 				RunId: "runID4",
+				State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			},
 		},
 	}

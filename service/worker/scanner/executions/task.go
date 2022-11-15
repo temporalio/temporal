@@ -269,7 +269,7 @@ func printValidationResult(
 			metrics.FailureTag(result.failureType),
 		).IncCounter(metrics.ScavengerValidationFailuresCount)
 
-		logger.Error(
+		logger.Info(
 			"validation failed for execution.",
 			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
 			tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),
