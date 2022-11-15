@@ -719,74 +719,37 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 	const (
 		errMsg = "the number of pending child workflow executions, 1, " +
 			"has reached the error limit of 1 established with \"limit.numPendingChildExecution.error\""
-		warnMsg = "The number of pending child workflow executions, 1, " +
-			"has reached the warning limit of 1 established with \"limit.numPendingChildExecution.warn\"."
 	)
 	for _, c := range []struct {
-		Name string
-
+		Name                      string
 		NumPendingChildExecutions int
-		WarnLimit                 int
 		ErrorLimit                int
 
-		ExpectedWarningMsg string
-		ExpectedErrorMsg   string
-
-		ExpectedMetric string
+		ExpectedErrorMsg string
+		ExpectedMetric   string
 	}{
 		{
-			Name:                      "No limits and no child workflows",
+			Name:                      "No limit and no child workflows",
 			NumPendingChildExecutions: 0,
-			WarnLimit:                 0,
 			ErrorLimit:                0,
 		},
 		{
 			Name:                      "No executions",
 			NumPendingChildExecutions: 0,
-			WarnLimit:                 1,
 			ErrorLimit:                1,
 		},
 		{
-			Name:                      "Neither limit exceeded",
+			Name:                      "Limit not exceeded",
 			NumPendingChildExecutions: 2,
-			WarnLimit:                 3,
 			ErrorLimit:                3,
 		},
 		{
-			Name:                      "Error limit exceeded without a warning limit",
+			Name:                      "Error limit exceeded",
 			NumPendingChildExecutions: 1,
-			WarnLimit:                 0,
 			ErrorLimit:                1,
 
 			ExpectedErrorMsg: errMsg,
 			ExpectedMetric:   "num_pending_child_workflows_too_high",
-		},
-		{
-			Name:                      "Error limit and warning limit both exceeded",
-			NumPendingChildExecutions: 1,
-			WarnLimit:                 1,
-			ErrorLimit:                1,
-
-			ExpectedErrorMsg: errMsg,
-			ExpectedMetric:   "num_pending_child_workflows_too_high",
-		},
-		{
-			Name:                      "Warning limit exceeded, but no error limit exists",
-			NumPendingChildExecutions: 1,
-			WarnLimit:                 1,
-			ErrorLimit:                0,
-
-			ExpectedWarningMsg: warnMsg,
-			ExpectedMetric:     "num_pending_child_workflows_high",
-		},
-		{
-			Name:                      "Only warning limit exceeded, and there is an error limit",
-			NumPendingChildExecutions: 1,
-			WarnLimit:                 1,
-			ErrorLimit:                2,
-
-			ExpectedWarningMsg: warnMsg,
-			ExpectedMetric:     "num_pending_child_workflows_high",
 		},
 	} {
 		t.Run(c.Name, func(t *testing.T) {
@@ -830,16 +793,12 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 				assert.Equal(t, "test-run-id", runID)
 			}
 
-			if len(c.ExpectedWarningMsg) > 0 {
-				logger.EXPECT().Warn(c.ExpectedWarningMsg, gomock.Any()).Do(assertMessage)
-			}
 			if len(c.ExpectedErrorMsg) > 0 {
 				logger.EXPECT().Error(c.ExpectedErrorMsg, gomock.Any()).Do(assertMessage)
 			}
 
 			checker := newWorkflowSizeChecker(workflowSizeLimits{
 				numPendingChildExecutionLimitError: c.ErrorLimit,
-				numPendingChildExecutionLimitWarn:  c.WarnLimit,
 			}, mutableState, nil, nil, metricsHandler, logger)
 			err := checker.checkIfNumChildWorkflowsExceedsLimit()
 
