@@ -716,7 +716,10 @@ func (s *commandAttrValidatorSuite) TestValidateCommandSequence_InvalidTerminalC
 }
 
 func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
-
+	const (
+		errMsg = "the number of pending child workflow executions, 1, " +
+			"has reached the error limit of 1 established with \"limit.numPendingChildExecutions.error\""
+	)
 	for _, c := range []struct {
 		Name                      string
 		NumPendingChildExecutions int
@@ -854,10 +857,7 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 			}
 
 			checker := newWorkflowSizeChecker(workflowSizeLimits{
-				numPendingChildExecutionsLimit: c.PendingChildExecutionsLimit,
-				numPendingActivitiesLimit:      c.PendingActivitiesLimit,
-				numPendingCancelsRequestLimit:  c.PendingCancelRequestsLimit,
-				numPendingSignalsLimit:         c.PendingSignalsLimit,
+				numPendingChildExecutionsLimit: c.ErrorLimit,
 			}, mutableState, nil, nil, metricsHandler, logger)
 
 			err := checker.checkIfNumChildWorkflowsExceedsLimit()
