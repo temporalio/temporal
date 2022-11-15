@@ -267,7 +267,7 @@ func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
 			_ = backoff.ThrottleRetry(func() error {
 				err := t.completeTask()
 				if err != nil {
-					t.logger.Info("Failed to complete transfer task", tag.Error(err))
+					t.logger.Error("Failed to complete visibility task", tag.Error(err))
 				}
 				return err
 			}, completeTaskRetryPolicy, func(err error) bool {
