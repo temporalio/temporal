@@ -22,43 +22,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package configs
+package quotas
 
 import (
-	"go.temporal.io/server/common/quotas"
+	"context"
+	"time"
 )
 
-var (
-	APIToPriority = map[string]int{
-		"AddActivityTask":             0,
-		"AddWorkflowTask":             0,
-		"CancelOutstandingPoll":       0,
-		"DescribeTaskQueue":           0,
-		"ListTaskQueuePartitions":     0,
-		"PollActivityTaskQueue":       0,
-		"PollWorkflowTaskQueue":       0,
-		"QueryWorkflow":               0,
-		"RespondQueryTaskCompleted":   0,
-		"GetWorkerBuildIdOrdering":    0,
-		"UpdateWorkerBuildIdOrdering": 0,
-		"InvalidateTaskQueueMetadata": 0,
-		"GetTaskQueueMetadata":        0,
+type (
+	RequestRateLimiterAdapterImpl struct {
+		rateLimiter RateLimiter
 	}
-
-	APIPrioritiesOrdered = []int{0}
 )
 
-func NewPriorityRateLimiter(
-	rateFn quotas.RateFn,
-) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RequestRateLimiter)
-	for priority := range APIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
+var _ RequestRateLimiter = (*RequestRateLimiterAdapterImpl)(nil)
+
+func NewRequestRateLimiterAdapter(
+	rateLimiter RateLimiter,
+) RequestRateLimiter {
+	return &RequestRateLimiterAdapterImpl{
+		rateLimiter: rateLimiter,
 	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if priority, ok := APIToPriority[req.API]; ok {
-			return priority
-		}
-		return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
-	}, rateLimiters)
+}
+
+func (r *RequestRateLimiterAdapterImpl) Allow(
+	now time.Time,
+	request Request,
+) bool {
+	return r.rateLimiter.AllowN(now, request.Token)
+}
+
+func (r *RequestRateLimiterAdapterImpl) Reserve(
+	now time.Time,
+	request Request,
+) Reservation {
+	return r.rateLimiter.ReserveN(now, request.Token)
+}
+
+func (r *RequestRateLimiterAdapterImpl) Wait(
+	ctx context.Context,
+	request Request,
+) error {
+	return r.rateLimiter.WaitN(ctx, request.Token)
 }
