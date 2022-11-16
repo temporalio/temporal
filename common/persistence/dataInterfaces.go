@@ -1262,11 +1262,11 @@ func UpdateHistoryBranchToken(branchToken []byte, branchInfo *persistencespb.His
 }
 
 // NewHistoryBranchToken return a new branch token
-func NewHistoryBranchToken(treeID, branchID string) ([]byte, error) {
+func NewHistoryBranchToken(treeID, branchID string, ancestors []*persistencespb.HistoryBranchRange) ([]byte, error) {
 	bi := &persistencespb.HistoryBranch{
 		TreeId:    treeID,
 		BranchId:  branchID,
-		Ancestors: []*persistencespb.HistoryBranchRange{},
+		Ancestors: ancestors,
 	}
 	datablob, err := serialization.HistoryBranchToBlob(bi)
 	if err != nil {
