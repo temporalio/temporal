@@ -77,10 +77,11 @@ type (
 
 	// SearchParameters holds all required and optional parameters for executing a search.
 	SearchParameters struct {
-		Index    string
-		Query    elastic.Query
-		PageSize int
-		Sorter   []elastic.Sorter
+		Index        string
+		Query        elastic.Query
+		PageSize     int
+		Sorter       []elastic.Sorter
+		Aggregations map[string]elastic.Aggregation
 
 		SearchAfter []interface{}
 		PointInTime *elastic.PointInTime

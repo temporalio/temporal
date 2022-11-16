@@ -137,6 +137,10 @@ func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.
 		searchSource.Size(p.PageSize)
 	}
 
+	for name, aggreation := range p.Aggregations {
+		searchSource.Aggregation(name, aggreation)
+	}
+
 	if len(p.SearchAfter) != 0 {
 		searchSource.SearchAfter(p.SearchAfter...)
 	}
