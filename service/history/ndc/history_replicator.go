@@ -263,9 +263,18 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		return err
 	}
 
-	renewedHistoryBranch, err := r.shard.GetExecutionManager().RenewHistoryBranch(ctx,
-		&persistence.RenewHistoryBranchRequest{
+	historyBranchResp, err := r.shard.GetExecutionManager().ParseHistoryBranchInfo(ctx,
+		&persistence.ParseHistoryBranchInfoRequest{
 			BranchToken: currentVersionHistory.GetBranchToken(),
+		})
+	if err != nil {
+		return err
+	}
+	newHistoryBranchResp, err := r.shard.GetExecutionManager().NewHistoryBranch(ctx,
+		&persistence.NewHistoryBranchRequest{
+			TreeID:    historyBranchResp.BranchInfo.GetTreeId(),
+			BranchID:  &historyBranchResp.BranchInfo.BranchId,
+			Ancestors: historyBranchResp.BranchInfo.Ancestors,
 		})
 	if err != nil {
 		return err
@@ -279,7 +288,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		rid,
 		lastEventItem.GetEventId(),
 		lastEventItem.GetVersion(),
-		renewedHistoryBranch.BranchToken,
+		newHistoryBranchResp.BranchToken,
 	)
 	if err != nil {
 		return err
@@ -303,7 +312,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		return err
 	}
 
-	err = mutableState.SetCurrentBranchToken(renewedHistoryBranch.BranchToken)
+	err = mutableState.SetCurrentBranchToken(newHistoryBranchResp.BranchToken)
 	if err != nil {
 		return err
 	}

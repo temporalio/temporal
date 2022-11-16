@@ -771,6 +771,8 @@ type (
 		TreeID string
 		// optional: can specify BranchID or allow random UUID to be generated
 		BranchID *string
+		// optional: can specify Ancestors to leave as empty
+		Ancestors []*persistencespb.HistoryBranchRange
 
 		// optional: supply optionally configured workflow settings as hints
 		RunTimeout        *time.Duration
@@ -780,14 +782,6 @@ type (
 
 	NewHistoryBranchResponse struct {
 		// The newly created branch token
-		BranchToken []byte
-	}
-
-	RenewHistoryBranchRequest struct {
-		BranchToken []byte
-	}
-
-	RenewHistoryBranchResponse struct {
 		BranchToken []byte
 	}
 
@@ -1107,8 +1101,6 @@ type (
 		UpdateHistoryBranchInfo(ctx context.Context, request *UpdateHistoryBranchInfoRequest) (*UpdateHistoryBranchInfoResponse, error)
 		// NewHistoryBranch initializes a new history branch
 		NewHistoryBranch(ctx context.Context, request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error)
-		// RenewHistoryBranch reinitializes the history branch to clean up potentially unnecessary information
-		RenewHistoryBranch(ctx context.Context, request *RenewHistoryBranchRequest) (*RenewHistoryBranchResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
 		// ReadHistoryBranchByBatch returns history node data for a branch ByBatch

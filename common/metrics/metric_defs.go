@@ -592,8 +592,6 @@ const (
 	PersistenceUpdateHistoryBranchInfoScope = "UpdateHistoryBranchInfo"
 	// PersistenceNewHistoryBranchScope tracks NewHistoryBranch calls made by service to persistence layer
 	PersistenceNewHistoryBranchScope = "NewHistoryBranch"
-	// PersistenceRenewHistoryBranchScope tracks RenewHistoryBranch calls made by service to persistence layer
-	PersistenceRenewHistoryBranchScope = "RenewHistoryBranch"
 	// PersistenceReadHistoryBranchScope tracks ReadHistoryBranch calls made by service to persistence layer
 	PersistenceReadHistoryBranchScope = "ReadHistoryBranch"
 	// PersistenceReadHistoryBranchReverseScope tracks ReadHistoryBranchReverse calls made by service to persistence layer
