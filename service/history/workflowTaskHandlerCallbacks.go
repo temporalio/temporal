@@ -454,8 +454,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 				blobSizeLimitError: handler.config.BlobSizeLimitError(namespace.String()),
 				memoSizeLimitWarn:  handler.config.MemoSizeLimitWarn(namespace.String()),
 				memoSizeLimitError: handler.config.MemoSizeLimitError(namespace.String()),
-				numPendingChildExecutionLimitWarn: handler.config.NumPendingChildExecutionLimitWarn(namespace.
-					String()),
 				numPendingChildExecutionLimitError: handler.config.NumPendingChildExecutionLimitError(namespace.
 					String()),
 			},

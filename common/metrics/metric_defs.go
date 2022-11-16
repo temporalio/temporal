@@ -1345,7 +1345,6 @@ var (
 	HistoryCount                                  = NewDimensionlessHistogramDef("history_count")
 	SearchAttributesSize                          = NewBytesHistogramDef("search_attributes_size")
 	MemoSize                                      = NewBytesHistogramDef("memo_size")
-	NumPendingChildWorkflowsHigh                  = NewCounterDef("num_pending_child_workflows_high")
 	NumPendingChildWorkflowsTooHigh               = NewCounterDef("num_pending_child_workflows_too_high")
 
 	// Frontend

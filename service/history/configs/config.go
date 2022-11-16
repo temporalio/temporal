@@ -197,7 +197,6 @@ type Config struct {
 	HistoryCountLimitError             dynamicconfig.IntPropertyFnWithNamespaceFilter
 	HistoryCountLimitWarn              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumPendingChildExecutionLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NumPendingChildExecutionLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
 	// none is configured on the Activity by the user.
@@ -433,7 +432,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		MemoSizeLimitError:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitError, 2*1024*1024),
 		MemoSizeLimitWarn:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitWarn, 2*1024),
 		NumPendingChildExecutionLimitError: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingChildExecutionLimitError, 1000),
-		NumPendingChildExecutionLimitWarn:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingChildExecutionLimitWarning, 200),
 		HistorySizeLimitError:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitError, 50*1024*1024),
 		HistorySizeLimitWarn:               dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitWarn, 10*1024*1024),
 		HistoryCountLimitError:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitError, 50*1024),
