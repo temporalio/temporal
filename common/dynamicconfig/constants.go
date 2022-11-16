@@ -115,8 +115,6 @@ const (
 	MemoSizeLimitWarn = "limit.memoSize.warn"
 	// NumPendingChildExecutionLimitError is the per workflow pending child workflow limit
 	NumPendingChildExecutionLimitError = "limit.numPendingChildExecution.error"
-	// NumPendingChildExecutionLimitWarning is the per workflow pending child workflow limit for warning
-	NumPendingChildExecutionLimitWarning = "limit.numPendingChildExecution.warn"
 	// HistorySizeLimitError is the per workflow execution history size limit
 	HistorySizeLimitError = "limit.historySize.error"
 	// HistorySizeLimitWarn is the per workflow execution history size limit for warning

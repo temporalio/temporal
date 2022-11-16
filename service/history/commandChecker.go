@@ -67,7 +67,6 @@ type (
 		memoSizeLimitWarn                  int
 		memoSizeLimitError                 int
 		numPendingChildExecutionLimitError int
-		numPendingChildExecutionLimitWarn  int
 	}
 
 	workflowSizeChecker struct {
@@ -191,30 +190,19 @@ func (c *workflowSizeChecker) checkIfNumChildWorkflowsExceedsLimit() error {
 
 	numPending := len(c.mutableState.GetPendingChildExecutionInfos())
 	errLimit := c.numPendingChildExecutionLimitError
-	warnLimit := c.numPendingChildExecutionLimitWarn
-	if !withinLimit(numPending, errLimit) {
-		c.metricsHandler.Counter(metrics.NumPendingChildWorkflowsTooHigh.GetMetricName()).Record(1)
-		err := fmt.Errorf(
-			"the number of pending child workflow executions, %d, "+
-				"has reached the error limit of %d established with %q",
-			numPending,
-			errLimit,
-			dynamicconfig.NumPendingChildExecutionLimitError,
-		)
-		logger.Error(err.Error(), tag.Error(err))
-		return err
+	if withinLimit(numPending, errLimit) {
+		return nil
 	}
-	if !withinLimit(numPending, warnLimit) {
-		c.metricsHandler.Counter(metrics.NumPendingChildWorkflowsHigh.GetMetricName()).Record(1)
-		logger.Warn(fmt.Sprintf(
-			"The number of pending child workflow executions, %d, "+
-				"has reached the warning limit of %d established with %q.",
-			numPending,
-			warnLimit,
-			dynamicconfig.NumPendingChildExecutionLimitWarning,
-		))
-	}
-	return nil
+	c.metricsHandler.Counter(metrics.NumPendingChildWorkflowsTooHigh.GetMetricName()).Record(1)
+	err := fmt.Errorf(
+		"the number of pending child workflow executions, %d, "+
+			"has reached the error limit of %d established with %q",
+		numPending,
+		errLimit,
+		dynamicconfig.NumPendingChildExecutionLimitError,
+	)
+	logger.Error(err.Error(), tag.Error(err))
+	return err
 }
 
 func (c *workflowSizeChecker) checkIfSearchAttributesSizeExceedsLimit(
