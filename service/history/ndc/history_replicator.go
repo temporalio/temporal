@@ -263,6 +263,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		return err
 	}
 
+	// The following sanitizes the branch token from the source cluster to this target cluster by re-initializing it.
 	historyBranchResp, err := r.shard.GetExecutionManager().ParseHistoryBranchInfo(ctx,
 		&persistence.ParseHistoryBranchInfoRequest{
 			BranchToken: currentVersionHistory.GetBranchToken(),
