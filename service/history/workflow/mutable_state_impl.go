@@ -177,7 +177,7 @@ type (
 		config          *configs.Config
 		timeSource      clock.TimeSource
 		logger          log.Logger
-		metricsClient   metrics.Client
+		metricsHandler  metrics.MetricsHandler
 	}
 )
 
@@ -236,7 +236,7 @@ func NewMutableState(
 		config:          shard.GetConfig(),
 		timeSource:      shard.GetTimeSource(),
 		logger:          logger,
-		metricsClient:   shard.GetMetricsClient(),
+		metricsHandler:  shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
 	}
 
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
@@ -336,13 +336,13 @@ func newMutableStateFromDB(
 		switch {
 		case mutableState.shouldInvalidateCheckum():
 			mutableState.checksum = nil
-			mutableState.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumInvalidated)
+			mutableState.metricsHandler.Counter(metrics.MutableStateChecksumInvalidated.GetMetricName()).Record(1)
 		case mutableState.shouldVerifyChecksum():
 			if err := verifyMutableStateChecksum(mutableState, dbRecord.Checksum); err != nil {
 				// we ignore checksum verification errors for now until this
 				// feature is tested and/or we have mechanisms in place to deal
 				// with these types of errors
-				mutableState.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumMismatch)
+				mutableState.metricsHandler.Counter(metrics.MutableStateChecksumMismatch.GetMetricName()).Record(1)
 				mutableState.logError("mutable state checksum mismatch", tag.Error(err))
 			}
 		}
@@ -428,8 +428,12 @@ func (e *MutableStateImpl) getCurrentBranchTokenAndEventVersion(eventID int64) (
 // SetHistoryTree set treeID/historyBranches
 func (e *MutableStateImpl) SetHistoryTree(
 	ctx context.Context,
+	executionTimeout *time.Duration,
+	runTimeout *time.Duration,
 	treeID string,
 ) error {
+	// NOTE: Unfortunately execution timeout and run timeout are not yet initialized into e.executionInfo at this point.
+	// TODO: Consider explicitly initializing mutable state with these timeout parameters instead of passing them in.
 
 	var retentionDuration *time.Duration
 	if duration := e.namespaceEntry.Retention(); duration > 0 {
@@ -439,8 +443,8 @@ func (e *MutableStateImpl) SetHistoryTree(
 		ctx,
 		&persistence.NewHistoryBranchRequest{
 			TreeID:            treeID,
-			RunTimeout:        e.executionInfo.WorkflowRunTimeout,
-			ExecutionTimeout:  e.executionInfo.WorkflowExecutionTimeout,
+			RunTimeout:        runTimeout,
+			ExecutionTimeout:  executionTimeout,
 			RetentionDuration: retentionDuration,
 		},
 	)
@@ -1555,13 +1559,11 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowStartTasks(
-		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
 		return nil, err
 	}
 	if err := e.taskGenerator.GenerateRecordWorkflowStartedTasks(
-		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
 		return nil, err
@@ -1817,7 +1819,7 @@ func (e *MutableStateImpl) addBinaryCheckSumIfNotExists(
 	}
 	exeInfo.SearchAttributes[searchattribute.BinaryChecksums] = checksumsPayload
 	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != visibility.AdvancedVisibilityWritingModeOff {
-		return e.taskGenerator.GenerateUpsertVisibilityTask(timestamp.TimeValue(event.GetEventTime()))
+		return e.taskGenerator.GenerateUpsertVisibilityTask()
 	}
 	return nil
 }
@@ -1940,7 +1942,6 @@ func (e *MutableStateImpl) AddActivityTaskScheduledEvent(
 	// TODO merge active & passive task generation
 	if !bypassTaskGeneration {
 		if err := e.taskGenerator.GenerateActivityTasks(
-			timestamp.TimeValue(event.GetEventTime()),
 			event,
 		); err != nil {
 			return nil, nil, err
@@ -2391,7 +2392,6 @@ func (e *MutableStateImpl) AddCompletedWorkflowEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
-		timestamp.TimeValue(event.GetEventTime()),
 		event,
 		false,
 	); err != nil {
@@ -2437,7 +2437,6 @@ func (e *MutableStateImpl) AddFailWorkflowEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
-		timestamp.TimeValue(event.GetEventTime()),
 		event,
 		false,
 	); err != nil {
@@ -2482,7 +2481,6 @@ func (e *MutableStateImpl) AddTimeoutWorkflowEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
-		timestamp.TimeValue(event.GetEventTime()),
 		event,
 		false,
 	); err != nil {
@@ -2564,7 +2562,6 @@ func (e *MutableStateImpl) AddWorkflowExecutionCanceledEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
-		timestamp.TimeValue(event.GetEventTime()),
 		event,
 		false,
 	); err != nil {
@@ -2610,7 +2607,6 @@ func (e *MutableStateImpl) AddRequestCancelExternalWorkflowExecutionInitiatedEve
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateRequestCancelExternalTasks(
-		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
 		return nil, nil, err
@@ -2750,7 +2746,6 @@ func (e *MutableStateImpl) AddSignalExternalWorkflowExecutionInitiatedEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateSignalExternalTasks(
-		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
 		return nil, nil, err
@@ -2793,9 +2788,7 @@ func (e *MutableStateImpl) AddUpsertWorkflowSearchAttributesEvent(
 	event := e.hBuilder.AddUpsertWorkflowSearchAttributesEvent(workflowTaskCompletedEventID, command)
 	e.ReplicateUpsertWorkflowSearchAttributesEvent(event)
 	// TODO merge active & passive task generation
-	if err := e.taskGenerator.GenerateUpsertVisibilityTask(
-		timestamp.TimeValue(event.GetEventTime()),
-	); err != nil {
+	if err := e.taskGenerator.GenerateUpsertVisibilityTask(); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -2820,9 +2813,7 @@ func (e *MutableStateImpl) AddWorkflowPropertiesModifiedEvent(
 	event := e.hBuilder.AddWorkflowPropertiesModifiedEvent(workflowTaskCompletedEventID, command)
 	e.ReplicateWorkflowPropertiesModifiedEvent(event)
 	// TODO merge active & passive task generation
-	if err := e.taskGenerator.GenerateUpsertVisibilityTask(
-		timestamp.TimeValue(event.GetEventTime()),
-	); err != nil {
+	if err := e.taskGenerator.GenerateUpsertVisibilityTask(); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -3111,7 +3102,6 @@ func (e *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
-		timestamp.TimeValue(event.GetEventTime()),
 		event,
 		deleteAfterTerminate,
 	); err != nil {
@@ -3222,16 +3212,21 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
 	)
 
-	if err = newMutableState.SetHistoryTree(ctx, newRunID); err != nil {
-		return nil, nil, err
-	}
-
 	if _, err = newMutableState.addWorkflowExecutionStartedEventForContinueAsNew(
 		parentInfo,
 		newExecution,
 		e,
 		command,
 		firstRunID,
+	); err != nil {
+		return nil, nil, err
+	}
+
+	if err = newMutableState.SetHistoryTree(
+		ctx,
+		newMutableState.executionInfo.WorkflowExecutionTimeout,
+		newMutableState.executionInfo.WorkflowRunTimeout,
+		newRunID,
 	); err != nil {
 		return nil, nil, err
 	}
@@ -3244,7 +3239,6 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
-		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
 		continueAsNewEvent,
 		false,
 	); err != nil {
@@ -3315,7 +3309,6 @@ func (e *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	}
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateChildWorkflowTasks(
-		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
 		return nil, nil, err
@@ -3840,7 +3833,6 @@ func (e *MutableStateImpl) CloseTransactionAsMutation(
 ) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error) {
 
 	if err := e.prepareCloseTransaction(
-		now,
 		transactionPolicy,
 	); err != nil {
 		return nil, nil, err
@@ -3919,7 +3911,6 @@ func (e *MutableStateImpl) CloseTransactionAsSnapshot(
 ) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error) {
 
 	if err := e.prepareCloseTransaction(
-		now,
 		transactionPolicy,
 	); err != nil {
 		return nil, nil, err
@@ -4004,14 +3995,11 @@ func (e *MutableStateImpl) UpdateDuplicatedResource(
 	e.appliedEvents[id] = struct{}{}
 }
 
-func (e *MutableStateImpl) GenerateMigrationTasks(
-	now time.Time,
-) (tasks.Task, error) {
-	return e.taskGenerator.GenerateMigrationTasks(now)
+func (e *MutableStateImpl) GenerateMigrationTasks() (tasks.Task, error) {
+	return e.taskGenerator.GenerateMigrationTasks()
 }
 
 func (e *MutableStateImpl) prepareCloseTransaction(
-	now time.Time,
 	transactionPolicy TransactionPolicy,
 ) error {
 
@@ -4028,7 +4016,6 @@ func (e *MutableStateImpl) prepareCloseTransaction(
 	}
 
 	if err := e.closeTransactionHandleWorkflowReset(
-		now,
 		transactionPolicy,
 	); err != nil {
 		return err
@@ -4040,7 +4027,6 @@ func (e *MutableStateImpl) prepareCloseTransaction(
 	//  regardless of how many activity & user timer created
 	//  so the calculation must be at the very end
 	return e.closeTransactionHandleActivityUserTimerTasks(
-		now,
 		transactionPolicy,
 	)
 }
@@ -4168,7 +4154,6 @@ func (e *MutableStateImpl) eventsToReplicationTask(
 		return err
 	}
 	return e.taskGenerator.GenerateHistoryReplicationTasks(
-		e.timeSource.Now(),
 		currentBranchToken,
 		events,
 	)
@@ -4449,7 +4434,6 @@ func (e *MutableStateImpl) closeTransactionHandleBufferedEventsLimit(
 }
 
 func (e *MutableStateImpl) closeTransactionHandleWorkflowReset(
-	now time.Time,
 	transactionPolicy TransactionPolicy,
 ) error {
 
@@ -4475,9 +4459,7 @@ func (e *MutableStateImpl) closeTransactionHandleWorkflowReset(
 		namespaceEntry.VerifyBinaryChecksum,
 		e.GetExecutionInfo().AutoResetPoints,
 	); pt != nil {
-		if err := e.taskGenerator.GenerateWorkflowResetTasks(
-			now,
-		); err != nil {
+		if err := e.taskGenerator.GenerateWorkflowResetTasks(); err != nil {
 			return err
 		}
 		e.logInfo("Auto-Reset task is scheduled",
@@ -4493,7 +4475,6 @@ func (e *MutableStateImpl) closeTransactionHandleWorkflowReset(
 }
 
 func (e *MutableStateImpl) closeTransactionHandleActivityUserTimerTasks(
-	now time.Time,
 	transactionPolicy TransactionPolicy,
 ) error {
 
@@ -4502,15 +4483,11 @@ func (e *MutableStateImpl) closeTransactionHandleActivityUserTimerTasks(
 		return nil
 	}
 
-	if err := e.taskGenerator.GenerateActivityTimerTasks(
-		now,
-	); err != nil {
+	if err := e.taskGenerator.GenerateActivityTimerTasks(); err != nil {
 		return err
 	}
 
-	return e.taskGenerator.GenerateUserTimerTasks(
-		now,
-	)
+	return e.taskGenerator.GenerateUserTimerTasks()
 }
 
 func (e *MutableStateImpl) checkMutability(

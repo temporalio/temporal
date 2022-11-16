@@ -115,7 +115,7 @@ func (s *executableSuite) TestExecute_UserLatency() {
 
 	expectedUserLatency := int64(133)
 	updateContext := func(ctx context.Context, taskInfo interface{}) {
-		metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency, expectedUserLatency)
+		metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName(), expectedUserLatency)
 	}
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(nil, true, nil)
@@ -153,6 +153,14 @@ func (s *executableSuite) TestHandleErr_ErrTaskDiscarded() {
 	})
 
 	s.NoError(executable.HandleErr(consts.ErrTaskDiscarded))
+}
+
+func (s *executableSuite) TestHandleErr_ErrTaskVersionMismatch() {
+	executable := s.newTestExecutable(func(_ tasks.Task) bool {
+		return true
+	})
+
+	s.NoError(executable.HandleErr(consts.ErrTaskVersionMismatch))
 }
 
 func (s *executableSuite) TestHandleErr_NamespaceNotActiveError() {

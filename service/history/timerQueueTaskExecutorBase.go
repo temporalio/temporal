@@ -53,8 +53,7 @@ type (
 		cache              workflow.Cache
 		logger             log.Logger
 		matchingClient     matchingservice.MatchingServiceClient
-		metricProvider     metrics.MetricsHandler
-		metricsClient      metrics.Client
+		metricHandler      metrics.MetricsHandler
 		config             *configs.Config
 	}
 )
@@ -65,7 +64,7 @@ func newTimerQueueTaskExecutorBase(
 	deleteManager workflow.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricHandler metrics.MetricsHandler,
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
@@ -76,8 +75,7 @@ func newTimerQueueTaskExecutorBase(
 		deleteManager:      deleteManager,
 		logger:             logger,
 		matchingClient:     matchingClient,
-		metricProvider:     metricProvider,
-		metricsClient:      shard.GetMetricsClient(),
+		metricHandler:      metricHandler,
 		config:             config,
 	}
 }
@@ -105,7 +103,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricHandler, t.logger)
 	switch err.(type) {
 	case nil:
 		if mutableState == nil {
@@ -130,16 +128,20 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	if ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); !ok {
-		return nil
+	if err := CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); err != nil {
+		return err
 	}
 
+	// We should only archive if it is enabled, and the data wasn't already archived. If WorkflowDataAlreadyArchived
+	// flag is set to true, then the data was already archived, so we can skip it.
+	archiveIfEnabled := !task.WorkflowDataAlreadyArchived
 	return t.deleteManager.DeleteWorkflowExecutionByRetention(
 		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
 		weContext,
 		mutableState,
+		archiveIfEnabled,
 	)
 }
 

@@ -32,13 +32,15 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
+
+	"go.temporal.io/server/common/debug"
 )
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
-	DefaultTimeout = 10 * time.Second
+	DefaultTimeout = 10 * time.Second * debug.TimeoutMultiplier
 	// DefaultLongPollTimeout is the long poll default timeout used to make calls
-	DefaultLongPollTimeout = time.Minute * 3
+	DefaultLongPollTimeout = time.Minute * 3 * debug.TimeoutMultiplier
 )
 
 var _ workflowservice.WorkflowServiceClient = (*clientImpl)(nil)

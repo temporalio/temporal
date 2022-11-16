@@ -52,7 +52,7 @@ type (
 		UpdateAckIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
 		MaxReschdulerSize                  dynamicconfig.IntPropertyFn
 		PollBackoffInterval                dynamicconfig.DurationPropertyFn
-		MetricScope                        int
+		Operation                          string
 	}
 
 	queueProcessorBase struct {

@@ -92,6 +92,17 @@ const (
 	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
 	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
 
+	// Whether the deadlock detector should dump goroutines
+	DeadlockDumpGoroutines = "system.deadlock.DumpGoroutines"
+	// Whether the deadlock detector should cause the grpc server to fail health checks
+	DeadlockFailHealthCheck = "system.deadlock.FailHealthCheck"
+	// Whether the deadlock detector should abort the process
+	DeadlockAbortProcess = "system.deadlock.AbortProcess"
+	// How often the detector checks each root.
+	DeadlockInterval = "system.deadlock.Interval"
+	// How many extra goroutines can be created per root.
+	DeadlockMaxWorkersPerRoot = "system.deadlock.MaxWorkersPerRoot"
+
 	// keys for size limit
 
 	// BlobSizeLimitError is the per event blob size limit
@@ -102,6 +113,8 @@ const (
 	MemoSizeLimitError = "limit.memoSize.error"
 	// MemoSizeLimitWarn is the per event memo size limit for warning
 	MemoSizeLimitWarn = "limit.memoSize.warn"
+	// NumPendingChildExecutionLimitError is the per workflow pending child workflow limit
+	NumPendingChildExecutionLimitError = "limit.numPendingChildExecution.error"
 	// HistorySizeLimitError is the per workflow execution history size limit
 	HistorySizeLimitError = "limit.historySize.error"
 	// HistorySizeLimitWarn is the per workflow execution history size limit for warning
@@ -394,6 +407,8 @@ const (
 	TimerProcessorHistoryArchivalSizeLimit = "history.timerProcessorHistoryArchivalSizeLimit"
 	// TimerProcessorArchivalTimeLimit is the upper time limit for inline history archival
 	TimerProcessorArchivalTimeLimit = "history.timerProcessorArchivalTimeLimit"
+	// RetentionTimerJitterDuration is a time duration jitter to distribute timer from T0 to T0 + jitter duration
+	RetentionTimerJitterDuration = "history.retentionTimerJitterDuration"
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize = "history.transferTaskBatchSize"
 	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
@@ -480,6 +495,32 @@ const (
 	VisibilityProcessorVisibilityArchivalTimeLimit = "history.visibilityProcessorVisibilityArchivalTimeLimit"
 	// VisibilityProcessorEnsureCloseBeforeDelete means we ensure the visibility of an execution is closed before we delete its visibility records
 	VisibilityProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
+
+	// ArchivalTaskBatchSize is batch size for archivalQueueProcessor
+	ArchivalTaskBatchSize = "history.archivalTaskBatchSize"
+	// ArchivalProcessorMaxPollRPS is max poll rate per second for archivalQueueProcessor
+	ArchivalProcessorMaxPollRPS = "history.archivalProcessorMaxPollRPS"
+	// ArchivalProcessorMaxPollHostRPS is max poll rate per second for all archivalQueueProcessor on a host
+	ArchivalProcessorMaxPollHostRPS = "history.archivalProcessorMaxPollHostRPS"
+	// ArchivalTaskMaxRetryCount is max times of retry for archivalQueueProcessor
+	ArchivalTaskMaxRetryCount = "history.archivalTaskMaxRetryCount"
+	// ArchivalProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for
+	// archivalQueueProcessor
+	ArchivalProcessorSchedulerWorkerCount = "history.archivalProcessorSchedulerWorkerCount"
+	// ArchivalProcessorSchedulerRoundRobinWeights is the priority round robin weights by archival task scheduler for
+	// all namespaces
+	ArchivalProcessorSchedulerRoundRobinWeights = "history.archivalProcessorSchedulerRoundRobinWeights"
+	// ArchivalProcessorMaxPollInterval max poll interval for archivalQueueProcessor
+	ArchivalProcessorMaxPollInterval = "history.archivalProcessorMaxPollInterval"
+	// ArchivalProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
+	ArchivalProcessorMaxPollIntervalJitterCoefficient = "history.archivalProcessorMaxPollIntervalJitterCoefficient"
+	// ArchivalProcessorUpdateAckInterval is update interval for archivalQueueProcessor
+	ArchivalProcessorUpdateAckInterval = "history.archivalProcessorUpdateAckInterval"
+	// ArchivalProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
+	ArchivalProcessorUpdateAckIntervalJitterCoefficient = "history.archivalProcessorUpdateAckIntervalJitterCoefficient"
+	// ArchivalProcessorPollBackoffInterval is the poll backoff interval if task redispatcher's size exceeds limit for
+	// archivalQueueProcessor
+	ArchivalProcessorPollBackoffInterval = "history.archivalProcessorPollBackoffInterval"
 
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"
@@ -645,6 +686,8 @@ const (
 	ExecutionScannerPerShardQPS = "worker.executionScannerPerShardQPS"
 	// ExecutionDataDurationBuffer is the data TTL duration buffer of execution data
 	ExecutionDataDurationBuffer = "worker.executionDataDurationBuffer"
+	// ExecutionScannerWorkerCount is the execution scavenger worker count
+	ExecutionScannerWorkerCount = "worker.executionScannerWorkerCount"
 	// TaskQueueScannerEnabled indicates if task queue scanner should be started as part of worker.Scanner
 	TaskQueueScannerEnabled = "worker.taskQueueScannerEnabled"
 	// HistoryScannerEnabled indicates if history scanner should be started as part of worker.Scanner
@@ -653,6 +696,9 @@ const (
 	ExecutionsScannerEnabled = "worker.executionsScannerEnabled"
 	// HistoryScannerDataMinAge indicates the history scanner cleanup minimum age.
 	HistoryScannerDataMinAge = "worker.historyScannerDataMinAge"
+	// HistoryScannerVerifyRetention indicates the history scanner verify data retention.
+	// If the service configures with archival feature enabled, update worker.historyScannerVerifyRetention to be double of the data retention.
+	HistoryScannerVerifyRetention = "worker.historyScannerVerifyRetention"
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher = "worker.enableBatcher"
 	// BatcherRPS controls number the rps of batch operations

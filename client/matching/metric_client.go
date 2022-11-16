@@ -27,6 +27,7 @@ package matching
 import (
 	"context"
 	"strings"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -45,7 +46,7 @@ var _ matchingservice.MatchingServiceClient = (*metricClient)(nil)
 
 type metricClient struct {
 	client          matchingservice.MatchingServiceClient
-	metricsClient   metrics.Client
+	metricsHandler  metrics.MetricsHandler
 	logger          log.Logger
 	throttledLogger log.Logger
 }
@@ -53,13 +54,13 @@ type metricClient struct {
 // NewMetricClient creates a new instance of matchingservice.MatchingServiceClient that emits metrics
 func NewMetricClient(
 	client matchingservice.MatchingServiceClient,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 	throttledLogger log.Logger,
 ) matchingservice.MatchingServiceClient {
 	return &metricClient{
 		client:          client,
-		metricsClient:   metricsClient,
+		metricsHandler:  metricsHandler,
 		logger:          logger,
 		throttledLogger: throttledLogger,
 	}
@@ -170,7 +171,7 @@ func (c *metricClient) QueryWorkflow(
 }
 
 func (c *metricClient) emitForwardedSourceStats(
-	scope metrics.Scope,
+	handler metrics.MetricsHandler,
 	forwardedFrom string,
 	taskQueue *taskqueuepb.TaskQueue,
 ) {
@@ -181,28 +182,27 @@ func (c *metricClient) emitForwardedSourceStats(
 	isChildPartition := strings.HasPrefix(taskQueue.GetName(), taskQueuePartitionPrefix)
 	switch {
 	case forwardedFrom != "":
-		scope.IncCounter(metrics.MatchingClientForwardedCounter)
+		handler.Counter(metrics.MatchingClientForwardedCounter.GetMetricName()).Record(1)
 	default:
 		if isChildPartition {
-			scope.IncCounter(metrics.MatchingClientInvalidTaskQueueName)
+			handler.Counter(metrics.MatchingClientInvalidTaskQueueName.GetMetricName()).Record(1)
 		}
 	}
 }
 
 func (c *metricClient) startMetricsRecording(
 	ctx context.Context,
-	metricScope int,
-) (metrics.Scope, metrics.Stopwatch) {
+	operation string,
+) (metrics.MetricsHandler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
-	scope := c.metricsClient.Scope(metricScope, metrics.NamespaceTag(caller))
-	scope.IncCounter(metrics.ClientRequests)
-	stopwatch := scope.StartTimer(metrics.ClientLatency)
-	return scope, stopwatch
+	handler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.MatchingRoleTagValue))
+	handler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	return handler, time.Now().UTC()
 }
 
 func (c *metricClient) finishMetricsRecording(
-	scope metrics.Scope,
-	stopwatch metrics.Stopwatch,
+	handler metrics.MetricsHandler,
+	startTime time.Time,
 	err error,
 ) {
 	if err != nil {
@@ -211,15 +211,14 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.Canceled,
 			*serviceerror.DeadlineExceeded,
 			*serviceerror.NotFound,
-			*serviceerror.NamespaceNotFound,
 			*serviceerror.QueryFailed,
+			*serviceerror.NamespaceNotFound,
 			*serviceerror.WorkflowExecutionAlreadyStarted:
 			// noop - not interest and too many logs
 		default:
-
 			c.throttledLogger.Info("matching client encountered error", tag.Error(err), tag.ErrorType(err))
 		}
-		scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ClientFailures)
+		handler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
-	stopwatch.Stop()
+	handler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
 }

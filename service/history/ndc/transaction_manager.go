@@ -34,6 +34,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -157,7 +158,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		executionManager  persistence.ExecutionManager
 		serializer        serialization.Serializer
-		metricsClient     metrics.Client
+		metricsHandler    metrics.MetricsHandler
 		workflowResetter  WorkflowResetter
 		eventsReapplier   EventsReapplier
 		logger            log.Logger
@@ -183,7 +184,7 @@ func newTransactionMgr(
 		clusterMetadata:   shard.GetClusterMetadata(),
 		executionManager:  shard.GetExecutionManager(),
 		serializer:        shard.GetPayloadSerializer(),
-		metricsClient:     shard.GetMetricsClient(),
+		metricsHandler:    shard.GetMetricsHandler(),
 		workflowResetter: NewWorkflowResetter(
 			shard,
 			historyCache,

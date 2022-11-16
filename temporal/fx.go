@@ -30,8 +30,7 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/server/service/history/replication"
-
+	"github.com/pborman/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -39,24 +38,18 @@ import (
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc"
-
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
-
-	"github.com/pborman/uuid"
-
-	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/telemetry"
+	"google.golang.org/grpc"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -68,11 +61,14 @@ import (
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
@@ -126,7 +122,6 @@ type (
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                  log.Logger
 		ClientFactoryProvider   client.FactoryProvider
-		MetricsClient           metrics.Client
 		DynamicConfigClient     dynamicconfig.Client
 		DynamicConfigCollection *dynamicconfig.Collection
 		TLSConfigProvider       encryption.TLSConfigProvider
@@ -193,13 +188,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	}
 
 	// MetricsHandler
-	provider := so.metricProvider
-	if provider == nil {
-		provider = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
+	metricHandler := so.metricHandler
+	if metricHandler == nil {
+		metricHandler = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
 	}
-
-	// MetricsClient
-	var metricsClient metrics.Client = metrics.NewClient(provider, metrics.Server)
 
 	// DynamicConfigClient
 	dcClient := so.dynamicConfigClient
@@ -220,7 +212,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// TLSConfigProvider
 	tlsConfigProvider := so.tlsConfigProvider
 	if tlsConfigProvider == nil {
-		tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricsClient, logger, nil)
+		tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricHandler, logger, nil)
 		if err != nil {
 			return serverOptionsProvider{}, err
 		}
@@ -274,13 +266,12 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 
 		Logger:                  logger,
 		ClientFactoryProvider:   clientFactoryProvider,
-		MetricsClient:           metricsClient,
 		DynamicConfigClient:     dcClient,
 		DynamicConfigCollection: dynamicconfig.NewCollection(dcClient, logger),
 		TLSConfigProvider:       tlsConfigProvider,
 		EsConfig:                esConfig,
 		EsClient:                esClient,
-		MetricsHandler:          provider,
+		MetricsHandler:          metricHandler,
 	}, nil
 }
 
@@ -375,7 +366,9 @@ func HistoryServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
+		fx.Provide(func() metrics.MetricsHandler {
+			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+		}),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
@@ -435,7 +428,9 @@ func MatchingServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
+		fx.Provide(func() metrics.MetricsHandler {
+			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+		}),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Supply(params.SpanExporters),
@@ -492,7 +487,9 @@ func FrontendServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
+		fx.Provide(func() metrics.MetricsHandler {
+			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+		}),
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
@@ -550,7 +547,9 @@ func WorkerServiceProvider(
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() metrics.MetricsHandler { return params.MetricsHandler }),
+		fx.Provide(func() metrics.MetricsHandler {
+			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
+		}),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Supply(params.SpanExporters),
@@ -600,7 +599,7 @@ func ApplyClusterMetadataConfigProvider(
 		PersistenceNamespaceMaxQPS: nil,
 		EnablePriorityRateLimiting: nil,
 		ClusterName:                persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
-		MetricsClient:              nil,
+		MetricsHandler:             nil,
 		Logger:                     logger,
 	})
 	defer factory.Close()
@@ -739,12 +738,17 @@ func loadClusterInformationFromStore(ctx context.Context, config *config.Config,
 			InitialFailoverVersion: metadata.InitialFailoverVersion,
 			RPCAddress:             metadata.ClusterAddress,
 		}
-		if staticClusterMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok && metadata.ClusterName != config.ClusterMetadata.CurrentClusterName {
-			logger.Warn(
-				"ClusterInformation in ClusterMetadata config is deprecated. Please use TCTL tool to configure remote cluster connections",
-				tag.Key("clusterInformation"),
-				tag.IgnoredValue(staticClusterMetadata),
-				tag.Value(newMetadata))
+		if staticClusterMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
+			if metadata.ClusterName != config.ClusterMetadata.CurrentClusterName {
+				logger.Warn(
+					"ClusterInformation in ClusterMetadata config is deprecated. Please use TCTL tool to configure remote cluster connections",
+					tag.Key("clusterInformation"),
+					tag.IgnoredValue(staticClusterMetadata),
+					tag.Value(newMetadata))
+			} else {
+				newMetadata.RPCAddress = staticClusterMetadata.RPCAddress
+				logger.Info(fmt.Sprintf("Use rpc address %v for cluster %v.", newMetadata.RPCAddress, metadata.ClusterName))
+			}
 		}
 		config.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
 	}
@@ -810,20 +814,20 @@ var TraceExportModule = fx.Options(
 // ServiceTracingModule holds per-service (i.e. frontend/history/matching/worker) fx
 // state. The following types can be overriden with fx.Replace/fx.Decorate:
 //
-// - []go.opentelemetry.io/otel/sdk/trace.BatchSpanProcessorOption
-//   default: empty slice
-// - []go.opentelemetry.io/otel/sdk/trace.SpanProcessor
-//   default: wrap each otelsdktrace.SpanExporter with otelsdktrace.NewBatchSpanProcessor
-// - *go.opentelemetry.io/otel/sdk/resource.Resource
-//   default: resource.Default() augmented with the supplied serviceName
-// - []go.opentelemetry.io/otel/sdk/trace.TracerProviderOption
-//   default: the provided resource.Resource and each of the otelsdktrace.SpanExporter
-// - go.opentelemetry.io/otel/trace.TracerProvider
-//   default: otelsdktrace.NewTracerProvider with each of the otelsdktrace.TracerProviderOption
-// - go.opentelemetry.io/otel/ppropagation.TextMapPropagator
-//   default: propagation.TraceContext{}
-// - telemetry.ServerTraceInterceptor
-// - telemetry.ClientTraceInterceptor
+//   - []go.opentelemetry.io/otel/sdk/trace.BatchSpanProcessorOption
+//     default: empty slice
+//   - []go.opentelemetry.io/otel/sdk/trace.SpanProcessor
+//     default: wrap each otelsdktrace.SpanExporter with otelsdktrace.NewBatchSpanProcessor
+//   - *go.opentelemetry.io/otel/sdk/resource.Resource
+//     default: resource.Default() augmented with the supplied serviceName
+//   - []go.opentelemetry.io/otel/sdk/trace.TracerProviderOption
+//     default: the provided resource.Resource and each of the otelsdktrace.SpanExporter
+//   - go.opentelemetry.io/otel/trace.TracerProvider
+//     default: otelsdktrace.NewTracerProvider with each of the otelsdktrace.TracerProviderOption
+//   - go.opentelemetry.io/otel/ppropagation.TextMapPropagator
+//     default: propagation.TraceContext{}
+//   - telemetry.ServerTraceInterceptor
+//   - telemetry.ClientTraceInterceptor
 var ServiceTracingModule = fx.Options(
 	fx.Supply([]otelsdktrace.BatchSpanProcessorOption{}),
 	fx.Provide(

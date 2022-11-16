@@ -31,9 +31,9 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -61,7 +61,8 @@ type (
 		executionManager persistence.ExecutionManager
 		registry         namespace.Registry
 		historyClient    historyservice.HistoryServiceClient
-		metrics          metrics.Client
+		adminClient      adminservice.AdminServiceClient
+		metricsHandler   metrics.MetricsHandler
 		logger           log.Logger
 		scavenger        *Scavenger
 
@@ -79,7 +80,8 @@ func newTask(
 	executionManager persistence.ExecutionManager,
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
-	metrics metrics.Client,
+	adminClient adminservice.AdminServiceClient,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 	scavenger *Scavenger,
 	rateLimiter quotas.RateLimiter,
@@ -90,10 +92,11 @@ func newTask(
 		executionManager: executionManager,
 		registry:         registry,
 		historyClient:    historyClient,
+		adminClient:      adminClient,
 
-		metrics:   metrics,
-		logger:    logger,
-		scavenger: scavenger,
+		metricsHandler: metricsHandler,
+		logger:         logger,
+		scavenger:      scavenger,
 
 		ctx:                         ctx,
 		rateLimiter:                 rateLimiter,
@@ -122,7 +125,7 @@ func (t *task) Run() executor.TaskStatus {
 		printValidationResult(
 			mutableState,
 			results,
-			t.metrics,
+			t.metricsHandler,
 			t.logger,
 		)
 		err = t.handleFailures(mutableState, results)
@@ -208,14 +211,25 @@ func (t *task) handleFailures(
 		case mutableStateRetentionFailureType:
 			executionInfo := mutableState.GetExecutionInfo()
 			runID := mutableState.GetExecutionState().GetRunId()
-			_, err := t.historyClient.DeleteWorkflowExecution(t.ctx, &historyservice.DeleteWorkflowExecutionRequest{
-				NamespaceId: executionInfo.GetNamespaceId(),
-				WorkflowExecution: &commonpb.WorkflowExecution{
+			ns, err := t.registry.GetNamespaceByID(namespace.ID(executionInfo.GetNamespaceId()))
+			switch err.(type) {
+			case *serviceerror.NotFound,
+				*serviceerror.NamespaceNotFound:
+				t.logger.Error("Garbage data in DB after namespace is deleted", tag.WorkflowNamespaceID(executionInfo.GetNamespaceId()))
+				// We cannot do much in this case. It just ignores this error.
+				return nil
+			case nil:
+				// continue to delete
+			default:
+				return err
+			}
+
+			_, err = t.adminClient.DeleteWorkflowExecution(t.ctx, &adminservice.DeleteWorkflowExecutionRequest{
+				Namespace: ns.Name().String(),
+				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: executionInfo.GetWorkflowId(),
 					RunId:      runID,
 				},
-				WorkflowVersion:    common.EmptyVersion,
-				ClosedWorkflowOnly: true,
 			})
 			switch err.(type) {
 			case *serviceerror.NotFound,
@@ -237,25 +251,19 @@ func (t *task) handleFailures(
 func printValidationResult(
 	mutableState *MutableState,
 	results []MutableStateValidationResult,
-	metricClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) {
-
-	metricsScope := metricClient.Scope(metrics.ExecutionsScavengerScope).Tagged(
-		metrics.FailureTag(""),
-	)
-	metricsScope.IncCounter(metrics.ScavengerValidationRequestsCount)
+	handler := metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionsScavengerScope), metrics.FailureTag(""))
+	handler.Counter(metrics.ScavengerValidationRequestsCount.GetMetricName()).Record(1)
 	if len(results) == 0 {
 		return
 	}
 
-	metricsScope.IncCounter(metrics.ScavengerValidationFailuresCount)
+	handler.Counter(metrics.ScavengerValidationFailuresCount.GetMetricName()).Record(1)
 	for _, result := range results {
-		metricsScope.Tagged(
-			metrics.FailureTag(result.failureType),
-		).IncCounter(metrics.ScavengerValidationFailuresCount)
-
-		logger.Error(
+		handler.Counter(metrics.ScavengerValidationFailuresCount.GetMetricName()).Record(1, metrics.FailureTag(result.failureType))
+		logger.Info(
 			"validation failed for execution.",
 			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
 			tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),

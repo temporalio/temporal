@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
@@ -70,12 +71,16 @@ type (
 		// HistoryScannerDataMinAge indicates the cleanup threshold of history branch data
 		// Only clean up history branches that older than this threshold
 		HistoryScannerDataMinAge dynamicconfig.DurationPropertyFn
+		// HistoryScannerVerifyRetention indicates if the history scavenger to do retention verification
+		HistoryScannerVerifyRetention dynamicconfig.BoolPropertyFn
 		// ExecutionScannerPerHostQPS the max rate of calls to scan execution data per host
 		ExecutionScannerPerHostQPS dynamicconfig.IntPropertyFn
 		// ExecutionScannerPerShardQPS the max rate of calls to scan execution data per shard
 		ExecutionScannerPerShardQPS dynamicconfig.IntPropertyFn
 		// ExecutionDataDurationBuffer is the data TTL duration buffer of execution data
 		ExecutionDataDurationBuffer dynamicconfig.DurationPropertyFn
+		// ExecutionScannerWorkerCount is the execution scavenger task worker number
+		ExecutionScannerWorkerCount dynamicconfig.IntPropertyFn
 	}
 
 	// scannerContext is the context object that get's
@@ -83,11 +88,12 @@ type (
 	scannerContext struct {
 		cfg               *Config
 		logger            log.Logger
-		sdkSystemClient   sdkclient.Client
-		metricsClient     metrics.Client
+		sdkClientFactory  sdk.ClientFactory
+		metricsHandler    metrics.MetricsHandler
 		executionManager  persistence.ExecutionManager
 		taskManager       persistence.TaskManager
 		historyClient     historyservice.HistoryServiceClient
+		adminClient       adminservice.AdminServiceClient
 		workerFactory     sdk.WorkerFactory
 		namespaceRegistry namespace.Registry
 	}
@@ -109,23 +115,25 @@ type (
 func New(
 	logger log.Logger,
 	cfg *Config,
-	sdkSystemClient sdkclient.Client,
-	metricsClient metrics.Client,
+	sdkClientFactory sdk.ClientFactory,
+	metricsHandler metrics.MetricsHandler,
 	executionManager persistence.ExecutionManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
+	adminClient adminservice.AdminServiceClient,
 	registry namespace.Registry,
 	workerFactory sdk.WorkerFactory,
 ) *Scanner {
 	return &Scanner{
 		context: scannerContext{
 			cfg:               cfg,
-			sdkSystemClient:   sdkSystemClient,
+			sdkClientFactory:  sdkClientFactory,
 			logger:            logger,
-			metricsClient:     metricsClient,
+			metricsHandler:    metricsHandler,
 			executionManager:  executionManager,
 			taskManager:       taskManager,
 			historyClient:     historyClient,
+			adminClient:       adminClient,
 			workerFactory:     workerFactory,
 			namespaceRegistry: registry,
 		},
@@ -166,7 +174,7 @@ func (s *Scanner) Start() error {
 	}
 
 	for _, tl := range workerTaskQueueNames {
-		work := s.context.workerFactory.New(s.context.sdkSystemClient, tl, workerOpts)
+		work := s.context.workerFactory.New(s.context.sdkClientFactory.GetSystemClient(), tl, workerOpts)
 
 		work.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tqScannerWFTypeName})
 		work.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
@@ -198,7 +206,7 @@ func (s *Scanner) startWorkflowWithRetry(
 		WithMaximumInterval(time.Minute).
 		WithExpirationInterval(backoff.NoInterval)
 	err := backoff.ThrottleRetry(func() error {
-		return s.startWorkflow(s.context.sdkSystemClient, options, workflowType, workflowArgs...)
+		return s.startWorkflow(s.context.sdkClientFactory.GetSystemClient(), options, workflowType, workflowArgs...)
 	}, policy, func(err error) bool {
 		return true
 	})

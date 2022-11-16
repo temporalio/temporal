@@ -25,6 +25,7 @@
 package batcher
 
 import (
+	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.uber.org/fx"
@@ -56,9 +57,10 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsClient metrics.Client
-		Logger        log.Logger
-		ClientFactory sdk.ClientFactory
+		MetricsHandler metrics.MetricsHandler
+		Logger         log.Logger
+		ClientFactory  sdk.ClientFactory
+		FrontendClient workflowservice.WorkflowServiceClient
 	}
 
 	fxResult struct {

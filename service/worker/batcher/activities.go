@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
@@ -68,10 +69,10 @@ func (a *activities) checkNamespace(namespace string) error {
 func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
-	metricsClient := a.MetricsClient.Scope(metrics.BatcherScope, metrics.NamespaceTag(batchParams.Namespace))
+	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceTag(batchParams.Namespace))
 
 	if err := a.checkNamespace(batchParams.Namespace); err != nil {
-		metricsClient.IncCounter(metrics.BatcherOperationFailures)
+		metricsHandler.Counter(metrics.BatcherOperationFailures.GetMetricName()).Record(1)
 		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
 		return hbd, err
 	}
@@ -94,7 +95,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 			Query: batchParams.Query,
 		})
 		if err != nil {
-			metricsClient.IncCounter(metrics.BatcherOperationFailures)
+			metricsHandler.Counter(metrics.BatcherOperationFailures.GetMetricName()).Record(1)
 			logger.Error("Failed to get estimate workflow count", tag.Error(err))
 			return HeartBeatDetails{}, err
 		}
@@ -105,7 +106,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
 	for i := 0; i < a.getOperationConcurrency(batchParams.Concurrency); i++ {
-		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, metricsClient, logger)
+		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
 	}
 
 	for {
@@ -115,7 +116,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 			Query:         batchParams.Query,
 		})
 		if err != nil {
-			metricsClient.IncCounter(metrics.BatcherOperationFailures)
+			metricsHandler.Counter(metrics.BatcherOperationFailures.GetMetricName()).Record(1)
 			logger.Error("Failed to list workflow executions", tag.Error(err))
 			return HeartBeatDetails{}, err
 		}
@@ -149,7 +150,7 @@ func (a *activities) BatchActivity(ctx context.Context, batchParams BatchParams)
 					break Loop
 				}
 			case <-ctx.Done():
-				metricsClient.IncCounter(metrics.BatcherOperationFailures)
+				metricsHandler.Counter(metrics.BatcherOperationFailures.GetMetricName()).Record(1)
 				logger.Error("Failed to complete batch operation", tag.Error(ctx.Err()))
 				return HeartBeatDetails{}, ctx.Err()
 			}
@@ -200,7 +201,8 @@ func startTaskProcessor(
 	respCh chan error,
 	limiter *rate.Limiter,
 	sdkClient sdkclient.Client,
-	metricsClient metrics.Scope,
+	frontendClient workflowservice.WorkflowServiceClient,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) {
 	for {
@@ -229,9 +231,21 @@ func startTaskProcessor(
 					func(workflowID, runID string) error {
 						return sdkClient.SignalWorkflow(ctx, workflowID, runID, batchParams.SignalParams.SignalName, batchParams.SignalParams.Input)
 					})
+			case BatchTypeDelete:
+				err = processTask(ctx, limiter, task,
+					func(workflowID, runID string) error {
+						_, err := frontendClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+							Namespace: batchParams.Namespace,
+							WorkflowExecution: &commonpb.WorkflowExecution{
+								WorkflowId: workflowID,
+								RunId:      runID,
+							},
+						})
+						return err
+					})
 			}
 			if err != nil {
-				metricsClient.IncCounter(metrics.BatcherProcessorFailures)
+				metricsHandler.Counter(metrics.BatcherProcessorFailures.GetMetricName()).Record(1)
 				logger.Error("Failed to process batch operation task", tag.Error(err))
 
 				_, ok := batchParams._nonRetryableErrors[err.Error()]
@@ -243,7 +257,7 @@ func startTaskProcessor(
 					taskCh <- task
 				}
 			} else {
-				metricsClient.IncCounter(metrics.BatcherProcessorSuccess)
+				metricsHandler.Counter(metrics.BatcherProcessorSuccess.GetMetricName()).Record(1)
 				respCh <- nil
 			}
 		}

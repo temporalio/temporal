@@ -26,6 +26,7 @@ package shard
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/golang/mock/gomock"
@@ -36,7 +37,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 )
@@ -44,7 +45,7 @@ import (
 type ContextTest struct {
 	*ContextImpl
 
-	Resource *resource.Test
+	Resource *resourcetest.Test
 
 	MockEventsCache      *events.MockCache
 	MockHostInfoProvider *membership.MockHostInfoProvider
@@ -69,7 +70,7 @@ func NewTestContext(
 	shardInfo *persistence.ShardInfoWithFailover,
 	config *configs.Config,
 ) *ContextTest {
-	resourceTest := resource.NewTest(ctrl, metrics.History)
+	resourceTest := resourcetest.NewTest(ctrl, metrics.History)
 	eventsCache := events.NewMockCache(ctrl)
 	hostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
@@ -81,8 +82,9 @@ func NewTestContext(
 	}
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
+		stringRepr:          fmt.Sprintf("Shard(%d)", shardInfo.GetShardId()),
 		executionManager:    resourceTest.ExecutionMgr,
-		metricsClient:       resourceTest.MetricsClient,
+		metricsHandler:      resourceTest.MetricsHandler,
 		eventsCache:         eventsCache,
 		config:              config,
 		contextTaggedLogger: resourceTest.GetLogger(),

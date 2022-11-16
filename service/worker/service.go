@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/batcher"
@@ -67,7 +66,6 @@ type (
 		logger                 log.Logger
 		archivalMetadata       carchiver.ArchivalMetadata
 		clusterMetadata        cluster.Metadata
-		metricsClient          metrics.Client
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
 		metadataManager        persistence.MetadataManager
@@ -128,13 +126,12 @@ type (
 )
 
 func NewService(
-	logger resource.SnTaggedLogger,
+	logger log.SnTaggedLogger,
 	serviceConfig *Config,
 	sdkClientFactory sdk.ClientFactory,
 	esClient esclient.Client,
 	archivalMetadata carchiver.ArchivalMetadata,
 	clusterMetadata cluster.Metadata,
-	metricsClient metrics.Client,
 	clientBean client.Bean,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	namespaceRegistry namespace.Registry,
@@ -166,7 +163,6 @@ func NewService(
 		logger:                    logger,
 		archivalMetadata:          archivalMetadata,
 		clusterMetadata:           clusterMetadata,
-		metricsClient:             metricsClient,
 		clientBean:                clientBean,
 		clusterMetadataManager:    clusterMetadataManager,
 		namespaceRegistry:         namespaceRegistry,
@@ -186,7 +182,9 @@ func NewService(
 		perNamespaceWorkerManager: perNamespaceWorkerManager,
 		workerFactory:             workerFactory,
 	}
-	s.initScanner()
+	if err := s.initScanner(); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -286,6 +284,10 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 				dynamicconfig.HistoryScannerDataMinAge,
 				60*24*time.Hour,
 			),
+			HistoryScannerVerifyRetention: dc.GetBoolProperty(
+				dynamicconfig.HistoryScannerVerifyRetention,
+				false,
+			),
 			ExecutionScannerPerHostQPS: dc.GetIntProperty(
 				dynamicconfig.ExecutionScannerPerHostQPS,
 				10,
@@ -296,7 +298,11 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 			),
 			ExecutionDataDurationBuffer: dc.GetDurationProperty(
 				dynamicconfig.ExecutionDataDurationBuffer,
-				time.Hour*24*30,
+				time.Hour*24*90,
+			),
+			ExecutionScannerWorkerCount: dc.GetIntProperty(
+				dynamicconfig.ExecutionScannerWorkerCount,
+				8,
 			),
 		},
 		EnableBatcher:      dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
@@ -439,7 +445,7 @@ func (s *Service) startParentClosePolicyProcessor() {
 	params := &parentclosepolicy.BootstrapParams{
 		Config:           *s.config.ParentCloseCfg,
 		SdkClientFactory: s.sdkClientFactory,
-		MetricsClient:    s.metricsClient,
+		MetricsHandler:   s.metricsHandler,
 		Logger:           s.logger,
 		ClientBean:       s.clientBean,
 		CurrentCluster:   s.clusterMetadata.GetCurrentClusterName(),
@@ -455,7 +461,7 @@ func (s *Service) startParentClosePolicyProcessor() {
 
 func (s *Service) startBatcher() {
 	if err := batcher.New(
-		s.metricsClient,
+		s.metricsHandler,
 		s.logger,
 		s.sdkClientFactory,
 		s.config.BatcherRPS,
@@ -468,18 +474,25 @@ func (s *Service) startBatcher() {
 	}
 }
 
-func (s *Service) initScanner() {
+func (s *Service) initScanner() error {
+	currentCluster := s.clusterMetadata.GetCurrentClusterName()
+	adminClient, err := s.clientBean.GetRemoteAdminClient(currentCluster)
+	if err != nil {
+		return err
+	}
 	s.scanner = scanner.New(
 		s.logger,
 		s.config.ScannerCfg,
-		s.sdkClientFactory.GetSystemClient(),
-		s.metricsClient,
+		s.sdkClientFactory,
+		s.metricsHandler,
 		s.executionManager,
 		s.taskManager,
 		s.historyClient,
+		adminClient,
 		s.namespaceRegistry,
 		s.workerFactory,
 	)
+	return nil
 }
 
 func (s *Service) startScanner() {
@@ -501,7 +514,7 @@ func (s *Service) startReplicator() {
 		s.clusterMetadata,
 		s.clientBean,
 		s.logger,
-		s.metricsClient,
+		s.metricsHandler,
 		s.hostInfo,
 		s.workerServiceResolver,
 		s.namespaceReplicationQueue,
@@ -513,7 +526,7 @@ func (s *Service) startReplicator() {
 func (s *Service) startArchiver() {
 	historyClient := s.clientBean.GetHistoryClient()
 	bc := &archiver.BootstrapContainer{
-		MetricsClient:    s.metricsClient,
+		MetricsHandler:   s.metricsHandler,
 		Logger:           s.logger,
 		HistoryV2Manager: s.executionManager,
 		NamespaceCache:   s.namespaceRegistry,

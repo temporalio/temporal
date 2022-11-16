@@ -51,7 +51,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/internal/goro"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -64,7 +64,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockResource        *resource.Test
+		mockResource        *resourcetest.Test
 		mockHistoryEngine   *MockEngine
 		mockClusterMetadata *cluster.MockMetadata
 		mockServiceResolver *membership.MockServiceResolver
@@ -83,7 +83,7 @@ type (
 func NewTestController(
 	engineFactory *MockEngineFactory,
 	config *configs.Config,
-	resource *resource.Test,
+	resource *resourcetest.Test,
 	hostInfoProvider *membership.MockHostInfoProvider,
 ) *ControllerImpl {
 	return &ControllerImpl{
@@ -96,7 +96,7 @@ func NewTestController(
 		clientBean:                  resource.GetClientBean(),
 		historyClient:               resource.GetHistoryClient(),
 		historyServiceResolver:      resource.GetHistoryServiceResolver(),
-		metricsClient:               resource.GetMetricsClient(),
+		metricsHandler:              resource.GetMetricsHandler(),
 		payloadSerializer:           resource.GetPayloadSerializer(),
 		timeSource:                  resource.GetTimeSource(),
 		namespaceRegistry:           resource.GetNamespaceRegistry(),
@@ -106,12 +106,12 @@ func NewTestController(
 		archivalMetadata:            resource.GetArchivalMetadata(),
 		hostInfoProvider:            hostInfoProvider,
 
-		status:             common.DaemonStatusInitialized,
-		membershipUpdateCh: make(chan *membership.ChangedEvent, 10),
-		engineFactory:      engineFactory,
-		shutdownCh:         make(chan struct{}),
-		metricsScope:       resource.GetMetricsClient().Scope(metrics.HistoryShardControllerScope),
-		historyShards:      make(map[int32]*ContextImpl),
+		status:               common.DaemonStatusInitialized,
+		membershipUpdateCh:   make(chan *membership.ChangedEvent, 10),
+		engineFactory:        engineFactory,
+		shutdownCh:           make(chan struct{}),
+		taggedMetricsHandler: resource.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryShardControllerScope)),
+		historyShards:        make(map[int32]*ContextImpl),
 	}
 }
 
@@ -124,7 +124,7 @@ func (s *controllerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.History)
+	s.mockResource = resourcetest.NewTest(s.controller, metrics.History)
 	s.mockHistoryEngine = NewMockEngine(s.controller)
 	s.mockEngineFactory = NewMockEngineFactory(s.controller)
 
@@ -189,6 +189,10 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 				},
 				PreviousRangeID: 5,
 			}).Return(nil)
+			s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+				ShardID: shardID,
+				RangeID: 6,
+			}).Return(nil).AnyTimes()
 		} else {
 			ownerHost := fmt.Sprintf("test-acquire-shard-host-%v", hostID)
 			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(membership.NewHostInfo(ownerHost, nil), nil)
@@ -254,6 +258,10 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 				},
 				PreviousRangeID: 5,
 			}).Return(nil)
+			s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+				ShardID: shardID,
+				RangeID: 6,
+			}).Return(nil).AnyTimes()
 		} else {
 			ownerHost := fmt.Sprintf("test-acquire-shard-host-%v", hostID)
 			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(membership.NewHostInfo(ownerHost, nil), nil)
@@ -328,6 +336,10 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 			},
 			PreviousRangeID: 5,
 		}).Return(nil)
+		s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+			ShardID: shardID,
+			RangeID: 6,
+		}).Return(nil).AnyTimes()
 	}
 
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
@@ -387,6 +399,10 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 			},
 			PreviousRangeID: 5,
 		}).Return(nil)
+		s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+			ShardID: shardID,
+			RangeID: 6,
+		}).Return(nil).AnyTimes()
 	}
 
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
@@ -745,6 +761,7 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 				}, nil
 			}).AnyTimes()
 		s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	}
 
 	randomLoadedShard := func() (int32, Context) {
@@ -853,6 +870,10 @@ func (s *controllerSuite) setupMocksForAcquireShard(
 		},
 		PreviousRangeID: currentRangeID,
 	}).Return(nil).MinTimes(minTimes)
+	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
+		ShardID: shardID,
+		RangeID: newRangeID,
+	}).Return(nil).AnyTimes()
 }
 
 func (s *controllerSuite) queueAckLevels() map[int32]*persistencespb.QueueAckLevel {

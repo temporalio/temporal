@@ -89,6 +89,27 @@ CREATE TABLE task_queues (
   PRIMARY KEY (range_hash, task_queue_id)
 );
 
+CREATE TABLE history_immediate_tasks(
+  shard_id INT NOT NULL,
+  category_id INT NOT NULL,
+  task_id BIGINT NOT NULL,
+  --
+  data MEDIUMBLOB NOT NULL,
+  data_encoding VARCHAR(16) NOT NULL,
+  PRIMARY KEY (shard_id, category_id, task_id)
+);
+
+CREATE TABLE history_scheduled_tasks (
+  shard_id INT NOT NULL,
+  category_id INT NOT NULL,
+  visibility_timestamp DATETIME(6) NOT NULL,
+  task_id BIGINT NOT NULL,
+  --
+  data MEDIUMBLOB NOT NULL,
+  data_encoding VARCHAR(16) NOT NULL,
+  PRIMARY KEY (shard_id, category_id, visibility_timestamp, task_id)
+);
+
 CREATE TABLE transfer_tasks(
   shard_id INT NOT NULL,
   task_id BIGINT NOT NULL,
@@ -264,9 +285,9 @@ CREATE TABLE cluster_membership
     rpc_address          VARCHAR(128) NOT NULL,
     rpc_port             SMALLINT NOT NULL,
     role                 TINYINT NOT NULL,
-    session_start        TIMESTAMP DEFAULT '1970-01-01 00:00:01+00:00',
-    last_heartbeat       TIMESTAMP DEFAULT '1970-01-01 00:00:01+00:00',
-    record_expiry        TIMESTAMP DEFAULT '1970-01-01 00:00:01+00:00',
+    session_start        TIMESTAMP DEFAULT '1970-01-02 00:00:01',
+    last_heartbeat       TIMESTAMP DEFAULT '1970-01-02 00:00:01',
+    record_expiry        TIMESTAMP DEFAULT '1970-01-02 00:00:01',
     INDEX (role, host_id),
     INDEX (role, last_heartbeat),
     INDEX (rpc_address, role),
@@ -274,4 +295,3 @@ CREATE TABLE cluster_membership
     INDEX (record_expiry),
     PRIMARY KEY (membership_partition, host_id)
 );
-

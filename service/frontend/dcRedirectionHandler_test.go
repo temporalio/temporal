@@ -28,8 +28,6 @@ import (
 	"context"
 	"testing"
 
-	"go.temporal.io/server/common/clock"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -39,12 +37,13 @@ import (
 	"google.golang.org/grpc/health"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 )
 
 type (
@@ -53,7 +52,7 @@ type (
 		*require.Assertions
 
 		controller               *gomock.Controller
-		mockResource             *resource.Test
+		mockResource             *resourcetest.Test
 		mockFrontendHandler      *workflowservicemock.MockWorkflowServiceServer
 		mockRemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
 		mockClusterMetadata      *cluster.MockMetadata
@@ -100,7 +99,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.mockDCRedirectionPolicy = NewMockDCRedirectionPolicy(s.controller)
-	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
+	s.mockResource = resourcetest.NewTest(s.controller, metrics.Frontend)
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.mockRemoteFrontendClient = s.mockResource.RemoteFrontendClient
 
@@ -137,7 +136,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 		config.DCRedirectionPolicy{},
 		s.mockResource.Logger,
 		s.mockResource.GetClientBean(),
-		s.mockResource.GetMetricsClient(),
+		s.mockResource.GetMetricsHandler(),
 		s.mockResource.GetTimeSource(),
 		s.mockResource.GetNamespaceRegistry(),
 		s.mockResource.GetClusterMetadata(),

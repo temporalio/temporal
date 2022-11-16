@@ -31,15 +31,16 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/resource"
 )
 
 // Service represents the matching service
@@ -49,24 +50,26 @@ type Service struct {
 	config  *Config
 
 	server                         *grpc.Server
-	logger                         resource.SnTaggedLogger
+	logger                         log.SnTaggedLogger
 	membershipMonitor              membership.Monitor
 	grpcListener                   net.Listener
 	runtimeMetricsReporter         *metrics.RuntimeMetricsReporter
 	metricsHandler                 metrics.MetricsHandler
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
+	healthServer                   *health.Server
 }
 
 func NewService(
 	grpcServerOptions []grpc.ServerOption,
 	serviceConfig *Config,
-	logger resource.SnTaggedLogger,
+	logger log.SnTaggedLogger,
 	membershipMonitor membership.Monitor,
 	grpcListener net.Listener,
 	runtimeMetricsReporter *metrics.RuntimeMetricsReporter,
 	handler *Handler,
 	metricsHandler metrics.MetricsHandler,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
+	healthServer *health.Server,
 ) *Service {
 	return &Service{
 		status:                         common.DaemonStatusInitialized,
@@ -79,6 +82,7 @@ func NewService(
 		runtimeMetricsReporter:         runtimeMetricsReporter,
 		metricsHandler:                 metricsHandler,
 		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
+		healthServer:                   healthServer,
 	}
 }
 
@@ -97,7 +101,8 @@ func (s *Service) Start() {
 	s.handler.Start()
 
 	matchingservice.RegisterMatchingServiceServer(s.server, s.handler)
-	healthpb.RegisterHealthServer(s.server, s.handler)
+	healthpb.RegisterHealthServer(s.server, s.healthServer)
+	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_SERVING)
 
 	s.logger.Info("Starting to serve on matching listener")
 	if err := s.server.Serve(s.grpcListener); err != nil {
@@ -114,6 +119,7 @@ func (s *Service) Stop() {
 	// remove self from membership ring and wait for traffic to drain
 	s.logger.Info("ShutdownHandler: Evicting self from membership ring")
 	s.membershipMonitor.EvictSelf()
+	s.healthServer.SetServingStatus(serviceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	s.logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(s.config.ShutdownDrainDuration())
 

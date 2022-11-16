@@ -55,7 +55,7 @@ var (
 
 type (
 	timerQueueProcessorBase struct {
-		scope            int
+		operation        string
 		shard            shard.Context
 		cache            workflow.Cache
 		executionManager persistence.ExecutionManager
@@ -64,7 +64,7 @@ type (
 		shutdownCh       chan struct{}
 		config           *configs.Config
 		logger           log.Logger
-		metricsClient    metrics.Client
+		metricHandler    metrics.MetricsHandler
 		timerProcessor   common.Daemon
 		timerQueueAckMgr timerQueueAckMgr
 		timerGate        timer.Gate
@@ -83,7 +83,7 @@ type (
 )
 
 func newTimerQueueProcessorBase(
-	scope int,
+	operation string,
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	timerProcessor common.Daemon,
@@ -98,7 +98,7 @@ func newTimerQueueProcessorBase(
 	config := shard.GetConfig()
 
 	base := &timerQueueProcessorBase{
-		scope:            scope,
+		operation:        operation,
 		shard:            shard,
 		timerProcessor:   timerProcessor,
 		cache:            workflowCache,
@@ -107,7 +107,7 @@ func newTimerQueueProcessorBase(
 		shutdownCh:       make(chan struct{}),
 		config:           config,
 		logger:           logger,
-		metricsClient:    shard.GetMetricsClient(),
+		metricHandler:    shard.GetMetricsHandler(),
 		timerQueueAckMgr: timerQueueAckMgr,
 		timerGate:        timerGate,
 		timeSource:       shard.GetTimeSource(),
@@ -291,7 +291,9 @@ eventLoop:
 			t.newTime = emptyTime
 			t.newTimeLock.Unlock()
 			// New Timer has arrived.
-			t.metricsClient.IncCounter(t.scope, metrics.NewTimerNotifyCounter)
+			t.metricHandler.Counter(metrics.NewTimerNotifyCounter.GetMetricName()).Record(
+				1,
+				metrics.OperationTag(t.operation))
 			t.timerGate.Update(newTime)
 		}
 	}
@@ -318,9 +320,11 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) 
 	if err != nil {
 		if common.IsResourceExhausted(err) {
 			t.notifyNewTimer(t.timeSource.Now().Add(loadTimerTaskThrottleRetryDelay))
-		} else {
+		} else if err != shard.ErrShardStatusUnknown && !shard.IsShardOwnershipLostError(err) {
 			t.notifyNewTimer(t.timeSource.Now().Add(t.readTaskRetrier.NextBackOff()))
 		}
+		// if shard status is invalid, stopping processing and wait for the notication from shard
+		// after shard is re-acquired
 		return nil, err
 	}
 	t.readTaskRetrier.Reset()

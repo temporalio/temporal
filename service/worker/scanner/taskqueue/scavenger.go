@@ -42,14 +42,14 @@ import (
 type (
 	// Scavenger is the type that holds the state for task queue scavenger daemon
 	Scavenger struct {
-		db       p.TaskManager
-		executor executor.Executor
-		metrics  metrics.Client
-		logger   log.Logger
-		stats    stats
-		status   int32
-		stopC    chan struct{}
-		stopWG   sync.WaitGroup
+		db             p.TaskManager
+		executor       executor.Executor
+		metricsHandler metrics.MetricsHandler
+		logger         log.Logger
+		stats          stats
+		status         int32
+		stopC          chan struct{}
+		stopWG         sync.WaitGroup
 
 		lifecycleCtx    context.Context
 		lifecycleCancel context.CancelFunc
@@ -94,17 +94,17 @@ var (
 // returned object. Calling the Start() method will result in one
 // complete iteration over all of the task queues in the system. For
 // each task queue, the scavenger will attempt
-//  - deletion of expired tasks in the task queues
-//  - deletion of task queue itself, if there are no tasks and the task queue hasn't been updated for a grace period
+//   - deletion of expired tasks in the task queues
+//   - deletion of task queue itself, if there are no tasks and the task queue hasn't been updated for a grace period
 //
 // The scavenger will retry on all persistence errors infinitely and will only stop under
 // two conditions
-//  - either all task queues are processed successfully (or)
-//  - Stop() method is called to stop the scavenger
-func NewScavenger(db p.TaskManager, metricsClient metrics.Client, logger log.Logger) *Scavenger {
+//   - either all task queues are processed successfully (or)
+//   - Stop() method is called to stop the scavenger
+func NewScavenger(db p.TaskManager, metricsHandler metrics.MetricsHandler, logger log.Logger) *Scavenger {
 	stopC := make(chan struct{})
 	taskExecutor := executor.NewFixedSizePoolExecutor(
-		taskQueueBatchSize, executorMaxDeferredTasks, metricsClient, metrics.TaskQueueScavengerScope)
+		taskQueueBatchSize, executorMaxDeferredTasks, metricsHandler, metrics.TaskQueueScavengerScope)
 	lifecycleCtx, lifecycleCancel := context.WithCancel(
 		headers.SetCallerInfo(
 			context.Background(),
@@ -113,7 +113,7 @@ func NewScavenger(db p.TaskManager, metricsClient metrics.Client, logger log.Log
 	)
 	return &Scavenger{
 		db:              db,
-		metrics:         metricsClient,
+		metricsHandler:  metricsHandler.WithTags(metrics.OperationTag(metrics.TaskQueueScavengerScope)),
 		logger:          logger,
 		stopC:           stopC,
 		executor:        taskExecutor,
@@ -131,7 +131,7 @@ func (s *Scavenger) Start() {
 	s.stopWG.Add(1)
 	s.executor.Start()
 	go s.run()
-	s.metrics.IncCounter(metrics.TaskQueueScavengerScope, metrics.StartedCount)
+	s.metricsHandler.Counter(metrics.StartedCount.GetMetricName()).Record(1)
 	s.logger.Info("Taskqueue scavenger started")
 }
 
@@ -140,7 +140,7 @@ func (s *Scavenger) Stop() {
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
-	s.metrics.IncCounter(metrics.TaskQueueScavengerScope, metrics.StoppedCount)
+	s.metricsHandler.Counter(metrics.StoppedCount.GetMetricName()).Record(1)
 	s.logger.Info("Taskqueue scavenger stopping")
 	s.lifecycleCancel()
 	close(s.stopC)
@@ -197,7 +197,7 @@ func (s *Scavenger) awaitExecutor() {
 		select {
 		case <-time.After(executorPollInterval):
 			outstanding = s.executor.TaskCount()
-			s.metrics.UpdateGauge(metrics.TaskQueueScavengerScope, metrics.TaskQueueOutstandingCount, float64(outstanding))
+			s.metricsHandler.Gauge(metrics.TaskQueueOutstandingCount.GetMetricName()).Record(float64(outstanding))
 		case <-s.stopC:
 			return
 		}
@@ -205,10 +205,10 @@ func (s *Scavenger) awaitExecutor() {
 }
 
 func (s *Scavenger) emitStats() {
-	s.metrics.UpdateGauge(metrics.TaskQueueScavengerScope, metrics.TaskProcessedCount, float64(s.stats.task.nProcessed))
-	s.metrics.UpdateGauge(metrics.TaskQueueScavengerScope, metrics.TaskDeletedCount, float64(s.stats.task.nDeleted))
-	s.metrics.UpdateGauge(metrics.TaskQueueScavengerScope, metrics.TaskQueueProcessedCount, float64(s.stats.taskqueue.nProcessed))
-	s.metrics.UpdateGauge(metrics.TaskQueueScavengerScope, metrics.TaskQueueDeletedCount, float64(s.stats.taskqueue.nDeleted))
+	s.metricsHandler.Gauge(metrics.TaskProcessedCount.GetMetricName()).Record(float64(s.stats.task.nProcessed))
+	s.metricsHandler.Gauge(metrics.TaskDeletedCount.GetMetricName()).Record(float64(s.stats.task.nDeleted))
+	s.metricsHandler.Gauge(metrics.TaskQueueProcessedCount.GetMetricName()).Record(float64(s.stats.taskqueue.nProcessed))
+	s.metricsHandler.Gauge(metrics.TaskQueueDeletedCount.GetMetricName()).Record(float64(s.stats.taskqueue.nDeleted))
 }
 
 // newTask returns a new instance of an executable task which will process a single task queue

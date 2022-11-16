@@ -70,7 +70,7 @@ func NewVisibilityQueueFactory(
 			},
 			params.NamespaceRegistry,
 			params.TimeSource,
-			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
+			params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
 			params.Logger,
 		)
 	}
@@ -98,7 +98,6 @@ func NewVisibilityQueueFactory(
 
 func (f *visibilityQueueFactory) CreateQueue(
 	shard shard.Context,
-	engine shard.Engine,
 	workflowCache workflow.Cache,
 ) queues.Queue {
 	if f.HostScheduler != nil && f.Config.VisibilityProcessorEnableMultiCursor() {
@@ -139,7 +138,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 			},
 			f.HostReaderRateLimiter,
 			logger,
-			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
+			f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
 		)
 	}
 

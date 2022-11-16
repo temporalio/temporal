@@ -70,12 +70,11 @@ func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 func TelemetryInterceptorProvider(
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
 		namespaceRegistry,
-		metricsClient,
-		metrics.MatchingAPIMetricsScopes(),
+		metricsHandler,
 		logger,
 	)
 }
@@ -112,13 +111,13 @@ func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.S
 
 func HandlerProvider(
 	config *Config,
-	logger resource.SnTaggedLogger,
-	throttledLogger resource.ThrottledLogger,
+	logger log.SnTaggedLogger,
+	throttledLogger log.ThrottledLogger,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
 	matchingRawClient resource.MatchingRawClient,
 	matchingServiceResolver membership.ServiceResolver,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
 ) *Handler {
@@ -130,7 +129,7 @@ func HandlerProvider(
 		historyClient,
 		matchingRawClient,
 		matchingServiceResolver,
-		metricsClient,
+		metricsHandler,
 		namespaceRegistry,
 		clusterMetadata,
 	)

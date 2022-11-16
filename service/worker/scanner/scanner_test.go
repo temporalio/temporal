@@ -30,6 +30,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -153,8 +154,10 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 		s.Run(c.Name, func() {
 			ctrl := gomock.NewController(s.T())
 			mockWorkerFactory := sdk.NewMockWorkerFactory(ctrl)
+			mockSdkClientFactory := sdk.NewMockClientFactory(ctrl)
 			mockSdkClient := mocksdk.NewMockClient(ctrl)
 			mockNamespaceRegistry := namespace.NewMockRegistry(ctrl)
+			mockAdminClient := adminservicemock.NewMockAdminServiceClient(ctrl)
 			scanner := New(
 				log.NewNoopLogger(),
 				&Config{
@@ -189,11 +192,12 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 						},
 					},
 				},
-				mockSdkClient,
-				metrics.NoopClient,
+				mockSdkClientFactory,
+				metrics.NoopMetricsHandler,
 				p.NewMockExecutionManager(ctrl),
 				p.NewMockTaskManager(ctrl),
 				historyservicemock.NewMockHistoryServiceClient(ctrl),
+				mockAdminClient,
 				mockNamespaceRegistry,
 				mockWorkerFactory,
 			)
@@ -203,6 +207,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().Start()
 				mockWorkerFactory.EXPECT().New(gomock.Any(), sc.TaskQueueName, gomock.Any()).Return(worker)
+				mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 				mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), sc.WFTypeName, gomock.Any())
 			}
 			err := scanner.Start()

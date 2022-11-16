@@ -69,7 +69,7 @@ type (
 		config             *configs.Config
 		workflowCache      workflow.Cache
 		executionMgr       persistence.ExecutionManager
-		metricsClient      metrics.Client
+		metricsHandler     metrics.MetricsHandler
 		logger             log.Logger
 		retryPolicy        backoff.RetryPolicy
 		pageSize           int
@@ -106,7 +106,7 @@ func NewAckManager(
 		config:             shard.GetConfig(),
 		workflowCache:      workflowCache,
 		executionMgr:       executionMgr,
-		metricsClient:      shard.GetMetricsClient(),
+		metricsHandler:     shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
 		logger:             log.With(logger, tag.ComponentReplicatorQueue),
 		retryPolicy:        retryPolicy,
 		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize(),
@@ -154,7 +154,7 @@ func (p *ackMgrImpl) GetMaxTaskInfo() (int64, time.Time) {
 		// use ImmediateTaskMaxReadLevel which is the max task id of any immediate task queues.
 		// ImmediateTaskMaxReadLevel will be the lower bound of new range_id if shard reload. Remote cluster will quickly (in
 		// a few seconds) ack to the latest ImmediateTaskMaxReadLevel if there is no replication tasks at all.
-		taskID := p.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, p.currentClusterName, false).Prev().TaskID
+		taskID := p.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID
 		maxTaskID = &taskID
 	}
 	maxVisibilityTimestamp := p.maxTaskVisibilityTimestamp
@@ -230,25 +230,15 @@ func (p *ackMgrImpl) GetTasks(
 	}
 
 	// Note this is a very rough indicator of how much the remote DC is behind on this shard.
-	p.metricsClient.Scope(
-		metrics.ReplicatorQueueProcessorScope,
-		metrics.TargetClusterTag(pollingCluster),
-	).RecordDistribution(
-		metrics.ReplicationTasksLag,
-		int(maxTaskID-lastTaskID),
-	)
+	p.metricsHandler.Histogram(metrics.ReplicationTasksLag.GetMetricName(), metrics.ReplicationTasksLag.GetMetricUnit()).Record(
+		maxTaskID-lastTaskID,
+		metrics.TargetClusterTag(pollingCluster))
 
-	p.metricsClient.RecordDistribution(
-		metrics.ReplicatorQueueProcessorScope,
-		metrics.ReplicationTasksFetched,
-		len(replicationTasks),
-	)
+	p.metricsHandler.Histogram(metrics.ReplicationTasksFetched.GetMetricName(), metrics.ReplicationTasksFetched.GetMetricUnit()).
+		Record(int64(len(replicationTasks)))
 
-	p.metricsClient.RecordDistribution(
-		metrics.ReplicatorQueueProcessorScope,
-		metrics.ReplicationTasksReturned,
-		len(replicationTasks),
-	)
+	p.metricsHandler.Histogram(metrics.ReplicationTasksReturned.GetMetricName(), metrics.ReplicationTasksReturned.GetMetricUnit()).
+		Record(int64(len(replicationTasks)))
 
 	return &replicationspb.ReplicationMessages{
 		ReplicationTasks:       replicationTasks,
@@ -319,7 +309,7 @@ func (p *ackMgrImpl) taskIDsRange(
 	lastReadMessageID int64,
 ) (minTaskID int64, maxTaskID int64) {
 	minTaskID = lastReadMessageID
-	maxTaskID = p.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, p.currentClusterName, false).Prev().TaskID
+	maxTaskID = p.shard.GetImmediateQueueExclusiveHighReadWatermark().Prev().TaskID
 
 	p.Lock()
 	defer p.Unlock()
@@ -601,6 +591,9 @@ func (p *ackMgrImpl) processNewRunReplication(
 	task *replicationspb.ReplicationTask,
 ) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
 
+	if task == nil {
+		return nil, nil
+	}
 	attr, ok := task.Attributes.(*replicationspb.ReplicationTask_HistoryTaskAttributes)
 	if !ok {
 		return nil, serviceerror.NewInternal("Wrong replication task to process new run replication.")

@@ -102,9 +102,11 @@ func (t *dbTaskReaderImpl) ackTask(taskID int64) {
 
 // moveAckedTaskID tries to advance the acked task ID
 // e.g. assuming task ID & whether the task is completed
-//  10 -> true
-//  12 -> true
-//  15 -> false
+//
+//	10 -> true
+//	12 -> true
+//	15 -> false
+//
 // the acked task ID can be set to 12, meaning task with ID <= 12 are finished
 func (t *dbTaskReaderImpl) moveAckedTaskID() int64 {
 	t.Lock()

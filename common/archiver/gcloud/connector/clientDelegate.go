@@ -131,7 +131,8 @@ func newClientDelegateWithCredentials(ctx context.Context, credentialsPath strin
 // The supplied name must contain only lowercase letters, numbers, dashes,
 // underscores, and dots. The full specification for valid bucket names can be
 // found at:
-//   https://cloud.google.com/storage/docs/bucket-naming
+//
+//	https://cloud.google.com/storage/docs/bucket-naming
 func (c *clientDelegate) Bucket(bucketName string) BucketHandleWrapper {
 	return &bucketDelegate{bucket: c.nativeClient.Bucket(bucketName)}
 }
@@ -141,7 +142,8 @@ func (c *clientDelegate) Bucket(bucketName string) BucketHandleWrapper {
 //
 // name must consist entirely of valid UTF-8-encoded runes. The full specification
 // for valid object names can be found at:
-//   https://cloud.google.com/storage/docs/bucket-naming
+//
+//	https://cloud.google.com/storage/docs/bucket-naming
 func (b *bucketDelegate) Object(name string) ObjectHandleWrapper {
 	return &objectDelegate{object: b.bucket.Object(name)}
 }

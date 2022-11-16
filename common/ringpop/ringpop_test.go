@@ -220,7 +220,7 @@ func runRingpopTLSTest(s suite.Suite, logger log.Logger, serverA *ringpopFactory
 }
 
 func (s *RingpopSuite) setupInternodeRingpop() {
-	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	s.insecureFactory = newTestRingpopFactory("tester", s.logger, rpcTestCfgDefault, provider, dynamicconfig.NewNoopCollection())
 	s.NotNil(s.insecureFactory)
@@ -246,14 +246,14 @@ func (s *RingpopSuite) setupInternodeRingpop() {
 		dynamicconfig.EnableRingpopTLS: true,
 	}), s.logger)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopMutualTLS.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopMutualTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	s.ringpopMutualTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
 	s.NotNil(s.ringpopMutualTLSFactoryA)
 	s.ringpopMutualTLSFactoryB = newTestRingpopFactory("tester-B", s.logger, rpcCfgB, provider, dc)
 	s.NotNil(s.ringpopMutualTLSFactoryB)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopServerTLS.TLS, metrics.NoopClient, s.logger, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopServerTLS.TLS, metrics.NoopMetricsHandler, s.logger, nil)
 	s.NoError(err)
 	s.ringpopServerTLSFactoryA = newTestRingpopFactory("tester-A", s.logger, rpcCfgA, provider, dc)
 	s.NotNil(s.ringpopServerTLSFactoryA)

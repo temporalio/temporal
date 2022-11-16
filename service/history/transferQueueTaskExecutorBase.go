@@ -34,7 +34,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -67,8 +66,7 @@ type (
 		cache                    workflow.Cache
 		archivalClient           archiver.Client
 		logger                   log.Logger
-		metricProvider           metrics.MetricsHandler
-		metricsClient            metrics.Client
+		metricHandler            metrics.MetricsHandler
 		historyClient            historyservice.HistoryServiceClient
 		matchingClient           matchingservice.MatchingServiceClient
 		config                   *configs.Config
@@ -82,7 +80,7 @@ func newTransferQueueTaskExecutorBase(
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricHandler metrics.MetricsHandler,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
@@ -92,8 +90,7 @@ func newTransferQueueTaskExecutorBase(
 		cache:                    workflowCache,
 		archivalClient:           archivalClient,
 		logger:                   logger,
-		metricProvider:           metricProvider,
-		metricsClient:            shard.GetMetricsClient(),
+		metricHandler:            metricHandler,
 		historyClient:            shard.GetHistoryClient(),
 		matchingClient:           matchingClient,
 		config:                   shard.GetConfig(),
@@ -256,7 +253,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -285,9 +282,9 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 		if err != nil {
 			return err
 		}
-		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
-		if !ok {
-			return nil
+		err = CheckTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -316,7 +313,7 @@ func (t *transferQueueTaskExecutorBase) isCloseExecutionTaskPending(ms workflow.
 		return closeTransferTaskId > transferQueueAckLevel
 	}
 	fakeCloseTransferTask := &tasks.CloseExecutionTask{
-		WorkflowKey: definition.NewWorkflowKey(weCtx.GetNamespaceID().String(), weCtx.GetWorkflowID(), weCtx.GetRunID()),
+		WorkflowKey: weCtx.GetWorkflowKey(),
 		TaskID:      closeTransferTaskId,
 	}
 	return !queues.IsTaskAcked(fakeCloseTransferTask, transferQueueState)

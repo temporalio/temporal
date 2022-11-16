@@ -50,6 +50,7 @@ const (
 	CategoryIDTimer       = int32(enumsspb.TASK_CATEGORY_TIMER)
 	CategoryIDReplication = int32(enumsspb.TASK_CATEGORY_REPLICATION)
 	CategoryIDVisibility  = int32(enumsspb.TASK_CATEGORY_VISIBILITY)
+	CategoryIDArchival    = int32(enumsspb.TASK_CATEGORY_ARCHIVAL)
 )
 
 const (
@@ -63,6 +64,7 @@ const (
 	CategoryNameTimer       = "timer"
 	CategoryNameReplication = "replication"
 	CategoryNameVisibility  = "visibility"
+	CategoryNameArchival    = "archival"
 )
 
 var (
@@ -88,6 +90,12 @@ var (
 		id:    CategoryIDVisibility,
 		cType: CategoryTypeImmediate,
 		name:  CategoryNameVisibility,
+	}
+
+	CategoryArchival = Category{
+		id:    CategoryIDArchival,
+		cType: CategoryTypeImmediate,
+		name:  CategoryNameArchival,
 	}
 )
 

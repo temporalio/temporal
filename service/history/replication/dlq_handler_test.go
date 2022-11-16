@@ -44,7 +44,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -58,7 +58,7 @@ type (
 		*require.Assertions
 		controller *gomock.Controller
 
-		mockResource     *resource.Test
+		mockResource     *resourcetest.Test
 		mockShard        *shard.ContextTest
 		config           *configs.Config
 		mockClientBean   *client.MockBean
@@ -291,7 +291,7 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
-	s.taskExecutor.EXPECT().Execute(gomock.Any(), remoteTask, true).Return(0, nil)
+	s.taskExecutor.EXPECT().Execute(gomock.Any(), remoteTask, true).Return("", nil)
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), &persistence.RangeDeleteReplicationTaskFromDLQRequest{
 		RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             s.mockShard.GetShardID(),

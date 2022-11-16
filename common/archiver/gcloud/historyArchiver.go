@@ -29,6 +29,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"path/filepath"
+	"time"
 
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -106,19 +107,19 @@ func newHistoryArchiver(container *archiver.HistoryBootstrapContainer, historyIt
 // between retry attempts.
 // This method will be invoked after a workflow passes its retention period.
 func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiver.ArchiveHistoryRequest, opts ...archiver.ArchiveOption) (err error) {
-	scope := h.container.MetricsClient.Scope(metrics.HistoryArchiverScope, metrics.NamespaceTag(request.Namespace))
+	handler := h.container.MetricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
-	sw := scope.StartTimer(metrics.ServiceLatency)
+	startTime := time.Now().UTC()
 	defer func() {
-		sw.Stop()
+		handler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
 		if err != nil {
 
 			if err.Error() != errUploadNonRetryable.Error() {
-				scope.IncCounter(metrics.HistoryArchiverArchiveTransientErrorCount)
+				handler.Counter(metrics.HistoryArchiverArchiveTransientErrorCount.GetMetricName()).Record(1)
 				return
 			}
 
-			scope.IncCounter(metrics.HistoryArchiverArchiveNonRetryableErrorCount)
+			handler.Counter(metrics.HistoryArchiverArchiveNonRetryableErrorCount.GetMetricName()).Record(1)
 			if featureCatalog.NonRetryableError != nil {
 				err = featureCatalog.NonRetryableError()
 			}
@@ -156,7 +157,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 				// this may happen even in the middle of iterating history as two archival signals
 				// can be processed concurrently.
 				logger.Info(archiver.ArchiveSkippedInfoMsg)
-				scope.IncCounter(metrics.HistoryArchiverDuplicateArchivalsCount)
+				handler.Counter(metrics.HistoryArchiverDuplicateArchivalsCount.GetMetricName()).Record(1)
 				return nil
 			}
 
@@ -184,7 +185,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		if exist, _ := h.gcloudStorage.Exist(ctx, URI, filename); !exist {
 			if err := h.gcloudStorage.Upload(ctx, URI, filename, encodedHistoryPart); err != nil {
 				logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
-				scope.IncCounter(metrics.HistoryArchiverArchiveTransientErrorCount)
+				handler.Counter(metrics.HistoryArchiverArchiveTransientErrorCount.GetMetricName()).Record(1)
 				return err
 			}
 
@@ -194,9 +195,9 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		saveHistoryIteratorState(ctx, featureCatalog, historyIterator, part, &progress)
 	}
 
-	scope.AddCounter(metrics.HistoryArchiverTotalUploadSize, totalUploadSize)
-	scope.AddCounter(metrics.HistoryArchiverHistorySize, totalUploadSize)
-	scope.IncCounter(metrics.HistoryArchiverArchiveSuccessCount)
+	handler.Counter(metrics.HistoryArchiverTotalUploadSize.GetMetricName()).Record(totalUploadSize)
+	handler.Counter(metrics.HistoryArchiverHistorySize.GetMetricName()).Record(totalUploadSize)
+	handler.Counter(metrics.HistoryArchiverArchiveSuccessCount.GetMetricName()).Record(1)
 	return
 }
 

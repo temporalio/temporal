@@ -56,6 +56,7 @@ type (
 
 	// HistoryTransferTask is the SQL persistence interface for history transfer tasks
 	HistoryTransferTask interface {
+		// InsertIntoTransferTasks inserts rows that into transfer_tasks table.
 		InsertIntoTransferTasks(ctx context.Context, rows []TransferTasksRow) (sql.Result, error)
 		// SelectFromTransferTasks returns rows that match filter criteria from transfer_tasks table.
 		SelectFromTransferTasks(ctx context.Context, filter TransferTasksFilter) ([]TransferTasksRow, error)

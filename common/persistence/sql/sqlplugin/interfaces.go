@@ -74,6 +74,8 @@ type (
 		HistoryExecutionSignal
 		HistoryExecutionSignalRequest
 
+		HistoryImmediateTask
+		HistoryScheduledTask
 		HistoryTransferTask
 		HistoryTimerTask
 		HistoryReplicationTask

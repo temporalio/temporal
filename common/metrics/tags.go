@@ -245,7 +245,7 @@ func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 	return &tagImpl{key: resourceExhaustedTag, value: cause.String()}
 }
 
-func ServiceTypeTag(value string) Tag {
+func ServiceNameTag(value string) Tag {
 	return &tagImpl{key: serviceName, value: value}
 }
 
@@ -259,4 +259,8 @@ func OperationTag(value string) Tag {
 
 func StringTag(key string, value string) Tag {
 	return &tagImpl{key: key, value: value}
+}
+
+func CacheTypeTag(value string) Tag {
+	return &tagImpl{key: CacheTypeTagName, value: value}
 }

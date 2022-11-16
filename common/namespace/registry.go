@@ -130,6 +130,7 @@ type (
 	// Registry provides access to Namespace objects by name or by ID.
 	Registry interface {
 		common.Daemon
+		common.Pingable
 		RegisterNamespaceChangeCallback(listenerID any, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn)
 		UnregisterNamespaceChangeCallback(listenerID any)
 		GetNamespace(name Name) (*Namespace, error)
@@ -153,7 +154,7 @@ type (
 		persistence             Persistence
 		globalNamespacesEnabled bool
 		clock                   Clock
-		metricsClient           metrics.Client
+		metricsHandler          metrics.MetricsHandler
 		logger                  log.Logger
 		lastRefreshTime         atomic.Value
 		refreshInterval         dynamicconfig.DurationPropertyFn
@@ -183,7 +184,7 @@ func NewRegistry(
 	persistence Persistence,
 	enableGlobalNamespaces bool,
 	refreshInterval dynamicconfig.DurationPropertyFn,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) Registry {
 	reg := &registry{
@@ -191,7 +192,7 @@ func NewRegistry(
 		persistence:             persistence,
 		globalNamespacesEnabled: enableGlobalNamespaces,
 		clock:                   clock.NewRealTimeSource(),
-		metricsClient:           metricsClient,
+		metricsHandler:          metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceCacheScope)),
 		logger:                  logger,
 		cacheNameToID:           cache.New(cacheMaxSize, &cacheOpts),
 		cacheByID:               cache.New(cacheMaxSize, &cacheOpts),
@@ -240,6 +241,35 @@ func (r *registry) Stop() {
 	defer atomic.StoreInt32(&r.status, stopped)
 	r.refresher.Cancel()
 	<-r.refresher.Done()
+}
+
+func (r *registry) GetPingChecks() []common.PingCheck {
+	return []common.PingCheck{
+		{
+			Name: "namespace registry lock",
+			// we don't do any persistence ops, this shouldn't be blocked
+			Timeout: 10 * time.Second,
+			Ping: func() []common.Pingable {
+				r.cacheLock.Lock()
+				//lint:ignore SA2001 just checking if we can acquire the lock
+				r.cacheLock.Unlock()
+				return nil
+			},
+			MetricsName: metrics.NamespaceRegistryLockLatency.GetMetricName(),
+		},
+		{
+			Name: "namespace registry callback lock",
+			// we don't do any persistence ops, this shouldn't be blocked
+			Timeout: 10 * time.Second,
+			Ping: func() []common.Pingable {
+				r.callbackLock.Lock()
+				//lint:ignore SA2001 just checking if we can acquire the lock
+				r.callbackLock.Unlock()
+				return nil
+			},
+			MetricsName: metrics.NamespaceRegistryCallbackLockLatency.GetMetricName(),
+		},
+	}
 }
 
 func (r *registry) getAllNamespace() map[ID]*Namespace {
@@ -586,9 +616,8 @@ func (r *registry) getNamespaceChangeCallbacks() ([]PrepareCallbackFn, []Callbac
 func (r *registry) triggerNamespaceChangePrepareCallback(
 	prepareCallbacks []PrepareCallbackFn,
 ) {
-	sw := r.metricsClient.StartTimer(
-		metrics.NamespaceCacheScope, metrics.NamespaceCachePrepareCallbacksLatency)
-	defer sw.Stop()
+	startTime := time.Now().UTC()
+	defer r.metricsHandler.Timer(metrics.NamespaceCachePrepareCallbacksLatency.GetMetricName()).Record(time.Since(startTime))
 
 	for _, prepareCallback := range prepareCallbacks {
 		prepareCallback()
@@ -600,10 +629,8 @@ func (r *registry) triggerNamespaceChangeCallback(
 	oldNamespaces []*Namespace,
 	newNamespaces []*Namespace,
 ) {
-
-	sw := r.metricsClient.StartTimer(
-		metrics.NamespaceCacheScope, metrics.NamespaceCacheCallbacksLatency)
-	defer sw.Stop()
+	startTime := time.Now().UTC()
+	defer r.metricsHandler.Timer(metrics.NamespaceCacheCallbacksLatency.GetMetricName()).Record(time.Since(startTime))
 
 	for _, callback := range callbacks {
 		callback(oldNamespaces, newNamespaces)

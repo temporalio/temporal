@@ -74,7 +74,7 @@ type (
 	HistoryBootstrapContainer struct {
 		ExecutionManager persistence.ExecutionManager
 		Logger           log.Logger
-		MetricsClient    metrics.Client
+		MetricsHandler   metrics.MetricsHandler
 		ClusterMetadata  cluster.Metadata
 	}
 
@@ -99,7 +99,7 @@ type (
 	// VisibilityBootstrapContainer contains components needed by all visibility Archiver implementations
 	VisibilityBootstrapContainer struct {
 		Logger          log.Logger
-		MetricsClient   metrics.Client
+		MetricsHandler  metrics.MetricsHandler
 		ClusterMetadata cluster.Metadata
 	}
 

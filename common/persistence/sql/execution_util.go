@@ -529,17 +529,13 @@ func applyTasks(
 
 	var err error
 	for category, tasksByCategory := range insertTasks {
-		switch category.ID() {
-		case tasks.CategoryIDTransfer:
-			err = createTransferTasks(ctx, tx, shardID, tasksByCategory)
-		case tasks.CategoryIDTimer:
-			err = createTimerTasks(ctx, tx, shardID, tasksByCategory)
-		case tasks.CategoryIDVisibility:
-			err = createVisibilityTasks(ctx, tx, shardID, tasksByCategory)
-		case tasks.CategoryIDReplication:
-			err = createReplicationTasks(ctx, tx, shardID, tasksByCategory)
+		switch category.Type() {
+		case tasks.CategoryTypeImmediate:
+			err = createImmediateTasks(ctx, tx, shardID, category.ID(), tasksByCategory)
+		case tasks.CategoryTypeScheduled:
+			err = createScheduledTasks(ctx, tx, shardID, category.ID(), tasksByCategory)
 		default:
-			err = serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", category))
+			err = serviceerror.NewInternal(fmt.Sprintf("Unknown task category type: %v", category))
 		}
 
 		if err != nil {
@@ -696,6 +692,101 @@ func lockExecution(
 		return 0, 0, serviceerror.NewUnavailable(fmt.Sprintf("lockNextEventID failed. Error: %v", err))
 	}
 	return dbRecordVersion, nextEventID, nil
+}
+
+func createImmediateTasks(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	shardID int32,
+	categoryID int32,
+	immedidateTasks []p.InternalHistoryTask,
+) error {
+	// This is for backward compatiblity.
+	// These task categories exist before the general history_immediate_tasks table is created,
+	// so they have their own tables.
+	switch categoryID {
+	case tasks.CategoryIDTransfer:
+		return createTransferTasks(ctx, tx, shardID, immedidateTasks)
+	case tasks.CategoryIDVisibility:
+		return createVisibilityTasks(ctx, tx, shardID, immedidateTasks)
+	case tasks.CategoryIDReplication:
+		return createReplicationTasks(ctx, tx, shardID, immedidateTasks)
+	}
+
+	if len(immedidateTasks) == 0 {
+		return nil
+	}
+
+	immediateTasksRows := make([]sqlplugin.HistoryImmediateTasksRow, 0, len(immedidateTasks))
+	for _, task := range immedidateTasks {
+		immediateTasksRows = append(immediateTasksRows, sqlplugin.HistoryImmediateTasksRow{
+			ShardID:      shardID,
+			CategoryID:   categoryID,
+			TaskID:       task.Key.TaskID,
+			Data:         task.Blob.Data,
+			DataEncoding: task.Blob.EncodingType.String(),
+		})
+	}
+
+	result, err := tx.InsertIntoHistoryImmediateTasks(ctx, immediateTasksRows)
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("createImmediateTasks failed. Error: %v", err))
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("createImmediateTasks failed. Could not verify number of rows inserted. Error: %v", err))
+	}
+
+	if int(rowsAffected) != len(immediateTasksRows) {
+		return serviceerror.NewUnavailable(fmt.Sprintf("createImmediateTasks failed. Inserted %v instead of %v rows into history_immediate_tasks. Error: %v", rowsAffected, len(immediateTasksRows), err))
+	}
+	return nil
+}
+
+func createScheduledTasks(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	shardID int32,
+	categoryID int32,
+	scheduledTasks []p.InternalHistoryTask,
+) error {
+	// This is for backward compatiblity.
+	// These task categories exists before the general history_scheduled_tasks table is created,
+	// so they have their own tables.
+	if categoryID == tasks.CategoryIDTimer {
+		return createTimerTasks(ctx, tx, shardID, scheduledTasks)
+	}
+
+	if len(scheduledTasks) == 0 {
+		return nil
+	}
+
+	scheduledTasksRows := make([]sqlplugin.HistoryScheduledTasksRow, 0, len(scheduledTasks))
+	for _, task := range scheduledTasks {
+		scheduledTasksRows = append(scheduledTasksRows, sqlplugin.HistoryScheduledTasksRow{
+			ShardID:             shardID,
+			CategoryID:          categoryID,
+			VisibilityTimestamp: task.Key.FireTime,
+			TaskID:              task.Key.TaskID,
+			Data:                task.Blob.Data,
+			DataEncoding:        task.Blob.EncodingType.String(),
+		})
+	}
+
+	result, err := tx.InsertIntoHistoryScheduledTasks(ctx, scheduledTasksRows)
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("createScheduledTasks failed. Error: %v", err))
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("createScheduledTasks failed. Could not verify number of rows inserted. Error: %v", err))
+	}
+
+	if int(rowsAffected) != len(scheduledTasks) {
+		return serviceerror.NewUnavailable(fmt.Sprintf("createScheduledTasks failed. Inserted %v instead of %v rows into history_scheduled_tasks. Error: %v", rowsAffected, len(scheduledTasks), err))
+	}
+	return nil
 }
 
 func createTransferTasks(

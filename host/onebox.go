@@ -389,7 +389,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.FrontendGRPCAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
-		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
+		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(func() resource.NamespaceLogger { return c.logger }),
 		fx.Provide(newRPCFactoryImpl),
 		fx.Provide(func() membership.Monitor {
@@ -480,7 +480,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 			fx.Provide(func() listenHostPort { return listenHostPort(grpcPort) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
-			fx.Provide(func() resource.ThrottledLogger { return c.logger }),
+			fx.Provide(func() log.ThrottledLogger { return c.logger }),
 			fx.Provide(newRPCFactoryImpl),
 			fx.Provide(func() membership.Monitor {
 				return newSimpleMonitor(serviceName, hosts)
@@ -564,7 +564,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() metrics.MetricsHandler { return metrics.NoopMetricsHandler }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.MatchingGRPCServiceAddress()) }),
-		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
+		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(newRPCFactoryImpl),
 		fx.Provide(func() membership.Monitor {
 			return newSimpleMonitor(serviceName, hosts)
@@ -645,7 +645,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() listenHostPort { return listenHostPort(c.WorkerGRPCServiceAddress()) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
-		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
+		fx.Provide(func() log.ThrottledLogger { return c.logger }),
 		fx.Provide(newRPCFactoryImpl),
 		fx.Provide(func() membership.Monitor {
 			return newSimpleMonitor(serviceName, hosts)

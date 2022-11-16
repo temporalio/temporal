@@ -33,10 +33,10 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -58,7 +58,7 @@ type (
 		// as that will lead to a cycle dependency issue between shard and workflow package.
 		// 2. Move this interface to queues package after 1 is done so that there's no cycle dependency
 		// between workflow and queues package.
-		CreateQueue(shard shard.Context, engine shard.Engine, cache workflow.Cache) queues.Queue
+		CreateQueue(shard shard.Context, cache workflow.Cache) queues.Queue
 	}
 
 	QueueFactoryBaseParams struct {
@@ -69,7 +69,7 @@ type (
 		Config            *configs.Config
 		TimeSource        clock.TimeSource
 		MetricsHandler    metrics.MetricsHandler
-		Logger            resource.SnTaggedLogger
+		Logger            log.SnTaggedLogger
 	}
 
 	QueueFactoryBase struct {

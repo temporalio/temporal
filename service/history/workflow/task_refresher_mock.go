@@ -31,7 +31,6 @@ package workflow
 import (
 	context "context"
 	reflect "reflect"
-	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 )
@@ -60,15 +59,15 @@ func (m *MockTaskRefresher) EXPECT() *MockTaskRefresherMockRecorder {
 }
 
 // RefreshTasks mocks base method.
-func (m *MockTaskRefresher) RefreshTasks(ctx context.Context, now time.Time, mutableState MutableState) error {
+func (m *MockTaskRefresher) RefreshTasks(ctx context.Context, mutableState MutableState) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshTasks", ctx, now, mutableState)
+	ret := m.ctrl.Call(m, "RefreshTasks", ctx, mutableState)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RefreshTasks indicates an expected call of RefreshTasks.
-func (mr *MockTaskRefresherMockRecorder) RefreshTasks(ctx, now, mutableState interface{}) *gomock.Call {
+func (mr *MockTaskRefresherMockRecorder) RefreshTasks(ctx, mutableState interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockTaskRefresher)(nil).RefreshTasks), ctx, now, mutableState)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockTaskRefresher)(nil).RefreshTasks), ctx, mutableState)
 }

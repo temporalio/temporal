@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package resource
+package resourcetest
 
 import (
 	"net"
@@ -73,7 +73,7 @@ type (
 		NamespaceCache    *namespace.MockRegistry
 		TimeSource        clock.TimeSource
 		PayloadSerializer serialization.Serializer
-		MetricsClient     metrics.Client
+		MetricsHandler    metrics.MetricsHandler
 		ArchivalMetadata  *archiver.MockArchivalMetadata
 		ArchiverProvider  *provider.MockArchiverProvider
 
@@ -165,9 +165,9 @@ func NewTest(
 	membershipMonitor.EXPECT().GetResolver(common.WorkerServiceName).Return(workerServiceResolver, nil).AnyTimes()
 
 	scope := tally.NewTestScope("test", nil)
-	metricClient := metrics.NewClient(
-		metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope),
-		serviceMetricsIndex,
+	serviceName, _ := metrics.MetricsServiceIdxToServiceName(serviceMetricsIndex)
+	metricsHandler := metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
+		metrics.ServiceNameTag(serviceName),
 	)
 
 	return &Test{
@@ -182,7 +182,7 @@ func NewTest(
 		NamespaceCache:    namespace.NewMockRegistry(controller),
 		TimeSource:        clock.NewRealTimeSource(),
 		PayloadSerializer: serialization.NewSerializer(),
-		MetricsClient:     metricClient,
+		MetricsHandler:    metricsHandler,
 		ArchivalMetadata:  archiver.NewMockArchivalMetadata(controller),
 		ArchiverProvider:  provider.NewMockArchiverProvider(controller),
 
@@ -274,9 +274,9 @@ func (t *Test) GetPayloadSerializer() serialization.Serializer {
 	return t.PayloadSerializer
 }
 
-// GetMetricsClient for testing
-func (t *Test) GetMetricsClient() metrics.Client {
-	return t.MetricsClient
+// GetMetricsHandler for testing
+func (t *Test) GetMetricsHandler() metrics.MetricsHandler {
+	return t.MetricsHandler
 }
 
 // GetArchivalMetadata for testing

@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -50,6 +51,8 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	dc "go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -106,6 +109,7 @@ type (
 		discardDuration      time.Duration
 
 		transferQueueStandbyTaskExecutor *transferQueueStandbyTaskExecutor
+		mockSearchAttributesProvider     *searchattribute.MockProvider
 	}
 )
 
@@ -151,7 +155,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.mockShard.GetExecutionManager(),
 		false,
 		s.mockShard.GetLogger(),
-		s.mockShard.GetMetricsClient(),
+		s.mockShard.GetMetricsHandler(),
 	))
 
 	s.mockHistoryClient = s.mockShard.Resource.HistoryClient
@@ -162,6 +166,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockArchiverProvider = s.mockShard.Resource.ArchiverProvider
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockAdminClient = s.mockShard.Resource.RemoteAdminClient
+	s.mockSearchAttributesProvider = s.mockShard.Resource.SearchAttributesProvider
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.Namespace).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.TargetNamespaceID).Return(tests.GlobalTargetNamespaceEntry, nil).AnyTimes()
@@ -173,6 +178,12 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.StandbyNamespaceID).Return(tests.GlobalStandbyNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.StandbyNamespace).Return(tests.GlobalStandbyNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.StandbyNamespaceID).Return(tests.StandbyNamespace, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.StandbyWithVisibilityArchivalNamespaceID).
+		Return(tests.GlobalStandbyWithVisibilityArchivalNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(tests.StandbyWithVisibilityArchivalNamespace).
+		Return(tests.GlobalStandbyWithVisibilityArchivalNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.StandbyWithVisibilityArchivalNamespaceID).
+		Return(tests.StandbyWithVisibilityArchivalNamespace, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
@@ -189,7 +200,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
+		metricsHandler:     s.mockShard.GetMetricsHandler(),
 	}
 	s.mockShard.SetEngineForTesting(h)
 	s.clusterName = cluster.TestAlternativeClusterName
@@ -653,6 +664,98 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationRequest).Return(nil, consts.ErrWorkflowNotReady)
 	_, _, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, err)
+}
+
+func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution_CanSkipVisibilityArchival() {
+	for _, skipVisibilityArchival := range []bool{
+		false,
+		true,
+	} {
+		s.Run(fmt.Sprintf("CanSkipVisibilityArchival=%v", skipVisibilityArchival), func() {
+			execution := commonpb.WorkflowExecution{
+				WorkflowId: "some random workflow ID",
+				RunId:      uuid.New(),
+			}
+			workflowType := "some random workflow type"
+			taskQueueName := "some random task queue"
+
+			mutableState := workflow.TestGlobalMutableState(
+				s.mockShard,
+				s.mockShard.GetEventsCache(),
+				s.logger,
+				s.version,
+				execution.GetRunId(),
+			)
+			_, err := mutableState.AddWorkflowExecutionStartedEvent(
+				execution,
+				&historyservice.StartWorkflowExecutionRequest{
+					Attempt:     1,
+					NamespaceId: tests.StandbyWithVisibilityArchivalNamespaceID.String(),
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+						TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+						WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+						WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+					},
+				},
+			)
+			s.Nil(err)
+
+			wt := addWorkflowTaskScheduledEvent(mutableState)
+			event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, taskQueueName, uuid.New())
+			wt.StartedEventID = event.GetEventId()
+			event = addWorkflowTaskCompletedEvent(
+				mutableState,
+				wt.ScheduledEventID,
+				wt.StartedEventID,
+				"some random identity",
+			)
+
+			taskID := int64(59)
+			event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+
+			transferTask := &tasks.CloseExecutionTask{
+				WorkflowKey: definition.NewWorkflowKey(
+					tests.StandbyWithVisibilityArchivalNamespaceID.String(),
+					execution.GetWorkflowId(),
+					execution.GetRunId(),
+				),
+				Version:                   s.version,
+				TaskID:                    taskID,
+				VisibilityTimestamp:       time.Now().UTC(),
+				CanSkipVisibilityArchival: skipVisibilityArchival,
+			}
+
+			persistenceMutableState := s.createPersistenceMutableState(
+				mutableState,
+				event.GetEventId(),
+				event.GetVersion(),
+			)
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(
+				gomock.Any(),
+				gomock.Any(),
+			).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+			if !skipVisibilityArchival {
+				s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(
+					archiver.NewArchivalConfig(
+						"enabled",
+						dc.GetStringPropertyFn("enabled"),
+						dc.GetBoolPropertyFn(true),
+						"disabled",
+						"random URI",
+					),
+				)
+				s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil)
+				s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
+			}
+
+			_, _, err = s.transferQueueStandbyTaskExecutor.Execute(
+				context.Background(),
+				s.newTaskExecutable(transferTask),
+			)
+			s.Nil(err)
+		})
+	}
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pending() {

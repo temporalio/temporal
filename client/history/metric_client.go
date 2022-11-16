@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 
@@ -34,14 +35,13 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 var _ historyservice.HistoryServiceClient = (*metricClient)(nil)
 
 type metricClient struct {
 	client          historyservice.HistoryServiceClient
-	metricsClient   metrics.Client
+	metricsHandler  metrics.MetricsHandler
 	logger          log.Logger
 	throttledLogger log.Logger
 }
@@ -49,13 +49,13 @@ type metricClient struct {
 // NewMetricClient creates a new instance of historyservice.HistoryServiceClient that emits metrics
 func NewMetricClient(
 	client historyservice.HistoryServiceClient,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 	throttledLogger log.Logger,
 ) historyservice.HistoryServiceClient {
 	return &metricClient{
 		client:          client,
-		metricsClient:   metricsClient,
+		metricsHandler:  metricsHandler,
 		logger:          logger,
 		throttledLogger: throttledLogger,
 	}
@@ -63,18 +63,17 @@ func NewMetricClient(
 
 func (c *metricClient) startMetricsRecording(
 	ctx context.Context,
-	metricScope int,
-) (metrics.Scope, metrics.Stopwatch) {
+	operation string,
+) (metrics.MetricsHandler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
-	scope := c.metricsClient.Scope(metricScope, metrics.NamespaceTag(caller))
-	scope.IncCounter(metrics.ClientRequests)
-	stopwatch := scope.StartTimer(metrics.ClientLatency)
-	return scope, stopwatch
+	handler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.HistoryRoleTagValue))
+	handler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
+	return handler, time.Now().UTC()
 }
 
 func (c *metricClient) finishMetricsRecording(
-	scope metrics.Scope,
-	stopwatch metrics.Stopwatch,
+	handler metrics.MetricsHandler,
+	startTime time.Time,
 	err error,
 ) {
 	if err != nil {
@@ -85,13 +84,12 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.QueryFailed,
 			*serviceerror.NamespaceNotFound,
 			*serviceerror.WorkflowNotReady,
-			*serviceerror.WorkflowExecutionAlreadyStarted,
-			*serviceerrors.TaskAlreadyStarted:
+			*serviceerror.WorkflowExecutionAlreadyStarted:
 			// noop - not interest and too many logs
 		default:
 			c.throttledLogger.Info("history client encountered error", tag.Error(err), tag.ErrorType(err))
 		}
-		scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ClientFailures)
+		handler.Counter(metrics.ClientFailures.GetMetricName()).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
-	stopwatch.Stop()
+	handler.Timer(metrics.ClientLatency.GetMetricName()).Record(time.Since(startTime))
 }

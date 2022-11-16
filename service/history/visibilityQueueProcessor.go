@@ -60,7 +60,7 @@ type (
 		visibilityTaskFilter     taskFilter
 		ownedScheduler           queues.Scheduler // this is the scheduler owned by this visibility queue processor
 		logger                   log.Logger
-		metricsClient            metrics.Client
+		metricHandler            metrics.MetricsHandler
 
 		// from transferQueueProcessorImpl
 		config   *configs.Config
@@ -84,7 +84,7 @@ func newVisibilityQueueProcessor(
 
 	config := shard.GetConfig()
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
-	metricsClient := shard.GetMetricsClient()
+	metricHandler := shard.GetMetricsHandler()
 
 	options := &QueueProcessorOptions{
 		BatchSize:                          config.VisibilityTaskBatchSize,
@@ -94,19 +94,13 @@ func newVisibilityQueueProcessor(
 		UpdateAckIntervalJitterCoefficient: config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
 		MaxReschdulerSize:                  config.VisibilityProcessorMaxReschedulerSize,
 		PollBackoffInterval:                config.VisibilityProcessorPollBackoffInterval,
-		MetricScope:                        metrics.VisibilityQueueProcessorScope,
+		Operation:                          metrics.VisibilityQueueProcessorScope,
 	}
 	visibilityTaskFilter := func(taskInfo tasks.Task) bool {
 		return true
 	}
 	maxReadLevel := func() int64 {
-		return shard.GetQueueExclusiveHighReadWatermark(
-			tasks.CategoryVisibility,
-			shard.GetClusterMetadata().GetCurrentClusterName(),
-			// the value doesn't actually used for immediate queue,
-			// but logically visibility queue only has one processor
-			true,
-		).TaskID
+		return shard.GetImmediateQueueExclusiveHighReadWatermark().TaskID
 	}
 	updateVisibilityAckLevel := func(ackLevel int64) error {
 		return shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.NewImmediateKey(ackLevel))
@@ -125,7 +119,7 @@ func newVisibilityQueueProcessor(
 		visibilityQueueShutdown:  visibilityQueueShutdown,
 		visibilityTaskFilter:     visibilityTaskFilter,
 		logger:                   logger,
-		metricsClient:            metricsClient,
+		metricHandler:            metricHandler,
 
 		config:       config,
 		ackLevel:     ackLevel,
@@ -153,7 +147,7 @@ func newVisibilityQueueProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
+		metricProvider.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
 	)
 
 	queueAckMgr := newQueueAckMgr(
@@ -269,10 +263,11 @@ func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
 			}
 			return
 		case <-timer.C:
-			if err := backoff.ThrottleRetry(func() error {
+			// TODO: We should have a better approach to handle shard and its component lifecycle
+			_ = backoff.ThrottleRetry(func() error {
 				err := t.completeTask()
 				if err != nil {
-					t.logger.Info("Failed to complete transfer task", tag.Error(err))
+					t.logger.Error("Failed to complete visibility task", tag.Error(err))
 				}
 				return err
 			}, completeTaskRetryPolicy, func(err error) bool {
@@ -282,11 +277,7 @@ func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
 				default:
 				}
 				return !shard.IsShardOwnershipLostError(err)
-			}); shard.IsShardOwnershipLostError(err) {
-				// shard closed, trigger shutdown and bail out
-				t.Stop()
-				return
-			}
+			})
 
 			timer.Reset(t.config.VisibilityProcessorCompleteTaskInterval())
 		}
@@ -302,7 +293,9 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 		return nil
 	}
 
-	t.metricsClient.IncCounter(metrics.VisibilityQueueProcessorScope, metrics.TaskBatchCompleteCounter)
+	t.metricHandler.Counter(metrics.TaskBatchCompleteCounter.GetMetricName()).Record(
+		1,
+		metrics.OperationTag(metrics.VisibilityQueueProcessorScope))
 
 	if lowerAckLevel < upperAckLevel {
 		ctx, cancel := newQueueIOContext()

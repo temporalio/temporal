@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -71,7 +72,7 @@ type (
 		historyClient     historyservice.HistoryServiceClient
 		frontendClient    workflowservice.WorkflowServiceClient
 		logger            log.Logger
-		metricsClient     metrics.Client
+		metricsHandler    metrics.MetricsHandler
 	}
 
 	replicationStatus struct {

@@ -74,7 +74,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/batcher"
 )
@@ -94,7 +94,7 @@ type (
 		*require.Assertions
 
 		controller                   *gomock.Controller
-		mockResource                 *resource.Test
+		mockResource                 *resourcetest.Test
 		mockNamespaceCache           *namespace.MockRegistry
 		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata          *cluster.MockMetadata
@@ -138,7 +138,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.testNamespaceID = "e4f90ec0-1313-45be-9877-8aa41f72a45a"
 
 	s.controller = gomock.NewController(s.T())
-	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
+	s.mockResource = resourcetest.NewTest(s.controller, metrics.Frontend)
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
@@ -1416,7 +1416,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 
 	history, token, err := wh.getHistory(
 		context.Background(),
-		metrics.NoopScope,
+		metrics.NoopMetricsHandler,
 		namespaceID,
 		namespace,
 		we,
@@ -1716,6 +1716,82 @@ func (s *workflowHandlerSuite) TestGetSearchAttributes() {
 	resp, err := wh.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
+}
+
+func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_RunningStatus() {
+	config := s.newConfig()
+	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	now := timestamp.TimePtr(time.Now())
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(
+		s.testNamespaceID,
+		nil,
+	).AnyTimes()
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&historyservice.DescribeWorkflowExecutionResponse{
+			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: testWorkflowID,
+					RunId:      testRunID,
+				},
+				StartTime:        now,
+				CloseTime:        now,
+				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				ExecutionTime:    now,
+				Memo:             nil,
+				SearchAttributes: nil,
+			},
+		},
+		nil,
+	)
+
+	request := &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.testNamespace.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+		},
+	}
+	_, err := wh.DescribeWorkflowExecution(context.Background(), request)
+	s.NoError(err)
+}
+
+func (s *workflowHandlerSuite) TestDescribeWorkflowExecution_CompletedStatus() {
+	config := s.newConfig()
+	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	now := timestamp.TimePtr(time.Now())
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(
+		s.testNamespaceID,
+		nil,
+	).AnyTimes()
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&historyservice.DescribeWorkflowExecutionResponse{
+			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: testWorkflowID,
+					RunId:      testRunID,
+				},
+				StartTime:        now,
+				CloseTime:        now,
+				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				ExecutionTime:    now,
+				Memo:             nil,
+				SearchAttributes: nil,
+			},
+		},
+		nil,
+	)
+
+	request := &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.testNamespace.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: testWorkflowID,
+		},
+	}
+	_, err := wh.DescribeWorkflowExecution(context.Background(), request)
+	s.NoError(err)
 }
 
 func (s *workflowHandlerSuite) TestListWorkflowExecutions() {

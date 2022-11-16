@@ -35,35 +35,36 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
 
-// VerifyTaskVersion, will return true if failover version check is successful
-func VerifyTaskVersion(
+// CheckTaskVersion will return an error if task version check fails
+func CheckTaskVersion(
 	shard shard.Context,
 	logger log.Logger,
 	namespace *namespace.Namespace,
 	version int64,
 	taskVersion int64,
 	task interface{},
-) bool {
+) error {
 
 	if !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-		return true
+		return nil
 	}
 
 	// the first return value is whether this task is valid for further processing
 	if !namespace.IsGlobalNamespace() {
 		logger.Debug("NamespaceID is not global, task version check pass", tag.WorkflowNamespaceID(namespace.ID().String()), tag.Task(task))
-		return true
+		return nil
 	} else if version != taskVersion {
 		logger.Debug("NamespaceID is global, task version != target version", tag.WorkflowNamespaceID(namespace.ID().String()), tag.Task(task), tag.TaskVersion(version))
-		return false
+		return consts.ErrTaskVersionMismatch
 	}
 	logger.Debug("NamespaceID is global, task version == target version", tag.WorkflowNamespaceID(namespace.ID().String()), tag.Task(task), tag.TaskVersion(version))
-	return true
+	return nil
 }
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
@@ -72,7 +73,7 @@ func loadMutableStateForTransferTask(
 	ctx context.Context,
 	wfContext workflow.Context,
 	transferTask tasks.Task,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	logger = tasks.InitializeLogger(transferTask, logger)
@@ -81,7 +82,7 @@ func loadMutableStateForTransferTask(
 		wfContext,
 		transferTask,
 		getTransferTaskEventIDAndRetryable,
-		metricsClient.Scope(metrics.TransferQueueProcessorScope),
+		metricsHandler.WithTags(metrics.OperationTag(metrics.TransferQueueProcessorScope)),
 		logger,
 	)
 	if err != nil {
@@ -116,7 +117,7 @@ func loadMutableStateForTimerTask(
 	ctx context.Context,
 	wfContext workflow.Context,
 	timerTask tasks.Task,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	logger = tasks.InitializeLogger(timerTask, logger)
@@ -125,7 +126,7 @@ func loadMutableStateForTimerTask(
 		wfContext,
 		timerTask,
 		getTimerTaskEventIDAndRetryable,
-		metricsClient.Scope(metrics.TimerQueueProcessorScope),
+		metricsHandler.WithTags(metrics.OperationTag(metrics.TimerQueueProcessorScope)),
 		logger,
 	)
 }
@@ -135,7 +136,7 @@ func LoadMutableStateForTask(
 	wfContext workflow.Context,
 	task tasks.Task,
 	taskEventIDAndRetryable func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) (int64, bool),
-	scope metrics.Scope,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 
@@ -152,7 +153,7 @@ func LoadMutableStateForTask(
 		return mutableState, nil
 	}
 
-	scope.IncCounter(metrics.StaleMutableStateCounter)
+	metricsHandler.Counter(metrics.StaleMutableStateCounter.GetMetricName()).Record(1)
 	wfContext.Clear()
 
 	mutableState, err = wfContext.LoadMutableState(ctx)
@@ -161,7 +162,7 @@ func LoadMutableStateForTask(
 	}
 	// after refresh, still mutable state's next event ID <= task's event ID
 	if eventID >= mutableState.GetNextEventID() {
-		scope.IncCounter(metrics.TaskSkipped)
+		metricsHandler.Counter(metrics.TaskSkipped.GetMetricName()).Record(1)
 		logger.Info("Task Processor: task event ID >= MS NextEventID, skip.",
 			tag.WorkflowNextEventID(mutableState.GetNextEventID()),
 		)

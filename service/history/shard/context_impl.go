@@ -88,8 +88,8 @@ type (
 	ContextImpl struct {
 		// These fields are constant:
 		shardID             int32
+		stringRepr          string
 		executionManager    persistence.ExecutionManager
-		metricsClient       metrics.Client
 		metricsHandler      metrics.MetricsHandler
 		eventsCache         events.Cache
 		closeCallback       func(*ContextImpl)
@@ -174,7 +174,7 @@ const (
 
 func (s *ContextImpl) String() string {
 	// constant from initialization, no need for locks
-	return fmt.Sprintf("Shard(%d)", s.shardID)
+	return s.stringRepr
 }
 
 func (s *ContextImpl) GetShardID() int32 {
@@ -185,6 +185,23 @@ func (s *ContextImpl) GetShardID() int32 {
 func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	// constant from initialization, no need for locks
 	return s.executionManager
+}
+
+func (s *ContextImpl) GetPingChecks() []common.PingCheck {
+	return []common.PingCheck{{
+		Name: s.String(),
+		// rwLock may be held for the duration of a persistence op, which are called with a
+		// timeout of shardIOTimeout. add a few more seconds for reliability.
+		Timeout: shardIOTimeout + 5*time.Second,
+		Ping: func() []common.Pingable {
+			// call rwLock.Lock directly to bypass metrics since this isn't a real request
+			s.rwLock.Lock()
+			//lint:ignore SA2001 just checking if we can acquire the lock
+			s.rwLock.Unlock()
+			return nil
+		},
+		MetricsName: metrics.ShardLockLatency.GetMetricName(),
+	}}
 }
 
 func (s *ContextImpl) GetEngine(
@@ -210,10 +227,9 @@ func (s *ContextImpl) AssertOwnership(
 		return err
 	}
 
-	rangeID := s.getRangeIDLocked()
 	err := s.persistenceShardManager.AssertShardOwnership(ctx, &persistence.AssertShardOwnershipRequest{
 		ShardID: s.shardID,
-		RangeID: rangeID,
+		RangeID: s.getRangeIDLocked(),
 	})
 	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, 0); err != nil {
 		return err
@@ -262,22 +278,7 @@ func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
 	return result, nil
 }
 
-func (s *ContextImpl) GetQueueExclusiveHighReadWatermark(
-	category tasks.Category,
-	cluster string,
-	singleProcessorMode bool,
-) tasks.Key {
-	switch categoryType := category.Type(); categoryType {
-	case tasks.CategoryTypeImmediate:
-		return s.getImmediateTaskExclusiveMaxReadLevel()
-	case tasks.CategoryTypeScheduled:
-		return s.updateScheduledTaskMaxReadLevel(cluster, singleProcessorMode)
-	default:
-		panic(fmt.Sprintf("invalid task category type: %v", categoryType))
-	}
-}
-
-func (s *ContextImpl) getImmediateTaskExclusiveMaxReadLevel() tasks.Key {
+func (s *ContextImpl) GetImmediateQueueExclusiveHighReadWatermark() tasks.Key {
 	s.rLock()
 	defer s.rUnlock()
 	return tasks.NewImmediateKey(s.immediateTaskExclusiveMaxReadLevel)
@@ -294,10 +295,10 @@ func (s *ContextImpl) getScheduledTaskMaxReadLevel(cluster string) tasks.Key {
 	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
 }
 
-func (s *ContextImpl) updateScheduledTaskMaxReadLevel(
+func (s *ContextImpl) UpdateScheduledQueueExclusiveHighReadWatermark(
 	cluster string,
 	singleProcessorMode bool,
-) tasks.Key {
+) (tasks.Key, error) {
 	s.wLock()
 	defer s.wUnlock()
 
@@ -305,8 +306,8 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(
 		s.scheduledTaskMaxReadLevelMap[cluster] = tasks.DefaultFireTime
 	}
 
-	if s.errorByState() != nil {
-		return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
+	if err := s.errorByState(); err != nil {
+		return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0), err
 	}
 
 	currentTime := s.timeSource.Now()
@@ -327,7 +328,7 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(
 		s.scheduledTaskMaxReadLevelMap[cluster] = util.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
 	}
 
-	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
+	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0), nil
 }
 
 // NOTE: the ack level returned is inclusive for immediate task category (acked),
@@ -527,14 +528,11 @@ func (s *ContextImpl) UpdateReplicatorDLQAckLevel(
 		return err
 	}
 
-	s.GetMetricsClient().Scope(
-		metrics.ReplicationDLQStatsScope,
-		metrics.TargetClusterTag(sourceCluster),
-		metrics.InstanceTag(convert.Int32ToString(s.shardID)),
-	).UpdateGauge(
-		metrics.ReplicationDLQAckLevelGauge,
-		float64(ackLevel),
-	)
+	s.GetMetricsHandler().Gauge(metrics.ReplicationDLQAckLevelGauge.GetMetricName()).
+		Record(float64(ackLevel),
+			metrics.OperationTag(metrics.ReplicationDLQStatsScope),
+			metrics.TargetClusterTag(sourceCluster),
+			metrics.InstanceTag(convert.Int32ToString(s.shardID)))
 	return nil
 }
 
@@ -556,12 +554,12 @@ func (s *ContextImpl) DeleteFailoverLevel(category tasks.Category, failoverID st
 
 	if levels, ok := s.shardInfo.FailoverLevels[category]; ok {
 		if level, ok := levels[failoverID]; ok {
-			scope := s.GetMetricsClient().Scope(metrics.ShardInfoScope)
+			handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
 			switch category {
 			case tasks.CategoryTransfer:
-				scope.RecordTimer(metrics.ShardInfoTransferFailoverLatencyTimer, time.Since(level.StartTime))
+				handler.Timer(metrics.ShardInfoTransferFailoverLatencyTimer.GetMetricName()).Record(time.Since(level.StartTime))
 			case tasks.CategoryTimer:
-				scope.RecordTimer(metrics.ShardInfoTimerFailoverLatencyTimer, time.Since(level.StartTime))
+				handler.Timer(metrics.ShardInfoTimerFailoverLatencyTimer.GetMetricName()).Record(time.Since(level.StartTime))
 			}
 			delete(levels, failoverID)
 		}
@@ -694,7 +692,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	}
 
 	transferExclusiveMaxReadLevel := int64(0)
-	if err := s.allocateTaskIDsLocked(
+	if err := s.allocateTaskIDAndTimestampLocked(
 		namespaceEntry,
 		workflowID,
 		request.NewWorkflowSnapshot.Tasks,
@@ -739,7 +737,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	}
 
 	transferExclusiveMaxReadLevel := int64(0)
-	if err := s.allocateTaskIDsLocked(
+	if err := s.allocateTaskIDAndTimestampLocked(
 		namespaceEntry,
 		workflowID,
 		request.UpdateWorkflowMutation.Tasks,
@@ -749,7 +747,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	}
 	s.updateCloseTaskIDs(request.UpdateWorkflowMutation.ExecutionInfo, request.UpdateWorkflowMutation.Tasks)
 	if request.NewWorkflowSnapshot != nil {
-		if err := s.allocateTaskIDsLocked(
+		if err := s.allocateTaskIDAndTimestampLocked(
 			namespaceEntry,
 			workflowID,
 			request.NewWorkflowSnapshot.Tasks,
@@ -811,7 +809,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 
 	transferExclusiveMaxReadLevel := int64(0)
 	if request.CurrentWorkflowMutation != nil {
-		if err := s.allocateTaskIDsLocked(
+		if err := s.allocateTaskIDAndTimestampLocked(
 			namespaceEntry,
 			workflowID,
 			request.CurrentWorkflowMutation.Tasks,
@@ -820,7 +818,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 			return nil, err
 		}
 	}
-	if err := s.allocateTaskIDsLocked(
+	if err := s.allocateTaskIDAndTimestampLocked(
 		namespaceEntry,
 		workflowID,
 		request.ResetWorkflowSnapshot.Tasks,
@@ -829,7 +827,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		return nil, err
 	}
 	if request.NewWorkflowSnapshot != nil {
-		if err := s.allocateTaskIDsLocked(
+		if err := s.allocateTaskIDAndTimestampLocked(
 			namespaceEntry,
 			workflowID,
 			request.NewWorkflowSnapshot.Tasks,
@@ -874,7 +872,7 @@ func (s *ContextImpl) SetWorkflowExecution(
 	}
 
 	transferExclusiveMaxReadLevel := int64(0)
-	if err := s.allocateTaskIDsLocked(
+	if err := s.allocateTaskIDAndTimestampLocked(
 		namespaceEntry,
 		workflowID,
 		request.SetWorkflowSnapshot.Tasks,
@@ -928,7 +926,7 @@ func (s *ContextImpl) addTasksLocked(
 	namespaceEntry *namespace.Namespace,
 ) error {
 	transferExclusiveMaxReadLevel := int64(0)
-	if err := s.allocateTaskIDsLocked(
+	if err := s.allocateTaskIDAndTimestampLocked(
 		namespaceEntry,
 		request.WorkflowID,
 		request.Tasks,
@@ -958,12 +956,11 @@ func (s *ContextImpl) AppendHistoryEvents(
 	defer func() {
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
 		// namespaces along with the individual namespaces stats
-		s.GetMetricsClient().RecordDistribution(metrics.SessionStatsScope, metrics.HistorySize, size)
+		handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.SessionStatsScope))
+		handler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).Record(int64(size))
 		if entry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID); err == nil && entry != nil {
-			s.GetMetricsClient().Scope(
-				metrics.SessionStatsScope,
-				metrics.NamespaceTag(entry.Name().String()),
-			).RecordDistribution(metrics.HistorySize, size)
+			handler.Histogram(metrics.HistorySize.GetMetricName(), metrics.HistorySize.GetMetricUnit()).
+				Record(int64(size), metrics.NamespaceTag(entry.Name().String()))
 		}
 		if size >= historySizeLogThreshold {
 			s.throttledLogger.Warn("history size threshold breached",
@@ -1309,25 +1306,28 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 		s.contextTaggedLogger.Warn("Shard ack levels diff exceeds warn threshold.", ackLevelTags...)
 	}
 
-	metricsScope := s.GetMetricsClient().Scope(metrics.ShardInfoScope)
-	metricsScope.RecordDistribution(metrics.ShardInfoTransferDiffHistogram, int(diffTransferLevel))
-	metricsScope.RecordTimer(metrics.ShardInfoTimerDiffTimer, diffTimerLevel)
+	handler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	handler.Histogram(metrics.ShardInfoTransferDiffHistogram.GetMetricName(), metrics.ShardInfoTransferDiffHistogram.GetMetricUnit()).Record(diffTransferLevel)
+	handler.Timer(metrics.ShardInfoTimerDiffTimer.GetMetricName()).Record(diffTimerLevel)
 
-	metricsScope.RecordDistribution(metrics.ShardInfoReplicationLagHistogram, int(replicationLag))
-	metricsScope.RecordDistribution(metrics.ShardInfoTransferLagHistogram, int(transferLag))
-	metricsScope.RecordTimer(metrics.ShardInfoTimerLagTimer, timerLag)
-	metricsScope.RecordDistribution(metrics.ShardInfoVisibilityLagHistogram, int(visibilityLag))
+	handler.Histogram(metrics.ShardInfoReplicationLagHistogram.GetMetricName(), metrics.ShardInfoReplicationLagHistogram.GetMetricUnit()).Record(replicationLag)
+	handler.Histogram(metrics.ShardInfoTransferLagHistogram.GetMetricName(), metrics.ShardInfoTransferLagHistogram.GetMetricUnit()).Record(transferLag)
+	handler.Histogram(metrics.ShardInfoVisibilityLagHistogram.GetMetricName(), metrics.ShardInfoVisibilityLagHistogram.GetMetricUnit()).Record(visibilityLag)
+	handler.Timer(metrics.ShardInfoTimerLagTimer.GetMetricName()).Record(timerLag)
 
-	metricsScope.RecordDistribution(metrics.ShardInfoTransferFailoverInProgressHistogram, transferFailoverInProgress)
-	metricsScope.RecordDistribution(metrics.ShardInfoTimerFailoverInProgressHistogram, timerFailoverInProgress)
+	handler.Histogram(metrics.ShardInfoTransferFailoverInProgressHistogram.GetMetricName(), metrics.ShardInfoTransferFailoverInProgressHistogram.GetMetricUnit()).
+		Record(int64(transferFailoverInProgress))
+	handler.Histogram(metrics.ShardInfoTimerFailoverInProgressHistogram.GetMetricName(), metrics.ShardInfoTimerFailoverInProgressHistogram.GetMetricUnit()).
+		Record(int64(timerFailoverInProgress))
 }
 
-func (s *ContextImpl) allocateTaskIDsLocked(
+func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	newTasks map[tasks.Category][]tasks.Task,
 	transferExclusiveMaxReadLevel *int64,
 ) error {
+	now := s.timeSource.Now()
 	currentCluster := s.GetClusterMetadata().GetCurrentClusterName()
 	for category, tasksByCategory := range newTasks {
 		for _, task := range tasksByCategory {
@@ -1339,6 +1339,12 @@ func (s *ContextImpl) allocateTaskIDsLocked(
 			s.contextTaggedLogger.Debug("Assigning task ID", tag.TaskID(id))
 			task.SetTaskID(id)
 			*transferExclusiveMaxReadLevel = id + 1
+
+			// for immediate task, visibility timestamp is only used for emitting task processing metrics.
+			// always set it's value to now so that the metrics emitted only include task processing latency.
+			if category.Type() == tasks.CategoryTypeImmediate {
+				task.SetVisibilityTime(now)
+			}
 
 			// if scheduled task, check if fire time is in the past
 			if category.Type() == tasks.CategoryTypeScheduled {
@@ -1427,6 +1433,10 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 		s.updateMaxReadLevelLocked(newMaxReadLevel)
 		return nil
 
+	case *persistence.AppendHistoryTimeoutError:
+		// append history can be blindly retried
+		return err
+
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
 		*persistence.ConditionFailedError,
@@ -1455,8 +1465,10 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 
 func (s *ContextImpl) maybeRecordShardAcquisitionLatency(ownershipChanged bool) {
 	if ownershipChanged {
-		s.GetMetricsClient().RecordTimer(metrics.ShardInfoScope, metrics.ShardContextAcquisitionLatency,
-			s.GetCurrentTime(s.GetClusterMetadata().GetCurrentClusterName()).Sub(s.GetLastUpdatedTime()))
+		s.GetMetricsHandler().Timer(metrics.ShardContextAcquisitionLatency.GetMetricName()).
+			Record(s.GetCurrentTime(s.GetClusterMetadata().GetCurrentClusterName()).Sub(s.GetLastUpdatedTime()),
+				metrics.OperationTag(metrics.ShardInfoScope),
+			)
 	}
 }
 
@@ -1501,19 +1513,19 @@ func (s *ContextImpl) isValid() bool {
 }
 
 func (s *ContextImpl) wLock() {
-	scope := metrics.ShardInfoScope
-	s.metricsClient.IncCounter(scope, metrics.LockRequests)
-	sw := s.metricsClient.StartTimer(scope, metrics.LockLatency)
-	defer sw.Stop()
+	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	handler.Counter(metrics.LockRequests.GetMetricName()).Record(1)
+	startTime := time.Now().UTC()
+	defer handler.Timer(metrics.LockLatency.GetMetricName()).Record(time.Since(startTime))
 
 	s.rwLock.Lock()
 }
 
 func (s *ContextImpl) rLock() {
-	scope := metrics.ShardInfoScope
-	s.metricsClient.IncCounter(scope, metrics.LockRequests)
-	sw := s.metricsClient.StartTimer(scope, metrics.LockLatency)
-	defer sw.Stop()
+	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	handler.Counter(metrics.LockRequests.GetMetricName()).Record(1)
+	startTime := time.Now().UTC()
+	defer handler.Timer(metrics.LockLatency.GetMetricName()).Record(time.Since(startTime))
 
 	s.rwLock.RLock()
 }
@@ -1842,7 +1854,7 @@ func (s *ContextImpl) acquireShard() {
 	//
 	// We stop retrying on any of:
 	// 1. We succeed in acquiring the rangeid lock.
-	// 2. We get any error other than transient errors.
+	// 2. We get ShardOwnershipLostError or lifecycleCtx ended.
 	// 3. The state changes to Stopping or Stopped.
 	//
 	// If the shard controller sees that service resolver has assigned ownership to someone
@@ -1906,7 +1918,18 @@ func (s *ContextImpl) acquireShard() {
 		return nil
 	}
 
-	err := backoff.ThrottleRetry(op, policy, common.IsPersistenceTransientError)
+	// keep retrying except ShardOwnershipLostError or lifecycle context ended
+	acquireShardRetryable := func(err error) bool {
+		if s.lifecycleCtx.Err() != nil {
+			return false
+		}
+		switch err.(type) {
+		case *persistence.ShardOwnershipLostError:
+			return false
+		}
+		return true
+	}
+	err := backoff.ThrottleRetry(op, policy, acquireShardRetryable)
 	if err != nil {
 		// We got an unretryable error (perhaps context cancelled or ShardOwnershipLostError).
 		s.contextTaggedLogger.Error("Couldn't acquire shard", tag.Error(err))
@@ -1928,7 +1951,6 @@ func newContext(
 	persistenceShardManager persistence.ShardManager,
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
-	metricsClient metrics.Client,
 	metricsHandler metrics.MetricsHandler,
 	payloadSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
@@ -1946,8 +1968,8 @@ func newContext(
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
+		stringRepr:              fmt.Sprintf("Shard(%d)", shardID),
 		executionManager:        persistenceExecutionManager,
-		metricsClient:           metricsClient,
 		metricsHandler:          metricsHandler,
 		closeCallback:           closeCallback,
 		config:                  config,
@@ -1978,7 +2000,7 @@ func newContext(
 		shardContext.GetExecutionManager(),
 		false,
 		shardContext.GetLogger(),
-		shardContext.GetMetricsClient(),
+		shardContext.GetMetricsHandler(),
 	)
 
 	return shardContext, nil
@@ -2027,10 +2049,6 @@ func (s *ContextImpl) GetPayloadSerializer() serialization.Serializer {
 
 func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return s.historyClient
-}
-
-func (s *ContextImpl) GetMetricsClient() metrics.Client {
-	return s.metricsClient
 }
 
 func (s *ContextImpl) GetMetricsHandler() metrics.MetricsHandler {

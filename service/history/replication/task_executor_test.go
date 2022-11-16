@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -44,7 +45,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resourcetest"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
@@ -60,7 +61,7 @@ type (
 		controller *gomock.Controller
 
 		remoteCluster      string
-		mockResource       *resource.Test
+		mockResource       *resourcetest.Test
 		mockShard          *shard.ContextTest
 		mockEngine         *shard.MockEngine
 		config             *configs.Config
@@ -179,6 +180,16 @@ func (s *taskExecutorSuite) TestFilterTask_EnforceApply() {
 	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, true)
 	s.NoError(err)
 	s.True(ok)
+}
+
+func (s *taskExecutorSuite) TestFilterTask_NamespaceNotFound() {
+	namespaceID := namespace.ID(uuid.New())
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceByID(namespaceID).
+		Return(nil, &serviceerror.NamespaceNotFound{})
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, false)
+	s.NoError(err)
+	s.False(ok)
 }
 
 func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {

@@ -50,19 +50,19 @@ type (
 	}
 
 	EventsReapplierImpl struct {
-		metricsClient metrics.Client
-		logger        log.Logger
+		metricsHandler metrics.MetricsHandler
+		logger         log.Logger
 	}
 )
 
 func NewEventsReapplier(
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) *EventsReapplierImpl {
 
 	return &EventsReapplierImpl{
-		metricsClient: metricsClient,
-		logger:        logger,
+		metricsHandler: metricsHandler,
+		logger:         logger,
 	}
 }
 

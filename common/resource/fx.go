@@ -33,6 +33,7 @@ import (
 
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -48,6 +49,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/deadlock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -67,8 +69,6 @@ import (
 )
 
 type (
-	SnTaggedLogger       log.Logger
-	ThrottledLogger      log.Logger
 	ThrottledLoggerRpsFn quotas.RateFn
 	NamespaceLogger      log.Logger
 	ServiceName          string
@@ -83,7 +83,7 @@ type (
 		fx.In
 
 		Provider   metrics.MetricsHandler
-		Logger     SnTaggedLogger
+		Logger     log.SnTaggedLogger
 		InstanceID InstanceID `optional:"true"`
 	}
 )
@@ -117,7 +117,8 @@ var Module = fx.Options(
 	membership.GRPCResolverModule,
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
-	fx.Provide(MetricsClientProvider),
+	fx.Provide(health.NewServer),
+	deadlock.Module,
 )
 
 var DefaultOptions = fx.Options(
@@ -131,14 +132,14 @@ var DefaultOptions = fx.Options(
 	fx.Provide(DCRedirectionPolicyProvider),
 )
 
-func SnTaggedLoggerProvider(logger log.Logger, sn ServiceName) SnTaggedLogger {
+func SnTaggedLoggerProvider(logger log.Logger, sn ServiceName) log.SnTaggedLogger {
 	return log.With(logger, tag.Service(string(sn)))
 }
 
 func ThrottledLoggerProvider(
-	logger SnTaggedLogger,
+	logger log.SnTaggedLogger,
 	fn ThrottledLoggerRpsFn,
-) ThrottledLogger {
+) log.ThrottledLogger {
 	return log.NewThrottledLogger(
 		logger,
 		quotas.RateFn(fn),
@@ -181,8 +182,8 @@ func SearchAttributeManagerProvider(
 }
 
 func NamespaceRegistryProvider(
-	logger SnTaggedLogger,
-	metricsClient metrics.Client,
+	logger log.SnTaggedLogger,
+	metricsHandler metrics.MetricsHandler,
 	clusterMetadata cluster.Metadata,
 	metadataManager persistence.MetadataManager,
 	dynamicCollection *dynamicconfig.Collection,
@@ -191,7 +192,7 @@ func NamespaceRegistryProvider(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
 		dynamicCollection.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
-		metricsClient,
+		metricsHandler,
 		logger,
 	)
 }
@@ -200,16 +201,16 @@ func ClientFactoryProvider(
 	factoryProvider client.FactoryProvider,
 	rpcFactory common.RPCFactory,
 	membershipMonitor membership.Monitor,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	dynamicCollection *dynamicconfig.Collection,
 	persistenceConfig *config.Persistence,
-	logger SnTaggedLogger,
-	throttledLogger ThrottledLogger,
+	logger log.SnTaggedLogger,
+	throttledLogger log.ThrottledLogger,
 ) client.Factory {
 	return factoryProvider.NewFactory(
 		rpcFactory,
 		membershipMonitor,
-		metricsClient,
+		metricsHandler,
 		dynamicCollection,
 		persistenceConfig.NumHistoryShards,
 		logger,
@@ -230,7 +231,7 @@ func ClientBeanProvider(
 func MembershipMonitorProvider(
 	lc fx.Lifecycle,
 	clusterMetadataManager persistence.ClusterMetadataManager,
-	logger SnTaggedLogger,
+	logger log.SnTaggedLogger,
 	cfg *config.Config,
 	svcName ServiceName,
 	tlsConfigProvider encryption.TLSConfigProvider,
@@ -300,27 +301,27 @@ func RuntimeMetricsReporterProvider(
 }
 
 func VisibilityBootstrapContainerProvider(
-	logger SnTaggedLogger,
-	metricsClient metrics.Client,
+	logger log.SnTaggedLogger,
+	metricsHandler metrics.MetricsHandler,
 	clusterMetadata cluster.Metadata,
 ) *archiver.VisibilityBootstrapContainer {
 	return &archiver.VisibilityBootstrapContainer{
 		Logger:          logger,
-		MetricsClient:   metricsClient,
+		MetricsHandler:  metricsHandler,
 		ClusterMetadata: clusterMetadata,
 	}
 }
 
 func HistoryBootstrapContainerProvider(
-	logger SnTaggedLogger,
-	metricsClient metrics.Client,
+	logger log.SnTaggedLogger,
+	metricsHandler metrics.MetricsHandler,
 	clusterMetadata cluster.Metadata,
 	executionManager persistence.ExecutionManager,
 ) *archiver.HistoryBootstrapContainer {
 	return &archiver.HistoryBootstrapContainer{
 		ExecutionManager: executionManager,
 		Logger:           logger,
-		MetricsClient:    metricsClient,
+		MetricsHandler:   metricsHandler,
 		ClusterMetadata:  clusterMetadata,
 	}
 }
@@ -363,12 +364,6 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient 
 	)
 }
 
-// TODO: rework to depend on...
-func MetricsClientProvider(logger log.Logger, serviceName ServiceName, provider metrics.MetricsHandler) metrics.Client {
-	serviceIdx := metrics.GetMetricsServiceIdx(string(serviceName), logger)
-	return metrics.NewClient(provider, serviceIdx)
-}
-
 func PersistenceConfigProvider(persistenceConfig config.Persistence, dc *dynamicconfig.Collection) *config.Persistence {
 	persistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
 	return &persistenceConfig
@@ -393,7 +388,7 @@ func SdkClientFactoryProvider(
 	cfg *config.Config,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	metricsHandler metrics.MetricsHandler,
-	logger SnTaggedLogger,
+	logger log.SnTaggedLogger,
 	resolver membership.GRPCResolver,
 ) (sdk.ClientFactory, error) {
 	tlsFrontendConfig, err := tlsConfigProvider.GetFrontendClientConfig()

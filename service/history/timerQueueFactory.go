@@ -27,6 +27,8 @@ package history
 import (
 	"context"
 
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
@@ -39,7 +41,6 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
-	"go.uber.org/fx"
 )
 
 const (
@@ -77,7 +78,7 @@ func NewTimerQueueFactory(
 			},
 			params.NamespaceRegistry,
 			params.TimeSource,
-			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTimerQueueProcessor)),
+			params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
 			params.Logger,
 		)
 	}
@@ -105,7 +106,6 @@ func NewTimerQueueFactory(
 
 func (f *timerQueueFactory) CreateQueue(
 	shard shard.Context,
-	engine shard.Engine,
 	workflowCache workflow.Cache,
 ) queues.Queue {
 	if f.HostScheduler != nil && f.Config.TimerProcessorEnableMultiCursor() {
@@ -195,7 +195,7 @@ func (f *timerQueueFactory) CreateQueue(
 			},
 			f.HostReaderRateLimiter,
 			logger,
-			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTimerQueueProcessor)),
+			f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
 		)
 	}
 

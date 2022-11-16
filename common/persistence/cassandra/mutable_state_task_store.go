@@ -76,8 +76,8 @@ const (
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id > ? ` +
-		`and task_id <= ?`
+		`and task_id >= ? ` +
+		`and task_id < ?`
 
 	templateGetHistoryScheduledTasksQuery = `SELECT task_data, task_encoding ` +
 		`FROM executions ` +

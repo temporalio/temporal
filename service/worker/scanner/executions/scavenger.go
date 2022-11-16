@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -44,9 +45,8 @@ import (
 )
 
 const (
-	executorPoolSize         = 4
 	executorPollInterval     = time.Minute
-	executorMaxDeferredTasks = 10000
+	executorMaxDeferredTasks = 50000
 )
 
 type (
@@ -59,11 +59,12 @@ type (
 		executionManager            persistence.ExecutionManager
 		registry                    namespace.Registry
 		historyClient               historyservice.HistoryServiceClient
+		adminClient                 adminservice.AdminServiceClient
 		executor                    executor.Executor
 		rateLimiter                 quotas.RateLimiter
 		perShardQPS                 dynamicconfig.IntPropertyFn
 		executionDataDurationBuffer dynamicconfig.DurationPropertyFn
-		metrics                     metrics.Client
+		metricsHandler              metrics.MetricsHandler
 		logger                      log.Logger
 
 		stopC  chan struct{}
@@ -79,18 +80,20 @@ type (
 //
 // The scavenger will retry on all persistence errors infinitely and will only stop under
 // two conditions
-//  - either all executions are processed successfully (or)
-//  - Stop() method is called to stop the scavenger
+//   - either all executions are processed successfully (or)
+//   - Stop() method is called to stop the scavenger
 func NewScavenger(
 	activityContext context.Context,
 	numHistoryShards int32,
 	perHostQPS dynamicconfig.IntPropertyFn,
 	perShardQPS dynamicconfig.IntPropertyFn,
 	executionDataDurationBuffer dynamicconfig.DurationPropertyFn,
+	executionTaskWorker dynamicconfig.IntPropertyFn,
 	executionManager persistence.ExecutionManager,
 	registry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
-	metricsClient metrics.Client,
+	adminClient adminservice.AdminServiceClient,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) *Scavenger {
 	return &Scavenger{
@@ -99,10 +102,11 @@ func NewScavenger(
 		executionManager: executionManager,
 		registry:         registry,
 		historyClient:    historyClient,
+		adminClient:      adminClient,
 		executor: executor.NewFixedSizePoolExecutor(
-			executorPoolSize,
+			executionTaskWorker(),
 			executorMaxDeferredTasks,
-			metricsClient,
+			metricsHandler,
 			metrics.ExecutionsScavengerScope,
 		),
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
@@ -110,7 +114,7 @@ func NewScavenger(
 		),
 		perShardQPS:                 perShardQPS,
 		executionDataDurationBuffer: executionDataDurationBuffer,
-		metrics:                     metricsClient,
+		metricsHandler:              metricsHandler.WithTags(metrics.OperationTag(metrics.ExecutionsScavengerScope)),
 		logger:                      logger,
 
 		stopC: make(chan struct{}),
@@ -130,7 +134,7 @@ func (s *Scavenger) Start() {
 	s.stopWG.Add(1)
 	s.executor.Start()
 	go s.run()
-	s.metrics.IncCounter(metrics.ExecutionsScavengerScope, metrics.StartedCount)
+	s.metricsHandler.Counter(metrics.StartedCount.GetMetricName()).Record(1)
 	s.logger.Info("Executions scavenger started")
 }
 
@@ -143,7 +147,7 @@ func (s *Scavenger) Stop() {
 	) {
 		return
 	}
-	s.metrics.IncCounter(metrics.ExecutionsScavengerScope, metrics.StoppedCount)
+	s.metricsHandler.Counter(metrics.StoppedCount.GetMetricName()).Record(1)
 	s.logger.Info("Executions scavenger stopping")
 	close(s.stopC)
 	s.executor.Stop()
@@ -170,7 +174,8 @@ func (s *Scavenger) run() {
 			s.executionManager,
 			s.registry,
 			s.historyClient,
-			s.metrics,
+			s.adminClient,
+			s.metricsHandler,
 			s.logger,
 			s,
 			quotas.NewMultiRateLimiter([]quotas.RateLimiter{
@@ -191,14 +196,14 @@ func (s *Scavenger) run() {
 
 func (s *Scavenger) awaitExecutor() {
 	// gauge value persists, so we want to reset it to 0
-	defer s.metrics.UpdateGauge(metrics.ExecutionsScavengerScope, metrics.ExecutionsOutstandingCount, float64(0))
+	defer s.metricsHandler.Gauge(metrics.ExecutionsOutstandingCount.GetMetricName()).Record(float64(0))
 
 	outstanding := s.executor.TaskCount()
 	for outstanding > 0 {
 		select {
 		case <-time.After(executorPollInterval):
 			outstanding = s.executor.TaskCount()
-			s.metrics.UpdateGauge(metrics.ExecutionsScavengerScope, metrics.ExecutionsOutstandingCount, float64(outstanding))
+			s.metricsHandler.Gauge(metrics.ExecutionsOutstandingCount.GetMetricName()).Record(float64(outstanding))
 		case <-s.stopC:
 			return
 		}
