@@ -704,6 +704,19 @@ func (p *executionRateLimitedPersistenceClient) NewHistoryBranch(
 	return p.persistence.NewHistoryBranch(ctx, request)
 }
 
+// RenewHistoryBranch reinitializes the history branch to clean up potentially unnecessary information
+func (p *executionRateLimitedPersistenceClient) RenewHistoryBranch(
+	ctx context.Context,
+	request *RenewHistoryBranchRequest,
+) (*RenewHistoryBranchResponse, error) {
+	// RenewHistoryBranch implementation currently doesn't actually query DB
+	// TODO: uncomment if necessary
+	// if ok := allow(ctx, "RenewHistoryBranch", p.rateLimiter); !ok {
+	// 	return nil, ErrPersistenceLimitExceeded
+	// }
+	return p.persistence.RenewHistoryBranch(ctx, request)
+}
+
 // ReadHistoryBranch returns history node data for a branch
 func (p *executionRateLimitedPersistenceClient) ReadHistoryBranch(
 	ctx context.Context,

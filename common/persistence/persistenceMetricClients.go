@@ -757,6 +757,19 @@ func (p *executionPersistenceClient) NewHistoryBranch(
 	return p.persistence.NewHistoryBranch(ctx, request)
 }
 
+// RenewHistoryBranch reinitializes the history branch to clean up potentially unnecessary information
+func (p *executionPersistenceClient) RenewHistoryBranch(
+	ctx context.Context,
+	request *RenewHistoryBranchRequest,
+) (_ *RenewHistoryBranchResponse, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func(err error) {
+		p.recordRequestMetrics(metrics.PersistenceRenewHistoryBranchScope, caller, startTime, err)
+	}(retErr)
+	return p.persistence.RenewHistoryBranch(ctx, request)
+}
+
 // ReadHistoryBranch returns history node data for a branch
 func (p *executionPersistenceClient) ReadHistoryBranch(
 	ctx context.Context,

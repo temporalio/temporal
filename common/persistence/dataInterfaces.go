@@ -783,6 +783,14 @@ type (
 		BranchToken []byte
 	}
 
+	RenewHistoryBranchRequest struct {
+		BranchToken []byte
+	}
+
+	RenewHistoryBranchResponse struct {
+		BranchToken []byte
+	}
+
 	// ReadHistoryBranchRequest is used to read a history branch
 	ReadHistoryBranchRequest struct {
 		// The shard to get history branch data
@@ -1099,6 +1107,8 @@ type (
 		UpdateHistoryBranchInfo(ctx context.Context, request *UpdateHistoryBranchInfoRequest) (*UpdateHistoryBranchInfoResponse, error)
 		// NewHistoryBranch initializes a new history branch
 		NewHistoryBranch(ctx context.Context, request *NewHistoryBranchRequest) (*NewHistoryBranchResponse, error)
+		// RenewHistoryBranch reinitializes the history branch to clean up potentially unnecessary information
+		RenewHistoryBranch(ctx context.Context, request *RenewHistoryBranchRequest) (*RenewHistoryBranchResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
 		// ReadHistoryBranchByBatch returns history node data for a branch ByBatch

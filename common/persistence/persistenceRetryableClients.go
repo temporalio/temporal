@@ -521,6 +521,22 @@ func (p *executionRetryablePersistenceClient) NewHistoryBranch(
 	return response, err
 }
 
+// RenewHistoryBranch reinitializes the history branch to clean up potentially unnecessary information
+func (p *executionRetryablePersistenceClient) RenewHistoryBranch(
+	ctx context.Context,
+	request *RenewHistoryBranchRequest,
+) (*RenewHistoryBranchResponse, error) {
+	var response *RenewHistoryBranchResponse
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.RenewHistoryBranch(ctx, request)
+		return err
+	}
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
+}
+
 // ReadHistoryBranch returns history node data for a branch
 func (p *executionRetryablePersistenceClient) ReadHistoryBranch(
 	ctx context.Context,

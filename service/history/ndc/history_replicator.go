@@ -263,6 +263,14 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		return err
 	}
 
+	renewedHistoryBranch, err := r.shard.GetExecutionManager().RenewHistoryBranch(ctx,
+		&persistence.RenewHistoryBranchRequest{
+			BranchToken: currentVersionHistory.GetBranchToken(),
+		})
+	if err != nil {
+		return err
+	}
+
 	lastEventTime, lastFirstTxnID, err := r.backfillHistory(
 		ctx,
 		request.GetRemoteCluster(),
@@ -271,7 +279,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		rid,
 		lastEventItem.GetEventId(),
 		lastEventItem.GetVersion(),
-		currentVersionHistory.GetBranchToken(),
+		renewedHistoryBranch.BranchToken,
 	)
 	if err != nil {
 		return err
@@ -291,6 +299,11 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		lastFirstTxnID,
 		lastEventItem.GetVersion(),
 	)
+	if err != nil {
+		return err
+	}
+
+	err = mutableState.SetCurrentBranchToken(renewedHistoryBranch.BranchToken)
 	if err != nil {
 		return err
 	}

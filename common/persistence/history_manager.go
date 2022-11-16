@@ -624,6 +624,17 @@ func (m *executionManagerImpl) NewHistoryBranch(
 	return m.persistence.NewHistoryBranch(ctx, request)
 }
 
+// RenewHistoryBranch reinitializes the history branch to clean up potentially unnecessary information
+func (m *executionManagerImpl) RenewHistoryBranch(
+	ctx context.Context,
+	request *RenewHistoryBranchRequest,
+) (*RenewHistoryBranchResponse, error) {
+
+	return &RenewHistoryBranchResponse{
+		BranchToken: request.BranchToken,
+	}, nil
+}
+
 // ReadHistoryBranchByBatch returns history node data for a branch by batch
 // Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 func (m *executionManagerImpl) ReadHistoryBranchByBatch(
