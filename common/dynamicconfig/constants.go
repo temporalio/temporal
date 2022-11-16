@@ -122,7 +122,7 @@ const (
 	// NumPendingSignalsLimitError is the maximum number of pending signals a workflow can have before
 	// SignalExternalWorkflowExecution commands from this workflow will fail.
 	NumPendingSignalsLimitError = "limit.numPendingSignals.error"
-	// NumPendingCancelRequestsLimitError is the maximum number of pending cancel requests a workflow can have before
+	// NumPendingCancelRequestsLimitError is the maximum number of pending requests to cancel other workflows a workflow can have before
 	// RequestCancelExternalWorkflowExecution commands will fail.
 	NumPendingCancelRequestsLimitError = "limit.numPendingCancelRequests.error"
 	// HistorySizeLimitError is the per workflow execution history size limit
