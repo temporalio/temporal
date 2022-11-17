@@ -26,18 +26,17 @@ package tests
 
 import (
 	"context"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"math/rand"
 	"testing"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
-
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	historypb "go.temporal.io/api/history/v1"
 
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
