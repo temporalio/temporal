@@ -154,8 +154,9 @@ func (m *sqlExecutionStore) getHistoryImmediateTask(
 
 	immedidateTaskRow := rows[0]
 	resp := &p.InternalGetHistoryTaskResponse{
-		InternalTask: p.InternalTask{
-			Task: *p.NewDataBlob(immedidateTaskRow.Data, immedidateTaskRow.DataEncoding),
+		InternalHistoryTask: p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(immedidateTaskRow.TaskID),
+			Blob: *p.NewDataBlob(immedidateTaskRow.Data, immedidateTaskRow.DataEncoding),
 		},
 	}
 	return resp, nil
@@ -198,14 +199,17 @@ func (m *sqlExecutionStore) getHistoryImmediateTasks(
 		}
 	}
 	resp := &p.InternalGetHistoryTasksResponse{
-		Tasks: make([]p.InternalTask, len(rows)),
+		Tasks: make([]p.InternalHistoryTask, len(rows)),
 	}
 	if len(rows) == 0 {
 		return resp, nil
 	}
 
 	for i, row := range rows {
-		resp.Tasks[i].Task = *p.NewDataBlob(row.Data, row.DataEncoding)
+		resp.Tasks[i] = p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(row.TaskID),
+			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+		}
 	}
 	if len(rows) == request.BatchSize {
 		resp.NextPageToken = getImmediateTaskNextPageToken(
@@ -313,9 +317,9 @@ func (m *sqlExecutionStore) getHistoryScheduledTask(
 
 	scheduledTaskRow := rows[0]
 	resp := &p.InternalGetHistoryTaskResponse{
-		InternalTask: p.InternalTask{
-			Task:                *p.NewDataBlob(scheduledTaskRow.Data, scheduledTaskRow.DataEncoding),
-			VisibilityTimestamp: scheduledTaskRow.VisibilityTimestamp,
+		InternalHistoryTask: p.InternalHistoryTask{
+			Key:  tasks.NewKey(scheduledTaskRow.VisibilityTimestamp, scheduledTaskRow.TaskID),
+			Blob: *p.NewDataBlob(scheduledTaskRow.Data, scheduledTaskRow.DataEncoding),
 		},
 	}
 	return resp, nil
@@ -357,11 +361,11 @@ func (m *sqlExecutionStore) getHistoryScheduledTasks(
 		)
 	}
 
-	resp := &p.InternalGetHistoryTasksResponse{Tasks: make([]p.InternalTask, 0, len(rows))}
+	resp := &p.InternalGetHistoryTasksResponse{Tasks: make([]p.InternalHistoryTask, 0, len(rows))}
 	for _, row := range rows {
-		resp.Tasks = append(resp.Tasks, p.InternalTask{
-			Task:                *p.NewDataBlob(row.Data, row.DataEncoding),
-			VisibilityTimestamp: row.VisibilityTimestamp,
+		resp.Tasks = append(resp.Tasks, p.InternalHistoryTask{
+			Key:  tasks.NewKey(row.VisibilityTimestamp, row.TaskID),
+			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
 		})
 	}
 
@@ -449,8 +453,9 @@ func (m *sqlExecutionStore) getTransferTask(
 
 	transferRow := rows[0]
 	resp := &p.InternalGetHistoryTaskResponse{
-		InternalTask: p.InternalTask{
-			Task: *p.NewDataBlob(transferRow.Data, transferRow.DataEncoding),
+		InternalHistoryTask: p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(transferRow.TaskID),
+			Blob: *p.NewDataBlob(transferRow.Data, transferRow.DataEncoding),
 		},
 	}
 
@@ -478,14 +483,17 @@ func (m *sqlExecutionStore) getTransferTasks(
 		}
 	}
 	resp := &p.InternalGetHistoryTasksResponse{
-		Tasks: make([]p.InternalTask, len(rows)),
+		Tasks: make([]p.InternalHistoryTask, len(rows)),
 	}
 	if len(rows) == 0 {
 		return resp, nil
 	}
 
 	for i, row := range rows {
-		resp.Tasks[i].Task = *p.NewDataBlob(row.Data, row.DataEncoding)
+		resp.Tasks[i] = p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(row.TaskID),
+			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+		}
 	}
 	if len(rows) == request.BatchSize {
 		resp.NextPageToken = getImmediateTaskNextPageToken(
@@ -546,9 +554,9 @@ func (m *sqlExecutionStore) getTimerTask(
 
 	timerRow := rows[0]
 	resp := &p.InternalGetHistoryTaskResponse{
-		InternalTask: p.InternalTask{
-			Task:                *p.NewDataBlob(timerRow.Data, timerRow.DataEncoding),
-			VisibilityTimestamp: timerRow.VisibilityTimestamp,
+		InternalHistoryTask: p.InternalHistoryTask{
+			Key:  tasks.NewKey(timerRow.VisibilityTimestamp, timerRow.TaskID),
+			Blob: *p.NewDataBlob(timerRow.Data, timerRow.DataEncoding),
 		},
 	}
 
@@ -578,11 +586,11 @@ func (m *sqlExecutionStore) getTimerTasks(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTimerTasks operation failed. Select failed. Error: %v", err))
 	}
 
-	resp := &p.InternalGetHistoryTasksResponse{Tasks: make([]p.InternalTask, 0, len(rows))}
+	resp := &p.InternalGetHistoryTasksResponse{Tasks: make([]p.InternalHistoryTask, 0, len(rows))}
 	for _, row := range rows {
-		resp.Tasks = append(resp.Tasks, p.InternalTask{
-			Task:                *p.NewDataBlob(row.Data, row.DataEncoding),
-			VisibilityTimestamp: row.VisibilityTimestamp,
+		resp.Tasks = append(resp.Tasks, p.InternalHistoryTask{
+			Key:  tasks.NewKey(row.VisibilityTimestamp, row.TaskID),
+			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
 		})
 	}
 
@@ -652,8 +660,9 @@ func (m *sqlExecutionStore) getReplicationTask(
 
 	replicationRow := rows[0]
 	resp := &p.InternalGetHistoryTaskResponse{
-		InternalTask: p.InternalTask{
-			Task: *p.NewDataBlob(replicationRow.Data, replicationRow.DataEncoding),
+		InternalHistoryTask: p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(replicationRow.TaskID),
+			Blob: *p.NewDataBlob(replicationRow.Data, replicationRow.DataEncoding),
 		},
 	}
 	return resp, nil
@@ -719,9 +728,12 @@ func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 		return &p.InternalGetHistoryTasksResponse{}, nil
 	}
 
-	var tasks = make([]p.InternalTask, len(rows))
+	var replicationTasks = make([]p.InternalHistoryTask, len(rows))
 	for i, row := range rows {
-		tasks[i].Task = *p.NewDataBlob(row.Data, row.DataEncoding)
+		replicationTasks[i] = p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(row.TaskID),
+			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+		}
 	}
 	var nextPageToken []byte
 	if len(rows) == batchSize {
@@ -731,7 +743,7 @@ func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 		)
 	}
 	return &p.InternalGetHistoryTasksResponse{
-		Tasks:         tasks,
+		Tasks:         replicationTasks,
 		NextPageToken: nextPageToken,
 	}, nil
 }
@@ -745,9 +757,12 @@ func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
 		return &p.InternalGetHistoryTasksResponse{}, nil
 	}
 
-	var tasks = make([]p.InternalTask, len(rows))
+	var dlqTasks = make([]p.InternalHistoryTask, len(rows))
 	for i, row := range rows {
-		tasks[i].Task = *p.NewDataBlob(row.Data, row.DataEncoding)
+		dlqTasks[i] = p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(row.TaskID),
+			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+		}
 	}
 	var nextPageToken []byte
 	if len(rows) == batchSize {
@@ -757,7 +772,7 @@ func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
 		)
 	}
 	return &p.InternalGetHistoryTasksResponse{
-		Tasks:         tasks,
+		Tasks:         dlqTasks,
 		NextPageToken: nextPageToken,
 	}, nil
 }
@@ -894,8 +909,9 @@ func (m *sqlExecutionStore) getVisibilityTask(
 
 	visibilityRow := rows[0]
 	resp := &p.InternalGetHistoryTaskResponse{
-		InternalTask: p.InternalTask{
-			Task: *p.NewDataBlob(visibilityRow.Data, visibilityRow.DataEncoding),
+		InternalHistoryTask: p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(visibilityRow.TaskID),
+			Blob: *p.NewDataBlob(visibilityRow.Data, visibilityRow.DataEncoding),
 		},
 	}
 	return resp, nil
@@ -922,14 +938,17 @@ func (m *sqlExecutionStore) getVisibilityTasks(
 		}
 	}
 	resp := &p.InternalGetHistoryTasksResponse{
-		Tasks: make([]p.InternalTask, len(rows)),
+		Tasks: make([]p.InternalHistoryTask, len(rows)),
 	}
 	if len(rows) == 0 {
 		return resp, nil
 	}
 
 	for i, row := range rows {
-		resp.Tasks[i].Task = *p.NewDataBlob(row.Data, row.DataEncoding)
+		resp.Tasks[i] = p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(row.TaskID),
+			Blob: *p.NewDataBlob(row.Data, row.DataEncoding),
+		}
 	}
 	if len(rows) == request.BatchSize {
 		resp.NextPageToken = getImmediateTaskNextPageToken(

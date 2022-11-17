@@ -69,7 +69,7 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
-	templateGetHistoryImmediateTasksQuery = `SELECT task_data, task_encoding ` +
+	templateGetHistoryImmediateTasksQuery = `SELECT task_id, task_data, task_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -80,7 +80,7 @@ const (
 		`and task_id >= ? ` +
 		`and task_id < ?`
 
-	templateGetHistoryScheduledTasksQuery = `SELECT task_data, task_encoding, visibility_ts ` +
+	templateGetHistoryScheduledTasksQuery = `SELECT visibility_ts, task_id, task_data, task_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ?` +
@@ -100,7 +100,7 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
-	templateGetTransferTasksQuery = `SELECT transfer, transfer_encoding ` +
+	templateGetTransferTasksQuery = `SELECT task_id, transfer, transfer_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -121,7 +121,7 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
-	templateGetVisibilityTasksQuery = `SELECT visibility_task_data, visibility_task_encoding ` +
+	templateGetVisibilityTasksQuery = `SELECT task_id, visibility_task_data, visibility_task_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -142,7 +142,7 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
-	templateGetReplicationTasksQuery = `SELECT replication, replication_encoding ` +
+	templateGetReplicationTasksQuery = `SELECT task_id, replication, replication_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -196,7 +196,7 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
-	templateGetTimerTasksQuery = `SELECT timer, timer_encoding, visibility_ts ` +
+	templateGetTimerTasksQuery = `SELECT visibility_ts, task_id, timer, timer_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ?` +
@@ -385,8 +385,9 @@ func (d *MutableStateTaskStore) getTransferTask(
 		return nil, gocql.ConvertError("GetTransferTask", err)
 	}
 	return &p.InternalGetHistoryTaskResponse{
-		InternalTask: p.InternalTask{
-			Task: *p.NewDataBlob(data, encoding),
+		InternalHistoryTask: p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(taskID),
+			Blob: *p.NewDataBlob(data, encoding),
 		},
 	}, nil
 }
@@ -410,14 +411,17 @@ func (d *MutableStateTaskStore) getTransferTasks(
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetHistoryTasksResponse{}
+	var taskID int64
 	var data []byte
 	var encoding string
 
-	for iter.Scan(&data, &encoding) {
-		response.Tasks = append(response.Tasks, p.InternalTask{
-			Task: *p.NewDataBlob(data, encoding),
+	for iter.Scan(&taskID, &data, &encoding) {
+		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(taskID),
+			Blob: *p.NewDataBlob(data, encoding),
 		})
 
+		taskID = 0
 		data = nil
 		encoding = ""
 	}
@@ -475,7 +479,7 @@ func (d *MutableStateTaskStore) getTimerTask(
 ) (*p.InternalGetHistoryTaskResponse, error) {
 	shardID := request.ShardID
 	taskID := request.TaskKey.TaskID
-	visibilityTs := request.TaskKey.FireTime // TODO: do we need to convert the timestamp?
+	visibilityTs := p.UnixMilliseconds(request.TaskKey.FireTime)
 	query := d.Session.Query(templateGetTimerTaskQuery,
 		shardID,
 		rowTypeTimerTask,
@@ -493,9 +497,9 @@ func (d *MutableStateTaskStore) getTimerTask(
 	}
 
 	return &p.InternalGetHistoryTaskResponse{
-		InternalTask: p.InternalTask{
-			Task:                *p.NewDataBlob(data, encoding),
-			VisibilityTimestamp: visibilityTs,
+		InternalHistoryTask: p.InternalHistoryTask{
+			Key:  tasks.NewKey(time.Unix(0, visibilityTs), taskID),
+			Blob: *p.NewDataBlob(data, encoding),
 		},
 	}, nil
 }
@@ -519,16 +523,19 @@ func (d *MutableStateTaskStore) getTimerTasks(
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetHistoryTasksResponse{}
+	var timestamp time.Time
+	var taskID int64
 	var data []byte
 	var encoding string
-	var timestamp time.Time
 
-	for iter.Scan(&data, &encoding, &timestamp) {
-		response.Tasks = append(response.Tasks, p.InternalTask{
-			Task:                *p.NewDataBlob(data, encoding),
-			VisibilityTimestamp: timestamp,
+	for iter.Scan(&timestamp, &taskID, &data, &encoding) {
+		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
+			Key:  tasks.NewKey(timestamp, taskID),
+			Blob: *p.NewDataBlob(data, encoding),
 		})
 
+		timestamp = time.Time{}
+		taskID = 0
 		data = nil
 		encoding = ""
 	}
@@ -605,8 +612,9 @@ func (d *MutableStateTaskStore) getReplicationTask(
 	}
 
 	return &p.InternalGetHistoryTaskResponse{
-		InternalTask: p.InternalTask{
-			Task: *p.NewDataBlob(data, encoding),
+		InternalHistoryTask: p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(taskID),
+			Blob: *p.NewDataBlob(data, encoding),
 		},
 	}, nil
 }
@@ -779,8 +787,9 @@ func (d *MutableStateTaskStore) getVisibilityTask(
 		return nil, gocql.ConvertError("GetVisibilityTask", err)
 	}
 	return &p.InternalGetHistoryTaskResponse{
-		InternalTask: p.InternalTask{
-			Task: *p.NewDataBlob(data, encoding),
+		InternalHistoryTask: p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(taskID),
+			Blob: *p.NewDataBlob(data, encoding),
 		},
 	}, nil
 }
@@ -804,14 +813,17 @@ func (d *MutableStateTaskStore) getVisibilityTasks(
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetHistoryTasksResponse{}
+	var taskID int64
 	var data []byte
 	var encoding string
 
-	for iter.Scan(&data, &encoding) {
-		response.Tasks = append(response.Tasks, p.InternalTask{
-			Task: *p.NewDataBlob(data, encoding),
+	for iter.Scan(&taskID, &data, &encoding) {
+		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(taskID),
+			Blob: *p.NewDataBlob(data, encoding),
 		})
 
+		taskID = 0
 		data = nil
 		encoding = ""
 	}
@@ -870,14 +882,17 @@ func (d *MutableStateTaskStore) populateGetReplicationTasksResponse(
 	iter := query.Iter()
 
 	response := &p.InternalGetHistoryTasksResponse{}
+	var taskID int64
 	var data []byte
 	var encoding string
 
-	for iter.Scan(&data, &encoding) {
-		response.Tasks = append(response.Tasks, p.InternalTask{
-			Task: *p.NewDataBlob(data, encoding),
+	for iter.Scan(&taskID, &data, &encoding) {
+		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(taskID),
+			Blob: *p.NewDataBlob(data, encoding),
 		})
 
+		taskID = 0
 		data = nil
 		encoding = ""
 	}
@@ -918,14 +933,15 @@ func (d *MutableStateTaskStore) getHistoryTask(
 		return nil, gocql.ConvertError("GetHistoryTask", err)
 	}
 
-	task := p.InternalTask{
-		Task: *p.NewDataBlob(data, encoding),
+	task := p.InternalHistoryTask{
+		Key:  tasks.NewImmediateKey(taskID),
+		Blob: *p.NewDataBlob(data, encoding),
 	}
-	if ts != defaultVisibilityTimestamp {
-		task.VisibilityTimestamp = time.Unix(0, ts)
+	if request.TaskCategory.Type() == tasks.CategoryTypeScheduled {
+		task.Key.FireTime = time.Unix(0, ts)
 	}
 	return &p.InternalGetHistoryTaskResponse{
-		InternalTask: task,
+		InternalHistoryTask: task,
 	}, nil
 }
 
@@ -964,14 +980,17 @@ func (d *MutableStateTaskStore) getHistoryImmedidateTasks(
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetHistoryTasksResponse{}
+	var taskID int64
 	var data []byte
 	var encoding string
 
-	for iter.Scan(&data, &encoding) {
-		response.Tasks = append(response.Tasks, p.InternalTask{
-			Task: *p.NewDataBlob(data, encoding),
+	for iter.Scan(&taskID, &data, &encoding) {
+		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
+			Key:  tasks.NewImmediateKey(taskID),
+			Blob: *p.NewDataBlob(data, encoding),
 		})
 
+		taskID = 0
 		data = nil
 		encoding = ""
 	}
@@ -1008,16 +1027,19 @@ func (d *MutableStateTaskStore) getHistoryScheduledTasks(
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetHistoryTasksResponse{}
+	var timestamp time.Time
+	var taskID int64
 	var data []byte
 	var encoding string
-	var timestamp time.Time
 
-	for iter.Scan(&data, &encoding, &timestamp) {
-		response.Tasks = append(response.Tasks, p.InternalTask{
-			Task:                *p.NewDataBlob(data, encoding),
-			VisibilityTimestamp: timestamp,
+	for iter.Scan(&timestamp, &taskID, &data, &encoding) {
+		response.Tasks = append(response.Tasks, p.InternalHistoryTask{
+			Key:  tasks.NewKey(timestamp, taskID),
+			Blob: *p.NewDataBlob(data, encoding),
 		})
 
+		timestamp = time.Time{}
+		taskID = 0
 		data = nil
 		encoding = ""
 	}

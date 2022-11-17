@@ -744,13 +744,14 @@ func (m *executionManagerImpl) GetHistoryTask(
 		return nil, err
 	}
 
-	task, err := m.serializer.DeserializeTask(request.TaskCategory, resp.Task)
+	task, err := m.serializer.DeserializeTask(request.TaskCategory, resp.Blob)
 	if err != nil {
 		return nil, err
 	}
-	if !resp.VisibilityTimestamp.IsZero() {
-		task.SetVisibilityTime(resp.VisibilityTimestamp)
+	if resp.Key.FireTime != tasks.DefaultFireTime {
+		task.SetVisibilityTime(resp.Key.FireTime)
 	}
+	task.SetTaskID(resp.Key.TaskID)
 	return &GetHistoryTaskResponse{
 		Task: task,
 	}, nil
@@ -773,22 +774,23 @@ func (m *executionManagerImpl) GetHistoryTasks(
 		return nil, err
 	}
 
-	tasks := make([]tasks.Task, 0, len(resp.Tasks))
+	historyTasks := make([]tasks.Task, 0, len(resp.Tasks))
 	for _, internalTask := range resp.Tasks {
-		task, err := m.serializer.DeserializeTask(request.TaskCategory, internalTask.Task)
+		task, err := m.serializer.DeserializeTask(request.TaskCategory, internalTask.Blob)
 		if err != nil {
 			return nil, err
 		}
 
-		if !internalTask.VisibilityTimestamp.IsZero() {
-			task.SetVisibilityTime(internalTask.VisibilityTimestamp)
+		if internalTask.Key.FireTime != tasks.DefaultFireTime {
+			task.SetVisibilityTime(internalTask.Key.FireTime)
 		}
+		task.SetTaskID(internalTask.Key.TaskID)
 
-		tasks = append(tasks, task)
+		historyTasks = append(historyTasks, task)
 	}
 
 	return &GetHistoryTasksResponse{
-		Tasks:         tasks,
+		Tasks:         historyTasks,
 		NextPageToken: resp.NextPageToken,
 	}, nil
 }
@@ -832,22 +834,23 @@ func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
 	}
 
 	category := tasks.CategoryReplication
-	tasks := make([]tasks.Task, 0, len(resp.Tasks))
+	dlqTasks := make([]tasks.Task, 0, len(resp.Tasks))
 	for _, internalTask := range resp.Tasks {
-		task, err := m.serializer.DeserializeTask(category, internalTask.Task)
+		task, err := m.serializer.DeserializeTask(category, internalTask.Blob)
 		if err != nil {
 			return nil, err
 		}
 
-		if !internalTask.VisibilityTimestamp.IsZero() {
-			task.SetVisibilityTime(internalTask.VisibilityTimestamp)
+		if internalTask.Key.FireTime != tasks.DefaultFireTime {
+			task.SetVisibilityTime(internalTask.Key.FireTime)
 		}
+		task.SetTaskID(internalTask.Key.TaskID)
 
-		tasks = append(tasks, task)
+		dlqTasks = append(dlqTasks, task)
 	}
 
 	return &GetHistoryTasksResponse{
-		Tasks:         tasks,
+		Tasks:         dlqTasks,
 		NextPageToken: resp.NextPageToken,
 	}, nil
 }

@@ -488,19 +488,12 @@ type (
 	}
 
 	InternalGetHistoryTaskResponse struct {
-		InternalTask
+		InternalHistoryTask
 	}
 
 	InternalGetHistoryTasksResponse struct {
-		Tasks         []InternalTask
+		Tasks         []InternalHistoryTask
 		NextPageToken []byte
-	}
-
-	InternalTask struct {
-		Task commonpb.DataBlob
-
-		// VisibilityTimestamp if non-zero should overwrite the timestamp in decoded task blob
-		VisibilityTimestamp time.Time
 	}
 
 	InternalGetReplicationTasksFromDLQResponse = InternalGetHistoryTasksResponse
