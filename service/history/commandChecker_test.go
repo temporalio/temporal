@@ -761,32 +761,31 @@ func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
 			NumPendingChildExecutions:   1,
 			PendingChildExecutionsLimit: 1,
 			ExpectedMetric:              "wf_too_many_pending_child_workflows",
-			ExpectedChildExecutionsErrorMsg: "the number of pending child workflow executions, 1, " +
-				"has reached the error limit of 1 established with \"limit.numPendingChildExecutions.error\"",
+			ExpectedChildExecutionsErrorMsg: "the number of pending child workflow executions, 1, has reached the " +
+				"per-workflow limit of 1",
 		},
 		{
-			Name:                   "Pending activities limit exceeded",
-			NumPendingActivities:   1,
-			PendingActivitiesLimit: 1,
-			ExpectedMetric:         "wf_too_many_pending_activities",
-			ExpectedActivitiesErrorMsg: "the number of pending activities, 1, " +
-				"has reached the error limit of 1 established with \"limit.numPendingActivities.error\"",
+			Name:                       "Pending activities limit exceeded",
+			NumPendingActivities:       1,
+			PendingActivitiesLimit:     1,
+			ExpectedMetric:             "wf_too_many_pending_activities",
+			ExpectedActivitiesErrorMsg: "the number of pending activities, 1, has reached the per-workflow limit of 1",
 		},
 		{
 			Name:                       "Pending cancel requests limit exceeded",
 			NumPendingCancelRequests:   1,
 			PendingCancelRequestsLimit: 1,
 			ExpectedMetric:             "wf_too_many_pending_cancel_requests",
-			ExpectedCancelRequestsErrorMsg: "the number of pending requests to cancel other workflows, 1, " +
-				"has reached the error limit of 1 established with \"limit.numPendingCancelRequests.error\"",
+			ExpectedCancelRequestsErrorMsg: "the number of pending requests to cancel external workflows, 1, has " +
+				"reached the per-workflow limit of 1",
 		},
 		{
 			Name:                "Pending signals limit exceeded",
 			NumPendingSignals:   1,
 			PendingSignalsLimit: 1,
 			ExpectedMetric:      "wf_too_many_pending_external_workflow_signals",
-			ExpectedSignalsErrorMsg: "the number of pending signals to external workflows, 1, " +
-				"has reached the error limit of 1 established with \"limit.numPendingSignals.error\"",
+			ExpectedSignalsErrorMsg: "the number of pending signals to external workflows, 1, has reached the " +
+				"per-workflow limit of 1",
 		},
 	} {
 		t.Run(c.Name, func(t *testing.T) {
