@@ -362,7 +362,15 @@ func (t *timerQueueProcessorBase) verifyReschedulerSize() bool {
 func (t *timerQueueProcessorBase) submitTask(
 	executable queues.Executable,
 ) {
-	executable.SetScheduledTime(t.timeSource.Now())
+	now := t.timeSource.Now()
+	// Persistence layer may lose precision when persisting the task, which essentially move
+	// task fire time forward. Need to account for that when submitting the task.
+	if fireTime := executable.GetKey().FireTime.Add(persistence.ScheduledTaskMinPrecision); now.Before(fireTime) {
+		t.rescheduler.Add(executable, fireTime)
+		return
+	}
+
+	executable.SetScheduledTime(now)
 	if !t.scheduler.TrySubmit(executable) {
 		executable.Reschedule()
 	}
