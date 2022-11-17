@@ -22,17 +22,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination interfaces_mock.go
-
-package metrics
+package gocql
 
 import (
-	"github.com/uber-go/tally/v4"
+	"github.com/gocql/gocql"
 )
 
-var sanitizer = tally.NewSanitizer(tally.SanitizeOptions{
-	NameCharacters:       tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
-	KeyCharacters:        tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
-	ValueCharacters:      tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
-	ReplacementCharacter: '_',
-})
+type iter struct {
+	session   *session
+	gocqlIter *gocql.Iter
+}
+
+func newIter(session *session, gocqlIter *gocql.Iter) *iter {
+	return &iter{
+		session:   session,
+		gocqlIter: gocqlIter,
+	}
+}
+
+func (it *iter) Scan(dest ...interface{}) bool {
+	return it.gocqlIter.Scan(dest...)
+}
+
+func (it *iter) MapScan(m map[string]interface{}) bool {
+	return it.gocqlIter.MapScan(m)
+}
+
+func (it *iter) PageState() []byte {
+	return it.gocqlIter.PageState()
+}
+
+func (it *iter) Close() (retError error) {
+	defer func() { it.session.handleError(retError) }()
+
+	return it.gocqlIter.Close()
+}

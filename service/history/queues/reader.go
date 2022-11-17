@@ -100,7 +100,9 @@ type (
 		throttleTimer *time.Timer
 		retrier       backoff.Retrier
 
-		rateLimiterRequest quotas.Request
+		rateLimitContext       context.Context
+		rateLimitContextCancel context.CancelFunc
+		rateLimiterRequest     quotas.Request
 	}
 )
 
@@ -123,6 +125,7 @@ func NewReader(
 	}
 	monitor.SetSliceCount(readerID, len(slices))
 
+	rateLimitContext, rateLimitContextCancel := context.WithCancel(context.Background())
 	return &ReaderImpl{
 		readerID:       readerID,
 		options:        options,
@@ -146,7 +149,9 @@ func NewReader(
 			backoff.SystemClock,
 		),
 
-		rateLimiterRequest: newReaderRequest(readerID),
+		rateLimitContext:       rateLimitContext,
+		rateLimitContextCancel: rateLimitContextCancel,
+		rateLimiterRequest:     newReaderRequest(readerID),
 	}
 }
 
@@ -179,6 +184,7 @@ func (r *ReaderImpl) Stop() {
 	r.monitor.RemoveReader(r.readerID)
 
 	close(r.shutdownCh)
+	r.rateLimitContextCancel()
 	if success := common.AwaitWaitGroup(&r.shutdownWG, time.Minute); !success {
 		r.logger.Warn("queue reader shutdown timed out waiting for event loop", tag.LifeCycleStopTimedout)
 	}
@@ -400,7 +406,14 @@ func (r *ReaderImpl) eventLoop() {
 }
 
 func (r *ReaderImpl) loadAndSubmitTasks() {
-	_ = r.ratelimiter.Wait(context.Background(), r.rateLimiterRequest)
+	if err := r.ratelimiter.Wait(r.rateLimitContext, r.rateLimiterRequest); err != nil {
+		if r.rateLimitContext.Err() != nil {
+			return
+		}
+
+		// this should never happen
+		r.logger.Error("Queue reader rate limiter burst size is smaller than required token count")
+	}
 
 	r.Lock()
 	defer r.Unlock()

@@ -25,7 +25,7 @@
 package cassandra
 
 import (
-	"errors"
+	"fmt"
 
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
@@ -40,10 +40,6 @@ type (
 	}
 )
 
-var (
-	ErrGetSchemaVersion = errors.New("failed to get current schema version from cassandra")
-)
-
 func NewSchemaVersionReader(session gocql.Session) *SchemaVersionReader {
 	return &SchemaVersionReader{
 		session: session,
@@ -56,12 +52,14 @@ func (svr *SchemaVersionReader) ReadSchemaVersion(keyspace string) (string, erro
 
 	iter := query.Iter()
 	var version string
-	if !iter.Scan(&version) {
-		_ = iter.Close()
-		return "", ErrGetSchemaVersion
+	success := iter.Scan(&version)
+	err := iter.Close()
+	if err == nil && !success {
+		err = fmt.Errorf("no schema version found for keyspace %q", keyspace)
 	}
-	if err := iter.Close(); err != nil {
-		return "", err
+	if err != nil {
+		return "", fmt.Errorf("unable to get current schema version from Cassandra: %w", err)
 	}
+
 	return version, nil
 }

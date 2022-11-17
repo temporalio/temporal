@@ -81,7 +81,7 @@ func NewTransferQueueFactory(
 			},
 			params.NamespaceRegistry,
 			params.TimeSource,
-			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferQueueProcessor)),
+			params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
 			params.Logger,
 		)
 	}
@@ -185,7 +185,7 @@ func (f *transferQueueFactory) CreateQueue(
 			},
 			f.HostReaderRateLimiter,
 			logger,
-			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferQueueProcessor)),
+			f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
 		)
 	}
 

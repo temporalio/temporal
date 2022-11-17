@@ -113,6 +113,8 @@ const (
 	MemoSizeLimitError = "limit.memoSize.error"
 	// MemoSizeLimitWarn is the per event memo size limit for warning
 	MemoSizeLimitWarn = "limit.memoSize.warn"
+	// NumPendingChildExecutionLimitError is the per workflow pending child workflow limit
+	NumPendingChildExecutionLimitError = "limit.numPendingChildExecution.error"
 	// HistorySizeLimitError is the per workflow execution history size limit
 	HistorySizeLimitError = "limit.historySize.error"
 	// HistorySizeLimitWarn is the per workflow execution history size limit for warning
@@ -405,6 +407,8 @@ const (
 	TimerProcessorHistoryArchivalSizeLimit = "history.timerProcessorHistoryArchivalSizeLimit"
 	// TimerProcessorArchivalTimeLimit is the upper time limit for inline history archival
 	TimerProcessorArchivalTimeLimit = "history.timerProcessorArchivalTimeLimit"
+	// RetentionTimerJitterDuration is a time duration jitter to distribute timer from T0 to T0 + jitter duration
+	RetentionTimerJitterDuration = "history.retentionTimerJitterDuration"
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize = "history.transferTaskBatchSize"
 	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor

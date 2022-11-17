@@ -449,10 +449,14 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	} else {
 		namespace := namespaceEntry.Name()
 		workflowSizeChecker := newWorkflowSizeChecker(
-			handler.config.BlobSizeLimitWarn(namespace.String()),
-			handler.config.BlobSizeLimitError(namespace.String()),
-			handler.config.MemoSizeLimitWarn(namespace.String()),
-			handler.config.MemoSizeLimitError(namespace.String()),
+			workflowSizeLimits{
+				blobSizeLimitWarn:  handler.config.BlobSizeLimitWarn(namespace.String()),
+				blobSizeLimitError: handler.config.BlobSizeLimitError(namespace.String()),
+				memoSizeLimitWarn:  handler.config.MemoSizeLimitWarn(namespace.String()),
+				memoSizeLimitError: handler.config.MemoSizeLimitError(namespace.String()),
+				numPendingChildExecutionLimitError: handler.config.NumPendingChildExecutionLimitError(namespace.
+					String()),
+			},
 			ms,
 			handler.searchAttributesValidator,
 			executionStats,

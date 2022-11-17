@@ -25,6 +25,7 @@
 package queues
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -52,7 +53,13 @@ type (
 		newTimerCh  chan struct{}
 		newTimeLock sync.Mutex
 		newTime     time.Time
+
+		lookAheadRateLimitRequest quotas.Request
 	}
+)
+
+const (
+	lookAheadRateLimitDelay = 3 * time.Second
 )
 
 func NewScheduledQueue(
@@ -114,6 +121,8 @@ func NewScheduledQueue(
 
 		timerGate:  timer.NewLocalGate(shard.GetTimeSource()),
 		newTimerCh: make(chan struct{}, 1),
+
+		lookAheadRateLimitRequest: newReaderRequest(DefaultReaderId),
 	}
 }
 
@@ -175,7 +184,7 @@ func (p *scheduledQueue) processEventLoop() {
 		case <-p.shutdownCh:
 			return
 		case <-p.newTimerCh:
-			p.metricsHandler.Counter(NewTimerNotifyCounter).Record(1)
+			p.metricsHandler.Counter(metrics.NewTimerNotifyCounter.GetMetricName()).Record(1)
 			p.processNewTime()
 		case <-p.timerGate.FireChan():
 			p.processNewRange()
@@ -212,11 +221,35 @@ func (p *scheduledQueue) processNewTime() {
 }
 
 func (p *scheduledQueue) processNewRange() {
-	p.queueBase.processNewRange()
+	if err := p.queueBase.processNewRange(); err != nil {
+		// This only happens when shard state is invalid,
+		// in which case no look ahead is needed.
+		// Notification will be sent when shard is reacquired, but
+		// still set a max poll timer here as a catch all case.
+		p.timerGate.Update(p.timeSource.Now().Add(backoff.JitDuration(
+			p.options.MaxPollInterval(),
+			p.options.MaxPollIntervalJitterCoefficient(),
+		)))
+		return
+	}
+
+	// Only do look ahead when shard state is valid.
+	// When shard is invalid, even look ahead task is found,
+	// it can't be loaded as scheduled queue max read level can't move
+	// forward.
 	p.lookAheadTask()
 }
 
 func (p *scheduledQueue) lookAheadTask() {
+	rateLimitCtx, rateLimitCancel := context.WithTimeout(context.Background(), lookAheadRateLimitDelay)
+	rateLimitErr := p.readerRateLimiter.Wait(rateLimitCtx, p.lookAheadRateLimitRequest)
+	rateLimitCancel()
+	if rateLimitErr != nil {
+		deadline, _ := rateLimitCtx.Deadline()
+		p.timerGate.Update(deadline)
+		return
+	}
+
 	lookAheadMinTime := p.nonReadableScope.Range.InclusiveMin.FireTime
 	lookAheadMaxTime := lookAheadMinTime.Add(backoff.JitDuration(
 		p.options.MaxPollInterval(),
@@ -236,14 +269,21 @@ func (p *scheduledQueue) lookAheadTask() {
 	}
 	response, err := p.shard.GetExecutionManager().GetHistoryTasks(ctx, request)
 	if err != nil {
-		// NOTE: the backoff is actually 2*TimerProcessorMaxTimeShift = 2s
-		p.timerGate.Update(lookAheadMinTime)
 		p.logger.Error("Failed to load look ahead task", tag.Error(err))
+		if common.IsResourceExhausted(err) {
+			p.timerGate.Update(p.timeSource.Now().Add(lookAheadRateLimitDelay))
+		} else {
+			// NOTE: the backoff is actually TimerProcessorMaxTimeShift = ~1s
+			// since lookAheadMinTime ~= now + TimerProcessorMaxTimeShift when
+			// shard is valid.
+			p.timerGate.Update(lookAheadMinTime)
+		}
 		return
 	}
 
 	if len(response.Tasks) == 1 {
 		p.timerGate.Update(response.Tasks[0].GetKey().FireTime)
+		return
 	}
 
 	// no look ahead task, next loading will be triggerred at the end of the current

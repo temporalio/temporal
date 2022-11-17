@@ -27,11 +27,14 @@ package host
 import (
 	"flag"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
+	"go.temporal.io/server/common/dynamicconfig"
 )
 
 type (
@@ -44,6 +47,9 @@ type (
 )
 
 func (s *integrationSuite) SetupSuite() {
+	s.dynamicConfigOverrides = map[dynamicconfig.Key]interface{}{
+		dynamicconfig.RetentionTimerJitterDuration: time.Second,
+	}
 	s.setupSuite("testdata/integration_test_cluster.yaml")
 }
 
