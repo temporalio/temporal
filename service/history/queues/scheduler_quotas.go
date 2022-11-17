@@ -30,10 +30,12 @@ import (
 	"go.temporal.io/server/common/tasks"
 )
 
+type SchedulerRateLimiter quotas.RequestRateLimiter
+
 func NewSchedulerRateLimiter(
 	namespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	hostMaxQPS dynamicconfig.IntPropertyFn,
-) quotas.RequestRateLimiter {
+) SchedulerRateLimiter {
 	hostRateFn := func() float64 { return float64(hostMaxQPS()) }
 
 	requestPriorityFn := func(req quotas.Request) int {

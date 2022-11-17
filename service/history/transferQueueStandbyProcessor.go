@@ -65,6 +65,7 @@ func newTransferQueueStandbyProcessor(
 	taskAllocator taskAllocator,
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
+	schedulerRateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
 	metricProvider metrics.MetricsHandler,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -145,7 +146,7 @@ func newTransferQueueStandbyProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newTransferTaskShardScheduler(shard, logger)
+		scheduler = newTransferTaskShardScheduler(shard, schedulerRateLimiter, logger)
 		processor.ownedScheduler = scheduler
 	}
 

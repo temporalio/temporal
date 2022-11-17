@@ -91,6 +91,9 @@ type Config struct {
 	QueuePendingTaskMaxCount         dynamicconfig.IntPropertyFn
 	QueueMaxReaderCount              dynamicconfig.IntPropertyFn
 
+	TaskSchedulerMaxQPS          dynamicconfig.IntPropertyFn
+	TaskSchedulerNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter
+
 	// TimerQueueProcessor settings
 	TimerTaskHighPriorityRPS                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
@@ -344,6 +347,9 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		QueueCriticalSlicesCount:         dc.GetIntProperty(dynamicconfig.QueueCriticalSlicesCount, 50),
 		QueuePendingTaskMaxCount:         dc.GetIntProperty(dynamicconfig.QueuePendingTaskMaxCount, 10000),
 		QueueMaxReaderCount:              dc.GetIntProperty(dynamicconfig.QueueMaxReaderCount, 2),
+
+		TaskSchedulerMaxQPS:          dc.GetIntProperty(dynamicconfig.TaskSchedulerMaxQPS, 9000),
+		TaskSchedulerNamespaceMaxQPS: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskSchedulerNamespaceMaxQPS, 0),
 
 		TimerTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
 		TimerTaskWorkerCount:                             dc.GetIntProperty(dynamicconfig.TimerTaskWorkerCount, 10),

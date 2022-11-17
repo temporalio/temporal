@@ -28,9 +28,16 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/quotas"
+)
+
+const (
+	iwrrDispatchThrottleDuration = 1 * time.Second
 )
 
 var _ Scheduler[Task] = (*InterleavedWeightedRoundRobinScheduler[Task, struct{}])(nil)
@@ -39,9 +46,14 @@ type (
 	// InterleavedWeightedRoundRobinSchedulerOptions is the config for
 	// interleaved weighted round robin scheduler
 	InterleavedWeightedRoundRobinSchedulerOptions[T Task, K comparable] struct {
-		TaskChannelKeyFn      TaskChannelKeyFn[T, K]
-		ChannelWeightFn       ChannelWeightFn[K]
+		// Required for mapping a task to it's corresponding task channel
+		TaskChannelKeyFn TaskChannelKeyFn[T, K]
+		// Required for getting the weight for a task channel
+		ChannelWeightFn ChannelWeightFn[K]
+		// Optional, if specified, re-evaluate task channel weight when channel is not empty
 		ChannelWeightUpdateCh chan struct{}
+		// Required for converting task channel to rate limit request
+		ChannelQuotaRequestFn ChannelQuotaRequestFn[K]
 	}
 
 	// TaskChannelKeyFn is the function for mapping a task to its task channel (key)
@@ -50,12 +62,17 @@ type (
 	// ChannelWeightFn is the function for mapping a task channel (key) to its weight
 	ChannelWeightFn[K comparable] func(K) int
 
+	// ChannelQuotaRequestFn is the function for mapping a task channel (key) to its rate limit request
+	ChannelQuotaRequestFn[K comparable] func(K) quotas.Request
+
 	// InterleavedWeightedRoundRobinScheduler is a round robin scheduler implementation
 	// ref: https://en.wikipedia.org/wiki/Weighted_round_robin#Interleaved_WRR
 	InterleavedWeightedRoundRobinScheduler[T Task, K comparable] struct {
 		status int32
 
 		fifoScheduler Scheduler[T]
+		rateLimiter   quotas.RequestRateLimiter
+		timeSource    clock.TimeSource
 		logger        log.Logger
 
 		notifyChan   chan struct{}
@@ -68,6 +85,26 @@ type (
 		sync.RWMutex
 		weightedChannels map[K]*WeightedChannel[T]
 
+		dispatchTimerLock sync.Mutex
+		dispatchTimer     *time.Timer
+		iwrrChannels      atomic.Value
+	}
+
+	channelWithStatus[T Task, K comparable] struct {
+		*WeightedChannel[T]
+
+		key              K
+		rateLimitRequest quotas.Request
+
+		throttled bool
+		moreTasks bool // this is only a hint since there's no way to peek the channel
+	}
+
+	channelsWithStatus[T Task, K comparable] []*channelWithStatus[T, K]
+
+	iwrrChannels[T Task, K comparable] struct {
+		channels channelsWithStatus[T, K]
+
 		// precalculated / flattened task chan according to weight
 		// e.g. if
 		// ChannelKeyToWeight has the following mapping
@@ -76,21 +113,25 @@ type (
 		//  2 -> 2
 		//  3 -> 1
 		// then iwrrChannels will contain chan [0, 0, 0, 1, 0, 1, 2, 0, 1, 2, 3] (ID-ed by channel key)
-		iwrrChannels atomic.Value // []*WeightedChannel
+		flattenedChannels channelsWithStatus[T, K]
 	}
 )
 
 func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 	options InterleavedWeightedRoundRobinSchedulerOptions[T, K],
 	fifoScheduler Scheduler[T],
+	rateLimiter quotas.RequestRateLimiter,
+	timeSource clock.TimeSource,
 	logger log.Logger,
 ) *InterleavedWeightedRoundRobinScheduler[T, K] {
-	iwrrChannels := atomic.Value{}
-	iwrrChannels.Store(WeightedChannels[T]{})
+	channels := atomic.Value{}
+	channels.Store(iwrrChannels[T, K]{})
 	return &InterleavedWeightedRoundRobinScheduler[T, K]{
 		status: common.DaemonStatusInitialized,
 
 		fifoScheduler: fifoScheduler,
+		rateLimiter:   rateLimiter,
+		timeSource:    timeSource,
 		logger:        logger,
 
 		options: options,
@@ -100,7 +141,7 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 
 		numInflightTask:  0,
 		weightedChannels: make(map[K]*WeightedChannel[T]),
-		iwrrChannels:     iwrrChannels,
+		iwrrChannels:     channels,
 	}
 }
 
@@ -142,13 +183,15 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) Submit(
 	task T,
 ) {
 	numTasks := atomic.AddInt64(&s.numInflightTask, 1)
-	if numTasks == 1 {
-		s.doDispatchTaskDirectly(task)
+	channelKey := s.options.TaskChannelKeyFn(task)
+	if numTasks == 1 && s.tryDispatchTaskDirectly(channelKey, task) {
 		return
 	}
 
 	// there are tasks pending dispatching, need to respect round roubin weight
-	channel := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	// or currently unable to submit to fifo scheduler, either due to buffer is full
+	// or exceeding rate limit
+	channel := s.getOrCreateTaskChannel(channelKey)
 	channel.Chan() <- task
 	s.notifyDispatcher()
 }
@@ -157,12 +200,13 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) TrySubmit(
 	task T,
 ) bool {
 	numTasks := atomic.AddInt64(&s.numInflightTask, 1)
-	if numTasks == 1 && s.tryDispatchTaskDirectly(task) {
+	channelKey := s.options.TaskChannelKeyFn(task)
+	if numTasks == 1 && s.tryDispatchTaskDirectly(channelKey, task) {
 		return true
 	}
 
 	// there are tasks pending dispatching, need to respect round roubin weight
-	channel := s.getOrCreateTaskChannel(s.options.TaskChannelKeyFn(task))
+	channel := s.getOrCreateTaskChannel(channelKey)
 	select {
 	case channel.Chan() <- task:
 		s.notifyDispatcher()
@@ -212,24 +256,52 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) getOrCreateTaskChannel(
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) flattenWeightedChannelsLocked() {
-	weightedChannels := make(WeightedChannels[T], 0, len(s.weightedChannels))
-	for _, weightedChan := range s.weightedChannels {
-		weightedChannels = append(weightedChannels, weightedChan)
+	weightedChannels := make(channelsWithStatus[T, K], 0, len(s.weightedChannels))
+	for channelKey, weightedChan := range s.weightedChannels {
+		weightedChannels = append(weightedChannels, &channelWithStatus[T, K]{
+			WeightedChannel:  weightedChan,
+			key:              channelKey,
+			rateLimitRequest: s.options.ChannelQuotaRequestFn(channelKey),
+			throttled:        false,
+			moreTasks:        false,
+		})
 	}
-	sort.Sort(weightedChannels)
+	sort.Slice(weightedChannels, func(i, j int) bool {
+		return weightedChannels[i].Weight() < weightedChannels[j].Weight()
+	})
 
-	iwrrChannels := make(WeightedChannels[T], 0, len(weightedChannels))
+	flattenedChannels := make(channelsWithStatus[T, K], 0, len(weightedChannels))
 	maxWeight := weightedChannels[len(weightedChannels)-1].Weight()
 	for round := maxWeight - 1; round > -1; round-- {
 		for index := len(weightedChannels) - 1; index > -1 && weightedChannels[index].Weight() > round; index-- {
-			iwrrChannels = append(iwrrChannels, weightedChannels[index])
+			flattenedChannels = append(flattenedChannels, weightedChannels[index])
 		}
 	}
-	s.iwrrChannels.Store(iwrrChannels)
+	s.iwrrChannels.Store(iwrrChannels[T, K]{
+		channels:          weightedChannels,
+		flattenedChannels: flattenedChannels,
+	})
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler[T, K]) channels() WeightedChannels[T] {
-	return s.iwrrChannels.Load().(WeightedChannels[T])
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) channels() iwrrChannels[T, K] {
+	return s.iwrrChannels.Load().(iwrrChannels[T, K])
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) setupDispatchTimer() {
+	s.dispatchTimerLock.Lock()
+	defer s.dispatchTimerLock.Unlock()
+
+	if s.dispatchTimer != nil {
+		s.dispatchTimer.Stop()
+	}
+
+	s.dispatchTimer = time.AfterFunc(iwrrDispatchThrottleDuration, func() {
+		s.dispatchTimerLock.Lock()
+		defer s.dispatchTimerLock.Unlock()
+
+		s.dispatchTimer = nil
+		s.notifyDispatcher()
+	})
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) notifyDispatcher() {
@@ -271,6 +343,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) updateChannelWeightLocked
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) dispatchTasksWithWeight() {
+LoopDispatch:
 	for s.hasRemainingTasks() {
 		if s.receiveWeightUpdateNotification() {
 			s.Lock()
@@ -279,38 +352,86 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) dispatchTasksWithWeight()
 			s.Unlock()
 		}
 
-		weightedChannels := s.channels()
-		s.doDispatchTasksWithWeight(weightedChannels)
+		iwrrChannels := s.channels()
+		s.doDispatchTasksWithWeight(iwrrChannels)
+
+		// all channels = throttled channels + not throttled but has more task + not throttled and no more task
+		// - If there's channel that's not throttled but has more task, need to trigger next round
+		//   of dispatch immediately.
+		// - Otherwise all channels = throttled channels + not throttled and no more task
+		//   then as long as there's throttled channel, need to set a timer to try dispatch later
+
+		numThrottled := 0
+		for _, channel := range iwrrChannels.channels {
+			if channel.throttled {
+				numThrottled++
+				continue
+			}
+			if channel.moreTasks {
+				// there's channel that is not throttled and may have more tasks
+				// start a new round of dispatch immediately
+				continue LoopDispatch
+			}
+		}
+
+		if numThrottled != 0 {
+			s.setupDispatchTimer()
+		}
+
+		return
 	}
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTasksWithWeight(
-	channels WeightedChannels[T],
+	iwrrChannels iwrrChannels[T, K],
 ) {
+	for _, channel := range iwrrChannels.channels {
+		channel.throttled = false
+		channel.moreTasks = false
+	}
+
 	numTasks := int64(0)
 LoopDispatch:
-	for _, channel := range channels {
+	for _, channel := range iwrrChannels.flattenedChannels {
+		if channel.throttled {
+			continue LoopDispatch
+		}
+
+		now := s.timeSource.Now()
+		reservation := s.rateLimiter.Reserve(
+			now,
+			channel.rateLimitRequest,
+		)
+		if reservation.DelayFrom(now) != 0 {
+			reservation.CancelAt(now)
+			channel.throttled = true
+			continue LoopDispatch
+		}
 		select {
 		case task := <-channel.Chan():
 			s.fifoScheduler.Submit(task)
 			numTasks++
+			channel.moreTasks = true
 		default:
+			reservation.CancelAt(now)
+			channel.moreTasks = false
 			continue LoopDispatch
 		}
 	}
 	atomic.AddInt64(&s.numInflightTask, -numTasks)
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTaskDirectly(
-	task T,
-) {
-	s.fifoScheduler.Submit(task)
-	atomic.AddInt64(&s.numInflightTask, -1)
-}
-
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) tryDispatchTaskDirectly(
+	channelKey K,
 	task T,
 ) bool {
+	if !s.rateLimiter.Allow(
+		s.timeSource.Now(),
+		s.options.ChannelQuotaRequestFn(channelKey),
+	) {
+		return false
+	}
+
 	dispatched := s.fifoScheduler.TrySubmit(task)
 	if dispatched {
 		atomic.AddInt64(&s.numInflightTask, -1)

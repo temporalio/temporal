@@ -370,6 +370,7 @@ func (t *timerQueueProcessorBase) submitTask(
 
 func newTimerTaskShardScheduler(
 	shard shard.Context,
+	rateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
 ) queues.Scheduler {
 	config := shard.GetConfig()
@@ -378,6 +379,8 @@ func newTimerTaskShardScheduler(
 			WorkerCount: config.TimerTaskWorkerCount,
 			QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
 		},
+		rateLimiter,
+		shard.GetTimeSource(),
 		logger,
 	)
 }

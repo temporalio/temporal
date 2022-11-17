@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 )
@@ -42,6 +43,8 @@ const (
 	// weighted round robin scheduler and the actual
 	// worker pool (parallel processor).
 	namespacePrioritySchedulerProcessorQueueSize = 10
+
+	taskSchedulerToken = 1
 )
 
 type (
@@ -92,6 +95,7 @@ func NewNamespacePriorityScheduler(
 	currentClusterName string,
 	options NamespacePrioritySchedulerOptions,
 	namespaceRegistry namespace.Registry,
+	rateLimiter SchedulerRateLimiter,
 	timeSource clock.TimeSource,
 	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
@@ -116,6 +120,13 @@ func NewNamespacePriorityScheduler(
 		)[key.Priority]
 	}
 	channelWeightUpdateCh := make(chan struct{}, 1)
+	channelQuotaRequestFn := func(key TaskChannelKey) quotas.Request {
+		namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(key.NamespaceID))
+		if err != nil {
+			namespaceName = namespace.EmptyName
+		}
+		return quotas.NewRequest("", taskSchedulerToken, namespaceName.String(), tasks.PriorityName[key.Priority], "")
+	}
 	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
 		QueueSize:   namespacePrioritySchedulerProcessorQueueSize,
 		WorkerCount: options.WorkerCount,
@@ -127,6 +138,7 @@ func NewNamespacePriorityScheduler(
 				TaskChannelKeyFn:      taskChannelKeyFn,
 				ChannelWeightFn:       channelWeightFn,
 				ChannelWeightUpdateCh: channelWeightUpdateCh,
+				ChannelQuotaRequestFn: channelQuotaRequestFn,
 			},
 			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
 				newSchedulerMonitor(
@@ -139,6 +151,8 @@ func NewNamespacePriorityScheduler(
 				fifoSchedulerOptions,
 				logger,
 			)),
+			rateLimiter,
+			timeSource,
 			logger,
 		),
 		namespaceRegistry:     namespaceRegistry,
@@ -151,21 +165,38 @@ func NewNamespacePriorityScheduler(
 // NewFIFOScheduler is used to create shard level task scheduler
 // and always schedule tasks in fifo order regardless
 // which namespace the task belongs to.
+// All tasks will be regarded as low priority
 func NewFIFOScheduler(
 	options FIFOSchedulerOptions,
+	rateLimiter SchedulerRateLimiter,
+	timeSource clock.TimeSource,
 	logger log.Logger,
 ) Scheduler {
 	taskChannelKeyFn := func(_ Executable) TaskChannelKey { return TaskChannelKey{} }
-	channelWeightFn := func(_ TaskChannelKey) int { return 1 }
+	channelWeightFn := func(_ TaskChannelKey) int { return 1000 }
+	channelQuotaRequestFn := func(_ TaskChannelKey) quotas.Request {
+		return quotas.NewRequest("", taskSchedulerToken, "", tasks.PriorityLow.String(), "")
+	}
 	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
 		QueueSize:   options.QueueSize,
 		WorkerCount: options.WorkerCount,
 	}
 
 	return &schedulerImpl{
-		Scheduler: tasks.NewFIFOScheduler[Executable](
-			noopScheduleMonitor,
-			fifoSchedulerOptions,
+		Scheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
+			tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
+				TaskChannelKeyFn:      taskChannelKeyFn,
+				ChannelWeightFn:       channelWeightFn,
+				ChannelWeightUpdateCh: nil,
+				ChannelQuotaRequestFn: channelQuotaRequestFn,
+			},
+			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
+				noopScheduleMonitor,
+				fifoSchedulerOptions,
+				logger,
+			)),
+			rateLimiter,
+			timeSource,
 			logger,
 		),
 		taskChannelKeyFn:      taskChannelKeyFn,

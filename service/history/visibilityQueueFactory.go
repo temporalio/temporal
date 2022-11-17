@@ -69,6 +69,7 @@ func NewVisibilityQueueFactory(
 				StandbyNamespaceWeights: params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
+			params.SchedulerRateLimiter,
 			params.TimeSource,
 			params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
 			params.Logger,
@@ -150,5 +151,6 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.VisibilityMgr,
 		f.MetricsHandler,
 		f.HostRateLimiter,
+		f.SchedulerRateLimiter,
 	)
 }

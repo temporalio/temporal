@@ -66,6 +66,7 @@ func newTimerQueueActiveProcessor(
 	taskAllocator taskAllocator,
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
+	schedulerRateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
 	metricProvider metrics.MetricsHandler,
 	singleProcessor bool,
@@ -91,7 +92,7 @@ func newTimerQueueActiveProcessor(
 	processor := &timerQueueActiveProcessorImpl{}
 
 	if scheduler == nil {
-		scheduler = newTimerTaskShardScheduler(shard, logger)
+		scheduler = newTimerTaskShardScheduler(shard, schedulerRateLimiter, logger)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -215,6 +216,7 @@ func newTimerQueueFailoverProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	rateLimiter quotas.RateLimiter,
+	schedulerRateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
 	metricProvider metrics.MetricsHandler,
 ) (func(ackLevel tasks.Key) error, *timerQueueActiveProcessorImpl) {
@@ -267,7 +269,7 @@ func newTimerQueueFailoverProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newTimerTaskShardScheduler(shard, logger)
+		scheduler = newTimerTaskShardScheduler(shard, schedulerRateLimiter, logger)
 		processor.ownedScheduler = scheduler
 	}
 

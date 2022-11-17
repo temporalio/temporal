@@ -107,6 +107,7 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 
 func newTransferTaskShardScheduler(
 	shard shard.Context,
+	rateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
 ) queues.Scheduler {
 	config := shard.GetConfig()
@@ -115,6 +116,8 @@ func newTransferTaskShardScheduler(
 			WorkerCount: config.TransferTaskWorkerCount,
 			QueueSize:   config.TransferTaskBatchSize(),
 		},
+		rateLimiter,
+		shard.GetTimeSource(),
 		logger,
 	)
 }

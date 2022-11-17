@@ -92,6 +92,11 @@ func (s *scheduledQueueSuite) SetupTest() {
 				WorkerCount: dynamicconfig.GetIntPropertyFn(10),
 				QueueSize:   100,
 			},
+			NewSchedulerRateLimiter(
+				s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS,
+				s.mockShard.GetConfig().TaskSchedulerMaxQPS,
+			),
+			s.mockShard.GetTimeSource(),
 			log.NewTestLogger(),
 		),
 		nil,

@@ -363,6 +363,12 @@ const (
 	QueuePendingTaskMaxCount = "history.queuePendingTasksMaxCount"
 	// QueueMaxReaderCount is the max number of readers in one multi-cursor queue
 	QueueMaxReaderCount = "history.queueMaxReaderCount"
+
+	// TaskSchedulerMaxQPS is the max qps task schedulers on a host can schedule tasks
+	TaskSchedulerMaxQPS = "history.taskSchedulerMaxQPS"
+	// TaskSchedulerMaxQPS is the max qps task schedulers on a host can schedule tasks for a certain namespace
+	TaskSchedulerNamespaceMaxQPS = "history.taskSchedulerNamespaceMaxQPS"
+
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
 	TimerTaskBatchSize = "history.timerTaskBatchSize"
 	// TimerTaskWorkerCount is number of task workers for timer processor

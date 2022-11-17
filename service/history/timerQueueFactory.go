@@ -77,6 +77,7 @@ func NewTimerQueueFactory(
 				StandbyNamespaceWeights: params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
 			},
 			params.NamespaceRegistry,
+			params.SchedulerRateLimiter,
 			params.TimeSource,
 			params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
 			params.Logger,
@@ -209,5 +210,6 @@ func (f *timerQueueFactory) CreateQueue(
 		f.MatchingClient,
 		f.MetricsHandler,
 		f.HostRateLimiter,
+		f.SchedulerRateLimiter,
 	)
 }
