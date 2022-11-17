@@ -263,6 +263,24 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		return err
 	}
 
+	// The following sanitizes the branch token from the source cluster to this target cluster by re-initializing it.
+	historyBranchResp, err := r.shard.GetExecutionManager().ParseHistoryBranchInfo(ctx,
+		&persistence.ParseHistoryBranchInfoRequest{
+			BranchToken: currentVersionHistory.GetBranchToken(),
+		})
+	if err != nil {
+		return err
+	}
+	newHistoryBranchResp, err := r.shard.GetExecutionManager().NewHistoryBranch(ctx,
+		&persistence.NewHistoryBranchRequest{
+			TreeID:    historyBranchResp.BranchInfo.GetTreeId(),
+			BranchID:  &historyBranchResp.BranchInfo.BranchId,
+			Ancestors: historyBranchResp.BranchInfo.Ancestors,
+		})
+	if err != nil {
+		return err
+	}
+
 	lastEventTime, lastFirstTxnID, err := r.backfillHistory(
 		ctx,
 		request.GetRemoteCluster(),
@@ -271,7 +289,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		rid,
 		lastEventItem.GetEventId(),
 		lastEventItem.GetVersion(),
-		currentVersionHistory.GetBranchToken(),
+		newHistoryBranchResp.BranchToken,
 	)
 	if err != nil {
 		return err
@@ -291,6 +309,11 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		lastFirstTxnID,
 		lastEventItem.GetVersion(),
 	)
+	if err != nil {
+		return err
+	}
+
+	err = mutableState.SetCurrentBranchToken(newHistoryBranchResp.BranchToken)
 	if err != nil {
 		return err
 	}
