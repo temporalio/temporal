@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -436,7 +437,7 @@ func (s *readerSuite) TestSubmitTask() {
 
 	futureFireTime := reader.timeSource.Now().Add(time.Minute)
 	mockExecutable.EXPECT().GetKey().Return(tasks.NewKey(futureFireTime, rand.Int63())).Times(1)
-	s.mockRescheduler.EXPECT().Add(mockExecutable, futureFireTime.Add(scheduledTaskPrecision)).Times(1)
+	s.mockRescheduler.EXPECT().Add(mockExecutable, futureFireTime.Add(persistence.ScheduledTaskMinPrecision)).Times(1)
 	reader.submit(mockExecutable)
 }
 

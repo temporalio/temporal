@@ -331,6 +331,112 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetVisibilityTasks_Multiple() {
 	s.Equal(visibilityTasks, loadedTasks)
 }
 
+func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
+	now := time.Now().Truncate(p.ScheduledTaskMinPrecision)
+	timerTasks := []tasks.Task{
+		&tasks.UserTimerTask{
+			WorkflowKey:         s.WorkflowKey,
+			TaskID:              100,
+			VisibilityTimestamp: now.Add(time.Nanosecond * 10),
+		},
+		&tasks.UserTimerTask{
+			WorkflowKey:         s.WorkflowKey,
+			TaskID:              50,
+			VisibilityTimestamp: now.Add(time.Nanosecond * 20),
+		},
+	}
+
+	err := s.ExecutionManager.AddHistoryTasks(s.Ctx, &p.AddHistoryTasksRequest{
+		ShardID:     s.ShardID,
+		RangeID:     s.RangeID,
+		NamespaceID: s.WorkflowKey.NamespaceID,
+		WorkflowID:  s.WorkflowKey.WorkflowID,
+		RunID:       s.WorkflowKey.RunID,
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryTimer: timerTasks,
+		},
+	})
+	s.NoError(err)
+
+	// due to persistence layer precision loss,
+	// two tasks can be returned in either order,
+	// but must be ordered in terms of tasks.Key
+	response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, &p.GetHistoryTasksRequest{
+		ShardID:             s.ShardID,
+		TaskCategory:        tasks.CategoryTimer,
+		InclusiveMinTaskKey: tasks.NewKey(now, 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
+		BatchSize:           10,
+	})
+	s.NoError(err)
+	s.Len(response.Tasks, 2)
+	s.Empty(response.NextPageToken)
+	s.True(response.Tasks[0].GetKey().CompareTo(response.Tasks[1].GetKey()) < 0)
+}
+
+func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
+	now := time.Now().Truncate(p.ScheduledTaskMinPrecision)
+	scheduledTasks := []tasks.Task{
+		tasks.NewFakeTask(
+			s.WorkflowKey,
+			fakeScheduledTaskCategory,
+			now.Add(time.Nanosecond*10),
+		),
+		tasks.NewFakeTask(
+			s.WorkflowKey,
+			fakeScheduledTaskCategory,
+			now.Add(time.Nanosecond*20),
+		),
+	}
+	scheduledTasks[0].SetTaskID(100)
+	scheduledTasks[1].SetTaskID(50)
+
+	err := s.ExecutionManager.AddHistoryTasks(s.Ctx, &p.AddHistoryTasksRequest{
+		ShardID:     s.ShardID,
+		RangeID:     s.RangeID,
+		NamespaceID: s.WorkflowKey.NamespaceID,
+		WorkflowID:  s.WorkflowKey.WorkflowID,
+		RunID:       s.WorkflowKey.RunID,
+		Tasks: map[tasks.Category][]tasks.Task{
+			fakeScheduledTaskCategory: scheduledTasks,
+		},
+	})
+	s.NoError(err)
+
+	// due to persistence layer precision loss,
+	// two tasks can be returned in either order,
+	// but must be ordered in terms of tasks.Key
+	response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, &p.GetHistoryTasksRequest{
+		ShardID:             s.ShardID,
+		TaskCategory:        fakeScheduledTaskCategory,
+		InclusiveMinTaskKey: tasks.NewKey(now, 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
+		BatchSize:           10,
+	})
+	s.NoError(err)
+	s.Len(response.Tasks, 2)
+	s.Empty(response.NextPageToken)
+	s.True(response.Tasks[0].GetKey().CompareTo(response.Tasks[1].GetKey()) < 0)
+
+	err = s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
+		ShardID:             s.ShardID,
+		TaskCategory:        fakeScheduledTaskCategory,
+		InclusiveMinTaskKey: tasks.NewKey(now, 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
+	})
+	s.NoError(err)
+
+	response, err = s.ExecutionManager.GetHistoryTasks(s.Ctx, &p.GetHistoryTasksRequest{
+		ShardID:             s.ShardID,
+		TaskCategory:        fakeScheduledTaskCategory,
+		InclusiveMinTaskKey: tasks.NewKey(now, 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
+		BatchSize:           10,
+	})
+	s.NoError(err)
+	s.Empty(response.Tasks)
+}
+
 func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 	category tasks.Category,
 	numTasks int,
@@ -340,6 +446,7 @@ func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 	now := time.Now().UTC()
 	randomTasks := make([]tasks.Task, 0, numTasks)
 	for i := 0; i != numTasks; i++ {
+		now = now.Truncate(p.ScheduledTaskMinPrecision)
 		randomTasks = append(randomTasks, newTaskFn(s.WorkflowKey, currentTaskID, now))
 		currentTaskID += rand.Int63n(100) + 1
 		now = now.Add(time.Duration(rand.Int63n(1000_000_000)) + time.Millisecond)

@@ -92,7 +92,7 @@ func NewEventsCache(
 		eventsMgr:      eventsMgr,
 		disabled:       disabled,
 		logger:         log.With(logger, tag.ComponentEventsCache),
-		metricsHandler: metricsHandler,
+		metricsHandler: metricsHandler.WithTags(metrics.StringTag(metrics.CacheTypeTagName, metrics.EventsCacheTypeTagValue)),
 		shardID:        shardID,
 	}
 }
