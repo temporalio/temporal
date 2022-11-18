@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.uber.org/multierr"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -695,6 +696,75 @@ func (s *clientIntegrationSuite) TestTooManyCancelRequests() {
 		for _, run := range runs {
 			s.NoError(run.Get(ctx, nil))
 		}
+	})
+}
+
+func (s *clientIntegrationSuite) TestTooManyPendingSignals() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	receiverId := "receiver-id"
+	signalName := "my-signal"
+	sender := func(ctx workflow.Context, n int) error {
+		var futures []workflow.Future
+		for i := 0; i < n; i++ {
+			future := workflow.SignalExternalWorkflow(ctx, receiverId, "", signalName, nil)
+			futures = append(futures, future)
+		}
+		var errs error
+		for _, future := range futures {
+			err := future.Get(ctx, nil)
+			errs = multierr.Combine(errs, err)
+		}
+		return errs
+	}
+	s.worker.RegisterWorkflow(sender)
+
+	receiver := func(ctx workflow.Context) error {
+		channel := workflow.GetSignalChannel(ctx, signalName)
+		for {
+			channel.Receive(ctx, nil)
+		}
+	}
+	s.worker.RegisterWorkflow(receiver)
+	_, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		TaskQueue: s.taskQueue,
+		ID:        receiverId,
+	}, receiver)
+	s.NoError(err)
+
+	successTimeout := time.Second * 5
+	s.Run("TooManySignals", func() {
+		senderId := "sender-1"
+		senderRun, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			TaskQueue: s.taskQueue,
+			ID:        senderId,
+		}, sender, s.maxPendingSignals+1)
+		s.NoError(err)
+		{
+			ctx, cancel := context.WithTimeout(ctx, successTimeout)
+			defer cancel()
+			err := senderRun.Get(ctx, nil)
+			s.Error(err)
+		}
+		s.historyContainsFailureCausedBy(
+			ctx,
+			senderId,
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED,
+		)
+		s.NoError(s.sdkClient.CancelWorkflow(ctx, senderId, ""))
+	})
+
+	s.Run("NotTooManySignals", func() {
+		senderID := "sender-2"
+		senderRun, err := s.sdkClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			TaskQueue: s.taskQueue,
+			ID:        senderID,
+		}, sender, s.maxPendingSignals)
+		s.NoError(err)
+		ctx, cancel := context.WithTimeout(ctx, successTimeout)
+		defer cancel()
+		err = senderRun.Get(ctx, nil)
+		s.NoError(err)
 	})
 }
 

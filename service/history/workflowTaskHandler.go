@@ -955,6 +955,9 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	); err != nil || handler.stopProcessing {
 		return err
 	}
+	if err := handler.sizeLimitChecker.checkIfNumPendingSignalsExceedsLimit(); err != nil {
+		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED, err)
+	}
 
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION.String()),
