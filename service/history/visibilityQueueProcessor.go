@@ -100,13 +100,7 @@ func newVisibilityQueueProcessor(
 		return true
 	}
 	maxReadLevel := func() int64 {
-		return shard.GetQueueExclusiveHighReadWatermark(
-			tasks.CategoryVisibility,
-			shard.GetClusterMetadata().GetCurrentClusterName(),
-			// the value doesn't actually used for immediate queue,
-			// but logically visibility queue only has one processor
-			true,
-		).TaskID
+		return shard.GetImmediateQueueExclusiveHighReadWatermark().TaskID
 	}
 	updateVisibilityAckLevel := func(ackLevel int64) error {
 		return shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.NewImmediateKey(ackLevel))
@@ -153,7 +147,7 @@ func newVisibilityQueueProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
+		metricProvider.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
 	)
 
 	queueAckMgr := newQueueAckMgr(
@@ -273,7 +267,7 @@ func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
 			_ = backoff.ThrottleRetry(func() error {
 				err := t.completeTask()
 				if err != nil {
-					t.logger.Info("Failed to complete transfer task", tag.Error(err))
+					t.logger.Error("Failed to complete visibility task", tag.Error(err))
 				}
 				return err
 			}, completeTaskRetryPolicy, func(err error) bool {
