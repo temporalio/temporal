@@ -3695,6 +3695,18 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	if len(request.GetJobId()) == 0 {
 		return nil, errBatchJobIDNotSet
 	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+	if len(request.VisibilityQuery) == 0 {
+		return nil, errQueryNotSet
+	}
+	if len(request.Reason) == 0 {
+		return nil, errReasonNotSet
+	}
+	if request.Operation == nil {
+		return nil, errBatchOperationNotSet
+	}
 
 	if !wh.config.EnableBatcher(request.Namespace) {
 		return nil, errBatchAPINotAllowed
@@ -3804,6 +3816,16 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errRequestNotSet
 	}
 
+	if len(request.GetJobId()) == 0 {
+		return nil, errBatchJobIDNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+	if len(request.Reason) == 0 {
+		return nil, errReasonNotSet
+	}
+
 	if !wh.config.EnableBatcher(request.Namespace) {
 		return nil, errBatchAPINotAllowed
 	}
@@ -3839,6 +3861,13 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if len(request.GetJobId()) == 0 {
+		return nil, errBatchJobIDNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
 	}
 
 	if !wh.config.EnableBatcher(request.Namespace) {
@@ -3950,6 +3979,10 @@ func (wh *WorkflowHandler) ListBatchOperations(
 
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
 	}
 
 	if !wh.config.EnableBatcher(request.Namespace) {

@@ -991,7 +991,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 	response := &persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(ms)}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(response, nil).AnyTimes()
 
-	s.historyEngine.shard.GetConfig().NumPendingChildExecutionLimitError = func(namespace string) int {
+	s.historyEngine.shard.GetConfig().NumPendingChildExecutionsLimit = func(namespace string) int {
 		return 5
 	}
 	_, err := s.historyEngine.RespondWorkflowTaskCompleted(metrics.AddMetricsContext(context.Background()), &historyservice.RespondWorkflowTaskCompletedRequest{
@@ -1005,7 +1005,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 
 	s.Error(err)
 	s.Assert().Equal([]string{"the number of pending child workflow executions, 5, " +
-		"has reached the error limit of 5 established with \"limit.numPendingChildExecution.error\""}, s.errorMessages)
+		"has reached the error limit of 5 established with \"limit.numPendingChildExecutions.error\""}, s.errorMessages)
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {

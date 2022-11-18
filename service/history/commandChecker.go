@@ -62,11 +62,14 @@ type (
 	}
 
 	workflowSizeLimits struct {
-		blobSizeLimitWarn                  int
-		blobSizeLimitError                 int
-		memoSizeLimitWarn                  int
-		memoSizeLimitError                 int
-		numPendingChildExecutionLimitError int
+		blobSizeLimitWarn              int
+		blobSizeLimitError             int
+		memoSizeLimitWarn              int
+		memoSizeLimitError             int
+		numPendingChildExecutionsLimit int
+		numPendingActivitiesLimit      int
+		numPendingSignalsLimit         int
+		numPendingCancelsRequestLimit  int
 	}
 
 	workflowSizeChecker struct {
@@ -189,7 +192,7 @@ func (c *workflowSizeChecker) checkIfNumChildWorkflowsExceedsLimit() error {
 	)
 
 	numPending := len(c.mutableState.GetPendingChildExecutionInfos())
-	errLimit := c.numPendingChildExecutionLimitError
+	errLimit := c.numPendingChildExecutionsLimit
 	if withinLimit(numPending, errLimit) {
 		return nil
 	}
@@ -199,7 +202,7 @@ func (c *workflowSizeChecker) checkIfNumChildWorkflowsExceedsLimit() error {
 			"has reached the error limit of %d established with %q",
 		numPending,
 		errLimit,
-		dynamicconfig.NumPendingChildExecutionLimitError,
+		dynamicconfig.NumPendingChildExecutionsLimitError,
 	)
 	logger.Error(err.Error(), tag.Error(err))
 	return err
