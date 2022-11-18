@@ -111,6 +111,8 @@ func (f *visibilityQueueFactory) CreateQueue(
 			f.VisibilityMgr,
 			logger,
 			f.MetricsHandler,
+			f.Config.VisibilityProcessorEnsureCloseBeforeDelete,
+			f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
 		)
 
 		return queues.NewImmediateQueue(

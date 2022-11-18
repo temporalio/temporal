@@ -417,9 +417,10 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 			ctx,
 			task,
 			// Visibility is not updated (to avoid race condition for visibility tasks) and workflow execution is
-			//still open there.
+			// still open there.
 			true,
 			false,
+			&task.DeleteProcessStage,
 		)
 	}
 	return err

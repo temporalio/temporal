@@ -51,6 +51,8 @@ const (
 	FakeClusterForEmptyVersion = "fake-cluster-for-empty-version"
 )
 
+var ErrUnknownCluster = fmt.Errorf("unknown cluster")
+
 type (
 	Metadata interface {
 		common.Daemon
@@ -74,7 +76,7 @@ type (
 		// GetAllClusterInfo return the all cluster name -> corresponding info
 		GetAllClusterInfo() map[string]ClusterInformation
 		// ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
-		ClusterNameForFailoverVersion(isGlobalNamespace bool, failoverVersion int64) string
+		ClusterNameForFailoverVersion(isGlobalNamespace bool, failoverVersion int64) (string, error)
 		// GetFailoverVersionIncrement return the Failover version increment value
 		GetFailoverVersionIncrement() int64
 		RegisterMetadataChangeCallback(callbackId any, cb CallbackFn)
@@ -342,15 +344,15 @@ func (m *metadataImpl) GetAllClusterInfo() map[string]ClusterInformation {
 	return result
 }
 
-func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, failoverVersion int64) string {
+func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, failoverVersion int64) (string, error) {
 	if failoverVersion == common.EmptyVersion {
 		// Local namespace uses EmptyVersion. But local namespace could be promoted to global namespace. Once promoted,
 		// workflows with EmptyVersion could be replicated to other clusters. The receiving cluster needs to know that
 		// those workflows are not from their current cluster.
 		if isGlobalNamespace {
-			return FakeClusterForEmptyVersion
+			return FakeClusterForEmptyVersion, nil
 		}
-		return m.currentClusterName
+		return m.currentClusterName, nil
 	}
 
 	if !isGlobalNamespace {
@@ -370,14 +372,15 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, fai
 	defer m.clusterLock.RUnlock()
 	clusterName, ok := m.versionToClusterName[initialFailoverVersion]
 	if !ok {
-		panic(fmt.Sprintf(
+		m.logger.Warn(fmt.Sprintf(
 			"Unknown initial failover version %v with given cluster initial failover version map: %v and failover version increment %v.",
 			initialFailoverVersion,
 			m.clusterInfo,
 			m.failoverVersionIncrement,
 		))
+		return "", ErrUnknownCluster
 	}
-	return clusterName
+	return clusterName, nil
 }
 
 func (m *metadataImpl) GetFailoverVersionIncrement() int64 {

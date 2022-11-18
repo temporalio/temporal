@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -53,6 +54,9 @@ type (
 		logger         log.Logger
 		metricProvider metrics.MetricsHandler
 		visibilityMgr  manager.VisibilityManager
+
+		ensureCloseBeforeDelete    dynamicconfig.BoolPropertyFn
+		enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -64,6 +68,8 @@ func newVisibilityQueueTaskExecutor(
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
 	metricProvider metrics.MetricsHandler,
+	ensureCloseBeforeDelete dynamicconfig.BoolPropertyFn,
+	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) *visibilityQueueTaskExecutor {
 	return &visibilityQueueTaskExecutor{
 		shard:          shard,
@@ -71,6 +77,9 @@ func newVisibilityQueueTaskExecutor(
 		logger:         logger,
 		metricProvider: metricProvider,
 		visibilityMgr:  visibilityMgr,
+
+		ensureCloseBeforeDelete:    ensureCloseBeforeDelete,
+		enableCloseWorkflowCleanup: enableCloseWorkflowCleanup,
 	}
 }
 
@@ -316,6 +325,11 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
+	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+	if err != nil {
+		return err
+	}
+
 	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
@@ -362,7 +376,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	release(nil)
 	err = t.recordCloseExecution(
 		ctx,
-		namespace.ID(task.GetNamespaceID()),
+		namespaceEntry,
 		task.GetWorkflowID(),
 		task.GetRunID(),
 		workflowTypeName,
@@ -381,12 +395,16 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	return t.cleanupExecutionInfo(ctx, task)
+
+	if t.enableCloseWorkflowCleanup(namespaceEntry.Name().String()) {
+		return t.cleanupExecutionInfo(ctx, task)
+	}
+	return nil
 }
 
 func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	ctx context.Context,
-	namespaceID namespace.ID,
+	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	runID string,
 	workflowTypeName string,
@@ -402,14 +420,9 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	searchAttributes *commonpb.SearchAttributes,
 	historySizeBytes int64,
 ) error {
-	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		return err
-	}
-
 	return t.visibilityMgr.RecordWorkflowExecutionClosed(ctx, &manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
-			NamespaceID: namespaceID,
+			NamespaceID: namespaceEntry.ID(),
 			Namespace:   namespaceEntry.Name(),
 			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
@@ -447,7 +460,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		StartTime:   task.StartTime,
 		CloseTime:   task.CloseTime,
 	}
-	if t.shard.GetConfig().VisibilityProcessorEnsureCloseBeforeDelete() {
+	if t.ensureCloseBeforeDelete() {
 		// If visibility delete task is executed before visibility close task then visibility close task
 		// (which change workflow execution status by uploading new visibility record) will resurrect visibility record.
 		//

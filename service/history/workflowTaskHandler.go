@@ -264,6 +264,9 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	); err != nil {
 		return nil, handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
 	}
+	if err := handler.sizeLimitChecker.checkIfNumPendingActivitiesExceedsLimit(); err != nil {
+		return nil, handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_ACTIVITIES_LIMIT_EXCEEDED, err)
+	}
 
 	enums.SetDefaultTaskQueueKind(&attr.GetTaskQueue().Kind)
 
@@ -893,6 +896,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 	); err != nil {
 		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
+	}
+
+	// child workflow limit
+	if err := handler.sizeLimitChecker.checkIfNumChildWorkflowsExceedsLimit(); err != nil {
+		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_CHILD_WORKFLOWS_LIMIT_EXCEEDED, err)
 	}
 
 	enabled := handler.config.EnableParentClosePolicy(parentNamespace.String())

@@ -188,7 +188,10 @@ func (r *WorkflowImpl) SuppressBy(
 		return workflow.TransactionPolicyPassive, nil
 	}
 
-	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(true, lastWriteVersion)
+	lastWriteCluster, err := r.clusterMetadata.ClusterNameForFailoverVersion(true, lastWriteVersion)
+	if err != nil {
+		return workflow.TransactionPolicyActive, err
+	}
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if currentCluster == lastWriteCluster {
@@ -212,7 +215,11 @@ func (r *WorkflowImpl) FlushBufferedEvents() error {
 		return err
 	}
 
-	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(true, lastWriteVersion)
+	lastWriteCluster, err := r.clusterMetadata.ClusterNameForFailoverVersion(true, lastWriteVersion)
+	if err != nil {
+		return err
+	}
+
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if lastWriteCluster != currentCluster {

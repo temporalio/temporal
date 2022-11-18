@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -170,10 +171,14 @@ func NewWorkflowVersionCheck(
 	if prevLastWriteVersion > newMutableState.GetCurrentVersion() {
 		clusterMetadata := shard.GetClusterMetadata()
 		namespaceEntry := newMutableState.GetNamespaceEntry()
+		clusterName, err := clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion)
+		if err != nil && err != cluster.ErrUnknownCluster {
+			return err
+		}
 		return serviceerror.NewNamespaceNotActive(
 			namespaceEntry.Name().String(),
 			clusterMetadata.GetCurrentClusterName(),
-			clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion),
+			clusterName,
 		)
 	}
 	return nil

@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -484,8 +485,9 @@ func (r *ReaderImpl) submit(
 	executable Executable,
 ) {
 	now := r.timeSource.Now()
-	// Please check the comment in queue_scheduled.go for why adding 1ms to the fire time.
-	if fireTime := executable.GetKey().FireTime.Add(scheduledTaskPrecision); now.Before(fireTime) {
+	// Persistence layer may lose precision when persisting the task, which essentially move
+	// task fire time forward. Need to account for that when submitting the task.
+	if fireTime := executable.GetKey().FireTime.Add(persistence.ScheduledTaskMinPrecision); now.Before(fireTime) {
 		r.rescheduler.Add(executable, fireTime)
 		return
 	}

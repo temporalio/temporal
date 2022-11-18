@@ -41,6 +41,7 @@ type (
 		Version                     int64
 		BranchToken                 []byte
 		WorkflowDataAlreadyArchived bool
+		ProcessStage                DeleteWorkflowExecutionStage
 	}
 )
 

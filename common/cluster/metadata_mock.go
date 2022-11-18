@@ -59,11 +59,12 @@ func (m *MockMetadata) EXPECT() *MockMetadataMockRecorder {
 }
 
 // ClusterNameForFailoverVersion mocks base method.
-func (m *MockMetadata) ClusterNameForFailoverVersion(isGlobalNamespace bool, failoverVersion int64) string {
+func (m *MockMetadata) ClusterNameForFailoverVersion(isGlobalNamespace bool, failoverVersion int64) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ClusterNameForFailoverVersion", isGlobalNamespace, failoverVersion)
 	ret0, _ := ret[0].(string)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ClusterNameForFailoverVersion indicates an expected call of ClusterNameForFailoverVersion.

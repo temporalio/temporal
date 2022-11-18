@@ -367,6 +367,7 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		wfCtx,
 		mutableState,
 		false,
+		nil, // stage is not stored during cleanup process.
 	)
 }
 

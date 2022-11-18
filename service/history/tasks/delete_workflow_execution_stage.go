@@ -22,38 +22,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistencetests
+package tasks
 
-import (
-	"testing"
+// DeleteWorkflowExecutionStage used by ContextImpl.DeleteWorkflowExecution to indicate progress stage.
+type DeleteWorkflowExecutionStage byte
 
-	"github.com/stretchr/testify/suite"
+const (
+	DeleteWorkflowExecutionStageNone DeleteWorkflowExecutionStage = 0
 )
 
-func TestCassandraHistoryV2Persistence(t *testing.T) {
-	s := new(HistoryV2PersistenceSuite)
-	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
-}
+const (
+	DeleteWorkflowExecutionStageVisibility DeleteWorkflowExecutionStage = 1 << iota
+	DeleteWorkflowExecutionStageCurrent
+	DeleteWorkflowExecutionStageMutableState
+	DeleteWorkflowExecutionStageHistory
+)
 
-func TestCassandraMetadataPersistenceV2(t *testing.T) {
-	s := new(MetadataPersistenceSuiteV2)
-	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
+func (s *DeleteWorkflowExecutionStage) MarkProcessed(stage DeleteWorkflowExecutionStage) {
+	if s == nil {
+		return
+	}
+	*s |= stage
 }
-
-func TestCassandraQueuePersistence(t *testing.T) {
-	s := new(QueuePersistenceSuite)
-	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
-}
-
-func TestCassandraClusterMetadataPersistence(t *testing.T) {
-	s := new(ClusterMetadataManagerSuite)
-	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
+func (s *DeleteWorkflowExecutionStage) IsProcessed(stage DeleteWorkflowExecutionStage) bool {
+	return s != nil && *s&stage == stage
 }

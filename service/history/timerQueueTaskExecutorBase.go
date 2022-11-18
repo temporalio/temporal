@@ -142,6 +142,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		weContext,
 		mutableState,
 		archiveIfEnabled,
+		&task.ProcessStage, // Pass stage by reference to update it inside delete manager.
 	)
 }
 

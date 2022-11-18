@@ -113,10 +113,18 @@ const (
 	MemoSizeLimitError = "limit.memoSize.error"
 	// MemoSizeLimitWarn is the per event memo size limit for warning
 	MemoSizeLimitWarn = "limit.memoSize.warn"
-	// NumPendingChildExecutionLimitError is the per workflow pending child workflow limit
-	NumPendingChildExecutionLimitError = "limit.numPendingChildExecution.error"
-	// NumPendingChildExecutionLimitWarning is the per workflow pending child workflow limit for warning
-	NumPendingChildExecutionLimitWarning = "limit.numPendingChildExecution.warn"
+	// NumPendingChildExecutionsLimitError is the maximum number of pending child workflows a workflow can have before
+	// StartChildWorkflowExecution commands will fail.
+	NumPendingChildExecutionsLimitError = "limit.numPendingChildExecutions.error"
+	// NumPendingActivitiesLimitError is the maximum number of pending activities a workflow can have before
+	// ScheduleActivityTask will fail.
+	NumPendingActivitiesLimitError = "limit.numPendingActivities.error"
+	// NumPendingSignalsLimitError is the maximum number of pending signals a workflow can have before
+	// SignalExternalWorkflowExecution commands from this workflow will fail.
+	NumPendingSignalsLimitError = "limit.numPendingSignals.error"
+	// NumPendingCancelRequestsLimitError is the maximum number of pending requests to cancel other workflows a workflow can have before
+	// RequestCancelExternalWorkflowExecution commands will fail.
+	NumPendingCancelRequestsLimitError = "limit.numPendingCancelRequests.error"
 	// HistorySizeLimitError is the per workflow execution history size limit
 	HistorySizeLimitError = "limit.historySize.error"
 	// HistorySizeLimitWarn is the per workflow execution history size limit for warning
@@ -422,6 +430,7 @@ const (
 	TimerProcessorArchivalTimeLimit = "history.timerProcessorArchivalTimeLimit"
 	// RetentionTimerJitterDuration is a time duration jitter to distribute timer from T0 to T0 + jitter duration
 	RetentionTimerJitterDuration = "history.retentionTimerJitterDuration"
+
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize = "history.transferTaskBatchSize"
 	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
@@ -508,6 +517,10 @@ const (
 	VisibilityProcessorVisibilityArchivalTimeLimit = "history.visibilityProcessorVisibilityArchivalTimeLimit"
 	// VisibilityProcessorEnsureCloseBeforeDelete means we ensure the visibility of an execution is closed before we delete its visibility records
 	VisibilityProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
+	// VisibilityProcessorEnableCloseWorkflowCleanup to clean up the mutable state after visibility
+	// close task has been processed. Must use Elasticsearch as visibility store, otherwise workflow
+	// data (eg: search attributes) will be lost after workflow is closed.
+	VisibilityProcessorEnableCloseWorkflowCleanup = "history.visibilityProcessorEnableCloseWorkflowCleanup"
 
 	// ArchivalTaskBatchSize is batch size for archivalQueueProcessor
 	ArchivalTaskBatchSize = "history.archivalTaskBatchSize"

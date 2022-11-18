@@ -127,7 +127,10 @@ func newReplicationTask(
 	lastEvent := events[len(events)-1]
 	version := firstEvent.GetVersion()
 
-	sourceCluster := clusterMetadata.ClusterNameForFailoverVersion(true, version)
+	sourceCluster, err := clusterMetadata.ClusterNameForFailoverVersion(true, version)
+	if err != nil {
+		return nil, err
+	}
 
 	eventTime := time.Time{}
 	for _, event := range events {
