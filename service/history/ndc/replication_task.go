@@ -129,16 +129,7 @@ func newReplicationTask(
 
 	sourceCluster, err := clusterMetadata.ClusterNameForFailoverVersion(true, version)
 	if err != nil {
-		if err != cluster.ErrUnknownCluster {
-			return nil, err
-		}
-		// Ignore the unknown cluster err and an empty cluster name will be used.
-		logger.Warn("Encounter unknown cluster when applying history replication task",
-			tag.WorkflowNamespaceID(request.GetNamespaceId()),
-			tag.WorkflowID(request.WorkflowExecution.GetWorkflowId()),
-			tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
-			tag.FailoverVersion(version),
-			tag.Error(err))
+		return nil, err
 	}
 
 	eventTime := time.Time{}
