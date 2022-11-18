@@ -41,8 +41,8 @@ import (
 const (
 	// This is the task channel buffer size between
 	// weighted round robin scheduler and the actual
-	// worker pool (parallel processor).
-	namespacePrioritySchedulerProcessorQueueSize = 10
+	// worker pool (fifo processor).
+	prioritySchedulerProcessorQueueSize = 10
 
 	taskSchedulerToken = 1
 )
@@ -74,11 +74,12 @@ type (
 		WorkerCount             dynamicconfig.IntPropertyFn
 		ActiveNamespaceWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
 		StandbyNamespaceWeights dynamicconfig.MapPropertyFnWithNamespaceFilter
+		EnableRateLimiter       dynamicconfig.BoolPropertyFn
 	}
 
-	FIFOSchedulerOptions struct {
-		WorkerCount dynamicconfig.IntPropertyFn
-		QueueSize   int
+	PrioritySchedulerOptions struct {
+		WorkerCount       dynamicconfig.IntPropertyFn
+		EnableRateLimiter dynamicconfig.BoolPropertyFn
 	}
 
 	schedulerImpl struct {
@@ -128,7 +129,7 @@ func NewNamespacePriorityScheduler(
 		return quotas.NewRequest("", taskSchedulerToken, namespaceName.String(), tasks.PriorityName[key.Priority], "")
 	}
 	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
-		QueueSize:   namespacePrioritySchedulerProcessorQueueSize,
+		QueueSize:   prioritySchedulerProcessorQueueSize,
 		WorkerCount: options.WorkerCount,
 	}
 
@@ -139,6 +140,7 @@ func NewNamespacePriorityScheduler(
 				ChannelWeightFn:       channelWeightFn,
 				ChannelWeightUpdateCh: channelWeightUpdateCh,
 				ChannelQuotaRequestFn: channelQuotaRequestFn,
+				EnableRateLimiter:     options.EnableRateLimiter,
 			},
 			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
 				newSchedulerMonitor(
@@ -162,23 +164,26 @@ func NewNamespacePriorityScheduler(
 	}
 }
 
-// NewFIFOScheduler is used to create shard level task scheduler
-// and always schedule tasks in fifo order regardless
-// which namespace the task belongs to.
-// All tasks will be regarded as low priority
-func NewFIFOScheduler(
-	options FIFOSchedulerOptions,
+// NewPriorityScheduler ignores namespace when scheduleing tasks.
+// currently only used for shard level task scheduler
+func NewPriorityScheduler(
+	options PrioritySchedulerOptions,
 	rateLimiter SchedulerRateLimiter,
 	timeSource clock.TimeSource,
 	logger log.Logger,
 ) Scheduler {
-	taskChannelKeyFn := func(_ Executable) TaskChannelKey { return TaskChannelKey{} }
+	taskChannelKeyFn := func(e Executable) TaskChannelKey {
+		return TaskChannelKey{
+			NamespaceID: namespace.EmptyID.String(),
+			Priority:    e.GetPriority(),
+		}
+	}
 	channelWeightFn := func(_ TaskChannelKey) int { return 1000 }
-	channelQuotaRequestFn := func(_ TaskChannelKey) quotas.Request {
-		return quotas.NewRequest("", taskSchedulerToken, "", tasks.PriorityLow.String(), "")
+	channelQuotaRequestFn := func(key TaskChannelKey) quotas.Request {
+		return quotas.NewRequest("", taskSchedulerToken, "", tasks.PriorityName[key.Priority], "")
 	}
 	fifoSchedulerOptions := &tasks.FIFOSchedulerOptions{
-		QueueSize:   options.QueueSize,
+		QueueSize:   prioritySchedulerProcessorQueueSize,
 		WorkerCount: options.WorkerCount,
 	}
 
@@ -189,6 +194,7 @@ func NewFIFOScheduler(
 				ChannelWeightFn:       channelWeightFn,
 				ChannelWeightUpdateCh: nil,
 				ChannelQuotaRequestFn: channelQuotaRequestFn,
+				EnableRateLimiter:     options.EnableRateLimiter,
 			},
 			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
 				noopScheduleMonitor,

@@ -115,6 +115,8 @@ func QueueSchedulerRateLimiterProvider(
 	return queues.NewSchedulerRateLimiter(
 		config.TaskSchedulerNamespaceMaxQPS,
 		config.TaskSchedulerMaxQPS,
+		config.PersistenceNamespaceMaxQPS,
+		config.PersistenceMaxQPS,
 	)
 }
 

@@ -35,8 +35,16 @@ type SchedulerRateLimiter quotas.RequestRateLimiter
 func NewSchedulerRateLimiter(
 	namespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	hostMaxQPS dynamicconfig.IntPropertyFn,
+	persistenceNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	persistenceHostMaxQPS dynamicconfig.IntPropertyFn,
 ) SchedulerRateLimiter {
-	hostRateFn := func() float64 { return float64(hostMaxQPS()) }
+	hostRateFn := func() float64 {
+		hostMaxQPS := float64(hostMaxQPS())
+		if hostMaxQPS > 0 {
+			return hostMaxQPS
+		}
+		return float64(persistenceHostMaxQPS())
+	}
 
 	requestPriorityFn := func(req quotas.Request) int {
 		if priority, ok := tasks.PriorityValue[req.CallerType]; ok {
@@ -51,7 +59,11 @@ func NewSchedulerRateLimiter(
 	for priority := range tasks.PriorityName {
 		var requestRateLimiter quotas.RequestRateLimiter
 		if priority == tasks.PriorityHigh {
-			requestRateLimiter = newHighPriorityTaskRequestRateLimiter(namespaceMaxQPS, hostMaxQPS)
+			requestRateLimiter = newHighPriorityTaskRequestRateLimiter(
+				namespaceMaxQPS,
+				persistenceNamespaceMaxQPS,
+				hostRateFn,
+			)
 		} else {
 			requestRateLimiter = quotas.NewRequestRateLimiterAdapter(
 				quotas.NewDefaultOutgoingRateLimiter(hostRateFn),
@@ -68,25 +80,24 @@ func NewSchedulerRateLimiter(
 
 func newHighPriorityTaskRequestRateLimiter(
 	namespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	hostMaxQPS dynamicconfig.IntPropertyFn,
+	persistenceNamespaceMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	hostRateFn quotas.RateFn,
 ) quotas.RequestRateLimiter {
 	hostRequestRateLimiter := quotas.NewRequestRateLimiterAdapter(
-		quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(hostMaxQPS()) },
-		),
+		quotas.NewDefaultOutgoingRateLimiter(hostRateFn),
 	)
 	namespaceRequestRateLimiterFn := func(req quotas.Request) quotas.RequestRateLimiter {
 		return quotas.NewRequestRateLimiterAdapter(
 			quotas.NewDefaultOutgoingRateLimiter(func() float64 {
-				if namespaceMaxQPS == nil {
-					return float64(hostMaxQPS())
+				if namespaceQPS := float64(namespaceMaxQPS(req.Caller)); namespaceQPS > 0 {
+					return namespaceQPS
 				}
 
-				namespaceQPS := float64(namespaceMaxQPS(req.Caller))
-				if namespaceQPS <= 0 {
-					return float64(hostMaxQPS())
+				if persistenceNamespaceQPS := float64(persistenceNamespaceMaxQPS(req.Caller)); persistenceNamespaceQPS > 0 {
+					return persistenceNamespaceQPS
 				}
-				return namespaceQPS
+
+				return hostRateFn()
 			}),
 		)
 	}

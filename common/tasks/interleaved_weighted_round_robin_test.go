@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
 )
@@ -93,6 +94,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 			ChannelWeightFn:       func(key int) int { return s.channelKeyToWeight[key] },
 			ChannelWeightUpdateCh: s.channelWeightUpdateCh,
 			ChannelQuotaRequestFn: func(key int) quotas.Request { return quotas.NewRequest("", 1, "", "", "") },
+			EnableRateLimiter:     dynamicconfig.GetBoolPropertyFn(true),
 		},
 		Scheduler[*testTask](s.mockFIFOScheduler),
 		quotas.NewRequestRateLimiterAdapter(

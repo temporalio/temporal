@@ -314,6 +314,7 @@ const (
 	// HistoryPersistenceGlobalMaxQPS is the max qps history cluster can query DB
 	HistoryPersistenceGlobalMaxQPS = "history.persistenceGlobalMaxQPS"
 	// HistoryPersistenceNamespaceMaxQPS is the max qps each namespace on history host can query DB
+	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	HistoryPersistenceNamespaceMaxQPS = "history.persistenceNamespaceMaxQPS"
 	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
 	HistoryEnablePersistencePriorityRateLimiting = "history.enablePersistencePriorityRateLimiting"
@@ -364,9 +365,13 @@ const (
 	// QueueMaxReaderCount is the max number of readers in one multi-cursor queue
 	QueueMaxReaderCount = "history.queueMaxReaderCount"
 
+	// TaskSchedulerEnableRateLimiter incidents if rate limiter should be enabled in task scheduler
+	TaskSchedulerEnableRateLimiter = "history.taskSchedulerEnableRateLimiter"
 	// TaskSchedulerMaxQPS is the max qps task schedulers on a host can schedule tasks
+	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	TaskSchedulerMaxQPS = "history.taskSchedulerMaxQPS"
-	// TaskSchedulerMaxQPS is the max qps task schedulers on a host can schedule tasks for a certain namespace
+	// TaskSchedulerNamespaceMaxQPS is the max qps task schedulers on a host can schedule tasks for a certain namespace
+	// If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 	TaskSchedulerNamespaceMaxQPS = "history.taskSchedulerNamespaceMaxQPS"
 
 	// TimerTaskBatchSize is batch size for timer processor to process tasks

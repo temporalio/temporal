@@ -69,3 +69,17 @@ func (s *priorityAssignerSuite) TestAssign_SelectedTaskTypes() {
 
 	s.Equal(tasks.PriorityLow, s.priorityAssigner.Assign(mockExecutable))
 }
+
+func (s *priorityAssignerSuite) TestAssign_UnknownTaskTypes() {
+	mockExecutable := NewMockExecutable(s.controller)
+	mockExecutable.EXPECT().GetType().Return(enumsspb.TaskType(1234)).Times(1)
+
+	s.Equal(tasks.PriorityLow, s.priorityAssigner.Assign(mockExecutable))
+}
+
+func (s *priorityAssignerSuite) TestAssign_HighPriorityTaskTypes() {
+	mockExecutable := NewMockExecutable(s.controller)
+	mockExecutable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER).Times(1)
+
+	s.Equal(tasks.PriorityHigh, s.priorityAssigner.Assign(mockExecutable))
+}

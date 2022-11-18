@@ -360,10 +360,10 @@ func newVisibilityTaskShardScheduler(
 	logger log.Logger,
 ) queues.Scheduler {
 	config := shard.GetConfig()
-	return queues.NewFIFOScheduler(
-		queues.FIFOSchedulerOptions{
-			WorkerCount: config.VisibilityTaskWorkerCount,
-			QueueSize:   config.VisibilityTaskBatchSize(),
+	return queues.NewPriorityScheduler(
+		queues.PrioritySchedulerOptions{
+			WorkerCount:       config.VisibilityTaskWorkerCount,
+			EnableRateLimiter: config.TaskSchedulerEnableRateLimiter,
 		},
 		rateLimiter,
 		shard.GetTimeSource(),

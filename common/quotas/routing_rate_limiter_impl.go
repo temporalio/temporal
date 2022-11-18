@@ -68,7 +68,7 @@ func (r *RoutingRateLimiterImpl) Reserve(
 ) Reservation {
 	rateLimiter, ok := r.apiToRateLimiter[request.API]
 	if !ok {
-		return NewNoopReservation()
+		return NoopReservation
 	}
 	return rateLimiter.Reserve(now, request)
 }

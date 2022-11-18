@@ -78,6 +78,7 @@ func NewTransferQueueFactory(
 				WorkerCount:             params.Config.TransferProcessorSchedulerWorkerCount,
 				ActiveNamespaceWeights:  params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
 				StandbyNamespaceWeights: params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
+				EnableRateLimiter:       params.Config.TaskSchedulerEnableRateLimiter,
 			},
 			params.NamespaceRegistry,
 			params.SchedulerRateLimiter,

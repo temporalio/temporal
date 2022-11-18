@@ -75,6 +75,7 @@ func NewTimerQueueFactory(
 				WorkerCount:             params.Config.TimerProcessorSchedulerWorkerCount,
 				ActiveNamespaceWeights:  params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
 				StandbyNamespaceWeights: params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
+				EnableRateLimiter:       params.Config.TaskSchedulerEnableRateLimiter,
 			},
 			params.NamespaceRegistry,
 			params.SchedulerRateLimiter,

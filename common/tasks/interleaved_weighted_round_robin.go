@@ -32,12 +32,14 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
 )
 
 const (
-	iwrrDispatchThrottleDuration = 1 * time.Second
+	iwrrDispatchThrottleDuration    = 1 * time.Second
+	checkRateLimiterEnabledInterval = 1 * time.Minute
 )
 
 var _ Scheduler[Task] = (*InterleavedWeightedRoundRobinScheduler[Task, struct{}])(nil)
@@ -54,6 +56,8 @@ type (
 		ChannelWeightUpdateCh chan struct{}
 		// Required for converting task channel to rate limit request
 		ChannelQuotaRequestFn ChannelQuotaRequestFn[K]
+		// Required for determining if rate limiter should be enabled.
+		EnableRateLimiter dynamicconfig.BoolPropertyFn
 	}
 
 	// TaskChannelKeyFn is the function for mapping a task to its task channel (key)
@@ -85,9 +89,10 @@ type (
 		sync.RWMutex
 		weightedChannels map[K]*WeightedChannel[T]
 
-		dispatchTimerLock sync.Mutex
-		dispatchTimer     *time.Timer
-		iwrrChannels      atomic.Value
+		dispatchTimerLock  sync.Mutex
+		dispatchTimer      *time.Timer
+		rateLimiterEnabled atomic.Value
+		iwrrChannels       atomic.Value
 	}
 
 	channelWithStatus[T Task, K comparable] struct {
@@ -126,6 +131,8 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 ) *InterleavedWeightedRoundRobinScheduler[T, K] {
 	channels := atomic.Value{}
 	channels.Store(iwrrChannels[T, K]{})
+	enableRateLimiter := atomic.Value{}
+	enableRateLimiter.Store(options.EnableRateLimiter())
 	return &InterleavedWeightedRoundRobinScheduler[T, K]{
 		status: common.DaemonStatusInitialized,
 
@@ -139,9 +146,10 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 		notifyChan:   make(chan struct{}, 1),
 		shutdownChan: make(chan struct{}),
 
-		numInflightTask:  0,
-		weightedChannels: make(map[K]*WeightedChannel[T]),
-		iwrrChannels:     channels,
+		numInflightTask:    0,
+		weightedChannels:   make(map[K]*WeightedChannel[T]),
+		rateLimiterEnabled: enableRateLimiter,
+		iwrrChannels:       channels,
 	}
 }
 
@@ -218,10 +226,15 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) TrySubmit(
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) eventLoop() {
+	checkRateLimiterEnabledTimer := time.NewTicker(checkRateLimiterEnabledInterval)
+	defer checkRateLimiterEnabledTimer.Stop()
+
 	for {
 		select {
 		case <-s.notifyChan:
 			s.dispatchTasksWithWeight()
+		case <-checkRateLimiterEnabledTimer.C:
+			s.rateLimiterEnabled.Store(s.options.EnableRateLimiter())
 		case <-s.shutdownChan:
 			return
 		}
@@ -353,8 +366,14 @@ LoopDispatch:
 		}
 
 		iwrrChannels := s.channels()
-		s.doDispatchTasksWithWeight(iwrrChannels)
+		enableRateLimiter := s.isRateLimiterEnabled()
+		s.doDispatchTasksWithWeight(iwrrChannels, enableRateLimiter)
 
+		if !enableRateLimiter {
+			continue LoopDispatch
+		}
+
+		// rate limiter enabled
 		// all channels = throttled channels + not throttled but has more task + not throttled and no more task
 		// - If there's channel that's not throttled but has more task, need to trigger next round
 		//   of dispatch immediately.
@@ -384,10 +403,15 @@ LoopDispatch:
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTasksWithWeight(
 	iwrrChannels iwrrChannels[T, K],
+	enableRateLimiter bool,
 ) {
-	for _, channel := range iwrrChannels.channels {
-		channel.throttled = false
-		channel.moreTasks = false
+	rateLimiter := quotas.NoopRequestRateLimiter
+	if enableRateLimiter {
+		rateLimiter = s.rateLimiter
+		for _, channel := range iwrrChannels.channels {
+			channel.throttled = false
+			channel.moreTasks = false
+		}
 	}
 
 	numTasks := int64(0)
@@ -398,7 +422,7 @@ LoopDispatch:
 		}
 
 		now := s.timeSource.Now()
-		reservation := s.rateLimiter.Reserve(
+		reservation := rateLimiter.Reserve(
 			now,
 			channel.rateLimitRequest,
 		)
@@ -425,7 +449,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) tryDispatchTaskDirectly(
 	channelKey K,
 	task T,
 ) bool {
-	if !s.rateLimiter.Allow(
+	if s.isRateLimiterEnabled() && !s.rateLimiter.Allow(
 		s.timeSource.Now(),
 		s.options.ChannelQuotaRequestFn(channelKey),
 	) {
@@ -462,6 +486,10 @@ DrainLoop:
 		}
 	}
 	atomic.AddInt64(&s.numInflightTask, -numTasks)
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler[T, K]) isRateLimiterEnabled() bool {
+	return s.rateLimiterEnabled.Load().(bool)
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) isStopped() bool {

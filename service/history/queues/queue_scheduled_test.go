@@ -87,14 +87,16 @@ func (s *scheduledQueueSuite) SetupTest() {
 	s.scheduledQueue = NewScheduledQueue(
 		s.mockShard,
 		tasks.CategoryTimer,
-		NewFIFOScheduler(
-			FIFOSchedulerOptions{
-				WorkerCount: dynamicconfig.GetIntPropertyFn(10),
-				QueueSize:   100,
+		NewPriorityScheduler(
+			PrioritySchedulerOptions{
+				WorkerCount:       dynamicconfig.GetIntPropertyFn(10),
+				EnableRateLimiter: dynamicconfig.GetBoolPropertyFn(true),
 			},
 			NewSchedulerRateLimiter(
 				s.mockShard.GetConfig().TaskSchedulerNamespaceMaxQPS,
 				s.mockShard.GetConfig().TaskSchedulerMaxQPS,
+				s.mockShard.GetConfig().PersistenceNamespaceMaxQPS,
+				s.mockShard.GetConfig().PersistenceMaxQPS,
 			),
 			s.mockShard.GetTimeSource(),
 			log.NewTestLogger(),

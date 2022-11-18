@@ -34,9 +34,7 @@ type (
 	NoopRequestRateLimiterImpl struct{}
 )
 
-func NewNoopRequestRateLimiter() *NoopRequestRateLimiterImpl {
-	return &NoopRequestRateLimiterImpl{}
-}
+var NoopRequestRateLimiter RequestRateLimiter = &NoopRequestRateLimiterImpl{}
 
 func (r *NoopRequestRateLimiterImpl) Allow(
 	_ time.Time,
@@ -49,7 +47,7 @@ func (r *NoopRequestRateLimiterImpl) Reserve(
 	_ time.Time,
 	_ Request,
 ) Reservation {
-	return NewNoopReservation()
+	return NoopReservation
 }
 
 func (r *NoopRequestRateLimiterImpl) Wait(
