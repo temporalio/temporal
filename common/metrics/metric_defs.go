@@ -1345,7 +1345,10 @@ var (
 	HistoryCount                                  = NewDimensionlessHistogramDef("history_count")
 	SearchAttributesSize                          = NewBytesHistogramDef("search_attributes_size")
 	MemoSize                                      = NewBytesHistogramDef("memo_size")
-	NumPendingChildWorkflowsTooHigh               = NewCounterDef("num_pending_child_workflows_too_high")
+	TooManyPendingChildWorkflows                  = NewCounterDef("wf_too_many_pending_child_workflows")
+	TooManyPendingActivities                      = NewCounterDef("wf_too_many_pending_activities")
+	TooManyPendingCancelRequests                  = NewCounterDef("wf_too_many_pending_cancel_requests")
+	TooManyPendingSignalsToExternalWorkflows      = NewCounterDef("wf_too_many_pending_external_workflow_signals")
 
 	// Frontend
 	AddSearchAttributesWorkflowSuccessCount  = NewCounterDef("add_search_attributes_workflow_success")
