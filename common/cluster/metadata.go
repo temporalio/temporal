@@ -51,7 +51,7 @@ const (
 	FakeClusterForEmptyVersion = "fake-cluster-for-empty-version"
 )
 
-var errUnknownCluster = fmt.Errorf("unknown cluster")
+var ErrUnknownCluster = fmt.Errorf("unknown cluster")
 
 type (
 	Metadata interface {
@@ -378,7 +378,7 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, fai
 			m.clusterInfo,
 			m.failoverVersionIncrement,
 		))
-		return "", errUnknownCluster
+		return "", ErrUnknownCluster
 	}
 	return clusterName, nil
 }
