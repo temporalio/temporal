@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -125,10 +126,14 @@ func Invoke(
 	prevLastWriteVersion = t.LastWriteVersion
 	if workflowContext.GetMutableState().GetCurrentVersion() < prevLastWriteVersion {
 		clusterMetadata := shard.GetClusterMetadata()
+		clusterName, err := clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion)
+		if err != nil && err != cluster.ErrUnknownCluster {
+			return nil, err
+		}
 		return nil, serviceerror.NewNamespaceNotActive(
 			request.GetNamespace(),
 			clusterMetadata.GetCurrentClusterName(),
-			clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion),
+			clusterName,
 		)
 	}
 
