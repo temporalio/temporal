@@ -125,10 +125,14 @@ func Invoke(
 	prevLastWriteVersion = t.LastWriteVersion
 	if workflowContext.GetMutableState().GetCurrentVersion() < prevLastWriteVersion {
 		clusterMetadata := shard.GetClusterMetadata()
+		clusterName, err := clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion)
+		if err != nil {
+			return nil, err
+		}
 		return nil, serviceerror.NewNamespaceNotActive(
 			request.GetNamespace(),
 			clusterMetadata.GetCurrentClusterName(),
-			clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion),
+			clusterName,
 		)
 	}
 

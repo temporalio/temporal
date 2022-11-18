@@ -170,10 +170,14 @@ func NewWorkflowVersionCheck(
 	if prevLastWriteVersion > newMutableState.GetCurrentVersion() {
 		clusterMetadata := shard.GetClusterMetadata()
 		namespaceEntry := newMutableState.GetNamespaceEntry()
+		clusterName, err := clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion)
+		if err != nil {
+			return err
+		}
 		return serviceerror.NewNamespaceNotActive(
 			namespaceEntry.Name().String(),
 			clusterMetadata.GetCurrentClusterName(),
-			clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion),
+			clusterName,
 		)
 	}
 	return nil
