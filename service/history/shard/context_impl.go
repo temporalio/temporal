@@ -1077,7 +1077,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					return err
 				}
 			}
-			stage.Process(tasks.DeleteWorkflowExecutionStageVisibility)
+			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageVisibility)
 
 			// Stage 2. Delete current workflow execution pointer.
 			if !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageCurrent) {
@@ -1094,7 +1094,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					return err
 				}
 			}
-			stage.Process(tasks.DeleteWorkflowExecutionStageCurrent)
+			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageCurrent)
 
 			// Stage 3. Delete workflow mutable state.
 			if !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageMutableState) {
@@ -1108,7 +1108,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					return err
 				}
 			}
-			stage.Process(tasks.DeleteWorkflowExecutionStageMutableState)
+			stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageMutableState)
 			return nil
 		}(); err != nil {
 			return err
@@ -1126,7 +1126,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			return err
 		}
 	}
-	stage.Process(tasks.DeleteWorkflowExecutionStageHistory)
+	stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageHistory)
 	return nil
 }
 

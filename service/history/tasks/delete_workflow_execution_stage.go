@@ -38,7 +38,7 @@ const (
 	DeleteWorkflowExecutionStageHistory
 )
 
-func (s *DeleteWorkflowExecutionStage) Process(stage DeleteWorkflowExecutionStage) {
+func (s *DeleteWorkflowExecutionStage) MarkProcessed(stage DeleteWorkflowExecutionStage) {
 	if s == nil {
 		return
 	}
