@@ -372,7 +372,7 @@ func (r *HistoryReplicatorImpl) applyEvents(
 			if mutableState.GetExecutionInfo().GetVersionHistories().GetCurrentVersionHistoryIndex() == branchIndex {
 				return r.applyNonStartEventsToCurrentBranch(ctx, context, mutableState, isRebuilt, releaseFn, task)
 			}
-			return r.applyNonStartEventsToNoneCurrentBranch(ctx, context, mutableState, branchIndex, releaseFn, task)
+			return r.applyNonStartEventsToNonCurrentBranch(ctx, context, mutableState, branchIndex, releaseFn, task)
 
 		case *serviceerror.NotFound:
 			// mutable state not created, check if is workflow reset
@@ -578,7 +578,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	return err
 }
 
-func (r *HistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
+func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranch(
 	ctx context.Context,
 	context workflow.Context,
 	mutableState workflow.MutableState,
@@ -588,7 +588,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
 ) error {
 
 	if len(task.getNewEvents()) != 0 {
-		return r.applyNonStartEventsToNoneCurrentBranchWithContinueAsNew(
+		return r.applyNonStartEventsToNonCurrentBranchWithContinueAsNew(
 			ctx,
 			context,
 			releaseFn,
@@ -596,7 +596,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
 		)
 	}
 
-	return r.applyNonStartEventsToNoneCurrentBranchWithoutContinueAsNew(
+	return r.applyNonStartEventsToNonCurrentBranchWithoutContinueAsNew(
 		ctx,
 		context,
 		mutableState,
@@ -606,7 +606,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
 	)
 }
 
-func (r *HistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithoutContinueAsNew(
+func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutContinueAsNew(
 	ctx context.Context,
 	context workflow.Context,
 	mutableState workflow.MutableState,
@@ -655,7 +655,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithoutCon
 	)
 	if err != nil {
 		task.getLogger().Error(
-			"nDCHistoryReplicator unable to backfill workflow when applyNonStartEventsToNoneCurrentBranch",
+			"nDCHistoryReplicator unable to backfill workflow when applyNonStartEventsToNonCurrentBranch",
 			tag.Error(err),
 		)
 		return err
@@ -663,7 +663,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithoutCon
 	return nil
 }
 
-func (r *HistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithContinueAsNew(
+func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithContinueAsNew(
 	ctx context.Context,
 	context workflow.Context,
 	releaseFn workflow.ReleaseCacheFunc,
@@ -691,7 +691,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithContin
 	}
 	if err := r.applyEvents(ctx, newTask); err != nil {
 		newTask.getLogger().Error(
-			"nDCHistoryReplicator unable to create new workflow when applyNonStartEventsToNoneCurrentBranchWithContinueAsNew",
+			"nDCHistoryReplicator unable to create new workflow when applyNonStartEventsToNonCurrentBranchWithContinueAsNew",
 			tag.Error(err),
 		)
 		return err
@@ -700,7 +700,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithContin
 	// step 3
 	if err := r.applyEvents(ctx, task); err != nil {
 		newTask.getLogger().Error(
-			"nDCHistoryReplicator unable to create target workflow when applyNonStartEventsToNoneCurrentBranchWithContinueAsNew",
+			"nDCHistoryReplicator unable to create target workflow when applyNonStartEventsToNonCurrentBranchWithContinueAsNew",
 			tag.Error(err),
 		)
 		return err
