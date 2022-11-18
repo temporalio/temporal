@@ -133,7 +133,7 @@ func newTimerQueueStandbyProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(metrics.OperationTimerStandbyQueueProcessorScope)),
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationTimerStandbyQueueProcessor)),
 	)
 
 	timerQueueAckMgr := newTimerQueueAckMgr(

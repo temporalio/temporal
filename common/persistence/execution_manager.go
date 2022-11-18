@@ -744,14 +744,10 @@ func (m *executionManagerImpl) GetHistoryTask(
 		return nil, err
 	}
 
-	task, err := m.serializer.DeserializeTask(request.TaskCategory, resp.Blob)
+	task, err := m.serializer.DeserializeTask(request.TaskCategory, resp.Task)
 	if err != nil {
 		return nil, err
 	}
-	if resp.Key.FireTime != tasks.DefaultFireTime {
-		task.SetVisibilityTime(resp.Key.FireTime)
-	}
-	task.SetTaskID(resp.Key.TaskID)
 	return &GetHistoryTaskResponse{
 		Task: task,
 	}, nil
@@ -774,23 +770,17 @@ func (m *executionManagerImpl) GetHistoryTasks(
 		return nil, err
 	}
 
-	historyTasks := make([]tasks.Task, 0, len(resp.Tasks))
-	for _, internalTask := range resp.Tasks {
-		task, err := m.serializer.DeserializeTask(request.TaskCategory, internalTask.Blob)
+	tasks := make([]tasks.Task, 0, len(resp.Tasks))
+	for _, blob := range resp.Tasks {
+		task, err := m.serializer.DeserializeTask(request.TaskCategory, blob)
 		if err != nil {
 			return nil, err
 		}
-
-		if internalTask.Key.FireTime != tasks.DefaultFireTime {
-			task.SetVisibilityTime(internalTask.Key.FireTime)
-		}
-		task.SetTaskID(internalTask.Key.TaskID)
-
-		historyTasks = append(historyTasks, task)
+		tasks = append(tasks, task)
 	}
 
 	return &GetHistoryTasksResponse{
-		Tasks:         historyTasks,
+		Tasks:         tasks,
 		NextPageToken: resp.NextPageToken,
 	}, nil
 }
@@ -834,23 +824,17 @@ func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
 	}
 
 	category := tasks.CategoryReplication
-	dlqTasks := make([]tasks.Task, 0, len(resp.Tasks))
-	for _, internalTask := range resp.Tasks {
-		task, err := m.serializer.DeserializeTask(category, internalTask.Blob)
+	tasks := make([]tasks.Task, 0, len(resp.Tasks))
+	for _, blob := range resp.Tasks {
+		task, err := m.serializer.DeserializeTask(category, blob)
 		if err != nil {
 			return nil, err
 		}
-
-		if internalTask.Key.FireTime != tasks.DefaultFireTime {
-			task.SetVisibilityTime(internalTask.Key.FireTime)
-		}
-		task.SetTaskID(internalTask.Key.TaskID)
-
-		dlqTasks = append(dlqTasks, task)
+		tasks = append(tasks, task)
 	}
 
 	return &GetHistoryTasksResponse{
-		Tasks:         dlqTasks,
+		Tasks:         tasks,
 		NextPageToken: resp.NextPageToken,
 	}, nil
 }

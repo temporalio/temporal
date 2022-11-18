@@ -278,7 +278,22 @@ func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
 	return result, nil
 }
 
-func (s *ContextImpl) GetImmediateQueueExclusiveHighReadWatermark() tasks.Key {
+func (s *ContextImpl) GetQueueExclusiveHighReadWatermark(
+	category tasks.Category,
+	cluster string,
+	singleProcessorMode bool,
+) tasks.Key {
+	switch categoryType := category.Type(); categoryType {
+	case tasks.CategoryTypeImmediate:
+		return s.getImmediateTaskExclusiveMaxReadLevel()
+	case tasks.CategoryTypeScheduled:
+		return s.updateScheduledTaskMaxReadLevel(cluster, singleProcessorMode)
+	default:
+		panic(fmt.Sprintf("invalid task category type: %v", categoryType))
+	}
+}
+
+func (s *ContextImpl) getImmediateTaskExclusiveMaxReadLevel() tasks.Key {
 	s.rLock()
 	defer s.rUnlock()
 	return tasks.NewImmediateKey(s.immediateTaskExclusiveMaxReadLevel)
@@ -295,10 +310,10 @@ func (s *ContextImpl) getScheduledTaskMaxReadLevel(cluster string) tasks.Key {
 	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
 }
 
-func (s *ContextImpl) UpdateScheduledQueueExclusiveHighReadWatermark(
+func (s *ContextImpl) updateScheduledTaskMaxReadLevel(
 	cluster string,
 	singleProcessorMode bool,
-) (tasks.Key, error) {
+) tasks.Key {
 	s.wLock()
 	defer s.wUnlock()
 
@@ -306,8 +321,8 @@ func (s *ContextImpl) UpdateScheduledQueueExclusiveHighReadWatermark(
 		s.scheduledTaskMaxReadLevelMap[cluster] = tasks.DefaultFireTime
 	}
 
-	if err := s.errorByState(); err != nil {
-		return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0), err
+	if s.errorByState() != nil {
+		return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
 	}
 
 	currentTime := s.timeSource.Now()
@@ -315,10 +330,7 @@ func (s *ContextImpl) UpdateScheduledQueueExclusiveHighReadWatermark(
 		currentTime = s.getOrUpdateRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 
-	// Truncation here is just to make sure max read level has the same precision as the old logic
-	// in case existing code can't work correctly with precision higher than 1ms.
-	// Once we validate the rest of the code can worker correctly with higher precision, the truncation should be removed.
-	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(persistence.ScheduledTaskMinPrecision)
+	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
 	if singleProcessorMode {
 		// When generating scheduled tasks, the task's timestamp will be compared to the namespace's active cluster's
 		// maxReadLevel to avoid generatnig a task before maxReadLevel.
@@ -331,7 +343,7 @@ func (s *ContextImpl) UpdateScheduledQueueExclusiveHighReadWatermark(
 		s.scheduledTaskMaxReadLevelMap[cluster] = util.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
 	}
 
-	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0), nil
+	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
 }
 
 // NOTE: the ack level returned is inclusive for immediate task category (acked),
@@ -1359,9 +1371,7 @@ func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
 					currentCluster = namespaceEntry.ActiveClusterName()
 				}
 				readCursorTS := s.scheduledTaskMaxReadLevelMap[currentCluster]
-				if ts.Truncate(persistence.ScheduledTaskMinPrecision).Before(readCursorTS) {
-					// make sure scheduled task timestamp is higher than max read level after truncation
-					// as persistence layer may lose precision when persisting the task.
+				if ts.Before(readCursorTS) {
 					// This can happen if shard move and new host have a time SKU, or there is db write delay.
 					// We generate a new timer ID using timerMaxReadLevel.
 					s.contextTaggedLogger.Debug("New timer generated is less than read level",
@@ -1370,7 +1380,7 @@ func (s *ContextImpl) allocateTaskIDAndTimestampLocked(
 						tag.Timestamp(ts),
 						tag.CursorTimestamp(readCursorTS),
 						tag.ValueShardAllocateTimerBeforeRead)
-					task.SetVisibilityTime(s.scheduledTaskMaxReadLevelMap[currentCluster].Add(persistence.ScheduledTaskMinPrecision))
+					task.SetVisibilityTime(s.scheduledTaskMaxReadLevelMap[currentCluster].Add(time.Millisecond))
 				}
 
 				visibilityTs := task.GetVisibilityTime()
@@ -1787,12 +1797,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 			maxReadTime = util.MaxTime(maxReadTime, timestamp.TimeValue(queueState.ExclusiveReaderHighWatermark.FireTime))
 		}
 
-		// we only need to make sure max read level >= persisted ack level/exclusiveReaderHighWatermark
-		// Add().Truncate() here is just to make sure max read level has the same precision as the old logic
-		// in case existing code can't work correctly with precision higher than 1ms.
-		// Once we validate the rest of the code can worker correctly with higher precision, the code should simply be
-		// scheduledTaskMaxReadLevelMap[clusterName] = maxReadTime
-		scheduledTaskMaxReadLevelMap[clusterName] = maxReadTime.Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision)
+		scheduledTaskMaxReadLevelMap[clusterName] = maxReadTime.Truncate(time.Millisecond)
 
 		if clusterName != currentClusterName {
 			remoteClusterInfos[clusterName] = &remoteClusterInfo{CurrentTime: maxReadTime}
@@ -1864,7 +1869,7 @@ func (s *ContextImpl) acquireShard() {
 	//
 	// We stop retrying on any of:
 	// 1. We succeed in acquiring the rangeid lock.
-	// 2. We get ShardOwnershipLostError or lifecycleCtx ended.
+	// 2. We get any error other than transient errors.
 	// 3. The state changes to Stopping or Stopped.
 	//
 	// If the shard controller sees that service resolver has assigned ownership to someone
@@ -1928,18 +1933,7 @@ func (s *ContextImpl) acquireShard() {
 		return nil
 	}
 
-	// keep retrying except ShardOwnershipLostError or lifecycle context ended
-	acquireShardRetryable := func(err error) bool {
-		if s.lifecycleCtx.Err() != nil {
-			return false
-		}
-		switch err.(type) {
-		case *persistence.ShardOwnershipLostError:
-			return false
-		}
-		return true
-	}
-	err := backoff.ThrottleRetry(op, policy, acquireShardRetryable)
+	err := backoff.ThrottleRetry(op, policy, common.IsPersistenceTransientError)
 	if err != nil {
 		// We got an unretryable error (perhaps context cancelled or ShardOwnershipLostError).
 		s.contextTaggedLogger.Error("Couldn't acquire shard", tag.Error(err))

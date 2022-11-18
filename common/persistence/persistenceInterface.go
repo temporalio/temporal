@@ -488,11 +488,11 @@ type (
 	}
 
 	InternalGetHistoryTaskResponse struct {
-		InternalHistoryTask
+		Task commonpb.DataBlob
 	}
 
 	InternalGetHistoryTasksResponse struct {
-		Tasks         []InternalHistoryTask
+		Tasks         []commonpb.DataBlob
 		NextPageToken []byte
 	}
 

@@ -107,8 +107,6 @@ const (
 
 const numItemsInGarbageInfo = 3
 
-const ScheduledTaskMinPrecision = time.Millisecond
-
 type (
 	// InvalidPersistenceRequestError represents invalid request to persistence
 	InvalidPersistenceRequestError struct {
@@ -773,8 +771,6 @@ type (
 		TreeID string
 		// optional: can specify BranchID or allow random UUID to be generated
 		BranchID *string
-		// optional: can specify Ancestors to leave as empty
-		Ancestors []*persistencespb.HistoryBranchRange
 
 		// optional: supply optionally configured workflow settings as hints
 		RunTimeout        *time.Duration
@@ -1264,11 +1260,11 @@ func UpdateHistoryBranchToken(branchToken []byte, branchInfo *persistencespb.His
 }
 
 // NewHistoryBranchToken return a new branch token
-func NewHistoryBranchToken(treeID, branchID string, ancestors []*persistencespb.HistoryBranchRange) ([]byte, error) {
+func NewHistoryBranchToken(treeID, branchID string) ([]byte, error) {
 	bi := &persistencespb.HistoryBranch{
 		TreeId:    treeID,
 		BranchId:  branchID,
-		Ancestors: ancestors,
+		Ancestors: []*persistencespb.HistoryBranchRange{},
 	}
 	datablob, err := serialization.HistoryBranchToBlob(bi)
 	if err != nil {

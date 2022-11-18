@@ -518,7 +518,7 @@ func (p *taskProcessorImpl) emitTaskMetrics(operation string, err error) {
 	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		metricsScope.Counter(metrics.ServiceErrNotFoundCounter.GetMetricName()).Record(1)
 	case *serviceerror.ResourceExhausted:
-		metricsScope.Counter(metrics.ServiceErrResourceExhaustedCounter.GetMetricName()).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
+		metricsScope.Counter(metrics.ServiceErrResourceExhaustedCounter.GetMetricRollupName()).Record(1, metrics.ResourceExhaustedCauseTag(err.Cause))
 	case *serviceerrors.RetryReplication:
 		metricsScope.Counter(metrics.ServiceErrRetryTaskCounter.GetMetricName()).Record(1)
 	default:

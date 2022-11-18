@@ -42,7 +42,6 @@ const (
 	ClientNameJavaSDK       = "temporal-java"
 	ClientNamePHPSDK        = "temporal-php"
 	ClientNameTypeScriptSDK = "temporal-typescript"
-	ClientNamePythonSDK     = "temporal-python"
 	ClientNameCLI           = "temporal-cli"
 	ClientNameUI            = "temporal-ui"
 

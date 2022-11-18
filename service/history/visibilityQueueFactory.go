@@ -70,7 +70,7 @@ func NewVisibilityQueueFactory(
 			},
 			params.NamespaceRegistry,
 			params.TimeSource,
-			params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
+			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
 			params.Logger,
 		)
 	}
@@ -138,7 +138,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 			},
 			f.HostReaderRateLimiter,
 			logger,
-			f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
+			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
 		)
 	}
 

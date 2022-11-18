@@ -263,7 +263,7 @@ func printValidationResult(
 	handler.Counter(metrics.ScavengerValidationFailuresCount.GetMetricName()).Record(1)
 	for _, result := range results {
 		handler.Counter(metrics.ScavengerValidationFailuresCount.GetMetricName()).Record(1, metrics.FailureTag(result.failureType))
-		logger.Info(
+		logger.Error(
 			"validation failed for execution.",
 			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
 			tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),

@@ -195,7 +195,7 @@ func (c *metricClient) startMetricsRecording(
 	operation string,
 ) (metrics.MetricsHandler, time.Time) {
 	caller := headers.GetCallerInfo(ctx).CallerName
-	handler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller), metrics.ServiceRoleTag(metrics.MatchingRoleTagValue))
+	handler := c.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.NamespaceTag(caller))
 	handler.Counter(metrics.ClientRequests.GetMetricName()).Record(1)
 	return handler, time.Now().UTC()
 }

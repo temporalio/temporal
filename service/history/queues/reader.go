@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -100,9 +99,7 @@ type (
 		throttleTimer *time.Timer
 		retrier       backoff.Retrier
 
-		rateLimitContext       context.Context
-		rateLimitContextCancel context.CancelFunc
-		rateLimiterRequest     quotas.Request
+		rateLimiterRequest quotas.Request
 	}
 )
 
@@ -125,7 +122,6 @@ func NewReader(
 	}
 	monitor.SetSliceCount(readerID, len(slices))
 
-	rateLimitContext, rateLimitContextCancel := context.WithCancel(context.Background())
 	return &ReaderImpl{
 		readerID:       readerID,
 		options:        options,
@@ -149,9 +145,7 @@ func NewReader(
 			backoff.SystemClock,
 		),
 
-		rateLimitContext:       rateLimitContext,
-		rateLimitContextCancel: rateLimitContextCancel,
-		rateLimiterRequest:     newReaderRequest(readerID),
+		rateLimiterRequest: newReaderRequest(readerID),
 	}
 }
 
@@ -184,7 +178,6 @@ func (r *ReaderImpl) Stop() {
 	r.monitor.RemoveReader(r.readerID)
 
 	close(r.shutdownCh)
-	r.rateLimitContextCancel()
 	if success := common.AwaitWaitGroup(&r.shutdownWG, time.Minute); !success {
 		r.logger.Warn("queue reader shutdown timed out waiting for event loop", tag.LifeCycleStopTimedout)
 	}
@@ -406,14 +399,7 @@ func (r *ReaderImpl) eventLoop() {
 }
 
 func (r *ReaderImpl) loadAndSubmitTasks() {
-	if err := r.ratelimiter.Wait(r.rateLimitContext, r.rateLimiterRequest); err != nil {
-		if r.rateLimitContext.Err() != nil {
-			return
-		}
-
-		// this should never happen
-		r.logger.Error("Queue reader rate limiter burst size is smaller than required token count")
-	}
+	_ = r.ratelimiter.Wait(context.Background(), r.rateLimiterRequest)
 
 	r.Lock()
 	defer r.Unlock()
@@ -485,9 +471,8 @@ func (r *ReaderImpl) submit(
 	executable Executable,
 ) {
 	now := r.timeSource.Now()
-	// Persistence layer may lose precision when persisting the task, which essentially move
-	// task fire time forward. Need to account for that when submitting the task.
-	if fireTime := executable.GetKey().FireTime.Add(persistence.ScheduledTaskMinPrecision); now.Before(fireTime) {
+	// Please check the comment in queue_scheduled.go for why adding 1ms to the fire time.
+	if fireTime := executable.GetKey().FireTime.Add(scheduledTaskPrecision); now.Before(fireTime) {
 		r.rescheduler.Add(executable, fireTime)
 		return
 	}

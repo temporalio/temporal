@@ -42,18 +42,13 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 var (
@@ -712,102 +707,5 @@ func (s *commandAttrValidatorSuite) TestValidateCommandSequence_InvalidTerminalC
 		))
 		s.Error(err)
 		s.IsType(&serviceerror.InvalidArgument{}, err)
-	}
-}
-
-func TestWorkflowSizeChecker_NumChildWorkflows(t *testing.T) {
-	const (
-		errMsg = "the number of pending child workflow executions, 1, " +
-			"has reached the error limit of 1 established with \"limit.numPendingChildExecutions.error\""
-	)
-	for _, c := range []struct {
-		Name                      string
-		NumPendingChildExecutions int
-		ErrorLimit                int
-
-		ExpectedErrorMsg string
-		ExpectedMetric   string
-	}{
-		{
-			Name:                      "No limit and no child workflows",
-			NumPendingChildExecutions: 0,
-			ErrorLimit:                0,
-		},
-		{
-			Name:                      "No executions",
-			NumPendingChildExecutions: 0,
-			ErrorLimit:                1,
-		},
-		{
-			Name:                      "Limit not exceeded",
-			NumPendingChildExecutions: 2,
-			ErrorLimit:                3,
-		},
-		{
-			Name:                      "Error limit exceeded",
-			NumPendingChildExecutions: 1,
-			ErrorLimit:                1,
-
-			ExpectedErrorMsg: errMsg,
-			ExpectedMetric:   "num_pending_child_workflows_too_high",
-		},
-	} {
-		t.Run(c.Name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			mutableState := workflow.NewMockMutableState(ctrl)
-			logger := log.NewMockLogger(ctrl)
-			metricsHandler := metrics.NewMockMetricsHandler(ctrl)
-
-			workflowKey := definition.NewWorkflowKey(
-				"test-namespace-id",
-				"test-workflow-id",
-				"test-run-id",
-			)
-			mutableState.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
-
-			executionInfos := make(map[int64]*persistencespb.ChildExecutionInfo)
-			for i := 0; i < c.NumPendingChildExecutions; i++ {
-				executionInfos[int64(i)] = new(persistencespb.ChildExecutionInfo)
-			}
-			mutableState.EXPECT().GetPendingChildExecutionInfos().Return(executionInfos)
-
-			if len(c.ExpectedMetric) > 0 {
-				counterMetric := metrics.NewMockCounterMetric(ctrl)
-				metricsHandler.EXPECT().Counter(c.ExpectedMetric).Return(counterMetric)
-				counterMetric.EXPECT().Record(int64(1))
-			}
-
-			assertMessage := func(msg string, tags ...tag.Tag) {
-				var namespaceID, workflowID, runID interface{}
-				for _, t := range tags {
-					if t.Key() == "wf-namespace-id" {
-						namespaceID = t.Value()
-					} else if t.Key() == "wf-id" {
-						workflowID = t.Value()
-					} else if t.Key() == "wf-run-id" {
-						runID = t.Value()
-					}
-				}
-				assert.Equal(t, "test-namespace-id", namespaceID)
-				assert.Equal(t, "test-workflow-id", workflowID)
-				assert.Equal(t, "test-run-id", runID)
-			}
-
-			if len(c.ExpectedErrorMsg) > 0 {
-				logger.EXPECT().Error(c.ExpectedErrorMsg, gomock.Any()).Do(assertMessage)
-			}
-
-			checker := newWorkflowSizeChecker(workflowSizeLimits{
-				numPendingChildExecutionsLimit: c.ErrorLimit,
-			}, mutableState, nil, nil, metricsHandler, logger)
-			err := checker.checkIfNumChildWorkflowsExceedsLimit()
-
-			if len(c.ExpectedErrorMsg) > 0 {
-				require.Error(t, err)
-				assert.Equal(t, c.ExpectedErrorMsg, err.Error())
-			} else {
-				assert.NoError(t, err)
-			}
-		})
 	}
 }

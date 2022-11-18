@@ -1836,7 +1836,7 @@ func (handler *DCRedirectionHandlerImpl) beforeCall(
 	operation string,
 ) (metrics.MetricsHandler, time.Time) {
 
-	return handler.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.ServiceRoleTag(metrics.DCRedirectionRoleTagValue)), handler.timeSource.Now()
+	return handler.metricsHandler.WithTags(metrics.OperationTag(operation)), handler.timeSource.Now()
 }
 
 func (handler *DCRedirectionHandlerImpl) afterCall(

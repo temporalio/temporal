@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencepb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -340,11 +339,6 @@ func (s *Scavenger) cleanUpWorkflowPastRetention(
 	ctx context.Context,
 	mutableState *persistencepb.WorkflowMutableState,
 ) error {
-	if mutableState.GetExecutionState().GetState() != enums.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		// Skip running workflow
-		return nil
-	}
-
 	executionInfo := mutableState.GetExecutionInfo()
 	ns, err := s.registry.GetNamespaceByID(namespace.ID(executionInfo.GetNamespaceId()))
 	switch err.(type) {
@@ -376,13 +370,7 @@ func (s *Scavenger) cleanUpWorkflowPastRetention(
 				tag.WorkflowID(executionInfo.GetWorkflowId()),
 				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
 			)
-			return nil
 		}
-		s.logger.Info("Delete workflow data past retention via history scavenger",
-			tag.WorkflowNamespace(ns.Name().String()),
-			tag.WorkflowID(executionInfo.GetWorkflowId()),
-			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
-		)
 	}
 	return nil
 }

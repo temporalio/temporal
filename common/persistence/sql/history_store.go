@@ -213,7 +213,7 @@ func (m *sqlExecutionStore) NewHistoryBranch(
 	} else {
 		branchID = *request.BranchID
 	}
-	branchToken, err := p.NewHistoryBranchToken(request.TreeID, branchID, request.Ancestors)
+	branchToken, err := p.NewHistoryBranchToken(request.TreeID, branchID)
 	if err != nil {
 		return nil, err
 	}

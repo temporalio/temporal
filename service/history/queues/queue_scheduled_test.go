@@ -97,10 +97,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		nil,
 		nil,
 		testQueueOptions,
-		NewReaderPriorityRateLimiter(
-			func() float64 { return 10 },
-			1,
-		),
+		nil,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 	)
@@ -139,6 +136,8 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider() {
 	for _, key := range testTaskKeys {
 		mockTask := tasks.NewMockTask(s.controller)
 		mockTask.EXPECT().GetKey().Return(key).AnyTimes()
+		mockTask.EXPECT().GetVisibilityTime().Return(key.FireTime).Times(1)
+		mockTask.EXPECT().SetVisibilityTime(key.FireTime.Truncate(scheduledTaskPrecision)).Times(1)
 		mockTasks = append(mockTasks, mockTask)
 
 		if r.ContainsKey(key) {
@@ -153,7 +152,7 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider() {
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryTimer,
 		InclusiveMinTaskKey: tasks.NewKey(r.InclusiveMin.FireTime, 0),
-		ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(scheduledTaskPrecision), 0),
 		BatchSize:           testQueueOptions.BatchSize(),
 		NextPageToken:       currentPageToken,
 	}).Return(&persistence.GetHistoryTasksResponse{

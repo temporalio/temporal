@@ -44,14 +44,14 @@ func TestCassandraMetadataPersistenceV2(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestCassandraQueuePersistence(t *testing.T) {
+func TestQueuePersistence(t *testing.T) {
 	s := new(QueuePersistenceSuite)
 	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
 	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
-func TestCassandraClusterMetadataPersistence(t *testing.T) {
+func TestClusterMetadataPersistence(t *testing.T) {
 	s := new(ClusterMetadataManagerSuite)
 	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
 	s.TestBase.Setup(nil)

@@ -1952,7 +1952,6 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Terminate() {
 		Namespace: testNamespace.String(),
 		Reason:    inputString,
 		BatchType: batcher.BatchTypeTerminate,
-		Query:     inputString,
 	}
 	inputPayload, err := payloads.Encode(params)
 	s.NoError(err)
@@ -1985,7 +1984,6 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Terminate() {
 				Identity: inputString,
 			},
 		},
-		VisibilityQuery: inputString,
 	}
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
@@ -2003,7 +2001,6 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 		Namespace: testNamespace.String(),
 		Reason:    inputString,
 		BatchType: batcher.BatchTypeCancel,
-		Query:     inputString,
 	}
 	inputPayload, err := payloads.Encode(params)
 	s.NoError(err)
@@ -2036,7 +2033,6 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 				Identity: inputString,
 			},
 		},
-		VisibilityQuery: inputString,
 	}
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
@@ -2053,8 +2049,6 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Signal() {
 	signalPayloads := payloads.EncodeString(signalName)
 	params := &batcher.BatchParams{
 		Namespace: testNamespace.String(),
-		Query:     inputString,
-		Reason:    inputString,
 		BatchType: batcher.BatchTypeSignal,
 		SignalParams: batcher.SignalParams{
 			SignalName: signalName,
@@ -2076,7 +2070,7 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Signal() {
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
 			s.Equal(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
-			s.Equal(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+			s.Equal(payload.EncodeString(""), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
 			s.Equal(payload.EncodeString(inputString), request.StartRequest.SearchAttributes.IndexedFields[searchattribute.BatcherUser])
 			s.Equal(inputPayload, request.StartRequest.Input)
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
@@ -2093,58 +2087,10 @@ func (s *workflowHandlerSuite) TestStartBatchOperation_Signal() {
 				Identity: inputString,
 			},
 		},
-		Reason:          inputString,
-		VisibilityQuery: inputString,
 	}
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
-}
-
-func (s *workflowHandlerSuite) TestStartBatchOperation_InvalidRequest() {
-	request := &workflowservice.StartBatchOperationRequest{
-		Namespace: "",
-		JobId:     uuid.New(),
-		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
-			SignalOperation: &batchpb.BatchOperationSignal{
-				Signal:   "signalName",
-				Identity: "identity",
-			},
-		},
-		Reason:          uuid.New(),
-		VisibilityQuery: uuid.New(),
-	}
-
-	config := s.newConfig()
-	wh := s.getWorkflowHandler(config)
-	var invalidArgumentErr *serviceerror.InvalidArgument
-	_, err := wh.StartBatchOperation(context.Background(), request)
-	s.ErrorAs(err, &invalidArgumentErr)
-
-	request.Namespace = uuid.New()
-	request.JobId = ""
-	_, err = wh.StartBatchOperation(context.Background(), request)
-	s.ErrorAs(err, &invalidArgumentErr)
-
-	request.JobId = uuid.New()
-	request.Operation = nil
-	_, err = wh.StartBatchOperation(context.Background(), request)
-	s.ErrorAs(err, &invalidArgumentErr)
-
-	request.Operation = &workflowservice.StartBatchOperationRequest_SignalOperation{
-		SignalOperation: &batchpb.BatchOperationSignal{
-			Signal:   "signalName",
-			Identity: "identity",
-		},
-	}
-	request.Reason = ""
-	_, err = wh.StartBatchOperation(context.Background(), request)
-	s.ErrorAs(err, &invalidArgumentErr)
-
-	request.Reason = uuid.New()
-	request.VisibilityQuery = ""
-	_, err = wh.StartBatchOperation(context.Background(), request)
-	s.ErrorAs(err, &invalidArgumentErr)
 }
 
 func (s *workflowHandlerSuite) TestStopBatchOperation() {
@@ -2170,35 +2116,10 @@ func (s *workflowHandlerSuite) TestStopBatchOperation() {
 	request := &workflowservice.StopBatchOperationRequest{
 		Namespace: testNamespace.String(),
 		JobId:     jobID,
-		Reason:    "reason",
 	}
 
 	_, err := wh.StopBatchOperation(context.Background(), request)
 	s.NoError(err)
-}
-
-func (s *workflowHandlerSuite) TestStopBatchOperation_InvalidRequest() {
-	config := s.newConfig()
-	wh := s.getWorkflowHandler(config)
-	request := &workflowservice.StopBatchOperationRequest{
-		Namespace: "",
-		JobId:     uuid.New(),
-		Reason:    "reason",
-	}
-
-	var invalidArgumentErr *serviceerror.InvalidArgument
-	_, err := wh.StopBatchOperation(context.Background(), request)
-	s.ErrorAs(err, &invalidArgumentErr)
-
-	request.Namespace = uuid.New()
-	request.JobId = ""
-	_, err = wh.StopBatchOperation(context.Background(), request)
-	s.ErrorAs(err, &invalidArgumentErr)
-
-	request.JobId = uuid.New()
-	request.Reason = ""
-	_, err = wh.StopBatchOperation(context.Background(), request)
-	s.ErrorAs(err, &invalidArgumentErr)
 }
 
 func (s *workflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
@@ -2404,23 +2325,6 @@ func (s *workflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 	s.Equal(enumspb.BATCH_OPERATION_STATE_FAILED, resp.GetState())
 }
 
-func (s *workflowHandlerSuite) TestDescribeBatchOperation_InvalidRequest() {
-	config := s.newConfig()
-	wh := s.getWorkflowHandler(config)
-	request := &workflowservice.DescribeBatchOperationRequest{
-		Namespace: "",
-		JobId:     uuid.New(),
-	}
-	var invalidArgumentErr *serviceerror.InvalidArgument
-	_, err := wh.DescribeBatchOperation(context.Background(), request)
-	s.ErrorAs(err, &invalidArgumentErr)
-
-	request.Namespace = uuid.New()
-	request.JobId = ""
-	_, err = wh.DescribeBatchOperation(context.Background(), request)
-	s.ErrorAs(err, &invalidArgumentErr)
-}
-
 func (s *workflowHandlerSuite) TestListBatchOperations() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.New())
@@ -2465,18 +2369,6 @@ func (s *workflowHandlerSuite) TestListBatchOperations() {
 	s.Equal(now, resp.OperationInfo[0].GetStartTime())
 	s.Equal(now, resp.OperationInfo[0].GetCloseTime())
 	s.Equal(enumspb.BATCH_OPERATION_STATE_FAILED, resp.OperationInfo[0].GetState())
-}
-
-func (s *workflowHandlerSuite) TestListBatchOperations_InvalidRerquest() {
-	config := s.newConfig()
-	wh := s.getWorkflowHandler(config)
-
-	request := &workflowservice.ListBatchOperationsRequest{
-		Namespace: "",
-	}
-	var invalidArgumentErr *serviceerror.InvalidArgument
-	_, err := wh.ListBatchOperations(context.Background(), request)
-	s.ErrorAs(err, &invalidArgumentErr)
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {

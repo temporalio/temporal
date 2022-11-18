@@ -119,7 +119,6 @@ type (
 		saValidator                     *searchattribute.Validator
 		archivalMetadata                archiver.ArchivalMetadata
 		healthServer                    *health.Server
-		overrides                       *Overrides
 	}
 )
 
@@ -183,7 +182,6 @@ func NewWorkflowHandler(
 			config.SearchAttributesTotalSizeLimit),
 		archivalMetadata: archivalMetadata,
 		healthServer:     healthServer,
-		overrides:        NewOverrides(),
 	}
 
 	return handler
@@ -944,8 +942,6 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, err
 	}
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
-
-	wh.overrides.DisableEagerActivityDispatchForBuggyClients(ctx, request)
 
 	histResp, err := wh.historyClient.RespondWorkflowTaskCompleted(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId:     namespaceId.String(),
@@ -3695,18 +3691,6 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	if len(request.GetJobId()) == 0 {
 		return nil, errBatchJobIDNotSet
 	}
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
-	}
-	if len(request.VisibilityQuery) == 0 {
-		return nil, errQueryNotSet
-	}
-	if len(request.Reason) == 0 {
-		return nil, errReasonNotSet
-	}
-	if request.Operation == nil {
-		return nil, errBatchOperationNotSet
-	}
 
 	if !wh.config.EnableBatcher(request.Namespace) {
 		return nil, errBatchAPINotAllowed
@@ -3816,16 +3800,6 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errRequestNotSet
 	}
 
-	if len(request.GetJobId()) == 0 {
-		return nil, errBatchJobIDNotSet
-	}
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
-	}
-	if len(request.Reason) == 0 {
-		return nil, errReasonNotSet
-	}
-
 	if !wh.config.EnableBatcher(request.Namespace) {
 		return nil, errBatchAPINotAllowed
 	}
@@ -3861,13 +3835,6 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 
 	if request == nil {
 		return nil, errRequestNotSet
-	}
-
-	if len(request.GetJobId()) == 0 {
-		return nil, errBatchJobIDNotSet
-	}
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
 	}
 
 	if !wh.config.EnableBatcher(request.Namespace) {
@@ -3979,10 +3946,6 @@ func (wh *WorkflowHandler) ListBatchOperations(
 
 	if request == nil {
 		return nil, errRequestNotSet
-	}
-
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
 	}
 
 	if !wh.config.EnableBatcher(request.Namespace) {

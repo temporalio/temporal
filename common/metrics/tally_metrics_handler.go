@@ -32,13 +32,6 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-var sanitizer = tally.NewSanitizer(tally.SanitizeOptions{
-	NameCharacters:       tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
-	KeyCharacters:        tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
-	ValueCharacters:      tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
-	ReplacementCharacter: '_',
-})
-
 type (
 	excludeTags map[string]map[string]struct{}
 

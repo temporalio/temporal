@@ -260,7 +260,3 @@ func OperationTag(value string) Tag {
 func StringTag(key string, value string) Tag {
 	return &tagImpl{key: key, value: value}
 }
-
-func CacheTypeTag(value string) Tag {
-	return &tagImpl{key: CacheTypeTagName, value: value}
-}

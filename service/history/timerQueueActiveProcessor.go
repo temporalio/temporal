@@ -99,7 +99,7 @@ func newTimerQueueActiveProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(metrics.OperationTimerActiveQueueProcessorScope)),
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationTimerActiveQueueProcessor)),
 	)
 
 	timerTaskFilter := func(task tasks.Task) bool {
@@ -275,7 +275,7 @@ func newTimerQueueFailoverProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(metrics.OperationTimerActiveQueueProcessorScope)),
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationTimerActiveQueueProcessor)),
 	)
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(

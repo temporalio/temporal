@@ -113,18 +113,6 @@ const (
 	MemoSizeLimitError = "limit.memoSize.error"
 	// MemoSizeLimitWarn is the per event memo size limit for warning
 	MemoSizeLimitWarn = "limit.memoSize.warn"
-	// NumPendingChildExecutionsLimitError is the maximum number of pending child workflows a workflow can have before
-	// StartChildWorkflowExecution commands will fail.
-	NumPendingChildExecutionsLimitError = "limit.numPendingChildExecutions.error"
-	// NumPendingActivitiesLimitError is the maximum number of pending activities a workflow can have before
-	// ScheduleActivityTask will fail.
-	NumPendingActivitiesLimitError = "limit.numPendingActivities.error"
-	// NumPendingSignalsLimitError is the maximum number of pending signals a workflow can have before
-	// SignalExternalWorkflowExecution commands from this workflow will fail.
-	NumPendingSignalsLimitError = "limit.numPendingSignals.error"
-	// NumPendingCancelRequestsLimitError is the maximum number of pending cancel requests a workflow can have before
-	// RequestCancelExternalWorkflowExecution commands will fail.
-	NumPendingCancelRequestsLimitError = "limit.numPendingCancelRequests.error"
 	// HistorySizeLimitError is the per workflow execution history size limit
 	HistorySizeLimitError = "limit.historySize.error"
 	// HistorySizeLimitWarn is the per workflow execution history size limit for warning

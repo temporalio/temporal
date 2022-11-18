@@ -895,11 +895,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		return handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
 	}
 
-	// child workflow limit
-	if err := handler.sizeLimitChecker.checkIfNumChildWorkflowsExceedsLimit(); err != nil {
-		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_CHILD_WORKFLOWS_LIMIT_EXCEEDED, err)
-	}
-
 	enabled := handler.config.EnableParentClosePolicy(parentNamespace.String())
 	if enabled {
 		enums.SetDefaultParentClosePolicy(&attr.ParentClosePolicy)

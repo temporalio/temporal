@@ -61,19 +61,12 @@ type (
 		enableCrossNamespaceCommands    dynamicconfig.BoolPropertyFn
 	}
 
-	workflowSizeLimits struct {
-		blobSizeLimitWarn              int
-		blobSizeLimitError             int
-		memoSizeLimitWarn              int
-		memoSizeLimitError             int
-		numPendingChildExecutionsLimit int
-		numPendingActivitiesLimit      int
-		numPendingSignalsLimit         int
-		numPendingCancelsRequestLimit  int
-	}
-
 	workflowSizeChecker struct {
-		workflowSizeLimits
+		blobSizeLimitWarn  int
+		blobSizeLimitError int
+
+		memoSizeLimitWarn  int
+		memoSizeLimitError int
 
 		mutableState              workflow.MutableState
 		searchAttributesValidator *searchattribute.Validator
@@ -104,7 +97,10 @@ func newCommandAttrValidator(
 }
 
 func newWorkflowSizeChecker(
-	limits workflowSizeLimits,
+	blobSizeLimitWarn int,
+	blobSizeLimitError int,
+	memoSizeLimitWarn int,
+	memoSizeLimitError int,
 	mutableState workflow.MutableState,
 	searchAttributesValidator *searchattribute.Validator,
 	executionStats *persistencespb.ExecutionStats,
@@ -112,7 +108,10 @@ func newWorkflowSizeChecker(
 	logger log.Logger,
 ) *workflowSizeChecker {
 	return &workflowSizeChecker{
-		workflowSizeLimits:        limits,
+		blobSizeLimitWarn:         blobSizeLimitWarn,
+		blobSizeLimitError:        blobSizeLimitError,
+		memoSizeLimitWarn:         memoSizeLimitWarn,
+		memoSizeLimitError:        memoSizeLimitError,
 		mutableState:              mutableState,
 		searchAttributesValidator: searchAttributesValidator,
 		executionStats:            executionStats,
@@ -172,40 +171,6 @@ func (c *workflowSizeChecker) checkIfMemoSizeExceedsLimit(
 		return fmt.Errorf(message)
 	}
 	return nil
-}
-
-func withinLimit(value int, limit int) bool {
-	if limit <= 0 {
-		// limit not defined
-		return true
-	}
-	return value < limit
-}
-
-func (c *workflowSizeChecker) checkIfNumChildWorkflowsExceedsLimit() error {
-	key := c.mutableState.GetWorkflowKey()
-	logger := log.With(
-		c.logger,
-		tag.WorkflowNamespaceID(key.NamespaceID),
-		tag.WorkflowID(key.WorkflowID),
-		tag.WorkflowRunID(key.RunID),
-	)
-
-	numPending := len(c.mutableState.GetPendingChildExecutionInfos())
-	errLimit := c.numPendingChildExecutionsLimit
-	if withinLimit(numPending, errLimit) {
-		return nil
-	}
-	c.metricsHandler.Counter(metrics.NumPendingChildWorkflowsTooHigh.GetMetricName()).Record(1)
-	err := fmt.Errorf(
-		"the number of pending child workflow executions, %d, "+
-			"has reached the error limit of %d established with %q",
-		numPending,
-		errLimit,
-		dynamicconfig.NumPendingChildExecutionsLimitError,
-	)
-	logger.Error(err.Error(), tag.Error(err))
-	return err
 }
 
 func (c *workflowSizeChecker) checkIfSearchAttributesSizeExceedsLimit(

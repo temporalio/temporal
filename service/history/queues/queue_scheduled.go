@@ -25,7 +25,6 @@
 package queues
 
 import (
-	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,13 +52,11 @@ type (
 		newTimerCh  chan struct{}
 		newTimeLock sync.Mutex
 		newTime     time.Time
-
-		lookAheadRateLimitRequest quotas.Request
 	}
 )
 
 const (
-	lookAheadRateLimitDelay = 3 * time.Second
+	scheduledTaskPrecision = time.Millisecond
 )
 
 func NewScheduledQueue(
@@ -82,7 +79,7 @@ func NewScheduledQueue(
 				ShardID:             shard.GetShardID(),
 				TaskCategory:        category,
 				InclusiveMinTaskKey: tasks.NewKey(r.InclusiveMin.FireTime, 0),
-				ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0),
+				ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(scheduledTaskPrecision), 0),
 				BatchSize:           options.BatchSize(),
 				NextPageToken:       paginationToken,
 			}
@@ -90,6 +87,17 @@ func NewScheduledQueue(
 			resp, err := shard.GetExecutionManager().GetHistoryTasks(ctx, request)
 			if err != nil {
 				return nil, nil, err
+			}
+
+			// The rest of the code assumes task loaded is ordered by task key, which has precision of ns for time.
+			// However for cassandra impl, the task returned is ordered by visibilitystamp column which only has
+			// ms precision, which makes tasks out of order, even across multiple loads.
+			// So truncate task key time also to ms precision to make them ordered.
+			//
+			// This however, moves task visibility time forward for 1ms and may cause timer tasks to be skipped
+			// during processing. To compensate for that, add 1ms back when scheduling the task in reader.go.
+			for _, task := range resp.Tasks {
+				task.SetVisibilityTime(task.GetVisibilityTime().Truncate(scheduledTaskPrecision))
 			}
 
 			for len(resp.Tasks) > 0 && !r.ContainsKey(resp.Tasks[0].GetKey()) {
@@ -121,8 +129,6 @@ func NewScheduledQueue(
 
 		timerGate:  timer.NewLocalGate(shard.GetTimeSource()),
 		newTimerCh: make(chan struct{}, 1),
-
-		lookAheadRateLimitRequest: newReaderRequest(DefaultReaderId),
 	}
 }
 
@@ -184,7 +190,7 @@ func (p *scheduledQueue) processEventLoop() {
 		case <-p.shutdownCh:
 			return
 		case <-p.newTimerCh:
-			p.metricsHandler.Counter(metrics.NewTimerNotifyCounter.GetMetricName()).Record(1)
+			p.metricsHandler.Counter(NewTimerNotifyCounter).Record(1)
 			p.processNewTime()
 		case <-p.timerGate.FireChan():
 			p.processNewRange()
@@ -221,35 +227,11 @@ func (p *scheduledQueue) processNewTime() {
 }
 
 func (p *scheduledQueue) processNewRange() {
-	if err := p.queueBase.processNewRange(); err != nil {
-		// This only happens when shard state is invalid,
-		// in which case no look ahead is needed.
-		// Notification will be sent when shard is reacquired, but
-		// still set a max poll timer here as a catch all case.
-		p.timerGate.Update(p.timeSource.Now().Add(backoff.JitDuration(
-			p.options.MaxPollInterval(),
-			p.options.MaxPollIntervalJitterCoefficient(),
-		)))
-		return
-	}
-
-	// Only do look ahead when shard state is valid.
-	// When shard is invalid, even look ahead task is found,
-	// it can't be loaded as scheduled queue max read level can't move
-	// forward.
+	p.queueBase.processNewRange()
 	p.lookAheadTask()
 }
 
 func (p *scheduledQueue) lookAheadTask() {
-	rateLimitCtx, rateLimitCancel := context.WithTimeout(context.Background(), lookAheadRateLimitDelay)
-	rateLimitErr := p.readerRateLimiter.Wait(rateLimitCtx, p.lookAheadRateLimitRequest)
-	rateLimitCancel()
-	if rateLimitErr != nil {
-		deadline, _ := rateLimitCtx.Deadline()
-		p.timerGate.Update(deadline)
-		return
-	}
-
 	lookAheadMinTime := p.nonReadableScope.Range.InclusiveMin.FireTime
 	lookAheadMaxTime := lookAheadMinTime.Add(backoff.JitDuration(
 		p.options.MaxPollInterval(),
@@ -269,21 +251,14 @@ func (p *scheduledQueue) lookAheadTask() {
 	}
 	response, err := p.shard.GetExecutionManager().GetHistoryTasks(ctx, request)
 	if err != nil {
+		// NOTE: the backoff is actually 2*TimerProcessorMaxTimeShift = 2s
+		p.timerGate.Update(lookAheadMinTime)
 		p.logger.Error("Failed to load look ahead task", tag.Error(err))
-		if common.IsResourceExhausted(err) {
-			p.timerGate.Update(p.timeSource.Now().Add(lookAheadRateLimitDelay))
-		} else {
-			// NOTE: the backoff is actually TimerProcessorMaxTimeShift = ~1s
-			// since lookAheadMinTime ~= now + TimerProcessorMaxTimeShift when
-			// shard is valid.
-			p.timerGate.Update(lookAheadMinTime)
-		}
 		return
 	}
 
 	if len(response.Tasks) == 1 {
 		p.timerGate.Update(response.Tasks[0].GetKey().FireTime)
-		return
 	}
 
 	// no look ahead task, next loading will be triggerred at the end of the current
@@ -299,7 +274,7 @@ func IsTimeExpired(
 	referenceTime time.Time,
 	testingTime time.Time,
 ) bool {
-	referenceTime = referenceTime.Truncate(persistence.ScheduledTaskMinPrecision)
-	testingTime = testingTime.Truncate(persistence.ScheduledTaskMinPrecision)
+	referenceTime = referenceTime.Truncate(scheduledTaskPrecision)
+	testingTime = testingTime.Truncate(scheduledTaskPrecision)
 	return !testingTime.After(referenceTime)
 }

@@ -135,7 +135,7 @@ func (s *taskProcessorManagerSuite) TearDownTest() {
 
 func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Noop() {
 	ackedTaskID := int64(12345)
-	s.mockShard.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(tasks.NewImmediateKey(ackedTaskID))
+	s.mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, cluster.TestCurrentClusterName, false).Return(tasks.NewImmediateKey(ackedTaskID))
 	s.mockShard.EXPECT().GetQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName).Return(tasks.NewImmediateKey(ackedTaskID))
 
 	s.taskProcessorManager.minTxAckedTaskID = ackedTaskID
@@ -145,7 +145,7 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Noop() {
 
 func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 	ackedTaskID := int64(12345)
-	s.mockShard.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(tasks.NewImmediateKey(ackedTaskID)).Times(2)
+	s.mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, cluster.TestCurrentClusterName, false).Return(tasks.NewImmediateKey(ackedTaskID)).Times(2)
 	s.mockShard.EXPECT().GetQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName).Return(tasks.NewImmediateKey(ackedTaskID))
 	s.taskProcessorManager.minTxAckedTaskID = ackedTaskID - 1
 	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(

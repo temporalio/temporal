@@ -26,13 +26,10 @@ package host
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"time"
 
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 )
@@ -65,19 +62,9 @@ func CreateIndex(s *suite.Suite, esClient esclient.IntegrationTestsClient, index
 		s.Require().True(acknowledged)
 	}
 
-	// we need to retry because DeleteIndex is not synchronous
-	err = backoff.ThrottleRetry(func() error {
-		acknowledged, err := esClient.CreateIndex(context.Background(), indexName)
-		if err != nil {
-			return err
-		}
-		if !acknowledged {
-			return fmt.Errorf("create request not acknowledged")
-		}
-		return nil
-	}, backoff.NewExponentialRetryPolicy(100*time.Millisecond), func(err error) bool { return true })
-
-	s.NoError(err)
+	acknowledged, err := esClient.CreateIndex(context.Background(), indexName)
+	s.Require().NoError(err)
+	s.Require().True(acknowledged)
 }
 
 // DeleteIndex delete test index
