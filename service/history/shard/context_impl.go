@@ -987,21 +987,22 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	startTime *time.Time,
 	closeTime *time.Time,
 	closeVisibilityTaskId int64,
+	stage *tasks.DeleteWorkflowExecutionStage,
 ) (retErr error) {
-	// DeleteWorkflowExecution is a 4-steps process (order is very important and should not be changed):
+	// DeleteWorkflowExecution is a 4 stages process (order is very important and should not be changed):
 	// 1. Add visibility delete task, i.e. schedule visibility record delete,
 	// 2. Delete current workflow execution pointer,
 	// 3. Delete workflow mutable state,
 	// 4. Delete history branch.
 
 	// This function is called from task processor and should not be called directly.
-	// It may fail at any step and task processor will retry. All steps are idempotent.
+	// It may fail at any stage and task processor will retry. All stages are idempotent.
 
-	// If process fails after step 1 then workflow execution becomes invisible but mutable state is still there and task can be safely retried.
-	// Step 2 doesn't affect mutable state neither and doesn't block retry.
-	// After step 3 task can't be retried because mutable state is gone and this might leave history branch in DB.
+	// If process fails after stage 1 then workflow execution becomes invisible but mutable state is still there and task can be safely retried.
+	// Stage 2 doesn't affect mutable state neither and doesn't block retry.
+	// After stage 3 task can't be retried because mutable state is gone and this might leave history branch in DB.
 	// The history branch won't be accessible (because mutable state is deleted) and special garbage collection workflow will delete it eventually.
-	// Step 4 shouldn't be done earlier because if this func fails after it, workflow execution will be accessible but won't have history (inconsistent state).
+	// Stage 4 shouldn't be done earlier because if this func fails after it, workflow execution will be accessible but won't have history (inconsistent state).
 
 	ctx, cancel, err := s.newDetachedContext(ctx)
 	if err != nil {
@@ -1034,73 +1035,88 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		}
 	}()
 
-	// Wrap step 1 and 2 with function to release the lock with defer after step 2.
-	if err = func() error {
-		s.wLock()
-		defer s.wUnlock()
+	// Don't acquire shard lock if all stages that require lock are already processed.
+	if !stage.IsProcessed(
+		tasks.DeleteWorkflowExecutionStageVisibility |
+			tasks.DeleteWorkflowExecutionStageCurrent |
+			tasks.DeleteWorkflowExecutionStageMutableState) {
 
-		if err := s.errorByState(); err != nil {
-			return err
-		}
+		// Wrap stage 1, 2, and 3 with function to release shard lock with defer after stage 3.
+		if err = func() error {
+			s.wLock()
+			defer s.wUnlock()
 
-		// Step 1. Delete visibility.
-		if deleteVisibilityRecord {
-			// TODO: move to existing task generator logic
-			newTasks = map[tasks.Category][]tasks.Task{
-				tasks.CategoryVisibility: {
-					&tasks.DeleteExecutionVisibilityTask{
-						// TaskID is set by addTasksLocked
-						WorkflowKey:                    key,
-						VisibilityTimestamp:            s.timeSource.Now(),
-						StartTime:                      startTime,
-						CloseTime:                      closeTime,
-						CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
-					},
-				},
-			}
-			addTasksRequest := &persistence.AddHistoryTasksRequest{
-				ShardID:     s.shardID,
-				NamespaceID: key.NamespaceID,
-				WorkflowID:  key.WorkflowID,
-				RunID:       key.RunID,
-
-				Tasks: newTasks,
-			}
-			err := s.addTasksLocked(ctx, addTasksRequest, namespaceEntry)
-			if err != nil {
+			if err := s.errorByState(); err != nil {
 				return err
 			}
-		}
 
-		// Step 2. Delete current workflow execution pointer.
-		delCurRequest := &persistence.DeleteCurrentWorkflowExecutionRequest{
-			ShardID:     s.shardID,
-			NamespaceID: key.NamespaceID,
-			WorkflowID:  key.WorkflowID,
-			RunID:       key.RunID,
-		}
-		if err := s.GetExecutionManager().DeleteCurrentWorkflowExecution(
-			ctx,
-			delCurRequest,
-		); err != nil {
+			// Stage 1. Delete visibility.
+			if deleteVisibilityRecord && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageVisibility) {
+				// TODO: move to existing task generator logic
+				newTasks = map[tasks.Category][]tasks.Task{
+					tasks.CategoryVisibility: {
+						&tasks.DeleteExecutionVisibilityTask{
+							// TaskID is set by addTasksLocked
+							WorkflowKey:                    key,
+							VisibilityTimestamp:            s.timeSource.Now(),
+							StartTime:                      startTime,
+							CloseTime:                      closeTime,
+							CloseExecutionVisibilityTaskID: closeVisibilityTaskId,
+						},
+					},
+				}
+				addTasksRequest := &persistence.AddHistoryTasksRequest{
+					ShardID:     s.shardID,
+					NamespaceID: key.NamespaceID,
+					WorkflowID:  key.WorkflowID,
+					RunID:       key.RunID,
+
+					Tasks: newTasks,
+				}
+				if err := s.addTasksLocked(ctx, addTasksRequest, namespaceEntry); err != nil {
+					return err
+				}
+			}
+			stage.Process(tasks.DeleteWorkflowExecutionStageVisibility)
+
+			// Stage 2. Delete current workflow execution pointer.
+			if !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageCurrent) {
+				delCurRequest := &persistence.DeleteCurrentWorkflowExecutionRequest{
+					ShardID:     s.shardID,
+					NamespaceID: key.NamespaceID,
+					WorkflowID:  key.WorkflowID,
+					RunID:       key.RunID,
+				}
+				if err := s.GetExecutionManager().DeleteCurrentWorkflowExecution(
+					ctx,
+					delCurRequest,
+				); err != nil {
+					return err
+				}
+			}
+			stage.Process(tasks.DeleteWorkflowExecutionStageCurrent)
+
+			// Stage 3. Delete workflow mutable state.
+			if !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageMutableState) {
+				delRequest := &persistence.DeleteWorkflowExecutionRequest{
+					ShardID:     s.shardID,
+					NamespaceID: key.NamespaceID,
+					WorkflowID:  key.WorkflowID,
+					RunID:       key.RunID,
+				}
+				if err = s.GetExecutionManager().DeleteWorkflowExecution(ctx, delRequest); err != nil {
+					return err
+				}
+			}
+			stage.Process(tasks.DeleteWorkflowExecutionStageMutableState)
+			return nil
+		}(); err != nil {
 			return err
 		}
-
-		// Step 3. Delete workflow mutable state.
-		delRequest := &persistence.DeleteWorkflowExecutionRequest{
-			ShardID:     s.shardID,
-			NamespaceID: key.NamespaceID,
-			WorkflowID:  key.WorkflowID,
-			RunID:       key.RunID,
-		}
-		err = s.GetExecutionManager().DeleteWorkflowExecution(ctx, delRequest)
-		return err
-	}(); err != nil {
-		return err
 	}
 
-	// Step 4. Delete history branch.
-	if branchToken != nil {
+	// Stage 4. Delete history branch.
+	if branchToken != nil && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageHistory) {
 		delHistoryRequest := &persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
 			ShardID:     s.shardID,
@@ -1110,6 +1126,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			return err
 		}
 	}
+	stage.Process(tasks.DeleteWorkflowExecutionStageHistory)
 	return nil
 }
 

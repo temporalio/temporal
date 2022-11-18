@@ -63,6 +63,7 @@ type (
 			weCtx Context,
 			ms MutableState,
 			forceDeleteFromOpenVisibility bool,
+			stage *tasks.DeleteWorkflowExecutionStage,
 		) error
 		DeleteWorkflowExecutionByRetention(
 			ctx context.Context,
@@ -71,6 +72,7 @@ type (
 			weCtx Context,
 			ms MutableState,
 			archiveIfEnabled bool,
+			stage *tasks.DeleteWorkflowExecutionStage,
 		) error
 	}
 
@@ -142,6 +144,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	weCtx Context,
 	ms MutableState,
 	forceDeleteFromOpenVisibility bool,
+	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
 	return m.deleteWorkflowExecutionInternal(
@@ -152,6 +155,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 		ms,
 		false,
 		forceDeleteFromOpenVisibility,
+		stage,
 		m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)),
 	)
 }
@@ -163,6 +167,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	weCtx Context,
 	ms MutableState,
 	archiveIfEnabled bool,
+	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
 	return m.deleteWorkflowExecutionInternal(
@@ -173,6 +178,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 		ms,
 		archiveIfEnabled,
 		false, // When retention is fired, workflow execution is always closed.
+		stage,
 		m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)),
 	)
 }
@@ -185,6 +191,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	ms MutableState,
 	archiveIfEnabled bool,
 	forceDeleteFromOpenVisibility bool,
+	stage *tasks.DeleteWorkflowExecutionStage,
 	metricsHandler metrics.MetricsHandler,
 ) error {
 
@@ -240,6 +247,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		startTime,
 		closeTime,
 		ms.GetExecutionInfo().GetCloseVisibilityTaskId(),
+		stage,
 	); err != nil {
 		return err
 	}
