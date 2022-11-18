@@ -79,6 +79,7 @@ type (
 
 	PrioritySchedulerOptions struct {
 		WorkerCount       dynamicconfig.IntPropertyFn
+		Weight            dynamicconfig.MapPropertyFn
 		EnableRateLimiter dynamicconfig.BoolPropertyFn
 	}
 
@@ -178,7 +179,16 @@ func NewPriorityScheduler(
 			Priority:    e.GetPriority(),
 		}
 	}
-	channelWeightFn := func(_ TaskChannelKey) int { return 1000 }
+	channelWeightFn := func(key TaskChannelKey) int {
+		weight := configs.DefaultActiveTaskPriorityWeight
+		if options.Weight != nil {
+			weight = configs.ConvertDynamicConfigValueToWeights(
+				options.Weight(),
+				logger,
+			)
+		}
+		return weight[key.Priority]
+	}
 	channelQuotaRequestFn := func(key TaskChannelKey) quotas.Request {
 		return quotas.NewRequest("", taskSchedulerToken, "", tasks.PriorityName[key.Priority], "")
 	}
