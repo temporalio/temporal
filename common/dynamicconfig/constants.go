@@ -371,6 +371,7 @@ const (
 	QueuePendingTaskMaxCount = "history.queuePendingTasksMaxCount"
 	// QueueMaxReaderCount is the max number of readers in one multi-cursor queue
 	QueueMaxReaderCount = "history.queueMaxReaderCount"
+
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
 	TimerTaskBatchSize = "history.timerTaskBatchSize"
 	// TimerTaskWorkerCount is number of task workers for timer processor
@@ -419,6 +420,7 @@ const (
 	TimerProcessorArchivalTimeLimit = "history.timerProcessorArchivalTimeLimit"
 	// RetentionTimerJitterDuration is a time duration jitter to distribute timer from T0 to T0 + jitter duration
 	RetentionTimerJitterDuration = "history.retentionTimerJitterDuration"
+
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize = "history.transferTaskBatchSize"
 	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
@@ -505,6 +507,10 @@ const (
 	VisibilityProcessorVisibilityArchivalTimeLimit = "history.visibilityProcessorVisibilityArchivalTimeLimit"
 	// VisibilityProcessorEnsureCloseBeforeDelete means we ensure the visibility of an execution is closed before we delete its visibility records
 	VisibilityProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
+	// VisibilityProcessorEnableCloseWorkflowCleanup to clean up the mutable state after visibility
+	// close task has been processed. Must use Elasticsearch as visibility store, otherwise workflow
+	// data (eg: search attributes) will be lost after workflow is closed.
+	VisibilityProcessorEnableCloseWorkflowCleanup = "history.visibilityProcessorEnableCloseWorkflowCleanup"
 
 	// ArchivalTaskBatchSize is batch size for archivalQueueProcessor
 	ArchivalTaskBatchSize = "history.archivalTaskBatchSize"

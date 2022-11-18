@@ -136,6 +136,8 @@ func newVisibilityQueueProcessor(
 		visibilityMgr,
 		logger,
 		metricProvider,
+		config.VisibilityProcessorEnsureCloseBeforeDelete,
+		config.VisibilityProcessorEnableCloseWorkflowCleanup,
 	)
 
 	if scheduler == nil {
