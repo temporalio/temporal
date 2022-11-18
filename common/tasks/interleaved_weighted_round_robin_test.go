@@ -151,6 +151,8 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestTrySubmitSchedule_Fail
 	s.True(s.scheduler.TrySubmit(mockTask))
 
 	testWaitGroup.Wait()
+	// need to wait for the dispatch event loop to update the numInflightTask count
+	time.Sleep(time.Millisecond * 100)
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
 }
 
