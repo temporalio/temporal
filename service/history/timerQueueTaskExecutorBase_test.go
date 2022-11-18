@@ -142,6 +142,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 
 			archiveIfEnabled := !alreadyArchived
+			stage := tasks.DeleteWorkflowExecutionStageNone
 			s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
 				gomock.Any(),
 				tests.NamespaceID,
@@ -149,6 +150,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 				mockWeCtx,
 				mockMutableState,
 				archiveIfEnabled,
+				&stage,
 			).Return(nil)
 
 			err := s.timerQueueTaskExecutorBase.executeDeleteHistoryEventTask(
@@ -192,6 +194,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 
 			archiveIfEnabled := !alreadyArchived
+			stage := tasks.DeleteWorkflowExecutionStageNone
 			s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
 				gomock.Any(),
 				tests.NamespaceID,
@@ -199,6 +202,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 				mockWeCtx,
 				mockMutableState,
 				archiveIfEnabled,
+				&stage,
 			).Return(serviceerror.NewInternal("test error"))
 
 			err := s.timerQueueTaskExecutorBase.executeDeleteHistoryEventTask(

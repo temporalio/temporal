@@ -179,17 +179,17 @@ func (mr *MockContextMockRecorder) DeleteFailoverLevel(category, failoverID inte
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime, closeTime *time.Time, closeExecutionVisibilityTaskID int64) error {
+func (m *MockContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, startTime, closeTime *time.Time, closeExecutionVisibilityTaskID int64, stage *tasks.DeleteWorkflowExecutionStage) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, branchToken, startTime, closeTime, closeExecutionVisibilityTaskID)
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, branchToken, startTime, closeTime, closeExecutionVisibilityTaskID, stage)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, branchToken, startTime, closeTime, closeExecutionVisibilityTaskID interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, branchToken, startTime, closeTime, closeExecutionVisibilityTaskID, stage interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, branchToken, startTime, closeTime, closeExecutionVisibilityTaskID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, branchToken, startTime, closeTime, closeExecutionVisibilityTaskID, stage)
 }
 
 // GenerateTaskID mocks base method.

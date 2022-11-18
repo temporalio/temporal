@@ -24,57 +24,26 @@
 
 package tasks
 
-import (
-	"time"
+// DeleteWorkflowExecutionStage used by ContextImpl.DeleteWorkflowExecution to indicate progress stage.
+type DeleteWorkflowExecutionStage byte
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/definition"
+const (
+	DeleteWorkflowExecutionStageNone DeleteWorkflowExecutionStage = 0
 )
 
-var _ Task = (*DeleteExecutionTask)(nil)
+const (
+	DeleteWorkflowExecutionStageVisibility DeleteWorkflowExecutionStage = 1 << iota
+	DeleteWorkflowExecutionStageCurrent
+	DeleteWorkflowExecutionStageMutableState
+	DeleteWorkflowExecutionStageHistory
+)
 
-type (
-	DeleteExecutionTask struct {
-		definition.WorkflowKey
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Version             int64
-		ProcessStage        DeleteWorkflowExecutionStage
+func (s *DeleteWorkflowExecutionStage) MarkProcessed(stage DeleteWorkflowExecutionStage) {
+	if s == nil {
+		return
 	}
-)
-
-func (a *DeleteExecutionTask) GetKey() Key {
-	return NewImmediateKey(a.TaskID)
+	*s |= stage
 }
-
-func (a *DeleteExecutionTask) GetVersion() int64 {
-	return a.Version
-}
-
-func (a *DeleteExecutionTask) SetVersion(version int64) {
-	a.Version = version
-}
-
-func (a *DeleteExecutionTask) GetTaskID() int64 {
-	return a.TaskID
-}
-
-func (a *DeleteExecutionTask) SetTaskID(id int64) {
-	a.TaskID = id
-}
-
-func (a *DeleteExecutionTask) GetVisibilityTime() time.Time {
-	return a.VisibilityTimestamp
-}
-
-func (a *DeleteExecutionTask) SetVisibilityTime(timestamp time.Time) {
-	a.VisibilityTimestamp = timestamp
-}
-
-func (a *DeleteExecutionTask) GetCategory() Category {
-	return CategoryTransfer
-}
-
-func (a *DeleteExecutionTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION
+func (s *DeleteWorkflowExecutionStage) IsProcessed(stage DeleteWorkflowExecutionStage) bool {
+	return s != nil && *s&stage == stage
 }
