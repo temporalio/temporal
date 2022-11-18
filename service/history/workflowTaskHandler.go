@@ -264,6 +264,9 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	); err != nil {
 		return nil, handler.failWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES, err)
 	}
+	if err := handler.sizeLimitChecker.checkIfNumPendingActivitiesExceedsLimit(); err != nil {
+		return nil, handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_ACTIVITIES_LIMIT_EXCEEDED, err)
+	}
 
 	enums.SetDefaultTaskQueueKind(&attr.GetTaskQueue().Kind)
 

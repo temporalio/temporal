@@ -182,7 +182,12 @@ func withinLimit(value int, limit int) bool {
 	return value < limit
 }
 
-func (c *workflowSizeChecker) checkCountConstraint(numPending int, errLimit int, metricName string, resourceName string) error {
+func (c *workflowSizeChecker) checkCountConstraint(
+	numPending int,
+	errLimit int,
+	metricName string,
+	resourceName string,
+) error {
 	key := c.mutableState.GetWorkflowKey()
 	logger := log.With(
 		c.logger,
