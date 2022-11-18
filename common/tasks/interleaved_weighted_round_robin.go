@@ -25,6 +25,7 @@
 package tasks
 
 import (
+	"math/rand"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -414,9 +415,13 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTasksWithWeight
 		}
 	}
 
+	numFlattenedChannels := len(iwrrChannels.flattenedChannels)
+	startIdx := rand.Intn(numFlattenedChannels)
 	numTasks := int64(0)
 LoopDispatch:
-	for _, channel := range iwrrChannels.flattenedChannels {
+	for i := 0; i != numFlattenedChannels; i++ {
+		channel := iwrrChannels.flattenedChannels[(startIdx+i)%numFlattenedChannels]
+
 		if channel.throttled {
 			continue LoopDispatch
 		}

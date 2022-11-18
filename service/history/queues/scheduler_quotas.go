@@ -47,6 +47,9 @@ func NewSchedulerRateLimiter(
 	}
 
 	requestPriorityFn := func(req quotas.Request) int {
+		// NOTE: task scheduler will use the string format for task priority as the caller type.
+		// see channelQuotaRequestFn in scheduler.go
+		// TODO: we don't need this hack when requestRateLimiter uses generics
 		if priority, ok := tasks.PriorityValue[req.CallerType]; ok {
 			return int(priority)
 		}
