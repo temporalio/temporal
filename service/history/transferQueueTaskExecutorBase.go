@@ -229,11 +229,16 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	task *tasks.DeleteExecutionTask,
 	ensureNoPendingCloseTask bool,
 ) error {
-	return t.deleteExecution(ctx, task, false, ensureNoPendingCloseTask)
+	return t.deleteExecution(ctx, task, false, ensureNoPendingCloseTask, &task.ProcessStage)
 }
 
-func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, task tasks.Task,
-	forceDeleteFromOpenVisibility bool, ensureNoPendingCloseTask bool) (retError error) {
+func (t *transferQueueTaskExecutorBase) deleteExecution(
+	ctx context.Context,
+	task tasks.Task,
+	forceDeleteFromOpenVisibility bool,
+	ensureNoPendingCloseTask bool,
+	stage *tasks.DeleteWorkflowExecutionStage,
+) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
@@ -295,6 +300,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 		weCtx,
 		mutableState,
 		forceDeleteFromOpenVisibility,
+		stage,
 	)
 }
 

@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -124,6 +125,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
 	})
+	stage := tasks.DeleteWorkflowExecutionStageNone
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
@@ -136,6 +138,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		nil,
 		&closeTime,
 		closeExecutionVisibilityTaskID,
+		&stage,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 
@@ -146,6 +149,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		mockWeCtx,
 		mockMutableState,
 		false,
+		&stage,
 	)
 	s.NoError(err)
 }
@@ -166,6 +170,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
 	})
+	stage := tasks.DeleteWorkflowExecutionStageNone
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
@@ -178,6 +183,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		nil,
 		&closeTime,
 		closeExecutionVisibilityTaskID,
+		&stage,
 	).Return(serviceerror.NewInternal("test error"))
 
 	err := s.deleteManager.DeleteWorkflowExecution(
@@ -187,6 +193,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		mockWeCtx,
 		mockMutableState,
 		false,
+		&stage,
 	)
 	s.Error(err)
 }
@@ -206,6 +213,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		StartTime:             &now,
 		CloseVisibilityTaskId: closeExecutionVisibilityTaskID,
 	})
+	stage := tasks.DeleteWorkflowExecutionStageNone
+
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
 		definition.WorkflowKey{
@@ -217,6 +226,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		&now,
 		nil,
 		closeExecutionVisibilityTaskID,
+		&stage,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 
@@ -227,6 +237,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		mockWeCtx,
 		mockMutableState,
 		true,
+		&stage,
 	)
 	s.NoError(err)
 }
@@ -246,6 +257,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 			closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 			mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(&closeTime, nil)
+
+			stage := tasks.DeleteWorkflowExecutionStageNone
 
 			if archiveIfEnabled {
 				mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
@@ -285,6 +298,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 					gomock.Any(),
 					gomock.Any(),
 					int64(42),
+					&stage,
 				)
 				mockWeCtx.EXPECT().Clear()
 			}
@@ -296,6 +310,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 				mockWeCtx,
 				mockMutableState,
 				archiveIfEnabled,
+				&stage,
 			)
 			s.NoError(err)
 		})
@@ -318,6 +333,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 				Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 			closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 			mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(&closeTime, nil)
+
+			stage := tasks.DeleteWorkflowExecutionStageNone
 
 			if archiveIfEnabled {
 				mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
@@ -360,6 +377,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 					nil,
 					&closeTime,
 					closeExecutionVisibilityTaskID,
+					&stage,
 				)
 				mockWeCtx.EXPECT().Clear()
 			}
@@ -372,6 +390,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 				mockWeCtx,
 				mockMutableState,
 				archiveIfEnabled,
+				&stage,
 			)
 			if archiveIfEnabled {
 				s.Error(err)
