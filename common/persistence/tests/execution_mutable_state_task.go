@@ -361,17 +361,14 @@ func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 	// due to persistence layer precision loss,
 	// two tasks can be returned in either order,
 	// but must be ordered in terms of tasks.Key
-	response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, &p.GetHistoryTasksRequest{
-		ShardID:             s.ShardID,
-		TaskCategory:        tasks.CategoryTimer,
-		InclusiveMinTaskKey: tasks.NewKey(now, 0),
-		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
-		BatchSize:           10,
-	})
-	s.NoError(err)
-	s.Len(response.Tasks, 2)
-	s.Empty(response.NextPageToken)
-	s.True(response.Tasks[0].GetKey().CompareTo(response.Tasks[1].GetKey()) < 0)
+	loadedTasks := s.PaginateTasks(
+		tasks.CategoryTimer,
+		tasks.NewKey(now, 0),
+		tasks.NewKey(now.Add(time.Second), 0),
+		10,
+	)
+	s.Len(loadedTasks, 2)
+	s.True(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()) < 0)
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
@@ -406,17 +403,14 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 	// due to persistence layer precision loss,
 	// two tasks can be returned in either order,
 	// but must be ordered in terms of tasks.Key
-	response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, &p.GetHistoryTasksRequest{
-		ShardID:             s.ShardID,
-		TaskCategory:        fakeScheduledTaskCategory,
-		InclusiveMinTaskKey: tasks.NewKey(now, 0),
-		ExclusiveMaxTaskKey: tasks.NewKey(now.Add(time.Second), 0),
-		BatchSize:           10,
-	})
-	s.NoError(err)
-	s.Len(response.Tasks, 2)
-	s.Empty(response.NextPageToken)
-	s.True(response.Tasks[0].GetKey().CompareTo(response.Tasks[1].GetKey()) < 0)
+	loadedTasks := s.PaginateTasks(
+		fakeScheduledTaskCategory,
+		tasks.NewKey(now, 0),
+		tasks.NewKey(now.Add(time.Second), 0),
+		10,
+	)
+	s.Len(loadedTasks, 2)
+	s.True(loadedTasks[0].GetKey().CompareTo(loadedTasks[1].GetKey()) < 0)
 
 	err = s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 		ShardID:             s.ShardID,
@@ -426,7 +420,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 	})
 	s.NoError(err)
 
-	response, err = s.ExecutionManager.GetHistoryTasks(s.Ctx, &p.GetHistoryTasksRequest{
+	response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, &p.GetHistoryTasksRequest{
 		ShardID:             s.ShardID,
 		TaskCategory:        fakeScheduledTaskCategory,
 		InclusiveMinTaskKey: tasks.NewKey(now, 0),
