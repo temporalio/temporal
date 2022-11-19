@@ -356,7 +356,9 @@ func (p *queueBase) checkpoint() {
 		scopes := reader.Scopes()
 
 		if len(scopes) == 0 {
-			p.readerGroup.RemoveReader(readerID)
+			if readerID != DefaultReaderId {
+				p.readerGroup.RemoveReader(readerID)
+			}
 			continue
 		}
 
