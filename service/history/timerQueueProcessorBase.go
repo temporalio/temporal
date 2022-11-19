@@ -378,14 +378,17 @@ func (t *timerQueueProcessorBase) submitTask(
 
 func newTimerTaskShardScheduler(
 	shard shard.Context,
+	rateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
 ) queues.Scheduler {
 	config := shard.GetConfig()
-	return queues.NewFIFOScheduler(
-		queues.FIFOSchedulerOptions{
-			WorkerCount: config.TimerTaskWorkerCount,
-			QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
+	return queues.NewPriorityScheduler(
+		queues.PrioritySchedulerOptions{
+			WorkerCount:       config.TimerTaskWorkerCount,
+			EnableRateLimiter: config.TaskSchedulerEnableRateLimiter,
 		},
+		rateLimiter,
+		shard.GetTimeSource(),
 		logger,
 	)
 }

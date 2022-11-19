@@ -29,15 +29,12 @@ import (
 )
 
 type (
-	NoopReservationImpl struct {
-	}
+	NoopReservationImpl struct{}
 )
 
 var _ Reservation = (*NoopReservationImpl)(nil)
 
-func NewNoopReservation() *NoopReservationImpl {
-	return &NoopReservationImpl{}
-}
+var NoopReservation Reservation = &NoopReservationImpl{}
 
 // OK returns whether the limiter can provide the requested number of tokens
 func (r *NoopReservationImpl) OK() bool {

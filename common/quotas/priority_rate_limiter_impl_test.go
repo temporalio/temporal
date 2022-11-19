@@ -79,9 +79,9 @@ func (s *priorityStageRateLimiterSuite) SetupTest() {
 		s.highPriorityAPIName: 0,
 		s.lowPriorityAPIName:  2,
 	}
-	priorityToRateLimiters := map[int]RateLimiter{
-		0: s.highPriorityRateLimiter,
-		2: s.lowPriorityRateLimiter,
+	priorityToRateLimiters := map[int]RequestRateLimiter{
+		0: NewRequestRateLimiterAdapter(s.highPriorityRateLimiter),
+		2: NewRequestRateLimiterAdapter(s.lowPriorityRateLimiter),
 	}
 	s.rateLimiter = NewPriorityRateLimiter(func(req Request) int {
 		return apiToPriority[req.API]

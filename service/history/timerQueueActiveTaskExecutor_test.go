@@ -194,6 +194,11 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 			quotas.NewDefaultOutgoingRateLimiter(
 				func() float64 { return float64(config.TimerProcessorMaxPollRPS()) },
 			),
+			quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDefaultOutgoingRateLimiter(
+					func() float64 { return float64(config.TaskSchedulerMaxQPS()) },
+				),
+			),
 			s.logger,
 			metrics.NoopMetricsHandler,
 			false,

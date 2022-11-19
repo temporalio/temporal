@@ -70,6 +70,7 @@ func newTransferQueueActiveProcessor(
 	taskAllocator taskAllocator,
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
+	schedulerRateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
 	metricProvider metrics.MetricsHandler,
 	singleProcessor bool,
@@ -119,7 +120,7 @@ func newTransferQueueActiveProcessor(
 	}
 
 	if scheduler == nil {
-		scheduler = newTransferTaskShardScheduler(shard, logger)
+		scheduler = newTransferTaskShardScheduler(shard, schedulerRateLimiter, logger)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -244,6 +245,7 @@ func newTransferQueueFailoverProcessor(
 	maxLevel int64,
 	taskAllocator taskAllocator,
 	rateLimiter quotas.RateLimiter,
+	schedulerRateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
 	metricProvider metrics.MetricsHandler,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
@@ -314,7 +316,7 @@ func newTransferQueueFailoverProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newTransferTaskShardScheduler(shard, logger)
+		scheduler = newTransferTaskShardScheduler(shard, schedulerRateLimiter, logger)
 		processor.ownedScheduler = scheduler
 	}
 

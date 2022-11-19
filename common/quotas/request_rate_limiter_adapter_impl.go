@@ -30,58 +30,38 @@ import (
 )
 
 type (
-	// RoutingRateLimiterImpl is a rate limiter special built for multi-tenancy
-	RoutingRateLimiterImpl struct {
-		apiToRateLimiter map[string]RequestRateLimiter
+	RequestRateLimiterAdapterImpl struct {
+		rateLimiter RateLimiter
 	}
 )
 
-var _ RequestRateLimiter = (*RoutingRateLimiterImpl)(nil)
+var _ RequestRateLimiter = (*RequestRateLimiterAdapterImpl)(nil)
 
-func NewRoutingRateLimiter(
-	apiToRateLimiter map[string]RequestRateLimiter,
-) *RoutingRateLimiterImpl {
-	return &RoutingRateLimiterImpl{
-		apiToRateLimiter: apiToRateLimiter,
+func NewRequestRateLimiterAdapter(
+	rateLimiter RateLimiter,
+) RequestRateLimiter {
+	return &RequestRateLimiterAdapterImpl{
+		rateLimiter: rateLimiter,
 	}
 }
 
-// Allow attempts to allow a request to go through. The method returns
-// immediately with a true or false indicating if the request can make
-// progress
-func (r *RoutingRateLimiterImpl) Allow(
+func (r *RequestRateLimiterAdapterImpl) Allow(
 	now time.Time,
 	request Request,
 ) bool {
-	rateLimiter, ok := r.apiToRateLimiter[request.API]
-	if !ok {
-		return true
-	}
-	return rateLimiter.Allow(now, request)
+	return r.rateLimiter.AllowN(now, request.Token)
 }
 
-// Reserve returns a Reservation that indicates how long the caller
-// must wait before event happen.
-func (r *RoutingRateLimiterImpl) Reserve(
+func (r *RequestRateLimiterAdapterImpl) Reserve(
 	now time.Time,
 	request Request,
 ) Reservation {
-	rateLimiter, ok := r.apiToRateLimiter[request.API]
-	if !ok {
-		return NoopReservation
-	}
-	return rateLimiter.Reserve(now, request)
+	return r.rateLimiter.ReserveN(now, request.Token)
 }
 
-// Wait waits till the deadline for a rate limit token to allow the request
-// to go through.
-func (r *RoutingRateLimiterImpl) Wait(
+func (r *RequestRateLimiterAdapterImpl) Wait(
 	ctx context.Context,
 	request Request,
 ) error {
-	rateLimiter, ok := r.apiToRateLimiter[request.API]
-	if !ok {
-		return nil
-	}
-	return rateLimiter.Wait(ctx, request)
+	return r.rateLimiter.WaitN(ctx, request.Token)
 }

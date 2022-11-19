@@ -22,43 +22,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package configs
+package quotas
 
 import (
-	"go.temporal.io/server/common/quotas"
+	"context"
+	"time"
 )
 
-var (
-	APIToPriority = map[string]int{
-		"AddActivityTask":             0,
-		"AddWorkflowTask":             0,
-		"CancelOutstandingPoll":       0,
-		"DescribeTaskQueue":           0,
-		"ListTaskQueuePartitions":     0,
-		"PollActivityTaskQueue":       0,
-		"PollWorkflowTaskQueue":       0,
-		"QueryWorkflow":               0,
-		"RespondQueryTaskCompleted":   0,
-		"GetWorkerBuildIdOrdering":    0,
-		"UpdateWorkerBuildIdOrdering": 0,
-		"InvalidateTaskQueueMetadata": 0,
-		"GetTaskQueueMetadata":        0,
-	}
-
-	APIPrioritiesOrdered = []int{0}
+type (
+	// NoopRequestRateLimiterImpl is a no-op implementation for RequestRateLimiter
+	NoopRequestRateLimiterImpl struct{}
 )
 
-func NewPriorityRateLimiter(
-	rateFn quotas.RateFn,
-) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RequestRateLimiter)
-	for priority := range APIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
-	}
-	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
-		if priority, ok := APIToPriority[req.API]; ok {
-			return priority
-		}
-		return APIPrioritiesOrdered[len(APIPrioritiesOrdered)-1]
-	}, rateLimiters)
+var NoopRequestRateLimiter RequestRateLimiter = &NoopRequestRateLimiterImpl{}
+
+func (r *NoopRequestRateLimiterImpl) Allow(
+	_ time.Time,
+	_ Request,
+) bool {
+	return true
+}
+
+func (r *NoopRequestRateLimiterImpl) Reserve(
+	_ time.Time,
+	_ Request,
+) Reservation {
+	return NoopReservation
+}
+
+func (r *NoopRequestRateLimiterImpl) Wait(
+	_ context.Context,
+	_ Request,
+) error {
+	return nil
 }

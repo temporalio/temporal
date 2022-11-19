@@ -78,8 +78,10 @@ func NewTransferQueueFactory(
 				WorkerCount:             params.Config.TransferProcessorSchedulerWorkerCount,
 				ActiveNamespaceWeights:  params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
 				StandbyNamespaceWeights: params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
+				EnableRateLimiter:       params.Config.TaskSchedulerEnableRateLimiter,
 			},
 			params.NamespaceRegistry,
+			params.SchedulerRateLimiter,
 			params.TimeSource,
 			params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
 			params.Logger,
@@ -201,5 +203,6 @@ func (f *transferQueueFactory) CreateQueue(
 		f.HistoryClient,
 		f.MetricsHandler,
 		f.HostRateLimiter,
+		f.SchedulerRateLimiter,
 	)
 }

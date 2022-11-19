@@ -39,11 +39,11 @@ func NewReaderPriorityRateLimiter(
 	rateFn quotas.RateFn,
 	maxReaders int,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RateLimiter, maxReaders)
+	rateLimiters := make(map[int]quotas.RequestRateLimiter, maxReaders)
 	readerCallerToPriority := make(map[string]int, maxReaders)
 	for readerId := DefaultReaderId; readerId != DefaultReaderId+maxReaders; readerId++ {
 		// use readerId as priority
-		rateLimiters[readerId] = quotas.NewDefaultOutgoingRateLimiter(rateFn)
+		rateLimiters[readerId] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(rateFn))
 		// reader will use readerId (in string type) as caller when using the rate limiter
 		readerCallerToPriority[newReaderRequest(int32(readerId)).Caller] = readerId
 	}

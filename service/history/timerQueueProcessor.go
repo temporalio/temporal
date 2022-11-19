@@ -70,6 +70,7 @@ type (
 		workflowDeleteManager      workflow.DeleteManager
 		ackLevel                   tasks.Key
 		hostRateLimiter            quotas.RateLimiter
+		schedulerRateLimiter       queues.SchedulerRateLimiter
 		logger                     log.Logger
 		clientBean                 client.Bean
 		matchingClient             matchingservice.MatchingServiceClient
@@ -92,6 +93,7 @@ func newTimerQueueProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	metricHandler metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
+	schedulerRateLimiter queues.SchedulerRateLimiter,
 ) queues.Queue {
 
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
@@ -122,6 +124,7 @@ func newTimerQueueProcessor(
 		workflowDeleteManager: workflowDeleteManager,
 		ackLevel:              shard.GetQueueAckLevel(tasks.CategoryTimer),
 		hostRateLimiter:       hostRateLimiter,
+		schedulerRateLimiter:  schedulerRateLimiter,
 		logger:                logger,
 		clientBean:            clientBean,
 		matchingClient:        matchingClient,
@@ -140,6 +143,7 @@ func newTimerQueueProcessor(
 				hostRateLimiter,
 				config.TimerProcessorMaxPollRPS,
 			),
+			schedulerRateLimiter,
 			logger,
 			metricHandler,
 			singleProcessor,
@@ -251,6 +255,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 			t.hostRateLimiter,
 			t.config.TimerProcessorFailoverMaxPollRPS,
 		),
+		t.schedulerRateLimiter,
 		t.logger,
 		t.metricHandler,
 	)
@@ -413,6 +418,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 					t.hostRateLimiter,
 					t.config.TimerProcessorMaxPollRPS,
 				),
+				t.schedulerRateLimiter,
 				t.logger,
 				t.metricHandler,
 			)

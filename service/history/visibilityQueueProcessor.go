@@ -80,6 +80,7 @@ func newVisibilityQueueProcessor(
 	visibilityMgr manager.VisibilityManager,
 	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
+	schedulerRateLimiter queues.SchedulerRateLimiter,
 ) queues.Queue {
 
 	config := shard.GetConfig()
@@ -141,7 +142,7 @@ func newVisibilityQueueProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newVisibilityTaskShardScheduler(shard, logger)
+		scheduler = newVisibilityTaskShardScheduler(shard, schedulerRateLimiter, logger)
 		retProcessor.ownedScheduler = scheduler
 	}
 
@@ -357,14 +358,17 @@ func (t *visibilityQueueProcessorImpl) queueShutdown() error {
 
 func newVisibilityTaskShardScheduler(
 	shard shard.Context,
+	rateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
 ) queues.Scheduler {
 	config := shard.GetConfig()
-	return queues.NewFIFOScheduler(
-		queues.FIFOSchedulerOptions{
-			WorkerCount: config.VisibilityTaskWorkerCount,
-			QueueSize:   config.VisibilityTaskBatchSize(),
+	return queues.NewPriorityScheduler(
+		queues.PrioritySchedulerOptions{
+			WorkerCount:       config.VisibilityTaskWorkerCount,
+			EnableRateLimiter: config.TaskSchedulerEnableRateLimiter,
 		},
+		rateLimiter,
+		shard.GetTimeSource(),
 		logger,
 	)
 }
