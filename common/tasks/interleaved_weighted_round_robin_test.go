@@ -264,7 +264,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule() {
-	maxQPS := 10000
+	maxQPS := 1000000
 	s.scheduler.rateLimiter = quotas.NewRequestRateLimiterAdapter(
 		quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(maxQPS) },
@@ -327,7 +327,10 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule
 	testWaitGroup.Wait()
 	totalDuration := time.Since(startTime)
 
+	// need to wait for the dispatch event loop to update the numInflightTask count
+	time.Sleep(time.Millisecond * 100)
 	s.Equal(int64(0), atomic.LoadInt64(&s.scheduler.numInflightTask))
+
 	s.Len(submittedTasks, numSubmitter*numTasks)
 	minDuration := time.Duration((numSubmitter*numTasks-maxQPS)/maxQPS) * time.Second
 	s.Greater(totalDuration, minDuration)
