@@ -781,7 +781,7 @@ func (m *executionManagerImpl) GetHistoryTasks(
 			return nil, err
 		}
 
-		if internalTask.Key.FireTime != tasks.DefaultFireTime {
+		if !internalTask.Key.FireTime.Equal(tasks.DefaultFireTime) {
 			task.SetVisibilityTime(internalTask.Key.FireTime)
 		}
 		task.SetTaskID(internalTask.Key.TaskID)
@@ -841,7 +841,7 @@ func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
 			return nil, err
 		}
 
-		if internalTask.Key.FireTime != tasks.DefaultFireTime {
+		if !internalTask.Key.FireTime.Equal(tasks.DefaultFireTime) {
 			task.SetVisibilityTime(internalTask.Key.FireTime)
 		}
 		task.SetTaskID(internalTask.Key.TaskID)
