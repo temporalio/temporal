@@ -33,5 +33,9 @@ type (
 		Level string `yaml:"level"`
 		// OutputFile is the path to the log output file
 		OutputFile string `yaml:"outputFile"`
+		// Format determines the format of each log file printed to the output.
+		// Acceptable values are "json" or "console". The default is "json".
+		// Use "console" if you want stack traces to appear on multiple lines.
+		Format string `yaml:"format"`
 	}
 )
