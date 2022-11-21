@@ -516,7 +516,7 @@ const (
 	// VisibilityProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
 	VisibilityProcessorVisibilityArchivalTimeLimit = "history.visibilityProcessorVisibilityArchivalTimeLimit"
 	// VisibilityProcessorEnsureCloseBeforeDelete means we ensure the visibility of an execution is closed before we delete its visibility records
-	VisibilityProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
+	VisibilityProcessorEnsureCloseBeforeDelete = "history.visibilityProcessorEnsureCloseBeforeDelete"
 	// VisibilityProcessorEnableCloseWorkflowCleanup to clean up the mutable state after visibility
 	// close task has been processed. Must use Elasticsearch as visibility store, otherwise workflow
 	// data (eg: search attributes) will be lost after workflow is closed.
