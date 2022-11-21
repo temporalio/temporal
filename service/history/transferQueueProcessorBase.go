@@ -113,8 +113,9 @@ func newTransferTaskShardScheduler(
 	config := shard.GetConfig()
 	return queues.NewPriorityScheduler(
 		queues.PrioritySchedulerOptions{
-			WorkerCount:       config.TransferTaskWorkerCount,
-			EnableRateLimiter: config.TaskSchedulerEnableRateLimiter,
+			WorkerCount:                 config.TransferTaskWorkerCount,
+			EnableRateLimiter:           config.TaskSchedulerEnableRateLimiter,
+			MaxDispatchThrottleDuration: ShardSchedulerMaxDispatchThrottleDuration,
 		},
 		rateLimiter,
 		shard.GetTimeSource(),

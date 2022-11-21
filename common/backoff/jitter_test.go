@@ -25,6 +25,7 @@
 package backoff
 
 import (
+	"math/rand"
 	"testing"
 	"time"
 
@@ -82,4 +83,10 @@ func (s *jitterSuite) TestJitDuration() {
 		s.True(result >= lowerBound)
 		s.True(result < upperBound)
 	}
+}
+
+func (s *jitterSuite) TestJit_InputZeroValue() {
+	s.Zero(JitDuration(0, rand.Float64()))
+	s.Zero(JitInt64(0, rand.Float64()))
+	s.Zero(JitFloat64(0, rand.Float64()))
 }
