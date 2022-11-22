@@ -128,7 +128,7 @@ func newReplicationTask(
 	version := firstEvent.GetVersion()
 
 	sourceCluster, err := clusterMetadata.ClusterNameForFailoverVersion(true, version)
-	if err != nil {
+	if err != nil && err != cluster.ErrUnknownCluster {
 		return nil, err
 	}
 
