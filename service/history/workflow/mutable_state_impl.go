@@ -4323,7 +4323,7 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, e
 	}
 
 	lastWriteSourceCluster, err := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), lastWriteVersion)
-	if err != nil {
+	if err != nil && err != cluster.ErrUnknownCluster {
 		return false, err
 	}
 	currentVersionCluster, err := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), currentVersion)
@@ -4398,7 +4398,7 @@ func (e *MutableStateImpl) closeTransactionWithPolicyCheck(
 	// passive cluster. For example: if passive cluster sees conflict and decided to terminate this workflow. The
 	// currentVersion on mutable state would be updated to point to last write version which is current (passive) cluster.
 	activeCluster, err := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), e.GetCurrentVersion())
-	if err != nil {
+	if err != nil && err != cluster.ErrUnknownCluster {
 		return err
 	}
 	currentCluster := e.clusterMetadata.GetCurrentClusterName()

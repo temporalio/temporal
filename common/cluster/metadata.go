@@ -48,7 +48,8 @@ const (
 	defaultClusterMetadataPageSize = 100
 	refreshInterval                = time.Minute
 
-	FakeClusterForEmptyVersion = "fake-cluster-for-empty-version"
+	FakeClusterForEmptyVersion       = "fake-cluster-for-empty-version"
+	FakeClusterNameForUnknownVersion = "fake_cluster-name"
 )
 
 var ErrUnknownCluster = fmt.Errorf("unknown cluster")
@@ -378,7 +379,7 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, fai
 			m.clusterInfo,
 			m.failoverVersionIncrement,
 		))
-		return "", ErrUnknownCluster
+		return FakeClusterNameForUnknownVersion, ErrUnknownCluster
 	}
 	return clusterName, nil
 }
