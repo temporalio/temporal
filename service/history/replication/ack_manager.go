@@ -73,6 +73,7 @@ type (
 		metricsHandler     metrics.MetricsHandler
 		logger             log.Logger
 		retryPolicy        backoff.RetryPolicy
+		namespaceRegistry  namespace.Registry
 		pageSize           int
 
 		sync.Mutex
@@ -111,6 +112,7 @@ func NewAckManager(
 		metricsHandler:     shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
 		logger:             log.With(logger, tag.ComponentReplicatorQueue),
 		retryPolicy:        retryPolicy,
+		namespaceRegistry:  shard.GetNamespaceRegistry(),
 		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize(),
 
 		maxTaskID:       nil,
@@ -223,6 +225,7 @@ func (p *ackMgrImpl) GetTasks(
 	minTaskID, maxTaskID := p.taskIDsRange(queryMessageID)
 	replicationTasks, lastTaskID, err := p.getTasks(
 		ctx,
+		pollingCluster,
 		minTaskID,
 		maxTaskID,
 		p.pageSize,
@@ -254,6 +257,7 @@ func (p *ackMgrImpl) GetTasks(
 
 func (p *ackMgrImpl) getTasks(
 	ctx context.Context,
+	pollingCluster string,
 	minTaskID int64,
 	maxTaskID int64,
 	batchSize int,
@@ -277,6 +281,22 @@ func (p *ackMgrImpl) getTasks(
 			}
 		}
 
+		skippedTasks := 0
+		ns, err := p.namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+		if err != nil {
+			if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
+				return nil, 0, err
+			}
+			// Namespace doesn't exist on this cluster (i.e. deleted). It is safe to skip the task.
+			skippedTasks++
+			continue
+		}
+		// If namespace doesn't exist on polling cluster, there is no reason to send the task.
+		if !ns.IsOnCluster(pollingCluster) {
+			skippedTasks++
+			continue
+		}
+
 		if replicationTask, err := p.toReplicationTask(ctx, task); err != nil {
 			p.logger.Error("replication task reader encounter error, return earlier", tag.Error(err))
 			if len(replicationTasks) == 0 {
@@ -284,9 +304,11 @@ func (p *ackMgrImpl) getTasks(
 			} else {
 				return replicationTasks, replicationTasks[len(replicationTasks)-1].GetSourceTaskId(), nil
 			}
-		} else if replicationTask != nil {
-			replicationTasks = append(replicationTasks, replicationTask)
+		} else if replicationTask == nil {
+			skippedTasks++
+			continue
 		}
+		replicationTasks = append(replicationTasks, replicationTask)
 	}
 
 	if len(replicationTasks) == 0 {

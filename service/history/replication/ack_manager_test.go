@@ -782,3 +782,43 @@ func (s *ackManagerSuite) TestGetTasks_FullResult() {
 	s.Equal(1, len(replicationTasks))
 	s.Equal(historyTask.TaskID, lastTaskID)
 }
+
+func (s *ackManagerSuite) Test_GetTasks_Success() {
+	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(22)
+
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
+		ShardID:             s.mockShard.GetShardID(),
+		TaskCategory:        tasks.CategoryReplication,
+		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
+		BatchSize:           10,
+		NextPageToken:       nil,
+	}).Return(&persistence.GetHistoryTasksResponse{
+		Tasks: []tasks.Task{
+			&tasks.HistoryReplicationTask{
+				WorkflowKey:         definition.WorkflowKey{},
+				VisibilityTimestamp: time.Time{},
+				TaskID:              1,
+				FirstEventID:        0,
+				NextEventID:         0,
+				Version:             0,
+				NewRunID:            "",
+			},
+			&tasks.HistoryReplicationTask{
+				WorkflowKey:         definition.WorkflowKey{},
+				VisibilityTimestamp: time.Time{},
+				TaskID:              1,
+				FirstEventID:        0,
+				NextEventID:         0,
+				Version:             0,
+				NewRunID:            "",
+			},
+		},
+		NextPageToken: nil,
+	}, nil)
+
+	msgs, err := s.replicationAckManager.GetTasks(context.Background(), "cluster1", 22)
+	s.NoError(err)
+	s.Len(msgs, 1)
+
+}
