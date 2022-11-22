@@ -634,7 +634,7 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 	})
 	s.NoError(err)
 
-	resp, err = s.ExecutionManager.GetHistoryTask(s.Ctx, &p.GetHistoryTaskRequest{
+	_, err = s.ExecutionManager.GetHistoryTask(s.Ctx, &p.GetHistoryTaskRequest{
 		ShardID:      s.ShardID,
 		TaskCategory: category,
 		TaskKey:      key,
