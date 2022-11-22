@@ -286,7 +286,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 			),
 			HistoryScannerVerifyRetention: dc.GetBoolProperty(
 				dynamicconfig.HistoryScannerVerifyRetention,
-				false,
+				true,
 			),
 			ExecutionScannerPerHostQPS: dc.GetIntProperty(
 				dynamicconfig.ExecutionScannerPerHostQPS,
