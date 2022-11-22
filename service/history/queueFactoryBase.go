@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"time"
 
 	"go.uber.org/fx"
 
@@ -45,6 +46,9 @@ import (
 
 const (
 	QueueFactoryFxGroup = "queueFactory"
+
+	HostSchedulerMaxDispatchThrottleDuration  = 3 * time.Second
+	ShardSchedulerMaxDispatchThrottleDuration = 5 * time.Second
 )
 
 type (

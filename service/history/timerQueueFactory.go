@@ -72,10 +72,11 @@ func NewTimerQueueFactory(
 		hostScheduler = queues.NewNamespacePriorityScheduler(
 			params.ClusterMetadata.GetCurrentClusterName(),
 			queues.NamespacePrioritySchedulerOptions{
-				WorkerCount:             params.Config.TimerProcessorSchedulerWorkerCount,
-				ActiveNamespaceWeights:  params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
-				StandbyNamespaceWeights: params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
-				EnableRateLimiter:       params.Config.TaskSchedulerEnableRateLimiter,
+				WorkerCount:                 params.Config.TimerProcessorSchedulerWorkerCount,
+				ActiveNamespaceWeights:      params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
+				StandbyNamespaceWeights:     params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
+				EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
+				MaxDispatchThrottleDuration: HostSchedulerMaxDispatchThrottleDuration,
 			},
 			params.NamespaceRegistry,
 			params.SchedulerRateLimiter,

@@ -64,10 +64,11 @@ func NewVisibilityQueueFactory(
 		hostScheduler = queues.NewNamespacePriorityScheduler(
 			params.ClusterMetadata.GetCurrentClusterName(),
 			queues.NamespacePrioritySchedulerOptions{
-				WorkerCount:             params.Config.VisibilityProcessorSchedulerWorkerCount,
-				ActiveNamespaceWeights:  params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
-				StandbyNamespaceWeights: params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
-				EnableRateLimiter:       params.Config.TaskSchedulerEnableRateLimiter,
+				WorkerCount:                 params.Config.VisibilityProcessorSchedulerWorkerCount,
+				ActiveNamespaceWeights:      params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
+				StandbyNamespaceWeights:     params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
+				EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
+				MaxDispatchThrottleDuration: HostSchedulerMaxDispatchThrottleDuration,
 			},
 			params.NamespaceRegistry,
 			params.SchedulerRateLimiter,

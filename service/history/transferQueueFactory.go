@@ -75,10 +75,11 @@ func NewTransferQueueFactory(
 		hostScheduler = queues.NewNamespacePriorityScheduler(
 			params.ClusterMetadata.GetCurrentClusterName(),
 			queues.NamespacePrioritySchedulerOptions{
-				WorkerCount:             params.Config.TransferProcessorSchedulerWorkerCount,
-				ActiveNamespaceWeights:  params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
-				StandbyNamespaceWeights: params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
-				EnableRateLimiter:       params.Config.TaskSchedulerEnableRateLimiter,
+				WorkerCount:                 params.Config.TransferProcessorSchedulerWorkerCount,
+				ActiveNamespaceWeights:      params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
+				StandbyNamespaceWeights:     params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
+				EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
+				MaxDispatchThrottleDuration: HostSchedulerMaxDispatchThrottleDuration,
 			},
 			params.NamespaceRegistry,
 			params.SchedulerRateLimiter,

@@ -32,14 +32,16 @@ import (
 	"time"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/util"
 )
 
 const (
-	iwrrDispatchThrottleDuration    = 1 * time.Second
+	iwrrMinDispatchThrottleDuration = 1 * time.Second
 	checkRateLimiterEnabledInterval = 1 * time.Minute
 )
 
@@ -59,6 +61,10 @@ type (
 		ChannelQuotaRequestFn ChannelQuotaRequestFn[K]
 		// Required for determining if rate limiter should be enabled.
 		EnableRateLimiter dynamicconfig.BoolPropertyFn
+		// Optional, if specified and greater than 1s the throttle duration will be a random
+		// value between 1s to the value specified.
+		// If not specified or not valid, the throttle duration will always be 1s.
+		MaxDispatchThrottleDuration time.Duration
 	}
 
 	// TaskChannelKeyFn is the function for mapping a task to its task channel (key)
@@ -132,8 +138,11 @@ func NewInterleavedWeightedRoundRobinScheduler[T Task, K comparable](
 ) *InterleavedWeightedRoundRobinScheduler[T, K] {
 	channels := atomic.Value{}
 	channels.Store(iwrrChannels[T, K]{})
+
 	enableRateLimiter := atomic.Value{}
 	enableRateLimiter.Store(options.EnableRateLimiter())
+
+	options.MaxDispatchThrottleDuration = util.Max(iwrrMinDispatchThrottleDuration, options.MaxDispatchThrottleDuration)
 	return &InterleavedWeightedRoundRobinScheduler[T, K]{
 		status: common.DaemonStatusInitialized,
 
@@ -302,6 +311,9 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) channels() iwrrChannels[T
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler[T, K]) setupDispatchTimer() {
+	throttleDuration := iwrrMinDispatchThrottleDuration +
+		backoff.JitDuration(s.options.MaxDispatchThrottleDuration-iwrrMinDispatchThrottleDuration, 1)/2
+
 	s.dispatchTimerLock.Lock()
 	defer s.dispatchTimerLock.Unlock()
 
@@ -309,7 +321,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) setupDispatchTimer() {
 		s.dispatchTimer.Stop()
 	}
 
-	s.dispatchTimer = time.AfterFunc(iwrrDispatchThrottleDuration, func() {
+	s.dispatchTimer = time.AfterFunc(throttleDuration, func() {
 		s.dispatchTimerLock.Lock()
 		defer s.dispatchTimerLock.Unlock()
 
@@ -418,6 +430,7 @@ func (s *InterleavedWeightedRoundRobinScheduler[T, K]) doDispatchTasksWithWeight
 	numFlattenedChannels := len(iwrrChannels.flattenedChannels)
 	startIdx := rand.Intn(numFlattenedChannels)
 	numTasks := int64(0)
+	numThrottled := 0
 LoopDispatch:
 	for i := 0; i != numFlattenedChannels; i++ {
 		channel := iwrrChannels.flattenedChannels[(startIdx+i)%numFlattenedChannels]
@@ -434,6 +447,11 @@ LoopDispatch:
 		if reservation.DelayFrom(now) != 0 {
 			reservation.CancelAt(now)
 			channel.throttled = true
+			numThrottled++
+			if numThrottled == len(iwrrChannels.channels) {
+				// all channels throttled
+				break LoopDispatch
+			}
 			continue LoopDispatch
 		}
 		select {

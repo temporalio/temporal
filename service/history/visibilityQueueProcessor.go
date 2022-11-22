@@ -364,8 +364,9 @@ func newVisibilityTaskShardScheduler(
 	config := shard.GetConfig()
 	return queues.NewPriorityScheduler(
 		queues.PrioritySchedulerOptions{
-			WorkerCount:       config.VisibilityTaskWorkerCount,
-			EnableRateLimiter: config.TaskSchedulerEnableRateLimiter,
+			WorkerCount:                 config.VisibilityTaskWorkerCount,
+			EnableRateLimiter:           config.TaskSchedulerEnableRateLimiter,
+			MaxDispatchThrottleDuration: ShardSchedulerMaxDispatchThrottleDuration,
 		},
 		rateLimiter,
 		shard.GetTimeSource(),

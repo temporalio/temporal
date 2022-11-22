@@ -384,8 +384,9 @@ func newTimerTaskShardScheduler(
 	config := shard.GetConfig()
 	return queues.NewPriorityScheduler(
 		queues.PrioritySchedulerOptions{
-			WorkerCount:       config.TimerTaskWorkerCount,
-			EnableRateLimiter: config.TaskSchedulerEnableRateLimiter,
+			WorkerCount:                 config.TimerTaskWorkerCount,
+			EnableRateLimiter:           config.TaskSchedulerEnableRateLimiter,
+			MaxDispatchThrottleDuration: ShardSchedulerMaxDispatchThrottleDuration,
 		},
 		rateLimiter,
 		shard.GetTimeSource(),

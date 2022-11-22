@@ -27,6 +27,8 @@
 package queues
 
 import (
+	"time"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -71,16 +73,18 @@ type (
 	ChannelWeightFn  = tasks.ChannelWeightFn[TaskChannelKey]
 
 	NamespacePrioritySchedulerOptions struct {
-		WorkerCount             dynamicconfig.IntPropertyFn
-		ActiveNamespaceWeights  dynamicconfig.MapPropertyFnWithNamespaceFilter
-		StandbyNamespaceWeights dynamicconfig.MapPropertyFnWithNamespaceFilter
-		EnableRateLimiter       dynamicconfig.BoolPropertyFn
+		WorkerCount                 dynamicconfig.IntPropertyFn
+		ActiveNamespaceWeights      dynamicconfig.MapPropertyFnWithNamespaceFilter
+		StandbyNamespaceWeights     dynamicconfig.MapPropertyFnWithNamespaceFilter
+		EnableRateLimiter           dynamicconfig.BoolPropertyFn
+		MaxDispatchThrottleDuration time.Duration
 	}
 
 	PrioritySchedulerOptions struct {
-		WorkerCount       dynamicconfig.IntPropertyFn
-		Weight            dynamicconfig.MapPropertyFn
-		EnableRateLimiter dynamicconfig.BoolPropertyFn
+		WorkerCount                 dynamicconfig.IntPropertyFn
+		Weight                      dynamicconfig.MapPropertyFn
+		EnableRateLimiter           dynamicconfig.BoolPropertyFn
+		MaxDispatchThrottleDuration time.Duration
 	}
 
 	schedulerImpl struct {
@@ -137,11 +141,12 @@ func NewNamespacePriorityScheduler(
 	return &schedulerImpl{
 		Scheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
 			tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
-				TaskChannelKeyFn:      taskChannelKeyFn,
-				ChannelWeightFn:       channelWeightFn,
-				ChannelWeightUpdateCh: channelWeightUpdateCh,
-				ChannelQuotaRequestFn: channelQuotaRequestFn,
-				EnableRateLimiter:     options.EnableRateLimiter,
+				TaskChannelKeyFn:            taskChannelKeyFn,
+				ChannelWeightFn:             channelWeightFn,
+				ChannelWeightUpdateCh:       channelWeightUpdateCh,
+				ChannelQuotaRequestFn:       channelQuotaRequestFn,
+				EnableRateLimiter:           options.EnableRateLimiter,
+				MaxDispatchThrottleDuration: options.MaxDispatchThrottleDuration,
 			},
 			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
 				newSchedulerMonitor(
@@ -200,11 +205,12 @@ func NewPriorityScheduler(
 	return &schedulerImpl{
 		Scheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
 			tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
-				TaskChannelKeyFn:      taskChannelKeyFn,
-				ChannelWeightFn:       channelWeightFn,
-				ChannelWeightUpdateCh: nil,
-				ChannelQuotaRequestFn: channelQuotaRequestFn,
-				EnableRateLimiter:     options.EnableRateLimiter,
+				TaskChannelKeyFn:            taskChannelKeyFn,
+				ChannelWeightFn:             channelWeightFn,
+				ChannelWeightUpdateCh:       nil,
+				ChannelQuotaRequestFn:       channelQuotaRequestFn,
+				EnableRateLimiter:           options.EnableRateLimiter,
+				MaxDispatchThrottleDuration: options.MaxDispatchThrottleDuration,
 			},
 			tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
 				noopScheduleMonitor,
