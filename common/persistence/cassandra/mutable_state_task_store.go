@@ -498,7 +498,7 @@ func (d *MutableStateTaskStore) getTimerTask(
 
 	return &p.InternalGetHistoryTaskResponse{
 		InternalHistoryTask: p.InternalHistoryTask{
-			Key:  tasks.NewKey(time.Unix(0, visibilityTs), taskID),
+			Key:  tasks.NewKey(time.UnixMilli(visibilityTs).UTC(), taskID),
 			Blob: *p.NewDataBlob(data, encoding),
 		},
 	}, nil
@@ -938,7 +938,7 @@ func (d *MutableStateTaskStore) getHistoryTask(
 		Blob: *p.NewDataBlob(data, encoding),
 	}
 	if request.TaskCategory.Type() == tasks.CategoryTypeScheduled {
-		task.Key.FireTime = time.Unix(0, ts)
+		task.Key.FireTime = time.UnixMilli(ts).UTC()
 	}
 	return &p.InternalGetHistoryTaskResponse{
 		InternalHistoryTask: task,
