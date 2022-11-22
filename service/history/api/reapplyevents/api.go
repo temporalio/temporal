@@ -32,7 +32,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
-	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
@@ -75,7 +74,7 @@ func Invoke(
 			workflowID,
 			"",
 		),
-		func(workflowContext api.WorkflowContext) (action *api.UpdateWorkflowAction, retErr error) {
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
 			context := workflowContext.GetContext()
 			mutableState := workflowContext.GetMutableState()
 			// Filter out reapply event from the same cluster
@@ -83,20 +82,6 @@ func Invoke(
 			lastWriteVersion, err := mutableState.GetLastWriteVersion()
 			if err != nil {
 				return nil, err
-			}
-			sourceMutableState := mutableState
-			if sourceMutableState.GetWorkflowKey().RunID != runID {
-				originCtx, err := workflowConsistencyChecker.GetWorkflowContext(
-					ctx,
-					nil,
-					api.BypassMutableStateConsistencyPredicate,
-					definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
-				)
-				if err != nil {
-					return nil, err
-				}
-				defer func() { originCtx.GetReleaseFn()(retErr) }()
-				sourceMutableState = originCtx.GetMutableState()
 			}
 
 			for _, event := range reapplyEvents {
@@ -107,10 +92,6 @@ func Invoke(
 				dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 				if mutableState.IsResourceDuplicated(dedupResource) {
 					// already apply the signal
-					continue
-				}
-				versionHistories := sourceMutableState.GetExecutionInfo().GetVersionHistories()
-				if containsHistoryEvent(versionHistories, event.GetEventId(), event.GetVersion()) {
 					continue
 				}
 
@@ -226,18 +207,4 @@ func Invoke(
 		shard,
 		workflowConsistencyChecker,
 	)
-}
-
-func containsHistoryEvent(
-	versionHistories *historyspb.VersionHistories,
-	reappliedEventID int64,
-	reappliedEventVersion int64,
-) bool {
-	// Check if the source workflow contains the reapply event.
-	// If it does, it means the event is received in this cluster, no need to reapply.
-	_, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-		versionHistories,
-		versionhistory.NewVersionHistoryItem(reappliedEventID, reappliedEventVersion),
-	)
-	return err == nil
 }
