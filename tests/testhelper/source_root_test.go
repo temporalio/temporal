@@ -25,54 +25,29 @@
 package testhelper
 
 import (
-	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGetRepoRootDirectory(t *testing.T) {
 	t.Run("env var set", func(t *testing.T) {
-		directory, err := GetRepoRootDirectory(WithGetenv(func(s string) string {
+		directory := GetRepoRootDirectory(WithGetenv(func(s string) string {
 			assert.Equal(t, "TEMPORAL_ROOT", s)
 			return "/tmp/temporal"
 		}))
-		require.NoError(t, err)
 		assert.Equal(t, "/tmp/temporal", directory)
 	})
 
 	t.Run("env var not set", func(t *testing.T) {
-		t.Run("getwd returns error", func(t *testing.T) {
-			_, err := GetRepoRootDirectory(WithGetenv(func(s string) string {
-				return ""
-			}), WithGetwd(func() (string, error) {
-				return "", errors.New("some error")
-			}))
-			require.Error(t, err)
-			assert.ErrorContains(t, err, "some error")
-		})
-
-		t.Run("getwd returns path not ending in temporal", func(t *testing.T) {
-			_, err := GetRepoRootDirectory(WithGetenv(func(s string) string {
-				return ""
-			}), WithGetwd(func() (string, error) {
-				return "/temp/tempura/", nil
-			}))
-			require.Error(t, err)
-			assert.ErrorContains(t, err, "unable to find repo path")
-			assert.ErrorContains(t, err, "temporal")
-			assert.ErrorContains(t, err, "tempura")
-		})
-
-		t.Run("getwd returns path ending with temporal", func(t *testing.T) {
-			directory, err := GetRepoRootDirectory(WithGetenv(func(s string) string {
-				return ""
-			}), WithGetwd(func() (string, error) {
-				return "/tmp/temporal/", nil
-			}))
-			require.NoError(t, err)
-			assert.Equal(t, "/tmp/temporal/", directory)
-		})
+		directory := GetRepoRootDirectory(WithGetenv(func(s string) string {
+			return ""
+		}))
+		assert.True(
+			t,
+			strings.HasSuffix(directory, "temporal") || strings.HasSuffix(directory, "temporal/"),
+			directory,
+		)
 	})
 }
