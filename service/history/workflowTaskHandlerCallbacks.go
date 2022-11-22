@@ -516,7 +516,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			// drop this workflow task if it keeps failing. This will cause the workflow task to timeout and get retried after timeout.
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 		}
-		ms, err = failWorkflowTask(ctx, weContext, scheduledEventID, startedEventID, wtFailedCause, request)
+		var nextEventBatchId int64
+		ms, nextEventBatchId, err = failWorkflowTask(ctx, weContext, scheduledEventID, startedEventID, wtFailedCause, request)
 		if err != nil {
 			return nil, err
 		}
@@ -527,7 +528,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
 				Failure: wtFailedCause.workflowFailure,
 			}
-			if _, err := ms.AddFailWorkflowEvent(ms.GetNextEventID(), enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
+			if _, err := ms.AddFailWorkflowEvent(nextEventBatchId, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
 				return nil, err
 			}
 			hasUnhandledEvents = false
@@ -853,7 +854,7 @@ func failWorkflowTask(
 	startedEventID int64,
 	wtFailedCause *workflowTaskFailedCause,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
-) (workflow.MutableState, error) {
+) (workflow.MutableState, int64, error) {
 
 	// clear any updates we have accumulated so far
 	wfContext.Clear()
@@ -861,9 +862,9 @@ func failWorkflowTask(
 	// Reload workflow execution so we can apply the workflow task failure event
 	mutableState, err := wfContext.LoadMutableState(ctx)
 	if err != nil {
-		return nil, err
+		return nil, common.EmptyEventID, err
 	}
-
+	nextEventBatchId := mutableState.GetNextEventID()
 	if _, err = mutableState.AddWorkflowTaskFailedEvent(
 		scheduledEventID,
 		startedEventID,
@@ -874,9 +875,9 @@ func failWorkflowTask(
 		"",
 		"",
 		0); err != nil {
-		return nil, err
+		return nil, nextEventBatchId, err
 	}
 
 	// Return new mutable state back to the caller for further updates
-	return mutableState, nil
+	return mutableState, nextEventBatchId, nil
 }
