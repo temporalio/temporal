@@ -148,13 +148,13 @@ func TestTaskQueueParentName(t *testing.T) {
 		output string
 	}{
 		/* unexpected input */
-		{"list0", 0, ""},
+		{"list0", 0, "__INVALID__"},
 		/* 1-ary tree */
-		{"list0", 1, ""},
+		{"list0", 1, "__INVALID__"},
 		{"/_sys/list0/1", 1, "list0"},
 		{"/_sys/list0/2", 1, "/_sys/list0/1"},
 		/* 2-ary tree */
-		{"list0", 2, ""},
+		{"list0", 2, "__INVALID__"},
 		{"/_sys/list0/1", 2, "list0"},
 		{"/_sys/list0/2", 2, "list0"},
 		{"/_sys/list0/3", 2, "/_sys/list0/1"},

@@ -74,6 +74,11 @@ type (
 	}
 )
 
+var (
+	// This value can be used when we have an error, but need to return just a Name.
+	InvalidName = Name{baseName: "__INVALID__"}
+)
+
 // Parse takes a mangled low-level task queue name and returns a Name. Returns an error if the
 // given name is not a valid mangled name.
 func Parse(name string) (Name, error) {
@@ -123,7 +128,7 @@ func FromBaseName(name string) (Name, error) {
 func MustFromBaseName(name string) Name {
 	n, err := FromBaseName(name)
 	if err != nil {
-		return Name{baseName: "__INVALID__"}
+		return InvalidName
 	}
 	return n
 }
@@ -162,7 +167,7 @@ func (tn Name) BaseNameString() string {
 // Parent returns a Name for the parent partition, using the given branching degree.
 func (tn Name) Parent(degree int) Name {
 	if tn.IsRoot() || degree == 0 {
-		return Name{}
+		return InvalidName
 	}
 	parent := (tn.partition+degree-1)/degree - 1
 	return tn.WithPartition(parent)
@@ -174,8 +179,8 @@ func (tn Name) FullName() string {
 		if tn.partition == 0 {
 			return tn.baseName
 		}
-		return mangledTaskQueuePrefix + tn.baseName + suffixDelimiter + strconv.Itoa(tn.partition)
+		return fmt.Sprintf("%s%s%s%d", mangledTaskQueuePrefix, tn.baseName, suffixDelimiter, tn.partition)
 	}
 	// versioned always use prefix
-	return mangledTaskQueuePrefix + tn.baseName + suffixDelimiter + tn.versionSet + versionSetDelimiter + strconv.Itoa(tn.partition)
+	return fmt.Sprintf("%s%s%s%s%s%d", mangledTaskQueuePrefix, tn.baseName, suffixDelimiter, tn.versionSet, versionSetDelimiter, tn.partition)
 }
