@@ -47,6 +47,10 @@ import (
 
 var Module = fx.Options(
 	fx.Provide(ControllerProvider),
+	fx.Provide(fx.Annotate(
+		func(p Controller) common.Pingable { return p },
+		fx.ResultTags(`group:"deadlockDetectorRoots"`),
+	)),
 )
 
 func ControllerProvider(
