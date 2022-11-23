@@ -26,6 +26,7 @@ package interceptor
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -62,6 +63,7 @@ var (
 var (
 	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
 	pollActivityTaskQueue        = "PollActivityTaskQueue"
+	frontendServicePackageName   = "workflowservice"
 
 	grpcActions = map[string]struct{}{
 		metrics.FrontendQueryWorkflowScope:                    {},
@@ -158,7 +160,7 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 	metricsHandler metrics.MetricsHandler,
 	result interface{},
 ) {
-	if _, ok := grpcActions[methodName]; !ok || !strings.Contains(strings.ToLower(fullName), strings.ToLower(common.FrontendServiceName)) {
+	if _, ok := grpcActions[methodName]; !ok || !strings.Contains(strings.ToLower(fullName), strings.ToLower(frontendServicePackageName)) {
 		// grpcActions checks that methodName is the one that we care about.
 		// ti.scopes verifies that the scope is the one we intended to emit action metrics.
 		// This is necessary because TelemetryInterceptor is used for all services. Different service could have same
@@ -166,6 +168,7 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 		return
 	}
 
+	fmt.Println("XXXXXXX", methodName, fullName)
 	switch methodName {
 	case respondWorkflowTaskCompleted:
 		// handle commands
