@@ -338,6 +338,7 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 		we := request.Executions[i]
 		err := a.generateWorkflowReplicationTask(ctx, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
 		if err != nil {
+			a.logger.Info("Force replicate failed", tag.WorkflowNamespaceID(request.NamespaceID), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId), tag.Error(err))
 			return err
 		}
 		activity.RecordHeartbeat(ctx, i)
