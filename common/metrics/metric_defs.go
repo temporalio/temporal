@@ -1423,7 +1423,7 @@ var (
 	TaskBatchCompleteCounter                          = NewCounterDef("task_batch_complete_counter")
 	TaskReschedulerPendingTasks                       = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
 	TaskThrottledCounter                              = NewCounterDef("task_throttled_counter")
-	PendingTasksCounter                               = NewCounterDef("pending_tasks")
+	PendingTasksCounter                               = NewDimensionlessHistogramDef("pending_tasks")
 	QueueScheduleLatency                              = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
 	QueueReaderCountHistogram                         = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram                          = NewDimensionlessHistogramDef("queue_slice_count")

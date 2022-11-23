@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -151,6 +152,23 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 	s.Cancel()
 }
 
+func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteImmediateTask_Single() {
+	immediateTasks := s.AddRandomTasks(
+		fakeImmediateTaskCategory,
+		1,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			fakeTask := tasks.NewFakeTask(
+				workflowKey,
+				fakeImmediateTaskCategory,
+				visibilityTimestamp,
+			)
+			fakeTask.SetTaskID(taskID)
+			return fakeTask
+		},
+	)
+	s.GetAndCompleteHistoryTask(fakeImmediateTaskCategory, immediateTasks[0])
+}
+
 func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteImmediateTasks_Multiple() {
 	numTasks := 20
 	immediateTasks := s.AddRandomTasks(
@@ -191,6 +209,23 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteImmediateTasks_M
 		1,
 	)
 	s.Empty(loadedTasks)
+}
+
+func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteScheduledTask_Single() {
+	scheduledTasks := s.AddRandomTasks(
+		fakeScheduledTaskCategory,
+		1,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			fakeTask := tasks.NewFakeTask(
+				workflowKey,
+				fakeScheduledTaskCategory,
+				visibilityTimestamp,
+			)
+			fakeTask.SetTaskID(taskID)
+			return fakeTask
+		},
+	)
+	s.GetAndCompleteHistoryTask(fakeScheduledTaskCategory, scheduledTasks[0])
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteScheduledTasks_Multiple() {
@@ -235,6 +270,21 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetRangeCompleteScheduledTasks_M
 	s.Empty(loadedTasks)
 }
 
+func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteTransferTask_Single() {
+	transferTasks := s.AddRandomTasks(
+		tasks.CategoryTransfer,
+		1,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			return &tasks.ActivityTask{
+				WorkflowKey:         workflowKey,
+				TaskID:              taskID,
+				VisibilityTimestamp: visibilityTimestamp,
+			}
+		},
+	)
+	s.GetAndCompleteHistoryTask(tasks.CategoryTransfer, transferTasks[0])
+}
+
 func (s *ExecutionMutableStateTaskSuite) TestAddGetTransferTasks_Multiple() {
 	numTasks := 20
 	transferTasks := s.AddRandomTasks(
@@ -257,6 +307,21 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetTransferTasks_Multiple() {
 		rand.Intn(len(transferTasks)*2)+1,
 	)
 	s.Equal(transferTasks, loadedTasks)
+}
+
+func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteTimerTask_Single() {
+	timerTasks := s.AddRandomTasks(
+		tasks.CategoryTimer,
+		1,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			return &tasks.UserTimerTask{
+				WorkflowKey:         workflowKey,
+				TaskID:              taskID,
+				VisibilityTimestamp: visibilityTimestamp,
+			}
+		},
+	)
+	s.GetAndCompleteHistoryTask(tasks.CategoryTimer, timerTasks[0])
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetTimerTasks_Multiple() {
@@ -283,6 +348,21 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetTimerTasks_Multiple() {
 	s.Equal(timerTasks, loadedTasks)
 }
 
+func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteReplicationTask_Single() {
+	replicationTasks := s.AddRandomTasks(
+		tasks.CategoryReplication,
+		1,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			return &tasks.HistoryReplicationTask{
+				WorkflowKey:         workflowKey,
+				TaskID:              taskID,
+				VisibilityTimestamp: visibilityTimestamp,
+			}
+		},
+	)
+	s.GetAndCompleteHistoryTask(tasks.CategoryReplication, replicationTasks[0])
+}
+
 func (s *ExecutionMutableStateTaskSuite) TestAddGetReplicationTasks_Multiple() {
 	numTasks := 20
 	replicationTasks := s.AddRandomTasks(
@@ -305,6 +385,21 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetReplicationTasks_Multiple() {
 		rand.Intn(len(replicationTasks)*2)+1,
 	)
 	s.Equal(replicationTasks, loadedTasks)
+}
+
+func (s *ExecutionMutableStateTaskSuite) TestAddGetCompleteVisibilityTask_Single() {
+	visibilityTasks := s.AddRandomTasks(
+		tasks.CategoryVisibility,
+		1,
+		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
+			return &tasks.StartExecutionVisibilityTask{
+				WorkflowKey:         workflowKey,
+				TaskID:              taskID,
+				VisibilityTimestamp: visibilityTimestamp,
+			}
+		},
+	)
+	s.GetAndCompleteHistoryTask(tasks.CategoryVisibility, visibilityTasks[0])
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetVisibilityTasks_Multiple() {
@@ -517,6 +612,34 @@ func (s *ExecutionMutableStateTaskSuite) RandomPaginateRange(
 	}
 
 	return createdTasks[firstTaskIdx:nextTaskIdx], inclusiveMinTaskKey, exclusiveMaxTaskKey
+}
+
+func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
+	category tasks.Category,
+	task tasks.Task,
+) {
+	key := task.GetKey()
+	resp, err := s.ExecutionManager.GetHistoryTask(s.Ctx, &p.GetHistoryTaskRequest{
+		ShardID:      s.ShardID,
+		TaskCategory: category,
+		TaskKey:      key,
+	})
+	s.NoError(err)
+	s.Equal(task, resp.Task)
+
+	err = s.ExecutionManager.CompleteHistoryTask(s.Ctx, &p.CompleteHistoryTaskRequest{
+		ShardID:      s.ShardID,
+		TaskCategory: category,
+		TaskKey:      key,
+	})
+	s.NoError(err)
+
+	_, err = s.ExecutionManager.GetHistoryTask(s.Ctx, &p.GetHistoryTaskRequest{
+		ShardID:      s.ShardID,
+		TaskCategory: category,
+		TaskKey:      key,
+	})
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func newTestSerializer(

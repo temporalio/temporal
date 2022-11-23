@@ -748,7 +748,7 @@ func (m *executionManagerImpl) GetHistoryTask(
 	if err != nil {
 		return nil, err
 	}
-	if resp.Key.FireTime != tasks.DefaultFireTime {
+	if !resp.Key.FireTime.Equal(tasks.DefaultFireTime) {
 		task.SetVisibilityTime(resp.Key.FireTime)
 	}
 	task.SetTaskID(resp.Key.TaskID)
