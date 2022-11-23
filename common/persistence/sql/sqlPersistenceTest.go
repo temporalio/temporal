@@ -99,10 +99,7 @@ func (s *TestCluster) SetupTestDatabase() {
 
 	schemaDir := s.schemaDir + "/"
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
-		temporalPackageDir, err := testhelper.GetRepoRootDirectory()
-		if err != nil {
-			s.logger.Fatal("Unable to get package dir.", tag.Error(err))
-		}
+		temporalPackageDir := testhelper.GetRepoRootDirectory()
 		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
 	s.LoadSchema(path.Join(schemaDir, "temporal", "schema.sql"))
