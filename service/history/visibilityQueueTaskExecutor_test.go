@@ -487,6 +487,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessModifyWorkflowProperties()
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessorDeleteExecution() {
+	s.T().SkipNow()
 	workflowKey := definition.WorkflowKey{
 		NamespaceID: s.namespaceID.String(),
 	}
