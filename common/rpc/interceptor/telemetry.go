@@ -26,7 +26,6 @@ package interceptor
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -168,7 +167,6 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 		return
 	}
 
-	fmt.Println("XXXXXXX", methodName, fullName)
 	switch methodName {
 	case respondWorkflowTaskCompleted:
 		// handle commands
