@@ -25,36 +25,28 @@
 package testhelper
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	"runtime"
+)
+
+var (
+	_, fileName, _, _ = runtime.Caller(0) // should be .../temporal/tests/testhelper/source_root.go
+	rootDirectory     = filepath.Dir(filepath.Dir(filepath.Dir(fileName)))
 )
 
 // GetRepoRootDirectory returns the root directory of the temporal repo.
-func GetRepoRootDirectory(opts ...Option) (string, error) {
+func GetRepoRootDirectory(opts ...Option) string {
 	p := &osParams{
 		Getenv: os.Getenv,
-		Getwd:  os.Getwd,
 	}
 	for _, opt := range opts {
 		opt(p)
 	}
-	if dir := p.Getenv("TEMPORAL_ROOT"); dir != "" {
-		return dir, nil
+	if customRootDirectory := p.Getenv("TEMPORAL_ROOT"); customRootDirectory != "" {
+		return customRootDirectory
 	}
-	dir, err := p.Getwd()
-	if err != nil {
-		return "", err
-	}
-	dir = filepath.ToSlash(dir)
-	temporalIndex := strings.LastIndex(dir, "/temporal/")
-	if temporalIndex == -1 {
-		return "", fmt.Errorf("unable to find repo path in %q. "+
-			"Use env var TEMPORAL_ROOT or clone the repo into folder named 'temporal'", dir)
-	}
-	root := dir[:temporalIndex+len("/temporal/")]
-	return root, nil
+	return rootDirectory
 }
 
 // region Options for GetRepoRootDirectory.
@@ -62,7 +54,6 @@ func GetRepoRootDirectory(opts ...Option) (string, error) {
 
 type osParams struct {
 	Getenv func(string) string
-	Getwd  func() (string, error)
 }
 
 type Option func(os *osParams)
@@ -70,12 +61,6 @@ type Option func(os *osParams)
 func WithGetenv(getenv func(string) string) Option {
 	return func(os *osParams) {
 		os.Getenv = getenv
-	}
-}
-
-func WithGetwd(getwd func() (string, error)) Option {
-	return func(os *osParams) {
-		os.Getwd = getwd
 	}
 }
 
