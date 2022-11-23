@@ -134,7 +134,7 @@ func (s *metadataSuite) Test_ClusterNameForFailoverVersion() {
 	s.Equal(s.secondClusterName, clusterName2)
 
 	clusterName3 := s.metadata.ClusterNameForFailoverVersion(true, 217)
-	s.Equal(unknownClusterNamePrefix+"217", clusterName3)
+	s.Equal(unknownClusterNamePrefix+"17", clusterName3)
 }
 
 func (s *metadataSuite) Test_RegisterMetadataChangeCallback() {
