@@ -127,17 +127,14 @@ func (s *metadataSuite) Test_IsVersionFromSameCluster() {
 }
 
 func (s *metadataSuite) Test_ClusterNameForFailoverVersion() {
-	clusterName, err := s.metadata.ClusterNameForFailoverVersion(true, 101)
-	s.NoError(err)
+	clusterName := s.metadata.ClusterNameForFailoverVersion(true, 101)
 	s.Equal(s.clusterName, clusterName)
 
-	clusterName2, err := s.metadata.ClusterNameForFailoverVersion(true, 204)
-	s.NoError(err)
+	clusterName2 := s.metadata.ClusterNameForFailoverVersion(true, 204)
 	s.Equal(s.secondClusterName, clusterName2)
 
-	clusterName3, err := s.metadata.ClusterNameForFailoverVersion(true, 217)
-	s.ErrorIs(err, ErrUnknownCluster)
-	s.Equal(FakeClusterNameForUnknownVersion, clusterName3)
+	clusterName3 := s.metadata.ClusterNameForFailoverVersion(true, 217)
+	s.Equal(unknownClusterNamePrefix+"17", clusterName3)
 }
 
 func (s *metadataSuite) Test_RegisterMetadataChangeCallback() {

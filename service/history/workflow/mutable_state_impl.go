@@ -4322,14 +4322,8 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, e
 		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encountered mismatch version, workflow task: %v, last write version %v", workflowTask.Version, lastWriteVersion))
 	}
 
-	lastWriteSourceCluster, err := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), lastWriteVersion)
-	if err != nil && err != cluster.ErrUnknownCluster {
-		return false, err
-	}
-	currentVersionCluster, err := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), currentVersion)
-	if err != nil {
-		return false, err
-	}
+	lastWriteSourceCluster := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), lastWriteVersion)
+	currentVersionCluster := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), currentVersion)
 	currentCluster := e.clusterMetadata.GetCurrentClusterName()
 
 	// there are 4 cases for version changes (based on version from namespace cache)
@@ -4397,10 +4391,7 @@ func (e *MutableStateImpl) closeTransactionWithPolicyCheck(
 	// Cannot use e.namespaceEntry.ActiveClusterName() because currentVersion may be updated during this transaction in
 	// passive cluster. For example: if passive cluster sees conflict and decided to terminate this workflow. The
 	// currentVersion on mutable state would be updated to point to last write version which is current (passive) cluster.
-	activeCluster, err := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), e.GetCurrentVersion())
-	if err != nil && err != cluster.ErrUnknownCluster {
-		return err
-	}
+	activeCluster := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), e.GetCurrentVersion())
 	currentCluster := e.clusterMetadata.GetCurrentClusterName()
 
 	if activeCluster != currentCluster {

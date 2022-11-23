@@ -29,6 +29,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,11 +49,8 @@ const (
 	defaultClusterMetadataPageSize = 100
 	refreshInterval                = time.Minute
 
-	FakeClusterForEmptyVersion       = "fake-cluster-for-empty-version"
-	FakeClusterNameForUnknownVersion = "fake_cluster-name"
+	unknownClusterNamePrefix = "unknown-cluster-"
 )
-
-var ErrUnknownCluster = fmt.Errorf("unknown cluster")
 
 type (
 	Metadata interface {
@@ -77,7 +75,7 @@ type (
 		// GetAllClusterInfo return the all cluster name -> corresponding info
 		GetAllClusterInfo() map[string]ClusterInformation
 		// ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
-		ClusterNameForFailoverVersion(isGlobalNamespace bool, failoverVersion int64) (string, error)
+		ClusterNameForFailoverVersion(isGlobalNamespace bool, failoverVersion int64) string
 		// GetFailoverVersionIncrement return the Failover version increment value
 		GetFailoverVersionIncrement() int64
 		RegisterMetadataChangeCallback(callbackId any, cb CallbackFn)
@@ -345,15 +343,15 @@ func (m *metadataImpl) GetAllClusterInfo() map[string]ClusterInformation {
 	return result
 }
 
-func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, failoverVersion int64) (string, error) {
+func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, failoverVersion int64) string {
 	if failoverVersion == common.EmptyVersion {
 		// Local namespace uses EmptyVersion. But local namespace could be promoted to global namespace. Once promoted,
 		// workflows with EmptyVersion could be replicated to other clusters. The receiving cluster needs to know that
 		// those workflows are not from their current cluster.
 		if isGlobalNamespace {
-			return FakeClusterForEmptyVersion, nil
+			return unknownClusterNamePrefix + strconv.Itoa(int(failoverVersion))
 		}
-		return m.currentClusterName, nil
+		return m.currentClusterName
 	}
 
 	if !isGlobalNamespace {
@@ -379,9 +377,9 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, fai
 			m.clusterInfo,
 			m.failoverVersionIncrement,
 		))
-		return FakeClusterNameForUnknownVersion, ErrUnknownCluster
+		return unknownClusterNamePrefix + strconv.Itoa(int(initialFailoverVersion))
 	}
-	return clusterName, nil
+	return clusterName
 }
 
 func (m *metadataImpl) GetFailoverVersionIncrement() int64 {
