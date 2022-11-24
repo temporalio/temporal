@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -217,7 +218,7 @@ func (t *transferQueueTaskExecutorBase) archiveVisibility(
 			HistoryURI:       namespaceEntry.HistoryArchivalState().URI,
 			Targets:          []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
 		},
-		CallerService:        common.HistoryServiceName,
+		CallerService:        primitives.HistoryService,
 		AttemptArchiveInline: true, // archive visibility inline by default
 	})
 

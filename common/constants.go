@@ -57,17 +57,6 @@ const (
 )
 
 const (
-	// FrontendServiceName is the name of the frontend service
-	FrontendServiceName = "frontend"
-	// HistoryServiceName is the name of the history service
-	HistoryServiceName = "history"
-	// MatchingServiceName is the name of the matching service
-	MatchingServiceName = "matching"
-	// WorkerServiceName is the name of the worker service
-	WorkerServiceName = "worker"
-)
-
-const (
 	// GetHistoryMaxPageSize is the max page size for get history
 	GetHistoryMaxPageSize = 256
 	// ReadDLQMessagesPageSize is the max page size for read DLQ messages

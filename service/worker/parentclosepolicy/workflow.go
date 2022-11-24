@@ -41,7 +41,6 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -227,7 +226,7 @@ func signalRemoteCluster(
 				},
 				Input:                 nil,
 				WorkflowTaskTimeout:   timestamp.DurationPtr(workflowTaskTimeout),
-				Identity:              currentCluster + "-" + common.WorkerServiceName + "-service",
+				Identity:              currentCluster + "-" + primitives.WorkerService + "-service",
 				WorkflowIdReusePolicy: workflowIDReusePolicy,
 				SignalName:            processorChannelName,
 				SignalInput:           signalInput,

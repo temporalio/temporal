@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc"
@@ -402,7 +403,7 @@ func SdkClientFactoryProvider(
 
 	hostPort := cfg.PublicClient.HostPort
 	if hostPort == "" {
-		hostPort = resolver.MakeURL(common.FrontendServiceName)
+		hostPort = resolver.MakeURL(primitives.FrontendService)
 	}
 
 	return sdk.NewClientFactory(
@@ -433,7 +434,7 @@ func RPCFactoryProvider(
 	svcCfg := cfg.Services[string(svcName)]
 	hostPort := cfg.PublicClient.HostPort
 	if hostPort == "" {
-		hostPort = resolver.MakeURL(common.FrontendServiceName)
+		hostPort = resolver.MakeURL(primitives.FrontendService)
 	}
 	return rpc.NewFactory(
 		&svcCfg.RPC,

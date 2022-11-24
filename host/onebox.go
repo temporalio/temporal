@@ -62,6 +62,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
@@ -207,11 +208,11 @@ func (c *temporalImpl) enableWorker() bool {
 
 func (c *temporalImpl) Start() error {
 	hosts := make(map[string][]string)
-	hosts[common.FrontendServiceName] = []string{c.FrontendGRPCAddress()}
-	hosts[common.MatchingServiceName] = []string{c.MatchingGRPCServiceAddress()}
-	hosts[common.HistoryServiceName] = c.HistoryServiceAddress()
+	hosts[primitives.FrontendService] = []string{c.FrontendGRPCAddress()}
+	hosts[primitives.MatchingService] = []string{c.MatchingGRPCServiceAddress()}
+	hosts[primitives.HistoryService] = c.HistoryServiceAddress()
 	if c.enableWorker() {
-		hosts[common.WorkerServiceName] = []string{c.WorkerGRPCServiceAddress()}
+		hosts[primitives.WorkerService] = []string{c.WorkerGRPCServiceAddress()}
 	}
 
 	// create temporal-system namespace, this must be created before starting
@@ -363,7 +364,7 @@ func (c *temporalImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 }
 
 func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.WaitGroup) {
-	serviceName := common.FrontendServiceName
+	serviceName := primitives.FrontendService
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
@@ -453,7 +454,7 @@ func (c *temporalImpl) startHistory(
 	hosts map[string][]string,
 	startWG *sync.WaitGroup,
 ) {
-	serviceName := common.HistoryServiceName
+	serviceName := primitives.HistoryService
 	for _, grpcPort := range c.HistoryServiceAddress() {
 		persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
@@ -545,7 +546,7 @@ func (c *temporalImpl) startHistory(
 }
 
 func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.WaitGroup) {
-	serviceName := common.MatchingServiceName
+	serviceName := primitives.MatchingService
 
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
@@ -607,7 +608,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 }
 
 func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.WaitGroup) {
-	serviceName := common.WorkerServiceName
+	serviceName := primitives.WorkerService
 
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
@@ -754,7 +755,7 @@ func sdkClientFactoryProvider(
 	logger log.Logger,
 ) sdk.ClientFactory {
 	return sdk.NewClientFactory(
-		resolver.MakeURL(common.FrontendServiceName),
+		resolver.MakeURL(primitives.FrontendService),
 		nil,
 		metricsHandler,
 		logger,
@@ -796,7 +797,7 @@ func newRPCFactoryImpl(sName resource.ServiceName, grpcHostPort listenHostPort, 
 		serviceName:  string(sName),
 		grpcHostPort: string(grpcHostPort),
 		logger:       logger,
-		frontendURL:  resolver.MakeURL(common.FrontendServiceName),
+		frontendURL:  resolver.MakeURL(primitives.FrontendService),
 	}
 }
 
