@@ -39,13 +39,10 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/matching"
 )
 
 func (s *integrationSuite) TestContinueAsNewWorkflow() {
@@ -257,120 +254,6 @@ GetHistoryLoop:
 		break GetHistoryLoop
 	}
 	s.True(workflowComplete)
-}
-
-func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
-	// TODO fix this
-	s.T().SkipNow()
-	id := "integration-continue-as-new-workflow-timeout-test"
-	wt := "integration-continue-as-new-workflow-timeout-test-type"
-	tl := "integration-continue-as-new-workflow-timeout-test-taskqueue"
-	identity := "worker1"
-
-	workflowType := &commonpb.WorkflowType{Name: wt}
-
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
-
-	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                uuid.New(),
-		Namespace:                s.namespace,
-		WorkflowId:               id,
-		WorkflowType:             workflowType,
-		TaskQueue:                taskQueue,
-		Input:                    nil,
-		WorkflowExecutionTimeout: timestamp.DurationPtr(5 * time.Second),
-		Identity:                 identity,
-	}
-
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err0)
-
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
-
-	workflowComplete := false
-	continueAsNewCounter := int32(0)
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		continueAsNewCounter++
-		buf := new(bytes.Buffer)
-		s.NoError(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
-		return []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-				WorkflowType:        workflowType,
-				TaskQueue:           taskQueue,
-				Input:               nil,
-				WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
-				WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
-			}},
-		}}, nil
-	}
-
-	poller := &TaskPoller{
-		Engine:              s.engine,
-		Namespace:           s.namespace,
-		TaskQueue:           taskQueue,
-		Identity:            identity,
-		WorkflowTaskHandler: wtHandler,
-		Logger:              s.Logger,
-		T:                   s.T(),
-	}
-
-	// process the workflow task and continue as new
-	_, err := poller.PollAndProcessWorkflowTask(true, false)
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-	s.NoError(err)
-
-	s.False(workflowComplete)
-
-	for i := 0; i < 100; i++ {
-		s.Logger.Info(fmt.Sprintf("Running Iteration `%v` for Making ContinueAsNew Command", i))
-		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace: s.namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
-			},
-		})
-		s.NoError(err)
-		h := historyResponse.History
-
-		firstEvent := h.Events[0]
-		lastEvent := h.Events[len(h.Events)-1]
-
-		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
-			s.Logger.Info("Workflow execution timedout.  Printing history for last run:")
-			common.PrettyPrintHistory(h)
-
-			workflowComplete = true
-			break
-		}
-
-		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
-			// Ensure that timeout is not caused by runTimeout
-			s.True(timestamp.TimeValue(lastEvent.EventTime).Sub(timestamp.TimeValue(firstEvent.EventTime)) < 5*time.Second)
-		}
-
-		// Only PollForWorkflowTask if the last event is WorkflowTaskScheduled and we have at least 2 seconds left
-		// (to account for potential delay from queueing and matching task forwarding).
-		expiration := firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionExpirationTime()
-		timeLeft := time.Until(*expiration)
-		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED && timeLeft > 2*time.Second {
-			s.Logger.Info(fmt.Sprintf("Execution not timed out yet. PollForWorkflowTask.  Last event is %v", lastEvent))
-			_, err := poller.PollAndProcessWorkflowTaskWithoutRetry(false, false)
-			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-			// Excluding ErrWorkflowCompleted because workflow might timeout while we are processing wtHandler.
-			if err != nil && err != matching.ErrNoTasks && err.Error() != consts.ErrWorkflowCompleted.Error() {
-				s.NoError(err)
-			}
-			time.Sleep(200 * time.Millisecond)
-		} else {
-			time.Sleep(timeLeft + 10*time.Millisecond)
-		}
-	}
-
-	s.True(workflowComplete)
-	s.Logger.Info(fmt.Sprintf("completed %v workflows", continueAsNewCounter))
-	s.True(continueAsNewCounter >= 3)
 }
 
 func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {

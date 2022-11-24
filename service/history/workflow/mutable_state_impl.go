@@ -1509,6 +1509,10 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 func (e *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *time.Duration) *time.Duration {
 	// lifetime of previous execution
 	lifetime := e.timeSource.Now().Sub(e.executionInfo.StartTime.UTC())
+	if e.executionInfo.ExecutionTime != nil {
+		lifetime = e.timeSource.Now().Sub(e.executionInfo.ExecutionTime.UTC())
+	}
+
 	interval := lifetime
 	if backoffDuration != nil {
 		// already has a backoff, add it to interval
