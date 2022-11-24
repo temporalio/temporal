@@ -258,5 +258,11 @@ type (
 		CloseTransactionAsMutation(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
 		GenerateMigrationTasks() (tasks.Task, error)
+
+		// ContinueAsNewMinBackoff calculate minimal backoff for next ContinueAsNew run.
+		// Input backoffDuration is current backoff for next run.
+		// If current backoff comply with minimal ContinueAsNew interval requirement, current backoff will be returned.
+		// Current backoff could be nil which means it does not have a backoff.
+		ContinueAsNewMinBackoff(backoffDuration *time.Duration) *time.Duration
 	}
 )

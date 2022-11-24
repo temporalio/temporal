@@ -1470,13 +1470,14 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
 
 	req := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:              e.namespaceEntry.ID().String(),
-		StartRequest:             createRequest,
-		ParentExecutionInfo:      parentExecutionInfo,
-		LastCompletionResult:     command.LastCompletionResult,
-		ContinuedFailure:         command.GetFailure(),
-		ContinueAsNewInitiator:   command.Initiator,
-		FirstWorkflowTaskBackoff: command.BackoffStartInterval,
+		NamespaceId:            e.namespaceEntry.ID().String(),
+		StartRequest:           createRequest,
+		ParentExecutionInfo:    parentExecutionInfo,
+		LastCompletionResult:   command.LastCompletionResult,
+		ContinuedFailure:       command.GetFailure(),
+		ContinueAsNewInitiator: command.Initiator,
+		// enforce minimal interval between runs to prevent tight loop continue as new spin.
+		FirstWorkflowTaskBackoff: previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -1503,6 +1504,24 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 
 	return event, nil
+}
+
+func (e *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *time.Duration) *time.Duration {
+	// lifetime of previous execution
+	lifetime := e.timeSource.Now().Sub(e.executionInfo.StartTime.UTC())
+	interval := lifetime
+	if backoffDuration != nil {
+		// already has a backoff, add it to interval
+		interval += *backoffDuration
+	}
+	// minimal interval for continue as new to prevent tight continue as new loop
+	minInterval := e.config.ContinueAsNewMinInterval(e.namespaceEntry.Name().String())
+	if interval < minInterval {
+		// enforce a minimal backoff
+		return timestamp.DurationPtr(minInterval - lifetime)
+	}
+
+	return backoffDuration
 }
 
 func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(

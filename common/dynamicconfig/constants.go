@@ -372,6 +372,9 @@ const (
 	QueuePendingTaskMaxCount = "history.queuePendingTasksMaxCount"
 	// QueueMaxReaderCount is the max number of readers in one multi-cursor queue
 	QueueMaxReaderCount = "history.queueMaxReaderCount"
+	// ContinueAsNewMinInterval is the minimal interval between continue_as_new executions.
+	// This is needed to prevent tight loop continue_as_new spin. Default is 1s.
+	ContinueAsNewMinInterval = "history.continueAsNewMinInterval"
 
 	// TaskSchedulerEnableRateLimiter indicates if rate limiter should be enabled in task scheduler
 	TaskSchedulerEnableRateLimiter = "history.taskSchedulerEnableRateLimiter"
