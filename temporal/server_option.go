@@ -27,6 +27,7 @@ package temporal
 import (
 	"net/http"
 
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/client"
@@ -44,12 +45,14 @@ import (
 type (
 	ServerOption interface {
 		apply(*serverOptions)
+		fxOptions() []fx.Option
 	}
 
 	applyFunc func(*serverOptions)
 )
 
 func (f applyFunc) apply(s *serverOptions) { f(s) }
+func (f applyFunc) fxOptions() []fx.Option { return nil }
 
 // WithConfig sets a custom configuration
 func WithConfig(cfg *config.Config) ServerOption {
@@ -187,4 +190,25 @@ func WithCustomMetricsHandler(provider metrics.MetricsHandler) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.metricHandler = provider
 	})
+}
+
+type fxOptions []fx.Option
+
+func (o fxOptions) apply(s *serverOptions) {}
+func (o fxOptions) fxOptions() []fx.Option { return o }
+
+// WithFxOptions passes a list of options to the underlying fx application. You can use this to do things like override
+// any dependency that the server needs. For example:
+//
+//	server.WithFxOptions(fx.Supply(myCustomConfig))
+//
+// This will override the default config with your custom config.
+// Additionally, you can decorate existing dependencies. For example:
+//
+//	server.WithFxOptions(fx.Decorate(func(cfg *config.Config) *config.Config {
+//		cfg.Persistence.NumHistoryShards = 10
+//		return cfg
+//	}))
+func WithFxOptions(opts ...fx.Option) ServerOption {
+	return fxOptions(opts)
 }

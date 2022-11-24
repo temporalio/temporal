@@ -132,6 +132,10 @@ type (
 )
 
 func NewServerFx(opts ...ServerOption) *ServerFx {
+	var fxOpts []fx.Option
+	for _, opt := range opts {
+		fxOpts = append(fxOpts, opt.fxOptions()...)
+	}
 	app := fx.New(
 		pprof.Module,
 		ServerFxImplModule,
@@ -146,6 +150,7 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 		fx.Provide(WorkerServiceProvider),
 
 		fx.Provide(ApplyClusterMetadataConfigProvider),
+		fx.Options(fxOpts...),
 		fx.Invoke(ServerLifetimeHooks),
 		FxLogAdapter,
 	)

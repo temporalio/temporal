@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/environment"
+	"go.temporal.io/server/tests/testhelper"
 )
 
 // TODO merge the initialization with existing persistence setup
@@ -56,8 +57,11 @@ const (
 
 	// TODO hard code this dir for now
 	//  need to merge persistence test config / initialization in one place
-	testPostgreSQLExecutionSchema  = "../../../schema/postgresql/v96/temporal/schema.sql"
-	testPostgreSQLVisibilitySchema = "../../../schema/postgresql/v96/visibility/schema.sql"
+)
+
+var (
+	testPostgreSQLExecutionSchema  = filepath.Join(testhelper.GetRepoRootDirectory(), "schema/postgresql/v96/temporal/schema.sql")
+	testPostgreSQLVisibilitySchema = filepath.Join(testhelper.GetRepoRootDirectory(), "schema/postgresql/v96/visibility/schema.sql")
 )
 
 type (
