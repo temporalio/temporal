@@ -159,9 +159,9 @@ func (p *shardPersistenceClient) GetOrCreateShard(
 ) (_ *GetOrCreateShardResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetOrCreateShardScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetOrCreateShardScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetOrCreateShard(ctx, request)
 }
 
@@ -171,9 +171,9 @@ func (p *shardPersistenceClient) UpdateShard(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceUpdateShardScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceUpdateShardScope, caller, startTime, retErr)
+	}()
 	return p.persistence.UpdateShard(ctx, request)
 }
 
@@ -183,9 +183,9 @@ func (p *shardPersistenceClient) AssertShardOwnership(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceAssertShardOwnershipScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceAssertShardOwnershipScope, caller, startTime, retErr)
+	}()
 	return p.persistence.AssertShardOwnership(ctx, request)
 }
 
@@ -203,9 +203,9 @@ func (p *executionPersistenceClient) CreateWorkflowExecution(
 ) (_ *CreateWorkflowExecutionResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceCreateWorkflowExecutionScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceCreateWorkflowExecutionScope, caller, startTime, retErr)
+	}()
 	return p.persistence.CreateWorkflowExecution(ctx, request)
 }
 
@@ -215,9 +215,9 @@ func (p *executionPersistenceClient) GetWorkflowExecution(
 ) (_ *GetWorkflowExecutionResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetWorkflowExecutionScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetWorkflowExecutionScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetWorkflowExecution(ctx, request)
 }
 
@@ -227,9 +227,9 @@ func (p *executionPersistenceClient) SetWorkflowExecution(
 ) (_ *SetWorkflowExecutionResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceSetWorkflowExecutionScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceSetWorkflowExecutionScope, caller, startTime, retErr)
+	}()
 	return p.persistence.SetWorkflowExecution(ctx, request)
 }
 
@@ -239,9 +239,9 @@ func (p *executionPersistenceClient) UpdateWorkflowExecution(
 ) (_ *UpdateWorkflowExecutionResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceUpdateWorkflowExecutionScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceUpdateWorkflowExecutionScope, caller, startTime, retErr)
+	}()
 	return p.persistence.UpdateWorkflowExecution(ctx, request)
 }
 
@@ -251,9 +251,9 @@ func (p *executionPersistenceClient) ConflictResolveWorkflowExecution(
 ) (_ *ConflictResolveWorkflowExecutionResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceConflictResolveWorkflowExecutionScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceConflictResolveWorkflowExecutionScope, caller, startTime, retErr)
+	}()
 	return p.persistence.ConflictResolveWorkflowExecution(ctx, request)
 }
 
@@ -263,9 +263,9 @@ func (p *executionPersistenceClient) DeleteWorkflowExecution(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceDeleteWorkflowExecutionScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceDeleteWorkflowExecutionScope, caller, startTime, retErr)
+	}()
 	return p.persistence.DeleteWorkflowExecution(ctx, request)
 }
 
@@ -275,9 +275,9 @@ func (p *executionPersistenceClient) DeleteCurrentWorkflowExecution(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceDeleteCurrentWorkflowExecutionScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceDeleteCurrentWorkflowExecutionScope, caller, startTime, retErr)
+	}()
 	return p.persistence.DeleteCurrentWorkflowExecution(ctx, request)
 }
 
@@ -287,9 +287,9 @@ func (p *executionPersistenceClient) GetCurrentExecution(
 ) (_ *GetCurrentExecutionResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetCurrentExecutionScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetCurrentExecutionScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetCurrentExecution(ctx, request)
 }
 
@@ -299,9 +299,9 @@ func (p *executionPersistenceClient) ListConcreteExecutions(
 ) (_ *ListConcreteExecutionsResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceListConcreteExecutionsScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceListConcreteExecutionsScope, caller, startTime, retErr)
+	}()
 	return p.persistence.ListConcreteExecutions(ctx, request)
 }
 
@@ -311,9 +311,9 @@ func (p *executionPersistenceClient) AddHistoryTasks(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceAddTasksScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceAddTasksScope, caller, startTime, retErr)
+	}()
 	return p.persistence.AddHistoryTasks(ctx, request)
 }
 
@@ -337,9 +337,9 @@ func (p *executionPersistenceClient) GetHistoryTask(
 
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(operation, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(operation, caller, startTime, retErr)
+	}()
 	return p.persistence.GetHistoryTask(ctx, request)
 }
 
@@ -363,9 +363,9 @@ func (p *executionPersistenceClient) GetHistoryTasks(
 
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(operation, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(operation, caller, startTime, retErr)
+	}()
 	return p.persistence.GetHistoryTasks(ctx, request)
 }
 
@@ -389,9 +389,9 @@ func (p *executionPersistenceClient) CompleteHistoryTask(
 
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(operation, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(operation, caller, startTime, retErr)
+	}()
 	return p.persistence.CompleteHistoryTask(ctx, request)
 }
 
@@ -415,9 +415,9 @@ func (p *executionPersistenceClient) RangeCompleteHistoryTasks(
 
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(operation, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(operation, caller, startTime, retErr)
+	}()
 	return p.persistence.RangeCompleteHistoryTasks(ctx, request)
 }
 
@@ -427,9 +427,9 @@ func (p *executionPersistenceClient) PutReplicationTaskToDLQ(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistencePutReplicationTaskToDLQScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistencePutReplicationTaskToDLQScope, caller, startTime, retErr)
+	}()
 	return p.persistence.PutReplicationTaskToDLQ(ctx, request)
 }
 
@@ -439,9 +439,9 @@ func (p *executionPersistenceClient) GetReplicationTasksFromDLQ(
 ) (_ *GetHistoryTasksResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetReplicationTasksFromDLQScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetReplicationTasksFromDLQScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetReplicationTasksFromDLQ(ctx, request)
 }
 
@@ -451,9 +451,9 @@ func (p *executionPersistenceClient) DeleteReplicationTaskFromDLQ(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceDeleteReplicationTaskFromDLQScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceDeleteReplicationTaskFromDLQScope, caller, startTime, retErr)
+	}()
 	return p.persistence.DeleteReplicationTaskFromDLQ(ctx, request)
 }
 
@@ -463,9 +463,9 @@ func (p *executionPersistenceClient) RangeDeleteReplicationTaskFromDLQ(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceRangeDeleteReplicationTaskFromDLQScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceRangeDeleteReplicationTaskFromDLQScope, caller, startTime, retErr)
+	}()
 	return p.persistence.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 }
 
@@ -483,9 +483,9 @@ func (p *taskPersistenceClient) CreateTasks(
 ) (_ *CreateTasksResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceCreateTasksScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceCreateTasksScope, caller, startTime, retErr)
+	}()
 	return p.persistence.CreateTasks(ctx, request)
 }
 
@@ -495,9 +495,9 @@ func (p *taskPersistenceClient) GetTasks(
 ) (_ *GetTasksResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetTasksScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetTasksScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetTasks(ctx, request)
 }
 
@@ -507,9 +507,9 @@ func (p *taskPersistenceClient) CompleteTask(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceCompleteTaskScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceCompleteTaskScope, caller, startTime, retErr)
+	}()
 	return p.persistence.CompleteTask(ctx, request)
 }
 
@@ -519,9 +519,9 @@ func (p *taskPersistenceClient) CompleteTasksLessThan(
 ) (_ int, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceCompleteTasksLessThanScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceCompleteTasksLessThanScope, caller, startTime, retErr)
+	}()
 	return p.persistence.CompleteTasksLessThan(ctx, request)
 }
 
@@ -531,9 +531,9 @@ func (p *taskPersistenceClient) CreateTaskQueue(
 ) (_ *CreateTaskQueueResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceCreateTaskQueueScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceCreateTaskQueueScope, caller, startTime, retErr)
+	}()
 	return p.persistence.CreateTaskQueue(ctx, request)
 }
 
@@ -543,9 +543,9 @@ func (p *taskPersistenceClient) UpdateTaskQueue(
 ) (_ *UpdateTaskQueueResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceUpdateTaskQueueScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceUpdateTaskQueueScope, caller, startTime, retErr)
+	}()
 	return p.persistence.UpdateTaskQueue(ctx, request)
 }
 
@@ -555,9 +555,9 @@ func (p *taskPersistenceClient) GetTaskQueue(
 ) (_ *GetTaskQueueResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetTaskQueueScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetTaskQueueScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetTaskQueue(ctx, request)
 }
 
@@ -567,9 +567,9 @@ func (p *taskPersistenceClient) ListTaskQueue(
 ) (_ *ListTaskQueueResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceListTaskQueueScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceListTaskQueueScope, caller, startTime, retErr)
+	}()
 	return p.persistence.ListTaskQueue(ctx, request)
 }
 
@@ -579,9 +579,9 @@ func (p *taskPersistenceClient) DeleteTaskQueue(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceDeleteTaskQueueScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceDeleteTaskQueueScope, caller, startTime, retErr)
+	}()
 	return p.persistence.DeleteTaskQueue(ctx, request)
 }
 
@@ -599,9 +599,9 @@ func (p *metadataPersistenceClient) CreateNamespace(
 ) (_ *CreateNamespaceResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceCreateNamespaceScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceCreateNamespaceScope, caller, startTime, retErr)
+	}()
 	return p.persistence.CreateNamespace(ctx, request)
 }
 
@@ -611,9 +611,9 @@ func (p *metadataPersistenceClient) GetNamespace(
 ) (_ *GetNamespaceResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetNamespaceScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetNamespaceScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetNamespace(ctx, request)
 }
 
@@ -623,9 +623,9 @@ func (p *metadataPersistenceClient) UpdateNamespace(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceUpdateNamespaceScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceUpdateNamespaceScope, caller, startTime, retErr)
+	}()
 	return p.persistence.UpdateNamespace(ctx, request)
 }
 
@@ -635,9 +635,9 @@ func (p *metadataPersistenceClient) RenameNamespace(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceRenameNamespaceScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceRenameNamespaceScope, caller, startTime, retErr)
+	}()
 	return p.persistence.RenameNamespace(ctx, request)
 }
 
@@ -647,9 +647,9 @@ func (p *metadataPersistenceClient) DeleteNamespace(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceDeleteNamespaceScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceDeleteNamespaceScope, caller, startTime, retErr)
+	}()
 	return p.persistence.DeleteNamespace(ctx, request)
 }
 
@@ -659,9 +659,9 @@ func (p *metadataPersistenceClient) DeleteNamespaceByName(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceDeleteNamespaceByNameScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceDeleteNamespaceByNameScope, caller, startTime, retErr)
+	}()
 	return p.persistence.DeleteNamespaceByName(ctx, request)
 }
 
@@ -671,9 +671,9 @@ func (p *metadataPersistenceClient) ListNamespaces(
 ) (_ *ListNamespacesResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceListNamespacesScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceListNamespacesScope, caller, startTime, retErr)
+	}()
 	return p.persistence.ListNamespaces(ctx, request)
 }
 
@@ -682,9 +682,9 @@ func (p *metadataPersistenceClient) GetMetadata(
 ) (_ *GetMetadataResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetMetadataScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetMetadataScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetMetadata(ctx)
 }
 
@@ -699,9 +699,9 @@ func (p *executionPersistenceClient) AppendHistoryNodes(
 ) (_ *AppendHistoryNodesResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceAppendHistoryNodesScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceAppendHistoryNodesScope, caller, startTime, retErr)
+	}()
 	return p.persistence.AppendHistoryNodes(ctx, request)
 }
 
@@ -712,9 +712,9 @@ func (p *executionPersistenceClient) AppendRawHistoryNodes(
 ) (_ *AppendHistoryNodesResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceAppendRawHistoryNodesScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceAppendRawHistoryNodesScope, caller, startTime, retErr)
+	}()
 	return p.persistence.AppendRawHistoryNodes(ctx, request)
 }
 
@@ -725,9 +725,9 @@ func (p *executionPersistenceClient) ParseHistoryBranchInfo(
 ) (_ *ParseHistoryBranchInfoResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceParseHistoryBranchInfoScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceParseHistoryBranchInfoScope, caller, startTime, retErr)
+	}()
 	return p.persistence.ParseHistoryBranchInfo(ctx, request)
 }
 
@@ -738,9 +738,9 @@ func (p *executionPersistenceClient) UpdateHistoryBranchInfo(
 ) (_ *UpdateHistoryBranchInfoResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceUpdateHistoryBranchInfoScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceUpdateHistoryBranchInfoScope, caller, startTime, retErr)
+	}()
 	return p.persistence.UpdateHistoryBranchInfo(ctx, request)
 }
 
@@ -751,9 +751,9 @@ func (p *executionPersistenceClient) NewHistoryBranch(
 ) (_ *NewHistoryBranchResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceNewHistoryBranchScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceNewHistoryBranchScope, caller, startTime, retErr)
+	}()
 	return p.persistence.NewHistoryBranch(ctx, request)
 }
 
@@ -764,9 +764,9 @@ func (p *executionPersistenceClient) ReadHistoryBranch(
 ) (_ *ReadHistoryBranchResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchScope, caller, startTime, retErr)
+	}()
 	return p.persistence.ReadHistoryBranch(ctx, request)
 }
 
@@ -776,9 +776,9 @@ func (p *executionPersistenceClient) ReadHistoryBranchReverse(
 ) (_ *ReadHistoryBranchReverseResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchReverseScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchReverseScope, caller, startTime, retErr)
+	}()
 	return p.persistence.ReadHistoryBranchReverse(ctx, request)
 }
 
@@ -789,9 +789,9 @@ func (p *executionPersistenceClient) ReadHistoryBranchByBatch(
 ) (_ *ReadHistoryBranchByBatchResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchScope, caller, startTime, retErr)
+	}()
 	return p.persistence.ReadHistoryBranchByBatch(ctx, request)
 }
 
@@ -802,9 +802,9 @@ func (p *executionPersistenceClient) ReadRawHistoryBranch(
 ) (_ *ReadRawHistoryBranchResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceReadHistoryBranchScope, caller, startTime, retErr)
+	}()
 	return p.persistence.ReadRawHistoryBranch(ctx, request)
 }
 
@@ -815,9 +815,9 @@ func (p *executionPersistenceClient) ForkHistoryBranch(
 ) (_ *ForkHistoryBranchResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceForkHistoryBranchScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceForkHistoryBranchScope, caller, startTime, retErr)
+	}()
 	return p.persistence.ForkHistoryBranch(ctx, request)
 }
 
@@ -828,9 +828,9 @@ func (p *executionPersistenceClient) DeleteHistoryBranch(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceDeleteHistoryBranchScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceDeleteHistoryBranchScope, caller, startTime, retErr)
+	}()
 	return p.persistence.DeleteHistoryBranch(ctx, request)
 }
 
@@ -841,9 +841,9 @@ func (p *executionPersistenceClient) TrimHistoryBranch(
 ) (_ *TrimHistoryBranchResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceTrimHistoryBranchScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceTrimHistoryBranchScope, caller, startTime, retErr)
+	}()
 	return p.persistence.TrimHistoryBranch(ctx, request)
 }
 
@@ -853,9 +853,9 @@ func (p *executionPersistenceClient) GetAllHistoryTreeBranches(
 ) (_ *GetAllHistoryTreeBranchesResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetAllHistoryTreeBranchesScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetAllHistoryTreeBranchesScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetAllHistoryTreeBranches(ctx, request)
 }
 
@@ -866,9 +866,9 @@ func (p *executionPersistenceClient) GetHistoryTree(
 ) (_ *GetHistoryTreeResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetHistoryTreeScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetHistoryTreeScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetHistoryTree(ctx, request)
 }
 
@@ -885,9 +885,9 @@ func (p *queuePersistenceClient) EnqueueMessage(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceEnqueueMessageScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceEnqueueMessageScope, caller, startTime, retErr)
+	}()
 	return p.persistence.EnqueueMessage(ctx, blob)
 }
 
@@ -898,9 +898,9 @@ func (p *queuePersistenceClient) ReadMessages(
 ) (_ []*QueueMessage, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceReadQueueMessagesScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceReadQueueMessagesScope, caller, startTime, retErr)
+	}()
 	return p.persistence.ReadMessages(ctx, lastMessageID, maxCount)
 }
 
@@ -910,9 +910,9 @@ func (p *queuePersistenceClient) UpdateAckLevel(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceUpdateAckLevelScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceUpdateAckLevelScope, caller, startTime, retErr)
+	}()
 	return p.persistence.UpdateAckLevel(ctx, metadata)
 }
 
@@ -921,9 +921,9 @@ func (p *queuePersistenceClient) GetAckLevels(
 ) (_ *InternalQueueMetadata, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetAckLevelScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetAckLevelScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetAckLevels(ctx)
 }
 
@@ -933,9 +933,9 @@ func (p *queuePersistenceClient) DeleteMessagesBefore(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceDeleteMessagesBeforeScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceDeleteMessagesBeforeScope, caller, startTime, retErr)
+	}()
 	return p.persistence.DeleteMessagesBefore(ctx, messageID)
 }
 
@@ -945,9 +945,9 @@ func (p *queuePersistenceClient) EnqueueMessageToDLQ(
 ) (_ int64, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceEnqueueMessageToDLQScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceEnqueueMessageToDLQScope, caller, startTime, retErr)
+	}()
 	return p.persistence.EnqueueMessageToDLQ(ctx, blob)
 }
 
@@ -960,9 +960,9 @@ func (p *queuePersistenceClient) ReadMessagesFromDLQ(
 ) (_ []*QueueMessage, _ []byte, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceReadMessagesFromDLQScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceReadMessagesFromDLQScope, caller, startTime, retErr)
+	}()
 	return p.persistence.ReadMessagesFromDLQ(ctx, firstMessageID, lastMessageID, pageSize, pageToken)
 }
 
@@ -972,9 +972,9 @@ func (p *queuePersistenceClient) DeleteMessageFromDLQ(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceDeleteMessageFromDLQScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceDeleteMessageFromDLQScope, caller, startTime, retErr)
+	}()
 	return p.persistence.DeleteMessageFromDLQ(ctx, messageID)
 }
 
@@ -985,9 +985,9 @@ func (p *queuePersistenceClient) RangeDeleteMessagesFromDLQ(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceRangeDeleteMessagesFromDLQScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceRangeDeleteMessagesFromDLQScope, caller, startTime, retErr)
+	}()
 	return p.persistence.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
 }
 
@@ -997,9 +997,9 @@ func (p *queuePersistenceClient) UpdateDLQAckLevel(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceUpdateDLQAckLevelScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceUpdateDLQAckLevelScope, caller, startTime, retErr)
+	}()
 	return p.persistence.UpdateDLQAckLevel(ctx, metadata)
 }
 
@@ -1008,9 +1008,9 @@ func (p *queuePersistenceClient) GetDLQAckLevels(
 ) (_ *InternalQueueMetadata, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetDLQAckLevelScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetDLQAckLevelScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetDLQAckLevels(ctx)
 }
 
@@ -1028,9 +1028,9 @@ func (p *clusterMetadataPersistenceClient) ListClusterMetadata(
 ) (_ *ListClusterMetadataResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceListClusterMetadataScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceListClusterMetadataScope, caller, startTime, retErr)
+	}()
 	return p.persistence.ListClusterMetadata(ctx, request)
 }
 
@@ -1039,9 +1039,9 @@ func (p *clusterMetadataPersistenceClient) GetCurrentClusterMetadata(
 ) (_ *GetClusterMetadataResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetCurrentClusterMetadataScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetCurrentClusterMetadataScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetCurrentClusterMetadata(ctx)
 }
 
@@ -1051,9 +1051,9 @@ func (p *clusterMetadataPersistenceClient) GetClusterMetadata(
 ) (_ *GetClusterMetadataResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetClusterMetadataScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetClusterMetadataScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetClusterMetadata(ctx, request)
 }
 
@@ -1063,9 +1063,9 @@ func (p *clusterMetadataPersistenceClient) SaveClusterMetadata(
 ) (_ bool, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceSaveClusterMetadataScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceSaveClusterMetadataScope, caller, startTime, retErr)
+	}()
 	return p.persistence.SaveClusterMetadata(ctx, request)
 }
 
@@ -1075,9 +1075,9 @@ func (p *clusterMetadataPersistenceClient) DeleteClusterMetadata(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceDeleteClusterMetadataScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceDeleteClusterMetadataScope, caller, startTime, retErr)
+	}()
 	return p.persistence.DeleteClusterMetadata(ctx, request)
 }
 
@@ -1091,9 +1091,9 @@ func (p *clusterMetadataPersistenceClient) GetClusterMembers(
 ) (_ *GetClusterMembersResponse, retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceGetClusterMembersScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceGetClusterMembersScope, caller, startTime, retErr)
+	}()
 	return p.persistence.GetClusterMembers(ctx, request)
 }
 
@@ -1103,9 +1103,9 @@ func (p *clusterMetadataPersistenceClient) UpsertClusterMembership(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceUpsertClusterMembershipScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceUpsertClusterMembershipScope, caller, startTime, retErr)
+	}()
 	return p.persistence.UpsertClusterMembership(ctx, request)
 }
 
@@ -1115,9 +1115,9 @@ func (p *clusterMetadataPersistenceClient) PruneClusterMembership(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistencePruneClusterMembershipScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistencePruneClusterMembershipScope, caller, startTime, retErr)
+	}()
 	return p.persistence.PruneClusterMembership(ctx, request)
 }
 
@@ -1127,9 +1127,9 @@ func (p *metadataPersistenceClient) InitializeSystemNamespaces(
 ) (retErr error) {
 	caller := headers.GetCallerInfo(ctx).CallerName
 	startTime := time.Now().UTC()
-	defer func(err error) {
-		p.recordRequestMetrics(metrics.PersistenceInitializeSystemNamespaceScope, caller, startTime, err)
-	}(retErr)
+	defer func() {
+		p.recordRequestMetrics(metrics.PersistenceInitializeSystemNamespaceScope, caller, startTime, retErr)
+	}()
 	return p.persistence.InitializeSystemNamespaces(ctx, currentClusterName)
 }
 
