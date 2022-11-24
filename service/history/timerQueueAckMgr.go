@@ -30,6 +30,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/exp/maps"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -41,7 +43,6 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"golang.org/x/exp/maps"
 )
 
 var (
@@ -50,12 +51,12 @@ var (
 
 type (
 	timerQueueAckMgrImpl struct {
-		scope               int
+		operation           string
 		isFailover          bool
 		shard               shard.Context
 		executionMgr        persistence.ExecutionManager
 		logger              log.Logger
-		metricsClient       metrics.Client
+		metricHandler       metrics.MetricsHandler
 		config              *configs.Config
 		timeNow             timeNow
 		updateTimerAckLevel updateTimerAckLevel
@@ -96,7 +97,7 @@ type (
 var _ timerQueueAckMgr = (*timerQueueAckMgrImpl)(nil)
 
 func newTimerQueueAckMgr(
-	scope int,
+	operation string,
 	shard shard.Context,
 	minLevel time.Time,
 	timeNow timeNow,
@@ -109,11 +110,11 @@ func newTimerQueueAckMgr(
 	ackLevel := tasks.NewKey(minLevel, 0)
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
-		scope:                  scope,
+		operation:              operation,
 		isFailover:             false,
 		shard:                  shard,
 		executionMgr:           shard.GetExecutionManager(),
-		metricsClient:          shard.GetMetricsClient(),
+		metricHandler:          shard.GetMetricsHandler(),
 		logger:                 logger,
 		config:                 shard.GetConfig(),
 		timeNow:                timeNow,
@@ -149,11 +150,11 @@ func newTimerQueueFailoverAckMgr(
 	ackLevel := tasks.NewKey(minLevel, 0)
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
-		scope:                  metrics.TimerActiveQueueProcessorScope,
+		operation:              metrics.TimerActiveQueueProcessorScope,
 		isFailover:             true,
 		shard:                  shard,
 		executionMgr:           shard.GetExecutionManager(),
-		metricsClient:          shard.GetMetricsClient(),
+		metricHandler:          shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.TimerActiveQueueProcessorScope)),
 		logger:                 logger,
 		config:                 shard.GetConfig(),
 		timeNow:                timeNow,
@@ -180,7 +181,11 @@ func (t *timerQueueAckMgrImpl) getFinishedChan() <-chan struct{} {
 
 func (t *timerQueueAckMgrImpl) readTimerTasks() ([]queues.Executable, *time.Time, bool, error) {
 	if t.maxQueryLevel == t.minQueryLevel {
-		t.maxQueryLevel = t.shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTimer, t.clusterName, t.singleProcessorMode).FireTime
+		highReadWatermark, err := t.shard.UpdateScheduledQueueExclusiveHighReadWatermark(t.clusterName, t.singleProcessorMode)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		t.maxQueryLevel = highReadWatermark.FireTime
 		t.maxQueryLevel = util.MaxTime(t.minQueryLevel, t.maxQueryLevel)
 	}
 	minQueryLevel := t.minQueryLevel
@@ -295,7 +300,9 @@ func (t *timerQueueAckMgrImpl) getAckLevel() tasks.Key {
 }
 
 func (t *timerQueueAckMgrImpl) updateAckLevel() error {
-	t.metricsClient.IncCounter(t.scope, metrics.AckLevelUpdateCounter)
+	t.metricHandler.Counter(metrics.AckLevelUpdateCounter.GetMetricName()).Record(
+		1,
+		metrics.OperationTag(t.operation))
 
 	t.Lock()
 	ackLevel := t.ackLevel
@@ -309,11 +316,23 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() error {
 	if pendingTasks > warnPendingTasks {
 		t.logger.Warn("Too many pending tasks.")
 	}
-	switch t.scope {
+	switch t.operation {
 	case metrics.TimerActiveQueueProcessorScope:
-		t.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTimerActivePendingTasksTimer, pendingTasks)
+		t.metricHandler.Histogram(
+			metrics.ShardInfoTimerActivePendingTasksTimer.GetMetricName(),
+			metrics.ShardInfoTimerActivePendingTasksTimer.GetMetricUnit(),
+		).Record(
+			int64(pendingTasks),
+			metrics.OperationTag(metrics.ShardInfoScope),
+		)
 	case metrics.TimerStandbyQueueProcessorScope:
-		t.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTimerStandbyPendingTasksTimer, pendingTasks)
+		t.metricHandler.Histogram(
+			metrics.ShardInfoTimerStandbyPendingTasksTimer.GetMetricName(),
+			metrics.ShardInfoTimerStandbyPendingTasksTimer.GetMetricUnit(),
+		).Record(
+			int64(pendingTasks),
+			metrics.OperationTag(metrics.ShardInfoScope),
+		)
 	}
 
 MoveAckLevelLoop:
@@ -344,7 +363,9 @@ MoveAckLevelLoop:
 
 	t.Unlock()
 	if err := t.updateTimerAckLevel(ackLevel); err != nil {
-		t.metricsClient.IncCounter(t.scope, metrics.AckLevelUpdateFailedCounter)
+		t.metricHandler.Counter(metrics.AckLevelUpdateFailedCounter.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(t.operation))
 		t.logger.Error("Error updating timer ack level for shard", tag.Error(err))
 		return err
 	}

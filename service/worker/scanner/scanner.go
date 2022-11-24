@@ -89,7 +89,7 @@ type (
 		cfg               *Config
 		logger            log.Logger
 		sdkClientFactory  sdk.ClientFactory
-		metricsClient     metrics.Client
+		metricsHandler    metrics.MetricsHandler
 		executionManager  persistence.ExecutionManager
 		taskManager       persistence.TaskManager
 		historyClient     historyservice.HistoryServiceClient
@@ -116,7 +116,7 @@ func New(
 	logger log.Logger,
 	cfg *Config,
 	sdkClientFactory sdk.ClientFactory,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	executionManager persistence.ExecutionManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
@@ -129,7 +129,7 @@ func New(
 			cfg:               cfg,
 			sdkClientFactory:  sdkClientFactory,
 			logger:            logger,
-			metricsClient:     metricsClient,
+			metricsHandler:    metricsHandler,
 			executionManager:  executionManager,
 			taskManager:       taskManager,
 			historyClient:     historyClient,

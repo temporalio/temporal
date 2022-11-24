@@ -25,9 +25,7 @@
 package cassandra
 
 import (
-	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -40,6 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/environment"
+	"go.temporal.io/server/tests/testhelper"
 )
 
 const (
@@ -110,10 +109,7 @@ func (s *TestCluster) SetupTestDatabase() {
 	schemaDir := s.schemaDir + "/"
 
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {
-		temporalPackageDir, err := getTemporalPackageDir()
-		if err != nil {
-			s.logger.Fatal("Unable to get package dir.", tag.Error(err))
-		}
+		temporalPackageDir := testhelper.GetRepoRootDirectory()
 		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
 
@@ -185,25 +181,4 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 			s.logger.Fatal("LoadSchema", tag.Error(err))
 		}
 	}
-}
-
-func getTemporalPackageDir() (string, error) {
-	var err error
-	temporalPackageDir := os.Getenv("TEMPORAL_ROOT")
-	if temporalPackageDir == "" {
-		temporalPackageDir, err = os.Getwd()
-		if err != nil {
-			panic(err)
-		}
-		temporalPackageDir = filepath.ToSlash(temporalPackageDir)
-		temporalIndex := strings.LastIndex(temporalPackageDir, "/temporal/")
-		if temporalIndex == -1 {
-			panic("Unable to find repo path. Use env var TEMPORAL_ROOT or clone the repo into folder named 'temporal'")
-		}
-		temporalPackageDir = temporalPackageDir[:temporalIndex+len("/temporal/")]
-		if err != nil {
-			panic(err)
-		}
-	}
-	return temporalPackageDir, err
 }

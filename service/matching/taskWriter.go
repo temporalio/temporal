@@ -163,7 +163,7 @@ func (w *taskWriter) appendTask(
 	case w.appendCh <- req:
 		select {
 		case r := <-ch:
-			w.tlMgr.metricScope.RecordTimer(metrics.TaskWriteLatencyPerTaskQueue, time.Since(startTime))
+			w.tlMgr.metricsHandler.Timer(metrics.TaskWriteLatencyPerTaskQueue.GetMetricName()).Record(time.Since(startTime))
 			return r.persistenceResponse, r.err
 		case <-w.writeLoop.Done():
 			// if we are shutting down, this request will never make
@@ -171,7 +171,7 @@ func (w *taskWriter) appendTask(
 			return nil, errShutdown
 		}
 	default: // channel is full, throttle
-		w.tlMgr.metricScope.IncCounter(metrics.TaskWriteThrottlePerTaskQueueCounter)
+		w.tlMgr.metricsHandler.Counter(metrics.TaskWriteThrottlePerTaskQueueCounter.GetMetricName()).Record(1)
 		return nil, serviceerror.NewResourceExhausted(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
 			"Too many outstanding appends to the task queue")
@@ -302,10 +302,10 @@ func (w *taskWriter) renewLeaseWithRetry(
 		newState, err = w.idAlloc.RenewLease(ctx)
 		return
 	}
-	w.tlMgr.metricScope.IncCounter(metrics.LeaseRequestPerTaskQueueCounter)
+	w.tlMgr.metricsHandler.Counter(metrics.LeaseRequestPerTaskQueueCounter.GetMetricName()).Record(1)
 	err := backoff.ThrottleRetryContext(ctx, op, retryPolicy, retryErrors)
 	if err != nil {
-		w.tlMgr.metricScope.IncCounter(metrics.LeaseFailurePerTaskQueueCounter)
+		w.tlMgr.metricsHandler.Counter(metrics.LeaseFailurePerTaskQueueCounter.GetMetricName()).Record(1)
 		return newState, err
 	}
 	return newState, nil

@@ -27,6 +27,8 @@ package history
 import (
 	"sync"
 
+	"golang.org/x/exp/maps"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -34,7 +36,6 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
-	"golang.org/x/exp/maps"
 )
 
 type (
@@ -43,13 +44,13 @@ type (
 	// Outstanding tasks map uses the task id sequencer as the key, which is used by updateAckLevel to move the ack level
 	// for the shard when all preceding tasks are acknowledged.
 	queueAckMgrImpl struct {
-		isFailover    bool
-		shard         shard.Context
-		options       *QueueProcessorOptions
-		processor     processor
-		logger        log.Logger
-		metricsClient metrics.Client
-		finishedChan  chan struct{}
+		isFailover     bool
+		shard          shard.Context
+		options        *QueueProcessorOptions
+		processor      processor
+		logger         log.Logger
+		metricsHandler metrics.MetricsHandler
+		finishedChan   chan struct{}
 
 		sync.RWMutex
 		outstandingExecutables map[int64]queues.Executable
@@ -85,7 +86,7 @@ func newQueueAckMgr(
 		readLevel:              ackLevel,
 		ackLevel:               ackLevel,
 		logger:                 logger,
-		metricsClient:          shard.GetMetricsClient(),
+		metricsHandler:         shard.GetMetricsHandler(),
 		finishedChan:           nil,
 		executableInitializer:  executableInitializer,
 	}
@@ -109,7 +110,7 @@ func newQueueFailoverAckMgr(
 		readLevel:              ackLevel,
 		ackLevel:               ackLevel,
 		logger:                 logger,
-		metricsClient:          shard.GetMetricsClient(),
+		metricsHandler:         shard.GetMetricsHandler(),
 		finishedChan:           make(chan struct{}, 1),
 		executableInitializer:  executableInitializer,
 	}
@@ -175,7 +176,9 @@ func (a *queueAckMgrImpl) getFinishedChan() <-chan struct{} {
 }
 
 func (a *queueAckMgrImpl) updateQueueAckLevel() error {
-	a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateCounter)
+	a.metricsHandler.Counter(metrics.AckLevelUpdateCounter.GetMetricName()).Record(
+		1,
+		metrics.OperationTag(a.options.Operation))
 
 	a.Lock()
 	ackLevel := a.ackLevel
@@ -190,16 +193,28 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() error {
 		a.logger.Warn("Too many pending tasks")
 	}
 
-	metricsScope := a.metricsClient.Scope(metrics.ShardInfoScope)
-	switch a.options.MetricScope {
+	metricsScope := a.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
+	switch a.options.Operation {
 	case metrics.ReplicatorQueueProcessorScope:
-		metricsScope.RecordDistribution(metrics.ShardInfoReplicationPendingTasksTimer, pendingTasks)
+		metricsScope.Histogram(
+			metrics.ShardInfoReplicationPendingTasksTimer.GetMetricName(),
+			metrics.ShardInfoReplicationPendingTasksTimer.GetMetricUnit(),
+		).Record(int64(pendingTasks))
 	case metrics.TransferActiveQueueProcessorScope:
-		metricsScope.RecordDistribution(metrics.ShardInfoTransferActivePendingTasksTimer, pendingTasks)
+		metricsScope.Histogram(
+			metrics.ShardInfoTransferActivePendingTasksTimer.GetMetricName(),
+			metrics.ShardInfoTransferActivePendingTasksTimer.GetMetricUnit(),
+		).Record(int64(pendingTasks))
 	case metrics.TransferStandbyQueueProcessorScope:
-		metricsScope.RecordDistribution(metrics.ShardInfoTransferStandbyPendingTasksTimer, pendingTasks)
+		metricsScope.Histogram(
+			metrics.ShardInfoTransferStandbyPendingTasksTimer.GetMetricName(),
+			metrics.ShardInfoTransferStandbyPendingTasksTimer.GetMetricUnit(),
+		).Record(int64(pendingTasks))
 	case metrics.VisibilityQueueProcessorScope:
-		metricsScope.RecordDistribution(metrics.ShardInfoVisibilityPendingTasksTimer, pendingTasks)
+		metricsScope.Histogram(
+			metrics.ShardInfoVisibilityPendingTasksTimer.GetMetricName(),
+			metrics.ShardInfoVisibilityPendingTasksTimer.GetMetricUnit(),
+		).Record(int64(pendingTasks))
 	}
 
 MoveAckLevelLoop:
@@ -230,7 +245,9 @@ MoveAckLevelLoop:
 
 	a.Unlock()
 	if err := a.processor.updateAckLevel(ackLevel); err != nil {
-		a.metricsClient.IncCounter(a.options.MetricScope, metrics.AckLevelUpdateFailedCounter)
+		a.metricsHandler.Counter(metrics.AckLevelUpdateFailedCounter.GetMetricName()).Record(
+			1,
+			metrics.OperationTag(a.options.Operation))
 		a.logger.Error("Error updating ack level for shard", tag.Error(err), tag.OperationFailed)
 		return err
 	}

@@ -92,6 +92,10 @@ type Config struct {
 	QueuePendingTaskMaxCount         dynamicconfig.IntPropertyFn
 	QueueMaxReaderCount              dynamicconfig.IntPropertyFn
 
+	TaskSchedulerEnableRateLimiter dynamicconfig.BoolPropertyFn
+	TaskSchedulerMaxQPS            dynamicconfig.IntPropertyFn
+	TaskSchedulerNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
+
 	// TimerQueueProcessor settings
 	TimerTaskHighPriorityRPS                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
@@ -116,6 +120,7 @@ type Config struct {
 	TimerProcessorMaxTimeShift                       dynamicconfig.DurationPropertyFn
 	TimerProcessorHistoryArchivalSizeLimit           dynamicconfig.IntPropertyFn
 	TimerProcessorArchivalTimeLimit                  dynamicconfig.DurationPropertyFn
+	RetentionTimerJitterDuration                     dynamicconfig.DurationPropertyFn
 
 	// TransferQueueProcessor settings
 	TransferTaskHighPriorityRPS                         dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -188,14 +193,18 @@ type Config struct {
 	DurableArchivalEnabled    dynamicconfig.BoolPropertyFn
 
 	// Size limit related settings
-	BlobSizeLimitError     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	BlobSizeLimitWarn      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MemoSizeLimitError     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MemoSizeLimitWarn      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistorySizeLimitError  dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistorySizeLimitWarn   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryCountLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
-	HistoryCountLimitWarn  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitError             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	BlobSizeLimitWarn              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitError             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitWarn              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeLimitError          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistorySizeLimitWarn           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountLimitError         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCountLimitWarn          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingChildExecutionsLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingActivitiesLimit      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingSignalsLimit         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumPendingCancelsRequestLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// DefaultActivityRetryOptions specifies the out-of-box retry policy if
 	// none is configured on the Activity by the user.
@@ -265,6 +274,7 @@ type Config struct {
 	VisibilityProcessorPollBackoffInterval                dynamicconfig.DurationPropertyFn
 	VisibilityProcessorVisibilityArchivalTimeLimit        dynamicconfig.DurationPropertyFn
 	VisibilityProcessorEnsureCloseBeforeDelete            dynamicconfig.BoolPropertyFn
+	VisibilityProcessorEnableCloseWorkflowCleanup         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -344,6 +354,10 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		QueuePendingTaskMaxCount:         dc.GetIntProperty(dynamicconfig.QueuePendingTaskMaxCount, 10000),
 		QueueMaxReaderCount:              dc.GetIntProperty(dynamicconfig.QueueMaxReaderCount, 2),
 
+		TaskSchedulerEnableRateLimiter: dc.GetBoolProperty(dynamicconfig.TaskSchedulerEnableRateLimiter, false),
+		TaskSchedulerMaxQPS:            dc.GetIntProperty(dynamicconfig.TaskSchedulerMaxQPS, 0),
+		TaskSchedulerNamespaceMaxQPS:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskSchedulerNamespaceMaxQPS, 0),
+
 		TimerTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
 		TimerTaskWorkerCount:                             dc.GetIntProperty(dynamicconfig.TimerTaskWorkerCount, 10),
 		TimerTaskMaxRetryCount:                           dc.GetIntProperty(dynamicconfig.TimerTaskMaxRetryCount, 20),
@@ -366,6 +380,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TimerProcessorMaxTimeShift:                       dc.GetDurationProperty(dynamicconfig.TimerProcessorMaxTimeShift, 1*time.Second),
 		TimerProcessorHistoryArchivalSizeLimit:           dc.GetIntProperty(dynamicconfig.TimerProcessorHistoryArchivalSizeLimit, 500*1024),
 		TimerProcessorArchivalTimeLimit:                  dc.GetDurationProperty(dynamicconfig.TimerProcessorArchivalTimeLimit, 1*time.Second),
+		RetentionTimerJitterDuration:                     dc.GetDurationProperty(dynamicconfig.RetentionTimerJitterDuration, 30*time.Minute),
 
 		TransferTaskBatchSize:                               dc.GetIntProperty(dynamicconfig.TransferTaskBatchSize, 100),
 		TransferTaskWorkerCount:                             dc.GetIntProperty(dynamicconfig.TransferTaskWorkerCount, 10),
@@ -426,14 +441,18 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 			return false
 		},
 
-		BlobSizeLimitError:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
-		BlobSizeLimitWarn:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 512*1024),
-		MemoSizeLimitError:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitError, 2*1024*1024),
-		MemoSizeLimitWarn:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitWarn, 2*1024),
-		HistorySizeLimitError:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitError, 50*1024*1024),
-		HistorySizeLimitWarn:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitWarn, 10*1024*1024),
-		HistoryCountLimitError: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitError, 50*1024),
-		HistoryCountLimitWarn:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitWarn, 10*1024),
+		BlobSizeLimitError:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
+		BlobSizeLimitWarn:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 512*1024),
+		MemoSizeLimitError:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitError, 2*1024*1024),
+		MemoSizeLimitWarn:              dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitWarn, 2*1024),
+		NumPendingChildExecutionsLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingChildExecutionsLimitError, 50000),
+		NumPendingActivitiesLimit:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingActivitiesLimitError, 50000),
+		NumPendingSignalsLimit:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingSignalsLimitError, 50000),
+		NumPendingCancelsRequestLimit:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.NumPendingCancelRequestsLimitError, 50000),
+		HistorySizeLimitError:          dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitError, 50*1024*1024),
+		HistorySizeLimitWarn:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitWarn, 10*1024*1024),
+		HistoryCountLimitError:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitError, 50*1024),
+		HistoryCountLimitWarn:          dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitWarn, 10*1024),
 
 		ThrottledLogRPS:   dc.GetIntProperty(dynamicconfig.HistoryThrottledLogRPS, 4),
 		EnableStickyQuery: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableStickyQuery, true),
@@ -486,7 +505,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		VisibilityProcessorMaxReschedulerSize:                 dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxReschedulerSize, 10000),
 		VisibilityProcessorPollBackoffInterval:                dc.GetDurationProperty(dynamicconfig.VisibilityProcessorPollBackoffInterval, 5*time.Second),
 		VisibilityProcessorVisibilityArchivalTimeLimit:        dc.GetDurationProperty(dynamicconfig.VisibilityProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
-		VisibilityProcessorEnsureCloseBeforeDelete:            dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnsureCloseBeforeDelete, true),
+		VisibilityProcessorEnsureCloseBeforeDelete:            dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnsureCloseBeforeDelete, false),
+		VisibilityProcessorEnableCloseWorkflowCleanup:         dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.VisibilityProcessorEnableCloseWorkflowCleanup, false),
 
 		SearchAttributesNumberOfKeysLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),

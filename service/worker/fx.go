@@ -94,7 +94,7 @@ func ConfigProvider(
 
 func VisibilityManagerProvider(
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	persistenceConfig *config.Persistence,
 	serviceConfig *Config,
 	esConfig *esclient.Config,
@@ -121,7 +121,7 @@ func VisibilityManagerProvider(
 		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
 		dynamicconfig.GetBoolPropertyFn(false), // worker visibility never write
 		serviceConfig.VisibilityDisableOrderByClause,
-		metricsClient,
+		metricsHandler,
 		logger,
 	)
 }

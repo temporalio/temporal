@@ -113,6 +113,18 @@ const (
 	MemoSizeLimitError = "limit.memoSize.error"
 	// MemoSizeLimitWarn is the per event memo size limit for warning
 	MemoSizeLimitWarn = "limit.memoSize.warn"
+	// NumPendingChildExecutionsLimitError is the maximum number of pending child workflows a workflow can have before
+	// StartChildWorkflowExecution commands will fail.
+	NumPendingChildExecutionsLimitError = "limit.numPendingChildExecutions.error"
+	// NumPendingActivitiesLimitError is the maximum number of pending activities a workflow can have before
+	// ScheduleActivityTask will fail.
+	NumPendingActivitiesLimitError = "limit.numPendingActivities.error"
+	// NumPendingSignalsLimitError is the maximum number of pending signals a workflow can have before
+	// SignalExternalWorkflowExecution commands from this workflow will fail.
+	NumPendingSignalsLimitError = "limit.numPendingSignals.error"
+	// NumPendingCancelRequestsLimitError is the maximum number of pending requests to cancel other workflows a workflow can have before
+	// RequestCancelExternalWorkflowExecution commands will fail.
+	NumPendingCancelRequestsLimitError = "limit.numPendingCancelRequests.error"
 	// HistorySizeLimitError is the per workflow execution history size limit
 	HistorySizeLimitError = "limit.historySize.error"
 	// HistorySizeLimitWarn is the per workflow execution history size limit for warning
@@ -310,6 +322,7 @@ const (
 	// HistoryPersistenceGlobalMaxQPS is the max qps history cluster can query DB
 	HistoryPersistenceGlobalMaxQPS = "history.persistenceGlobalMaxQPS"
 	// HistoryPersistenceNamespaceMaxQPS is the max qps each namespace on history host can query DB
+	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
 	HistoryPersistenceNamespaceMaxQPS = "history.persistenceNamespaceMaxQPS"
 	// HistoryEnablePersistencePriorityRateLimiting indicates if priority rate limiting is enabled in history persistence client
 	HistoryEnablePersistencePriorityRateLimiting = "history.enablePersistencePriorityRateLimiting"
@@ -359,6 +372,16 @@ const (
 	QueuePendingTaskMaxCount = "history.queuePendingTasksMaxCount"
 	// QueueMaxReaderCount is the max number of readers in one multi-cursor queue
 	QueueMaxReaderCount = "history.queueMaxReaderCount"
+
+	// TaskSchedulerEnableRateLimiter indicates if rate limiter should be enabled in task scheduler
+	TaskSchedulerEnableRateLimiter = "history.taskSchedulerEnableRateLimiter"
+	// TaskSchedulerMaxQPS is the max qps task schedulers on a host can schedule tasks
+	// If value less or equal to 0, will fall back to HistoryPersistenceMaxQPS
+	TaskSchedulerMaxQPS = "history.taskSchedulerMaxQPS"
+	// TaskSchedulerNamespaceMaxQPS is the max qps task schedulers on a host can schedule tasks for a certain namespace
+	// If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
+	TaskSchedulerNamespaceMaxQPS = "history.taskSchedulerNamespaceMaxQPS"
+
 	// TimerTaskBatchSize is batch size for timer processor to process tasks
 	TimerTaskBatchSize = "history.timerTaskBatchSize"
 	// TimerTaskWorkerCount is number of task workers for timer processor
@@ -405,6 +428,9 @@ const (
 	TimerProcessorHistoryArchivalSizeLimit = "history.timerProcessorHistoryArchivalSizeLimit"
 	// TimerProcessorArchivalTimeLimit is the upper time limit for inline history archival
 	TimerProcessorArchivalTimeLimit = "history.timerProcessorArchivalTimeLimit"
+	// RetentionTimerJitterDuration is a time duration jitter to distribute timer from T0 to T0 + jitter duration
+	RetentionTimerJitterDuration = "history.retentionTimerJitterDuration"
+
 	// TransferTaskBatchSize is batch size for transferQueueProcessor
 	TransferTaskBatchSize = "history.transferTaskBatchSize"
 	// TransferProcessorFailoverMaxPollRPS is max poll rate per second for transferQueueProcessor
@@ -490,7 +516,11 @@ const (
 	// VisibilityProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
 	VisibilityProcessorVisibilityArchivalTimeLimit = "history.visibilityProcessorVisibilityArchivalTimeLimit"
 	// VisibilityProcessorEnsureCloseBeforeDelete means we ensure the visibility of an execution is closed before we delete its visibility records
-	VisibilityProcessorEnsureCloseBeforeDelete = "history.transferProcessorEnsureCloseBeforeDelete"
+	VisibilityProcessorEnsureCloseBeforeDelete = "history.visibilityProcessorEnsureCloseBeforeDelete"
+	// VisibilityProcessorEnableCloseWorkflowCleanup to clean up the mutable state after visibility
+	// close task has been processed. Must use Elasticsearch as visibility store, otherwise workflow
+	// data (eg: search attributes) will be lost after workflow is closed.
+	VisibilityProcessorEnableCloseWorkflowCleanup = "history.visibilityProcessorEnableCloseWorkflowCleanup"
 
 	// ArchivalTaskBatchSize is batch size for archivalQueueProcessor
 	ArchivalTaskBatchSize = "history.archivalTaskBatchSize"

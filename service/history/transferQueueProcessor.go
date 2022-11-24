@@ -66,13 +66,13 @@ type (
 		sdkClientFactory          sdk.ClientFactory
 		taskAllocator             taskAllocator
 		config                    *configs.Config
-		metricProvider            metrics.MetricsHandler
-		metricsClient             metrics.Client
+		metricHandler             metrics.MetricsHandler
 		clientBean                client.Bean
 		matchingClient            matchingservice.MatchingServiceClient
 		historyClient             historyservice.HistoryServiceClient
 		ackLevel                  int64
 		hostRateLimiter           quotas.RateLimiter
+		schedulerRateLimiter      queues.SchedulerRateLimiter
 		logger                    log.Logger
 		isStarted                 int32
 		isStopped                 int32
@@ -97,6 +97,7 @@ func newTransferQueueProcessor(
 	historyClient historyservice.HistoryServiceClient,
 	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
+	schedulerRateLimiter queues.SchedulerRateLimiter,
 ) queues.Queue {
 
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
@@ -108,25 +109,25 @@ func newTransferQueueProcessor(
 	taskAllocator := newTaskAllocator(shard)
 
 	return &transferQueueProcessorImpl{
-		singleProcessor:    singleProcessor,
-		currentClusterName: currentClusterName,
-		shard:              shard,
-		workflowCache:      workflowCache,
-		archivalClient:     archivalClient,
-		sdkClientFactory:   sdkClientFactory,
-		taskAllocator:      taskAllocator,
-		config:             config,
-		metricProvider:     metricProvider,
-		metricsClient:      shard.GetMetricsClient(),
-		clientBean:         clientBean,
-		matchingClient:     matchingClient,
-		historyClient:      historyClient,
-		ackLevel:           shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
-		hostRateLimiter:    hostRateLimiter,
-		logger:             logger,
-		shutdownChan:       make(chan struct{}),
-		scheduler:          scheduler,
-		priorityAssigner:   priorityAssigner,
+		singleProcessor:      singleProcessor,
+		currentClusterName:   currentClusterName,
+		shard:                shard,
+		workflowCache:        workflowCache,
+		archivalClient:       archivalClient,
+		sdkClientFactory:     sdkClientFactory,
+		taskAllocator:        taskAllocator,
+		config:               config,
+		metricHandler:        metricProvider,
+		clientBean:           clientBean,
+		matchingClient:       matchingClient,
+		historyClient:        historyClient,
+		ackLevel:             shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
+		hostRateLimiter:      hostRateLimiter,
+		schedulerRateLimiter: schedulerRateLimiter,
+		logger:               logger,
+		shutdownChan:         make(chan struct{}),
+		scheduler:            scheduler,
+		priorityAssigner:     priorityAssigner,
 		activeTaskProcessor: newTransferQueueActiveProcessor(
 			shard,
 			workflowCache,
@@ -142,6 +143,7 @@ func newTransferQueueProcessor(
 				hostRateLimiter,
 				config.TransferProcessorMaxPollRPS,
 			),
+			schedulerRateLimiter,
 			logger,
 			metricProvider,
 			singleProcessor,
@@ -249,8 +251,9 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 			t.hostRateLimiter,
 			t.config.TransferProcessorFailoverMaxPollRPS,
 		),
+		t.schedulerRateLimiter,
 		t.logger,
-		t.metricProvider,
+		t.metricHandler,
 	)
 
 	// NOTE: READ REF BEFORE MODIFICATION
@@ -344,7 +347,9 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 		return nil
 	}
 
-	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.TaskBatchCompleteCounter)
+	t.metricHandler.Counter(metrics.TaskBatchCompleteCounter.GetMetricName()).Record(
+		1,
+		metrics.OperationTag(metrics.TransferQueueProcessorScope))
 
 	if lowerAckLevel < upperAckLevel {
 		ctx, cancel := newQueueIOContext()
@@ -406,8 +411,9 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 					t.hostRateLimiter,
 					t.config.TransferProcessorMaxPollRPS,
 				),
+				t.schedulerRateLimiter,
 				t.logger,
-				t.metricProvider,
+				t.metricHandler,
 				t.matchingClient,
 			)
 			processor.Start()

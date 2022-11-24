@@ -47,22 +47,19 @@ const (
 )
 
 var (
-	PriorityHigh   = getPriority(highPriorityClass, mediumPrioritySubclass)
-	PriorityMedium = getPriority(mediumPriorityClass, mediumPrioritySubclass)
-	PriorityLow    = getPriority(lowPriorityClass, mediumPrioritySubclass)
+	PriorityHigh = getPriority(highPriorityClass, mediumPrioritySubclass)
+	PriorityLow  = getPriority(lowPriorityClass, mediumPrioritySubclass)
 )
 
 var (
 	PriorityName = map[Priority]string{
-		PriorityHigh:   "high",
-		PriorityMedium: "medium",
-		PriorityLow:    "low",
+		PriorityHigh: "high",
+		PriorityLow:  "low",
 	}
 
 	PriorityValue = map[string]Priority{
-		"high":   PriorityHigh,
-		"medium": PriorityMedium,
-		"low":    PriorityLow,
+		"high": PriorityHigh,
+		"low":  PriorityLow,
 	}
 )
 

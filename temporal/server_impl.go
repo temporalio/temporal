@@ -144,8 +144,8 @@ func (s *ServerImpl) Stop() {
 
 	wg.Wait()
 
-	if s.so.metricProvider != nil {
-		s.so.metricProvider.Stop(s.logger)
+	if s.so.metricHandler != nil {
+		s.so.metricHandler.Stop(s.logger)
 	}
 }
 
@@ -174,7 +174,7 @@ func initSystemNamespaces(
 		PersistenceNamespaceMaxQPS: nil,
 		EnablePriorityRateLimiting: nil,
 		ClusterName:                persistenceClient.ClusterName(currentClusterName),
-		MetricsClient:              nil,
+		MetricsHandler:             nil,
 		Logger:                     logger,
 	})
 	defer factory.Close()

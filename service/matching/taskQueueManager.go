@@ -131,23 +131,23 @@ type (
 
 	// Single task queue in memory state
 	taskQueueManagerImpl struct {
-		status            int32
-		taskQueueID       *taskQueueID
-		taskQueueKind     enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
-		config            *taskQueueConfig
-		db                *taskQueueDB
-		taskWriter        *taskWriter
-		taskReader        *taskReader // reads tasks from db and async matches it with poller
-		liveness          *liveness
-		taskGC            *taskGC
-		taskAckManager    ackManager   // tracks ackLevel for delivered messages
-		matcher           *TaskMatcher // for matching a task producer with a poller
-		namespaceRegistry namespace.Registry
-		logger            log.Logger
-		matchingClient    matchingservice.MatchingServiceClient
-		metricsClient     metrics.Client
-		namespace         namespace.Name
-		metricScope       metrics.Scope // namespace/taskqueue tagged metric scope
+		status               int32
+		taskQueueID          *taskQueueID
+		taskQueueKind        enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
+		config               *taskQueueConfig
+		db                   *taskQueueDB
+		taskWriter           *taskWriter
+		taskReader           *taskReader // reads tasks from db and async matches it with poller
+		liveness             *liveness
+		taskGC               *taskGC
+		taskAckManager       ackManager   // tracks ackLevel for delivered messages
+		matcher              *TaskMatcher // for matching a task producer with a poller
+		namespaceRegistry    namespace.Registry
+		logger               log.Logger
+		matchingClient       matchingservice.MatchingServiceClient
+		metricsHandler       metrics.MetricsHandler
+		namespace            namespace.Name
+		taggedMetricsHandler metrics.MetricsHandler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory *pollerHistory
 		// outstandingPollsMap is needed to keep track of all outstanding pollers for a
@@ -206,17 +206,17 @@ func newTaskQueueManager(
 		tag.WorkflowTaskQueueName(taskQueue.name),
 		tag.WorkflowTaskQueueType(taskQueue.taskType),
 		tag.WorkflowNamespace(nsName.String()))
-	metricsScope := metrics.GetPerTaskQueueScope(
-		e.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope),
+	taggedMetricsHandler := metrics.GetPerTaskQueueScope(
+		e.metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingTaskQueueMgrScope), metrics.TaskQueueTypeTag(taskQueue.taskType)),
 		nsName.String(),
 		taskQueue.name,
 		taskQueueKind,
-	).Tagged(metrics.TaskQueueTypeTag(taskQueue.taskType))
+	)
 	tlMgr := &taskQueueManagerImpl{
 		status:               common.DaemonStatusInitialized,
 		namespaceRegistry:    e.namespaceRegistry,
 		matchingClient:       e.matchingClient,
-		metricsClient:        e.metricsClient,
+		metricsHandler:       e.metricsHandler,
 		taskQueueID:          taskQueue,
 		taskQueueKind:        taskQueueKind,
 		logger:               logger,
@@ -229,7 +229,7 @@ func newTaskQueueManager(
 		signalFatalProblem:   e.unloadTaskQueue,
 		clusterMeta:          clusterMeta,
 		namespace:            nsName,
-		metricScope:          metricsScope,
+		taggedMetricsHandler: taggedMetricsHandler,
 		initializedError:     future.NewFuture[struct{}](),
 		metadataInitialFetch: future.NewFuture[struct{}](),
 		metadataPoller: metadataPoller{
@@ -252,7 +252,7 @@ func newTaskQueueManager(
 	if tlMgr.isFowardingAllowed(taskQueue, taskQueueKind) {
 		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, taskQueue, taskQueueKind, e.matchingClient)
 	}
-	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.metricScope)
+	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.taggedMetricsHandler)
 	for _, opt := range opts {
 		opt(tlMgr)
 	}
@@ -269,7 +269,7 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	}
 	var condfail *persistence.ConditionFailedError
 	if errors.As(err, &condfail) {
-		c.metricScope.IncCounter(metrics.ConditionFailedErrorPerTaskQueueCounter)
+		c.taggedMetricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.GetMetricName()).Record(1)
 		c.signalFatalProblem(c)
 		return true
 	}
@@ -289,7 +289,7 @@ func (c *taskQueueManagerImpl) Start() {
 	c.taskReader.Start()
 	go c.fetchMetadataFromRootPartitionOnInit(context.TODO())
 	c.logger.Info("", tag.LifeCycleStarted)
-	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
+	c.taggedMetricsHandler.Counter(metrics.TaskQueueStartedCounter.GetMetricName()).Record(1)
 }
 
 func (c *taskQueueManagerImpl) Stop() {
@@ -316,7 +316,7 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
 	c.logger.Info("", tag.LifeCycleStopped)
-	c.metricScope.IncCounter(metrics.TaskQueueStoppedCounter)
+	c.taggedMetricsHandler.Counter(metrics.TaskQueueStoppedCounter.GetMetricName()).Record(1)
 }
 
 func (c *taskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -344,7 +344,7 @@ func (c *taskQueueManagerImpl) AddTask(
 
 	if c.QueueID().IsRoot() && !c.HasPollerAfter(time.Now().Add(-noPollerThreshold)) {
 		// Only checks recent pollers in the root partition
-		c.metricScope.IncCounter(metrics.NoRecentPollerTasksPerTaskQueueCounter)
+		c.taggedMetricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.GetMetricName()).Record(1)
 	}
 
 	taskInfo := params.taskInfo

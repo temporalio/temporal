@@ -22,20 +22,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package temporal
+package quotas
+
+import (
+	"context"
+	"time"
+)
 
 type (
-	applyFuncContainer struct {
-		applyInternal func(*serverOptions)
+	RequestRateLimiterAdapterImpl struct {
+		rateLimiter RateLimiter
 	}
 )
 
-func (fso *applyFuncContainer) apply(s *serverOptions) {
-	fso.applyInternal(s)
+var _ RequestRateLimiter = (*RequestRateLimiterAdapterImpl)(nil)
+
+func NewRequestRateLimiterAdapter(
+	rateLimiter RateLimiter,
+) RequestRateLimiter {
+	return &RequestRateLimiterAdapterImpl{
+		rateLimiter: rateLimiter,
+	}
 }
 
-func newApplyFuncContainer(apply func(option *serverOptions)) *applyFuncContainer {
-	return &applyFuncContainer{
-		applyInternal: apply,
-	}
+func (r *RequestRateLimiterAdapterImpl) Allow(
+	now time.Time,
+	request Request,
+) bool {
+	return r.rateLimiter.AllowN(now, request.Token)
+}
+
+func (r *RequestRateLimiterAdapterImpl) Reserve(
+	now time.Time,
+	request Request,
+) Reservation {
+	return r.rateLimiter.ReserveN(now, request.Token)
+}
+
+func (r *RequestRateLimiterAdapterImpl) Wait(
+	ctx context.Context,
+	request Request,
+) error {
+	return r.rateLimiter.WaitN(ctx, request.Token)
 }

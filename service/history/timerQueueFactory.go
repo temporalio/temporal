@@ -72,13 +72,16 @@ func NewTimerQueueFactory(
 		hostScheduler = queues.NewNamespacePriorityScheduler(
 			params.ClusterMetadata.GetCurrentClusterName(),
 			queues.NamespacePrioritySchedulerOptions{
-				WorkerCount:             params.Config.TimerProcessorSchedulerWorkerCount,
-				ActiveNamespaceWeights:  params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
-				StandbyNamespaceWeights: params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
+				WorkerCount:                 params.Config.TimerProcessorSchedulerWorkerCount,
+				ActiveNamespaceWeights:      params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
+				StandbyNamespaceWeights:     params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
+				EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
+				MaxDispatchThrottleDuration: HostSchedulerMaxDispatchThrottleDuration,
 			},
 			params.NamespaceRegistry,
+			params.SchedulerRateLimiter,
 			params.TimeSource,
-			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTimerQueueProcessor)),
+			params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
 			params.Logger,
 		)
 	}
@@ -195,7 +198,7 @@ func (f *timerQueueFactory) CreateQueue(
 			},
 			f.HostReaderRateLimiter,
 			logger,
-			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTimerQueueProcessor)),
+			f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTimerQueueProcessorScope)),
 		)
 	}
 
@@ -209,5 +212,6 @@ func (f *timerQueueFactory) CreateQueue(
 		f.MatchingClient,
 		f.MetricsHandler,
 		f.HostRateLimiter,
+		f.SchedulerRateLimiter,
 	)
 }

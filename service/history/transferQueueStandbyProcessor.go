@@ -65,6 +65,7 @@ func newTransferQueueStandbyProcessor(
 	taskAllocator taskAllocator,
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
+	schedulerRateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
 	metricProvider metrics.MetricsHandler,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -78,7 +79,7 @@ func newTransferQueueStandbyProcessor(
 		UpdateAckIntervalJitterCoefficient: config.TransferProcessorUpdateAckIntervalJitterCoefficient,
 		MaxReschdulerSize:                  config.TransferProcessorMaxReschedulerSize,
 		PollBackoffInterval:                config.TransferProcessorPollBackoffInterval,
-		MetricScope:                        metrics.TransferStandbyQueueProcessorScope,
+		Operation:                          metrics.TransferStandbyQueueProcessorScope,
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
 
@@ -100,7 +101,7 @@ func newTransferQueueStandbyProcessor(
 	}
 	maxReadLevel := func() int64 {
 		// we are creating standby processor, so we know we are not in single processor mode
-		return shard.GetQueueExclusiveHighReadWatermark(tasks.CategoryTransfer, clusterName, false).TaskID
+		return shard.GetImmediateQueueExclusiveHighReadWatermark().TaskID
 	}
 	updateClusterAckLevel := func(ackLevel int64) error {
 		return shard.UpdateQueueClusterAckLevel(tasks.CategoryTransfer, clusterName, tasks.NewImmediateKey(ackLevel))
@@ -145,7 +146,7 @@ func newTransferQueueStandbyProcessor(
 	)
 
 	if scheduler == nil {
-		scheduler = newTransferTaskShardScheduler(shard, logger)
+		scheduler = newTransferTaskShardScheduler(shard, schedulerRateLimiter, logger)
 		processor.ownedScheduler = scheduler
 	}
 
@@ -153,7 +154,7 @@ func newTransferQueueStandbyProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationTransferStandbyQueueProcessor)),
+		metricProvider.WithTags(metrics.OperationTag(metrics.OperationTransferStandbyQueueProcessorScope)),
 	)
 
 	queueAckMgr := newQueueAckMgr(

@@ -135,6 +135,9 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				DurableArchivalEnabled: func() bool {
 					return c.DurableArchivalEnabled
 				},
+				RetentionTimerJitterDuration: func() time.Duration {
+					return time.Second
+				},
 			})
 
 			closeTime := time.Unix(0, 0)
@@ -179,10 +182,8 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 					assert.Equal(t, deleteHistoryEventTask.NamespaceID, namespaceEntry.ID().String())
 					assert.Equal(t, deleteHistoryEventTask.WorkflowID, tests.WorkflowID)
 					assert.Equal(t, deleteHistoryEventTask.RunID, tests.RunID)
-					assert.Equal(t,
-						deleteHistoryEventTask.VisibilityTimestamp,
-						closeTime.Add(retention),
-					)
+					assert.True(t, deleteHistoryEventTask.VisibilityTimestamp.After(closeTime.Add(retention)))
+					assert.True(t, deleteHistoryEventTask.VisibilityTimestamp.Before(closeTime.Add(retention).Add(time.Second*2)))
 				} else {
 					assert.Nil(t, deleteHistoryEventTask)
 				}

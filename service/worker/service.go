@@ -66,7 +66,6 @@ type (
 		logger                 log.Logger
 		archivalMetadata       carchiver.ArchivalMetadata
 		clusterMetadata        cluster.Metadata
-		metricsClient          metrics.Client
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
 		metadataManager        persistence.MetadataManager
@@ -133,7 +132,6 @@ func NewService(
 	esClient esclient.Client,
 	archivalMetadata carchiver.ArchivalMetadata,
 	clusterMetadata cluster.Metadata,
-	metricsClient metrics.Client,
 	clientBean client.Bean,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	namespaceRegistry namespace.Registry,
@@ -165,7 +163,6 @@ func NewService(
 		logger:                    logger,
 		archivalMetadata:          archivalMetadata,
 		clusterMetadata:           clusterMetadata,
-		metricsClient:             metricsClient,
 		clientBean:                clientBean,
 		clusterMetadataManager:    clusterMetadataManager,
 		namespaceRegistry:         namespaceRegistry,
@@ -289,7 +286,7 @@ func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persisten
 			),
 			HistoryScannerVerifyRetention: dc.GetBoolProperty(
 				dynamicconfig.HistoryScannerVerifyRetention,
-				false,
+				true,
 			),
 			ExecutionScannerPerHostQPS: dc.GetIntProperty(
 				dynamicconfig.ExecutionScannerPerHostQPS,
@@ -448,7 +445,7 @@ func (s *Service) startParentClosePolicyProcessor() {
 	params := &parentclosepolicy.BootstrapParams{
 		Config:           *s.config.ParentCloseCfg,
 		SdkClientFactory: s.sdkClientFactory,
-		MetricsClient:    s.metricsClient,
+		MetricsHandler:   s.metricsHandler,
 		Logger:           s.logger,
 		ClientBean:       s.clientBean,
 		CurrentCluster:   s.clusterMetadata.GetCurrentClusterName(),
@@ -464,7 +461,7 @@ func (s *Service) startParentClosePolicyProcessor() {
 
 func (s *Service) startBatcher() {
 	if err := batcher.New(
-		s.metricsClient,
+		s.metricsHandler,
 		s.logger,
 		s.sdkClientFactory,
 		s.config.BatcherRPS,
@@ -487,7 +484,7 @@ func (s *Service) initScanner() error {
 		s.logger,
 		s.config.ScannerCfg,
 		s.sdkClientFactory,
-		s.metricsClient,
+		s.metricsHandler,
 		s.executionManager,
 		s.taskManager,
 		s.historyClient,
@@ -517,7 +514,7 @@ func (s *Service) startReplicator() {
 		s.clusterMetadata,
 		s.clientBean,
 		s.logger,
-		s.metricsClient,
+		s.metricsHandler,
 		s.hostInfo,
 		s.workerServiceResolver,
 		s.namespaceReplicationQueue,
@@ -529,7 +526,7 @@ func (s *Service) startReplicator() {
 func (s *Service) startArchiver() {
 	historyClient := s.clientBean.GetHistoryClient()
 	bc := &archiver.BootstrapContainer{
-		MetricsClient:    s.metricsClient,
+		MetricsHandler:   s.metricsHandler,
 		Logger:           s.logger,
 		HistoryV2Manager: s.executionManager,
 		NamespaceCache:   s.namespaceRegistry,

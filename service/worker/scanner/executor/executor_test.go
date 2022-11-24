@@ -52,14 +52,14 @@ func TestExecutionTestSuite(t *testing.T) {
 
 func (s *ExecutorTestSuite) TestStartStop() {
 	e := NewFixedSizePoolExecutor(
-		4, 4, metrics.NoopClient, metrics.TaskQueueScavengerScope)
+		4, 4, metrics.NoopMetricsHandler, metrics.TaskQueueScavengerScope)
 	e.Start()
 	e.Stop()
 }
 
 func (s *ExecutorTestSuite) TestTaskExecution() {
 	e := NewFixedSizePoolExecutor(
-		32, 100, metrics.NoopClient, metrics.TaskQueueScavengerScope)
+		32, 100, metrics.NoopMetricsHandler, metrics.TaskQueueScavengerScope)
 	e.Start()
 	var runCounter int64
 	var startWG sync.WaitGroup

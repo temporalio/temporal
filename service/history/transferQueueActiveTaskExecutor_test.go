@@ -177,7 +177,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockShard.GetExecutionManager(),
 		false,
 		s.mockShard.GetLogger(),
-		s.mockShard.GetMetricsClient(),
+		s.mockShard.GetMetricsHandler(),
 	))
 
 	s.mockParentClosePolicyClient = parentclosepolicy.NewMockClient(s.controller)
@@ -216,8 +216,8 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		executionManager:   s.mockExecutionMgr,
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopClient, func(namespace.ID, string) int32 { return 1 }),
+		metricsHandler:     s.mockShard.GetMetricsHandler(),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopMetricsHandler, func(namespace.ID, string) int32 { return 1 }),
 		queueProcessors: map[tasks.Category]queues.Queue{
 			s.mockTxProcessor.Category():    s.mockTxProcessor,
 			s.mockTimerProcessor.Category(): s.mockTimerProcessor,
@@ -1382,7 +1382,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_DeleteA
 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Times(2)
 	mockDeleteMgr := workflow.NewMockDeleteManager(s.controller)
-	mockDeleteMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockDeleteMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.transferQueueActiveTaskExecutor.workflowDeleteManager = mockDeleteMgr
 	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(err)
@@ -2608,14 +2608,14 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockWorkflowDeleteManager := workflow.NewMockDeleteManager(ctrl)
 			if c.ShouldDelete {
 				mockWorkflowDeleteManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
-					gomock.Any(), gomock.Any(), gomock.Any())
+					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())
 			}
 
 			executor := &transferQueueActiveTaskExecutor{
 				transferQueueTaskExecutorBase: &transferQueueTaskExecutorBase{
 					cache:                 mockWorkflowCache,
 					config:                mockShard.GetConfig(),
-					metricsClient:         metrics.NoopClient,
+					metricHandler:         metrics.NoopMetricsHandler,
 					shard:                 mockShard,
 					workflowDeleteManager: mockWorkflowDeleteManager,
 				},

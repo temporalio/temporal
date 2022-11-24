@@ -107,14 +107,18 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 
 func newTransferTaskShardScheduler(
 	shard shard.Context,
+	rateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
 ) queues.Scheduler {
 	config := shard.GetConfig()
-	return queues.NewFIFOScheduler(
-		queues.FIFOSchedulerOptions{
-			WorkerCount: config.TransferTaskWorkerCount,
-			QueueSize:   config.TransferTaskBatchSize(),
+	return queues.NewPriorityScheduler(
+		queues.PrioritySchedulerOptions{
+			WorkerCount:                 config.TransferTaskWorkerCount,
+			EnableRateLimiter:           config.TaskSchedulerEnableRateLimiter,
+			MaxDispatchThrottleDuration: ShardSchedulerMaxDispatchThrottleDuration,
 		},
+		rateLimiter,
+		shard.GetTimeSource(),
 		logger,
 	)
 }

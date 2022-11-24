@@ -64,13 +64,16 @@ func NewVisibilityQueueFactory(
 		hostScheduler = queues.NewNamespacePriorityScheduler(
 			params.ClusterMetadata.GetCurrentClusterName(),
 			queues.NamespacePrioritySchedulerOptions{
-				WorkerCount:             params.Config.VisibilityProcessorSchedulerWorkerCount,
-				ActiveNamespaceWeights:  params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
-				StandbyNamespaceWeights: params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
+				WorkerCount:                 params.Config.VisibilityProcessorSchedulerWorkerCount,
+				ActiveNamespaceWeights:      params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
+				StandbyNamespaceWeights:     params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
+				EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
+				MaxDispatchThrottleDuration: HostSchedulerMaxDispatchThrottleDuration,
 			},
 			params.NamespaceRegistry,
+			params.SchedulerRateLimiter,
 			params.TimeSource,
-			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
+			params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
 			params.Logger,
 		)
 	}
@@ -109,6 +112,8 @@ func (f *visibilityQueueFactory) CreateQueue(
 			f.VisibilityMgr,
 			logger,
 			f.MetricsHandler,
+			f.Config.VisibilityProcessorEnsureCloseBeforeDelete,
+			f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
 		)
 
 		return queues.NewImmediateQueue(
@@ -138,7 +143,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 			},
 			f.HostReaderRateLimiter,
 			logger,
-			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
+			f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
 		)
 	}
 
@@ -150,5 +155,6 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.VisibilityMgr,
 		f.MetricsHandler,
 		f.HostRateLimiter,
+		f.SchedulerRateLimiter,
 	)
 }

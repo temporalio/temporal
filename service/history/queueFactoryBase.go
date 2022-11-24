@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"time"
 
 	"go.uber.org/fx"
 
@@ -45,6 +46,9 @@ import (
 
 const (
 	QueueFactoryFxGroup = "queueFactory"
+
+	HostSchedulerMaxDispatchThrottleDuration  = 3 * time.Second
+	ShardSchedulerMaxDispatchThrottleDuration = 5 * time.Second
 )
 
 type (
@@ -64,12 +68,13 @@ type (
 	QueueFactoryBaseParams struct {
 		fx.In
 
-		NamespaceRegistry namespace.Registry
-		ClusterMetadata   cluster.Metadata
-		Config            *configs.Config
-		TimeSource        clock.TimeSource
-		MetricsHandler    metrics.MetricsHandler
-		Logger            log.SnTaggedLogger
+		NamespaceRegistry    namespace.Registry
+		ClusterMetadata      cluster.Metadata
+		Config               *configs.Config
+		TimeSource           clock.TimeSource
+		MetricsHandler       metrics.MetricsHandler
+		Logger               log.SnTaggedLogger
+		SchedulerRateLimiter queues.SchedulerRateLimiter
 	}
 
 	QueueFactoryBase struct {
@@ -90,6 +95,7 @@ type (
 )
 
 var QueueModule = fx.Options(
+	fx.Provide(QueueSchedulerRateLimiterProvider),
 	fx.Provide(
 		fx.Annotated{
 			Group:  QueueFactoryFxGroup,
@@ -106,6 +112,17 @@ var QueueModule = fx.Options(
 	),
 	fx.Invoke(QueueFactoryLifetimeHooks),
 )
+
+func QueueSchedulerRateLimiterProvider(
+	config *configs.Config,
+) queues.SchedulerRateLimiter {
+	return queues.NewSchedulerRateLimiter(
+		config.TaskSchedulerNamespaceMaxQPS,
+		config.TaskSchedulerMaxQPS,
+		config.PersistenceNamespaceMaxQPS,
+		config.PersistenceMaxQPS,
+	)
+}
 
 func QueueFactoryLifetimeHooks(
 	params QueueFactoriesLifetimeHookParams,

@@ -52,7 +52,7 @@ type (
 		frontendHandler    Handler
 		logger             log.Logger
 		clientBean         client.Bean
-		metricsClient      metrics.Client
+		metricsHandler     metrics.MetricsHandler
 		timeSource         clock.TimeSource
 	}
 )
@@ -63,7 +63,7 @@ func NewDCRedirectionHandler(
 	policy config.DCRedirectionPolicy,
 	logger log.Logger,
 	clientBean client.Bean,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	timeSource clock.TimeSource,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
@@ -83,7 +83,7 @@ func NewDCRedirectionHandler(
 		frontendHandler:    wfHandler,
 		logger:             logger,
 		clientBean:         clientBean,
-		metricsClient:      metricsClient,
+		metricsHandler:     metricsHandler,
 		timeSource:         timeSource,
 	}
 }
@@ -1833,14 +1833,14 @@ func (handler *DCRedirectionHandlerImpl) ListBatchOperations(
 }
 
 func (handler *DCRedirectionHandlerImpl) beforeCall(
-	scope int,
-) (metrics.Scope, time.Time) {
+	operation string,
+) (metrics.MetricsHandler, time.Time) {
 
-	return handler.metricsClient.Scope(scope), handler.timeSource.Now()
+	return handler.metricsHandler.WithTags(metrics.OperationTag(operation), metrics.ServiceRoleTag(metrics.DCRedirectionRoleTagValue)), handler.timeSource.Now()
 }
 
 func (handler *DCRedirectionHandlerImpl) afterCall(
-	scope metrics.Scope,
+	metricsHandler metrics.MetricsHandler,
 	startTime time.Time,
 	cluster string,
 	retError *error,
@@ -1848,10 +1848,10 @@ func (handler *DCRedirectionHandlerImpl) afterCall(
 
 	log.CapturePanic(handler.logger, retError)
 
-	scope = scope.Tagged(metrics.TargetClusterTag(cluster))
-	scope.IncCounter(metrics.ClientRedirectionRequests)
-	scope.RecordTimer(metrics.ClientRedirectionLatency, handler.timeSource.Now().Sub(startTime))
+	metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(cluster))
+	metricsHandler.Counter(metrics.ClientRedirectionRequests.GetMetricName()).Record(1)
+	metricsHandler.Timer(metrics.ClientRedirectionLatency.GetMetricName()).Record(handler.timeSource.Now().Sub(startTime))
 	if *retError != nil {
-		scope.IncCounter(metrics.ClientRedirectionFailures)
+		metricsHandler.Counter(metrics.ClientRedirectionFailures.GetMetricName()).Record(1)
 	}
 }

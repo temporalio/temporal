@@ -75,13 +75,16 @@ func NewTransferQueueFactory(
 		hostScheduler = queues.NewNamespacePriorityScheduler(
 			params.ClusterMetadata.GetCurrentClusterName(),
 			queues.NamespacePrioritySchedulerOptions{
-				WorkerCount:             params.Config.TransferProcessorSchedulerWorkerCount,
-				ActiveNamespaceWeights:  params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
-				StandbyNamespaceWeights: params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
+				WorkerCount:                 params.Config.TransferProcessorSchedulerWorkerCount,
+				ActiveNamespaceWeights:      params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
+				StandbyNamespaceWeights:     params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
+				EnableRateLimiter:           params.Config.TaskSchedulerEnableRateLimiter,
+				MaxDispatchThrottleDuration: HostSchedulerMaxDispatchThrottleDuration,
 			},
 			params.NamespaceRegistry,
+			params.SchedulerRateLimiter,
 			params.TimeSource,
-			params.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferQueueProcessor)),
+			params.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
 			params.Logger,
 		)
 	}
@@ -185,7 +188,7 @@ func (f *transferQueueFactory) CreateQueue(
 			},
 			f.HostReaderRateLimiter,
 			logger,
-			f.MetricsHandler.WithTags(metrics.OperationTag(queues.OperationTransferQueueProcessor)),
+			f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationTransferQueueProcessorScope)),
 		)
 	}
 
@@ -201,5 +204,6 @@ func (f *transferQueueFactory) CreateQueue(
 		f.HistoryClient,
 		f.MetricsHandler,
 		f.HostRateLimiter,
+		f.SchedulerRateLimiter,
 	)
 }

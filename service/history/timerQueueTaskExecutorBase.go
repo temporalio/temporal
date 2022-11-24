@@ -53,8 +53,7 @@ type (
 		cache              workflow.Cache
 		logger             log.Logger
 		matchingClient     matchingservice.MatchingServiceClient
-		metricProvider     metrics.MetricsHandler
-		metricsClient      metrics.Client
+		metricHandler      metrics.MetricsHandler
 		config             *configs.Config
 	}
 )
@@ -65,7 +64,7 @@ func newTimerQueueTaskExecutorBase(
 	deleteManager workflow.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricHandler metrics.MetricsHandler,
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
@@ -76,8 +75,7 @@ func newTimerQueueTaskExecutorBase(
 		deleteManager:      deleteManager,
 		logger:             logger,
 		matchingClient:     matchingClient,
-		metricProvider:     metricProvider,
-		metricsClient:      shard.GetMetricsClient(),
+		metricHandler:      metricHandler,
 		config:             config,
 	}
 }
@@ -105,7 +103,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricHandler, t.logger)
 	switch err.(type) {
 	case nil:
 		if mutableState == nil {
@@ -144,6 +142,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		weContext,
 		mutableState,
 		archiveIfEnabled,
+		&task.ProcessStage, // Pass stage by reference to update it inside delete manager.
 	)
 }
 

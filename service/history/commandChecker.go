@@ -61,17 +61,24 @@ type (
 		enableCrossNamespaceCommands    dynamicconfig.BoolPropertyFn
 	}
 
-	workflowSizeChecker struct {
-		blobSizeLimitWarn  int
-		blobSizeLimitError int
+	workflowSizeLimits struct {
+		blobSizeLimitWarn              int
+		blobSizeLimitError             int
+		memoSizeLimitWarn              int
+		memoSizeLimitError             int
+		numPendingChildExecutionsLimit int
+		numPendingActivitiesLimit      int
+		numPendingSignalsLimit         int
+		numPendingCancelsRequestLimit  int
+	}
 
-		memoSizeLimitWarn  int
-		memoSizeLimitError int
+	workflowSizeChecker struct {
+		workflowSizeLimits
 
 		mutableState              workflow.MutableState
 		searchAttributesValidator *searchattribute.Validator
 		executionStats            *persistencespb.ExecutionStats
-		metricsScope              metrics.Scope
+		metricsHandler            metrics.MetricsHandler
 		logger                    log.Logger
 	}
 )
@@ -97,25 +104,19 @@ func newCommandAttrValidator(
 }
 
 func newWorkflowSizeChecker(
-	blobSizeLimitWarn int,
-	blobSizeLimitError int,
-	memoSizeLimitWarn int,
-	memoSizeLimitError int,
+	limits workflowSizeLimits,
 	mutableState workflow.MutableState,
 	searchAttributesValidator *searchattribute.Validator,
 	executionStats *persistencespb.ExecutionStats,
-	metricsScope metrics.Scope,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 ) *workflowSizeChecker {
 	return &workflowSizeChecker{
-		blobSizeLimitWarn:         blobSizeLimitWarn,
-		blobSizeLimitError:        blobSizeLimitError,
-		memoSizeLimitWarn:         memoSizeLimitWarn,
-		memoSizeLimitError:        memoSizeLimitError,
+		workflowSizeLimits:        limits,
 		mutableState:              mutableState,
 		searchAttributesValidator: searchAttributesValidator,
 		executionStats:            executionStats,
-		metricsScope:              metricsScope,
+		metricsHandler:            metricsHandler,
 		logger:                    logger,
 	}
 }
@@ -135,7 +136,7 @@ func (c *workflowSizeChecker) checkIfPayloadSizeExceedsLimit(
 		executionInfo.NamespaceId,
 		executionInfo.WorkflowId,
 		executionState.RunId,
-		c.metricsScope.Tagged(commandTypeTag),
+		c.metricsHandler.WithTags(commandTypeTag),
 		c.logger,
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
 	)
@@ -150,7 +151,9 @@ func (c *workflowSizeChecker) checkIfMemoSizeExceedsLimit(
 	commandTypeTag metrics.Tag,
 	message string,
 ) error {
-	c.metricsScope.Tagged(commandTypeTag).RecordDistribution(metrics.MemoSize, memo.Size())
+	c.metricsHandler.Histogram(metrics.MemoSize.GetMetricName(), metrics.MemoSize.GetMetricUnit()).Record(
+		int64(memo.Size()),
+		commandTypeTag)
 
 	executionInfo := c.mutableState.GetExecutionInfo()
 	executionState := c.mutableState.GetExecutionState()
@@ -161,7 +164,7 @@ func (c *workflowSizeChecker) checkIfMemoSizeExceedsLimit(
 		executionInfo.NamespaceId,
 		executionInfo.WorkflowId,
 		executionState.RunId,
-		c.metricsScope.Tagged(commandTypeTag),
+		c.metricsHandler.WithTags(commandTypeTag),
 		c.logger,
 		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
 	)
@@ -171,15 +174,93 @@ func (c *workflowSizeChecker) checkIfMemoSizeExceedsLimit(
 	return nil
 }
 
+func withinLimit(value int, limit int) bool {
+	if limit <= 0 {
+		// limit not defined
+		return true
+	}
+	return value < limit
+}
+
+func (c *workflowSizeChecker) checkCountConstraint(
+	numPending int,
+	errLimit int,
+	metricName string,
+	resourceName string,
+) error {
+	key := c.mutableState.GetWorkflowKey()
+	logger := log.With(
+		c.logger,
+		tag.WorkflowNamespaceID(key.NamespaceID),
+		tag.WorkflowID(key.WorkflowID),
+		tag.WorkflowRunID(key.RunID),
+	)
+
+	if withinLimit(numPending, errLimit) {
+		return nil
+	}
+	c.metricsHandler.Counter(metricName).Record(1)
+	err := fmt.Errorf(
+		"the number of %s, %d, has reached the per-workflow limit of %d",
+		resourceName,
+		numPending,
+		errLimit,
+	)
+	logger.Error(err.Error(), tag.Error(err))
+	return err
+}
+
+const (
+	PendingChildWorkflowExecutionsDescription = "pending child workflow executions"
+	PendingActivitiesDescription              = "pending activities"
+	PendingCancelRequestsDescription          = "pending requests to cancel external workflows"
+	PendingSignalsDescription                 = "pending signals to external workflows"
+)
+
+func (c *workflowSizeChecker) checkIfNumChildWorkflowsExceedsLimit() error {
+	return c.checkCountConstraint(
+		len(c.mutableState.GetPendingChildExecutionInfos()),
+		c.numPendingChildExecutionsLimit,
+		metrics.TooManyPendingChildWorkflows.GetMetricName(),
+		PendingChildWorkflowExecutionsDescription,
+	)
+}
+
+func (c *workflowSizeChecker) checkIfNumPendingActivitiesExceedsLimit() error {
+	return c.checkCountConstraint(
+		len(c.mutableState.GetPendingActivityInfos()),
+		c.numPendingActivitiesLimit,
+		metrics.TooManyPendingActivities.GetMetricName(),
+		PendingActivitiesDescription,
+	)
+}
+
+func (c *workflowSizeChecker) checkIfNumPendingCancelRequestsExceedsLimit() error {
+	return c.checkCountConstraint(
+		len(c.mutableState.GetPendingRequestCancelExternalInfos()),
+		c.numPendingCancelsRequestLimit,
+		metrics.TooManyPendingCancelRequests.GetMetricName(),
+		PendingCancelRequestsDescription,
+	)
+}
+
+func (c *workflowSizeChecker) checkIfNumPendingSignalsExceedsLimit() error {
+	return c.checkCountConstraint(
+		len(c.mutableState.GetPendingSignalExternalInfos()),
+		c.numPendingSignalsLimit,
+		metrics.TooManyPendingSignalsToExternalWorkflows.GetMetricName(),
+		PendingSignalsDescription,
+	)
+}
+
 func (c *workflowSizeChecker) checkIfSearchAttributesSizeExceedsLimit(
 	searchAttributes *commonpb.SearchAttributes,
 	namespace namespace.Name,
 	commandTypeTag metrics.Tag,
 ) error {
-	c.metricsScope.Tagged(commandTypeTag).RecordDistribution(
-		metrics.SearchAttributesSize,
-		searchAttributes.Size(),
-	)
+	c.metricsHandler.Histogram(metrics.SearchAttributesSize.GetMetricName(), metrics.SearchAttributesSize.GetMetricUnit()).Record(
+		int64(searchAttributes.Size()),
+		commandTypeTag)
 	err := c.searchAttributesValidator.ValidateSize(searchAttributes, namespace.String())
 	if err != nil {
 		c.logger.Warn(

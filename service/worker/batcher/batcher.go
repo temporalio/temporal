@@ -49,7 +49,7 @@ type (
 	// It is also the context object that get's passed around within the scanner workflows / activities
 	Batcher struct {
 		sdkClientFactory sdk.ClientFactory
-		metricsClient    metrics.Client
+		metricsHandler   metrics.MetricsHandler
 		logger           log.Logger
 		rps              dynamicconfig.IntPropertyFnWithNamespaceFilter
 		concurrency      dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -58,7 +58,7 @@ type (
 
 // New returns a new instance of batcher daemon Batcher
 func New(
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
 	rps dynamicconfig.IntPropertyFnWithNamespaceFilter,
@@ -66,7 +66,7 @@ func New(
 ) *Batcher {
 	return &Batcher{
 		sdkClientFactory: sdkClientFactory,
-		metricsClient:    metricsClient,
+		metricsHandler:   metricsHandler,
 		logger:           log.With(logger, tag.ComponentBatcher),
 		rps:              rps,
 		concurrency:      concurrency,
@@ -85,9 +85,9 @@ func (s *Batcher) Start() error {
 	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	batchWorker.RegisterActivity(&activities{
 		activityDeps: activityDeps{
-			MetricsClient: s.metricsClient,
-			Logger:        s.logger,
-			ClientFactory: s.sdkClientFactory,
+			MetricsHandler: s.metricsHandler,
+			Logger:         s.logger,
+			ClientFactory:  s.sdkClientFactory,
 		},
 		namespace:   primitives.SystemLocalNamespace,
 		namespaceID: primitives.SystemNamespaceID,

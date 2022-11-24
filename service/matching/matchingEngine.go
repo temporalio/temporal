@@ -94,7 +94,7 @@ type (
 		matchingClient       matchingservice.MatchingServiceClient
 		tokenSerializer      common.TaskTokenSerializer
 		logger               log.Logger
-		metricsClient        metrics.Client
+		metricsHandler       metrics.MetricsHandler
 		taskQueuesLock       sync.RWMutex                     // locks mutation of taskQueues
 		taskQueues           map[taskQueueID]taskQueueManager // Convert to LRU cache
 		taskQueueCount       map[taskQueueCounterKey]int      // per-namespace task queue counter
@@ -129,7 +129,7 @@ func NewEngine(
 	matchingClient matchingservice.MatchingServiceClient,
 	config *Config,
 	logger log.Logger,
-	metricsClient metrics.Client,
+	metricsHandler metrics.MetricsHandler,
 	namespaceRegistry namespace.Registry,
 	resolver membership.ServiceResolver,
 	clusterMeta cluster.Metadata,
@@ -143,7 +143,7 @@ func NewEngine(
 		taskQueues:           make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:       make(map[taskQueueCounterKey]int),
 		logger:               log.With(logger, tag.ComponentMatchingEngine),
-		metricsClient:        metricsClient,
+		metricsHandler:       metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope)),
 		matchingClient:       matchingClient,
 		config:               config,
 		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
@@ -377,7 +377,7 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedSourceStats(hCtx.scope, task.isForwarded(), req.GetForwardedSource())
+		e.emitForwardedSourceStats(hCtx.metricsHandler, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -413,7 +413,7 @@ pollLoop:
 				StartedEventId:             common.EmptyEventID,
 				Attempt:                    1,
 			}
-			return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.scope), nil
+			return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.metricsHandler), nil
 		}
 
 		resp, err := e.recordWorkflowTaskStarted(hCtx.Context, request, task)
@@ -442,7 +442,7 @@ pollLoop:
 			continue pollLoop
 		}
 		task.finish(nil)
-		return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.scope), nil
+		return e.createPollWorkflowTaskQueueResponse(task, resp, hCtx.metricsHandler), nil
 	}
 }
 
@@ -488,7 +488,7 @@ pollLoop:
 			return nil, err
 		}
 
-		e.emitForwardedSourceStats(hCtx.scope, task.isForwarded(), req.GetForwardedSource())
+		e.emitForwardedSourceStats(hCtx.metricsHandler, task.isForwarded(), req.GetForwardedSource())
 
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
@@ -520,7 +520,7 @@ pollLoop:
 			continue pollLoop
 		}
 		task.finish(nil)
-		return e.createPollActivityTaskQueueResponse(task, resp, hCtx.scope), nil
+		return e.createPollActivityTaskQueueResponse(task, resp, hCtx.metricsHandler), nil
 	}
 }
 
@@ -592,7 +592,7 @@ func (e *matchingEngineImpl) RespondQueryTaskCompleted(
 	request *matchingservice.RespondQueryTaskCompletedRequest,
 ) error {
 	if err := e.deliverQueryResult(request.GetTaskId(), &queryResult{workerResponse: request}); err != nil {
-		hCtx.scope.IncCounter(metrics.RespondQueryTaskFailedPerTaskQueueCounter)
+		hCtx.metricsHandler.Counter(metrics.RespondQueryTaskFailedPerTaskQueueCounter.GetMetricName()).Record(1)
 		return err
 	}
 	return nil
@@ -881,19 +881,19 @@ func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, 
 		namespace = nsEntry.Name()
 	}
 
-	e.metricsClient.Scope(
-		metrics.MatchingEngineScope,
+	e.metricsHandler.Gauge(metrics.LoadedTaskQueueGauge.GetMetricName()).Record(
+		float64(taskQueueCount),
 		metrics.NamespaceTag(namespace.String()),
 		metrics.TaskTypeTag(countKey.taskType.String()),
 		metrics.QueueTypeTag(countKey.queueType.String()),
-	).UpdateGauge(metrics.LoadedTaskQueueGauge, float64(taskQueueCount))
+	)
 }
 
 // Populate the workflow task response based on context and scheduled/started events.
 func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	task *internalTask,
 	historyResponse *historyservice.RecordWorkflowTaskStartedResponse,
-	scope metrics.Scope,
+	metricsHandler metrics.MetricsHandler,
 ) *matchingservice.PollWorkflowTaskQueueResponse {
 
 	var serializedToken []byte
@@ -918,7 +918,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
 			ct := timestamp.TimeValue(task.event.Data.CreateTime)
-			scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
+			metricsHandler.Timer(metrics.AsyncMatchLatencyPerTaskQueue.GetMetricName()).Record(time.Since(ct))
 		}
 	}
 
@@ -938,7 +938,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	task *internalTask,
 	historyResponse *historyservice.RecordActivityTaskStartedResponse,
-	scope metrics.Scope,
+	metricsHandler metrics.MetricsHandler,
 ) *matchingservice.PollActivityTaskQueueResponse {
 
 	scheduledEvent := historyResponse.ScheduledEvent
@@ -951,7 +951,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	}
 	if task.responseC == nil {
 		ct := timestamp.TimeValue(task.event.Data.CreateTime)
-		scope.RecordTimer(metrics.AsyncMatchLatencyPerTaskQueue, time.Since(ct))
+		metricsHandler.Timer(metrics.AsyncMatchLatencyPerTaskQueue.GetMetricName()).Record(time.Since(ct))
 	}
 
 	taskToken := &tokenspb.Task{
@@ -1026,20 +1026,20 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 }
 
 func (e *matchingEngineImpl) emitForwardedSourceStats(
-	scope metrics.Scope,
+	metricsHandler metrics.MetricsHandler,
 	isTaskForwarded bool,
 	pollForwardedSource string,
 ) {
 	isPollForwarded := len(pollForwardedSource) > 0
 	switch {
 	case isTaskForwarded && isPollForwarded:
-		scope.IncCounter(metrics.RemoteToRemoteMatchPerTaskQueueCounter)
+		metricsHandler.Counter(metrics.RemoteToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
 	case isTaskForwarded:
-		scope.IncCounter(metrics.RemoteToLocalMatchPerTaskQueueCounter)
+		metricsHandler.Counter(metrics.RemoteToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
 	case isPollForwarded:
-		scope.IncCounter(metrics.LocalToRemoteMatchPerTaskQueueCounter)
+		metricsHandler.Counter(metrics.LocalToRemoteMatchPerTaskQueueCounter.GetMetricName()).Record(1)
 	default:
-		scope.IncCounter(metrics.LocalToLocalMatchPerTaskQueueCounter)
+		metricsHandler.Counter(metrics.LocalToLocalMatchPerTaskQueueCounter.GetMetricName()).Record(1)
 	}
 }
 

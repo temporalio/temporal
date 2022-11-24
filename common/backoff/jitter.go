@@ -40,6 +40,10 @@ func JitDuration(duration time.Duration, coefficient float64) time.Duration {
 func JitInt64(input int64, coefficient float64) int64 {
 	validateCoefficient(coefficient)
 
+	if input == 0 {
+		return 0
+	}
+
 	base := int64(float64(input) * (1 - coefficient))
 	addon := rand.Int63n(2 * (input - base))
 	return base + addon

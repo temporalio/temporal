@@ -29,6 +29,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,7 +49,7 @@ const (
 	defaultClusterMetadataPageSize = 100
 	refreshInterval                = time.Minute
 
-	FakeClusterForEmptyVersion = "fake-cluster-for-empty-version"
+	unknownClusterNamePrefix = "unknown-cluster-"
 )
 
 type (
@@ -262,7 +263,7 @@ func (m *metadataImpl) GetPingChecks() []common.PingCheck {
 				m.clusterLock.Unlock()
 				return nil
 			},
-			MetricsTimer: metrics.ClusterMetadataLockLatency,
+			MetricsName: metrics.ClusterMetadataLockLatency.GetMetricName(),
 		},
 		{
 			Name: "cluster metadata callback lock",
@@ -275,7 +276,7 @@ func (m *metadataImpl) GetPingChecks() []common.PingCheck {
 				m.clusterCallbackLock.Unlock()
 				return nil
 			},
-			MetricsTimer: metrics.ClusterMetadataCallbackLockLatency,
+			MetricsName: metrics.ClusterMetadataCallbackLockLatency.GetMetricName(),
 		},
 	}
 }
@@ -348,7 +349,7 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, fai
 		// workflows with EmptyVersion could be replicated to other clusters. The receiving cluster needs to know that
 		// those workflows are not from their current cluster.
 		if isGlobalNamespace {
-			return FakeClusterForEmptyVersion
+			return unknownClusterNamePrefix + strconv.Itoa(int(failoverVersion))
 		}
 		return m.currentClusterName
 	}
@@ -370,12 +371,13 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, fai
 	defer m.clusterLock.RUnlock()
 	clusterName, ok := m.versionToClusterName[initialFailoverVersion]
 	if !ok {
-		panic(fmt.Sprintf(
+		m.logger.Warn(fmt.Sprintf(
 			"Unknown initial failover version %v with given cluster initial failover version map: %v and failover version increment %v.",
 			initialFailoverVersion,
 			m.clusterInfo,
 			m.failoverVersionIncrement,
 		))
+		return unknownClusterNamePrefix + strconv.Itoa(int(initialFailoverVersion))
 	}
 	return clusterName
 }

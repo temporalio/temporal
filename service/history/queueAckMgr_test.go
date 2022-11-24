@@ -127,7 +127,7 @@ func (s *queueAckMgrSuite) SetupTest() {
 	s.queueAckMgr = newQueueAckMgr(
 		s.mockShard,
 		&QueueProcessorOptions{
-			MetricScope: metrics.TransferActiveQueueProcessorScope,
+			Operation: metrics.TransferActiveQueueProcessorScope,
 		},
 		s.mockProcessor,
 		0,
@@ -373,7 +373,7 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 	s.queueFailoverAckMgr = newQueueFailoverAckMgr(
 		s.mockShard,
 		&QueueProcessorOptions{
-			MetricScope: metrics.TransferQueueProcessorScope,
+			Operation: metrics.TransferQueueProcessorScope,
 		},
 		s.mockProcessor,
 		0,

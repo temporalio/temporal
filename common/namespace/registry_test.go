@@ -74,7 +74,7 @@ func (s *registrySuite) SetupTest() {
 		s.regPersistence,
 		true,
 		dynamicconfig.GetDurationPropertyFn(time.Second),
-		metrics.NoopClient,
+		metrics.NoopMetricsHandler,
 		log.NewTestLogger())
 }
 
@@ -660,7 +660,7 @@ func TestCacheByName(t *testing.T) {
 		Namespaces: []*persistence.GetNamespaceResponse{&nsrec},
 	}, nil)
 	reg := namespace.NewRegistry(
-		regPersist, false, dynamicconfig.GetDurationPropertyFn(time.Second), metrics.NoopClient, log.NewNoopLogger())
+		regPersist, false, dynamicconfig.GetDurationPropertyFn(time.Second), metrics.NoopMetricsHandler, log.NewNoopLogger())
 	reg.Start()
 	defer reg.Stop()
 	ns, err := reg.GetNamespace(namespace.Name("foo"))

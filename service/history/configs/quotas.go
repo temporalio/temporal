@@ -83,9 +83,9 @@ var (
 func NewPriorityRateLimiter(
 	rateFn quotas.RateFn,
 ) quotas.RequestRateLimiter {
-	rateLimiters := make(map[int]quotas.RateLimiter)
+	rateLimiters := make(map[int]quotas.RequestRateLimiter)
 	for priority := range APIPrioritiesOrdered {
-		rateLimiters[priority] = quotas.NewDefaultIncomingRateLimiter(rateFn)
+		rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultIncomingRateLimiter(rateFn))
 	}
 	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
 		if priority, ok := APIToPriority[req.API]; ok {

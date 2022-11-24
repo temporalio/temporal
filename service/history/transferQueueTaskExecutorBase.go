@@ -66,8 +66,7 @@ type (
 		cache                    workflow.Cache
 		archivalClient           archiver.Client
 		logger                   log.Logger
-		metricProvider           metrics.MetricsHandler
-		metricsClient            metrics.Client
+		metricHandler            metrics.MetricsHandler
 		historyClient            historyservice.HistoryServiceClient
 		matchingClient           matchingservice.MatchingServiceClient
 		config                   *configs.Config
@@ -81,7 +80,7 @@ func newTransferQueueTaskExecutorBase(
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
 	logger log.Logger,
-	metricProvider metrics.MetricsHandler,
+	metricHandler metrics.MetricsHandler,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
@@ -91,8 +90,7 @@ func newTransferQueueTaskExecutorBase(
 		cache:                    workflowCache,
 		archivalClient:           archivalClient,
 		logger:                   logger,
-		metricProvider:           metricProvider,
-		metricsClient:            shard.GetMetricsClient(),
+		metricHandler:            metricHandler,
 		historyClient:            shard.GetHistoryClient(),
 		matchingClient:           matchingClient,
 		config:                   shard.GetConfig(),
@@ -231,11 +229,16 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	task *tasks.DeleteExecutionTask,
 	ensureNoPendingCloseTask bool,
 ) error {
-	return t.deleteExecution(ctx, task, false, ensureNoPendingCloseTask)
+	return t.deleteExecution(ctx, task, false, ensureNoPendingCloseTask, &task.ProcessStage)
 }
 
-func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, task tasks.Task,
-	forceDeleteFromOpenVisibility bool, ensureNoPendingCloseTask bool) (retError error) {
+func (t *transferQueueTaskExecutorBase) deleteExecution(
+	ctx context.Context,
+	task tasks.Task,
+	forceDeleteFromOpenVisibility bool,
+	ensureNoPendingCloseTask bool,
+	stage *tasks.DeleteWorkflowExecutionStage,
+) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
@@ -255,7 +258,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricHandler, t.logger)
 	if err != nil {
 		return err
 	}
@@ -297,6 +300,7 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(ctx context.Context, tas
 		weCtx,
 		mutableState,
 		forceDeleteFromOpenVisibility,
+		stage,
 	)
 }
 

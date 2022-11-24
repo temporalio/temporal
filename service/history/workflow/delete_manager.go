@@ -63,6 +63,7 @@ type (
 			weCtx Context,
 			ms MutableState,
 			forceDeleteFromOpenVisibility bool,
+			stage *tasks.DeleteWorkflowExecutionStage,
 		) error
 		DeleteWorkflowExecutionByRetention(
 			ctx context.Context,
@@ -71,6 +72,7 @@ type (
 			weCtx Context,
 			ms MutableState,
 			archiveIfEnabled bool,
+			stage *tasks.DeleteWorkflowExecutionStage,
 		) error
 	}
 
@@ -78,7 +80,7 @@ type (
 		shard          shard.Context
 		historyCache   Cache
 		config         *configs.Config
-		metricsClient  metrics.Client
+		metricsHandler metrics.MetricsHandler
 		archivalClient archiver.Client
 		timeSource     clock.TimeSource
 	}
@@ -96,7 +98,7 @@ func NewDeleteManager(
 	deleteManager := &DeleteManagerImpl{
 		shard:          shard,
 		historyCache:   cache,
-		metricsClient:  shard.GetMetricsClient(),
+		metricsHandler: shard.GetMetricsHandler(),
 		config:         config,
 		archivalClient: archiverClient,
 		timeSource:     timeSource,
@@ -142,6 +144,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	weCtx Context,
 	ms MutableState,
 	forceDeleteFromOpenVisibility bool,
+	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
 	return m.deleteWorkflowExecutionInternal(
@@ -152,7 +155,8 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 		ms,
 		false,
 		forceDeleteFromOpenVisibility,
-		m.metricsClient.Scope(metrics.HistoryDeleteWorkflowExecutionScope),
+		stage,
+		m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)),
 	)
 }
 
@@ -163,6 +167,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	weCtx Context,
 	ms MutableState,
 	archiveIfEnabled bool,
+	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
 	return m.deleteWorkflowExecutionInternal(
@@ -173,7 +178,8 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 		ms,
 		archiveIfEnabled,
 		false, // When retention is fired, workflow execution is always closed.
-		m.metricsClient.Scope(metrics.HistoryProcessDeleteHistoryEventScope),
+		stage,
+		m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)),
 	)
 }
 
@@ -185,7 +191,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	ms MutableState,
 	archiveIfEnabled bool,
 	forceDeleteFromOpenVisibility bool,
-	scope metrics.Scope,
+	stage *tasks.DeleteWorkflowExecutionStage,
+	metricsHandler metrics.MetricsHandler,
 ) error {
 
 	currentBranchToken, err := ms.GetCurrentBranchToken()
@@ -213,7 +220,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	// after archiving history. But getting workflow close time requires workflow close event (for workflows closed by
 	// server version before 1.17), so this step needs to be done after getting workflow close time.
 	if archiveIfEnabled {
-		deletionPromised, err := m.archiveWorkflowIfEnabled(ctx, namespaceID, we, currentBranchToken, weCtx, ms, scope)
+		deletionPromised, err := m.archiveWorkflowIfEnabled(ctx, namespaceID, we, currentBranchToken, weCtx, ms, metricsHandler)
 		if err != nil {
 			return err
 		}
@@ -240,6 +247,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		startTime,
 		closeTime,
 		ms.GetExecutionInfo().GetCloseVisibilityTaskId(),
+		stage,
 	); err != nil {
 		return err
 	}
@@ -247,7 +255,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	// Clear workflow execution context here to prevent further readers to get stale copy of non-exiting workflow execution.
 	weCtx.Clear()
 
-	scope.IncCounter(metrics.WorkflowCleanupDeleteCount)
+	metricsHandler.Counter(metrics.WorkflowCleanupDeleteCount.GetMetricName()).Record(1)
 	return nil
 }
 
@@ -258,7 +266,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	currentBranchToken []byte,
 	weCtx Context,
 	ms MutableState,
-	scope metrics.Scope,
+	metricsHandler metrics.MetricsHandler,
 ) (deletionPromised bool, err error) {
 
 	namespaceRegistryEntry := ms.GetNamespaceEntry()
@@ -313,9 +321,9 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 		return false, err
 	}
 	if resp.HistoryArchivedInline {
-		scope.IncCounter(metrics.WorkflowCleanupDeleteHistoryInlineCount)
+		metricsHandler.Counter(metrics.WorkflowCleanupDeleteHistoryInlineCount.GetMetricName()).Record(1)
 	} else {
-		scope.IncCounter(metrics.WorkflowCleanupArchiveCount)
+		metricsHandler.Counter(metrics.WorkflowCleanupArchiveCount.GetMetricName()).Record(1)
 	}
 
 	// inline archival don't perform deletion

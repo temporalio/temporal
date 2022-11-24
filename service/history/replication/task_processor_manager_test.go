@@ -109,7 +109,7 @@ func (s *taskProcessorManagerSuite) SetupTest() {
 	s.mockShard.EXPECT().GetNamespaceRegistry().Return(namespace.NewMockRegistry(s.controller)).AnyTimes()
 	s.mockShard.EXPECT().GetConfig().Return(s.config).AnyTimes()
 	s.mockShard.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
-	s.mockShard.EXPECT().GetMetricsClient().Return(metrics.NoopClient).AnyTimes()
+	s.mockShard.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 	s.mockShard.EXPECT().GetPayloadSerializer().Return(serializer).AnyTimes()
 	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 	s.mockShard.EXPECT().GetExecutionManager().Return(s.mockExecutionManager).AnyTimes()
@@ -135,7 +135,7 @@ func (s *taskProcessorManagerSuite) TearDownTest() {
 
 func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Noop() {
 	ackedTaskID := int64(12345)
-	s.mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, cluster.TestCurrentClusterName, false).Return(tasks.NewImmediateKey(ackedTaskID))
+	s.mockShard.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(tasks.NewImmediateKey(ackedTaskID))
 	s.mockShard.EXPECT().GetQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName).Return(tasks.NewImmediateKey(ackedTaskID))
 
 	s.taskProcessorManager.minTxAckedTaskID = ackedTaskID
@@ -145,7 +145,7 @@ func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Noop() {
 
 func (s *taskProcessorManagerSuite) TestCleanupReplicationTask_Cleanup() {
 	ackedTaskID := int64(12345)
-	s.mockShard.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication, cluster.TestCurrentClusterName, false).Return(tasks.NewImmediateKey(ackedTaskID)).Times(2)
+	s.mockShard.EXPECT().GetImmediateQueueExclusiveHighReadWatermark().Return(tasks.NewImmediateKey(ackedTaskID)).Times(2)
 	s.mockShard.EXPECT().GetQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName).Return(tasks.NewImmediateKey(ackedTaskID))
 	s.taskProcessorManager.minTxAckedTaskID = ackedTaskID - 1
 	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(

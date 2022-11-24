@@ -60,7 +60,7 @@ type (
 		visibilityTaskFilter     taskFilter
 		ownedScheduler           queues.Scheduler // this is the scheduler owned by this visibility queue processor
 		logger                   log.Logger
-		metricsClient            metrics.Client
+		metricHandler            metrics.MetricsHandler
 
 		// from transferQueueProcessorImpl
 		config   *configs.Config
@@ -80,11 +80,12 @@ func newVisibilityQueueProcessor(
 	visibilityMgr manager.VisibilityManager,
 	metricProvider metrics.MetricsHandler,
 	hostRateLimiter quotas.RateLimiter,
+	schedulerRateLimiter queues.SchedulerRateLimiter,
 ) queues.Queue {
 
 	config := shard.GetConfig()
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
-	metricsClient := shard.GetMetricsClient()
+	metricHandler := shard.GetMetricsHandler()
 
 	options := &QueueProcessorOptions{
 		BatchSize:                          config.VisibilityTaskBatchSize,
@@ -94,19 +95,13 @@ func newVisibilityQueueProcessor(
 		UpdateAckIntervalJitterCoefficient: config.VisibilityProcessorUpdateAckIntervalJitterCoefficient,
 		MaxReschdulerSize:                  config.VisibilityProcessorMaxReschedulerSize,
 		PollBackoffInterval:                config.VisibilityProcessorPollBackoffInterval,
-		MetricScope:                        metrics.VisibilityQueueProcessorScope,
+		Operation:                          metrics.VisibilityQueueProcessorScope,
 	}
 	visibilityTaskFilter := func(taskInfo tasks.Task) bool {
 		return true
 	}
 	maxReadLevel := func() int64 {
-		return shard.GetQueueExclusiveHighReadWatermark(
-			tasks.CategoryVisibility,
-			shard.GetClusterMetadata().GetCurrentClusterName(),
-			// the value doesn't actually used for immediate queue,
-			// but logically visibility queue only has one processor
-			true,
-		).TaskID
+		return shard.GetImmediateQueueExclusiveHighReadWatermark().TaskID
 	}
 	updateVisibilityAckLevel := func(ackLevel int64) error {
 		return shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.NewImmediateKey(ackLevel))
@@ -125,7 +120,7 @@ func newVisibilityQueueProcessor(
 		visibilityQueueShutdown:  visibilityQueueShutdown,
 		visibilityTaskFilter:     visibilityTaskFilter,
 		logger:                   logger,
-		metricsClient:            metricsClient,
+		metricHandler:            metricHandler,
 
 		config:       config,
 		ackLevel:     ackLevel,
@@ -142,10 +137,12 @@ func newVisibilityQueueProcessor(
 		visibilityMgr,
 		logger,
 		metricProvider,
+		config.VisibilityProcessorEnsureCloseBeforeDelete,
+		config.VisibilityProcessorEnableCloseWorkflowCleanup,
 	)
 
 	if scheduler == nil {
-		scheduler = newVisibilityTaskShardScheduler(shard, logger)
+		scheduler = newVisibilityTaskShardScheduler(shard, schedulerRateLimiter, logger)
 		retProcessor.ownedScheduler = scheduler
 	}
 
@@ -153,7 +150,7 @@ func newVisibilityQueueProcessor(
 		scheduler,
 		shard.GetTimeSource(),
 		logger,
-		metricProvider.WithTags(metrics.OperationTag(queues.OperationVisibilityQueueProcessor)),
+		metricProvider.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope)),
 	)
 
 	queueAckMgr := newQueueAckMgr(
@@ -273,7 +270,7 @@ func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
 			_ = backoff.ThrottleRetry(func() error {
 				err := t.completeTask()
 				if err != nil {
-					t.logger.Info("Failed to complete transfer task", tag.Error(err))
+					t.logger.Error("Failed to complete visibility task", tag.Error(err))
 				}
 				return err
 			}, completeTaskRetryPolicy, func(err error) bool {
@@ -299,7 +296,9 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 		return nil
 	}
 
-	t.metricsClient.IncCounter(metrics.VisibilityQueueProcessorScope, metrics.TaskBatchCompleteCounter)
+	t.metricHandler.Counter(metrics.TaskBatchCompleteCounter.GetMetricName()).Record(
+		1,
+		metrics.OperationTag(metrics.VisibilityQueueProcessorScope))
 
 	if lowerAckLevel < upperAckLevel {
 		ctx, cancel := newQueueIOContext()
@@ -359,14 +358,18 @@ func (t *visibilityQueueProcessorImpl) queueShutdown() error {
 
 func newVisibilityTaskShardScheduler(
 	shard shard.Context,
+	rateLimiter queues.SchedulerRateLimiter,
 	logger log.Logger,
 ) queues.Scheduler {
 	config := shard.GetConfig()
-	return queues.NewFIFOScheduler(
-		queues.FIFOSchedulerOptions{
-			WorkerCount: config.VisibilityTaskWorkerCount,
-			QueueSize:   config.VisibilityTaskBatchSize(),
+	return queues.NewPriorityScheduler(
+		queues.PrioritySchedulerOptions{
+			WorkerCount:                 config.VisibilityTaskWorkerCount,
+			EnableRateLimiter:           config.TaskSchedulerEnableRateLimiter,
+			MaxDispatchThrottleDuration: ShardSchedulerMaxDispatchThrottleDuration,
 		},
+		rateLimiter,
+		shard.GetTimeSource(),
 		logger,
 	)
 }
