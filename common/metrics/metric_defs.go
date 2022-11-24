@@ -1133,7 +1133,7 @@ const (
 	// SessionStatsScope is the scope used for emiting session update related stats
 	SessionStatsScope = "SessionStats"
 	// WorkflowCompletionStatsScope tracks workflow completion updates
-	WorkflowCompletionStatsScope = "WorkflowCompletionStats"
+	WorkflowCompletionStatsScope = "CompletionStats"
 	// ReplicationTaskFetcherScope is scope used by all metrics emitted by ReplicationTaskFetcher
 	ReplicationTaskFetcherScope = "ReplicationTaskFetcher"
 	// ReplicationTaskCleanupScope is scope used by all metrics emitted by ReplicationTaskProcessor cleanup
