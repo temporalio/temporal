@@ -682,15 +682,27 @@ func (s *VisibilityPersistenceSuite) TestAdvancedVisibilityPagination() {
 	}
 
 	for pageSize := 1; pageSize <= 5; pageSize++ {
-		executions := s.listWithPagination(testNamespaceUUID, 5)
-		s.Equal(5, len(executions))
-		for i := 0; i < 5; i++ {
-			if i <= 1 {
-				s.assertOpenExecutionEquals(startReqs[i], executions[i])
-			} else {
-				s.assertClosedExecutionEquals(closeReqs[i-2], executions[i])
-			}
+		executions := make(map[string]*workflowpb.WorkflowExecutionInfo)
+		for _, e := range s.listWithPagination(testNamespaceUUID, 5) {
+			executions[e.GetExecution().GetWorkflowId()] = e
 		}
+
+		// there is no order guarantee from the list method, so we have to find the right execution
+		for _, r := range startReqs {
+			id := r.Execution.GetWorkflowId()
+			e, ok := executions[id]
+			s.True(ok)
+			s.assertOpenExecutionEquals(r, e)
+			delete(executions, id)
+		}
+		for _, r := range closeReqs {
+			id := r.Execution.GetWorkflowId()
+			e, ok := executions[id]
+			s.True(ok)
+			s.assertClosedExecutionEquals(r, e)
+			delete(executions, id)
+		}
+		s.Empty(executions, "Unexpected executions returned from list method")
 	}
 }
 

@@ -872,6 +872,20 @@ func (mr *MockMutableStateMockRecorder) CloseTransactionAsSnapshot(now, transact
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransactionAsSnapshot", reflect.TypeOf((*MockMutableState)(nil).CloseTransactionAsSnapshot), now, transactionPolicy)
 }
 
+// ContinueAsNewMinBackoff mocks base method.
+func (m *MockMutableState) ContinueAsNewMinBackoff(backoffDuration *time.Duration) *time.Duration {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ContinueAsNewMinBackoff", backoffDuration)
+	ret0, _ := ret[0].(*time.Duration)
+	return ret0
+}
+
+// ContinueAsNewMinBackoff indicates an expected call of ContinueAsNewMinBackoff.
+func (mr *MockMutableStateMockRecorder) ContinueAsNewMinBackoff(backoffDuration interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ContinueAsNewMinBackoff", reflect.TypeOf((*MockMutableState)(nil).ContinueAsNewMinBackoff), backoffDuration)
+}
+
 // CreateTransientWorkflowTask mocks base method.
 func (m *MockMutableState) CreateTransientWorkflowTask(workflowTask *WorkflowTaskInfo, identity string) *v19.TransientWorkflowTaskInfo {
 	m.ctrl.T.Helper()
