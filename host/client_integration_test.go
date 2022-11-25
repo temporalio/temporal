@@ -768,6 +768,37 @@ func (s *clientIntegrationSuite) TestTooManyPendingSignals() {
 	})
 }
 
+func continueAsNewTightLoop(ctx workflow.Context, currCount, maxCount int) (int, error) {
+	if currCount == maxCount {
+		return currCount, nil
+	}
+	return currCount, workflow.NewContinueAsNewError(ctx, continueAsNewTightLoop, currCount+1, maxCount)
+}
+
+func (s *clientIntegrationSuite) TestContinueAsNewTightLoop() {
+	// Simulate continue as new tight loop, and verify server throttle the rate.
+	workflowId := "continue_as_new_tight_loop"
+	s.worker.RegisterWorkflow(continueAsNewTightLoop)
+
+	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
+	defer cancel()
+	options := sdkclient.StartWorkflowOptions{
+		ID:                 workflowId,
+		TaskQueue:          s.taskQueue,
+		WorkflowRunTimeout: time.Second * 10,
+	}
+	startTime := time.Now()
+	future, err := s.sdkClient.ExecuteWorkflow(ctx, options, continueAsNewTightLoop, 1, 5)
+	s.NoError(err)
+
+	var runCount int
+	err = future.Get(ctx, &runCount)
+	s.NoError(err)
+	s.Equal(5, runCount)
+	duration := time.Since(startTime)
+	s.GreaterOrEqual(duration, time.Second*4)
+}
+
 func (s *clientIntegrationSuite) eventuallySucceeds(ctx context.Context, operationCtx backoff.OperationCtx) {
 	s.T().Helper()
 	s.NoError(backoff.ThrottleRetryContext(
