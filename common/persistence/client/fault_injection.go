@@ -141,16 +141,22 @@ func (d *FaultInjectionDataStoreFactory) UpdateRate(rate float64) {
 	d.Queue.UpdateRate(rate)
 	d.ClusterMDStore.UpdateRate(rate)
 }
-
 func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, error) {
 	if d.TaskStore == nil {
 		baseFactory, err := d.baseFactory.NewTaskStore()
 		if err != nil {
 			return nil, err
 		}
-		d.TaskStore, err = NewFaultInjectionTaskStore(d.ErrorGenerator.Rate(), baseFactory)
-		if err != nil {
-			return nil, err
+		if storeConfig, ok := d.config.Targets.DataStores[config.TaskStoreName]; ok {
+			d.TaskStore = &FaultInjectionTaskStore{
+				baseTaskStore:  baseFactory,
+				ErrorGenerator: NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.TaskStore, err = NewFaultInjectionTaskStore(d.ErrorGenerator.Rate(), baseFactory)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return d.TaskStore, nil
@@ -162,9 +168,16 @@ func (d *FaultInjectionDataStoreFactory) NewShardStore() (persistence.ShardStore
 		if err != nil {
 			return nil, err
 		}
-		d.ShardStore, err = NewFaultInjectionShardStore(d.ErrorGenerator.Rate(), baseFactory)
-		if err != nil {
-			return nil, err
+		if storeConfig, ok := d.config.Targets.DataStores[config.ShardStoreName]; ok {
+			d.ShardStore = &FaultInjectionShardStore{
+				baseShardStore: baseFactory,
+				ErrorGenerator: NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.ShardStore, err = NewFaultInjectionShardStore(d.ErrorGenerator.Rate(), baseFactory)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return d.ShardStore, nil
@@ -176,9 +189,16 @@ func (d *FaultInjectionDataStoreFactory) NewMetadataStore() (persistence.Metadat
 		if err != nil {
 			return nil, err
 		}
-		d.MetadataStore, err = NewFaultInjectionMetadataStore(d.ErrorGenerator.Rate(), baseStore)
-		if err != nil {
-			return nil, err
+		if storeConfig, ok := d.config.Targets.DataStores[config.MetadataStoreName]; ok {
+			d.MetadataStore = &FaultInjectionMetadataStore{
+				baseMetadataStore: baseStore,
+				ErrorGenerator:    NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.MetadataStore, err = NewFaultInjectionMetadataStore(d.ErrorGenerator.Rate(), baseStore)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return d.MetadataStore, nil
@@ -190,9 +210,16 @@ func (d *FaultInjectionDataStoreFactory) NewExecutionStore() (persistence.Execut
 		if err != nil {
 			return nil, err
 		}
-		d.ExecutionStore, err = NewFaultInjectionExecutionStore(d.ErrorGenerator.Rate(), baseStore)
-		if err != nil {
-			return nil, err
+		if storeConfig, ok := d.config.Targets.DataStores[config.ExecutionStoreName]; ok {
+			d.ExecutionStore = &FaultInjectionExecutionStore{
+				baseExecutionStore: baseStore,
+				ErrorGenerator:     NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.ExecutionStore, err = NewFaultInjectionExecutionStore(d.ErrorGenerator.Rate(), baseStore)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 	}
@@ -205,11 +232,17 @@ func (d *FaultInjectionDataStoreFactory) NewQueue(queueType persistence.QueueTyp
 		if err != nil {
 			return baseQueue, err
 		}
-		d.Queue, err = NewFaultInjectionQueue(d.ErrorGenerator.Rate(), baseQueue)
-		if err != nil {
-			return nil, err
+		if storeConfig, ok := d.config.Targets.DataStores[config.QueueName]; ok {
+			d.Queue = &FaultInjectionQueue{
+				baseQueue:      baseQueue,
+				ErrorGenerator: NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.Queue, err = NewFaultInjectionQueue(d.ErrorGenerator.Rate(), baseQueue)
+			if err != nil {
+				return nil, err
+			}
 		}
-
 	}
 	return d.Queue, nil
 }
@@ -220,9 +253,16 @@ func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.
 		if err != nil {
 			return nil, err
 		}
-		d.ClusterMDStore, err = NewFaultInjectionClusterMetadataStore(d.ErrorGenerator.Rate(), baseStore)
-		if err != nil {
-			return nil, err
+		if storeConfig, ok := d.config.Targets.DataStores[config.ClusterMDStoreName]; ok {
+			d.ClusterMDStore = &FaultInjectionClusterMetadataStore{
+				baseCMStore:    baseStore,
+				ErrorGenerator: NewTargetedDataStoreErrorGenerator(&storeConfig),
+			}
+		} else {
+			d.ClusterMDStore, err = NewFaultInjectionClusterMetadataStore(d.ErrorGenerator.Rate(), baseStore)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 	}

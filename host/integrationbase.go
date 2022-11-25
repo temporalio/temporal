@@ -126,8 +126,13 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	}
 }
 
+// setupLogger sets the Logger for the test suite.
+// If the Logger is already set, this method does nothing.
+// If the Logger is not set, this method creates a new log.TestLogger which logs to stdout and stderr.
 func (s *IntegrationBase) setupLogger() {
-	s.Logger = log.NewTestLogger()
+	if s.Logger == nil {
+		s.Logger = log.NewTestLogger()
+	}
 }
 
 // GetTestClusterConfig return test cluster config
