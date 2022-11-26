@@ -90,7 +90,12 @@ func TestScheduleIntegrationSuite(t *testing.T) {
 }
 
 func (s *scheduleIntegrationSuite) SetupSuite() {
-	s.setupSuite("testdata/schedule_integration_test_cluster.yaml")
+	if TestFlags.PersistenceDriver == sqlite.PluginName {
+		// sqlite tests are run without elasticsearch
+		s.setupSuite("testdata/schedule_integration_test_cluster_std_vis.yaml")
+	} else {
+		s.setupSuite("testdata/schedule_integration_test_cluster_adv_vis.yaml")
+	}
 	s.hostPort = "127.0.0.1:7134"
 	if TestFlags.FrontendAddr != "" {
 		s.hostPort = TestFlags.FrontendAddr
