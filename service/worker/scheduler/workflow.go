@@ -526,12 +526,13 @@ func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
 }
 
 func (s *scheduler) handleDescribeQuery() (*schedspb.DescribeResponse, error) {
-	// this field is never read by the workflow so it's okay to modify it from a query
-	s.Info.FutureActionTimes = s.getFutureActionTimes(s.tweakables.FutureActionCount)
+	// this is a query handler, don't modify s.Info directly
+	infoCopy := *s.Info
+	infoCopy.FutureActionTimes = s.getFutureActionTimes(s.tweakables.FutureActionCount)
 
 	return &schedspb.DescribeResponse{
 		Schedule:      s.Schedule,
-		Info:          s.Info,
+		Info:          &infoCopy,
 		ConflictToken: s.State.ConflictToken,
 	}, nil
 }
