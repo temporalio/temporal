@@ -107,7 +107,7 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	handler := c.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryCacheGetOrCreateScope))
 	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
 	start := time.Now()
-	defer handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(start))
+	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(start)) }()
 
 	weCtx, weReleaseFunc, err := c.getOrCreateWorkflowExecutionInternal(
 		ctx,

@@ -114,7 +114,7 @@ func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int
 	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetEventScope))
 	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
 	startTime := time.Now().UTC()
-	defer handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	validKey := e.validateKey(key)
 
@@ -150,7 +150,7 @@ func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
 	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCachePutEventScope))
 	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
 	startTime := time.Now().UTC()
-	defer handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	if !e.validateKey(key) {
 		return
@@ -162,7 +162,7 @@ func (e *CacheImpl) DeleteEvent(key EventKey) {
 	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheDeleteEventScope))
 	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
 	startTime := time.Now().UTC()
-	defer handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	e.validateKey(key) // just for log message, delete anyway
 	e.Delete(key)
@@ -178,7 +178,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	handler := e.metricsHandler.WithTags(metrics.OperationTag(metrics.EventsCacheGetFromStoreScope))
 	handler.Counter(metrics.CacheRequests.GetMetricName()).Record(1)
 	startTime := time.Now().UTC()
-	defer handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() { handler.Timer(metrics.CacheLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	response, err := e.eventsMgr.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,

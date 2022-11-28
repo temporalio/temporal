@@ -617,7 +617,9 @@ func (r *registry) triggerNamespaceChangePrepareCallback(
 	prepareCallbacks []PrepareCallbackFn,
 ) {
 	startTime := time.Now().UTC()
-	defer r.metricsHandler.Timer(metrics.NamespaceCachePrepareCallbacksLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() {
+		r.metricsHandler.Timer(metrics.NamespaceCachePrepareCallbacksLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 
 	for _, prepareCallback := range prepareCallbacks {
 		prepareCallback()
@@ -630,7 +632,9 @@ func (r *registry) triggerNamespaceChangeCallback(
 	newNamespaces []*Namespace,
 ) {
 	startTime := time.Now().UTC()
-	defer r.metricsHandler.Timer(metrics.NamespaceCacheCallbacksLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() {
+		r.metricsHandler.Timer(metrics.NamespaceCacheCallbacksLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 
 	for _, callback := range callbacks {
 		callback(oldNamespaces, newNamespaces)

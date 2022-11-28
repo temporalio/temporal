@@ -188,14 +188,18 @@ func (c *ControllerImpl) GetShardByID(
 	shardID int32,
 ) (Context, error) {
 	startTime := time.Now().UTC()
-	defer c.taggedMetricsHandler.Timer(metrics.GetEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() {
+		c.taggedMetricsHandler.Timer(metrics.GetEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 
 	return c.getOrCreateShardContext(shardID)
 }
 
 func (c *ControllerImpl) CloseShardByID(shardID int32) {
 	startTime := time.Now().UTC()
-	defer c.taggedMetricsHandler.Timer(metrics.RemoveEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() {
+		c.taggedMetricsHandler.Timer(metrics.RemoveEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 
 	shard, newNumShards := c.removeShard(shardID, nil)
 	// Stop the current shard, if it exists.
@@ -209,7 +213,9 @@ func (c *ControllerImpl) CloseShardByID(shardID int32) {
 
 func (c *ControllerImpl) shardClosedCallback(shard *ContextImpl) {
 	startTime := time.Now().UTC()
-	defer c.taggedMetricsHandler.Timer(metrics.RemoveEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() {
+		c.taggedMetricsHandler.Timer(metrics.RemoveEngineForShardLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 
 	c.taggedMetricsHandler.Counter(metrics.ShardContextClosedCounter.GetMetricName()).Record(1)
 	_, newNumShards := c.removeShard(shard.shardID, shard)
@@ -350,7 +356,9 @@ func (c *ControllerImpl) shardManagementPump() {
 func (c *ControllerImpl) acquireShards() {
 	c.taggedMetricsHandler.Counter(metrics.AcquireShardsCounter.GetMetricName()).Record(1)
 	startTime := time.Now().UTC()
-	defer c.taggedMetricsHandler.Timer(metrics.AcquireShardsLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() {
+		c.taggedMetricsHandler.Timer(metrics.AcquireShardsLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 
 	tryAcquire := func(shardID int32) {
 		info, err := c.historyServiceResolver.Lookup(convert.Int32ToString(shardID))

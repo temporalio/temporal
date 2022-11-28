@@ -213,7 +213,9 @@ func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
 ) error {
 	p.metricsHandler.Counter(metrics.ReplicatorMessages.GetMetricName()).Record(1)
 	startTime := time.Now().UTC()
-	defer p.metricsHandler.Timer(metrics.ReplicatorLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() {
+		p.metricsHandler.Timer(metrics.ReplicatorLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 
 	return p.taskExecutor.Execute(ctx, task.GetNamespaceTaskAttributes())
 }

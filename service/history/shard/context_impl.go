@@ -1538,7 +1538,7 @@ func (s *ContextImpl) wLock() {
 	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
 	handler.Counter(metrics.LockRequests.GetMetricName()).Record(1)
 	startTime := time.Now().UTC()
-	defer handler.Timer(metrics.LockLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() { handler.Timer(metrics.LockLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	s.rwLock.Lock()
 }
@@ -1547,7 +1547,7 @@ func (s *ContextImpl) rLock() {
 	handler := s.metricsHandler.WithTags(metrics.OperationTag(metrics.ShardInfoScope))
 	handler.Counter(metrics.LockRequests.GetMetricName()).Record(1)
 	startTime := time.Now().UTC()
-	defer handler.Timer(metrics.LockLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() { handler.Timer(metrics.LockLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	s.rwLock.RLock()
 }
