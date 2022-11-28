@@ -25,35 +25,28 @@
 package temporal
 
 import (
-	"time"
+	"path"
+	"testing"
 
-	"go.temporal.io/server/common/primitives"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"go.temporal.io/server/common/config"
+	// need to import this package to register the sqlite plugin
+	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+	"go.temporal.io/server/tests/testhelper"
 )
 
-const (
-	mismatchLogMessage  = "Supplied configuration key/value mismatches persisted cluster metadata. Continuing with the persisted value as this value cannot be changed once initialized."
-	serviceStartTimeout = time.Duration(15) * time.Second
-	serviceStopTimeout  = time.Duration(60) * time.Second
-)
-
-type (
-	Server interface {
-		Start() error
-		Stop()
-	}
-)
-
-// Services is the list of all valid temporal services
-var (
-	Services = []string{
-		primitives.FrontendService,
-		primitives.HistoryService,
-		primitives.MatchingService,
-		primitives.WorkerService,
-	}
-)
-
-// NewServer returns a new instance of server that serves one or many services.
-func NewServer(opts ...ServerOption) (Server, error) {
-	return NewServerFx(opts...)
+// TestNewServer verifies that NewServer doesn't cause any fx errors
+func TestNewServer(t *testing.T) {
+	configDir := path.Join(testhelper.GetRepoRootDirectory(), "config")
+	cfg, err := config.LoadConfig("development-sqlite", configDir, "")
+	require.NoError(t, err)
+	cfg.DynamicConfigClient.Filepath = path.Join(configDir, "dynamicconfig", "development-sql.yaml")
+	_, err = NewServer(
+		ForServices(Services),
+		WithConfig(cfg),
+	)
+	assert.NoError(t, err)
+	// TODO: add tests for Server.Run(), etc.
 }
