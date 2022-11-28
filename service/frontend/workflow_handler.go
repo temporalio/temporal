@@ -3217,7 +3217,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	// wait up to 4 seconds or rpc deadline minus 1 second, but at least 1 second
 	expiration := 4 * time.Second
 	if deadline, ok := ctx.Deadline(); ok {
-		remaining := deadline.Sub(time.Now()) - 1*time.Second
+		remaining := time.Until(deadline) - 1*time.Second
 		expiration = util.Min(expiration, remaining)
 	}
 	expiration = util.Max(expiration, 1*time.Second)
