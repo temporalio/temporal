@@ -146,10 +146,12 @@ func (e *taskExecutorImpl) handleActivityTask(
 	}
 
 	startTime := time.Now().UTC()
-	defer e.metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
-		time.Since(startTime),
-		metrics.OperationTag(metrics.SyncActivityTaskScope),
-	)
+	defer func() {
+		e.metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
+			time.Since(startTime),
+			metrics.OperationTag(metrics.SyncActivityTaskScope),
+		)
+	}()
 
 	request := &historyservice.SyncActivityRequest{
 		NamespaceId:        attr.NamespaceId,
@@ -181,10 +183,12 @@ func (e *taskExecutorImpl) handleActivityTask(
 			metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
 		)
 		startTime := time.Now().UTC()
-		defer e.metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(
-			time.Since(startTime),
-			metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
-		)
+		defer func() {
+			e.metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(
+				time.Since(startTime),
+				metrics.OperationTag(metrics.HistoryRereplicationByActivityReplicationScope),
+			)
+		}()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
 			ctx,
@@ -227,10 +231,12 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 	}
 
 	startTime := time.Now().UTC()
-	defer e.metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
-		time.Since(startTime),
-		metrics.OperationTag(metrics.HistoryReplicationTaskScope),
-	)
+	defer func() {
+		e.metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(
+			time.Since(startTime),
+			metrics.OperationTag(metrics.HistoryReplicationTaskScope),
+		)
+	}()
 
 	request := &historyservice.ReplicateEventsV2Request{
 		NamespaceId: attr.NamespaceId,
@@ -257,10 +263,12 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 			metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
 		)
 		startTime := time.Now().UTC()
-		defer e.metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(
-			time.Since(startTime),
-			metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
-		)
+		defer func() {
+			e.metricsHandler.Timer(metrics.ClientLatency.GetMetricName()).Record(
+				time.Since(startTime),
+				metrics.OperationTag(metrics.HistoryRereplicationByHistoryReplicationScope),
+			)
+		}()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
 			ctx,
