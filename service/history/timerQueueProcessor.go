@@ -197,7 +197,8 @@ func (t *timerQueueProcessorImpl) NotifyNewTasks(
 	standbyTimerProcessor, ok := t.standbyTimerProcessors[clusterName]
 	t.standbyTimerProcessorsLock.RUnlock()
 	if !ok {
-		panic(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
+		t.logger.Warn(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
+		return
 	}
 	standbyTimerProcessor.setCurrentTime(t.shard.GetCurrentTime(clusterName))
 	standbyTimerProcessor.notifyNewTimers(timerTasks)
