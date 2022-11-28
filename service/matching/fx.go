@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service"
@@ -106,7 +107,7 @@ func PersistenceRateLimitingParamsProvider(
 }
 
 func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.ServiceResolver, error) {
-	return membershipMonitor.GetResolver(common.MatchingServiceName)
+	return membershipMonitor.GetResolver(primitives.MatchingService)
 }
 
 func HandlerProvider(

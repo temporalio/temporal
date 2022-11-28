@@ -149,7 +149,7 @@ func NewService(
 	visibilityManager manager.VisibilityManager,
 	workerFactory sdk.WorkerFactory,
 ) (*Service, error) {
-	workerServiceResolver, err := membershipMonitor.GetResolver(common.WorkerServiceName)
+	workerServiceResolver, err := membershipMonitor.GetResolver(primitives.WorkerService)
 	if err != nil {
 		return nil, err
 	}

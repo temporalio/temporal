@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -111,7 +112,7 @@ func ServiceProvider(
 }
 
 func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.ServiceResolver, error) {
-	return membershipMonitor.GetResolver(common.HistoryServiceName)
+	return membershipMonitor.GetResolver(primitives.HistoryService)
 }
 
 func HandlerProvider(args NewHandlerArgs) *Handler {

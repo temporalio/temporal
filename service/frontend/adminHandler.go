@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/primitives"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -453,7 +454,7 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), request.Execution.WorkflowId, adh.numberOfHistoryShards)
 	shardIDStr := convert.Int32ToString(shardID)
 
-	historyHost, err := adh.membershipMonitor.Lookup(common.HistoryServiceName, shardIDStr)
+	historyHost, err := adh.membershipMonitor.Lookup(primitives.HistoryService, shardIDStr)
 	if err != nil {
 		return nil, err
 	}
@@ -801,7 +802,7 @@ func (adh *AdminHandler) DescribeCluster(
 		membershipInfo.ReachableMembers = members
 
 		var rings []*clusterspb.RingInfo
-		for _, role := range []string{common.FrontendServiceName, common.HistoryServiceName, common.MatchingServiceName, common.WorkerServiceName} {
+		for _, role := range []string{primitives.FrontendService, primitives.HistoryService, primitives.MatchingService, primitives.WorkerService} {
 			resolver, err := monitor.GetResolver(role)
 			if err != nil {
 				return nil, err

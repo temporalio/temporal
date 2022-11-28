@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 )
 
 type (
@@ -118,7 +119,7 @@ func (p *factoryProviderImpl) NewFactory(
 }
 
 func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (historyservice.HistoryServiceClient, error) {
-	resolver, err := cf.monitor.GetResolver(common.HistoryServiceName)
+	resolver, err := cf.monitor.GetResolver(primitives.HistoryService)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +142,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (matchingservice.MatchingServiceClient, error) {
-	resolver, err := cf.monitor.GetResolver(common.MatchingServiceName)
+	resolver, err := cf.monitor.GetResolver(primitives.MatchingService)
 	if err != nil {
 		return nil, err
 	}

@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
@@ -382,7 +383,7 @@ func FEReplicatorNamespaceReplicationQueueProvider(
 }
 
 func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.ServiceResolver, error) {
-	return membershipMonitor.GetResolver(common.FrontendServiceName)
+	return membershipMonitor.GetResolver(primitives.FrontendService)
 }
 
 func AdminHandlerProvider(

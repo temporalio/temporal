@@ -40,13 +40,13 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -409,7 +409,7 @@ type (
 
 func (m archiverClientRequestMatcher) Matches(x interface{}) bool {
 	req := x.(*archiver.ClientRequest)
-	return req.CallerService == common.HistoryServiceName &&
+	return req.CallerService == primitives.HistoryService &&
 		req.AttemptArchiveInline == m.inline &&
 		req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory
 }

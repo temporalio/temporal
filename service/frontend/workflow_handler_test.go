@@ -158,7 +158,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.tokenSerializer = common.NewProtoTaskTokenSerializer()
 
 	mockMonitor := s.mockResource.MembershipMonitor
-	mockMonitor.EXPECT().GetMemberCount(common.FrontendServiceName).Return(5, nil).AnyTimes()
+	mockMonitor.EXPECT().GetMemberCount(primitives.FrontendService).Return(5, nil).AnyTimes()
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {

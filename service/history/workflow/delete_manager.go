@@ -34,12 +34,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -298,7 +298,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 			BranchToken:          currentBranchToken,
 			CloseFailoverVersion: closeFailoverVersion,
 		},
-		CallerService:        common.HistoryServiceName,
+		CallerService:        primitives.HistoryService,
 		AttemptArchiveInline: false, // archive in workflow by default
 	}
 	executionStats, err := weCtx.LoadExecutionStats(ctx)
