@@ -108,6 +108,7 @@ type (
 		FutureActionCountForList          int           // The number of future action times to include in List (search attr).
 		RecentActionCountForList          int           // The number of recent actual action results to include in List (search attr).
 		IterationsBeforeContinueAsNew     int
+		SleepWhilePaused                  bool // If true, don't set timers while paused/out of actions
 	}
 )
 
@@ -137,6 +138,7 @@ var (
 		FutureActionCountForList:          5,
 		RecentActionCountForList:          5,
 		IterationsBeforeContinueAsNew:     500,
+		SleepWhilePaused:                  true,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -388,6 +390,11 @@ func (s *scheduler) sleep(nextSleep time.Duration) {
 
 	refreshCh := workflow.GetSignalChannel(s.ctx, SignalNameRefresh)
 	sel.AddReceive(refreshCh, s.handleRefreshSignal)
+
+	// if we're paused or out of actions, we don't need to wake up until we get an update
+	if s.tweakables.SleepWhilePaused && !s.canTakeScheduledAction(false, false) {
+		nextSleep = invalidDuration
+	}
 
 	if nextSleep != invalidDuration {
 		tmr := workflow.NewTimer(s.ctx, nextSleep)
