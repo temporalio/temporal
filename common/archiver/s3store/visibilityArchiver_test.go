@@ -225,7 +225,7 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	s.NoError(err)
 
 	expectedKey := constructTimestampIndex(URI.Path(), testNamespaceID, primaryIndexKeyWorkflowID, testWorkflowID, secondaryIndexKeyCloseTimeout, timestamp.TimeValue(closeTimestamp), testRunID)
-	data, err := download(context.Background(), visibilityArchiver.s3cli, URI, expectedKey)
+	data, err := Download(context.Background(), visibilityArchiver.s3cli, URI, expectedKey)
 	s.NoError(err, expectedKey)
 
 	archivedRecord := &archiverspb.VisibilityRecord{}
