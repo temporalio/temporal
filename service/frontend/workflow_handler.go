@@ -3120,6 +3120,9 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	// then query to get current state from the workflow itself
 	// TODO: turn the refresh path into a synchronous update so we don't have to retry in a loop
 	sentRefresh := make(map[commonpb.WorkflowExecution]struct{})
+	// limit how many signals we send, separate from the retry policy (which is used to retry
+	// the query if the signal was not received or processed yet)
+	signalsLeft := 1
 	var queryResponse schedspb.DescribeResponse
 
 	op := func(ctx context.Context) error {
@@ -3192,9 +3195,10 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 			}
 		}
 
-		if !needRefresh {
+		if !needRefresh || signalsLeft == 0 {
 			return nil
 		}
+		signalsLeft--
 
 		// poke to refresh
 		_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
