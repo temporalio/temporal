@@ -51,7 +51,7 @@ type RPCFactory struct {
 	dc          *dynamicconfig.Collection
 	frontendURL string
 
-	sync.Mutex
+	initListener       sync.Once
 	grpcListener       net.Listener
 	tlsFactory         encryption.TLSConfigProvider
 	clientInterceptors []grpc.UnaryClientInterceptor
@@ -139,25 +139,17 @@ func (d *RPCFactory) GetInternodeClientTlsConfig() (*tls.Config, error) {
 
 // GetGRPCListener returns cached dispatcher for gRPC inbound or creates one
 func (d *RPCFactory) GetGRPCListener() net.Listener {
-	if d.grpcListener != nil {
-		return d.grpcListener
-	}
-
-	d.Lock()
-	defer d.Unlock()
-
-	if d.grpcListener == nil {
+	d.initListener.Do(func() {
 		hostAddress := net.JoinHostPort(getListenIP(d.config, d.logger).String(), convert.IntToString(d.config.GRPCPort))
 		var err error
 		d.grpcListener, err = net.Listen("tcp", hostAddress)
 
 		if err != nil {
 			d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
-			return nil
 		}
 
 		d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
-	}
+	})
 
 	return d.grpcListener
 }
