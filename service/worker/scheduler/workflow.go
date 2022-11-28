@@ -155,8 +155,8 @@ func SchedulerWorkflow(ctx workflow.Context, args *schedspb.StartScheduleArgs) e
 func (s *scheduler) run() error {
 	s.logger.Info("Schedule starting", "schedule", s.Schedule)
 
-	s.ensureFields()
 	s.updateTweakables()
+	s.ensureFields()
 	s.compileSpec()
 
 	if err := workflow.SetQueryHandler(s.ctx, QueryNameDescribe, s.handleDescribeQuery); err != nil {
@@ -230,8 +230,11 @@ func (s *scheduler) ensureFields() {
 	if s.Schedule.Policies == nil {
 		s.Schedule.Policies = &schedpb.SchedulePolicies{}
 	}
-	// set default so it shows up in describe output
+
+	// set defaults eagerly so they show up in describe output
 	s.Schedule.Policies.OverlapPolicy = s.resolveOverlapPolicy(s.Schedule.Policies.OverlapPolicy)
+	s.Schedule.Policies.CatchupWindow = timestamp.DurationPtr(s.getCatchupWindow())
+
 	if s.Schedule.State == nil {
 		s.Schedule.State = &schedpb.ScheduleState{}
 	}
@@ -523,11 +526,13 @@ func (s *scheduler) getFutureActionTimes(n int) []*time.Time {
 }
 
 func (s *scheduler) handleDescribeQuery() (*schedspb.DescribeResponse, error) {
-	s.Info.FutureActionTimes = s.getFutureActionTimes(s.tweakables.FutureActionCount)
+	// this is a query handler, don't modify s.Info directly
+	infoCopy := *s.Info
+	infoCopy.FutureActionTimes = s.getFutureActionTimes(s.tweakables.FutureActionCount)
 
 	return &schedspb.DescribeResponse{
 		Schedule:      s.Schedule,
-		Info:          s.Info,
+		Info:          &infoCopy,
 		ConflictToken: s.State.ConflictToken,
 	}, nil
 }
