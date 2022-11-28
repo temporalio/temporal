@@ -653,7 +653,9 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	defer log.CapturePanic(adh.logger, &retError)
 
 	taggedMetricsHandler, startTime := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope)
-	defer taggedMetricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() {
+		taggedMetricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 
 	if err := adh.validateGetWorkflowExecutionRawHistoryV2Request(
 		request,

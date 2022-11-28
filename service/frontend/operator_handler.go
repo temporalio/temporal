@@ -154,7 +154,7 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 	defer log.CapturePanic(h.logger, &retError)
 
 	scope, startTime := h.startRequestProfile(metrics.OperatorAddSearchAttributesScope)
-	defer scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	// validate request
 	if request == nil {
@@ -294,7 +294,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 	defer log.CapturePanic(h.logger, &retError)
 
 	scope, startTime := h.startRequestProfile(metrics.OperatorDeleteNamespaceScope)
-	defer scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	// validate request
 	if request == nil {
@@ -353,7 +353,7 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 ) (_ *operatorservice.AddOrUpdateRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	scope, startTime := h.startRequestProfile(metrics.OperatorAddOrUpdateRemoteClusterScope)
-	defer scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	adminClient := h.clientFactory.NewRemoteAdminClientWithTimeout(
 		request.GetFrontendAddress(),
@@ -423,7 +423,7 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 ) (_ *operatorservice.RemoveRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	scope, startTime := h.startRequestProfile(metrics.OperatorRemoveRemoteClusterScope)
-	defer scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	if err := h.clusterMetadataManager.DeleteClusterMetadata(
 		ctx,
@@ -441,7 +441,7 @@ func (h *OperatorHandlerImpl) ListClusters(
 ) (_ *operatorservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	scope, startTime := h.startRequestProfile(metrics.OperatorListClustersScope)
-	defer scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
 	if request == nil {
 		return nil, errRequestNotSet

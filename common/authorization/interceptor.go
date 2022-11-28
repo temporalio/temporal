@@ -159,7 +159,9 @@ func (a *interceptor) authorize(
 	callTarget *CallTarget,
 	metricsHandler metrics.MetricsHandler) (Result, error) {
 	startTime := time.Now().UTC()
-	defer metricsHandler.Timer(metrics.ServiceAuthorizationLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() {
+		metricsHandler.Timer(metrics.ServiceAuthorizationLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 	return a.authorizer.Authorize(ctx, claims, callTarget)
 }
 

@@ -198,7 +198,9 @@ func (notifier *NotifierImpl) dispatchHistoryEventNotification(event *Notificati
 	identifier := event.ID
 
 	startTime := time.Now().UTC()
-	defer notifier.metricsHandler.Timer(metrics.HistoryEventNotificationFanoutLatency.GetMetricName()).Record(time.Since(startTime))
+	defer func() {
+		notifier.metricsHandler.Timer(metrics.HistoryEventNotificationFanoutLatency.GetMetricName()).Record(time.Since(startTime))
+	}()
 	_, _, _ = notifier.eventsPubsubs.GetAndDo(identifier, func(key interface{}, value interface{}) error {
 		subscribers := value.(map[string]chan *Notification)
 
