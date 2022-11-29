@@ -140,7 +140,7 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_UpdateCurrent()
 	newStateToError := map[enumsspb.WorkflowExecutionState]bool{
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
-		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	for currentState, currentExpectError := range currentStateToError {
@@ -194,7 +194,7 @@ func (s *validateOperationWorkflowModeStateSuite) TestUpdateMode_BypassCurrent()
 	newStateToError := map[enumsspb.WorkflowExecutionState]bool{
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   true,
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   true,
-		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    false,
 	}
 	for currentState, currentExpectError := range currentStateToError {
@@ -249,7 +249,7 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 	newStateToError := map[enumsspb.WorkflowExecutionState]bool{
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
-		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	for resetState, resetExpectError := range resetStateToError {
@@ -311,7 +311,7 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Update
 	newStateToError = map[enumsspb.WorkflowExecutionState]bool{
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
-		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 	currentStateToError = map[enumsspb.WorkflowExecutionState]bool{
