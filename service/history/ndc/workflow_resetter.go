@@ -213,7 +213,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	if err != nil {
 		return err
 	}
-	defer resetWorkflow.GetReleaseFn()(retError)
+	defer func() { resetWorkflow.GetReleaseFn()(retError) }()
 
 	if err := r.reapplyEventsToResetWorkflow(
 		ctx,
