@@ -252,7 +252,14 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 	if err != nil {
 		return err
 	}
-	defer releaseFn(retError)
+	defer func() {
+		if rec := recover(); rec != nil {
+			releaseFn(errPanic)
+			panic(rec)
+		} else {
+			releaseFn(retError)
+		}
+	}()
 
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
 	if err != nil {
