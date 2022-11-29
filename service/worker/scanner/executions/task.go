@@ -112,12 +112,14 @@ func (t *task) Run() executor.TaskStatus {
 	))
 
 	iter := collection.NewPagingIteratorWithToken(t.getPaginationFn(), t.paginationToken)
+	var retryTask bool
 	for iter.HasNext() {
 		_ = t.rateLimiter.Wait(t.ctx)
 		record, err := iter.Next()
 		if err != nil {
+			// continue validation process and retry after all workflow records has been iterated.
 			t.logger.Error("unable to paginate concrete execution", tag.ShardID(t.shardID), tag.Error(err))
-			return executor.TaskStatusDefer
+			retryTask = true
 		}
 
 		mutableState := &MutableState{WorkflowMutableState: record}
@@ -130,9 +132,19 @@ func (t *task) Run() executor.TaskStatus {
 		)
 		err = t.handleFailures(mutableState, results)
 		if err != nil {
-			t.logger.Error("unable to process failure result", tag.ShardID(t.shardID), tag.Error(err))
-			return executor.TaskStatusDefer
+			// continue validation process and retry after all workflow records has been iterated.
+			executionInfo := mutableState.GetExecutionInfo()
+			t.logger.Error("unable to process failure result",
+				tag.ShardID(t.shardID),
+				tag.Error(err),
+				tag.WorkflowNamespaceID(executionInfo.GetNamespaceId()),
+				tag.WorkflowID(executionInfo.GetWorkflowId()),
+				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()))
+			retryTask = true
 		}
+	}
+	if retryTask {
+		return executor.TaskStatusDefer
 	}
 	return executor.TaskStatusDone
 }
@@ -165,6 +177,11 @@ func (t *task) validate(
 		)
 	} else {
 		results = append(results, validationResults...)
+	}
+
+	// Fail fast if the mutable is corrupted, no need to validate history.
+	if len(results) > 0 {
+		return results
 	}
 
 	if validationResults, err := NewHistoryEventIDValidator(
