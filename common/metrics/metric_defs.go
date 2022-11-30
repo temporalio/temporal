@@ -1651,6 +1651,7 @@ var (
 	ArchiverWorkflowStoppingCount                             = NewCounterDef("archiver_workflow_stopping")
 	ScavengerValidationRequestsCount                          = NewCounterDef("scavenger_validation_requests")
 	ScavengerValidationFailuresCount                          = NewCounterDef("scavenger_validation_failures")
+	ScavengerValidationSkipsCount                             = NewCounterDef("scavenger_validation_skips")
 	AddSearchAttributesFailuresCount                          = NewCounterDef("add_search_attributes_failures")
 	DeleteNamespaceSuccessCount                               = NewCounterDef("delete_namespace_success")
 	RenameNamespaceSuccessCount                               = NewCounterDef("rename_namespace_success")

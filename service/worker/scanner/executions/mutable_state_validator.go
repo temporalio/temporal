@@ -91,6 +91,20 @@ func (v *mutableStateValidator) Validate(
 
 	var results []MutableStateValidationResult
 
+	// First， to check if the data is expired on retention time.
+	retentionResult, err := v.validateRetention(
+		mutableState.GetExecutionInfo(),
+		mutableState.GetExecutionState().GetState(),
+	)
+	if err != nil {
+		return results, err
+	}
+	if retentionResult != nil {
+		// Skip all validation if the data is expired.
+		results = append(results, *retentionResult)
+		return results, nil
+	}
+
 	results = append(results, v.validateActivity(
 		mutableState.ActivityInfos,
 		lastItem.GetEventId())...,
@@ -115,17 +129,6 @@ func (v *mutableStateValidator) Validate(
 		mutableState.SignalInfos,
 		lastItem.GetEventId())...,
 	)
-
-	retentionResult, err := v.validateRetention(
-		mutableState.GetExecutionInfo(),
-		mutableState.GetExecutionState().GetState(),
-	)
-	if err != nil {
-		return results, err
-	}
-	if retentionResult != nil {
-		results = append(results, *retentionResult)
-	}
 
 	return results, nil
 }
