@@ -128,15 +128,21 @@ func (ti *TelemetryInterceptor) Intercept(
 	metricsHandler.Counter(metrics.ServiceRequests.GetMetricName()).Record(1)
 
 	startTime := time.Now().UTC()
+	userLatencyDuration := time.Duration(0)
 	defer func() {
-		metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime))
-		metricsHandler.Timer(metrics.ServiceLatencyNoUserLatency.GetMetricName()).Record(time.Since(startTime))
+		latency := time.Since(startTime)
+		metricsHandler.Timer(metrics.ServiceLatency.GetMetricName()).Record(latency)
+		noUserLatency := latency - userLatencyDuration
+		if noUserLatency < 0 {
+			noUserLatency = 0
+		}
+		metricsHandler.Timer(metrics.ServiceLatencyNoUserLatency.GetMetricName()).Record(noUserLatency)
 	}()
 
 	resp, err := handler(ctx, req)
 
 	if val, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency.GetMetricName()); ok {
-		userLatencyDuration := time.Duration(val)
+		userLatencyDuration = time.Duration(val)
 		startTime.Add(userLatencyDuration)
 		metricsHandler.Timer(metrics.ServiceLatencyUserLatency.GetMetricName()).Record(userLatencyDuration)
 	}
