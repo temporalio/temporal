@@ -104,7 +104,6 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionStarted() {
 		WithTags(
 			metrics.OperationTag(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope),
 			metrics.StandardVisibilityTypeTag(),
-			metrics.VisibilityTypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionStarted(context.Background(), request))
@@ -131,7 +130,6 @@ func (s *VisibilityManagerSuite) TestRecordWorkflowExecutionClosed() {
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope),
 			metrics.StandardVisibilityTypeTag(),
-			metrics.VisibilityTypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	s.NoError(s.visibilityManager.RecordWorkflowExecutionClosed(context.Background(), request))
@@ -151,7 +149,6 @@ func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutions() {
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceListOpenWorkflowExecutionsScope),
 			metrics.StandardVisibilityTypeTag(),
-			metrics.VisibilityTypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListOpenWorkflowExecutions(context.Background(), request)
@@ -173,7 +170,6 @@ func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutions() {
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceListClosedWorkflowExecutionsScope),
 			metrics.StandardVisibilityTypeTag(),
-			metrics.VisibilityTypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListClosedWorkflowExecutions(context.Background(), request)
@@ -198,7 +194,6 @@ func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutionsByType() {
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope),
 			metrics.StandardVisibilityTypeTag(),
-			metrics.VisibilityTypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListOpenWorkflowExecutionsByType(context.Background(), request)
@@ -223,7 +218,6 @@ func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByType() {
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope),
 			metrics.StandardVisibilityTypeTag(),
-			metrics.VisibilityTypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListClosedWorkflowExecutionsByType(context.Background(), request)
@@ -248,7 +242,6 @@ func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope),
 			metrics.StandardVisibilityTypeTag(),
-			metrics.VisibilityTypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListOpenWorkflowExecutionsByWorkflowID(context.Background(), request)
@@ -273,7 +266,6 @@ func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByWorkflowID() 
 		WithTags(metrics.OperationTag(
 			metrics.VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope),
 			metrics.StandardVisibilityTypeTag(),
-			metrics.VisibilityTypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListClosedWorkflowExecutionsByWorkflowID(context.Background(), request)
@@ -298,7 +290,6 @@ func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByStatus() {
 		WithTags(
 			metrics.OperationTag(metrics.VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope),
 			metrics.StandardVisibilityTypeTag(),
-			metrics.VisibilityTypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.ListClosedWorkflowExecutionsByStatus(context.Background(), request)
@@ -325,7 +316,6 @@ func (s *VisibilityManagerSuite) TestGetWorkflowExecution() {
 		WithTags(
 			metrics.OperationTag(metrics.VisibilityPersistenceGetWorkflowExecutionScope),
 			metrics.StandardVisibilityTypeTag(),
-			metrics.VisibilityTypeTag(""),
 		).
 		Return(metrics.NoopMetricsHandler).Times(2)
 	_, err := s.visibilityManager.GetWorkflowExecution(context.Background(), request)
