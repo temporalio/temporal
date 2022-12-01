@@ -104,6 +104,7 @@ type (
 	Scanner struct {
 		context scannerContext
 		wg      sync.WaitGroup
+		cancel  context.CancelFunc
 	}
 )
 
@@ -144,6 +145,8 @@ func New(
 func (s *Scanner) Start() error {
 	ctx := context.WithValue(context.Background(), scannerContextKey, s.context)
 	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
+	ctx, cancel := context.WithCancel(ctx)
+	s.cancel = cancel
 
 	workerOpts := worker.Options{
 		MaxConcurrentActivityExecutionSize:     s.context.cfg.MaxConcurrentActivityExecutionSize(),
@@ -157,19 +160,19 @@ func (s *Scanner) Start() error {
 	var workerTaskQueueNames []string
 	if s.context.cfg.ExecutionsScannerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(executionsScannerWFStartOptions, executionsScannerWFTypeName)
+		go s.startWorkflowWithRetry(ctx, executionsScannerWFStartOptions, executionsScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, executionsScannerTaskQueueName)
 	}
 
 	if s.context.cfg.Persistence.DefaultStoreType() == config.StoreTypeSQL && s.context.cfg.TaskQueueScannerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(tlScannerWFStartOptions, tqScannerWFTypeName)
+		go s.startWorkflowWithRetry(ctx, tlScannerWFStartOptions, tqScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, tqScannerTaskQueueName)
 	}
 
 	if s.context.cfg.HistoryScannerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(historyScannerWFStartOptions, historyScannerWFTypeName)
+		go s.startWorkflowWithRetry(ctx, historyScannerWFStartOptions, historyScannerWFTypeName)
 		workerTaskQueueNames = append(workerTaskQueueNames, historyScannerTaskQueueName)
 	}
 
@@ -192,37 +195,41 @@ func (s *Scanner) Start() error {
 }
 
 func (s *Scanner) Stop() {
+	s.cancel()
 	s.wg.Wait()
 }
 
-func (s *Scanner) startWorkflowWithRetry(
-	options sdkclient.StartWorkflowOptions,
-	workflowType string,
-	workflowArgs ...interface{},
-) {
+func (s *Scanner) startWorkflowWithRetry(ctx context.Context, options sdkclient.StartWorkflowOptions, workflowType string, workflowArgs ...interface{}) {
 	defer s.wg.Done()
 
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
 		WithMaximumInterval(time.Minute).
 		WithExpirationInterval(backoff.NoInterval)
-	err := backoff.ThrottleRetry(func() error {
-		return s.startWorkflow(s.context.sdkClientFactory.GetSystemClient(), options, workflowType, workflowArgs...)
+	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
+		return s.startWorkflow(
+			ctx,
+			s.context.sdkClientFactory.GetSystemClient(),
+			options,
+			workflowType,
+			workflowArgs...,
+		)
 	}, policy, func(err error) bool {
 		return true
 	})
-	if err != nil {
+	// if the scanner shuts down before the workflow is started, then the error will be context canceled
+	if err != nil && err != context.Canceled {
 		s.context.logger.Fatal("unable to start scanner", tag.WorkflowType(workflowType), tag.Error(err))
 	}
 }
 
 func (s *Scanner) startWorkflow(
+	ctx context.Context,
 	client sdkclient.Client,
 	options sdkclient.StartWorkflowOptions,
 	workflowType string,
 	workflowArgs ...interface{},
 ) error {
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	_, err := client.ExecuteWorkflow(ctx, options, workflowType, workflowArgs...)
 	cancel()
 	if err != nil {
