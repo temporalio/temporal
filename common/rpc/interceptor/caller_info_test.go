@@ -32,9 +32,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
-	"google.golang.org/grpc"
 )
 
 type (
@@ -71,6 +72,7 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 	// testNamespaceID := namespace.NewID()
 	testNamespaceName := namespace.Name("test-namespace")
 	// s.mockRegistry.EXPECT().GetNamespaceName(testNamespaceID).Return(testNamespaceName, nil).AnyTimes()
+	s.mockRegistry.EXPECT().GetNamespace(gomock.Any()).Return(nil, nil).AnyTimes()
 
 	testCases := []struct {
 		setupIncomingCtx   func() context.Context
@@ -139,6 +141,8 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 }
 
 func (s *callerInfoSuite) TestIntercept_CallerType() {
+	s.mockRegistry.EXPECT().GetNamespace(gomock.Any()).Return(nil, nil).AnyTimes()
+
 	testCases := []struct {
 		setupIncomingCtx   func() context.Context
 		request            interface{}
@@ -202,6 +206,7 @@ func (s *callerInfoSuite) TestIntercept_CallOrigin() {
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: "/temporal/" + method,
 	}
+	s.mockRegistry.EXPECT().GetNamespace(gomock.Any()).Return(nil, nil).AnyTimes()
 
 	testCases := []struct {
 		setupIncomingCtx   func() context.Context
