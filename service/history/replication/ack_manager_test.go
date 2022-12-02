@@ -113,7 +113,7 @@ func (s *ackManagerSuite) SetupTest() {
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return(cluster.TestCurrentClusterName, nil).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
 	historyCache := workflow.NewCache(s.mockShard)
@@ -551,28 +551,177 @@ func (s *ackManagerSuite) Test_GetMaxTaskInfo() {
 	s.Equal(int64(6), maxTaskID)
 	s.Equal(now.Add(time.Hour), maxVisibilityTimestamp)
 }
-func (s *ackManagerSuite) getHistoryTasksResponse(size int) *persistence.GetHistoryTasksResponse {
-	result := &persistence.GetHistoryTasksResponse{}
-	for i := 0; i < size; i++ {
-		result.Tasks = append(result.Tasks, &tasks.HistoryReplicationTask{
-			WorkflowKey: definition.WorkflowKey{
-				NamespaceID: tests.NamespaceID.String(),
-				WorkflowID:  tests.WorkflowID + strconv.Itoa(i),
-				RunID:       uuid.New(),
+
+func (s *ackManagerSuite) TestGetTasks_NoTasksInDB() {
+	ctx := context.Background()
+	minTaskID := int64(220878)
+	maxTaskID := minTaskID + 100
+	batchSize := 100
+
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
+		ShardID:             s.mockShard.GetShardID(),
+		TaskCategory:        tasks.CategoryReplication,
+		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
+		BatchSize:           batchSize,
+		NextPageToken:       nil,
+	}).Return(s.getHistoryTasksResponse(0), nil)
+
+	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, cluster.TestCurrentClusterName, minTaskID, maxTaskID, batchSize)
+	s.NoError(err)
+	s.Empty(replicationTasks)
+	s.Equal(maxTaskID, lastTaskID)
+}
+
+func (s *ackManagerSuite) TestGetTasks_FirstPersistenceErrorReturnsErrorAndEmptyResult() {
+	ctx := context.Background()
+	minTaskID := int64(220878)
+	maxTaskID := minTaskID + 100
+	batchSize := 100
+
+	tasksResponse := s.getHistoryTasksResponse(2)
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
+		ShardID:             s.mockShard.GetShardID(),
+		TaskCategory:        tasks.CategoryReplication,
+		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
+		BatchSize:           batchSize,
+		NextPageToken:       nil,
+	}).Return(tasksResponse, nil)
+
+	gweErr := serviceerror.NewUnavailable("random error")
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		NamespaceID: tasksResponse.Tasks[0].GetNamespaceID(),
+		WorkflowID:  tasksResponse.Tasks[0].GetWorkflowID(),
+		RunID:       tasksResponse.Tasks[0].GetRunID(),
+	}).Return(nil, gweErr)
+
+	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, cluster.TestCurrentClusterName, minTaskID, maxTaskID, batchSize)
+	s.Error(err)
+	s.ErrorIs(err, gweErr)
+	s.Empty(replicationTasks)
+	s.EqualValues(0, lastTaskID)
+}
+
+func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResult() {
+	ctx := context.Background()
+	minTaskID := int64(220878)
+	maxTaskID := minTaskID + 100
+	batchSize := 100
+
+	tasksResponse := s.getHistoryTasksResponse(2)
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
+		ShardID:             s.mockShard.GetShardID(),
+		TaskCategory:        tasks.CategoryReplication,
+		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
+		BatchSize:           batchSize,
+		NextPageToken:       nil,
+	}).Return(tasksResponse, nil)
+
+	eventsCache := events.NewEventsCache(
+		s.mockShard.GetShardID(),
+		s.mockShard.GetConfig().EventsCacheInitialSize(),
+		s.mockShard.GetConfig().EventsCacheMaxSize(),
+		s.mockShard.GetConfig().EventsCacheTTL(),
+		s.mockShard.GetExecutionManager(),
+		false,
+		s.mockShard.GetLogger(),
+		s.mockShard.GetMetricsHandler(),
+	)
+	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
+	ei := ms.GetExecutionInfo()
+	ei.NamespaceId = tests.NamespaceID.String()
+	ei.VersionHistories = &historyspb.VersionHistories{
+		Histories: []*historyspb.VersionHistory{
+			{
+				Items: []*historyspb.VersionHistoryItem{
+					{
+						EventId: 1,
+						Version: 1,
+					},
+				},
 			},
-			TaskID:       int64(i),
-			FirstEventID: 1,
-			NextEventID:  1,
-			Version:      1,
 		},
-		)
 	}
 
-	return result
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
+		State: workflow.TestCloneToProto(ms)}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("some random error"))
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil)
+
+	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, cluster.TestCurrentClusterName, minTaskID, maxTaskID, batchSize)
+	s.NoError(err)
+	s.Equal(1, len(replicationTasks))
+	s.Equal(tasksResponse.Tasks[0].GetTaskID(), lastTaskID)
 }
-func (s *ackManagerSuite) Test_GetTasks_FullPage() {
+
+func (s *ackManagerSuite) TestGetTasks_FullPage() {
 	tasksResponse := s.getHistoryTasksResponse(s.replicationAckManager.pageSize)
-	tasksResponse.NextPageToken = []byte{22, 3, 83} // There is mor in DB.
+	tasksResponse.NextPageToken = []byte{22, 3, 83} // There is more in DB.
+	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(22)
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
+		ShardID:             s.mockShard.GetShardID(),
+		TaskCategory:        tasks.CategoryReplication,
+		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
+		BatchSize:           s.replicationAckManager.pageSize,
+		NextPageToken:       nil,
+	}).Return(tasksResponse, nil)
+	// collection.PagingIterator will call persistence layer second time
+	// but results will be ignored because we already got all tasks.
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
+		ShardID:             s.mockShard.GetShardID(),
+		TaskCategory:        tasks.CategoryReplication,
+		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
+		BatchSize:           s.replicationAckManager.pageSize,
+		NextPageToken:       tasksResponse.NextPageToken,
+	}).Return(s.getHistoryTasksResponse(1), nil)
+
+	eventsCache := events.NewEventsCache(
+		s.mockShard.GetShardID(),
+		s.mockShard.GetConfig().EventsCacheInitialSize(),
+		s.mockShard.GetConfig().EventsCacheMaxSize(),
+		s.mockShard.GetConfig().EventsCacheTTL(),
+		s.mockShard.GetExecutionManager(),
+		false,
+		s.mockShard.GetLogger(),
+		s.mockShard.GetMetricsHandler(),
+	)
+	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
+	ei := ms.GetExecutionInfo()
+	ei.NamespaceId = tests.NamespaceID.String()
+	ei.VersionHistories = &historyspb.VersionHistories{
+		Histories: []*historyspb.VersionHistory{
+			{
+				Items: []*historyspb.VersionHistoryItem{
+					{
+						EventId: 1,
+						Version: 1,
+					},
+				},
+			},
+		},
+	}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
+		State: workflow.TestCloneToProto(ms)}, nil).Times(s.replicationAckManager.pageSize)
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil).Times(s.replicationAckManager.pageSize)
+
+	replicationMessages, err := s.replicationAckManager.GetTasks(context.Background(), cluster.TestCurrentClusterName, 22)
+	s.NoError(err)
+	s.NotNil(replicationMessages)
+	s.Len(replicationMessages.ReplicationTasks, s.replicationAckManager.pageSize)
+	s.Equal(tasksResponse.Tasks[len(tasksResponse.Tasks)-1].GetTaskID(), replicationMessages.LastRetrievedMessageId)
+
+}
+func (s *ackManagerSuite) TestGetTasks_PartialPage() {
+	numTasks := s.replicationAckManager.pageSize / 2
+	tasksResponse := s.getHistoryTasksResponse(numTasks)
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(22)
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
@@ -610,290 +759,6 @@ func (s *ackManagerSuite) Test_GetTasks_FullPage() {
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State: workflow.TestCloneToProto(ms)}, nil).Times(s.replicationAckManager.pageSize)
-	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
-		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil).Times(s.replicationAckManager.pageSize)
-
-	replicationMessages, err := s.replicationAckManager.GetTasks(context.Background(), cluster.TestCurrentClusterName, 22)
-	s.NoError(err)
-	s.NotNil(replicationMessages)
-	s.Len(replicationMessages.ReplicationTasks, s.replicationAckManager.pageSize)
-}
-
-func (s *ackManagerSuite) Test_GetTasks_PartialPage() {
-	numTasks := s.replicationAckManager.pageSize / 2
-func (s *ackManagerSuite) TestGetTasks_Empty() {
-	ctx := context.Background()
-	minTaskID := rand.Int63()
-	maxTaskID := minTaskID + 100
-	batchSize := 100
-
-	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
-		ShardID:             s.mockShard.GetShardID(),
-		TaskCategory:        tasks.CategoryReplication,
-		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
-		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           batchSize,
-		NextPageToken:       nil,
-	}).Return(&persistence.GetHistoryTasksResponse{
-		Tasks:         nil,
-		NextPageToken: nil,
-	}, nil)
-
-	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, minTaskID, maxTaskID, batchSize)
-	s.NoError(err)
-	s.Empty(replicationTasks)
-	s.Equal(maxTaskID, lastTaskID)
-}
-
-func (s *ackManagerSuite) TestGetTasks_PartialResult_Case1() {
-	ctx := context.Background()
-	minTaskID := rand.Int63()
-	maxTaskID := minTaskID + 100
-	batchSize := 100
-
-	namespaceID := tests.NamespaceID
-	workflowID := "some random workflow ID"
-
-	historyTask := &tasks.HistoryReplicationTask{
-		TaskID:       minTaskID + 10,
-		WorkflowKey:  definition.NewWorkflowKey(namespaceID.String(), workflowID, uuid.New()),
-		FirstEventID: rand.Int63(),
-		NextEventID:  rand.Int63(),
-	}
-	activityTask := &tasks.SyncActivityTask{
-		TaskID:      minTaskID + 20,
-		WorkflowKey: definition.NewWorkflowKey(namespaceID.String(), workflowID, uuid.New()),
-	}
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
-		ShardID:             s.mockShard.GetShardID(),
-		TaskCategory:        tasks.CategoryReplication,
-		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
-		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           batchSize,
-		NextPageToken:       nil,
-	}).Return(&persistence.GetHistoryTasksResponse{
-		Tasks:         []tasks.Task{historyTask, activityTask},
-		NextPageToken: nil,
-	}, nil)
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
-		ShardID:     s.mockShard.GetShardID(),
-		NamespaceID: historyTask.NamespaceID,
-		WorkflowID:  historyTask.WorkflowID,
-		RunID:       historyTask.RunID,
-	}).Return(nil, serviceerror.NewUnavailable(""))
-
-	_, _, err := s.replicationAckManager.getTasks(ctx, minTaskID, maxTaskID, batchSize)
-	s.Error(err)
-}
-
-func (s *ackManagerSuite) TestGetTasks_PartialResult_Case2() {
-	ctx := context.Background()
-	minTaskID := rand.Int63()
-	maxTaskID := minTaskID + 100
-	batchSize := 100
-
-	namespaceID := tests.NamespaceID
-	workflowID := "some random workflow ID"
-
-	historyTask := &tasks.HistoryReplicationTask{
-		TaskID:       minTaskID + 10,
-		WorkflowKey:  definition.NewWorkflowKey(namespaceID.String(), workflowID, uuid.New()),
-		FirstEventID: 1,
-		NextEventID:  1 + rand.Int63(),
-		Version:      rand.Int63(),
-		BranchToken:  []byte("random history branch token"),
-	}
-	activityTask := &tasks.SyncActivityTask{
-		TaskID:           minTaskID + 20,
-		WorkflowKey:      definition.NewWorkflowKey(namespaceID.String(), workflowID, uuid.New()),
-		ScheduledEventID: rand.Int63(),
-		Version:          rand.Int63(),
-	}
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
-		ShardID:             s.mockShard.GetShardID(),
-		TaskCategory:        tasks.CategoryReplication,
-		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
-		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           batchSize,
-		NextPageToken:       nil,
-	}).Return(&persistence.GetHistoryTasksResponse{
-		Tasks:         []tasks.Task{historyTask, activityTask},
-		NextPageToken: nil,
-	}, nil)
-
-	context, release, _ := s.replicationAckManager.workflowCache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespace.ID(historyTask.NamespaceID),
-		commonpb.WorkflowExecution{
-			WorkflowId: historyTask.WorkflowID,
-			RunId:      historyTask.RunID,
-		},
-		workflow.CallerTypeTask,
-	)
-	context.(*workflow.ContextImpl).MutableState = s.mockMutableState
-	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil)
-	versionHistories := &historyspb.VersionHistories{
-		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
-			BranchToken: historyTask.BranchToken,
-			Items: []*historyspb.VersionHistoryItem{
-				{
-					EventId: historyTask.NextEventID - 1,
-					Version: historyTask.Version,
-				},
-			},
-		}},
-	}
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
-	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		ShardID:       s.mockShard.GetShardID(),
-		MinEventID:    historyTask.FirstEventID,
-		MaxEventID:    historyTask.NextEventID,
-		BranchToken:   historyTask.BranchToken,
-		PageSize:      1,
-		NextPageToken: nil,
-	}).Return(&persistence.ReadRawHistoryBranchResponse{
-		HistoryEventBlobs: []*commonpb.DataBlob{{
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-			Data:         []byte("some random events blob"),
-		}},
-		NextPageToken: nil,
-	}, nil)
-	release(nil)
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
-		ShardID:     s.mockShard.GetShardID(),
-		NamespaceID: activityTask.NamespaceID,
-		WorkflowID:  activityTask.WorkflowID,
-		RunID:       activityTask.RunID,
-	}).Return(nil, serviceerror.NewUnavailable(""))
-
-	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, minTaskID, maxTaskID, batchSize)
-	s.NoError(err)
-	s.Equal(1, len(replicationTasks))
-	s.Equal(historyTask.TaskID, lastTaskID)
-}
-
-func (s *ackManagerSuite) TestGetTasks_FullResult() {
-	ctx := context.Background()
-	minTaskID := rand.Int63()
-	maxTaskID := minTaskID + 100
-	batchSize := 100
-
-	namespaceID := tests.NamespaceID
-	workflowID := "some random workflow ID"
-
-	historyTask := &tasks.HistoryReplicationTask{
-		TaskID:       minTaskID + 10,
-		WorkflowKey:  definition.NewWorkflowKey(namespaceID.String(), workflowID, uuid.New()),
-		FirstEventID: 1,
-		NextEventID:  1 + rand.Int63(),
-		Version:      rand.Int63(),
-		BranchToken:  []byte("random history branch token"),
-	}
-
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
-		ShardID:             s.mockShard.GetShardID(),
-		TaskCategory:        tasks.CategoryReplication,
-		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
-		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           batchSize,
-		NextPageToken:       nil,
-	}).Return(&persistence.GetHistoryTasksResponse{
-		Tasks:         []tasks.Task{historyTask},
-		NextPageToken: nil,
-	}, nil)
-
-	context, release, _ := s.replicationAckManager.workflowCache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespace.ID(historyTask.NamespaceID),
-		commonpb.WorkflowExecution{
-			WorkflowId: historyTask.WorkflowID,
-			RunId:      historyTask.RunID,
-		},
-		workflow.CallerTypeTask,
-	)
-	context.(*workflow.ContextImpl).MutableState = s.mockMutableState
-	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil)
-	versionHistories := &historyspb.VersionHistories{
-		CurrentVersionHistoryIndex: 0,
-		Histories: []*historyspb.VersionHistory{{
-			BranchToken: historyTask.BranchToken,
-			Items: []*historyspb.VersionHistoryItem{
-				{
-					EventId: historyTask.NextEventID - 1,
-					Version: historyTask.Version,
-				},
-			},
-		}},
-	}
-	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
-	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
-		ShardID:       s.mockShard.GetShardID(),
-		MinEventID:    historyTask.FirstEventID,
-		MaxEventID:    historyTask.NextEventID,
-		BranchToken:   historyTask.BranchToken,
-		PageSize:      1,
-		NextPageToken: nil,
-	}).Return(&persistence.ReadRawHistoryBranchResponse{
-		HistoryEventBlobs: []*commonpb.DataBlob{{
-			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
-			Data:         []byte("some random events blob"),
-		}},
-		NextPageToken: nil,
-	}, nil)
-	release(nil)
-
-	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, minTaskID, maxTaskID, batchSize)
-	s.NoError(err)
-	s.Equal(1, len(replicationTasks))
-	s.Equal(historyTask.TaskID, lastTaskID)
-}
-
-func (s *ackManagerSuite) Test_GetTasks_Success() {
-	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(22)
-	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
-		ShardID:             s.mockShard.GetShardID(),
-		TaskCategory:        tasks.CategoryReplication,
-		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
-		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           s.replicationAckManager.pageSize,
-		NextPageToken:       nil,
-	}).Return(s.getHistoryTasksResponse(numTasks), nil)
-
-	eventsCache := events.NewEventsCache(
-		s.mockShard.GetShardID(),
-		s.mockShard.GetConfig().EventsCacheInitialSize(),
-		s.mockShard.GetConfig().EventsCacheMaxSize(),
-		s.mockShard.GetConfig().EventsCacheTTL(),
-		s.mockShard.GetExecutionManager(),
-		false,
-		s.mockShard.GetLogger(),
-		s.mockShard.GetMetricsHandler(),
-	)
-	ms := workflow.TestLocalMutableState(s.mockShard, eventsCache, tests.GlobalNamespaceEntry, log.NewTestLogger(), tests.RunID)
-	ei := ms.GetExecutionInfo()
-	ei.NamespaceId = tests.NamespaceID.String()
-	ei.VersionHistories = &historyspb.VersionHistories{
-		Histories: []*historyspb.VersionHistory{
-			{
-				Items: []*historyspb.VersionHistoryItem{
-					{
-						EventId: 1,
-						Version: 1,
-					},
-				},
-			},
-		},
-	}
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
 		State: workflow.TestCloneToProto(ms)}, nil).Times(numTasks)
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil).Times(numTasks)
@@ -902,9 +767,10 @@ func (s *ackManagerSuite) Test_GetTasks_Success() {
 	s.NoError(err)
 	s.NotNil(replicationMessages)
 	s.Len(replicationMessages.ReplicationTasks, numTasks)
+	s.Equal(tasksResponse.Tasks[len(tasksResponse.Tasks)-1].GetTaskID(), replicationMessages.LastRetrievedMessageId)
 }
 
-func (s *ackManagerSuite) Test_GetTasks_FilterNamespace() {
+func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	notExistOnTestClusterNamespaceID := namespace.ID("not-exist-on-" + cluster.TestCurrentClusterName)
 	notExistOnTestClusterNamespaceEntry := namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{},
@@ -916,7 +782,7 @@ func (s *ackManagerSuite) Test_GetTasks_FilterNamespace() {
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(22)
 
 	tasksResponse1 := s.getHistoryTasksResponse(s.replicationAckManager.pageSize)
-	// 2 of 25 tasks are for namespace that not exist on poll cluster
+	// 2 of 25 tasks are for namespace that doesn't exist on poll cluster.
 	tasksResponse1.Tasks[1].(*tasks.HistoryReplicationTask).NamespaceID = notExistOnTestClusterNamespaceID.String()
 	tasksResponse1.Tasks[3].(*tasks.HistoryReplicationTask).NamespaceID = notExistOnTestClusterNamespaceID.String()
 	tasksResponse1.NextPageToken = []byte{22, 3, 83} // There is more in DB.
@@ -930,7 +796,7 @@ func (s *ackManagerSuite) Test_GetTasks_FilterNamespace() {
 	}).Return(tasksResponse1, nil)
 
 	tasksResponse2 := s.getHistoryTasksResponse(2)
-	// 1 of 2 task is for namespace that not exist on poll cluster
+	// 1 of 2 task is for namespace that doesn't exist on poll cluster.
 	tasksResponse2.Tasks[1].(*tasks.HistoryReplicationTask).NamespaceID = notExistOnTestClusterNamespaceID.String()
 	tasksResponse2.NextPageToken = []byte{22, 8, 78} // There is more in DB.
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
@@ -938,18 +804,17 @@ func (s *ackManagerSuite) Test_GetTasks_FilterNamespace() {
 		TaskCategory:        tasks.CategoryReplication,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           2,                 // 2 tasks are filtered out
+		BatchSize:           s.replicationAckManager.pageSize,
 		NextPageToken:       []byte{22, 3, 83}, // previous token
 	}).Return(tasksResponse2, nil)
 
 	tasksResponse3 := s.getHistoryTasksResponse(1)
-	tasksResponse3.NextPageToken = []byte{21, 4, 16} // There is more in DB, but we've got all we need.
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           1,                 // 1 task is filtered out
+		BatchSize:           s.replicationAckManager.pageSize,
 		NextPageToken:       []byte{22, 8, 78}, // previous token
 	}).Return(tasksResponse3, nil)
 
@@ -988,4 +853,25 @@ func (s *ackManagerSuite) Test_GetTasks_FilterNamespace() {
 	s.NoError(err)
 	s.NotNil(replicationMessages)
 	s.Len(replicationMessages.ReplicationTasks, s.replicationAckManager.pageSize)
+	s.Equal(tasksResponse3.Tasks[len(tasksResponse3.Tasks)-1].GetTaskID(), replicationMessages.LastRetrievedMessageId)
+}
+
+func (s *ackManagerSuite) getHistoryTasksResponse(size int) *persistence.GetHistoryTasksResponse {
+	result := &persistence.GetHistoryTasksResponse{}
+	for i := 1; i <= size; i++ {
+		result.Tasks = append(result.Tasks, &tasks.HistoryReplicationTask{
+			WorkflowKey: definition.WorkflowKey{
+				NamespaceID: tests.NamespaceID.String(),
+				WorkflowID:  tests.WorkflowID + strconv.Itoa(i),
+				RunID:       uuid.New(),
+			},
+			TaskID:       int64(i),
+			FirstEventID: 1,
+			NextEventID:  1,
+			Version:      1,
+		},
+		)
+	}
+
+	return result
 }
