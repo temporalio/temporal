@@ -49,7 +49,7 @@ func GetNamespace(
 		namespaceName := namespace.Name(request.GetNamespace())
 		_, err := namespaceRegistry.GetNamespace(namespaceName)
 		if err != nil {
-			return ""
+			return namespace.EmptyName
 		}
 		return namespaceName
 
@@ -57,11 +57,11 @@ func GetNamespace(
 		namespaceID := namespace.ID(request.GetNamespaceId())
 		namespaceName, err := namespaceRegistry.GetNamespaceName(namespaceID)
 		if err != nil {
-			return ""
+			return namespace.EmptyName
 		}
 		return namespaceName
 
 	default:
-		return ""
+		return namespace.EmptyName
 	}
 }
