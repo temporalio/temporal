@@ -230,7 +230,6 @@ func (p *ackMgrImpl) GetTasks(
 		pollingCluster,
 		minTaskID,
 		maxTaskID,
-		p.pageSize(),
 	)
 	if err != nil {
 		return nil, err
@@ -262,7 +261,6 @@ func (p *ackMgrImpl) getTasks(
 	pollingCluster string,
 	minTaskID int64,
 	maxTaskID int64,
-	batchSize int,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
 	if minTaskID > maxTaskID {
 		return nil, 0, serviceerror.NewUnavailable("min task ID > max task ID, probably due to shard re-balancing")
@@ -270,11 +268,12 @@ func (p *ackMgrImpl) getTasks(
 		return nil, maxTaskID, nil
 	}
 
-	replicationTasks := make([]*replicationspb.ReplicationTask, 0, batchSize)
+	replicationTasks := make([]*replicationspb.ReplicationTask, 0, p.pageSize())
 	skippedTaskCount := 0
 	lastTaskID := maxTaskID // If no tasks are returned, then it means there are no tasks bellow maxTaskID.
-	iter := collection.NewPagingIterator(p.getReplicationTasksFn(ctx, minTaskID, maxTaskID, batchSize))
-	for iter.HasNext() && len(replicationTasks) < batchSize && skippedTaskCount <= p.maxSkipTaskCount() {
+	iter := collection.NewPagingIterator(p.getReplicationTasksFn(ctx, minTaskID, maxTaskID, p.pageSize()))
+	// iter.HasNext() should be the last check to avoid extra page read in case if replicationTasks is already full.
+	for len(replicationTasks) < p.pageSize() && skippedTaskCount <= p.maxSkipTaskCount() && iter.HasNext() {
 		task, err := iter.Next()
 		if err != nil {
 			return p.swallowPartialResultsError(replicationTasks, lastTaskID, err)

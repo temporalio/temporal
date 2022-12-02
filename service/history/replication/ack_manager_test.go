@@ -556,18 +556,17 @@ func (s *ackManagerSuite) TestGetTasks_NoTasksInDB() {
 	ctx := context.Background()
 	minTaskID := int64(220878)
 	maxTaskID := minTaskID + 100
-	batchSize := 100
 
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryReplication,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           batchSize,
+		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       nil,
 	}).Return(s.getHistoryTasksResponse(0), nil)
 
-	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, cluster.TestCurrentClusterName, minTaskID, maxTaskID, batchSize)
+	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, cluster.TestCurrentClusterName, minTaskID, maxTaskID)
 	s.NoError(err)
 	s.Empty(replicationTasks)
 	s.Equal(maxTaskID, lastTaskID)
@@ -577,7 +576,6 @@ func (s *ackManagerSuite) TestGetTasks_FirstPersistenceErrorReturnsErrorAndEmpty
 	ctx := context.Background()
 	minTaskID := int64(220878)
 	maxTaskID := minTaskID + 100
-	batchSize := 100
 
 	tasksResponse := s.getHistoryTasksResponse(2)
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
@@ -585,7 +583,7 @@ func (s *ackManagerSuite) TestGetTasks_FirstPersistenceErrorReturnsErrorAndEmpty
 		TaskCategory:        tasks.CategoryReplication,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           batchSize,
+		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
 
@@ -597,7 +595,7 @@ func (s *ackManagerSuite) TestGetTasks_FirstPersistenceErrorReturnsErrorAndEmpty
 		RunID:       tasksResponse.Tasks[0].GetRunID(),
 	}).Return(nil, gweErr)
 
-	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, cluster.TestCurrentClusterName, minTaskID, maxTaskID, batchSize)
+	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, cluster.TestCurrentClusterName, minTaskID, maxTaskID)
 	s.Error(err)
 	s.ErrorIs(err, gweErr)
 	s.Empty(replicationTasks)
@@ -608,7 +606,6 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 	ctx := context.Background()
 	minTaskID := int64(220878)
 	maxTaskID := minTaskID + 100
-	batchSize := 100
 
 	tasksResponse := s.getHistoryTasksResponse(2)
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
@@ -616,7 +613,7 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 		TaskCategory:        tasks.CategoryReplication,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           batchSize,
+		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
 
@@ -652,7 +649,7 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil)
 
-	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, cluster.TestCurrentClusterName, minTaskID, maxTaskID, batchSize)
+	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, cluster.TestCurrentClusterName, minTaskID, maxTaskID)
 	s.NoError(err)
 	s.Equal(1, len(replicationTasks))
 	s.Equal(tasksResponse.Tasks[0].GetTaskID(), lastTaskID)
@@ -670,16 +667,6 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
-	// collection.PagingIterator will call persistence layer second time
-	// but results will be ignored because we already got all tasks.
-	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
-		ShardID:             s.mockShard.GetShardID(),
-		TaskCategory:        tasks.CategoryReplication,
-		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
-		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           s.replicationAckManager.pageSize(),
-		NextPageToken:       tasksResponse.NextPageToken,
-	}).Return(s.getHistoryTasksResponse(1), nil)
 
 	eventsCache := events.NewEventsCache(
 		s.mockShard.GetShardID(),
