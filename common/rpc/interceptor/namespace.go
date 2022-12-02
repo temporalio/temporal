@@ -46,7 +46,12 @@ func GetNamespace(
 ) namespace.Name {
 	switch request := req.(type) {
 	case NamespaceNameGetter:
-		return namespace.Name(request.GetNamespace())
+		namespaceName := namespace.Name(request.GetNamespace())
+		_, err := namespaceRegistry.GetNamespace(namespaceName)
+		if err != nil {
+			return ""
+		}
+		return namespaceName
 
 	case NamespaceIDGetter:
 		namespaceID := namespace.ID(request.GetNamespaceId())
