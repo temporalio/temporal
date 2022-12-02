@@ -659,7 +659,7 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 }
 
 func (s *ackManagerSuite) TestGetTasks_FullPage() {
-	tasksResponse := s.getHistoryTasksResponse(s.replicationAckManager.pageSize)
+	tasksResponse := s.getHistoryTasksResponse(s.replicationAckManager.pageSize())
 	tasksResponse.NextPageToken = []byte{22, 3, 83} // There is more in DB.
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(22)
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
@@ -667,7 +667,7 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 		TaskCategory:        tasks.CategoryReplication,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           s.replicationAckManager.pageSize,
+		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
 	// collection.PagingIterator will call persistence layer second time
@@ -677,7 +677,7 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 		TaskCategory:        tasks.CategoryReplication,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           s.replicationAckManager.pageSize,
+		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       tasksResponse.NextPageToken,
 	}).Return(s.getHistoryTasksResponse(1), nil)
 
@@ -708,19 +708,19 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State: workflow.TestCloneToProto(ms)}, nil).Times(s.replicationAckManager.pageSize)
+		State: workflow.TestCloneToProto(ms)}, nil).Times(s.replicationAckManager.pageSize())
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
-		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil).Times(s.replicationAckManager.pageSize)
+		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil).Times(s.replicationAckManager.pageSize())
 
 	replicationMessages, err := s.replicationAckManager.GetTasks(context.Background(), cluster.TestCurrentClusterName, 22)
 	s.NoError(err)
 	s.NotNil(replicationMessages)
-	s.Len(replicationMessages.ReplicationTasks, s.replicationAckManager.pageSize)
+	s.Len(replicationMessages.ReplicationTasks, s.replicationAckManager.pageSize())
 	s.Equal(tasksResponse.Tasks[len(tasksResponse.Tasks)-1].GetTaskID(), replicationMessages.LastRetrievedMessageId)
 
 }
 func (s *ackManagerSuite) TestGetTasks_PartialPage() {
-	numTasks := s.replicationAckManager.pageSize / 2
+	numTasks := s.replicationAckManager.pageSize() / 2
 	tasksResponse := s.getHistoryTasksResponse(numTasks)
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(22)
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), &persistence.GetHistoryTasksRequest{
@@ -728,7 +728,7 @@ func (s *ackManagerSuite) TestGetTasks_PartialPage() {
 		TaskCategory:        tasks.CategoryReplication,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           s.replicationAckManager.pageSize,
+		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       nil,
 	}).Return(tasksResponse, nil)
 
@@ -781,7 +781,7 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 
 	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(22)
 
-	tasksResponse1 := s.getHistoryTasksResponse(s.replicationAckManager.pageSize)
+	tasksResponse1 := s.getHistoryTasksResponse(s.replicationAckManager.pageSize())
 	// 2 of 25 tasks are for namespace that doesn't exist on poll cluster.
 	tasksResponse1.Tasks[1].(*tasks.HistoryReplicationTask).NamespaceID = notExistOnTestClusterNamespaceID.String()
 	tasksResponse1.Tasks[3].(*tasks.HistoryReplicationTask).NamespaceID = notExistOnTestClusterNamespaceID.String()
@@ -791,7 +791,7 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 		TaskCategory:        tasks.CategoryReplication,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           s.replicationAckManager.pageSize,
+		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       nil,
 	}).Return(tasksResponse1, nil)
 
@@ -804,7 +804,7 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 		TaskCategory:        tasks.CategoryReplication,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           s.replicationAckManager.pageSize,
+		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       []byte{22, 3, 83}, // previous token
 	}).Return(tasksResponse2, nil)
 
@@ -814,7 +814,7 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 		TaskCategory:        tasks.CategoryReplication,
 		InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
 		ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
-		BatchSize:           s.replicationAckManager.pageSize,
+		BatchSize:           s.replicationAckManager.pageSize(),
 		NextPageToken:       []byte{22, 8, 78}, // previous token
 	}).Return(tasksResponse3, nil)
 
@@ -845,14 +845,14 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State: workflow.TestCloneToProto(ms)}, nil).Times(s.replicationAckManager.pageSize)
+		State: workflow.TestCloneToProto(ms)}, nil).Times(s.replicationAckManager.pageSize())
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
-		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil).Times(s.replicationAckManager.pageSize)
+		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil).Times(s.replicationAckManager.pageSize())
 
 	replicationMessages, err := s.replicationAckManager.GetTasks(context.Background(), cluster.TestCurrentClusterName, 22)
 	s.NoError(err)
 	s.NotNil(replicationMessages)
-	s.Len(replicationMessages.ReplicationTasks, s.replicationAckManager.pageSize)
+	s.Len(replicationMessages.ReplicationTasks, s.replicationAckManager.pageSize())
 	s.Equal(tasksResponse3.Tasks[len(tasksResponse3.Tasks)-1].GetTaskID(), replicationMessages.LastRetrievedMessageId)
 }
 

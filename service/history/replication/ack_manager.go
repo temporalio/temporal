@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -74,8 +75,8 @@ type (
 		logger             log.Logger
 		retryPolicy        backoff.RetryPolicy
 		namespaceRegistry  namespace.Registry
-		pageSize           int
-		maxSkipTaskCount   int
+		pageSize           dynamicconfig.IntPropertyFn
+		maxSkipTaskCount   dynamicconfig.IntPropertyFn
 
 		sync.Mutex
 		// largest replication task ID generated
@@ -113,8 +114,8 @@ func NewAckManager(
 		logger:             log.With(logger, tag.ComponentReplicatorQueue),
 		retryPolicy:        retryPolicy,
 		namespaceRegistry:  shard.GetNamespaceRegistry(),
-		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize(),
-		maxSkipTaskCount:   config.ReplicatorProcessorMaxSkipTaskCount(),
+		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize,
+		maxSkipTaskCount:   config.ReplicatorProcessorMaxSkipTaskCount,
 
 		maxTaskID:       nil,
 		sanityCheckTime: time.Time{},
@@ -229,7 +230,7 @@ func (p *ackMgrImpl) GetTasks(
 		pollingCluster,
 		minTaskID,
 		maxTaskID,
-		p.pageSize,
+		p.pageSize(),
 	)
 	if err != nil {
 		return nil, err
@@ -273,7 +274,7 @@ func (p *ackMgrImpl) getTasks(
 	skippedTaskCount := 0
 	lastTaskID := maxTaskID // If no tasks are returned, then it means there are no tasks bellow maxTaskID.
 	iter := collection.NewPagingIterator(p.getReplicationTasksFn(ctx, minTaskID, maxTaskID, batchSize))
-	for iter.HasNext() && len(replicationTasks) < batchSize && skippedTaskCount <= p.maxSkipTaskCount {
+	for iter.HasNext() && len(replicationTasks) < batchSize && skippedTaskCount <= p.maxSkipTaskCount() {
 		task, err := iter.Next()
 		if err != nil {
 			return p.swallowPartialResultsError(replicationTasks, lastTaskID, err)
