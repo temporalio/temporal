@@ -58,6 +58,23 @@ func (m *MockLogger) EXPECT() *MockLoggerMockRecorder {
 	return m.recorder
 }
 
+// DPanic mocks base method.
+func (m *MockLogger) DPanic(msg string, tags ...tag.Tag) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{msg}
+	for _, a := range tags {
+		varargs = append(varargs, a)
+	}
+	m.ctrl.Call(m, "DPanic", varargs...)
+}
+
+// DPanic indicates an expected call of DPanic.
+func (mr *MockLoggerMockRecorder) DPanic(msg interface{}, tags ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{msg}, tags...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DPanic", reflect.TypeOf((*MockLogger)(nil).DPanic), varargs...)
+}
+
 // Debug mocks base method.
 func (m *MockLogger) Debug(msg string, tags ...tag.Tag) {
 	m.ctrl.T.Helper()
@@ -124,6 +141,23 @@ func (mr *MockLoggerMockRecorder) Info(msg interface{}, tags ...interface{}) *go
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{msg}, tags...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Info", reflect.TypeOf((*MockLogger)(nil).Info), varargs...)
+}
+
+// Panic mocks base method.
+func (m *MockLogger) Panic(msg string, tags ...tag.Tag) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{msg}
+	for _, a := range tags {
+		varargs = append(varargs, a)
+	}
+	m.ctrl.Call(m, "Panic", varargs...)
+}
+
+// Panic indicates an expected call of Panic.
+func (mr *MockLoggerMockRecorder) Panic(msg interface{}, tags ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{msg}, tags...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Panic", reflect.TypeOf((*MockLogger)(nil).Panic), varargs...)
 }
 
 // Warn mocks base method.

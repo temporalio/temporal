@@ -11,7 +11,7 @@ all: update-tools clean proto bins check test
 # Used by Buildkite.
 ci-build: bins build-tests update-tools shell-check check proto go-generate gomodtidy ensure-no-changes
 
-# Delete all build artefacts.
+# Delete all build artifacts
 clean: clean-bins clean-test-results
 
 # Recompile proto files.

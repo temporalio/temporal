@@ -82,6 +82,20 @@ func (r *replayLogger) Error(msg string, tags ...tag.Tag) {
 	r.logger.Error(msg, tags...)
 }
 
+func (r *replayLogger) DPanic(msg string, tags ...tag.Tag) {
+	if workflow.IsReplaying(r.ctx) && !r.enableLogInReplay {
+		return
+	}
+	r.logger.DPanic(msg, tags...)
+}
+
+func (r *replayLogger) Panic(msg string, tags ...tag.Tag) {
+	if workflow.IsReplaying(r.ctx) && !r.enableLogInReplay {
+		return
+	}
+	r.logger.Panic(msg, tags...)
+}
+
 func (r *replayLogger) Fatal(msg string, tags ...tag.Tag) {
 	if workflow.IsReplaying(r.ctx) && !r.enableLogInReplay {
 		return
