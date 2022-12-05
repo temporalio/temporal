@@ -673,6 +673,7 @@ func (p *ackMgrImpl) processNewRunReplication(
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(workflowID),
 				tag.WorkflowRunID(newRunID))
+			// only return the task with current run and bypass the new run.
 			return task, nil
 		default:
 			return nil, err
