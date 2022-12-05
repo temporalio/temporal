@@ -155,7 +155,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 		actionFn,
 		getStandbyPostActionFn(
 			timerTask,
-			t.getCurrentTime,
+			t.getCompensatedCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(timerTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
 			t.fetchHistoryFromRemote,
@@ -237,7 +237,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			return nil, nil
 		}
 
-		now := t.getStandbyClusterTime()
+		now := t.shard.GetCurrentTime(t.clusterName)
 		// we need to handcraft some of the variables
 		// since the job being done here is update the activity and possibly write a timer task to DB
 		// also need to reset the current version.
@@ -255,7 +255,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		actionFn,
 		getStandbyPostActionFn(
 			timerTask,
-			t.getCurrentTime,
+			t.getCompensatedCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(timerTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
 			t.fetchHistoryFromRemote,
@@ -296,7 +296,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 		actionFn,
 		getStandbyPostActionFn(
 			task,
-			t.getCurrentTime,
+			t.getCompensatedCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(task.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
 			t.fetchHistoryFromRemote,
@@ -336,7 +336,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 		actionFn,
 		getStandbyPostActionFn(
 			timerTask,
-			t.getCurrentTime,
+			t.getCompensatedCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(timerTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
 			t.fetchHistoryFromRemote,
@@ -375,7 +375,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 		actionFn,
 		getStandbyPostActionFn(
 			timerTask,
-			t.getCurrentTime,
+			t.getCompensatedCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(timerTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
 			t.fetchHistoryFromRemote,
@@ -410,24 +410,13 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 		actionFn,
 		getStandbyPostActionFn(
 			timerTask,
-			t.getCurrentTime,
+			t.getCompensatedCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(timerTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(timerTask.GetType()),
 			t.fetchHistoryFromRemote,
 			standbyTimerTaskPostActionTaskDiscarded,
 		),
 	)
-}
-
-func (t *timerQueueStandbyTaskExecutor) getStandbyClusterTime() time.Time {
-	// time of remote cluster in the shard is delayed by "StandbyClusterDelay"
-	// so to get the current accurate remote cluster time, need to add it back
-	currentTime := t.shard.GetCurrentTime(t.clusterName)
-	if t.clusterName != t.shard.GetClusterMetadata().GetCurrentClusterName() {
-		currentTime.Add(t.shard.GetConfig().StandbyClusterDelay())
-	}
-
-	return currentTime
 }
 
 func (t *timerQueueStandbyTaskExecutor) getTimerSequence(
@@ -609,6 +598,6 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	return err
 }
 
-func (t *timerQueueStandbyTaskExecutor) getCurrentTime() time.Time {
-	return t.shard.GetCurrentTime(t.clusterName)
+func (t *timerQueueStandbyTaskExecutor) getCompensatedCurrentTime() time.Time {
+	return t.shard.GetCurrentTime(t.currentClusterName).Add(-t.shard.GetConfig().StandbyClusterDelay())
 }

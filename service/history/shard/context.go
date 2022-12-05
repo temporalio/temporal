@@ -96,8 +96,8 @@ type (
 
 		GetMaxTaskIDForCurrentRangeID() int64
 
-		SetCurrentTime(cluster string, currentTime time.Time)
-		GetCurrentTime(cluster string) time.Time
+		SetCurrentTime(cluster string, currentTime time.Time) // TODO: deprecate this one when single processor mdoe is enabled by default
+		GetCurrentTime(cluster string) time.Time              // TODO: remove cluster argument
 		GetLastUpdatedTime() time.Time
 
 		GetReplicationStatus(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error)

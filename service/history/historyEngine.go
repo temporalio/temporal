@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/api"
@@ -678,22 +677,10 @@ func (e *historyEngineImpl) ReplicateWorkflowState(
 }
 
 func (e *historyEngineImpl) SyncShardStatus(
-	ctx context.Context,
-	request *historyservice.SyncShardStatusRequest,
+	_ context.Context,
+	_ *historyservice.SyncShardStatusRequest,
 ) error {
-
-	clusterName := request.GetSourceCluster()
-	now := timestamp.TimeValue(request.GetStatusTime())
-
-	// here there are 3 main things
-	// 1. update the view of remote cluster's shard time
-	// 2. notify the timer gate in the timer queue standby processor
-	// 3, notify the transfer (essentially a no op, just put it here so it looks symmetric)
-	e.shard.SetCurrentTime(clusterName, now)
-	for _, processor := range e.queueProcessors {
-		processor.NotifyNewTasks(clusterName, []tasks.Task{})
-	}
-	return nil
+	return serviceerror.NewUnimplemented("Sync shard status API is deprecating")
 }
 
 func (e *historyEngineImpl) SyncActivity(

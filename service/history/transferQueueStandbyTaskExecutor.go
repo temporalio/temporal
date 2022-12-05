@@ -158,7 +158,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 		actionFn,
 		getStandbyPostActionFn(
 			transferTask,
-			t.getCurrentTime,
+			t.getCompensatedCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
 			t.fetchHistoryFromRemote,
@@ -216,7 +216,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		actionFn,
 		getStandbyPostActionFn(
 			transferTask,
-			t.getCurrentTime,
+			t.getCompensatedCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
 			t.fetchHistoryFromRemote,
@@ -333,7 +333,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		actionFn,
 		getStandbyPostActionFn(
 			transferTask,
-			t.getCurrentTime,
+			t.getCompensatedCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
 			standbyTaskPostActionNoOp,
@@ -368,7 +368,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 		actionFn,
 		getStandbyPostActionFn(
 			transferTask,
-			t.getCurrentTime,
+			t.getCompensatedCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
 			t.fetchHistoryFromRemote,
@@ -403,7 +403,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 		actionFn,
 		getStandbyPostActionFn(
 			transferTask,
-			t.getCurrentTime,
+			t.getCompensatedCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
 			t.fetchHistoryFromRemote,
@@ -485,7 +485,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		actionFn,
 		getStandbyPostActionFn(
 			transferTask,
-			t.getCurrentTime,
+			t.getCompensatedCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
 			t.startChildExecutionResendPostAction,
@@ -692,6 +692,6 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	return consts.ErrTaskRetry
 }
 
-func (t *transferQueueStandbyTaskExecutor) getCurrentTime() time.Time {
-	return t.shard.GetCurrentTime(t.clusterName)
+func (t *transferQueueStandbyTaskExecutor) getCompensatedCurrentTime() time.Time {
+	return t.shard.GetCurrentTime(t.currentClusterName).Add(-t.shard.GetConfig().StandbyClusterDelay())
 }

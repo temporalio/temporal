@@ -968,8 +968,6 @@ const (
 	HistoryVerifyChildExecutionCompletionRecordedScope = "VerifyChildExecutionCompletionRecorded"
 	// HistoryRequestCancelWorkflowExecutionScope tracks RequestCancelWorkflowExecution API calls received by service
 	HistoryRequestCancelWorkflowExecutionScope = "RequestCancelWorkflowExecution"
-	// HistorySyncShardStatusScope tracks HistorySyncShardStatus API calls received by service
-	HistorySyncShardStatusScope = "SyncShardStatus"
 	// HistorySyncActivityScope tracks HistoryActivity API calls received by service
 	HistorySyncActivityScope = "SyncActivity"
 	// HistoryRebuildMutableStateScope tracks RebuildMutable API calls received by service
@@ -1399,8 +1397,6 @@ var (
 	ShardInfoTimerFailoverInProgressHistogram         = NewDimensionlessHistogramDef("shardinfo_timer_failover_in_progress")
 	ShardInfoTransferFailoverLatencyTimer             = NewTimerDef("shardinfo_transfer_failover_latency")
 	ShardInfoTimerFailoverLatencyTimer                = NewTimerDef("shardinfo_timer_failover_latency")
-	SyncShardFromRemoteCounter                        = NewCounterDef("syncshard_remote_count")
-	SyncShardFromRemoteFailure                        = NewCounterDef("syncshard_remote_failed")
 	TaskRequests                                      = NewCounterDef("task_requests")
 	TaskLoadLatency                                   = NewTimerDef("task_latency_load")       // latency from task generation to task loading (persistence scheduleToStart)
 	TaskScheduleLatency                               = NewTimerDef("task_latency_schedule")   // latency from task submission to in-memory queue to processing (in-memory scheduleToStart)

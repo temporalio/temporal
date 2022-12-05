@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -96,9 +95,8 @@ type (
 		maxRxReceivedTaskID     int64
 		rxTaskBackoff           time.Duration
 
-		requestChan   chan<- *replicationTaskRequest
-		syncShardChan chan *replicationspb.SyncShardStatus
-		shutdownChan  chan struct{}
+		requestChan  chan<- *replicationTaskRequest
+		shutdownChan chan struct{}
 	}
 
 	replicationTaskRequest struct {
@@ -151,7 +149,6 @@ func NewTaskProcessor(
 		taskRetryPolicy:      taskRetryPolicy,
 		dlqRetryPolicy:       dlqRetryPolicy,
 		requestChan:          replicationTaskFetcher.getRequestChan(),
-		syncShardChan:        make(chan *replicationspb.SyncShardStatus, 1),
 		shutdownChan:         make(chan struct{}),
 		maxRxProcessedTaskID: persistence.EmptyQueueMessageID,
 		maxRxReceivedTaskID:  persistence.EmptyQueueMessageID,
@@ -189,32 +186,11 @@ func (p *taskProcessorImpl) Stop() {
 }
 
 func (p *taskProcessorImpl) eventLoop() {
-	syncShardTimer := time.NewTimer(backoff.JitDuration(
-		p.config.ShardSyncMinInterval(),
-		p.config.ShardSyncTimerJitterCoefficient(),
-	))
-	defer syncShardTimer.Stop()
 
 	replicationTimer := time.NewTimer(0)
 	defer replicationTimer.Stop()
-
-	var syncShardTask *replicationspb.SyncShardStatus
 	for {
 		select {
-		case syncShardTask = <-p.syncShardChan:
-
-		case <-syncShardTimer.C:
-			if err := p.handleSyncShardStatus(syncShardTask); err != nil {
-				p.logger.Error("unable to sync shard status", tag.Error(err))
-				p.metricsHandler.Counter(metrics.SyncShardFromRemoteFailure.GetMetricName()).Record(
-					1,
-					metrics.OperationTag(metrics.HistorySyncShardStatusScope))
-			}
-			syncShardTimer.Reset(backoff.JitDuration(
-				p.config.ShardSyncMinInterval(),
-				p.config.ShardSyncTimerJitterCoefficient(),
-			))
-
 		case <-p.shutdownChan:
 			return
 
@@ -294,31 +270,6 @@ func (p *taskProcessorImpl) applyReplicationTask(
 		return err
 	}
 	return nil
-}
-
-func (p *taskProcessorImpl) handleSyncShardStatus(
-	status *replicationspb.SyncShardStatus,
-) error {
-
-	now := p.shard.GetTimeSource().Now()
-	if status == nil {
-		return nil
-	} else if now.Sub(timestamp.TimeValue(status.GetStatusTime())) > dropSyncShardTaskTimeThreshold {
-		return nil
-	}
-
-	p.metricsHandler.Counter(metrics.SyncShardFromRemoteCounter.GetMetricName()).Record(
-		1,
-		metrics.OperationTag(metrics.HistorySyncShardStatusScope))
-	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
-	defer cancel()
-	ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundCallerInfo)
-
-	return p.historyEngine.SyncShardStatus(ctx, &historyservice.SyncShardStatusRequest{
-		SourceCluster: p.sourceCluster,
-		ShardId:       p.shard.GetShardID(),
-		StatusTime:    status.StatusTime,
-	})
 }
 
 func (p *taskProcessorImpl) handleReplicationTask(
@@ -463,14 +414,6 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 	case resp, ok := <-respChan:
 		if !ok {
 			return nil, nil, nil
-		}
-
-		select {
-		case p.syncShardChan <- resp.GetSyncShardStatus():
-
-		default:
-			// channel full, it is ok to drop the sync shard status
-			// since sync shard status are periodically updated
 		}
 
 		var tasks []interface{}
