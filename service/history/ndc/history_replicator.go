@@ -54,9 +54,9 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	historyCache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 const (

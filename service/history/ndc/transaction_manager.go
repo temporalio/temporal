@@ -43,9 +43,9 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	historyCache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 // NOTE: terminology

@@ -31,11 +31,11 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/timer"
-	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	historyCache "go.temporal.io/server/service/history/workflow/cache"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"

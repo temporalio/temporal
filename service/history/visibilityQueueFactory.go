@@ -31,10 +31,10 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	historyCache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 const (

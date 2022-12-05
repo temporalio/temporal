@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/definition"
-	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/tasks"
+	historyCache "go.temporal.io/server/service/history/workflow/cache"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"

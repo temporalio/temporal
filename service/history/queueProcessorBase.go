@@ -37,9 +37,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/quotas"
-	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
+	historyCache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (

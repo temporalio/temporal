@@ -27,8 +27,8 @@ package api
 import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
-	historyCache "go.temporal.io/server/service/history/cache"
 	"go.temporal.io/server/service/history/workflow"
+	historyCache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type WorkflowContext interface {
