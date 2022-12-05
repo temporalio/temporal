@@ -43,7 +43,7 @@ import (
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -75,7 +75,7 @@ type (
 		taskExecutors        map[string]TaskExecutor
 		shard                shard.Context
 		deleteManager        deletemanager.DeleteManager
-		workflowCache        historyCache.Cache
+		workflowCache        wcache.Cache
 		resender             xdc.NDCHistoryResender
 		taskExecutorProvider TaskExecutorProvider
 		logger               log.Logger
@@ -85,7 +85,7 @@ type (
 func NewLazyDLQHandler(
 	shard shard.Context,
 	deleteManager deletemanager.DeleteManager,
-	workflowCache historyCache.Cache,
+	workflowCache wcache.Cache,
 	clientBean client.Bean,
 	taskExecutorProvider TaskExecutorProvider,
 ) DLQHandler {
@@ -102,7 +102,7 @@ func NewLazyDLQHandler(
 func newDLQHandler(
 	shard shard.Context,
 	deleteManager deletemanager.DeleteManager,
-	workflowCache historyCache.Cache,
+	workflowCache wcache.Cache,
 	clientBean client.Bean,
 	taskExecutors map[string]TaskExecutor,
 	taskExecutorProvider TaskExecutorProvider,

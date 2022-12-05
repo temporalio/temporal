@@ -85,7 +85,7 @@ import (
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -138,7 +138,7 @@ func NewEngineWithShardContext(
 	eventNotifier events.Notifier,
 	config *configs.Config,
 	rawMatchingClient matchingservice.MatchingServiceClient,
-	workflowCache historyCache.Cache,
+	workflowCache wcache.Cache,
 	archivalClient archiver.Client,
 	eventSerializer serialization.Serializer,
 	queueProcessorFactories []QueueFactory,

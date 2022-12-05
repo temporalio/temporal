@@ -53,7 +53,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -71,7 +71,7 @@ type (
 
 		mockExecutionMgr *persistence.MockExecutionManager
 
-		workflowCache *historyCache.CacheImpl
+		workflowCache *wcache.CacheImpl
 		logger        log.Logger
 
 		nDCActivityReplicator *ActivityReplicatorImpl
@@ -111,7 +111,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 			}},
 		tests.NewDynamicConfig(),
 	)
-	s.workflowCache = historyCache.NewCache(s.mockShard).(*historyCache.CacheImpl)
+	s.workflowCache = wcache.NewCache(s.mockShard).(*wcache.CacheImpl)
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr

@@ -52,7 +52,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -62,7 +62,7 @@ type (
 		*require.Assertions
 
 		controller            *gomock.Controller
-		mockCache             *historyCache.MockCache
+		mockCache             *wcache.MockCache
 		mockArchivalClient    *archiver.MockClient
 		mockShardContext      *shard.MockContext
 		mockClock             *clock.EventTimeSource
@@ -90,7 +90,7 @@ func (s *deleteManagerWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockCache = historyCache.NewMockCache(s.controller)
+	s.mockCache = wcache.NewMockCache(s.controller)
 	s.mockArchivalClient = archiver.NewMockClient(s.controller)
 	s.mockClock = clock.NewEventTimeSource()
 	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)

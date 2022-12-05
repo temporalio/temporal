@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -63,7 +63,7 @@ type (
 
 func newTimerQueueStandbyTaskExecutor(
 	shard shard.Context,
-	workflowCache historyCache.Cache,
+	workflowCache wcache.Cache,
 	workflowDeleteManager deletemanager.DeleteManager,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	matchingClient matchingservice.MatchingServiceClient,

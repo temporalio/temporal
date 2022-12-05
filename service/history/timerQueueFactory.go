@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -110,7 +110,7 @@ func NewTimerQueueFactory(
 
 func (f *timerQueueFactory) CreateQueue(
 	shard shard.Context,
-	workflowCache historyCache.Cache,
+	workflowCache wcache.Cache,
 ) queues.Queue {
 	if f.HostScheduler != nil && f.Config.TimerProcessorEnableMultiCursor() {
 		logger := log.With(shard.GetLogger(), tag.ComponentTimerQueue)

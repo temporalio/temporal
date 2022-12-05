@@ -37,7 +37,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -56,7 +55,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -114,10 +113,10 @@ func (s *ackManagerSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
-	historyCache := historyCache.NewCache(s.mockShard)
+	workflowCache := wcache.NewCache(s.mockShard)
 
 	s.replicationAckManager = NewAckManager(
-		s.mockShard, historyCache, s.mockExecutionMgr, s.logger,
+		s.mockShard, workflowCache, s.mockExecutionMgr, s.logger,
 	).(*ackMgrImpl)
 }
 

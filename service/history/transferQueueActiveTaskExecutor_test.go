@@ -80,7 +80,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	warchiver "go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
@@ -106,7 +106,7 @@ type (
 		mockArchiverProvider        *provider.MockArchiverProvider
 		mockParentClosePolicyClient *parentclosepolicy.MockClient
 
-		workflowCache                   historyCache.Cache
+		workflowCache                   wcache.Cache
 		logger                          log.Logger
 		namespaceID                     namespace.ID
 		namespace                       namespace.Name
@@ -208,7 +208,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
 
-	s.workflowCache = historyCache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard)
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{
@@ -2559,10 +2559,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockWorkflowContext.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
 			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 
-			mockWorkflowCache := historyCache.NewMockCache(ctrl)
+			mockWorkflowCache := wcache.NewMockCache(ctrl)
 			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
 				gomock.Any(),
-			).Return(mockWorkflowContext, historyCache.ReleaseCacheFunc(func(err error) {
+			).Return(mockWorkflowContext, wcache.ReleaseCacheFunc(func(err error) {
 			}), nil)
 
 			mockClusterMetadata := cluster.NewMockMetadata(ctrl)

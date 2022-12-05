@@ -28,13 +28,13 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type WorkflowContext interface {
 	GetContext() workflow.Context
 	GetMutableState() workflow.MutableState
-	GetReleaseFn() historyCache.ReleaseCacheFunc
+	GetReleaseFn() wcache.ReleaseCacheFunc
 
 	GetNamespaceEntry() *namespace.Namespace
 	GetWorkflowKey() definition.WorkflowKey
@@ -43,7 +43,7 @@ type WorkflowContext interface {
 type WorkflowContextImpl struct {
 	context      workflow.Context
 	mutableState workflow.MutableState
-	releaseFn    historyCache.ReleaseCacheFunc
+	releaseFn    wcache.ReleaseCacheFunc
 }
 
 type UpdateWorkflowAction struct {
@@ -66,7 +66,7 @@ var _ WorkflowContext = (*WorkflowContextImpl)(nil)
 
 func NewWorkflowContext(
 	context workflow.Context,
-	releaseFn historyCache.ReleaseCacheFunc,
+	releaseFn wcache.ReleaseCacheFunc,
 	mutableState workflow.MutableState,
 ) *WorkflowContextImpl {
 
@@ -85,7 +85,7 @@ func (w *WorkflowContextImpl) GetMutableState() workflow.MutableState {
 	return w.mutableState
 }
 
-func (w *WorkflowContextImpl) GetReleaseFn() historyCache.ReleaseCacheFunc {
+func (w *WorkflowContextImpl) GetReleaseFn() wcache.ReleaseCacheFunc {
 	return w.releaseFn
 }
 

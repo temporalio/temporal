@@ -35,8 +35,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"golang.org/x/exp/slices"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -56,7 +54,8 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"golang.org/x/exp/slices"
 )
 
 const (
@@ -114,7 +113,7 @@ type (
 		historySerializer serialization.Serializer
 		metricsHandler    metrics.MetricsHandler
 		namespaceRegistry namespace.Registry
-		historyCache      historyCache.Cache
+		workflowCache     wcache.Cache
 		eventsReapplier   EventsReapplier
 		transactionMgr    transactionMgr
 		logger            log.Logger
@@ -136,13 +135,13 @@ var errPanic = serviceerror.NewInternal("encountered panic")
 
 func NewHistoryReplicator(
 	shard shard.Context,
-	histCache historyCache.Cache,
+	workflowCache wcache.Cache,
 	eventsReapplier EventsReapplier,
 	logger log.Logger,
 	eventSerializer serialization.Serializer,
 ) *HistoryReplicatorImpl {
 
-	transactionMgr := newTransactionMgr(shard, histCache, eventsReapplier, logger)
+	transactionMgr := newTransactionMgr(shard, workflowCache, eventsReapplier, logger)
 	replicator := &HistoryReplicatorImpl{
 		shard:             shard,
 		clusterMetadata:   shard.GetClusterMetadata(),
@@ -150,7 +149,7 @@ func NewHistoryReplicator(
 		historySerializer: eventSerializer,
 		metricsHandler:    shard.GetMetricsHandler(),
 		namespaceRegistry: shard.GetNamespaceRegistry(),
-		historyCache:      histCache,
+		workflowCache:     workflowCache,
 		transactionMgr:    transactionMgr,
 		eventsReapplier:   eventsReapplier,
 		logger:            log.With(logger, tag.ComponentHistoryReplicator),
@@ -241,7 +240,7 @@ func (r *HistoryReplicatorImpl) ApplyWorkflowState(
 		return serviceerror.NewInternal("Replicate non completed workflow state is not supported.")
 	}
 
-	wfCtx, releaseFn, err := r.historyCache.GetOrCreateWorkflowExecution(
+	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
@@ -350,7 +349,7 @@ func (r *HistoryReplicatorImpl) applyEvents(
 	task replicationTask,
 ) (retError error) {
 
-	context, releaseFn, err := r.historyCache.GetOrCreateWorkflowExecution(
+	context, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		task.getNamespaceID(),
 		*task.getExecution(),
@@ -424,7 +423,7 @@ func (r *HistoryReplicatorImpl) applyEvents(
 func (r *HistoryReplicatorImpl) applyStartEvents(
 	ctx context.Context,
 	context workflow.Context,
-	releaseFn historyCache.ReleaseCacheFunc,
+	releaseFn wcache.ReleaseCacheFunc,
 	task replicationTask,
 ) error {
 
@@ -536,7 +535,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	context workflow.Context,
 	mutableState workflow.MutableState,
 	isRebuilt bool,
-	releaseFn historyCache.ReleaseCacheFunc,
+	releaseFn wcache.ReleaseCacheFunc,
 	task replicationTask,
 ) error {
 
@@ -587,7 +586,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 			r.clusterMetadata,
 			newContext,
 			newMutableState,
-			historyCache.NoopReleaseFn,
+			wcache.NoopReleaseFn,
 		)
 	}
 
@@ -614,7 +613,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranch(
 	context workflow.Context,
 	mutableState workflow.MutableState,
 	branchIndex int32,
-	releaseFn historyCache.ReleaseCacheFunc,
+	releaseFn wcache.ReleaseCacheFunc,
 	task replicationTask,
 ) error {
 
@@ -642,7 +641,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 	context workflow.Context,
 	mutableState workflow.MutableState,
 	branchIndex int32,
-	releaseFn historyCache.ReleaseCacheFunc,
+	releaseFn wcache.ReleaseCacheFunc,
 	task replicationTask,
 ) error {
 
@@ -697,7 +696,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithoutCont
 func (r *HistoryReplicatorImpl) applyNonStartEventsToNonCurrentBranchWithContinueAsNew(
 	ctx context.Context,
 	context workflow.Context,
-	releaseFn historyCache.ReleaseCacheFunc,
+	releaseFn wcache.ReleaseCacheFunc,
 	task replicationTask,
 ) error {
 
@@ -825,7 +824,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 		r.clusterMetadata,
 		context,
 		mutableState,
-		historyCache.NoopReleaseFn,
+		wcache.NoopReleaseFn,
 	)
 
 	err = r.transactionMgr.createWorkflow(

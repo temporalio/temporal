@@ -52,7 +52,7 @@ import (
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -69,7 +69,7 @@ type (
 		historyClient      *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *namespace.MockRegistry
 		clusterMetadata    *cluster.MockMetadata
-		workflowCache      *historyCache.MockCache
+		workflowCache      *wcache.MockCache
 		nDCHistoryResender *xdc.MockNDCHistoryResender
 
 		replicationTaskExecutor *taskExecutorImpl
@@ -113,7 +113,7 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.clusterMetadata = s.mockResource.ClusterMetadata
 	s.nDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
-	s.workflowCache = historyCache.NewMockCache(s.controller)
+	s.workflowCache = wcache.NewMockCache(s.controller)
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()

@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -68,7 +68,7 @@ var (
 
 func newTransferQueueStandbyTaskExecutor(
 	shard shard.Context,
-	workflowCache historyCache.Cache,
+	workflowCache wcache.Cache,
 	archivalClient archiver.Client,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,

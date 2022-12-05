@@ -32,8 +32,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	cache "go.temporal.io/server/service/history/workflow/cache"
 	workflow "go.temporal.io/server/service/history/workflow"
+	cache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 // MockWorkflow is a mock of Workflow interface.

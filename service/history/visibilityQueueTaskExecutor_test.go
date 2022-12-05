@@ -61,7 +61,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -75,7 +75,7 @@ type (
 		mockVisibilityMgr *manager.MockVisibilityManager
 		mockExecutionMgr  *persistence.MockExecutionManager
 
-		workflowCache               historyCache.Cache
+		workflowCache               wcache.Cache
 		logger                      log.Logger
 		namespaceID                 namespace.ID
 		namespace                   namespace.Name
@@ -147,7 +147,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, s.version).Return(mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
 
-	s.workflowCache = historyCache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard)
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{

@@ -56,7 +56,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -67,7 +67,7 @@ type (
 		controller            *gomock.Controller
 		mockShard             *shard.ContextTest
 		mockEventCache        *events.MockCache
-		mockHistoryCache      *historyCache.MockCache
+		mockWorkflowCache     *wcache.MockCache
 		mockNamespaceCache    *namespace.MockRegistry
 		mockRemoteAdminClient *adminservicemock.MockAdminServiceClient
 		mockExecutionManager  *persistence.MockExecutionManager
@@ -104,7 +104,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
-	s.mockHistoryCache = historyCache.NewMockCache(s.controller)
+	s.mockWorkflowCache = wcache.NewMockCache(s.controller)
 	s.mockEventCache = s.mockShard.MockEventsCache
 	s.mockRemoteAdminClient = s.mockShard.Resource.RemoteAdminClient
 	eventReapplier := NewMockEventsReapplier(s.controller)
@@ -115,7 +115,7 @@ func (s *historyReplicatorSuite) SetupTest() {
 	s.now = time.Now().UTC()
 	s.historyReplicator = NewHistoryReplicator(
 		s.mockShard,
-		s.mockHistoryCache,
+		s.mockWorkflowCache,
 		eventReapplier,
 		s.logger,
 		serialization.NewSerializer(),
@@ -174,12 +174,12 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		RunId:      s.runID,
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	s.mockHistoryCache.EXPECT().GetOrCreateWorkflowExecution(
+	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		namespace.ID(namespaceID),
 		we,
 		workflow.CallerTypeTask,
-	).Return(mockWeCtx, historyCache.NoopReleaseFn, nil)
+	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		gomock.Any(),
@@ -286,12 +286,12 @@ func (s *historyReplicatorSuite) Test_ApplyWorkflowState_Ancestors() {
 		RunId:      s.runID,
 	}
 	mockWeCtx := workflow.NewMockContext(s.controller)
-	s.mockHistoryCache.EXPECT().GetOrCreateWorkflowExecution(
+	s.mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		gomock.Any(),
 		namespace.ID(namespaceID),
 		we,
 		workflow.CallerTypeTask,
-	).Return(mockWeCtx, historyCache.NoopReleaseFn, nil)
+	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	mockWeCtx.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		gomock.Any(),

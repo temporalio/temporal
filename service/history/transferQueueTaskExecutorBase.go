@@ -50,7 +50,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -65,7 +65,7 @@ type (
 		currentClusterName       string
 		shard                    shard.Context
 		registry                 namespace.Registry
-		cache                    historyCache.Cache
+		cache                    wcache.Cache
 		archivalClient           archiver.Client
 		logger                   log.Logger
 		metricHandler            metrics.MetricsHandler
@@ -79,7 +79,7 @@ type (
 
 func newTransferQueueTaskExecutorBase(
 	shard shard.Context,
-	workflowCache historyCache.Cache,
+	workflowCache wcache.Cache,
 	archivalClient archiver.Client,
 	logger log.Logger,
 	metricHandler metrics.MetricsHandler,

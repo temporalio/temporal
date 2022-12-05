@@ -45,7 +45,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -80,7 +80,7 @@ type (
 
 	DeleteManagerImpl struct {
 		shard          shard.Context
-		historyCache   historyCache.Cache
+		workflowCache  wcache.Cache
 		config         *configs.Config
 		metricsHandler metrics.MetricsHandler
 		archivalClient archiver.Client
@@ -92,14 +92,14 @@ var _ DeleteManager = (*DeleteManagerImpl)(nil)
 
 func NewDeleteManager(
 	shard shard.Context,
-	cache historyCache.Cache,
+	cache wcache.Cache,
 	config *configs.Config,
 	archiverClient archiver.Client,
 	timeSource clock.TimeSource,
 ) *DeleteManagerImpl {
 	deleteManager := &DeleteManagerImpl{
 		shard:          shard,
-		historyCache:   cache,
+		workflowCache:  cache,
 		metricsHandler: shard.GetMetricsHandler(),
 		config:         config,
 		archivalClient: archiverClient,

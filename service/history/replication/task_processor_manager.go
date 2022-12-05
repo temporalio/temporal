@@ -46,7 +46,7 @@ import (
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -59,7 +59,7 @@ type (
 		shard                         shard.Context
 		status                        int32
 		replicationTaskFetcherFactory TaskFetcherFactory
-		workflowCache                 historyCache.Cache
+		workflowCache                 wcache.Cache
 		resender                      xdc.NDCHistoryResender
 		taskExecutorProvider          TaskExecutorProvider
 		metricsHandler                metrics.MetricsHandler
@@ -78,7 +78,7 @@ func NewTaskProcessorManager(
 	config *configs.Config,
 	shard shard.Context,
 	engine shard.Engine,
-	workflowCache historyCache.Cache,
+	workflowCache wcache.Cache,
 	workflowDeleteManager deletemanager.DeleteManager,
 	clientBean client.Bean,
 	eventSerializer serialization.Serializer,

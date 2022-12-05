@@ -30,20 +30,15 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/service/history/tasks"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
-
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -52,7 +47,9 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 const (
@@ -69,7 +66,7 @@ type (
 	}
 
 	ActivityReplicatorImpl struct {
-		historyCache    historyCache.Cache
+		workflowCache   wcache.Cache
 		clusterMetadata cluster.Metadata
 		logger          log.Logger
 	}
@@ -77,12 +74,12 @@ type (
 
 func NewActivityReplicator(
 	shard shard.Context,
-	histCache historyCache.Cache,
+	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *ActivityReplicatorImpl {
 
 	return &ActivityReplicatorImpl{
-		historyCache:    histCache,
+		workflowCache:   workflowCache,
 		clusterMetadata: shard.GetClusterMetadata(),
 		logger:          log.With(logger, tag.ComponentHistoryReplicator),
 	}
@@ -104,7 +101,7 @@ func (r *ActivityReplicatorImpl) SyncActivity(
 		RunId:      request.RunId,
 	}
 
-	executionContext, release, err := r.historyCache.GetOrCreateWorkflowExecution(
+	executionContext, release, err := r.workflowCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,

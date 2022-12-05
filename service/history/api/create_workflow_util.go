@@ -44,7 +44,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -118,7 +118,7 @@ func NewWorkflowWithSignal(
 		),
 		shard.GetLogger(),
 	)
-	return NewWorkflowContext(newWorkflowContext, historyCache.NoopReleaseFn, newMutableState), nil
+	return NewWorkflowContext(newWorkflowContext, wcache.NoopReleaseFn, newMutableState), nil
 }
 
 func CreateMutableState(

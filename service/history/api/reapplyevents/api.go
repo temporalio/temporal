@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/shard"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 func Invoke(
@@ -156,7 +156,7 @@ func Invoke(
 						shard.GetClusterMetadata(),
 						context,
 						mutableState,
-						historyCache.NoopReleaseFn,
+						wcache.NoopReleaseFn,
 					),
 					ndc.EventsReapplicationResetWorkflowReason,
 					toReapplyEvents,

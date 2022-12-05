@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -64,7 +64,7 @@ var _ workflowRebuilder = (*workflowRebuilderImpl)(nil)
 
 func NewWorkflowRebuilder(
 	shard shard.Context,
-	workflowCache historyCache.Cache,
+	workflowCache wcache.Cache,
 	logger log.Logger,
 ) *workflowRebuilderImpl {
 	return &workflowRebuilderImpl{

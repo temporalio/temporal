@@ -75,7 +75,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	warchiver "go.temporal.io/server/service/worker/archiver"
 )
 
@@ -98,7 +98,7 @@ type (
 		mockArchivalMetadata *archiver.MockArchivalMetadata
 		mockArchiverProvider *provider.MockArchiverProvider
 
-		workflowCache        historyCache.Cache
+		workflowCache        wcache.Cache
 		logger               log.Logger
 		namespaceID          namespace.ID
 		namespaceEntry       *namespace.Namespace
@@ -191,7 +191,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.clusterName).AnyTimes()
 
-	s.workflowCache = historyCache.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard)
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{
@@ -1156,7 +1156,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	mutableState.FlushBufferedEvents()
 
 	// clear the cache
-	s.transferQueueStandbyTaskExecutor.cache = historyCache.NewCache(s.mockShard)
+	s.transferQueueStandbyTaskExecutor.cache = wcache.NewCache(s.mockShard)
 	persistenceMutableState = s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -1265,7 +1265,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	)
 	s.NoError(err)
 
-	s.transferQueueStandbyTaskExecutor.cache = historyCache.NewCache(s.mockShard)
+	s.transferQueueStandbyTaskExecutor.cache = wcache.NewCache(s.mockShard)
 	persistenceMutableState = s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)

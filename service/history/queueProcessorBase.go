@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
-	historyCache "go.temporal.io/server/service/history/workflow/cache"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -89,7 +89,7 @@ func newQueueProcessorBase(
 	options *QueueProcessorOptions,
 	queueProcessor common.Daemon,
 	queueAckMgr queueAckMgr,
-	historyCache historyCache.Cache,
+	wcache wcache.Cache,
 	scheduler queues.Scheduler,
 	rescheduler queues.Rescheduler,
 	rateLimiter quotas.RateLimiter,

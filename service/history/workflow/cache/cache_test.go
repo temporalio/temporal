@@ -49,7 +49,7 @@ import (
 )
 
 type (
-	historyCacheSuite struct {
+	workflowCacheSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -60,18 +60,18 @@ type (
 	}
 )
 
-func TestHistoryCacheSuite(t *testing.T) {
-	s := new(historyCacheSuite)
+func TestWorkflowCacheSuite(t *testing.T) {
+	s := new(workflowCacheSuite)
 	suite.Run(t, s)
 }
 
-func (s *historyCacheSuite) SetupSuite() {
+func (s *workflowCacheSuite) SetupSuite() {
 }
 
-func (s *historyCacheSuite) TearDownSuite() {
+func (s *workflowCacheSuite) TearDownSuite() {
 }
 
-func (s *historyCacheSuite) SetupTest() {
+func (s *workflowCacheSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 
@@ -89,12 +89,12 @@ func (s *historyCacheSuite) SetupTest() {
 	s.mockShard.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
 }
 
-func (s *historyCacheSuite) TearDownTest() {
+func (s *workflowCacheSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
 }
 
-func (s *historyCacheSuite) TestHistoryCacheBasic() {
+func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 	s.cache = NewCache(s.mockShard)
 
 	namespaceID := namespace.ID("test_namespace_id")
@@ -137,7 +137,7 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 	release(nil)
 }
 
-func (s *historyCacheSuite) TestHistoryCachePinning() {
+func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	namespaceID := namespace.ID("test_namespace_id")
 	s.cache = NewCache(s.mockShard)
@@ -192,7 +192,7 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 	release(err4)
 }
 
-func (s *historyCacheSuite) TestHistoryCacheClear() {
+func (s *workflowCacheSuite) TestHistoryCacheClear() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	namespaceID := namespace.ID("test_namespace_id")
 	s.cache = NewCache(s.mockShard)
@@ -242,7 +242,7 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 	release(nil)
 }
 
-func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
+func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 	cacheMaxSize := 16
 	coroutineCount := 50
 
@@ -304,7 +304,7 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 	release(nil)
 }
 
-func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
+func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 	cacheMaxSize := 16
 	runIDCount := cacheMaxSize * 4
 	coroutineCount := runIDCount * 64
