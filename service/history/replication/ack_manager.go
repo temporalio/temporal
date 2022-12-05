@@ -453,7 +453,7 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 			switch err.(type) {
 			case nil:
 				// continue to generate replication task.
-			case *serviceerror.NotFound, *serviceerror.DataLoss:
+			case *serviceerror.NotFound, *serviceerror.DataLoss, *serviceerror.Unavailable:
 				// bypass this corrupted workflow to unblock the replication queue.
 				p.logger.Error("Cannot get history from corrupted workflow",
 					tag.WorkflowNamespaceID(namespaceID.String()),
@@ -667,7 +667,7 @@ func (p *ackMgrImpl) processNewRunReplication(
 		switch err.(type) {
 		case nil:
 			// continue to generate replication task.
-		case *serviceerror.NotFound, *serviceerror.DataLoss:
+		case *serviceerror.NotFound, *serviceerror.DataLoss, *serviceerror.Unavailable:
 			// bypass this corrupted workflow to unblock the replication queue.
 			p.logger.Error("Cannot get history from corrupted workflow",
 				tag.WorkflowNamespaceID(namespaceID.String()),
