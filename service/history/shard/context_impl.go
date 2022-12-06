@@ -129,8 +129,9 @@ type (
 		scheduledTaskMaxReadLevelMap       map[string]time.Time // cluster -> scheduledTaskMaxReadLevel
 
 		// exist only in memory
-		remoteClusterInfos map[string]*remoteClusterInfo
-		handoverNamespaces map[string]*namespaceHandOverInfo // keyed on namespace name
+		remoteClusterInfos      map[string]*remoteClusterInfo
+		handoverNamespaces      map[string]*namespaceHandOverInfo // keyed on namespace name
+		acquireShardRetryPolicy backoff.RetryPolicy
 	}
 
 	remoteClusterInfo struct {
@@ -1621,7 +1622,9 @@ func (s *ContextImpl) transition(request contextRequest) error {
 		// Cancel lifecycle context as soon as we know we're shutting down
 		s.lifecycleCancel()
 		// This will cause the controller to remove this shard from the map and then call s.finishStop()
-		go s.closeCallback(s)
+		if s.closeCallback != nil {
+			go s.closeCallback(s)
+		}
 	}
 
 	setStateStopped := func() {
@@ -1889,8 +1892,10 @@ func (s *ContextImpl) acquireShard() {
 	// lifecycleCtx. The persistence operations called here use lifecycleCtx as their context,
 	// so if we were blocked in any of them, they should return immediately with a context
 	// canceled error.
-	policy := backoff.NewExponentialRetryPolicy(1 * time.Second).
-		WithExpirationInterval(5 * time.Minute)
+	policy := s.acquireShardRetryPolicy
+	if policy == nil {
+		policy = backoff.NewExponentialRetryPolicy(1 * time.Second).WithExpirationInterval(5 * time.Minute)
+	}
 
 	// Remember this value across attempts
 	ownershipChanged := false
