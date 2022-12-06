@@ -620,6 +620,9 @@ func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace
 	currentClustername := s.GetClusterMetadata().GetCurrentClusterName()
 	newHandoverNamespaces := make(map[namespace.Name]struct{})
 	for _, ns := range namespaces {
+		// NOTE: replication state field won't be replicated and currently we only update a namespace
+		// to handover state from active cluster, so the second condition will always be true. Adding
+		// it here to be more safe in case above assumption no longer holds in the future.
 		if ns.IsGlobalNamespace() && ns.ActiveInCluster(currentClustername) && ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER {
 			nsName := ns.Name()
 			newHandoverNamespaces[nsName] = struct{}{}

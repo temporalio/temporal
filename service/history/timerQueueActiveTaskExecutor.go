@@ -109,8 +109,6 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		// them during namespace handover.
 		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
 		// be returned from task executor
-
-		// namespace in handover state is still active namespace
 		return metricsTags, true, consts.ErrNamespaceHandover
 	}
 
