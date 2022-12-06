@@ -72,6 +72,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -79,6 +80,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	warchiver "go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
@@ -104,7 +106,7 @@ type (
 		mockArchiverProvider        *provider.MockArchiverProvider
 		mockParentClosePolicyClient *parentclosepolicy.MockClient
 
-		workflowCache                   workflow.Cache
+		workflowCache                   wcache.Cache
 		logger                          log.Logger
 		namespaceID                     namespace.ID
 		namespace                       namespace.Name
@@ -206,7 +208,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
 
-	s.workflowCache = workflow.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard)
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{
@@ -1381,7 +1383,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_DeleteA
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Times(2)
-	mockDeleteMgr := workflow.NewMockDeleteManager(s.controller)
+	mockDeleteMgr := deletemanager.NewMockDeleteManager(s.controller)
 	mockDeleteMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.transferQueueActiveTaskExecutor.workflowDeleteManager = mockDeleteMgr
 	_, _, err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
@@ -2557,10 +2559,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 			mockWorkflowContext.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
 			mockWorkflowContext.EXPECT().LoadMutableState(gomock.Any()).Return(mockMutableState, nil)
 
-			mockWorkflowCache := workflow.NewMockCache(ctrl)
+			mockWorkflowCache := wcache.NewMockCache(ctrl)
 			mockWorkflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
 				gomock.Any(),
-			).Return(mockWorkflowContext, workflow.ReleaseCacheFunc(func(err error) {
+			).Return(mockWorkflowContext, wcache.ReleaseCacheFunc(func(err error) {
 			}), nil)
 
 			mockClusterMetadata := cluster.NewMockMetadata(ctrl)
@@ -2605,7 +2607,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestPendingCloseExecutionTasks() 
 					clusterName).Return(tasks.NewImmediateKey(ackLevel)).AnyTimes()
 			}
 
-			mockWorkflowDeleteManager := workflow.NewMockDeleteManager(ctrl)
+			mockWorkflowDeleteManager := deletemanager.NewMockDeleteManager(ctrl)
 			if c.ShouldDelete {
 				mockWorkflowDeleteManager.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(),
 					gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any())

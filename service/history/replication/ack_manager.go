@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -68,7 +69,7 @@ type (
 		currentClusterName string
 		shard              shard.Context
 		config             *configs.Config
-		workflowCache      workflow.Cache
+		workflowCache      wcache.Cache
 		executionMgr       persistence.ExecutionManager
 		metricsHandler     metrics.MetricsHandler
 		logger             log.Logger
@@ -90,7 +91,7 @@ var (
 
 func NewAckManager(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	executionMgr persistence.ExecutionManager,
 	logger log.Logger,
 ) AckManager {

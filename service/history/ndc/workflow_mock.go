@@ -33,6 +33,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	workflow "go.temporal.io/server/service/history/workflow"
+	cache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 // MockWorkflow is a mock of Workflow interface.
@@ -101,10 +102,10 @@ func (mr *MockWorkflowMockRecorder) GetMutableState() *gomock.Call {
 }
 
 // GetReleaseFn mocks base method.
-func (m *MockWorkflow) GetReleaseFn() workflow.ReleaseCacheFunc {
+func (m *MockWorkflow) GetReleaseFn() cache.ReleaseCacheFunc {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReleaseFn")
-	ret0, _ := ret[0].(workflow.ReleaseCacheFunc)
+	ret0, _ := ret[0].(cache.ReleaseCacheFunc)
 	return ret0
 }
 
