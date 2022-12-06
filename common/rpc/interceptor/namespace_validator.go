@@ -51,7 +51,7 @@ type (
 var (
 	ErrNamespaceNotSet            = serviceerror.NewInvalidArgument("Namespace not set on request.")
 	errNamespaceTooLong           = serviceerror.NewInvalidArgument("Namespace length exceeds limit.")
-	errNamespaceHandover          = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
+	ErrNamespaceHandover          = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
 	errTaskTokenNotSet            = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errTaskTokenNamespaceMismatch = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
 
@@ -266,5 +266,5 @@ func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *n
 		return nil
 	}
 
-	return errNamespaceHandover
+	return ErrNamespaceHandover
 }

@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -93,10 +94,24 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 ) ([]metrics.Tag, bool, error) {
 	task := executable.GetTask()
 	taskType := queues.GetActiveTimerTaskTypeTagValue(task)
+	namespaceTag, replicationState := getNamespaceTagAndReplicationStateByID(
+		t.shard.GetNamespaceRegistry(),
+		task.GetNamespaceID(),
+	)
 	metricsTags := []metrics.Tag{
-		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		namespaceTag,
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
+	}
+
+	if replicationState == enumspb.REPLICATION_STATE_HANDOVER {
+		// TODO: exclude task types here if we believe it's safe & necessary to execute
+		// them during namespace handover.
+		// TODO: move this logic to queues.Executable when metrics tag doesn't need to
+		// be returned from task executor
+
+		// namespace in handover state is still active namespace
+		return metricsTags, true, consts.ErrNamespaceHandover
 	}
 
 	var err error

@@ -200,7 +200,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 		{
 			state:            enumspb.NAMESPACE_STATE_REGISTERED,
 			replicationState: enumspb.REPLICATION_STATE_HANDOVER,
-			expectedErr:      errNamespaceHandover,
+			expectedErr:      ErrNamespaceHandover,
 			method:           "/temporal/StartWorkflowExecution",
 			req:              &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},

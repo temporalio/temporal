@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/rpc/interceptor"
 )
 
 const (
@@ -90,6 +91,8 @@ var (
 	ErrWorkflowNotReady = serviceerror.NewWorkflowNotReady("Workflow state is not ready to handle the request.")
 	// ErrWorkflowTaskNotScheduled is error indicating workflow task is not scheduled yet.
 	ErrWorkflowTaskNotScheduled = serviceerror.NewWorkflowNotReady("Workflow task is not scheduled yet.")
+	// ErrNamespaceHandover is error in dicating namespace is in handover state and cannot process request.
+	ErrNamespaceHandover = interceptor.ErrNamespaceHandover
 
 	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
