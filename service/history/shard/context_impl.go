@@ -617,9 +617,10 @@ func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace
 		maxReplicationTaskID = pendingMaxReplicationTaskID
 	}
 
+	currentClustername := s.GetClusterMetadata().GetCurrentClusterName()
 	newHandoverNamespaces := make(map[namespace.Name]struct{})
 	for _, ns := range namespaces {
-		if ns.IsGlobalNamespace() && ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER {
+		if ns.IsGlobalNamespace() && ns.ActiveInCluster(currentClustername) && ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER {
 			nsName := ns.Name()
 			newHandoverNamespaces[nsName] = struct{}{}
 			if handover, ok := s.handoverNamespaces[nsName]; ok {
