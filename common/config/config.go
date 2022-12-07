@@ -26,6 +26,7 @@ package config
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"time"
 
@@ -111,9 +112,12 @@ type (
 
 	// RootTLS contains all TLS settings for the Temporal server
 	RootTLS struct {
-		// Internode controls backend service communication TLS settings.
+		// Internode controls backend service (history, matching, internal-frontend)
+		// communication TLS settings.
 		Internode GroupTLS `yaml:"internode"`
-		// Frontend controls SDK Client to Frontend communication TLS settings.
+		// Frontend controls frontend server TLS settings. To control system worker -> frontend
+		// TLS, use the SystemWorker field. (Frontend.Client is accepted for backwards
+		// compatibility.)
 		Frontend GroupTLS `yaml:"frontend"`
 		// SystemWorker controls TLS setting for System Workers connecting to Frontend.
 		SystemWorker WorkerTLS `yaml:"systemWorker"`
@@ -481,16 +485,22 @@ type (
 		S3ForcePathStyle bool    `yaml:"s3ForcePathStyle"`
 	}
 
-	// PublicClient is config for internal nodes (history/matching/worker) connecting to
-	// temporal frontend. There are two methods of connecting:
-	// Explicit endpoint: Supply a host:port to connect to. This can resolve to multiple IPs,
-	// or a single IP that is a load-balancer.
-	// Membership resolver (new in 1.18): Leave this empty, and other nodes will use the
-	// membership service resolver to find the frontend.
-	// TODO: remove this and always use membership resolver
+	// PublicClient is the config for internal nodes (history/matching/worker) connecting to
+	// frontend. There are two methods of connecting:
+	// 1. Use membership to locate "internal-frontend" or "frontend" nodes and connect to them
+	//    using the internode TLS config (which can be "no TLS"). This is recommended for most
+	//    deployments. To use this, leave this section out of your config.
+	// 2. Connect to an explicit endpoint using the SystemWorker TLS config (which can be "no
+	//    TLS"). You can use this if you want to force frontend connections to go through an
+	//    external load balancer. If you use this with a ClaimMapper+Authorizer, you need to
+	//    ensure that your ClaimMapper assigns admin permissions to worker nodes, and your
+	//    Authorizer correctly handles those claims.
 	PublicClient struct {
 		// HostPort is the host port to connect on. Host can be DNS name
 		HostPort string `yaml:"hostPort"`
+		// Force selection of either the "internode" or "frontend" TLS configs for these
+		// connections (only those two strings are valid).
+		ForceTLSConfig string `yaml:"forceTLSConfig"`
 	}
 
 	// NamespaceDefaults is the default config for each namespace
@@ -551,6 +561,12 @@ const (
 	ClusterMDStoreName DataStoreName = "ClusterMDStore"
 )
 
+const (
+	ForceTLSConfigDefault   = ""
+	ForceTLSConfigInternode = "internode"
+	ForceTLSConfigFrontend  = "frontend"
+)
+
 // Validate validates this config
 func (c *Config) Validate() error {
 	if err := c.Persistence.Validate(); err != nil {
@@ -559,6 +575,12 @@ func (c *Config) Validate() error {
 
 	if err := c.Archival.Validate(&c.NamespaceDefaults.Archival); err != nil {
 		return err
+	}
+
+	switch c.PublicClient.ForceTLSConfig {
+	case ForceTLSConfigDefault, ForceTLSConfigInternode, ForceTLSConfigFrontend:
+	default:
+		return fmt.Errorf("invalid value for publicClient.forceTLSConfig: %q", c.PublicClient.ForceTLSConfig)
 	}
 
 	return nil

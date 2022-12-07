@@ -806,6 +806,7 @@ func (adh *AdminHandler) DescribeCluster(
 		var rings []*clusterspb.RingInfo
 		for _, role := range []primitives.ServiceName{
 			primitives.FrontendService,
+			primitives.InternalFrontendService,
 			primitives.HistoryService,
 			primitives.MatchingService,
 			primitives.WorkerService,

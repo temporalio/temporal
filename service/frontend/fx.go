@@ -26,6 +26,7 @@ package frontend
 
 import (
 	"context"
+	"fmt"
 	"net"
 
 	"go.uber.org/fx"
@@ -130,6 +131,7 @@ func NewServiceProvider(
 func GrpcServerOptionsProvider(
 	logger log.Logger,
 	serviceConfig *Config,
+	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
 	namespaceLogInterceptor *interceptor.NamespaceLogInterceptor,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
@@ -158,7 +160,14 @@ func GrpcServerOptionsProvider(
 		Time:                  serviceConfig.KeepAliveTime(),
 		Timeout:               serviceConfig.KeepAliveTimeout(),
 	}
-	grpcServerOptions, err := rpcFactory.GetFrontendGRPCServerOptions()
+	var grpcServerOptions []grpc.ServerOption
+	err := fmt.Errorf("unexpected frontend service name %q", serviceName)
+	switch serviceName {
+	case primitives.FrontendService:
+		grpcServerOptions, err = rpcFactory.GetFrontendGRPCServerOptions()
+	case primitives.InternalFrontendService:
+		grpcServerOptions, err = rpcFactory.GetInternodeGRPCServerOptions()
+	}
 	if err != nil {
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
