@@ -90,7 +90,7 @@ type (
 
 	ServicesMetadata struct {
 		App           *fx.App // Added for info. ServiceStopFn is enough.
-		ServiceName   string
+		ServiceName   primitives.ServiceName
 		ServiceStopFn ServiceStopFn
 	}
 
@@ -283,7 +283,7 @@ func (s ServerFx) Stop() {
 	s.app.Stop(context.Background())
 }
 
-func StopService(logger log.Logger, app *fx.App, svcName string, stopChan chan struct{}) {
+func StopService(logger log.Logger, app *fx.App, svcName primitives.ServiceName, stopChan chan struct{}) {
 	stopCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStopTimeout)
 	err := app.Stop(stopCtx)
 	cancelFunc()
@@ -353,6 +353,7 @@ func HistoryServiceProvider(
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,
+			serviceName,
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
@@ -364,7 +365,6 @@ func HistoryServiceProvider(
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() metrics.MetricsHandler {
 			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
@@ -415,6 +415,7 @@ func MatchingServiceProvider(
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,
+			serviceName,
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
@@ -426,7 +427,6 @@ func MatchingServiceProvider(
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() metrics.MetricsHandler {
 			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
@@ -474,6 +474,7 @@ func FrontendServiceProvider(
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,
+			serviceName,
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
@@ -485,7 +486,6 @@ func FrontendServiceProvider(
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() metrics.MetricsHandler {
 			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
@@ -534,6 +534,7 @@ func WorkerServiceProvider(
 			params.PersistenceConfig,
 			params.ClusterMetadata,
 			params.Cfg,
+			serviceName,
 		),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
 		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
@@ -545,7 +546,6 @@ func WorkerServiceProvider(
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() metrics.MetricsHandler {
 			return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
@@ -844,7 +844,7 @@ var ServiceTracingModule = fx.Options(
 	),
 	fx.Provide(
 		fx.Annotate(
-			func(rsn resource.ServiceName, rsi resource.InstanceID) (*otelresource.Resource, error) {
+			func(rsn primitives.ServiceName, rsi resource.InstanceID) (*otelresource.Resource, error) {
 				serviceName := string(rsn)
 				if !strings.HasPrefix(serviceName, "io.temporal.") {
 					serviceName = fmt.Sprintf("io.temporal.%s", serviceName)

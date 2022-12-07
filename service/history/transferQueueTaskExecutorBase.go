@@ -219,7 +219,7 @@ func (t *transferQueueTaskExecutorBase) archiveVisibility(
 			HistoryURI:       namespaceEntry.HistoryArchivalState().URI,
 			Targets:          []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
 		},
-		CallerService:        primitives.HistoryService,
+		CallerService:        string(primitives.HistoryService),
 		AttemptArchiveInline: true, // archive visibility inline by default
 	})
 

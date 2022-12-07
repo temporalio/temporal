@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/primitives"
 )
 
 const (
@@ -245,8 +246,8 @@ func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 	return &tagImpl{key: resourceExhaustedTag, value: cause.String()}
 }
 
-func ServiceNameTag(value string) Tag {
-	return &tagImpl{key: serviceName, value: value}
+func ServiceNameTag(value primitives.ServiceName) Tag {
+	return &tagImpl{key: serviceName, value: string(value)}
 }
 
 func ActionType(value string) Tag {

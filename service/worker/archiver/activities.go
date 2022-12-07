@@ -74,7 +74,7 @@ func uploadHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 		logger.Error(carchiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason("failed to get history archival uri"), tag.ArchivalURI(request.HistoryURI), tag.Error(err))
 		return errUploadNonRetryable
 	}
-	historyArchiver, err := container.ArchiverProvider.GetHistoryArchiver(URI.Scheme(), primitives.WorkerService)
+	historyArchiver, err := container.ArchiverProvider.GetHistoryArchiver(URI.Scheme(), string(primitives.WorkerService))
 	if err != nil {
 		logger.Error(carchiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason("failed to get history archiver"), tag.Error(err))
 		return errUploadNonRetryable
@@ -154,7 +154,7 @@ func archiveVisibilityActivity(ctx context.Context, request ArchiveRequest) (err
 		logger.Error(carchiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason("failed to get visibility archival uri"), tag.ArchivalURI(request.VisibilityURI), tag.Error(err))
 		return errArchiveVisibilityNonRetryable
 	}
-	visibilityArchiver, err := container.ArchiverProvider.GetVisibilityArchiver(URI.Scheme(), primitives.WorkerService)
+	visibilityArchiver, err := container.ArchiverProvider.GetVisibilityArchiver(URI.Scheme(), string(primitives.WorkerService))
 	if err != nil {
 		logger.Error(carchiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason("failed to get visibility archiver"), tag.Error(err))
 		return errArchiveVisibilityNonRetryable

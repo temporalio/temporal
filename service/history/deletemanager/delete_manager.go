@@ -300,7 +300,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 			BranchToken:          currentBranchToken,
 			CloseFailoverVersion: closeFailoverVersion,
 		},
-		CallerService:        primitives.HistoryService,
+		CallerService:        string(primitives.HistoryService),
 		AttemptArchiveInline: false, // archive in workflow by default
 	}
 	executionStats, err := weCtx.LoadExecutionStats(ctx)

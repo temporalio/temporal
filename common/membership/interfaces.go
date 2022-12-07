@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/primitives"
 )
 
 // ErrUnknownService is thrown for a service that is not tracked by this instance
@@ -65,22 +66,22 @@ type (
 		// called, other members will discover that this node is no longer part of the
 		// ring. This primitive is useful to carry out graceful host shutdown during deployments.
 		EvictSelf() error
-		Lookup(service string, key string) (*HostInfo, error)
-		GetResolver(service string) (ServiceResolver, error)
+		Lookup(service primitives.ServiceName, key string) (*HostInfo, error)
+		GetResolver(service primitives.ServiceName) (ServiceResolver, error)
 		// AddListener adds a listener for this service.
 		// The listener will get notified on the given
 		// channel, whenever there is a membership change.
 		// @service: The service to be listened on
 		// @name: The name for identifying the listener
 		// @notifyChannel: The channel on which the caller receives notifications
-		AddListener(service string, name string, notifyChannel chan<- *ChangedEvent) error
+		AddListener(service primitives.ServiceName, name string, notifyChannel chan<- *ChangedEvent) error
 		// RemoveListener removes a listener for this service.
-		RemoveListener(service string, name string) error
+		RemoveListener(service primitives.ServiceName, name string) error
 		// GetReachableMembers returns addresses of all members of the ring
 		GetReachableMembers() ([]string, error)
 		// GetMemberCount returns the number of reachable members
-		// currently in this node's membership list for the given role
-		GetMemberCount(role string) (int, error)
+		// currently in this node's membership list for the given service
+		GetMemberCount(service primitives.ServiceName) (int, error)
 	}
 
 	// ServiceResolver provides membership information for a specific temporal service.

@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	persistenceclient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
@@ -68,9 +69,9 @@ func WithConfigLoader(configDir string, env string, zone string) ServerOption {
 // ForServices indicates which supplied services (e.g. frontend, history, matching, worker) within the server to start
 func ForServices(names []string) ServerOption {
 	return applyFunc(func(s *serverOptions) {
-		s.serviceNames = make(map[string]struct{})
+		s.serviceNames = make(map[primitives.ServiceName]struct{})
 		for _, name := range names {
-			s.serviceNames[name] = struct{}{}
+			s.serviceNames[primitives.ServiceName(name)] = struct{}{}
 		}
 	})
 }

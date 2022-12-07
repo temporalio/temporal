@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 )
 
 // TestRingpopCluster is a type that represents a test ringpop cluster
@@ -58,7 +59,7 @@ func NewTestRingpopCluster(
 	size int,
 	listenIPAddr string,
 	seed string,
-	serviceName string,
+	serviceName primitives.ServiceName,
 	broadcastAddress string,
 ) *TestRingpopCluster {
 	logger := log.NewTestLogger()
@@ -156,7 +157,7 @@ func NewTestRingpopCluster(
 		_, port, _ := SplitHostPortTyped(cluster.hostAddrs[i])
 		cluster.rings[i] = NewRingpopMonitor(
 			serviceName,
-			map[string]int{serviceName: int(port)}, // use same port for "grpc" port
+			map[primitives.ServiceName]int{serviceName: int(port)}, // use same port for "grpc" port
 			rpWrapper,
 			logger,
 			mockMgr,

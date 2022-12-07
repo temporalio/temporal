@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives"
 )
 
 const (
@@ -62,7 +63,7 @@ const (
 
 type ringpopServiceResolver struct {
 	status      int32
-	service     string
+	service     primitives.ServiceName
 	port        int
 	rp          *RingPop
 	refreshChan chan struct{}
@@ -83,7 +84,7 @@ type ringpopServiceResolver struct {
 var _ ServiceResolver = (*ringpopServiceResolver)(nil)
 
 func newRingpopServiceResolver(
-	service string,
+	service primitives.ServiceName,
 	port int,
 	rp *RingPop,
 	logger log.Logger,
@@ -286,7 +287,7 @@ func (r *ringpopServiceResolver) refreshNoLock() (*ChangedEvent, error) {
 }
 
 func (r *ringpopServiceResolver) getReachableMembers() ([]string, error) {
-	members, err := r.rp.GetReachableMemberObjects(swim.MemberWithLabelAndValue(RoleKey, r.service))
+	members, err := r.rp.GetReachableMemberObjects(swim.MemberWithLabelAndValue(RoleKey, string(r.service)))
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +362,7 @@ func (r *ringpopServiceResolver) ring() *hashring.HashRing {
 
 func (r *ringpopServiceResolver) getLabelsMap() map[string]string {
 	labels := make(map[string]string)
-	labels[RoleKey] = r.service
+	labels[RoleKey] = string(r.service)
 	return labels
 }
 
