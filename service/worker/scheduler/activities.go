@@ -57,11 +57,10 @@ type (
 )
 
 var (
-	errTryAgain          = errors.New("try again")
-	errWrongChain        = errors.New("found running workflow with wrong FirstExecutionRunId")
-	errNoEvents          = errors.New("GetEvents didn't return any events")
-	errNoAttrs           = errors.New("last event did not have correct attrs")
-	errNamespaceMismatch = errors.New("namespace mismatch")
+	errTryAgain   = errors.New("try again")
+	errWrongChain = errors.New("found running workflow with wrong FirstExecutionRunId")
+	errNoEvents   = errors.New("GetEvents didn't return any events")
+	errNoAttrs    = errors.New("last event did not have correct attrs")
 )
 
 func (e errFollow) Error() string { return string(e) }
