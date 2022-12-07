@@ -311,10 +311,8 @@ func (s *workflowSuite) TestStart() {
 
 	s.expectStart(func(req *schedspb.StartWorkflowRequest) (*schedspb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
-		s.Equal("mynsid", req.NamespaceId)
 		s.Nil(req.LastCompletionResult)
 		s.Nil(req.ContinuedFailure)
-		s.Equal("myns", req.Request.Namespace)
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
 		s.Equal("mywf", req.Request.WorkflowType.Name)
 		s.Equal("mytq", req.Request.TaskQueue.Name)
