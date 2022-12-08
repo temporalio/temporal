@@ -142,6 +142,8 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 	return nil
 }
 
+var archivalDelayJitterCoefficient = 1.0
+
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	closeEvent *historypb.HistoryEvent,
 	deleteAfterClose bool,
@@ -198,10 +200,17 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			},
 		)
 		if r.config.DurableArchivalEnabled() {
+			delay := backoff.JitDuration(r.config.ArchivalProcessorArchiveDelay(), archivalDelayJitterCoefficient) / 2
+			if delay > retention {
+				delay = retention
+			}
+
+			archiveTime := closeEvent.GetEventTime().Add(delay)
 			closeTasks = append(closeTasks, &tasks.ArchiveExecutionTask{
-				// TaskID and VisibilityTimestamp are set by the shard
-				WorkflowKey: r.mutableState.GetWorkflowKey(),
-				Version:     currentVersion,
+				// TaskID is set by the shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: archiveTime,
+				Version:             currentVersion,
 			})
 		} else {
 			closeTime := timestamp.TimeValue(closeEvent.GetEventTime())

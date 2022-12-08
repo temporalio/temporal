@@ -43,6 +43,9 @@ func JitInt64(input int64, coefficient float64) int64 {
 	if input == 0 {
 		return 0
 	}
+	if coefficient == 0 {
+		return input
+	}
 
 	base := int64(float64(input) * (1 - coefficient))
 	addon := rand.Int63n(2 * (input - base))
