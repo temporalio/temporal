@@ -10,7 +10,7 @@ SQL_USER=$USERNAME SQL_PASSWORD=$PASSWD make install-schema-mysql
 
 ## For production
 
-### Create the binaries
+### Create the binary
 - Run `make temporal-sql-tool` on the root of repositroy
 - You should see an executable `temporal-sql-tool`
 - Temporal officially support MySQL and Postgres for SQL. 
@@ -20,8 +20,8 @@ SQL_USER=$USERNAME SQL_PASSWORD=$PASSWD make install-schema-mysql
 - All command below are taking MySQL as example. For postgres, simply use with "--plugin postgres"
 
 ```
-temporal-sql-tool --ep $SQL_HOST -p $port --db temporal --plugin mysql create
-temporal-sql-tool --ep $SQL_HOST -p $port --db temporal_visibility --plugin mysql create
+./temporal-sql-tool --ep $SQL_HOST -p $port --db temporal --plugin mysql create
+./temporal-sql-tool --ep $SQL_HOST -p $port --db temporal_visibility --plugin mysql create
 ```
 
 ```
