@@ -1951,7 +1951,14 @@ func (s *ContextImpl) acquireShard() {
 	}
 
 	// keep retrying except ShardOwnershipLostError or lifecycle context ended
-	acquireShardRetryable := func(err error) bool {
+	acquireShardRetryable := func(err error) (isRetryable bool) {
+		defer func() {
+			s.contextTaggedLogger.Error(
+				"Error acquiring shard",
+				tag.Error(err),
+				tag.IsRetryable(isRetryable),
+			)
+		}()
 		if s.lifecycleCtx.Err() != nil {
 			return false
 		}
@@ -1963,7 +1970,7 @@ func (s *ContextImpl) acquireShard() {
 	}
 	err := backoff.ThrottleRetry(op, policy, acquireShardRetryable)
 	if err != nil {
-		// We got an unretryable error (perhaps context cancelled or ShardOwnershipLostError).
+		// We got an non-retryable error, e.g. ShardOwnershipLostError
 		s.contextTaggedLogger.Error("Couldn't acquire shard", tag.Error(err))
 
 		// On any error, initiate shutting down the shard. If we already changed state
