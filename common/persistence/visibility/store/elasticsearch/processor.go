@@ -208,11 +208,11 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 			continue
 		}
 		_, _, _ = p.mapToAckFuture.GetAndDo(visibilityTaskKey, func(key interface{}, value interface{}) error {
-			future, ok := value.(*ackFuture)
+			ackF, ok := value.(*ackFuture)
 			if !ok {
 				p.logger.Fatal(fmt.Sprintf("mapToAckFuture has item of a wrong type %T (%T expected).", value, &ackFuture{}), tag.Value(key))
 			}
-			future.recordStart(p.metricsHandler)
+			ackF.recordStart(p.metricsHandler)
 			return nil
 		})
 	}
@@ -307,12 +307,12 @@ func (p *processorImpl) buildResponseIndex(response *elastic.BulkResponse) map[s
 func (p *processorImpl) notifyResult(visibilityTaskKey string, ack bool) {
 	// Use RemoveIf here to prevent race condition with de-dup logic in Add method.
 	_ = p.mapToAckFuture.RemoveIf(visibilityTaskKey, func(key interface{}, value interface{}) bool {
-		future, ok := value.(*ackFuture)
+		ackF, ok := value.(*ackFuture)
 		if !ok {
 			p.logger.Fatal(fmt.Sprintf("mapToAckFuture has item of a wrong type %T (%T expected).", value, &ackFuture{}), tag.ESKey(visibilityTaskKey))
 		}
 
-		future.done(ack, p.metricsHandler)
+		ackF.done(ack, p.metricsHandler)
 		return true
 	})
 }
