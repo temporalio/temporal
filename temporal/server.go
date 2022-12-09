@@ -43,13 +43,14 @@ type (
 	}
 )
 
-// Services is the list of all valid temporal services
+// Services is the list of all valid temporal services as strings (needs to be strings to keep
+// ServerOptions interface stable)
 var (
 	Services = []string{
-		primitives.FrontendService,
-		primitives.HistoryService,
-		primitives.MatchingService,
-		primitives.WorkerService,
+		string(primitives.FrontendService),
+		string(primitives.HistoryService),
+		string(primitives.MatchingService),
+		string(primitives.WorkerService),
 	}
 )
 

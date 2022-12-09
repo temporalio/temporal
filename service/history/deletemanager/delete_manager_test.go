@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workflow
+package deletemanager
 
 import (
 	"context"
@@ -51,6 +51,8 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -60,7 +62,7 @@ type (
 		*require.Assertions
 
 		controller            *gomock.Controller
-		mockCache             *MockCache
+		mockCache             *wcache.MockCache
 		mockArchivalClient    *archiver.MockClient
 		mockShardContext      *shard.MockContext
 		mockClock             *clock.EventTimeSource
@@ -88,7 +90,7 @@ func (s *deleteManagerWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockCache = NewMockCache(s.controller)
+	s.mockCache = wcache.NewMockCache(s.controller)
 	s.mockArchivalClient = archiver.NewMockClient(s.controller)
 	s.mockClock = clock.NewEventTimeSource()
 	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
@@ -115,8 +117,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		RunId:      tests.RunID,
 	}
 
-	mockWeCtx := NewMockContext(s.controller)
-	mockMutableState := NewMockMutableState(s.controller)
+	mockWeCtx := workflow.NewMockContext(s.controller)
+	mockMutableState := workflow.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
@@ -160,8 +162,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		RunId:      tests.RunID,
 	}
 
-	mockWeCtx := NewMockContext(s.controller)
-	mockMutableState := NewMockMutableState(s.controller)
+	mockWeCtx := workflow.NewMockContext(s.controller)
+	mockMutableState := workflow.NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
@@ -205,8 +207,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 	}
 	now := time.Now()
 
-	mockWeCtx := NewMockContext(s.controller)
-	mockMutableState := NewMockMutableState(s.controller)
+	mockWeCtx := workflow.NewMockContext(s.controller)
+	mockMutableState := workflow.NewMockMutableState(s.controller)
 	closeExecutionVisibilityTaskID := int64(39)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionInfo().MinTimes(1).Return(&persistencespb.WorkflowExecutionInfo{
@@ -250,8 +252,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 				RunId:      tests.RunID,
 			}
 
-			mockWeCtx := NewMockContext(s.controller)
-			mockMutableState := NewMockMutableState(s.controller)
+			mockWeCtx := workflow.NewMockContext(s.controller)
+			mockMutableState := workflow.NewMockMutableState(s.controller)
 
 			mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 			mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
@@ -325,8 +327,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 				RunId:      tests.RunID,
 			}
 
-			mockWeCtx := NewMockContext(s.controller)
-			mockMutableState := NewMockMutableState(s.controller)
+			mockWeCtx := workflow.NewMockContext(s.controller)
+			mockMutableState := workflow.NewMockMutableState(s.controller)
 			branchToken := []byte{22, 8, 78}
 			mockMutableState.EXPECT().GetCurrentBranchToken().Return(branchToken, nil)
 			mockMutableState.EXPECT().GetExecutionState().
@@ -409,7 +411,7 @@ type (
 
 func (m archiverClientRequestMatcher) Matches(x interface{}) bool {
 	req := x.(*archiver.ClientRequest)
-	return req.CallerService == primitives.HistoryService &&
+	return req.CallerService == string(primitives.HistoryService) &&
 		req.AttemptArchiveInline == m.inline &&
 		req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory
 }

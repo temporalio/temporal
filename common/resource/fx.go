@@ -72,10 +72,9 @@ import (
 type (
 	ThrottledLoggerRpsFn quotas.RateFn
 	NamespaceLogger      log.Logger
-	ServiceName          string
 	HostName             string
 	InstanceID           string
-	ServiceNames         map[string]struct{}
+	ServiceNames         map[primitives.ServiceName]struct{}
 
 	MatchingRawClient matchingservice.MatchingServiceClient
 	MatchingClient    matchingservice.MatchingServiceClient
@@ -137,8 +136,8 @@ var DefaultOptions = fx.Options(
 	fx.Provide(DCRedirectionPolicyProvider),
 )
 
-func SnTaggedLoggerProvider(logger log.Logger, sn ServiceName) log.SnTaggedLogger {
-	return log.With(logger, tag.Service(string(sn)))
+func SnTaggedLoggerProvider(logger log.Logger, sn primitives.ServiceName) log.SnTaggedLogger {
+	return log.With(logger, tag.Service(sn))
 }
 
 func ThrottledLoggerProvider(
@@ -238,20 +237,20 @@ func MembershipMonitorProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	logger log.SnTaggedLogger,
 	cfg *config.Config,
-	svcName ServiceName,
+	svcName primitives.ServiceName,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
 ) (membership.Monitor, error) {
-	servicePortMap := make(map[string]int)
+	servicePortMap := make(map[primitives.ServiceName]int)
 	for sn, sc := range cfg.Services {
-		servicePortMap[sn] = sc.RPC.GRPCPort
+		servicePortMap[primitives.ServiceName(sn)] = sc.RPC.GRPCPort
 	}
 
 	rpcConfig := cfg.Services[string(svcName)].RPC
 
 	factory, err := ringpop.NewRingpopFactory(
 		&cfg.Global.Membership,
-		string(svcName),
+		svcName,
 		servicePortMap,
 		logger,
 		clusterMetadataManager,
@@ -333,7 +332,7 @@ func HistoryBootstrapContainerProvider(
 
 func RegisterBootstrapContainer(
 	archiverProvider provider.ArchiverProvider,
-	serviceName ServiceName,
+	serviceName primitives.ServiceName,
 	visibilityArchiverBootstrapContainer *archiver.VisibilityBootstrapContainer,
 	historyArchiverBootstrapContainer *archiver.HistoryBootstrapContainer,
 ) error {
@@ -424,7 +423,7 @@ func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy 
 
 func RPCFactoryProvider(
 	cfg *config.Config,
-	svcName ServiceName,
+	svcName primitives.ServiceName,
 	logger log.Logger,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
@@ -438,7 +437,7 @@ func RPCFactoryProvider(
 	}
 	return rpc.NewFactory(
 		&svcCfg.RPC,
-		string(svcName),
+		svcName,
 		logger,
 		tlsConfigProvider,
 		dc,

@@ -808,7 +808,7 @@ func (d *HandlerImpl) validateHistoryArchivalURI(URIString string) error {
 		return err
 	}
 
-	archiver, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme(), primitives.FrontendService)
+	archiver, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme(), string(primitives.FrontendService))
 	if err != nil {
 		return err
 	}
@@ -822,7 +822,7 @@ func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 		return err
 	}
 
-	archiver, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme(), primitives.FrontendService)
+	archiver, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme(), string(primitives.FrontendService))
 	if err != nil {
 		return err
 	}

@@ -694,6 +694,14 @@ const (
 	PersistenceRangeCompleteVisibilityTasksScope = "RangeCompleteVisibilityTasks"
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetReplicationTaskScope = "GetReplicationTask"
+	// PersistenceGetArchivalTaskScope tracks GetArchivalTask calls made by service to persistence layer
+	PersistenceGetArchivalTaskScope = "GetArchivalTask"
+	// PersistenceGetArchivalTasksScope tracks GetArchivalTasks calls made by service to persistence layer
+	PersistenceGetArchivalTasksScope = "GetArchivalTasks"
+	// PersistenceCompleteArchivalTaskScope tracks CompleteArchivalTasks calls made by service to persistence layer
+	PersistenceCompleteArchivalTaskScope = "CompleteArchivalTask"
+	// PersistenceRangeCompleteArchivalTasksScope tracks CompleteArchivalTasks calls made by service to persistence layer
+	PersistenceRangeCompleteArchivalTasksScope = "RangeCompleteArchivalTasks"
 	// PersistenceGetReplicationTasksScope tracks GetReplicationTasks calls made by service to persistence layer
 	PersistenceGetReplicationTasksScope = "GetReplicationTasks"
 	// PersistenceCompleteReplicationTaskScope tracks CompleteReplicationTasks calls made by service to persistence layer

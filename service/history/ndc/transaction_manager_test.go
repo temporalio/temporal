@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -101,7 +102,7 @@ func (s *transactionMgrSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 	s.namespaceEntry = tests.GlobalNamespaceEntry
 
-	s.transactionMgr = newTransactionMgr(s.mockShard, workflow.NewCache(s.mockShard), s.mockEventsReapplier, s.logger)
+	s.transactionMgr = newTransactionMgr(s.mockShard, wcache.NewCache(s.mockShard), s.mockEventsReapplier, s.logger)
 	s.transactionMgr.createMgr = s.mockCreateMgr
 	s.transactionMgr.updateMgr = s.mockUpdateMgr
 	s.transactionMgr.workflowResetter = s.mockWorkflowResetter
@@ -149,7 +150,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Open()
 	targetWorkflow := NewMockWorkflow(s.controller)
 	weContext := workflow.NewMockContext(s.controller)
 	mutableState := workflow.NewMockMutableState(s.controller)
-	var releaseFn workflow.ReleaseCacheFunc = func(error) { releaseCalled = true }
+	var releaseFn wcache.ReleaseCacheFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
 		Events: []*historypb.HistoryEvent{{EventId: 1}},
@@ -197,7 +198,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 	targetWorkflow := NewMockWorkflow(s.controller)
 	weContext := workflow.NewMockContext(s.controller)
 	mutableState := workflow.NewMockMutableState(s.controller)
-	var releaseFn workflow.ReleaseCacheFunc = func(error) { releaseCalled = true }
+	var releaseFn wcache.ReleaseCacheFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{}
 
@@ -275,7 +276,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 	targetWorkflow := NewMockWorkflow(s.controller)
 	weContext := workflow.NewMockContext(s.controller)
 	mutableState := workflow.NewMockMutableState(s.controller)
-	var releaseFn workflow.ReleaseCacheFunc = func(error) { releaseCalled = true }
+	var releaseFn wcache.ReleaseCacheFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{}
 
@@ -341,7 +342,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Open(
 	targetWorkflow := NewMockWorkflow(s.controller)
 	weContext := workflow.NewMockContext(s.controller)
 	mutableState := workflow.NewMockMutableState(s.controller)
-	var releaseFn workflow.ReleaseCacheFunc = func(error) { releaseCalled = true }
+	var releaseFn wcache.ReleaseCacheFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
 		Events: []*historypb.HistoryEvent{{EventId: 1}},
@@ -380,7 +381,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Close
 	targetWorkflow := NewMockWorkflow(s.controller)
 	weContext := workflow.NewMockContext(s.controller)
 	mutableState := workflow.NewMockMutableState(s.controller)
-	var releaseFn workflow.ReleaseCacheFunc = func(error) { releaseCalled = true }
+	var releaseFn wcache.ReleaseCacheFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{}
 
@@ -432,7 +433,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active() {
 	targetWorkflow := NewMockWorkflow(s.controller)
 	weContext := workflow.NewMockContext(s.controller)
 	mutableState := workflow.NewMockMutableState(s.controller)
-	var releaseFn workflow.ReleaseCacheFunc = func(error) { releaseCalled = true }
+	var releaseFn wcache.ReleaseCacheFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
 		Events: []*historypb.HistoryEvent{{
@@ -489,7 +490,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive() 
 	targetWorkflow := NewMockWorkflow(s.controller)
 	weContext := workflow.NewMockContext(s.controller)
 	mutableState := workflow.NewMockMutableState(s.controller)
-	var releaseFn workflow.ReleaseCacheFunc = func(error) { releaseCalled = true }
+	var releaseFn wcache.ReleaseCacheFunc = func(error) { releaseCalled = true }
 
 	workflowEvents := &persistence.WorkflowEvents{
 		Events: []*historypb.HistoryEvent{{

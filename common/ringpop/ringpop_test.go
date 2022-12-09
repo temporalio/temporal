@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/tests/testhelper"
 
@@ -158,7 +159,7 @@ maxJoinDuration: 30s`
 }
 
 func newTestRingpopFactory(
-	serviceName string,
+	serviceName primitives.ServiceName,
 	logger log.Logger,
 	rpcConfig *config.RPC,
 	tlsProvider encryption.TLSConfigProvider,

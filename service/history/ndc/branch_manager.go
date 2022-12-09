@@ -41,6 +41,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 const (
@@ -184,7 +185,7 @@ func (r *BranchMgrImpl) flushBufferedEvents(
 		r.clusterMetadata,
 		r.context,
 		r.mutableState,
-		workflow.NoopReleaseFn,
+		wcache.NoopReleaseFn,
 	)
 	if err := targetWorkflow.FlushBufferedEvents(); err != nil {
 		return nil, 0, err

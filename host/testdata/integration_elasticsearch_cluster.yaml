@@ -12,4 +12,4 @@ esconfig:
     scheme: "http"
     host: "${ES_SEEDS}:9200"
   indices:
-    visibility: test-visibility-
+    visibility: test-visibility-ad8388-

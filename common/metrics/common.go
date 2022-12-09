@@ -33,7 +33,7 @@ import (
 )
 
 // GetMetricsServiceIdx returns service id corresponding to serviceName
-func GetMetricsServiceIdx(serviceName string, logger log.Logger) ServiceIdx {
+func GetMetricsServiceIdx(serviceName primitives.ServiceName, logger log.Logger) ServiceIdx {
 	switch serviceName {
 	case primitives.FrontendService:
 		return Frontend
@@ -54,7 +54,7 @@ func GetMetricsServiceIdx(serviceName string, logger log.Logger) ServiceIdx {
 }
 
 // GetMetricsServiceIdx returns service id corresponding to serviceName
-func MetricsServiceIdxToServiceName(serviceIdx ServiceIdx) (string, error) {
+func MetricsServiceIdxToServiceName(serviceIdx ServiceIdx) (primitives.ServiceName, error) {
 	switch serviceIdx {
 	case Server:
 		return primitives.ServerService, nil
