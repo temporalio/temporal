@@ -32,6 +32,8 @@ import (
 
 	"go.uber.org/fx"
 	"google.golang.org/grpc/resolver"
+
+	"go.temporal.io/server/common/primitives"
 )
 
 const GRPCResolverScheme = "membership"
@@ -59,8 +61,8 @@ func initializeBuilder(monitor Monitor) GRPCResolver {
 	return GRPCResolver{}
 }
 
-func (g *GRPCResolver) MakeURL(service string) string {
-	return fmt.Sprintf("%s://%s", GRPCResolverScheme, service)
+func (g *GRPCResolver) MakeURL(service primitives.ServiceName) string {
+	return fmt.Sprintf("%s://%s", GRPCResolverScheme, string(service))
 }
 
 type grpcBuilder struct {
@@ -78,7 +80,7 @@ func (m *grpcBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts
 	}
 	// See MakeURL: the service ends up as the "host" of the parsed URL
 	service := target.URL.Host
-	r, err := monitor.GetResolver(service)
+	r, err := monitor.GetResolver(primitives.ServiceName(service))
 	if err != nil {
 		return nil, err
 	}

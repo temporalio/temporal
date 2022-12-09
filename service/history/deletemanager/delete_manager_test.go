@@ -411,7 +411,7 @@ type (
 
 func (m archiverClientRequestMatcher) Matches(x interface{}) bool {
 	req := x.(*archiver.ClientRequest)
-	return req.CallerService == primitives.HistoryService &&
+	return req.CallerService == string(primitives.HistoryService) &&
 		req.AttemptArchiveInline == m.inline &&
 		req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory
 }

@@ -804,7 +804,12 @@ func (adh *AdminHandler) DescribeCluster(
 		membershipInfo.ReachableMembers = members
 
 		var rings []*clusterspb.RingInfo
-		for _, role := range []string{primitives.FrontendService, primitives.HistoryService, primitives.MatchingService, primitives.WorkerService} {
+		for _, role := range []primitives.ServiceName{
+			primitives.FrontendService,
+			primitives.HistoryService,
+			primitives.MatchingService,
+			primitives.WorkerService,
+		} {
 			resolver, err := monitor.GetResolver(role)
 			if err != nil {
 				return nil, err
@@ -818,7 +823,7 @@ func (adh *AdminHandler) DescribeCluster(
 			}
 
 			rings = append(rings, &clusterspb.RingInfo{
-				Role:        role,
+				Role:        string(role),
 				MemberCount: int32(resolver.MemberCount()),
 				Members:     servers,
 			})

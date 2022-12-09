@@ -226,7 +226,7 @@ func signalRemoteCluster(
 				},
 				Input:                 nil,
 				WorkflowTaskTimeout:   timestamp.DurationPtr(workflowTaskTimeout),
-				Identity:              currentCluster + "-" + primitives.WorkerService + "-service",
+				Identity:              currentCluster + "-" + string(primitives.WorkerService) + "-service",
 				WorkflowIdReusePolicy: workflowIDReusePolicy,
 				SignalName:            processorChannelName,
 				SignalInput:           signalInput,

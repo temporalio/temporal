@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 )
 
@@ -59,8 +60,8 @@ var (
 type ringpopFactory struct {
 	config         *config.Membership
 	channel        *tchannel.Channel
-	serviceName    string
-	servicePortMap map[string]int
+	serviceName    primitives.ServiceName
+	servicePortMap map[primitives.ServiceName]int
 	logger         log.Logger
 
 	membershipMonitor membership.Monitor
@@ -77,8 +78,8 @@ type ringpopFactory struct {
 // to the underlying configuration
 func NewRingpopFactory(
 	rpConfig *config.Membership,
-	serviceName string,
-	servicePortMap map[string]int,
+	serviceName primitives.ServiceName,
+	servicePortMap map[primitives.ServiceName]int,
 	logger log.Logger,
 	metadataManager persistence.ClusterMetadataManager,
 	rpcConfig *config.RPC,
