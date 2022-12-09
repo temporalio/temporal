@@ -200,7 +200,7 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorBulkSize.GetMetricName(), metrics.ElasticsearchBulkProcessorBulkSize.GetMetricUnit()).
 		Record(int64(len(requests)))
 	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricName(), metrics.ElasticsearchBulkProcessorBulkSize.GetMetricUnit()).
-		Record(int64(p.mapToAckFuture.Len() - len(requests)))
+		Record(int64(p.mapToAckFuture.Len()))
 
 	for _, request := range requests {
 		visibilityTaskKey := p.extractVisibilityTaskKey(request)
