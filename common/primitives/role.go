@@ -26,7 +26,7 @@ package primitives
 
 type ServiceName string
 
-// These const represent role strings
+// These constants represent service roles
 const (
 	AllServices     ServiceName = "all"
 	FrontendService ServiceName = "frontend"

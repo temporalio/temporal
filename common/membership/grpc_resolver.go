@@ -30,9 +30,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/resolver"
+
+	"go.temporal.io/server/common/primitives"
 )
 
 const GRPCResolverScheme = "membership"
