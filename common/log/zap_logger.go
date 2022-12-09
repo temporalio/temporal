@@ -58,8 +58,8 @@ func NewTestLogger() *zapLogger {
 	return NewZapLogger(BuildZapLogger(Config{
 		// Uncomment next line if you need debug level logging in tests.
 		// Level: "debug",
-		Format:           "console",
-		DevelopmentStage: true,
+		Format:      "console",
+		Development: true,
 	}))
 }
 
@@ -218,13 +218,9 @@ func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
 	if cfg.Format == "console" {
 		encoding = "console"
 	}
-	development := false // default to Prod
-	if cfg.DevelopmentStage == true {
-		development = true
-	}
 	config := zap.Config{
 		Level:            zap.NewAtomicLevelAt(parseZapLevel(cfg.Level)),
-		Development:      development,
+		Development:      cfg.Development,
 		Sampling:         nil,
 		Encoding:         encoding,
 		EncoderConfig:    encodeConfig,

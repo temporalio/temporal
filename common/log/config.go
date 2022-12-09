@@ -37,9 +37,9 @@ type (
 		// Acceptable values are "json" or "console". The default is "json".
 		// Use "console" if you want stack traces to appear on multiple lines.
 		Format string `yaml:"format"`
-		// DevelopmentStage determines whether the logger is run in Development (== Test) or
-		// in Production mode.  Default is Production.  Production-stage disables panics from
+		// Development determines whether the logger is run in Development (== Test) or in
+		// Production mode.  Default is Production.  Production-stage disables panics from
 		// DPanic logging.
-		DevelopmentStage bool `yaml:"developmentStage"`
+		Development bool `yaml:"development"`
 	}
 )

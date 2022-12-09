@@ -85,9 +85,9 @@ func (s *LogSuite) TestNewLogger() {
 	})
 
 	cfg = Config{
-		Level:            "info",
-		OutputFile:       dir + "/test.log",
-		DevelopmentStage: true,
+		Level:       "info",
+		OutputFile:  dir + "/test.log",
+		Development: true,
 	}
 	log = BuildZapLogger(cfg)
 	s.NotNil(log)
