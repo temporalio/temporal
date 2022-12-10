@@ -47,11 +47,11 @@ const (
 type CallTarget struct {
 	// APIName must be the full API function name.
 	// Example: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution".
-	APIName string
+	APIName string `json:"apiName"`
 	// If a Namespace is not being targeted this be set to an empty string.
-	Namespace string
+	Namespace string `json:"namespace"`
 	// Request contains a deserialized copy of the API request object
-	Request interface{}
+	Request interface{} `json:"request"`
 }
 
 // @@@SNIPEND
@@ -87,6 +87,8 @@ func GetAuthorizerFromConfig(config *config.Authorization) (Authorizer, error) {
 		return NewNoopAuthorizer(), nil
 	case "default":
 		return NewDefaultAuthorizer(), nil
+	case "opa":
+		return NewOpaAuthorizer(config.OpaEndpoint), nil
 	}
 	return nil, fmt.Errorf("unknown authorizer: %s", config.Authorizer)
 }

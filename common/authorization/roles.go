@@ -48,13 +48,13 @@ func (b Role) IsValid() bool {
 // Claims contains the identity of the subject and subject's roles at the system level and for individual namespaces
 type Claims struct {
 	// Identity of the subject
-	Subject string
+	Subject string `json:"subject"`
 	// Role within the context of the whole Temporal cluster or a multi-cluster setup
-	System Role
+	System Role `json:"role"`
 	// Roles within specific namespaces
-	Namespaces map[string]Role
+	Namespaces map[string]Role `json:"namespaces"`
 	// Free form bucket for extra data
-	Extensions interface{}
+	Extensions interface{} `json:"extensions"`
 }
 
 // @@@SNIPEND
