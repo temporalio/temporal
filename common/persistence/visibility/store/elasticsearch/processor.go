@@ -199,8 +199,6 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 	p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorRequests.GetMetricName()).Record(int64(len(requests)))
 	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorBulkSize.GetMetricName(), metrics.ElasticsearchBulkProcessorBulkSize.GetMetricUnit()).
 		Record(int64(len(requests)))
-	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricName(), metrics.ElasticsearchBulkProcessorBulkSize.GetMetricUnit()).
-		Record(int64(p.mapToAckFuture.Len()))
 
 	for _, request := range requests {
 		visibilityTaskKey := p.extractVisibilityTaskKey(request)
@@ -286,6 +284,10 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 			p.metricsHandler.Counter(metrics.ElasticsearchBulkProcessorRetries.GetMetricName()).Record(1, metrics.HttpStatusTag(responseItem.Status))
 		}
 	}
+
+	// Record how many documents are waiting to be flushed to Elasticsearch after this bulk is committed.
+	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorQueuedRequests.GetMetricName(), metrics.ElasticsearchBulkProcessorBulkSize.GetMetricUnit()).
+		Record(int64(p.mapToAckFuture.Len()))
 }
 
 func (p *processorImpl) buildResponseIndex(response *elastic.BulkResponse) map[string]*elastic.BulkResponseItem {

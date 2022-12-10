@@ -251,7 +251,7 @@ func (s *visibilityStore) addBulkRequestAndWait(
 
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return &persistence.TimeoutError{Msg: fmt.Sprintf("visibility task %s timedout waiting for ACK after %v", visibilityTaskKey, s.processorAckTimeout())}
+			return &persistence.TimeoutError{Msg: fmt.Sprintf("visibility task %s timed out waiting for ACK after %v", visibilityTaskKey, s.processorAckTimeout())}
 		}
 		// Returns non-retryable Internal error here because these errors are unexpected.
 		// Visibility task processor retries all errors though, therefore new request will be generated for the same task.
