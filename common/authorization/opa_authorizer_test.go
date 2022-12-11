@@ -44,7 +44,7 @@ type (
 	}
 
 	extendedClaims struct {
-		ForceAllow bool `json:"forceAllow"`
+		ForceAllow bool
 	}
 )
 
@@ -106,7 +106,9 @@ func (s *opaAuthorizerSuite) TestAllowsWhenOpaHasAccessToClaimExtensions() {
 		},
 	}
 
-	target := CallTarget{}
+	target := CallTarget{
+		Namespace: "test-namespace",
+	}
 
 	result, err := authorizer.Authorize(context.TODO(), &claims, &target)
 	s.NoError(err)

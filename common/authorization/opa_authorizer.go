@@ -50,8 +50,8 @@ func NewOpaAuthorizer(opaEndpoint string) Authorizer {
 
 type (
 	opaInput struct {
-		Claims Claims     `json:"claims"`
-		Target CallTarget `json:"target"`
+		Claims Claims
+		Target CallTarget
 	}
 
 	opaRequest struct {

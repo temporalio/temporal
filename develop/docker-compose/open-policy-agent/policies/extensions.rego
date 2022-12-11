@@ -4,5 +4,6 @@ package temporal.extensions
 default allow := false
 
 allow {
-    input.claims.extensions.forceAllow = true
+    input.Claims.Extensions.ForceAllow = true
+    input.Target.Namespace = "test-namespace"
 }

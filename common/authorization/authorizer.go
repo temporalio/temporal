@@ -47,11 +47,11 @@ const (
 type CallTarget struct {
 	// APIName must be the full API function name.
 	// Example: "/temporal.api.workflowservice.v1.WorkflowService/StartWorkflowExecution".
-	APIName string `json:"apiName"`
+	APIName string
 	// If a Namespace is not being targeted this be set to an empty string.
-	Namespace string `json:"namespace"`
+	Namespace string
 	// Request contains a deserialized copy of the API request object
-	Request interface{} `json:"request"`
+	Request interface{}
 }
 
 // @@@SNIPEND
