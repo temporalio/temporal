@@ -84,6 +84,13 @@ func (s *opaAuthorizerSuite) TestDeniesWhenOpaReturnsNothing() {
 }
 
 func (s *opaAuthorizerSuite) TestDeniesWhenOpaPolicyIsNotFound() {
+	authorizer := NewOpaAuthorizer("http://localhost:8182/v1")
+	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
+	s.Error(err)
+	s.Equal(DecisionDeny, result.Decision)
+}
+
+func (s *opaAuthorizerSuite) TestDeniesWhenOpaIsUnreachable() {
 	authorizer := NewOpaAuthorizer("http://localhost:8181/v1")
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.Error(err)

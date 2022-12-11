@@ -77,6 +77,8 @@ func GetClaimMapperFromConfig(config *config.Authorization, logger log.Logger) (
 		return NewNoopClaimMapper(), nil
 	case "default":
 		return NewDefaultJWTClaimMapper(NewDefaultTokenKeyProvider(config, logger), config, logger), nil
+	case "opa":
+		return NewOpaClaimMapper(), nil
 	}
 	return nil, fmt.Errorf("unknown claim mapper: %s", config.ClaimMapper)
 }
