@@ -39,8 +39,15 @@ func TestToString(t *testing.T) {
 
 func TestOpaAuthorizer(t *testing.T) {
 	var cfg Config
-	err := Load("", "../../config", "cass", &cfg)
+	err := Load("development-opa", "../../config", "", &cfg)
 	assert.NoError(t, err)
 	assert.Equal(t, "opa", cfg.Global.Authorization.Authorizer)
 	assert.Equal(t, "http://localhost:8181/v1/data/temporal", cfg.Global.Authorization.OpaEndpoint)
+}
+
+func TestOpaClaimMapper(t *testing.T) {
+	var cfg Config
+	err := Load("development-opa", "../../config", "", &cfg)
+	assert.NoError(t, err)
+	assert.Equal(t, "opa", cfg.Global.Authorization.ClaimMapper)
 }
