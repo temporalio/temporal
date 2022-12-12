@@ -29,7 +29,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -78,15 +77,7 @@ func (a *opaAuthorizer) Authorize(_ context.Context, claims *Claims, target *Cal
 		return resultDeny, err
 	}
 
-	request, err := http.NewRequest("POST", a.opaEndpoint, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return resultDeny, err
-	}
-
-	request.Header.Set("Content-Type", "application/json; charset=UTF-8")
-
-	client := &http.Client{}
-	response, err := client.Do(request)
+	response, err := http.Post(a.opaEndpoint, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return resultDeny, err
 	}
@@ -96,13 +87,8 @@ func (a *opaAuthorizer) Authorize(_ context.Context, claims *Claims, target *Cal
 		return resultDeny, fmt.Errorf("OPA returned a status code %d", response.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		return resultDeny, err
-	}
-
 	var opaResult opaResult
-	err = json.Unmarshal(body, &opaResult)
+	err = json.NewDecoder(response.Body).Decode(&opaRequest)
 	if err != nil {
 		return resultDeny, err
 	}
