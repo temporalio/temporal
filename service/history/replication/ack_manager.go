@@ -450,18 +450,8 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 				taskInfo.FirstEventID,
 				taskInfo.NextEventID,
 			)
-			switch err.(type) {
-			case nil:
-				// continue to generate replication task.
-			case *serviceerror.NotFound, *serviceerror.DataLoss, *serviceerror.Unavailable:
-				// bypass this corrupted workflow to unblock the replication queue.
-				p.logger.Error("Cannot get history from corrupted workflow",
-					tag.WorkflowNamespaceID(namespaceID.String()),
-					tag.WorkflowID(workflowID),
-					tag.WorkflowRunID(runID))
-				return nil, nil
-			default:
-				return nil, err
+			if err != nil {
+				return nil, p.handleReadHistoryError(namespaceID.String(), workflowID, runID, err)
 			}
 
 			replicationTask := &replicationspb.ReplicationTask{
@@ -664,19 +654,8 @@ func (p *ackMgrImpl) processNewRunReplication(
 			common.FirstEventID,
 			common.FirstEventID+1,
 		)
-		switch err.(type) {
-		case nil:
-			// continue to generate replication task.
-		case *serviceerror.NotFound, *serviceerror.DataLoss, *serviceerror.Unavailable:
-			// bypass this corrupted workflow to unblock the replication queue.
-			p.logger.Error("Cannot get history from corrupted workflow",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(workflowID),
-				tag.WorkflowRunID(newRunID))
-			// only return the task with current run and bypass the new run.
-			return task, nil
-		default:
-			return nil, err
+		if err != nil {
+			return nil, p.handleReadHistoryError(namespaceID.String(), workflowID, newRunID, err)
 		}
 	}
 	attr.HistoryTaskAttributes.NewRunEvents = newRunEventsBlob
@@ -706,4 +685,26 @@ func getVersionHistoryItems(
 		return nil, nil, err
 	}
 	return versionhistory.CopyVersionHistory(versionHistoryBranch).GetItems(), versionHistoryBranch.GetBranchToken(), nil
+}
+
+func (p *ackMgrImpl) handleReadHistoryError(
+	namespaceID string,
+	workflowID string,
+	runID string,
+	err error,
+) error {
+	switch err.(type) {
+	case *serviceerror.NotFound, *serviceerror.DataLoss:
+		if p.config.ReplicationBypassCorruptedData(namespaceID) {
+			// bypass this corrupted workflow to unblock the replication queue.
+			p.logger.Error("Cannot get history from corrupted workflow",
+				tag.WorkflowNamespaceID(namespaceID),
+				tag.WorkflowID(workflowID),
+				tag.WorkflowRunID(runID))
+			return nil
+		}
+		return err
+	default:
+		return err
+	}
 }
