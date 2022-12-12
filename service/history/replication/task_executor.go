@@ -36,11 +36,13 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	deletemanager "go.temporal.io/server/service/history/deletemanager"
@@ -142,7 +144,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 ) error {
 
 	attr := task.GetSyncActivityTaskAttributes()
-	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), forceApply)
+	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), attr.Version, forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
@@ -227,7 +229,12 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 ) error {
 
 	attr := task.GetHistoryTaskAttributes()
-	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), forceApply)
+	versionHistory := attr.GetVersionHistoryItems()
+	lastHistoryEventVersion := common.EmptyVersion
+	if len(versionHistory) > 0 {
+		lastHistoryEventVersion = versionHistory[len(versionHistory)-1].GetVersion()
+	}
+	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), lastHistoryEventVersion, forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
@@ -310,8 +317,16 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 	attr := task.GetSyncWorkflowStateTaskAttributes()
 	executionInfo := attr.GetWorkflowState().GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
-
-	doContinue, err := e.filterTask(namespaceID, forceApply)
+	executionInfo.GetVersionHistories()
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
+	if err != nil {
+		return err
+	}
+	lastVerionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+	if err != nil {
+		return err
+	}
+	doContinue, err := e.filterTask(namespaceID, lastVerionHistoryItem.GetVersion(), forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
@@ -327,6 +342,7 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 
 func (e *taskExecutorImpl) filterTask(
 	namespaceID namespace.ID,
+	failoverVersion int64,
 	forceApply bool,
 ) (bool, error) {
 
@@ -341,6 +357,10 @@ func (e *taskExecutorImpl) filterTask(
 			return false, nil
 		}
 		return false, err
+	}
+
+	if failoverVersion > namespaceEntry.FailoverVersion() {
+		return false, serviceerror.NewUnavailable("The namespace is not ready to apply new replication task.")
 	}
 
 	shouldProcessTask := false
