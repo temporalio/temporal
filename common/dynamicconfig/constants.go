@@ -531,8 +531,6 @@ const (
 	ArchivalProcessorMaxPollRPS = "history.archivalProcessorMaxPollRPS"
 	// ArchivalProcessorMaxPollHostRPS is max poll rate per second for all archivalQueueProcessor on a host
 	ArchivalProcessorMaxPollHostRPS = "history.archivalProcessorMaxPollHostRPS"
-	// ArchivalTaskMaxRetryCount is max times of retry for archivalQueueProcessor
-	ArchivalTaskMaxRetryCount = "history.archivalTaskMaxRetryCount"
 	// ArchivalProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for
 	// archivalQueueProcessor
 	ArchivalProcessorSchedulerWorkerCount = "history.archivalProcessorSchedulerWorkerCount"
