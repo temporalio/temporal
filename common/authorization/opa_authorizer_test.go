@@ -26,11 +26,13 @@ package authorization
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/environment"
 )
 
 var ()
@@ -63,42 +65,48 @@ func (s *opaAuthorizerSuite) TearDownTest() {
 }
 
 func (s *opaAuthorizerSuite) TestDeniesWhenOpaDoesNotReturnAllowFalse() {
-	authorizer := NewOpaAuthorizer("http://localhost:8181/v1/data/temporal/deny")
+	opaEndpoint := fmt.Sprintf("%s/v1/data/temporal/deny", getTestOpaBaseUri())
+	authorizer := NewOpaAuthorizer(opaEndpoint)
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 
 func (s *opaAuthorizerSuite) TestAllowsWhenOpaReturnsAllowTrue() {
-	authorizer := NewOpaAuthorizer("http://localhost:8181/v1/data/temporal/allow")
+	opaEndpoint := fmt.Sprintf("%s/v1/data/temporal/allow", getTestOpaBaseUri())
+	authorizer := NewOpaAuthorizer(opaEndpoint)
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
 }
 
 func (s *opaAuthorizerSuite) TestDeniesWhenOpaReturnsNothing() {
-	authorizer := NewOpaAuthorizer("http://localhost:8181/v1/data/temporal/empty")
+	opaEndpoint := fmt.Sprintf("%s/v1/data/temporal/empty", getTestOpaBaseUri())
+	authorizer := NewOpaAuthorizer(opaEndpoint)
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 
 func (s *opaAuthorizerSuite) TestDeniesWhenOpaPolicyIsNotFound() {
-	authorizer := NewOpaAuthorizer("http://localhost:8182/v1")
+	opaEndpoint := fmt.Sprintf("%s/v1", getTestOpaBaseUri())
+	authorizer := NewOpaAuthorizer(opaEndpoint)
+
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.Error(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 
 func (s *opaAuthorizerSuite) TestDeniesWhenOpaIsUnreachable() {
-	authorizer := NewOpaAuthorizer("http://localhost:8181/v1")
+	authorizer := NewOpaAuthorizer("http://localhost:8182/v1")
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.Error(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 
 func (s *opaAuthorizerSuite) TestAllowsWhenOpaHasAccessToClaimExtensions() {
-	authorizer := NewOpaAuthorizer("http://localhost:8181/v1/data/temporal/extensions")
+	opaEndpoint := fmt.Sprintf("%s/v1/data/temporal/extensions", getTestOpaBaseUri())
+	authorizer := NewOpaAuthorizer(opaEndpoint)
 
 	claims := Claims{
 		Extensions: extendedClaims{
@@ -116,7 +124,8 @@ func (s *opaAuthorizerSuite) TestAllowsWhenOpaHasAccessToClaimExtensions() {
 }
 
 func (s *opaAuthorizerSuite) TestDeniesWhenOpaHasAccessToClaimExtensions() {
-	authorizer := NewOpaAuthorizer("http://localhost:8181/v1/data/temporal/extensions")
+	opaEndpoint := fmt.Sprintf("%s/v1/data/temporal/extensions", getTestOpaBaseUri())
+	authorizer := NewOpaAuthorizer(opaEndpoint)
 
 	claims := Claims{
 		Extensions: extendedClaims{
@@ -129,4 +138,11 @@ func (s *opaAuthorizerSuite) TestDeniesWhenOpaHasAccessToClaimExtensions() {
 	result, err := authorizer.Authorize(context.TODO(), &claims, &target)
 	s.NoError(err)
 	s.Equal(DecisionDeny, result.Decision)
+}
+
+func getTestOpaBaseUri() string {
+	host := environment.GetOpaHost()
+	port := environment.GetOpaPort()
+
+	return fmt.Sprintf("http://%s:%d", host, port)
 }

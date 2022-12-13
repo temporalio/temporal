@@ -65,6 +65,13 @@ const (
 	PostgresPort = "POSTGRES_PORT"
 	// PostgresDefaultPort Postgres default port
 	PostgresDefaultPort = 5432
+
+	// OpaHost env
+	OpaHost = "OPA_HOST"
+	// OpaPort env
+	OpaPort = "OPA_PORT"
+	// OpaDefaultPort OPA default port
+	OpaDefaultPort = 8181
 )
 
 // SetupEnv setup the necessary env
@@ -108,6 +115,20 @@ func SetupEnv() {
 		err := os.Setenv(PostgresPort, strconv.Itoa(PostgresDefaultPort))
 		if err != nil {
 			panic(fmt.Sprintf("error setting env %v", PostgresPort))
+		}
+	}
+
+	if os.Getenv(OpaHost) == "" {
+		err := os.Setenv(OpaHost, Localhost)
+		if err != nil {
+			panic(fmt.Sprintf("error setting env %v", OpaPort))
+		}
+	}
+
+	if os.Getenv(OpaPort) == "" {
+		err := os.Setenv(OpaPort, strconv.Itoa(OpaDefaultPort))
+		if err != nil {
+			panic(fmt.Sprintf("error setting env %v", OpaPort))
 		}
 	}
 
@@ -195,6 +216,26 @@ func GetPostgreSQLPort() int {
 	p, err := strconv.Atoi(port)
 	if err != nil {
 		panic(fmt.Sprintf("error getting env %v", PostgresPort))
+	}
+	return p
+}
+
+func GetOpaHost() string {
+	host := os.Getenv(OpaHost)
+	if host == "" {
+		return Localhost
+	}
+	return host
+}
+
+func GetOpaPort() int {
+	port := os.Getenv(OpaPort)
+	if port == "" {
+		return OpaDefaultPort
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		panic(fmt.Sprintf("error getting env %v", OpaPort))
 	}
 	return p
 }

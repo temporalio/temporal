@@ -40,6 +40,19 @@ services:
     environment:
       - discovery.type=single-node
 
+  opa:
+    image: openpolicyagent/opa:0.40.0-rootless
+    command:
+      - "run"
+      - "--server"
+      - "file:///config/policies"
+    volumes:
+      - ./open-policy-agent/:/config
+    networks:
+      services-network:
+        aliases:
+          - opa
+
   build:
     build:
       context: ../..
@@ -66,6 +79,7 @@ services:
       - "CASSANDRA_SEEDS=cassandra"
       - "MYSQL_SEEDS=mysql"
       - "POSTGRES_SEEDS=postgresql"
+      - "OPA_HOST=opa"
       - "TEMPORAL_VERSION_CHECK_DISABLED=1"
       - BUILDKITE_AGENT_ACCESS_TOKEN
       - BUILDKITE_JOB_ID
@@ -75,6 +89,7 @@ services:
       - cassandra
       - mysql
       - postgresql
+      - opa
     volumes:
       - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent

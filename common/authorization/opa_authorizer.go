@@ -88,7 +88,7 @@ func (a *opaAuthorizer) Authorize(_ context.Context, claims *Claims, target *Cal
 	}
 
 	var opaResult opaResult
-	err = json.NewDecoder(response.Body).Decode(&opaRequest)
+	err = json.NewDecoder(response.Body).Decode(&opaResult)
 	if err != nil {
 		return resultDeny, err
 	}
