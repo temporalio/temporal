@@ -485,7 +485,7 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 				taskInfo.NextEventID,
 			)
 			if err != nil {
-				return nil, err
+				return nil, p.handleReadHistoryError(namespaceID, workflowID, runID, err)
 			}
 
 			replicationTask := &replicationspb.ReplicationTask{
@@ -689,7 +689,7 @@ func (p *ackMgrImpl) processNewRunReplication(
 			common.FirstEventID+1,
 		)
 		if err != nil {
-			return nil, err
+			return nil, p.handleReadHistoryError(namespaceID, workflowID, newRunID, err)
 		}
 	}
 	attr.HistoryTaskAttributes.NewRunEvents = newRunEventsBlob
@@ -719,4 +719,27 @@ func getVersionHistoryItems(
 		return nil, nil, err
 	}
 	return versionhistory.CopyVersionHistory(versionHistoryBranch).GetItems(), versionHistoryBranch.GetBranchToken(), nil
+}
+
+func (p *ackMgrImpl) handleReadHistoryError(
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	err error,
+) error {
+	switch err.(type) {
+	case *serviceerror.NotFound, *serviceerror.DataLoss:
+		if p.config.ReplicationBypassCorruptedData(namespaceID.String()) {
+			// bypass this corrupted workflow to unblock the replication queue.
+			p.logger.Error("Cannot get history from corrupted workflow",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(workflowID),
+				tag.WorkflowRunID(runID),
+				tag.Error(err))
+			return nil
+		}
+		return err
+	default:
+		return err
+	}
 }

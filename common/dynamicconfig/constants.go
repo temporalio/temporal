@@ -663,6 +663,8 @@ const (
 	ReplicationTaskProcessorHostQPS = "history.ReplicationTaskProcessorHostQPS"
 	// ReplicationTaskProcessorShardQPS is the qps of task processing rate limiter on shard level
 	ReplicationTaskProcessorShardQPS = "history.ReplicationTaskProcessorShardQPS"
+	// ReplicationBypassCorruptedData is the flag to bypass corrupted workflow data in source cluster
+	ReplicationBypassCorruptedData = "history.ReplicationBypassCorruptedData"
 
 	// keys for worker
 
