@@ -83,3 +83,18 @@ func (s *priorityAssignerSuite) TestAssign_HighPriorityTaskTypes() {
 
 	s.Equal(tasks.PriorityHigh, s.priorityAssigner.Assign(mockExecutable))
 }
+
+func (s *priorityAssignerSuite) TestAssign_LowPriorityTaskTypes() {
+	for _, taskType := range []enumsspb.TaskType{
+		enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
+		enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
+		enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
+		enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION,
+		enumsspb.TASK_TYPE_UNSPECIFIED,
+	} {
+		mockExecutable := NewMockExecutable(s.controller)
+		mockExecutable.EXPECT().GetType().Return(taskType).Times(1)
+
+		s.Equal(tasks.PriorityLow, s.priorityAssigner.Assign(mockExecutable))
+	}
+}

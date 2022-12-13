@@ -534,9 +534,6 @@ const (
 	// ArchivalProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for
 	// archivalQueueProcessor
 	ArchivalProcessorSchedulerWorkerCount = "history.archivalProcessorSchedulerWorkerCount"
-	// ArchivalProcessorSchedulerRoundRobinWeights is the priority round robin weights by archival task scheduler for
-	// all namespaces
-	ArchivalProcessorSchedulerRoundRobinWeights = "history.archivalProcessorSchedulerRoundRobinWeights"
 	// ArchivalProcessorMaxPollInterval max poll interval for archivalQueueProcessor
 	ArchivalProcessorMaxPollInterval = "history.archivalProcessorMaxPollInterval"
 	// ArchivalProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
@@ -550,6 +547,8 @@ const (
 	ArchivalProcessorPollBackoffInterval = "history.archivalProcessorPollBackoffInterval"
 	// ArchivalProcessorArchiveDelay is the delay before archivalQueueProcessor starts to process archival tasks
 	ArchivalProcessorArchiveDelay = "history.archivalProcessorArchiveDelay"
+	// ArchivalProcessorRetryWarningLimit is the number of times an archival task may be retried before we log a warning
+	ArchivalProcessorRetryWarningLimit = "history.archivalProcessorRetryLimitWarning"
 
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"
