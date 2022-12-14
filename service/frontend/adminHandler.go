@@ -813,6 +813,9 @@ func (adh *AdminHandler) DescribeCluster(
 		} {
 			resolver, err := monitor.GetResolver(role)
 			if err != nil {
+				if role == primitives.InternalFrontendService {
+					continue // this one is optional
+				}
 				return nil, err
 			}
 
