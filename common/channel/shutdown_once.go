@@ -25,6 +25,8 @@
 package channel
 
 import (
+	"context"
+	"sync"
 	"sync/atomic"
 )
 
@@ -41,11 +43,18 @@ type (
 		IsShutdown() bool
 		// Channel for shutdown notification
 		Channel() <-chan struct{}
+		// PropagateShutdown propagates the shutdown signal to the input context, canceling it when shutdown is called.
+		// This is useful when creating contexts for background tasks that should be terminated when the service that
+		// started them is shutdown.
+		// The cancel function returned by this method should be called in the same manner as the cancel function
+		// returned by context.WithCancel. In essence, it should be called in a defer statement.
+		PropagateShutdown(ctx context.Context) (context.Context, context.CancelFunc)
 	}
 
 	ShutdownOnceImpl struct {
 		status  int32
 		channel chan struct{}
+		wg      sync.WaitGroup
 	}
 )
 
@@ -72,4 +81,21 @@ func (c *ShutdownOnceImpl) IsShutdown() bool {
 
 func (c *ShutdownOnceImpl) Channel() <-chan struct{} {
 	return c.channel
+}
+
+// PropagateShutdown wraps the given context with a cancel function. We then spawn a goroutine which waits for the
+// context to be canceled or for the shutdown channel to be closed. When shutdown is called, the cancel function is
+// also called.
+func (c *ShutdownOnceImpl) PropagateShutdown(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(ctx)
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		select {
+		case <-c.channel:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return ctx, cancel
 }
