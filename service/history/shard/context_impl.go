@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
+	"go.temporal.io/server/service/history/workflow/cache"
 )
 
 const (
@@ -91,6 +92,7 @@ type (
 		stringRepr          string
 		executionManager    persistence.ExecutionManager
 		metricsHandler      metrics.MetricsHandler
+		workflowCache       cache.Cache
 		eventsCache         events.Cache
 		closeCallback       func(*ContextImpl)
 		config              *configs.Config
@@ -1136,6 +1138,10 @@ func (s *ContextImpl) GetConfig() *configs.Config {
 	return s.config
 }
 
+func (s *ContextImpl) GetWorkflowCache() cache.Cache {
+	return s.workflowCache
+}
+
 func (s *ContextImpl) GetEventsCache() events.Cache {
 	// constant from initialization (except for tests), no need for locks
 	return s.eventsCache
@@ -1982,6 +1988,8 @@ func (s *ContextImpl) acquireShard() {
 func newContext(
 	shardID int32,
 	factory EngineFactory,
+	workflowCache cache.Cache,
+	eventsCache events.Cache,
 	config *configs.Config,
 	closeCallback func(*ContextImpl),
 	logger log.Logger,
@@ -2007,6 +2015,8 @@ func newContext(
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
+		workflowCache:           workflowCache,
+		eventsCache:             eventsCache,
 		stringRepr:              fmt.Sprintf("Shard(%d)", shardID),
 		executionManager:        persistenceExecutionManager,
 		metricsHandler:          metricsHandler,
@@ -2031,17 +2041,6 @@ func newContext(
 		lifecycleCancel:         lifecycleCancel,
 		engineFuture:            future.NewFuture[Engine](),
 	}
-	shardContext.eventsCache = events.NewEventsCache(
-		shardContext.GetShardID(),
-		shardContext.GetConfig().EventsCacheInitialSize(),
-		shardContext.GetConfig().EventsCacheMaxSize(),
-		shardContext.GetConfig().EventsCacheTTL(),
-		shardContext.GetExecutionManager(),
-		false,
-		shardContext.GetLogger(),
-		shardContext.GetMetricsHandler(),
-	)
-
 	return shardContext, nil
 }
 

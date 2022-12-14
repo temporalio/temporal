@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow/cache"
 )
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_mock.go
@@ -59,6 +60,7 @@ type (
 		GetNamespaceRegistry() namespace.Registry
 		GetClusterMetadata() cluster.Metadata
 		GetConfig() *configs.Config
+		GetWorkflowCache() cache.Cache
 		GetEventsCache() events.Cache
 		GetLogger() log.Logger
 		GetThrottledLogger() log.Logger

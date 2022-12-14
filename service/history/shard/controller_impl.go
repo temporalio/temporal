@@ -32,7 +32,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.opentelemetry.io/otel/trace"
+	"go.opencensus.io/otel/trace"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -52,6 +52,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/events"
 )
 
 const (
@@ -271,6 +272,17 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 	shard, err := newContext(
 		shardID,
 		c.engineFactory,
+		nil,
+		events.NewEventsCache(
+			shardID,
+			c.config.EventsCacheInitialSize(),
+			c.config.EventsCacheMaxSize(),
+			c.config.EventsCacheTTL(),
+			c.persistenceExecutionManager,
+			false,
+			c.logger,
+			c.metricsHandler,
+		),
 		c.config,
 		c.shardClosedCallback,
 		c.logger,
