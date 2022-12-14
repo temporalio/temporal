@@ -456,8 +456,8 @@ func getFrontendConnectionDetails(
 	_, hasIFE := cfg.Services[string(primitives.InternalFrontendService)]
 
 	forceTLS := cfg.PublicClient.ForceTLSConfig
-	if forceTLS == config.ForceTLSConfigDefault {
-		if hasIFE && cfg.PublicClient.HostPort == "" {
+	if forceTLS == config.ForceTLSConfigAuto {
+		if hasIFE {
 			forceTLS = config.ForceTLSConfigInternode
 		} else {
 			forceTLS = config.ForceTLSConfigFrontend

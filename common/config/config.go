@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/telemetry"
 )
 
@@ -486,17 +487,25 @@ type (
 	}
 
 	// PublicClient is the config for internal nodes (history/matching/worker) connecting to
-	// frontend. There are two methods of connecting:
-	// 1. Use membership to locate "internal-frontend" or "frontend" nodes and connect to them
-	//    using the internode TLS config (which can be "no TLS"). This is recommended for most
-	//    deployments. To use this, leave this section out of your config.
-	// 2. Connect to an explicit endpoint using the SystemWorker TLS config (which can be "no
-	//    TLS"). You can use this if you want to force frontend connections to go through an
-	//    external load balancer. If you use this with a ClaimMapper+Authorizer, you need to
-	//    ensure that your ClaimMapper assigns admin permissions to worker nodes, and your
-	//    Authorizer correctly handles those claims.
+	// frontend. There are three methods of connecting:
+	// 1. Use membership to locate "internal-frontend" and connect to them using the Internode
+	//    TLS config (which can be "no TLS"). This is recommended for deployments that use an
+	//    Authorizer and ClaimMapper. To use this, leave this section out of your config, and
+	//    make sure there is an "internal-frontend" section in Services.
+	// 2. Use membership to locate "frontend" and connect to them using the Frontend TLS config
+	//    (which can be "no TLS"). This is recommended for deployments that don't use an
+	//    Authorizer or ClaimMapper, or have implemented a custom ClaimMapper that correctly
+	//    identifies the system worker using mTLS and assigns it an Admin-level claim.
+	//    To use this, leave this section out of your config and make sure there is _no_
+	//    "internal-frontend" section in Services.
+	// 3. Connect to an explicit endpoint using the SystemWorker (falling back to Frontend) TLS
+	//    config (which can be "no TLS"). You can use this if you want to force frontend
+	//    connections to go through an external load balancer. If you use this with a
+	//    ClaimMapper+Authorizer, you need to ensure that your ClaimMapper assigns Admin
+	//    claims to worker nodes, and your Authorizer correctly handles those claims.
 	PublicClient struct {
-		// HostPort is the host port to connect on. Host can be DNS name
+		// HostPort is the host port to connect on. Host can be DNS name. See the above
+		// comment: in many situations you can leave this empty.
 		HostPort string `yaml:"hostPort"`
 		// Force selection of either the "internode" or "frontend" TLS configs for these
 		// connections (only those two strings are valid).
@@ -562,7 +571,7 @@ const (
 )
 
 const (
-	ForceTLSConfigDefault   = ""
+	ForceTLSConfigAuto      = ""
 	ForceTLSConfigInternode = "internode"
 	ForceTLSConfigFrontend  = "frontend"
 )
@@ -577,8 +586,13 @@ func (c *Config) Validate() error {
 		return err
 	}
 
+	_, hasIFE := c.Services[string(primitives.InternalFrontendService)]
+	if hasIFE && (c.PublicClient.HostPort != "" || c.PublicClient.ForceTLSConfig != "") {
+		return fmt.Errorf("when using internal-frontend, publicClient must be empty")
+	}
+
 	switch c.PublicClient.ForceTLSConfig {
-	case ForceTLSConfigDefault, ForceTLSConfigInternode, ForceTLSConfigFrontend:
+	case ForceTLSConfigAuto, ForceTLSConfigInternode, ForceTLSConfigFrontend:
 	default:
 		return fmt.Errorf("invalid value for publicClient.forceTLSConfig: %q", c.PublicClient.ForceTLSConfig)
 	}
