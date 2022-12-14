@@ -161,12 +161,14 @@ func GrpcServerOptionsProvider(
 		Timeout:               serviceConfig.KeepAliveTimeout(),
 	}
 	var grpcServerOptions []grpc.ServerOption
-	err := fmt.Errorf("unexpected frontend service name %q", serviceName)
+	var err error
 	switch serviceName {
 	case primitives.FrontendService:
 		grpcServerOptions, err = rpcFactory.GetFrontendGRPCServerOptions()
 	case primitives.InternalFrontendService:
 		grpcServerOptions, err = rpcFactory.GetInternodeGRPCServerOptions()
+	default:
+		err = fmt.Errorf("unexpected frontend service name %q", serviceName)
 	}
 	if err != nil {
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))

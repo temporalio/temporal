@@ -395,8 +395,7 @@ func SdkClientFactoryProvider(
 	logger log.SnTaggedLogger,
 	resolver membership.GRPCResolver,
 ) (sdk.ClientFactory, error) {
-	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(
-		cfg, tlsConfigProvider, resolver)
+	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -425,8 +424,7 @@ func RPCFactoryProvider(
 	traceInterceptor telemetry.ClientTraceInterceptor,
 ) (common.RPCFactory, error) {
 	svcCfg := cfg.Services[string(svcName)]
-	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(
-		cfg, tlsConfigProvider, resolver)
+	frontendURL, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -465,12 +463,14 @@ func getFrontendConnectionDetails(
 	}
 
 	var frontendTLSConfig *tls.Config
-	err := fmt.Errorf("invalid forceTLSConfig")
+	var err error
 	switch forceTLS {
 	case config.ForceTLSConfigInternode:
 		frontendTLSConfig, err = tlsConfigProvider.GetInternodeClientConfig()
 	case config.ForceTLSConfigFrontend:
 		frontendTLSConfig, err = tlsConfigProvider.GetFrontendClientConfig()
+	default:
+		err = fmt.Errorf("invalid forceTLSConfig")
 	}
 	if err != nil {
 		return "", nil, fmt.Errorf("unable to load TLS configuration: %w", err)
