@@ -45,10 +45,6 @@ type (
 
 		controller *gomock.Controller
 	}
-
-	extendedClaims struct {
-		ForceAllow bool
-	}
 )
 
 func TestOpaAuthorizerSuite(t *testing.T) {
