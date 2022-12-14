@@ -55,6 +55,12 @@ type (
 			closeEvent *historypb.HistoryEvent,
 			deleteAfterClose bool,
 		) error
+		// GenerateDeleteHistoryEventTask adds a tasks.DeleteHistoryEventTask to the mutable state.
+		// This task is used to delete the history events of the workflow execution after the retention period expires.
+		// If workflowDataAlreadyArchived is true, then the workflow data is already archived,
+		// so we can delete the history immediately. Otherwise, we need to archive the history first before we can
+		// safely delete it.
+		GenerateDeleteHistoryEventTask(closeTime time.Time, workflowDataAlreadyArchived bool) error
 		GenerateDeleteExecutionTask() (*tasks.DeleteExecutionTask, error)
 		GenerateRecordWorkflowStartedTasks(
 			startEvent *historypb.HistoryEvent,
@@ -142,28 +148,16 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 	return nil
 }
 
+// archivalDelayJitterCoefficient is a variable because we need to override it to 0 in unit tests to make them
+// deterministic.
+var archivalDelayJitterCoefficient = 1.0
+
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	closeEvent *historypb.HistoryEvent,
 	deleteAfterClose bool,
 ) error {
 
 	currentVersion := r.mutableState.GetCurrentVersion()
-	executionInfo := r.mutableState.GetExecutionInfo()
-
-	retention := defaultWorkflowRetention
-	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
-	switch err.(type) {
-	case nil:
-		retention = namespaceEntry.Retention()
-	case *serviceerror.NamespaceNotFound:
-		// namespace is not accessible, use default value above
-	default:
-		return err
-	}
-	branchToken, err := r.mutableState.GetCurrentBranchToken()
-	if err != nil {
-		return err
-	}
 
 	closeTasks := []tasks.Task{
 		&tasks.CloseExecutionTask{
@@ -198,25 +192,82 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			},
 		)
 		if r.config.DurableArchivalEnabled() {
-			closeTasks = append(closeTasks, &tasks.ArchiveExecutionTask{
-				// TaskID and VisibilityTimestamp are set by the shard
-				WorkflowKey: r.mutableState.GetWorkflowKey(),
-				Version:     currentVersion,
-			})
+			retention, err := r.getRetention()
+			if err != nil {
+				return err
+			}
+			// We schedule the archival task for a random time in the near future to avoid sending a surge of tasks
+			// to the archival system at the same time
+			delay := backoff.JitDuration(r.config.ArchivalProcessorArchiveDelay(), archivalDelayJitterCoefficient) / 2
+			if delay > retention {
+				delay = retention
+			}
+			// archiveTime is the time when the archival queue recognizes the ArchiveExecutionTask as ready-to-process
+			archiveTime := closeEvent.GetEventTime().Add(delay)
+
+			task := &tasks.ArchiveExecutionTask{
+				// TaskID is set by the shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: archiveTime,
+				Version:             currentVersion,
+			}
+			closeTasks = append(closeTasks, task)
 		} else {
 			closeTime := timestamp.TimeValue(closeEvent.GetEventTime())
-			retentionJitterDuration := backoff.JitDuration(r.config.RetentionTimerJitterDuration(), 1) / 2
-			closeTasks = append(closeTasks, &tasks.DeleteHistoryEventTask{
-				// TaskID is set by shard
-				WorkflowKey:         r.mutableState.GetWorkflowKey(),
-				VisibilityTimestamp: closeTime.Add(retention).Add(retentionJitterDuration),
-				Version:             currentVersion,
-				BranchToken:         branchToken,
-			})
+			if err := r.GenerateDeleteHistoryEventTask(closeTime, false); err != nil {
+				return err
+			}
 		}
 	}
 
 	r.mutableState.AddTasks(closeTasks...)
+	return nil
+}
+
+// getRetention returns the retention period for this task generator's workflow execution.
+// The retention period represents how long the workflow data should exist in primary storage after the workflow closes.
+// If the workflow namespace is not found, the default retention period is returned.
+// This method returns an error when the GetNamespaceByID call fails with anything other than
+// serviceerror.NamespaceNotFound.
+func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
+	retention := defaultWorkflowRetention
+	executionInfo := r.mutableState.GetExecutionInfo()
+	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
+	switch err.(type) {
+	case nil:
+		retention = namespaceEntry.Retention()
+	case *serviceerror.NamespaceNotFound:
+		// namespace is not accessible, use default value above
+	default:
+		return 0, err
+	}
+	return retention, nil
+}
+
+// GenerateDeleteHistoryEventTask adds a task to delete all history events for a workflow execution.
+// This method only adds the task to the mutable state object in memory; it does not write the task to the database.
+// You must call shard.Context#AddTasks to notify the history engine of this task.
+func (r *TaskGeneratorImpl) GenerateDeleteHistoryEventTask(closeTime time.Time, workflowDataAlreadyArchived bool) error {
+	retention, err := r.getRetention()
+	if err != nil {
+		return err
+	}
+	currentVersion := r.mutableState.GetCurrentVersion()
+	branchToken, err := r.mutableState.GetCurrentBranchToken()
+	if err != nil {
+		return err
+	}
+
+	retentionJitterDuration := backoff.JitDuration(r.config.RetentionTimerJitterDuration(), 1) / 2
+	deleteTime := closeTime.Add(retention).Add(retentionJitterDuration)
+	r.mutableState.AddTasks(&tasks.DeleteHistoryEventTask{
+		// TaskID is set by shard
+		WorkflowKey:                 r.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp:         deleteTime,
+		Version:                     currentVersion,
+		BranchToken:                 branchToken,
+		WorkflowDataAlreadyArchived: workflowDataAlreadyArchived,
+	})
 	return nil
 }
 

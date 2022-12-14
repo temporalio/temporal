@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -54,6 +55,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -68,12 +70,14 @@ type (
 		currentClusterName string
 		shard              shard.Context
 		config             *configs.Config
-		workflowCache      workflow.Cache
+		workflowCache      wcache.Cache
 		executionMgr       persistence.ExecutionManager
 		metricsHandler     metrics.MetricsHandler
 		logger             log.Logger
 		retryPolicy        backoff.RetryPolicy
-		pageSize           int
+		namespaceRegistry  namespace.Registry
+		pageSize           dynamicconfig.IntPropertyFn
+		maxSkipTaskCount   dynamicconfig.IntPropertyFn
 
 		sync.Mutex
 		// largest replication task ID generated
@@ -85,12 +89,11 @@ type (
 
 var (
 	errUnknownReplicationTask = serviceerror.NewInternal("unknown replication task")
-	emptyReplicationTasks     = []*replicationspb.ReplicationTask{}
 )
 
 func NewAckManager(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	executionMgr persistence.ExecutionManager,
 	logger log.Logger,
 ) AckManager {
@@ -111,7 +114,9 @@ func NewAckManager(
 		metricsHandler:     shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ReplicatorQueueProcessorScope)),
 		logger:             log.With(logger, tag.ComponentReplicatorQueue),
 		retryPolicy:        retryPolicy,
-		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize(),
+		namespaceRegistry:  shard.GetNamespaceRegistry(),
+		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize,
+		maxSkipTaskCount:   config.ReplicatorProcessorMaxSkipTaskCount,
 
 		maxTaskID:       nil,
 		sanityCheckTime: time.Time{},
@@ -223,9 +228,9 @@ func (p *ackMgrImpl) GetTasks(
 	minTaskID, maxTaskID := p.taskIDsRange(queryMessageID)
 	replicationTasks, lastTaskID, err := p.getTasks(
 		ctx,
+		pollingCluster,
 		minTaskID,
 		maxTaskID,
-		p.pageSize,
 	)
 	if err != nil {
 		return nil, err
@@ -254,49 +259,65 @@ func (p *ackMgrImpl) GetTasks(
 
 func (p *ackMgrImpl) getTasks(
 	ctx context.Context,
+	pollingCluster string,
 	minTaskID int64,
 	maxTaskID int64,
-	batchSize int,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
 	if minTaskID > maxTaskID {
-		return nil, 0, serviceerror.NewUnavailable("min task ID < max task ID, probably due to shard re-balancing")
+		return nil, 0, serviceerror.NewUnavailable("min task ID > max task ID, probably due to shard re-balancing")
 	} else if minTaskID == maxTaskID {
-		return []*replicationspb.ReplicationTask{}, maxTaskID, nil
+		return nil, maxTaskID, nil
 	}
 
-	replicationTasks := make([]*replicationspb.ReplicationTask, 0, batchSize)
-	iter := collection.NewPagingIterator(p.getPaginationFn(ctx, minTaskID, maxTaskID, batchSize))
-	for iter.HasNext() && len(replicationTasks) < batchSize {
+	replicationTasks := make([]*replicationspb.ReplicationTask, 0, p.pageSize())
+	skippedTaskCount := 0
+	lastTaskID := maxTaskID // If no tasks are returned, then it means there are no tasks bellow maxTaskID.
+	iter := collection.NewPagingIterator(p.getReplicationTasksFn(ctx, minTaskID, maxTaskID, p.pageSize()))
+	// iter.HasNext() should be the last check to avoid extra page read in case if replicationTasks is already full.
+	for len(replicationTasks) < p.pageSize() && skippedTaskCount <= p.maxSkipTaskCount() && iter.HasNext() {
 		task, err := iter.Next()
 		if err != nil {
-			p.logger.Error("replication task reader encounter error, return earlier", tag.Error(err))
-			if len(replicationTasks) == 0 {
-				return nil, 0, err
-			} else {
-				return replicationTasks, replicationTasks[len(replicationTasks)-1].GetSourceTaskId(), nil
-			}
+			return p.swallowPartialResultsError(replicationTasks, lastTaskID, err)
 		}
 
-		if replicationTask, err := p.toReplicationTask(ctx, task); err != nil {
-			p.logger.Error("replication task reader encounter error, return earlier", tag.Error(err))
-			if len(replicationTasks) == 0 {
-				return nil, 0, err
-			} else {
-				return replicationTasks, replicationTasks[len(replicationTasks)-1].GetSourceTaskId(), nil
+		// If, for any reason, task is skipped:
+		//  - lastTaskID needs to be updated because this task should not be read next time,
+		//  - skippedTaskCount needs to be incremented to prevent timeout on caller side (too many tasks are skipped).
+		// If error has occurred though, lastTaskID shouldn't be updated, and next time task needs to be read again.
+
+		ns, err := p.namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+		if err != nil {
+			if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
+				return p.swallowPartialResultsError(replicationTasks, lastTaskID, err)
 			}
-		} else if replicationTask != nil {
-			replicationTasks = append(replicationTasks, replicationTask)
+			// Namespace doesn't exist on this cluster (i.e. deleted). It is safe to skip the task.
+			lastTaskID = task.GetTaskID()
+			skippedTaskCount++
+			continue
 		}
+		// If namespace doesn't exist on polling cluster, there is no reason to send the task.
+		if !ns.IsOnCluster(pollingCluster) {
+			lastTaskID = task.GetTaskID()
+			skippedTaskCount++
+			continue
+		}
+
+		replicationTask, err := p.toReplicationTask(ctx, task)
+		if err != nil {
+			return p.swallowPartialResultsError(replicationTasks, lastTaskID, err)
+		} else if replicationTask == nil {
+			lastTaskID = task.GetTaskID()
+			skippedTaskCount++
+			continue
+		}
+		lastTaskID = task.GetTaskID()
+		replicationTasks = append(replicationTasks, replicationTask)
 	}
 
-	if len(replicationTasks) == 0 {
-		return emptyReplicationTasks, maxTaskID, nil
-	} else {
-		return replicationTasks, replicationTasks[len(replicationTasks)-1].GetSourceTaskId(), nil
-	}
+	return replicationTasks, lastTaskID, nil
 }
 
-func (p *ackMgrImpl) getPaginationFn(
+func (p *ackMgrImpl) getReplicationTasksFn(
 	ctx context.Context,
 	minTaskID int64,
 	maxTaskID int64,
@@ -316,6 +337,19 @@ func (p *ackMgrImpl) getPaginationFn(
 		}
 		return response.Tasks, response.NextPageToken, nil
 	}
+}
+
+func (p *ackMgrImpl) swallowPartialResultsError(
+	replicationTasks []*replicationspb.ReplicationTask,
+	lastTaskID int64,
+	err error,
+) ([]*replicationspb.ReplicationTask, int64, error) {
+
+	p.logger.Error("Replication tasks reader encountered error, return earlier.", tag.Error(err), tag.Value(len(replicationTasks)))
+	if len(replicationTasks) == 0 {
+		return nil, 0, err
+	}
+	return replicationTasks, lastTaskID, nil
 }
 
 func (p *ackMgrImpl) taskIDsRange(
@@ -451,7 +485,7 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 				taskInfo.NextEventID,
 			)
 			if err != nil {
-				return nil, err
+				return nil, p.handleReadHistoryError(namespaceID, workflowID, runID, err)
 			}
 
 			replicationTask := &replicationspb.ReplicationTask{
@@ -655,7 +689,7 @@ func (p *ackMgrImpl) processNewRunReplication(
 			common.FirstEventID+1,
 		)
 		if err != nil {
-			return nil, err
+			return nil, p.handleReadHistoryError(namespaceID, workflowID, newRunID, err)
 		}
 	}
 	attr.HistoryTaskAttributes.NewRunEvents = newRunEventsBlob
@@ -685,4 +719,27 @@ func getVersionHistoryItems(
 		return nil, nil, err
 	}
 	return versionhistory.CopyVersionHistory(versionHistoryBranch).GetItems(), versionHistoryBranch.GetBranchToken(), nil
+}
+
+func (p *ackMgrImpl) handleReadHistoryError(
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	err error,
+) error {
+	switch err.(type) {
+	case *serviceerror.NotFound, *serviceerror.DataLoss:
+		if p.config.ReplicationBypassCorruptedData(namespaceID.String()) {
+			// bypass this corrupted workflow to unblock the replication queue.
+			p.logger.Error("Cannot get history from corrupted workflow",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(workflowID),
+				tag.WorkflowRunID(runID),
+				tag.Error(err))
+			return nil
+		}
+		return err
+	default:
+		return err
+	}
 }

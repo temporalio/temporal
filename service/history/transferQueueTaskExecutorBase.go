@@ -33,6 +33,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -42,15 +44,14 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
-
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 )
 
 const (
@@ -64,7 +65,7 @@ type (
 		currentClusterName       string
 		shard                    shard.Context
 		registry                 namespace.Registry
-		cache                    workflow.Cache
+		cache                    wcache.Cache
 		archivalClient           archiver.Client
 		logger                   log.Logger
 		metricHandler            metrics.MetricsHandler
@@ -72,13 +73,13 @@ type (
 		matchingClient           matchingservice.MatchingServiceClient
 		config                   *configs.Config
 		searchAttributesProvider searchattribute.Provider
-		workflowDeleteManager    workflow.DeleteManager
+		workflowDeleteManager    deletemanager.DeleteManager
 	}
 )
 
 func newTransferQueueTaskExecutorBase(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	archivalClient archiver.Client,
 	logger log.Logger,
 	metricHandler metrics.MetricsHandler,
@@ -96,7 +97,7 @@ func newTransferQueueTaskExecutorBase(
 		matchingClient:           matchingClient,
 		config:                   shard.GetConfig(),
 		searchAttributesProvider: shard.GetSearchAttributesProvider(),
-		workflowDeleteManager: workflow.NewDeleteManager(
+		workflowDeleteManager: deletemanager.NewDeleteManager(
 			shard,
 			workflowCache,
 			shard.GetConfig(),
@@ -218,7 +219,7 @@ func (t *transferQueueTaskExecutorBase) archiveVisibility(
 			HistoryURI:       namespaceEntry.HistoryArchivalState().URI,
 			Targets:          []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
 		},
-		CallerService:        primitives.HistoryService,
+		CallerService:        string(primitives.HistoryService),
 		AttemptArchiveInline: true, // archive visibility inline by default
 	})
 

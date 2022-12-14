@@ -36,10 +36,11 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/xdc"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -109,13 +110,13 @@ func NewTimerQueueFactory(
 
 func (f *timerQueueFactory) CreateQueue(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 ) queues.Queue {
 	if f.HostScheduler != nil && f.Config.TimerProcessorEnableMultiCursor() {
 		logger := log.With(shard.GetLogger(), tag.ComponentTimerQueue)
 
 		currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
-		workflowDeleteManager := workflow.NewDeleteManager(
+		workflowDeleteManager := deletemanager.NewDeleteManager(
 			shard,
 			workflowCache,
 			f.Config,

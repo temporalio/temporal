@@ -28,6 +28,7 @@ import (
 	"github.com/dgryski/go-farm"
 
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/primitives"
 )
 
 type simpleResolver struct {
@@ -37,10 +38,10 @@ type simpleResolver struct {
 
 // newSimpleResolver returns a service resolver that maintains static mapping
 // between services and host info
-func newSimpleResolver(service string, hosts []string) membership.ServiceResolver {
+func newSimpleResolver(service primitives.ServiceName, hosts []string) membership.ServiceResolver {
 	hostInfos := make([]*membership.HostInfo, 0, len(hosts))
 	for _, host := range hosts {
-		hostInfos = append(hostInfos, membership.NewHostInfo(host, map[string]string{membership.RoleKey: service}))
+		hostInfos = append(hostInfos, membership.NewHostInfo(host, map[string]string{membership.RoleKey: string(service)}))
 	}
 	return &simpleResolver{hostInfos, farm.Fingerprint32}
 }

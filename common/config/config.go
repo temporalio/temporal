@@ -251,7 +251,70 @@ type (
 	}
 
 	FaultInjection struct {
+		// Rate is the probability that we will return an error from any call to any datastore.
+		// The value should be between 0.0 and 1.0.
+		// The fault injector will inject different errors depending on the data store and method. See the
+		// implementation for details.
+		// This field is ignored if Targets is non-empty.
 		Rate float64 `yaml:"rate"`
+
+		// Targets is a mapping of data store name to a targeted fault injection config for that data store.
+		// If Targets is non-empty, then Rate is ignored.
+		// Here is an example config for targeted fault injection. This config will inject errors into the
+		// UpdateShard method of the ShardStore at a rate of 100%. No other methods will be affected.
+		/*
+			targets:
+			  dataStores:
+				ShardStore:
+				  methods:
+					UpdateShard:
+					  seed: 42
+					  errors:
+						ShardOwnershipLostError: 1.0 # all UpdateShard calls will fail with ShardOwnershipLostError
+		*/
+		// This will cause the UpdateShard method of the ShardStore to always return ShardOwnershipLostError.
+		Targets FaultInjectionTargets `yaml:"targets"`
+	}
+
+	// FaultInjectionTargets is the set of targets for fault injection. A target is a method of a data store.
+	FaultInjectionTargets struct {
+		// DataStores is a map of datastore name to fault injection config.
+		// Use this to configure fault injection for specific datastores. The key is the name of the datastore,
+		// e.g. "ShardStore". See DataStoreName for the list of valid datastore names.
+		DataStores map[DataStoreName]FaultInjectionDataStoreConfig `yaml:"dataStores"`
+	}
+
+	// DataStoreName is the name of a datastore, e.g. "ShardStore". The full list is defined later in this file.
+	DataStoreName string
+
+	// FaultInjectionDataStoreConfig is the fault injection config for a single datastore, e.g., the ShardStore.
+	FaultInjectionDataStoreConfig struct {
+		// Methods is a map of data store method name to a fault injection config for that method.
+		// We create an error generator that infers the method name from the call stack using reflection.
+		// For example, if a test with targeted fault injection enabled calls ShardStore.UpdateShard, then
+		// we fetch the error generator from this map using the key "UpdateShard".
+		// The key is the name of the method to inject faults for.
+		// The value is the config for that method.
+		Methods map[string]FaultInjectionMethodConfig `yaml:"methods"`
+	}
+
+	// FaultInjectionMethodConfig is the fault injection config for a single method of a data store.
+	FaultInjectionMethodConfig struct {
+		// Errors is a map of error type to probability of returning that error.
+		// For example: `ShardOwnershipLostError: 0.1` will cause the method to return a ShardOwnershipLostError 10% of
+		// the time.
+		// The other 90% of the time, the method will call the underlying datastore.
+		// If there are multiple errors for a method, the probability of each error is independent of the others.
+		// For example, if there are two errors with probabilities 0.1 and 0.2, then the first error will be returned
+		// 10% of the time, the second error will be returned 20% of the time,
+		// and the underlying method will be called 70% of the time.
+		Errors map[string]float64 `yaml:"errors"`
+
+		// Seed is the seed for the random number generator used to sample faults from the Errors map. You can use this
+		// to make the fault injection deterministic.
+		// If the test config does not set this to a non-zero number, the fault injector will set it to the current time
+		// in nanoseconds.
+		Seed int64 `yaml:"seed"`
 	}
 
 	// Cassandra contains configuration to connect to Cassandra cluster
@@ -477,6 +540,15 @@ type (
 		RefreshInterval time.Duration `yaml:"refreshInterval"`
 	}
 	// @@@SNIPEND
+)
+
+const (
+	ShardStoreName     DataStoreName = "ShardStore"
+	TaskStoreName      DataStoreName = "TaskStore"
+	MetadataStoreName  DataStoreName = "MetadataStore"
+	ExecutionStoreName DataStoreName = "ExecutionStore"
+	QueueName          DataStoreName = "Queue"
+	ClusterMDStoreName DataStoreName = "ClusterMDStore"
 )
 
 // Validate validates this config

@@ -78,6 +78,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -97,7 +98,7 @@ type (
 		mockEventsReapplier     *ndc.MockEventsReapplier
 		mockWorkflowResetter    *ndc.MockWorkflowResetter
 
-		workflowCache     workflow.Cache
+		workflowCache     wcache.Cache
 		mockHistoryEngine *historyEngineImpl
 		mockExecutionMgr  *persistence.MockExecutionManager
 		mockShardManager  *persistence.MockShardManager
@@ -144,7 +145,7 @@ func (s *engineSuite) SetupTest() {
 			}},
 		s.config,
 	)
-	s.workflowCache = workflow.NewCache(s.mockShard)
+	s.workflowCache = wcache.NewCache(s.mockShard)
 	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.eventsCache = events.NewEventsCache(

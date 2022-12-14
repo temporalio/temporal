@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/encryption"
 )
 
@@ -46,7 +47,7 @@ var _ common.RPCFactory = (*RPCFactory)(nil)
 // RPCFactory is an implementation of common.RPCFactory interface
 type RPCFactory struct {
 	config      *config.RPC
-	serviceName string
+	serviceName primitives.ServiceName
 	logger      log.Logger
 	dc          *dynamicconfig.Collection
 	frontendURL string
@@ -61,7 +62,7 @@ type RPCFactory struct {
 // conforming to the underlying configuration
 func NewFactory(
 	cfg *config.RPC,
-	sName string,
+	sName primitives.ServiceName,
 	logger log.Logger,
 	tlsProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,

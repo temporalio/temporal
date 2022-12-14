@@ -39,9 +39,11 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -49,8 +51,8 @@ type (
 		currentClusterName string
 		shard              shard.Context
 		registry           namespace.Registry
-		deleteManager      workflow.DeleteManager
-		cache              workflow.Cache
+		deleteManager      deletemanager.DeleteManager
+		cache              wcache.Cache
 		logger             log.Logger
 		matchingClient     matchingservice.MatchingServiceClient
 		metricHandler      metrics.MetricsHandler
@@ -60,8 +62,8 @@ type (
 
 func newTimerQueueTaskExecutorBase(
 	shard shard.Context,
-	workflowCache workflow.Cache,
-	deleteManager workflow.DeleteManager,
+	workflowCache wcache.Cache,
+	deleteManager deletemanager.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
 	metricHandler metrics.MetricsHandler,
@@ -148,9 +150,9 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 
 func getWorkflowExecutionContextForTask(
 	ctx context.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	task tasks.Task,
-) (workflow.Context, workflow.ReleaseCacheFunc, error) {
+) (workflow.Context, wcache.ReleaseCacheFunc, error) {
 	namespaceID, execution := getTaskNamespaceIDAndWorkflowExecution(task)
 	return getWorkflowExecutionContext(
 		ctx,
@@ -162,10 +164,10 @@ func getWorkflowExecutionContextForTask(
 
 func getWorkflowExecutionContext(
 	ctx context.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
-) (workflow.Context, workflow.ReleaseCacheFunc, error) {
+) (workflow.Context, wcache.ReleaseCacheFunc, error) {
 	ctx, cancel := context.WithTimeout(ctx, taskGetExecutionTimeout)
 	defer cancel()
 

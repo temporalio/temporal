@@ -28,21 +28,22 @@ import (
 	"fmt"
 
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/primitives"
 )
 
 type simpleMonitor struct {
 	hostInfo  *membership.HostInfo
-	resolvers map[string]membership.ServiceResolver
+	resolvers map[primitives.ServiceName]membership.ServiceResolver
 }
 
 // NewSimpleMonitor returns a simple monitor interface
-func newSimpleMonitor(serviceName string, hosts map[string][]string) membership.Monitor {
-	resolvers := make(map[string]membership.ServiceResolver, len(hosts))
+func newSimpleMonitor(serviceName primitives.ServiceName, hosts map[primitives.ServiceName][]string) membership.Monitor {
+	resolvers := make(map[primitives.ServiceName]membership.ServiceResolver, len(hosts))
 	for service, hostList := range hosts {
 		resolvers[service] = newSimpleResolver(service, hostList)
 	}
 
-	hostInfo := membership.NewHostInfo(hosts[serviceName][0], map[string]string{membership.RoleKey: serviceName})
+	hostInfo := membership.NewHostInfo(hosts[serviceName][0], map[string]string{membership.RoleKey: string(serviceName)})
 	return &simpleMonitor{hostInfo, resolvers}
 }
 
@@ -60,11 +61,11 @@ func (s *simpleMonitor) WhoAmI() (*membership.HostInfo, error) {
 	return s.hostInfo, nil
 }
 
-func (s *simpleMonitor) GetResolver(service string) (membership.ServiceResolver, error) {
+func (s *simpleMonitor) GetResolver(service primitives.ServiceName) (membership.ServiceResolver, error) {
 	return s.resolvers[service], nil
 }
 
-func (s *simpleMonitor) Lookup(service string, key string) (*membership.HostInfo, error) {
+func (s *simpleMonitor) Lookup(service primitives.ServiceName, key string) (*membership.HostInfo, error) {
 	resolver, ok := s.resolvers[service]
 	if !ok {
 		return nil, fmt.Errorf("cannot lookup host for service %v", service)
@@ -72,11 +73,11 @@ func (s *simpleMonitor) Lookup(service string, key string) (*membership.HostInfo
 	return resolver.Lookup(key)
 }
 
-func (s *simpleMonitor) AddListener(service string, name string, notifyChannel chan<- *membership.ChangedEvent) error {
+func (s *simpleMonitor) AddListener(service primitives.ServiceName, name string, notifyChannel chan<- *membership.ChangedEvent) error {
 	return nil
 }
 
-func (s *simpleMonitor) RemoveListener(service string, name string) error {
+func (s *simpleMonitor) RemoveListener(service primitives.ServiceName, name string) error {
 	return nil
 }
 
@@ -84,6 +85,6 @@ func (s *simpleMonitor) GetReachableMembers() ([]string, error) {
 	return nil, nil
 }
 
-func (s *simpleMonitor) GetMemberCount(service string) (int, error) {
+func (s *simpleMonitor) GetMemberCount(service primitives.ServiceName) (int, error) {
 	return 0, nil
 }

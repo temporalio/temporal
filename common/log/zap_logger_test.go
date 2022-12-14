@@ -62,6 +62,8 @@ func (s *LogSuite) TestParseLogLevel() {
 	s.Equal(zap.WarnLevel, parseZapLevel("warn"))
 	s.Equal(zap.ErrorLevel, parseZapLevel("error"))
 	s.Equal(zap.FatalLevel, parseZapLevel("fatal"))
+	s.Equal(zap.DPanicLevel, parseZapLevel("dpanic"))
+	s.Equal(zap.PanicLevel, parseZapLevel("panic"))
 	s.Equal(zap.InfoLevel, parseZapLevel("unknown"))
 }
 
@@ -77,6 +79,27 @@ func (s *LogSuite) TestNewLogger() {
 	s.NotNil(log)
 	_, err := os.Stat(dir + "/test.log")
 	s.Nil(err)
+	log.DPanic("Development default is false; should not panic here!")
+	s.Panics(nil, func() {
+		log.Panic("Must Panic")
+	})
+
+	cfg = Config{
+		Level:       "info",
+		OutputFile:  dir + "/test.log",
+		Development: true,
+	}
+	log = BuildZapLogger(cfg)
+	s.NotNil(log)
+	_, err = os.Stat(dir + "/test.log")
+	s.Nil(err)
+	s.Panics(nil, func() {
+		log.DPanic("Must panic!")
+	})
+	s.Panics(nil, func() {
+		log.Panic("Must panic!")
+	})
+
 }
 
 func TestDefaultLogger(t *testing.T) {

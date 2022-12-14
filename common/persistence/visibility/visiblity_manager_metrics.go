@@ -220,7 +220,7 @@ func (m *visibilityManagerMetrics) GetWorkflowExecution(
 }
 
 func (m *visibilityManagerMetrics) tagScope(operation string) (metrics.MetricsHandler, time.Time) {
-	taggedHandler := m.metricHandler.WithTags(metrics.OperationTag(operation), m.visibilityTypeMetricsTag, metrics.VisibilityTypeTag(""))
+	taggedHandler := m.metricHandler.WithTags(metrics.OperationTag(operation), m.visibilityTypeMetricsTag)
 	taggedHandler.Counter(metrics.VisibilityPersistenceRequests.GetMetricName()).Record(1)
 	return taggedHandler, time.Now().UTC()
 }

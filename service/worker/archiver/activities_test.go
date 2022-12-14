@@ -138,7 +138,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_GetArchiverError() {
 		metrics.OperationTag(metrics.ArchiverUploadHistoryActivityScope), []metrics.Tag{metrics.NamespaceTag(testNamespace)},
 	).Return(s.metricsHandler)
 	s.metricsHandler.EXPECT().Counter(metrics.ArchiverNonRetryableErrorCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
-	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), primitives.WorkerService).Return(
+	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), string(primitives.WorkerService)).Return(
 		nil, errors.New("failed to get archiver"),
 	)
 	container := &BootstrapContainer{
@@ -172,7 +172,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveNonRetryableError() {
 	s.metricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverUploadHistoryActivityScope), []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsHandler)
 	s.metricsHandler.EXPECT().Counter(metrics.ArchiverNonRetryableErrorCount.GetMetricName()).Return(metrics.NoopCounterMetricFunc)
 	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errUploadNonRetryable)
-	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), primitives.WorkerService).Return(s.historyArchiver, nil)
+	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), string(primitives.WorkerService)).Return(s.historyArchiver, nil)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
 		MetricsHandler:   s.metricsHandler,
@@ -204,7 +204,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetryableError() {
 	s.metricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverUploadHistoryActivityScope), []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsHandler)
 	testArchiveErr := errors.New("some transient error")
 	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(testArchiveErr)
-	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), primitives.WorkerService).Return(s.historyArchiver, nil)
+	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), string(primitives.WorkerService)).Return(s.historyArchiver, nil)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
 		MetricsHandler:   s.metricsHandler,
@@ -235,7 +235,7 @@ func (s *activitiesSuite) TestUploadHistory_Fail_ArchiveRetryableError() {
 func (s *activitiesSuite) TestUploadHistory_Success() {
 	s.metricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverUploadHistoryActivityScope), []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsHandler)
 	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), primitives.WorkerService).Return(s.historyArchiver, nil)
+	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), string(primitives.WorkerService)).Return(s.historyArchiver, nil)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
 		MetricsHandler:   s.metricsHandler,
@@ -365,7 +365,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_InvalidURI() {
 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_GetArchiverError() {
 	s.metricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverArchiveVisibilityActivityScope), []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsHandler)
-	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), primitives.WorkerService).Return(nil, errors.New("failed to get archiver"))
+	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), string(primitives.WorkerService)).Return(nil, errors.New("failed to get archiver"))
 	container := &BootstrapContainer{
 		Logger:           s.logger,
 		MetricsHandler:   s.metricsHandler,
@@ -393,7 +393,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_GetArchiverError() 
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveNonRetryableError() {
 	s.metricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverArchiveVisibilityActivityScope), []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsHandler)
 	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(errArchiveVisibilityNonRetryable)
-	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), primitives.WorkerService).Return(s.visibilityArchiver, nil)
+	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), string(primitives.WorkerService)).Return(s.visibilityArchiver, nil)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
 		MetricsHandler:   s.metricsHandler,
@@ -422,7 +422,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetryableErr
 	s.metricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverArchiveVisibilityActivityScope), []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsHandler)
 	testArchiveErr := errors.New("some transient error")
 	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(testArchiveErr)
-	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), primitives.WorkerService).Return(s.visibilityArchiver, nil)
+	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), string(primitives.WorkerService)).Return(s.visibilityArchiver, nil)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
 		MetricsHandler:   s.metricsHandler,
@@ -450,7 +450,7 @@ func (s *activitiesSuite) TestArchiveVisibilityActivity_Fail_ArchiveRetryableErr
 func (s *activitiesSuite) TestArchiveVisibilityActivity_Success() {
 	s.metricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ArchiverArchiveVisibilityActivityScope), []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsHandler)
 	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), primitives.WorkerService).Return(s.visibilityArchiver, nil)
+	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), string(primitives.WorkerService)).Return(s.visibilityArchiver, nil)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
 		MetricsHandler:   s.metricsHandler,

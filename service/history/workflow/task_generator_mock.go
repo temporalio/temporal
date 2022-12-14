@@ -30,6 +30,7 @@ package workflow
 
 import (
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	history "go.temporal.io/api/history/v1"
@@ -142,6 +143,20 @@ func (m *MockTaskGenerator) GenerateDeleteExecutionTask() (*tasks.DeleteExecutio
 func (mr *MockTaskGeneratorMockRecorder) GenerateDeleteExecutionTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDeleteExecutionTask", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDeleteExecutionTask))
+}
+
+// GenerateDeleteHistoryEventTask mocks base method.
+func (m *MockTaskGenerator) GenerateDeleteHistoryEventTask(closeTime time.Time, workflowDataAlreadyArchived bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateDeleteHistoryEventTask", closeTime, workflowDataAlreadyArchived)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateDeleteHistoryEventTask indicates an expected call of GenerateDeleteHistoryEventTask.
+func (mr *MockTaskGeneratorMockRecorder) GenerateDeleteHistoryEventTask(closeTime, workflowDataAlreadyArchived interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDeleteHistoryEventTask", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDeleteHistoryEventTask), closeTime, workflowDataAlreadyArchived)
 }
 
 // GenerateHistoryReplicationTasks mocks base method.

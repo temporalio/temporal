@@ -113,7 +113,7 @@ func (s *TestCluster) Config() config.Persistence {
 		DefaultStore:    "test",
 		VisibilityStore: "test",
 		DataStores: map[string]config.DataStore{
-			"test": {SQL: &cfg},
+			"test": {SQL: &cfg, FaultInjection: s.faultInjection},
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
 	}

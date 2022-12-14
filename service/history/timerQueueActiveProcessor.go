@@ -41,10 +41,11 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/xdc"
+	deletemanager "go.temporal.io/server/service/history/deletemanager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
 
 type (
@@ -58,10 +59,10 @@ type (
 
 func newTimerQueueActiveProcessor(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	scheduler queues.Scheduler,
 	priorityAssigner queues.PriorityAssigner,
-	workflowDeleteManager workflow.DeleteManager,
+	workflowDeleteManager deletemanager.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	clientBean client.Bean,
@@ -205,10 +206,10 @@ func newTimerQueueActiveProcessor(
 
 func newTimerQueueFailoverProcessor(
 	shard shard.Context,
-	workflowCache workflow.Cache,
+	workflowCache wcache.Cache,
 	scheduler queues.Scheduler,
 	priorityAssigner queues.PriorityAssigner,
-	workflowDeleteManager workflow.DeleteManager,
+	workflowDeleteManager deletemanager.DeleteManager,
 	namespaceIDs map[string]struct{},
 	standbyClusterName string,
 	minLevel time.Time,
