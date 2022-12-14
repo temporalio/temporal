@@ -26,13 +26,14 @@ package authorization
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/environment"
 )
 
 var ()
@@ -65,32 +66,43 @@ func (s *opaAuthorizerSuite) TearDownTest() {
 }
 
 func (s *opaAuthorizerSuite) TestDeniesWhenOpaDoesNotReturnAllowFalse() {
-	opaEndpoint := fmt.Sprintf("%s/v1/data/temporal/deny", getTestOpaBaseUri())
-	authorizer := NewOpaAuthorizer(opaEndpoint)
+	srv, _ := createTestServer(200, []byte(`{"result": { "allow": false }}`))
+	defer srv.Close()
+
+	authorizer := NewOpaAuthorizer(srv.URL)
+
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 
 func (s *opaAuthorizerSuite) TestAllowsWhenOpaReturnsAllowTrue() {
-	opaEndpoint := fmt.Sprintf("%s/v1/data/temporal/allow", getTestOpaBaseUri())
-	authorizer := NewOpaAuthorizer(opaEndpoint)
+	srv, _ := createTestServer(200, []byte(`{"result": { "allow": true }}`))
+	defer srv.Close()
+
+	authorizer := NewOpaAuthorizer(srv.URL)
+
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
 }
 
 func (s *opaAuthorizerSuite) TestDeniesWhenOpaReturnsNothing() {
-	opaEndpoint := fmt.Sprintf("%s/v1/data/temporal/empty", getTestOpaBaseUri())
-	authorizer := NewOpaAuthorizer(opaEndpoint)
+	srv, _ := createTestServer(200, []byte(`{"result": {}}`))
+	defer srv.Close()
+
+	authorizer := NewOpaAuthorizer(srv.URL)
+
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.NoError(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 
 func (s *opaAuthorizerSuite) TestDeniesWhenOpaPolicyIsNotFound() {
-	opaEndpoint := fmt.Sprintf("%s/v1", getTestOpaBaseUri())
-	authorizer := NewOpaAuthorizer(opaEndpoint)
+	srv, _ := createTestServer(404, []byte(""))
+	defer srv.Close()
+
+	authorizer := NewOpaAuthorizer(srv.URL)
 
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.Error(err)
@@ -98,51 +110,52 @@ func (s *opaAuthorizerSuite) TestDeniesWhenOpaPolicyIsNotFound() {
 }
 
 func (s *opaAuthorizerSuite) TestDeniesWhenOpaIsUnreachable() {
-	authorizer := NewOpaAuthorizer("http://localhost:8182/v1")
+	srv, _ := createTestServer(500, []byte(""))
+	// Stop the server now to simulate it being unavailable
+	srv.Close()
+
+	authorizer := NewOpaAuthorizer(srv.URL)
+
 	result, err := authorizer.Authorize(context.TODO(), &claimsSystemAdmin, &targetFooBar)
 	s.Error(err)
 	s.Equal(DecisionDeny, result.Decision)
 }
 
-func (s *opaAuthorizerSuite) TestAllowsWhenOpaHasAccessToClaimExtensions() {
-	opaEndpoint := fmt.Sprintf("%s/v1/data/temporal/extensions", getTestOpaBaseUri())
-	authorizer := NewOpaAuthorizer(opaEndpoint)
+func (s *opaAuthorizerSuite) TestClaimsAndTargetAreSentToOpa() {
+	srv, requestChannel := createTestServer(200, []byte(`{"result": { "allow": false }}`))
+	defer srv.Close()
+
+	authorizer := NewOpaAuthorizer(srv.URL)
 
 	claims := Claims{
-		Extensions: extendedClaims{
-			ForceAllow: true,
-		},
+		Subject: "test-user",
 	}
 
 	target := CallTarget{
 		Namespace: "test-namespace",
 	}
 
-	result, err := authorizer.Authorize(context.TODO(), &claims, &target)
+	_, err := authorizer.Authorize(context.TODO(), &claims, &target)
 	s.NoError(err)
-	s.Equal(DecisionAllow, result.Decision)
+
+	request := <-requestChannel
+	s.Equal(target.Namespace, request.Input.Target.Namespace)
+	s.Equal(claims.Subject, request.Input.Claims.Subject)
 }
 
-func (s *opaAuthorizerSuite) TestDeniesWhenOpaHasAccessToClaimExtensions() {
-	opaEndpoint := fmt.Sprintf("%s/v1/data/temporal/extensions", getTestOpaBaseUri())
-	authorizer := NewOpaAuthorizer(opaEndpoint)
+func createTestServer(statusCode int, content []byte) (*httptest.Server, chan opaRequest) {
 
-	claims := Claims{
-		Extensions: extendedClaims{
-			ForceAllow: false,
-		},
-	}
+	requestChannel := make(chan opaRequest, 1)
 
-	target := CallTarget{}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(statusCode)
+		w.Write(content)
 
-	result, err := authorizer.Authorize(context.TODO(), &claims, &target)
-	s.NoError(err)
-	s.Equal(DecisionDeny, result.Decision)
-}
+		var request opaRequest
+		json.NewDecoder(r.Body).Decode(&request)
 
-func getTestOpaBaseUri() string {
-	host := environment.GetOpaHost()
-	port := environment.GetOpaPort()
+		requestChannel <- request
+	})
 
-	return fmt.Sprintf("http://%s:%d", host, port)
+	return httptest.NewServer(handler), requestChannel
 }

@@ -64,7 +64,7 @@ type (
 	}
 )
 
-func (a *opaAuthorizer) Authorize(_ context.Context, claims *Claims, target *CallTarget) (Result, error) {
+func (a *opaAuthorizer) Authorize(ctx context.Context, claims *Claims, target *CallTarget) (Result, error) {
 	opaRequest := opaRequest{
 		Input: opaInput{
 			Claims: *claims,
@@ -77,7 +77,12 @@ func (a *opaAuthorizer) Authorize(_ context.Context, claims *Claims, target *Cal
 		return resultDeny, err
 	}
 
-	response, err := http.Post(a.opaEndpoint, "application/json", bytes.NewBuffer(jsonData))
+	request, err := http.NewRequestWithContext(ctx, "POST", a.opaEndpoint, bytes.NewReader(jsonData))
+	if err != nil {
+		return resultDeny, err
+	}
+
+	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		return resultDeny, err
 	}

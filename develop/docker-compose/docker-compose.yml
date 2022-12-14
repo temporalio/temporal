@@ -80,18 +80,6 @@ services:
   temporal-ui:
     image: temporalio/ui:2.8.3
     container_name: temporal-dev-ui
-  opa:
-    image: openpolicyagent/opa:0.40.0-rootless
-    container_name: temporal-dev-opa
-    command:
-      - "run"
-      - "--server"
-      - "--config-file=/config/config.yaml"
-      - "file:///config/policies"
-    ports:
-      - "8181:8181"
-    volumes:
-      - ./open-policy-agent/:/config
 
 networks:
   temporal-dev-network:
