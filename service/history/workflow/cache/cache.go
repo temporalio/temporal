@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -202,20 +201,7 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 		return serviceerror.NewNotFound("Workflow not exists.")
 	}
 
-	// RunID is not provided, lets try to retrieve the RunID for current active execution
-	if execution.GetRunId() == "" {
-		response, err := c.shard.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
-			ShardID:     c.shard.GetShardID(),
-			NamespaceID: namespaceID.String(),
-			WorkflowID:  execution.GetWorkflowId(),
-		})
-
-		if err != nil {
-			return err
-		}
-
-		execution.RunId = response.RunID
-	} else if uuid.Parse(execution.GetRunId()) == nil { // immediately return if invalid runID
+	if uuid.Parse(execution.GetRunId()) == nil { // immediately return if invalid runID
 		return serviceerror.NewInvalidArgument("RunId is not valid UUID.")
 	}
 	return nil
