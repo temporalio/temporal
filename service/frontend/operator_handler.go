@@ -425,6 +425,17 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 	scope, startTime := h.startRequestProfile(metrics.OperatorRemoveRemoteClusterScope)
 	defer func() { scope.Timer(metrics.ServiceLatency.GetMetricName()).Record(time.Since(startTime)) }()
 
+	var isClusterNameExist bool
+	for clusterName := range h.clusterMetadata.GetAllClusterInfo() {
+		if clusterName == request.GetClusterName() {
+			isClusterNameExist = true
+			break
+		}
+	}
+	if !isClusterNameExist {
+		return nil, serviceerror.NewInvalidArgument("The cluster to be deleted cannot be found in clusters cache.")
+	}
+
 	if err := h.clusterMetadataManager.DeleteClusterMetadata(
 		ctx,
 		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
