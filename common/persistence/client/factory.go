@@ -123,7 +123,7 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 		return nil, err
 	}
 
-	result := p.NewShardManager(shardStore, f.serializer)
+	result := p.NewShardManager(shardStore, f.serializer, f.config.NumHistoryShards)
 	if f.ratelimiter != nil {
 		result = p.NewShardPersistenceRateLimitedClient(result, f.ratelimiter, f.logger)
 	}

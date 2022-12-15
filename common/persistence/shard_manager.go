@@ -29,6 +29,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -36,18 +37,21 @@ import (
 )
 
 type shardManagerImpl struct {
-	shardStore ShardStore
-	serializer serialization.Serializer
+	shardStore    ShardStore
+	serializer    serialization.Serializer
+	maxShardCount int32
 }
 
 // NewShardManager create a new instance of ShardManager
 func NewShardManager(
 	shardStore ShardStore,
 	serializer serialization.Serializer,
+	maxShardCount int32,
 ) ShardManager {
 	return &shardManagerImpl{
-		shardStore: shardStore,
-		serializer: serializer,
+		shardStore:    shardStore,
+		serializer:    serializer,
+		maxShardCount: maxShardCount,
 	}
 }
 
@@ -63,6 +67,10 @@ func (m *shardManagerImpl) GetOrCreateShard(
 	ctx context.Context,
 	request *GetOrCreateShardRequest,
 ) (*GetOrCreateShardResponse, error) {
+	if err := m.validateShardId(request.ShardID); err != nil {
+		return nil, err
+	}
+
 	createShardInfo := func() (int64, *commonpb.DataBlob, error) {
 		shardInfo := request.InitialShardInfo
 		if shardInfo == nil {
@@ -99,6 +107,9 @@ func (m *shardManagerImpl) UpdateShard(
 ) error {
 	shardInfo := request.ShardInfo
 	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
+	if err := m.validateShardId(shardInfo.ShardId); err != nil {
+		return err
+	}
 
 	shardInfoBlob, err := m.serializer.ShardInfoToBlob(shardInfo, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
@@ -117,5 +128,19 @@ func (m *shardManagerImpl) AssertShardOwnership(
 	ctx context.Context,
 	request *AssertShardOwnershipRequest,
 ) error {
+	if err := m.validateShardId(request.ShardID); err != nil {
+		return err
+	}
 	return m.shardStore.AssertShardOwnership(ctx, request)
+}
+
+func (m *shardManagerImpl) validateShardId(shardId int32) error {
+	if shardId <= 0 {
+		return serviceerror.NewInvalidArgument("Cannot handle invalid shard Id below the lower bound")
+	}
+
+	if shardId > m.maxShardCount {
+		return serviceerror.NewInvalidArgument("Cannot handle shard Id exceed the upper bound")
+	}
+	return nil
 }
