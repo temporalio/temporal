@@ -70,7 +70,8 @@ type (
 func (f *historyEngineFactory) CreateEngine(
 	shard shard.Context,
 ) shard.Engine {
-	workflowCache := f.NewCacheFn(shard)
+	workflowCache := f.NewCacheFn(shard.GetShardID(), shard.GetLogger(), f.Config,
+		shard.GetMetricsHandler(), shard.GetExecutionManager())
 	workflowConsistencyChecker := api.NewWorkflowConsistencyChecker(shard, workflowCache)
 	return NewEngineWithShardContext(
 		shard,

@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -61,13 +60,15 @@ type (
 
 	CacheImpl struct {
 		cache.Cache
-		shard          shard.Context
-		logger         log.Logger
-		metricsHandler metrics.Handler
-		config         *configs.Config
+		logger           log.Logger
+		metricsHandler   metrics.Handler
+		config           *configs.Config
+		shardID          int32
+		executionManager persistence.ExecutionManager
 	}
 
-	NewCacheFn func(shard shard.Context) Cache
+	NewCacheFn func(shardID int32, logger log.Logger, config *configs.Config,
+		metricsHandler metrics.Handler, executionManager persistence.ExecutionManager) Cache
 )
 
 var NoopReleaseFn ReleaseCacheFunc = func(err error) {}
@@ -77,19 +78,21 @@ const (
 	cacheReleased    int32 = 1
 )
 
-func NewCache(shard shard.Context) Cache {
+func NewCache(shardID int32, logger log.Logger, config *configs.Config,
+	metricsHandler metrics.Handler, executionManager persistence.ExecutionManager,
+) Cache {
 	opts := &cache.Options{}
-	config := shard.GetConfig()
 	opts.InitialCapacity = config.HistoryCacheInitialSize()
 	opts.TTL = config.HistoryCacheTTL()
 	opts.Pin = true
 
 	return &CacheImpl{
-		Cache:          cache.New(config.HistoryCacheMaxSize(), opts),
-		shard:          shard,
-		logger:         log.With(shard.GetLogger(), tag.ComponentHistoryCache),
-		metricsHandler: shard.GetMetricsHandler().WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)),
-		config:         config,
+		Cache:            cache.New(config.HistoryCacheMaxSize(), opts),
+		logger:           log.With(logger, tag.ComponentHistoryCache),
+		metricsHandler:   metricsHandler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue)),
+		config:           config,
+		shardID:          shardID,
+		executionManager: executionManager,
 	}
 }
 
@@ -137,7 +140,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	if !cacheHit {
 		handler.Counter(metrics.CacheMissCounter.GetMetricName()).Record(1)
 		// Let's create the workflow execution workflowCtx
-		workflowCtx = workflow.NewContext(c.shard, key, c.logger)
+		workflowCtx = workflow.NewContext(c.shard, key, c.logger) // TODO: remove shard dependency
 		elem, err := c.PutIfNotExist(key, workflowCtx)
 		if err != nil {
 			handler.Counter(metrics.CacheFailures.GetMetricName()).Record(1)
@@ -204,8 +207,8 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
 	if execution.GetRunId() == "" {
-		response, err := c.shard.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
-			ShardID:     c.shard.GetShardID(),
+		response, err := c.executionManager.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
+			ShardID:     c.shardID,
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  execution.GetWorkflowId(),
 		})
