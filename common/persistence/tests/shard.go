@@ -62,6 +62,7 @@ func NewShardSuite(
 		ShardManager: p.NewShardManager(
 			shardStore,
 			serializer,
+			4,
 		),
 		Logger: logger,
 	}

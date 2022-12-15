@@ -136,7 +136,7 @@ func (m *shardManagerImpl) AssertShardOwnership(
 
 func (m *shardManagerImpl) validateShardId(shardId int32) error {
 	if shardId <= 0 {
-		return serviceerror.NewInvalidArgument("Cannot handle invalid shard Id below the lower bound")
+		return serviceerror.NewInvalidArgument("Cannot handle shard Id below the lower bound")
 	}
 
 	if shardId > m.maxShardCount {

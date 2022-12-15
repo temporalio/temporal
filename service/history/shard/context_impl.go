@@ -1468,9 +1468,11 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 		// No special handling required for these errors.
 		return err
 
-	case *persistence.ShardOwnershipLostError:
+	case *persistence.ShardOwnershipLostError,
+		*serviceerror.InvalidArgument:
 		// Shard is stolen, trigger shutdown of history engine.
 		// Handling of max read level doesn't matter here.
+		// Or the shard id is invalid. Stop the shard.
 		s.transition(contextRequestStop{})
 		return err
 
